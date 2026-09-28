@@ -338,7 +338,7 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         // Set this to mac-only. On Linux this conflicts with the general binding to copy.
         CustomAction::CopyBlockCommand => mac_only_keystroke("cmd-shift-C"),
         // Set this to mac-only. On Linux this conflicts with the cmd-enter keybindings
-        // (used for actions on the input suggestions menu, and for accepting passive code diffs).
+        // (used for actions on the input suggestions menu).
         CustomAction::ToggleMaximizePane => mac_only_keystroke("cmd-shift-enter"),
         // Note: The base character '/' is used instead of '?' as mac registers keybindings
         // differently compared to the app which saves the resulting character used with shift

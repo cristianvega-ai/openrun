@@ -484,30 +484,6 @@ pub fn assert_todo_list(
     })
 }
 
-pub fn assert_exchange_has_trigger_suggest_prompt(exchange_index: usize) -> AssertionCallback {
-    Box::new(move |app, window_id| {
-        let terminal_view = terminal_view(app, window_id, 0, 0);
-        BlocklistAIHistoryModel::handle(app).update(app, |history_model, _| {
-            let exchange = get_exchange_index_from_conversation(
-                ConversationTarget::Only,
-                terminal_view.id(),
-                exchange_index,
-                history_model,
-            );
-            let Ok(exchange) = exchange else {
-                return AssertionOutcome::immediate_failure("Exchange not found".to_string());
-            };
-            match exchange.input.last() {
-                Some(AIAgentInput::TriggerPassiveSuggestion { .. }) => AssertionOutcome::Success,
-                Some(_) => AssertionOutcome::immediate_failure(
-                    "Exchange input is not a trigger suggest prompt".to_string(),
-                ),
-                None => AssertionOutcome::immediate_failure("Exchange input is empty".to_string()),
-            }
-        })
-    })
-}
-
 pub fn assert_exchange_action_is_suggested_prompt(exchange_index: usize) -> AssertionCallback {
     assert_exchange_action(ConversationTarget::Only, exchange_index, move |action| {
         let AIAgentActionType::SuggestPrompt { .. } = action else {

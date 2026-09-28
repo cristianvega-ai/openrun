@@ -35,50 +35,37 @@ const NOTICE_BODY_TEXT: &str = "To keep using Warp's AI features, please upgrade
 const NOTICE_BONUS_CREDITS_TEXT: &str = "If you have any unused bonus credits, AI will keep \
      working until these run out.";
 
-const PROMPT_SUGGESTIONS_TITLE_TEXT: &str = "How to use AI features in Warp";
-const PROMPT_SUGGESTIONS_BODY_TEXT: &str = "To use AI features in Warp, subscribe to a paid plan, \
-     add an API key (OpenAI, Anthropic, or Google), add a custom inference endpoint (OpenRouter, \
-     LiteLLM), or log in using your SuperGrok subscription.";
-
 /// Which surface opened the modal. Selects the copy and disambiguates telemetry;
 /// the layout and CTAs are identical across variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FreeAiRemovalModalVariant {
     /// One-time notice shown to Free users when Warp-provided AI is removed from their plan.
     Notice,
-    /// Shown on demand when a Free user activates Prompt Suggestions while out of credits.
-    PromptSuggestions,
 }
 
 impl FreeAiRemovalModalVariant {
     fn title(self) -> &'static str {
         match self {
             Self::Notice => NOTICE_TITLE_TEXT,
-            Self::PromptSuggestions => PROMPT_SUGGESTIONS_TITLE_TEXT,
         }
     }
 
     fn body(self) -> &'static str {
         match self {
             Self::Notice => NOTICE_BODY_TEXT,
-            Self::PromptSuggestions => PROMPT_SUGGESTIONS_BODY_TEXT,
         }
     }
 
-    /// Secondary note rendered under the body. The on-demand Prompt Suggestions
-    /// variant only fires once the user is already out of credits, so the
-    /// bonus-credits note doesn't apply there.
+    /// Secondary note rendered under the body.
     fn secondary(self) -> Option<&'static str> {
         match self {
             Self::Notice => Some(NOTICE_BONUS_CREDITS_TEXT),
-            Self::PromptSuggestions => None,
         }
     }
 
     fn as_str(self) -> &'static str {
         match self {
             Self::Notice => "notice",
-            Self::PromptSuggestions => "prompt_suggestions",
         }
     }
 }

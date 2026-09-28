@@ -39,7 +39,6 @@ pub(crate) mod llms;
 pub(crate) mod local_harness_setup;
 pub mod onboarding;
 pub(crate) mod orchestration;
-pub(crate) mod predict;
 pub(crate) mod pricing_promotion;
 #[cfg(all(not(target_family = "wasm"), feature = "local_fs"))]
 pub mod request_usage_model;

@@ -3366,13 +3366,7 @@ fn test_tab_completion_hides_autosuggestion() {
         input.update(&mut app, |input, ctx| {
             input.clear_buffer_and_reset_undo_stack(ctx);
             input.user_insert("open-file ", ctx);
-            input.set_autosuggestion(
-                "sesame",
-                AutosuggestionType::Command {
-                    was_intelligent_autosuggestion: false,
-                },
-                ctx,
-            )
+            input.set_autosuggestion("sesame", ctx)
         });
 
         input.update(&mut app, |input, ctx| {
@@ -3429,13 +3423,7 @@ fn test_completions_while_typing_doesnt_hide_autosuggestion() {
         input.update(&mut app, |input, ctx| {
             input.clear_buffer_and_reset_undo_stack(ctx);
             input.user_insert("open-file ", ctx);
-            input.set_autosuggestion(
-                "sesame",
-                AutosuggestionType::Command {
-                    was_intelligent_autosuggestion: false,
-                },
-                ctx,
-            )
+            input.set_autosuggestion("sesame", ctx)
         });
 
         // Autosuggestion should be active.
@@ -7382,7 +7370,7 @@ fn test_remove_ignored_suggestion_on_ai_query_execution() {
             });
             input.clear_buffer_and_reset_undo_stack(ctx);
             input.user_insert(test_query, ctx);
-            input.submit_ai_query_local(None, ctx);
+            input.submit_ai_query_local(ctx);
         });
 
         // Verify the query is no longer ignored
@@ -7771,7 +7759,7 @@ fn enter_submits_when_submit_on_ctrl_enter_is_false() {
 }
 
 #[test]
-fn ctrl_enter_emits_ctrl_enter_event_when_submit_on_ctrl_enter_is_false() {
+fn ctrl_enter_does_not_submit_when_submit_on_ctrl_enter_is_false() {
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -7791,17 +7779,13 @@ fn ctrl_enter_emits_ctrl_enter_event_when_submit_on_ctrl_enter_is_false() {
 
         open_rich_input_for_terminal(&terminal, &mut app);
 
-        let ctrl_enter_fired: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let submitted: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
-        let ctrl_enter_clone = ctrl_enter_fired.clone();
         let submitted_clone = submitted.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, event, _| match event {
-                Event::CtrlEnter => *ctrl_enter_clone.borrow_mut() = true,
-                Event::SubmitCLIAgentInput { text } => {
-                    submitted_clone.borrow_mut().push(text.clone())
+            ctx.subscribe_to_view(&input, move |_, event, _| {
+                if let Event::SubmitCLIAgentInput { text } = event {
+                    submitted_clone.borrow_mut().push(text.clone());
                 }
-                _ => {}
             });
         });
 
@@ -7813,10 +7797,6 @@ fn ctrl_enter_emits_ctrl_enter_event_when_submit_on_ctrl_enter_is_false() {
             input.input_ctrl_enter(ctx);
         });
 
-        assert!(
-            *ctrl_enter_fired.borrow(),
-            "Ctrl+Enter should emit Event::CtrlEnter when submit_on_ctrl_enter=false"
-        );
         assert!(
             submitted.borrow().is_empty(),
             "Ctrl+Enter must NOT submit when submit_on_ctrl_enter=false"
@@ -7898,16 +7878,12 @@ fn ctrl_enter_submits_when_submit_on_ctrl_enter_is_true() {
         open_rich_input_for_terminal(&terminal, &mut app);
 
         let submitted: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
-        let ctrl_enter_fired: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let submitted_clone = submitted.clone();
-        let ctrl_enter_clone = ctrl_enter_fired.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, event, _| match event {
-                Event::SubmitCLIAgentInput { text } => {
-                    submitted_clone.borrow_mut().push(text.clone())
+            ctx.subscribe_to_view(&input, move |_, event, _| {
+                if let Event::SubmitCLIAgentInput { text } = event {
+                    submitted_clone.borrow_mut().push(text.clone());
                 }
-                Event::CtrlEnter => *ctrl_enter_clone.borrow_mut() = true,
-                _ => {}
             });
         });
 
@@ -7929,11 +7905,6 @@ fn ctrl_enter_submits_when_submit_on_ctrl_enter_is_true() {
             "world",
             "submitted text should match buffer contents"
         );
-        assert!(
-            !*ctrl_enter_fired.borrow(),
-            "Ctrl+Enter must NOT emit Event::CtrlEnter when submit_on_ctrl_enter=true"
-        );
-
         input.read(&app, |input, ctx| {
             assert!(
                 input.buffer_text(ctx).is_empty(),

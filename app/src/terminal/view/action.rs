@@ -41,7 +41,6 @@ use crate::terminal::model::selection::{SelectAction, SelectionDirection};
 use crate::terminal::model::terminal_model::{BlockIndex, WithinModel};
 use crate::terminal::shared_session::SharedSessionActionSource;
 use crate::terminal::view::RichContentSecretTooltipInfo;
-use crate::terminal::view::passive_suggestions::PromptSuggestionResolution;
 use crate::workflows::workflow::Workflow;
 
 /// Version of the agent onboarding flow (non-legacy).
@@ -345,7 +344,6 @@ pub enum TerminalAction {
     CancelAmbientAgentTask,
     OpenInlineHistoryMenu,
     OpenModelSelector,
-    ResolvePromptSuggestion(PromptSuggestionResolution),
     AwsBedrockLoginBanner(AwsBedrockLoginBannerAction),
     AwsCliNotInstalledBanner(AwsCliNotInstalledBannerAction),
     /// Toggle the usage footer on the last AI block in the active conversation.
@@ -643,7 +641,6 @@ impl fmt::Debug for TerminalAction {
             CancelAmbientAgentTask => write!(f, "CancelAmbientAgentTask"),
             OpenInlineHistoryMenu => write!(f, "OpenInlineHistoryMenu"),
             OpenModelSelector => write!(f, "OpenModelSelector"),
-            ResolvePromptSuggestion(..) => write!(f, "ResolvePromptSuggestion"),
             AwsBedrockLoginBanner(action) => write!(f, "AwsBedrockLoginBanner({action:?})"),
             AwsCliNotInstalledBanner(action) => write!(f, "AwsCliNotInstalledBanner({action:?})"),
             ToggleUsageFooter => write!(f, "ToggleUsageFooter"),

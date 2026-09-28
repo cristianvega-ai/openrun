@@ -95,7 +95,6 @@ use super::soft_wrap::{ClampDirection, DisplayPointAndClampDirection};
 use crate::BlocklistAIHistoryModel;
 use crate::ai::agent::ImageContext;
 use crate::ai::blocklist::{BlocklistAIContextModel, InputType, PendingAttachment, PendingFile};
-use crate::ai::predict::next_command_model::{NextCommandModel, NextCommandSuggestionState};
 use crate::appearance::Appearance;
 use crate::channel::{Channel, ChannelState};
 use crate::editor::RangeExt;
@@ -114,9 +113,7 @@ use crate::settings::{
     InputSettings, SelectionSettings,
 };
 use crate::settings_view::flags;
-use crate::suggestions::ignored_suggestions_model::{IgnoredSuggestionsModel, SuggestionType};
 use crate::terminal::grid_size_util::grid_cell_dimensions;
-use crate::terminal::model::block::BlockId;
 use crate::themes::theme::Fill;
 use crate::ui_components::avatar::{Avatar, AvatarContent};
 use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, keybinding_name_to_keystroke};
@@ -145,27 +142,6 @@ use warpui::clipboard_utils::CLIPBOARD_IMAGE_MIME_TYPES;
 pub enum AutosuggestionLocation {
     EndOfBuffer,
     Inline(usize),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum AutosuggestionType {
-    Command {
-        was_intelligent_autosuggestion: bool,
-    },
-    AgentModeQuery {
-        context_block_ids: Vec<BlockId>,
-        was_intelligent_autosuggestion: bool,
-    },
-}
-
-impl AutosuggestionType {
-    pub fn matches_input_type(&self, input_type: InputType) -> bool {
-        if input_type.is_ai() {
-            matches!(self, AutosuggestionType::AgentModeQuery { .. })
-        } else {
-            matches!(self, AutosuggestionType::Command { .. })
-        }
-    }
 }
 
 impl fmt::Display for AutosuggestionLocation {
@@ -379,10 +355,7 @@ pub fn init(ctx: &mut AppContext) {
         FixedBinding::new(
             "ctrl-enter",
             EditorAction::CtrlEnter,
-            id!("EditorView")
-                & !id!("IMEOpen")
-                & !id!(flags::CTRL_ENTER_ACCEPTS_PROMPT_SUGGESTION)
-                & !id!(flags::CTRL_ENTER_ENTERS_AGENT_VIEW),
+            id!("EditorView") & !id!("IMEOpen") & !id!(flags::CTRL_ENTER_ENTERS_AGENT_VIEW),
         ),
         FixedBinding::new(
             "alt-enter",
@@ -1758,7 +1731,6 @@ pub struct EditorView {
     cursor_display_override: Option<CursorDisplayType>,
     window_id: WindowId,
     autosuggestion_state: Option<Arc<AutosuggestionState>>,
-    next_command_model: Option<ModelHandle<NextCommandModel>>,
 
     /// The height of the editor at the last render.
     /// This is needed because autosuggestions soft wrap and can increase the height of the editor.
@@ -1917,10 +1889,6 @@ pub struct AutosuggestionState {
     /// number in the editor where the autosuggestion should be rendered. By default, this should be
     /// the end of the buffer.
     pub location: AutosuggestionLocation,
-
-    /// Type of autosuggestion - whether it's a command or AI prompt.
-    /// Note we cannot use `type` since that's a reserved Rust keyword.
-    pub autosuggestion_type: AutosuggestionType,
 }
 
 impl AutosuggestionState {
@@ -2964,16 +2932,6 @@ impl EditorView {
         Self::new_internal("", options, ctx)
     }
 
-    pub fn with_next_command_model(
-        self,
-        next_command_model: ModelHandle<NextCommandModel>,
-    ) -> Self {
-        Self {
-            next_command_model: Some(next_command_model),
-            ..self
-        }
-    }
-
     pub fn with_context_model(self, context_model: ModelHandle<BlocklistAIContextModel>) -> Self {
         Self {
             context_model: Some(context_model),
@@ -3160,7 +3118,6 @@ impl EditorView {
             autocomplete_symbols_setting: *editor_settings_handle.as_ref(ctx).autocomplete_symbols,
             cursor_display_override,
             autosuggestion_state: None,
-            next_command_model: None,
             editor_height_shrink_delay: Arc::new(Mutex::new(EditorHeightShrinkDelay {
                 editor_height_before_shrink: 0.,
                 editor_height_shrink_start: None,
@@ -3453,14 +3410,6 @@ impl EditorView {
         buffer.to_point(char_offset)
     }
 
-    fn next_command_state<'a, A: ModelAsRef>(&self, ctx: &'a A) -> &'a NextCommandSuggestionState {
-        self.next_command_model
-            .as_ref()
-            .map_or(&NextCommandSuggestionState::None, |model| {
-                model.as_ref(ctx).get_state()
-            })
-    }
-
     /// Set an autosuggestion that is rendered natively within the editor as "ghosted" text. This
     /// autosuggestion will continue to be displayed as long as the text in the editor stays the
     /// same or a user inserts a prefix of autosuggestion text.
@@ -3468,7 +3417,6 @@ impl EditorView {
         &mut self,
         text: impl Into<String>,
         location: AutosuggestionLocation,
-        autosuggestion_type: AutosuggestionType,
         ctx: &mut ViewContext<Self>,
     ) {
         let buffer_snapshot = self.autosuggestion_basis(location, ctx);
@@ -3481,7 +3429,6 @@ impl EditorView {
                 buffer_snapshot: buffer_text,
                 original_autosuggestion_text: text.clone(),
                 current_autosuggestion_text: Some(text),
-                autosuggestion_type,
                 location,
             }));
 
@@ -3490,54 +3437,6 @@ impl EditorView {
             });
 
             ctx.notify();
-        }
-    }
-
-    /// Clears any existing autosuggestions (intelligent or not) that weren't for the current input_type.
-    /// If there's an empty buffer, populates the input with an intelligent autosuggestion for the input_type.
-    pub fn maybe_populate_intelligent_autosuggestion(
-        &mut self,
-        input_type: InputType,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // If our existing autosuggestion is not meant for the current input type, clear it.
-        if self
-            .autosuggestion_state
-            .as_ref()
-            .is_some_and(|state| !state.autosuggestion_type.matches_input_type(input_type))
-        {
-            self.clear_autosuggestion(ctx);
-        }
-        if input_type.is_ai() {
-            // The server does not return AI query suggestions currently.
-            // If we switched to AI input, clear the next command state.
-            // This way when switching back to shell input, there should be no next command suggestion populated.
-            self.clear_next_command_state(ctx);
-        } else if let Some(command) = self
-            .next_command_state(ctx)
-            .command_suggestion()
-            .map(|command| command.to_owned())
-        {
-            // Check if this suggestion is ignored before applying it
-            let is_ignored = IgnoredSuggestionsModel::as_ref(ctx)
-                .is_ignored(&command, SuggestionType::ShellCommand);
-
-            if !is_ignored {
-                // If input type is shell, populate with suggested shell command.
-                // The suggestion must contain the current buffer text as a prefix.
-                let Some(autosuggestion) = command.strip_prefix(self.buffer_text(ctx).as_str())
-                else {
-                    return;
-                };
-                self.set_autosuggestion(
-                    autosuggestion,
-                    AutosuggestionLocation::EndOfBuffer,
-                    AutosuggestionType::Command {
-                        was_intelligent_autosuggestion: true,
-                    },
-                    ctx,
-                );
-            }
         }
     }
 
@@ -3594,7 +3493,6 @@ impl EditorView {
     }
 
     /// Clears the current autosuggestion (ghosted text).
-    /// Next command state is not cleared so it may be used to populate an autosuggestion again.
     pub fn clear_autosuggestion(&mut self, ctx: &mut ViewContext<Self>) {
         self.autosuggestion_state.take();
 
@@ -3603,16 +3501,6 @@ impl EditorView {
             view.set_current_autosuggestion(None);
         });
 
-        ctx.notify();
-    }
-
-    /// Clears any next command state. Autosuggestion (ghosted text) is not cleared.
-    fn clear_next_command_state(&mut self, ctx: &mut ViewContext<Self>) {
-        if let Some(next_command_model) = &self.next_command_model {
-            next_command_model.update(ctx, |model, _| {
-                model.clear_state();
-            });
-        }
         ctx.notify();
     }
 
@@ -4371,7 +4259,6 @@ impl EditorView {
 
         // If an agent is responding, we don't want ctrl+c to clear the persistent input.
         let is_agent_responding = terminal_view
-            .as_ref()
             .and_then(|terminal_view| {
                 BlocklistAIHistoryModel::as_ref(ctx).active_conversation(terminal_view.id())
             })
@@ -4379,39 +4266,17 @@ impl EditorView {
                 conversation.status().is_in_progress() && conversation.exchange_count() > 0
             });
 
-        // If there is a pending passive ai block, we don't want ctrl+c to clear the buffer.
-        let is_pending_passive_ai_block = terminal_view.is_some_and(|terminal_view| {
-            let terminal_model = terminal_view.as_ref(ctx).model.lock();
-            terminal_model
-                .block_list()
-                .last_non_hidden_ai_block_handle(ctx)
-                .is_some_and(|ai_block| {
-                    let block = ai_block.as_ref(ctx);
-                    // Ctrl+c should dismiss the passive ai block only if the keybindings for the block are not hidden.
-                    block.is_passive_conversation()
-                        && (block.find_undismissed_code_diff(ctx).is_some()
-                            || block.pending_unit_test_suggestion(ctx).is_some_and(
-                                |suggested_prompt| {
-                                    !suggested_prompt.as_ref(ctx).is_keybindings_hidden()
-                                },
-                            ))
-                })
-        });
-
         let mut cleared_buffer_len = 0;
         if (!self.vim_mode_enabled(ctx)
             || self
                 .vim_mode(ctx)
                 .is_some_and(|vim_mode| matches![vim_mode, VimMode::Normal | VimMode::Insert]))
             && !is_agent_responding
-            && !is_pending_passive_ai_block
         {
             cleared_buffer_len = self.buffer_size(ctx).as_usize();
             self.clear_buffer(ctx);
         }
-        if !is_agent_responding || !is_pending_passive_ai_block {
-            self.vim_interrupt(ctx);
-        }
+        self.vim_interrupt(ctx);
 
         ctx.emit(Event::CtrlC { cleared_buffer_len });
     }
@@ -5993,7 +5858,6 @@ impl EditorView {
                     .clone(),
                 current_autosuggestion_text: Some(remaining_autosuggestion.to_owned()),
                 location: current_autosuggestion_state.location,
-                autosuggestion_type: current_autosuggestion_state.autosuggestion_type.clone(),
             };
             self.autosuggestion_state = Some(Arc::new(new_autosuggestion_state));
         }
@@ -6002,7 +5866,6 @@ impl EditorView {
         ctx.emit(Event::AutosuggestionAccepted {
             insertion_length: insertion_text.len(),
             buffer_char_length,
-            autosuggestion_type: current_autosuggestion_state.autosuggestion_type.clone(),
         });
 
         self.edit(
@@ -7476,12 +7339,6 @@ impl EditorView {
             .is_some_and(|s| s.is_active())
     }
 
-    pub fn active_autosuggestion_type(&self) -> Option<&AutosuggestionType> {
-        self.autosuggestion_state
-            .as_ref()
-            .map(|s| &s.autosuggestion_type)
-    }
-
     pub fn current_autosuggestion_text(&self) -> Option<&str> {
         self.autosuggestion_state
             .as_ref()
@@ -7702,7 +7559,6 @@ impl EditorView {
                             .clone(),
                         current_autosuggestion_text: Some(new_autosuggestion_text.to_owned()),
                         location: autosuggestion_state.location,
-                        autosuggestion_type: autosuggestion_state.autosuggestion_type.clone(),
                     };
                     self.autosuggestion_state = Some(Arc::new(new_autosuggestion_state));
                     return;
@@ -7716,7 +7572,6 @@ impl EditorView {
                     .clone(),
                 current_autosuggestion_text: None,
                 location: autosuggestion_state.location,
-                autosuggestion_type: autosuggestion_state.autosuggestion_type.clone(),
             }))
         }
     }
@@ -8192,7 +8047,6 @@ pub enum Event {
     AutosuggestionAccepted {
         insertion_length: usize,
         buffer_char_length: usize,
-        autosuggestion_type: AutosuggestionType,
     },
     Navigate(NavigationKey),
     Enter,
@@ -8553,8 +8407,6 @@ impl View for EditorView {
             &self.autosuggestion_ignore_view,
             self.show_autosuggestion_keybinding_hint,
             self.show_autosuggestion_ignore_button,
-            self.next_command_state(ctx).is_cycling(),
-            ctx,
         );
 
         #[cfg(feature = "voice_input")]

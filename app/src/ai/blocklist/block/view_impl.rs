@@ -1369,7 +1369,6 @@ impl AIAgentInput {
             | AIAgentInput::AutoCodeDiffQuery { .. }
             | AIAgentInput::ResumeConversation { .. }
             | AIAgentInput::CreateEnvironment { .. }
-            | AIAgentInput::TriggerPassiveSuggestion { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::SummarizeConversation { .. }
@@ -1378,7 +1377,6 @@ impl AIAgentInput {
             | AIAgentInput::ActionResult { .. }
             | AIAgentInput::MessagesReceivedFromAgents { .. }
             | AIAgentInput::EventsFromAgents { .. }
-            | AIAgentInput::PassiveSuggestionResult { .. }
             | AIAgentInput::OrchestrationConfigUpdate { .. } => None,
         }
     }

@@ -1948,10 +1948,6 @@ impl AIConversation {
         } = request_input;
 
         for (task_id, inputs) in input_messages.into_iter() {
-            let should_hide = inputs
-                .iter()
-                .any(|input| input.is_passive_suggestion_trigger());
-
             let new_exchange = AIAgentExchange {
                 id: AIAgentExchangeId::new(),
                 input: inputs,
@@ -1981,16 +1977,12 @@ impl AIConversation {
                 }),
             );
 
-            if should_hide {
-                self.hidden_exchanges.insert(new_exchange_id);
-            }
-
             ctx.emit(BlocklistAIHistoryEvent::AppendedExchange {
                 exchange_id: new_exchange_id,
                 task_id,
                 terminal_surface_id,
                 conversation_id: self.id,
-                is_hidden: should_hide,
+                is_hidden: false,
                 response_stream_id: Some(stream_id.clone()),
             });
         }

@@ -12,13 +12,10 @@ use anyhow::Result;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use lazy_static::lazy_static;
-use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use pathfinder_geometry::vector::vec2f;
 use rand::distributions::Alphanumeric;
 use rand::{Rng as _, thread_rng};
-use warp_core::features::FeatureFlag;
 use warp_core::platform::SessionPlatform;
-use warp_core::settings::ToggleableSetting;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::color::CLAUDE_ORANGE;
 use warp_core::ui::theme::Fill;
@@ -33,15 +30,14 @@ use warpui::elements::new_scrollable::{ScrollableAppearance, SingleAxisConfig};
 use warpui::elements::{
     Align, Border, ChildAnchor, ChildView, Clipped, ClippedScrollStateHandle, ConstrainedBox,
     Container, CornerRadius, CrossAxisAlignment, DispatchEventResult, Empty, EventHandler, Flex,
-    FormattedTextElement, HighlightedHyperlink, Hoverable, MainAxisAlignment, MainAxisSize,
-    MouseStateHandle, NewScrollable, OffsetPositioning, ParentAnchor, ParentElement,
-    ParentOffsetBounds, PositionedElementAnchor, PositionedElementOffsetBounds, Radius,
-    SavePosition, ScrollTarget, ScrollToPositionMode, ScrollbarWidth, Shrinkable,
-    SizeConstraintCondition, SizeConstraintSwitch, Stack, Text,
+    Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle, NewScrollable, OffsetPositioning,
+    ParentAnchor, ParentElement, ParentOffsetBounds, PositionedElementAnchor,
+    PositionedElementOffsetBounds, Radius, SavePosition, ScrollTarget, ScrollToPositionMode,
+    ScrollbarWidth, Shrinkable, SizeConstraintCondition, SizeConstraintSwitch, Stack, Text,
 };
 use warpui::keymap::{EditableBinding, FixedBinding, Keystroke};
 use warpui::platform::{Cursor, OperatingSystem};
-use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
+use warpui::ui_components::components::UiComponent;
 use warpui::{
     AppContext, Element, Entity, FocusContext, ModelHandle, SingletonEntity, TypedActionView, View,
     ViewContext, ViewHandle, WeakViewHandle,
@@ -72,7 +68,6 @@ use crate::ai::blocklist::model::{AIBlockModel, AIBlockModelHelper};
 use crate::ai::blocklist::view_util::render_provider_icon_button;
 use crate::ai::mcp::{MCPProvider, mcp_provider_from_file_path};
 use crate::ai::paths::host_native_absolute_path;
-use crate::ai::predict::prompt_suggestions::ACCEPT_PROMPT_SUGGESTION_KEYBINDING;
 use crate::ai::skills::{
     SkillManager, SkillOpenOrigin, SkillReference, SkillTelemetryEvent,
     icon_override_for_skill_name, render_skill_button, skill_path_from_location,
@@ -86,10 +81,7 @@ use crate::menu::{Event as MenuEvent, Menu, MenuItemFields, MenuVariant};
 use crate::pane_group::focus_state::PaneFocusHandle;
 use crate::pane_group::pane::{PaneId, view};
 use crate::pane_group::{BackingView, PaneEvent};
-use crate::server::telemetry::{
-    AgentModeCodeFileNavigationSource, ToggleCodeSuggestionsSettingSource,
-};
-use crate::settings::AISettings;
+use crate::server::telemetry::AgentModeCodeFileNavigationSource;
 use crate::terminal::ShellLaunchData;
 use crate::terminal::input::SET_INPUT_MODE_AGENT_ACTION_NAME;
 use crate::ui_components::blended_colors;
@@ -207,8 +199,6 @@ pub fn init(app: &mut AppContext) {
 struct CodeDiffViewMouseStates {
     show_hide_button: MouseStateHandle,
     scroll_icon_button: MouseStateHandle,
-    passive_code_suggestion_checkbox: MouseStateHandle,
-    ai_settings_link_highlight_index: HighlightedHyperlink,
     skill_button_handle: MouseStateHandle,
     stats_badge_button: MouseStateHandle,
     mcp_config_button_handle: MouseStateHandle,
@@ -229,7 +219,6 @@ pub enum CodeDiffViewEvent {
     EditorFocused,
     Blur,
     DisplayModeChanged,
-    OpenSettings,
     CancelPassive,
     ViewDetails,
     ContinuePassiveCodeDiffWithAgent {
@@ -307,8 +296,6 @@ pub enum CodeDiffViewAction {
     NavigateToDiffHunk(Direction),
     SelectFile(Direction),
     ScrollToExpand,
-    ToggleCodeSuggestions,
-    OpenSettings,
     ToggleAcceptMenu,
     OpenCodeReviewPane,
     RevertChanges,
@@ -407,7 +394,6 @@ pub struct CodeDiffView {
     position_id_prefix: String,
     /// Whether this code diff is a passive code suggestion.
     is_passive: bool,
-    should_show_speedbump: bool,
     session_platform: Option<SessionPlatform>,
     /// Whether diffs target local disk or a remote host.
     diff_session_type: DiffSessionType,
@@ -584,7 +570,6 @@ impl CodeDiffView {
         title: Option<String>,
         identifiers: AIIdentifiers,
         edit_format_kind: RequestFileEditsFormatKind,
-        should_show_speedbump: bool,
         action_model: ModelHandle<BlocklistAIActionModel>,
         session_platform: Option<SessionPlatform>,
         ctx: &mut ViewContext<Self>,
@@ -605,7 +590,6 @@ impl CodeDiffView {
             title,
             identifiers,
             edit_format_kind,
-            should_show_speedbump,
             session_platform,
             ctx,
         );
@@ -646,34 +630,6 @@ impl CodeDiffView {
         view
     }
 
-    /// Creates a passive `CodeDiffView` for out-of-band code diff suggestions.
-    ///
-    /// Unlike [`Self::new`], this does not require an `AIBlockModel` or
-    /// `BlocklistAIActionModel` — the view is standalone and not tied to the
-    /// action executor pipeline.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_passive(
-        action_id: &AIAgentActionId,
-        title: Option<String>,
-        identifiers: AIIdentifiers,
-        edit_format_kind: RequestFileEditsFormatKind,
-        should_show_speedbump: bool,
-        session_platform: Option<SessionPlatform>,
-        ctx: &mut ViewContext<Self>,
-    ) -> Self {
-        Self::build(
-            action_id,
-            true,
-            CodeDiffState::WaitingForUser,
-            title,
-            identifiers,
-            edit_format_kind,
-            should_show_speedbump,
-            session_platform,
-            ctx,
-        )
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn build(
         action_id: &AIAgentActionId,
@@ -682,7 +638,6 @@ impl CodeDiffView {
         title: Option<String>,
         identifiers: AIIdentifiers,
         edit_format_kind: RequestFileEditsFormatKind,
-        should_show_speedbump: bool,
         session_platform: Option<SessionPlatform>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
@@ -842,7 +797,6 @@ impl CodeDiffView {
             scrollable_state: Default::default(),
             position_id_prefix,
             is_passive,
-            should_show_speedbump,
             session_platform,
             diff_session_type: DiffSessionType::Local,
             pending_saves: 0,
@@ -1957,10 +1911,6 @@ impl CodeDiffView {
                 )
                 .finish();
 
-                if self.should_show_speedbump {
-                    let checkbox = self.render_code_suggestions_toggle(appearance, app);
-                    return Flex::column().with_children([container, checkbox]).finish();
-                }
                 container
             }
             DisplayMode::FullPane => Shrinkable::new(
@@ -1987,10 +1937,6 @@ impl CodeDiffView {
 
     fn position_id_for_inline_editor(&self) -> String {
         format!("CodeDiffView-inline-editor-{}", &self.position_id_prefix)
-    }
-
-    fn position_id_for_inline_speedbump(&self) -> String {
-        format!("CodeDiffView-inline-speedbump-{}", &self.position_id_prefix)
     }
 
     fn position_id_for_accept_split_button(&self) -> String {
@@ -2295,101 +2241,6 @@ impl CodeDiffView {
         ctx.notify();
     }
 
-    /// Render the code suggestions toggle checkbox for passive code diffs.
-    fn render_code_suggestions_toggle(
-        &self,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let theme = appearance.theme();
-        let font_color = theme.sub_text_color(theme.background()).into_solid();
-        let font_family = appearance.ui_font_family();
-        let font_size = 12.;
-
-        let checked = AISettings::as_ref(app).is_code_suggestions_enabled(app);
-        let checkbox = appearance
-            .ui_builder()
-            .checkbox(
-                self.button_mouse_states
-                    .passive_code_suggestion_checkbox
-                    .clone(),
-                Some(font_size),
-            )
-            .check(!checked)
-            .with_style(UiComponentStyles {
-                font_color: Some(font_color),
-                font_size: Some(font_size),
-                ..Default::default()
-            })
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(CodeDiffViewAction::ToggleCodeSuggestions);
-            })
-            .with_cursor(Cursor::PointingHand)
-            .finish();
-
-        let checkbox_text = appearance
-            .ui_builder()
-            .span("Don't show me suggested code banners again")
-            .with_style(UiComponentStyles {
-                font_color: Some(font_color),
-                font_size: Some(font_size),
-                padding: Some(Coords::default().left(4.)),
-                ..Default::default()
-            })
-            .build()
-            .finish();
-
-        let formatted_text = FormattedTextElement::new(
-            FormattedText::new([FormattedTextLine::Line(vec![
-                FormattedTextFragment::hyperlink(
-                    "Manage suggested code banner settings",
-                    "Settings > AI",
-                ),
-            ])]),
-            font_size,
-            font_family,
-            font_family,
-            font_color,
-            self.button_mouse_states
-                .ai_settings_link_highlight_index
-                .clone(),
-        )
-        .with_hyperlink_font_color(blended_colors::accent_fg_strong(theme).into())
-        .register_default_click_handlers(|_, ctx, _| {
-            ctx.dispatch_typed_action(CodeDiffViewAction::OpenSettings);
-        })
-        .finish();
-
-        let mut container = Container::new(
-            Flex::row()
-                .with_main_axis_size(MainAxisSize::Max)
-                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_child(
-                    Flex::row()
-                        .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                        .with_children([checkbox, checkbox_text])
-                        .finish(),
-                )
-                .with_child(formatted_text)
-                .finish(),
-        )
-        .with_horizontal_padding(INLINE_ACTION_HORIZONTAL_PADDING)
-        .with_background(theme.surface_1())
-        .with_border(
-            Border::new(1.)
-                .with_sides(false, true, true, true)
-                .with_border_fill(blended_colors::neutral_4(theme)),
-        );
-
-        if self.is_inline_banner_expanded() {
-            container = container.with_corner_radius(CornerRadius::with_bottom(Radius::Pixels(8.)))
-        }
-
-        SavePosition::new(container.finish(), &self.position_id_for_inline_speedbump()).finish()
-    }
-
     pub fn primary_file_path(&self, app: &AppContext) -> Option<String> {
         let first = self.pending_diffs.first()?;
         first
@@ -2445,18 +2296,10 @@ impl View for CodeDiffView {
                 && !self.is_inline_banner_expanded()
                 && !self.is_inline_banner_dismissed()
             {
-                // Scroll icon is anchored to either the editor or the speedbump, depending on which is visible.
-                let (saved_position_id, saved_position_anchor) = if self.should_show_speedbump {
-                    (
-                        self.position_id_for_inline_speedbump(),
-                        PositionedElementAnchor::TopMiddle,
-                    )
-                } else {
-                    (
-                        self.position_id_for_inline_editor(),
-                        PositionedElementAnchor::BottomMiddle,
-                    )
-                };
+                let (saved_position_id, saved_position_anchor) = (
+                    self.position_id_for_inline_editor(),
+                    PositionedElementAnchor::BottomMiddle,
+                );
 
                 let mut stack = Stack::new();
                 stack.add_child(
@@ -2626,27 +2469,6 @@ impl TypedActionView for CodeDiffView {
                     },
                     ctx
                 );
-            }
-            CodeDiffViewAction::ToggleCodeSuggestions => {
-                let checked = AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    settings
-                        .code_suggestions_enabled_internal
-                        .toggle_and_save_value(ctx)
-                });
-                ctx.notify();
-
-                if let Ok(checked) = checked {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::ToggleCodeSuggestionsSetting {
-                            source: ToggleCodeSuggestionsSettingSource::Speedbump,
-                            is_code_suggestions_enabled: checked,
-                        },
-                        ctx
-                    );
-                }
-            }
-            CodeDiffViewAction::OpenSettings => {
-                ctx.emit(CodeDiffViewEvent::OpenSettings);
             }
             CodeDiffViewAction::OpenCodeReviewPane => {
                 self.code_review_button.update(ctx, |_, ctx| {
@@ -3042,11 +2864,7 @@ impl BackingView for CodeDiffView {
 }
 
 fn accept_keystroke_source(is_passive: bool) -> KeystrokeSource {
-    if FeatureFlag::AgentView.is_enabled() && is_passive {
-        KeystrokeSource::Binding(ACCEPT_PROMPT_SUGGESTION_KEYBINDING)
-    } else {
-        KeystrokeSource::Fixed(keystroke_for_mode(ACCEPT_KEY, is_passive))
-    }
+    KeystrokeSource::Fixed(keystroke_for_mode(ACCEPT_KEY, is_passive))
 }
 
 /// Returns a keystroke based on key, OS, and passive state.

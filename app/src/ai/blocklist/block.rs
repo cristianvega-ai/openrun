@@ -95,10 +95,10 @@ use crate::ai::agent::{
     AIAgentCitation, AIAgentContext, AIAgentExchangeId, AIAgentInput, AIAgentOutput,
     AIAgentOutputMessage, AIAgentOutputMessageType, AIAgentTextSection, AIIdentifiers,
     CancellationReason, CreateDocumentsRequest, CreateDocumentsResult, DocumentToCreate,
-    EditDocumentsResult, MessageId, PassiveSuggestionTrigger, ProgrammingLanguage,
-    RenderableAIError, RequestCommandOutputResult, RequestFileEditsResult, SearchCodebaseResult,
-    ServerOutputId, SubagentCall, SubagentType, SuggestPromptRequest, SuggestPromptResult,
-    SuggestedLoggingId, SummarizationType, TodoOperation,
+    EditDocumentsResult, MessageId, ProgrammingLanguage, RenderableAIError,
+    RequestCommandOutputResult, RequestFileEditsResult, SearchCodebaseResult, ServerOutputId,
+    SubagentCall, SubagentType, SuggestPromptRequest, SuggestPromptResult, SuggestedLoggingId,
+    SummarizationType, TodoOperation,
 };
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
@@ -180,7 +180,6 @@ use crate::settings::{
 };
 use crate::settings_view::SettingsSection;
 use crate::terminal::find::TerminalFindModel;
-use crate::terminal::model::BlockId;
 use crate::terminal::model::secrets::RichContentSecretTooltipInfo;
 use crate::terminal::model::session::active_session::{ActiveSession, ActiveSessionEvent};
 use crate::terminal::model_events::{ModelEvent, ModelEventDispatcher};
@@ -188,9 +187,7 @@ use crate::terminal::safe_mode_settings::{
     SafeModeSettings, SafeModeSettingsChangedEvent, get_secret_obfuscation_mode,
 };
 use crate::terminal::view::ambient_agent::{AmbientAgentViewModel, AmbientAgentViewModelEvent};
-use crate::terminal::view::{
-    CodeDiffAction, RichContentLink, RichContentLinkTooltipInfo, TerminalAction,
-};
+use crate::terminal::view::{RichContentLink, RichContentLinkTooltipInfo, TerminalAction};
 use crate::terminal::{ShellLaunchData, TerminalModel, TerminalView};
 use crate::ui_components::icons::Icon;
 use crate::util::link_detection::*;
@@ -206,7 +203,6 @@ use crate::view_components::compactible_action_button::CompactibleActionButton;
 use crate::view_components::find::FindEvent;
 use crate::workspace::{ForkAIConversationParams, ForkedConversationDestination, WorkspaceAction};
 use crate::workspaces::user_profiles::{UserProfileWithUID, UserProfiles};
-use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{
     AIAgentTodoList, Appearance, FileEdit, LLMPreferences, ToastStack, send_telemetry_from_ctx,
 };
@@ -3146,24 +3142,6 @@ impl AIBlock {
             (false, false) => RequestFileEditsFormatKind::Unknown,
         };
 
-        // Only show the speedbump once, update the setting afterwards.
-        let should_show_code_suggestion_speedbump =
-            self.model.request_type(ctx).is_passive_code_diff()
-                && UserWorkspaces::as_ref(ctx).is_code_suggestions_toggleable()
-                && AISettings::as_ref(ctx).show_code_suggestion_speedbump(ctx);
-        if should_show_code_suggestion_speedbump {
-            AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                if let Err(e) = settings
-                    .show_code_suggestion_speedbump
-                    .set_value(false, ctx)
-                {
-                    report_error!(
-                        e.context("Failed to persist 'Show code suggestion speedbump' setting")
-                    );
-                }
-            });
-        }
-
         let view = ctx.add_typed_action_view(|ctx| {
             CodeDiffView::new(
                 action_id,
@@ -3171,7 +3149,6 @@ impl AIBlock {
                 title.clone(),
                 identifiers,
                 edit_format_kind,
-                should_show_code_suggestion_speedbump,
                 self.action_model.clone(),
                 self.shell_launch_data.clone().map(|data| data.into()),
                 ctx,
@@ -3259,9 +3236,6 @@ impl AIBlock {
                 CodeDiffViewEvent::DisplayModeChanged => {
                     ctx.notify();
                 }
-                CodeDiffViewEvent::OpenSettings => {
-                    ctx.emit(AIBlockEvent::OpenSettings);
-                }
                 CodeDiffViewEvent::CancelPassive => {
                     ctx.emit(AIBlockEvent::DismissedPassiveBlock);
                 }
@@ -3286,18 +3260,8 @@ impl AIBlock {
                     accepted: auto_resume,
                     ..
                 } => {
-                    let trigger_block_id = me.model.inputs_to_render(ctx).iter().find_map(|i| {
-                        if let Some(PassiveSuggestionTrigger::ShellCommandCompleted(trigger)) =
-                            i.passive_suggestion_trigger()
-                        {
-                            Some(trigger.executed_shell_command.id.clone())
-                        } else {
-                            None
-                        }
-                    });
                     ctx.emit(AIBlockEvent::ContinuePassiveCodeDiffWithAgent {
                         conversation_id: me.client_ids.conversation_id,
-                        trigger_block_id,
                         auto_resume: *auto_resume,
                     });
                     ctx.emit(AIBlockEvent::FocusTerminal);
@@ -4288,26 +4252,6 @@ impl AIBlock {
             model_id: self.model.model_id(ctx),
         };
 
-        // Only show the speedbump once, update the setting afterwards.
-        let should_show_speedbump = self
-            .model
-            .request_type(ctx)
-            .is_passive_unit_test_suggestion()
-            && UserWorkspaces::as_ref(ctx).is_code_suggestions_toggleable()
-            && AISettings::as_ref(ctx).show_code_suggestion_speedbump(ctx);
-        if should_show_speedbump {
-            AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                if let Err(e) = settings
-                    .show_code_suggestion_speedbump
-                    .set_value(false, ctx)
-                {
-                    report_error!(
-                        e.context("Failed to persist 'Show code suggestion speedbump' setting")
-                    );
-                }
-            });
-        }
-
         let view = ctx.add_typed_action_view(|ctx| {
             SuggestedUnitTestsView::new(
                 identifiers.clone(),
@@ -4315,7 +4259,6 @@ impl AIBlock {
                 query,
                 title,
                 description,
-                should_show_speedbump,
                 ctx,
             )
         });
@@ -4365,9 +4308,6 @@ impl AIBlock {
             }
             SuggestedUnitTestsEvent::Blur => {
                 ctx.emit(AIBlockEvent::FocusTerminal);
-            }
-            SuggestedUnitTestsEvent::OpenSettings => {
-                ctx.emit(AIBlockEvent::OpenSettings);
             }
         }
     }
@@ -5452,24 +5392,6 @@ impl AIBlock {
         requested_command_view.copied_from_citation().cloned()
     }
 
-    pub fn handle_passive_code_diff_action(
-        &mut self,
-        action: CodeDiffAction,
-        ctx: &mut ViewContext<Self>,
-    ) -> bool {
-        let Some(edit) = self.find_undismissed_code_diff(ctx) else {
-            return false;
-        };
-        edit.view.update(ctx, |view, ctx| match action {
-            CodeDiffAction::Accept => view.try_accept_action(ctx),
-            CodeDiffAction::Reject => view.reject(ctx),
-            CodeDiffAction::Edit => view.expand_and_edit(ctx),
-            CodeDiffAction::ScrollToExpand => view.expand_inline_banner(ctx),
-        });
-        ctx.notify();
-        true
-    }
-
     /// Marks all pending passive actions (code diffs and suggested prompts) as dismissed/ignored.
     /// This hides their keybindings in the UI and makes them less interactive.
     pub fn ignore_passive_actions(&mut self, ctx: &mut ViewContext<Self>) {
@@ -6155,9 +6077,6 @@ pub enum AIBlockEvent {
     /// Emitted when a passive code diff should be injected into an agent context.
     ContinuePassiveCodeDiffWithAgent {
         conversation_id: AIConversationId,
-        /// If the auto code diff was generated as a result of a block trigger,
-        /// this is the ID of that block.
-        trigger_block_id: Option<BlockId>,
         auto_resume: bool,
     },
     OpenSuggestedAgentModeWorkflowModal {

@@ -16,8 +16,8 @@ use super::history_model::{
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::{
     AIAgentActionType, AIAgentAttachment, AIAgentContext, AIAgentExchangeId, AIAgentInput,
-    AIAgentPtyWriteMode, AskUserQuestionItem, FileLocations, PassiveSuggestionResultType,
-    ReadFilesRequest, SearchCodebaseRequest, UserQueryMode,
+    AIAgentPtyWriteMode, AskUserQuestionItem, FileLocations, ReadFilesRequest,
+    SearchCodebaseRequest, UserQueryMode,
 };
 use crate::ai::llms::LLMId;
 use crate::persistence::ModelEvent;
@@ -73,25 +73,9 @@ impl TryFrom<&AIAgentInput> for PersistedAIInputType {
                 context: context.clone(),
                 referenced_attachments: Default::default(),
             }),
-            AIAgentInput::PassiveSuggestionResult {
-                suggestion: PassiveSuggestionResultType::Prompt { prompt },
-                context,
-                ..
-            } => Ok(Self::Query {
-                text: prompt.clone(),
-                context: context.clone(),
-                referenced_attachments: Default::default(),
-            }),
-            AIAgentInput::PassiveSuggestionResult {
-                suggestion: PassiveSuggestionResultType::CodeDiff { .. },
-                ..
-            } => Err(anyhow!(
-                "PassiveSuggestionResult::CodeDiff is not persisted as a query."
-            )),
             AIAgentInput::ActionResult { .. }
             | AIAgentInput::ResumeConversation { .. }
             | AIAgentInput::CreateEnvironment { .. }
-            | AIAgentInput::TriggerPassiveSuggestion { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::CodeReview { .. }

@@ -26,11 +26,9 @@ pub use execute::{
     RequestFileEditsExecutor, RequestFileEditsFormatKind, RequestFileEditsTelemetryEvent,
     RunAgentsExecutor, RunAgentsExecutorEvent, RunAgentsSpawningSnapshot, ShellCommandExecutor,
     ShellCommandExecutorEvent, StartAgentExecutor, StartAgentExecutorEvent, StartAgentRequest,
-    StartAgentRequestId, TEAM_CHANGED_DURING_CHILD_LAUNCH_ERROR, read_local_file_context,
+    StartAgentRequestId, TEAM_CHANGED_DURING_CHILD_LAUNCH_ERROR,
 };
-pub(crate) use execute::{
-    FileReadResult, MalformedFinalLineProxyEvent, apply_edits, coerce_integer_args,
-};
+pub(crate) use execute::{MalformedFinalLineProxyEvent, coerce_integer_args};
 #[cfg(test)]
 pub(crate) use execute::{compose_run_agents_child_prompt, run_agents_to_start_agent_mode};
 use futures::future::{BoxFuture, join_all};

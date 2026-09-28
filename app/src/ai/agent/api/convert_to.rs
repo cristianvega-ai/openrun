@@ -10,8 +10,8 @@ use warp_multi_agent_api as api;
 use crate::ai::agent::base_user_query::warp_client_origin;
 use crate::ai::agent::{
     AIAgentActionResult, AIAgentActionResultType, AIAgentAttachment, AIAgentContext, AIAgentInput,
-    BaseUserQuery, DriveObjectPayload, MCPContext, PassiveSuggestionResultType,
-    PassiveSuggestionTrigger, RunningCommand, StaticQueryType, Suggestions, UserQueryMode,
+    BaseUserQuery, DriveObjectPayload, MCPContext, RunningCommand, StaticQueryType, Suggestions,
+    UserQueryMode,
 };
 use crate::ai::block_context::BlockContext;
 
@@ -110,24 +110,6 @@ pub(super) fn convert_input(
                     context: Some(convert_context(context.as_ref())),
                     r#type: Some(api::request::input::Type::CreateEnvironment(
                         api::request::input::CreateEnvironment { repo_paths },
-                    )),
-                });
-            }
-            AIAgentInput::TriggerPassiveSuggestion {
-                context,
-                attachments,
-                trigger,
-            } => {
-                return Ok(api::request::Input {
-                    context: Some(convert_context(context.as_ref())),
-                    r#type: Some(api::request::input::Type::GeneratePassiveSuggestions(
-                        api::request::input::GeneratePassiveSuggestions {
-                            attachments: attachments
-                                .into_iter()
-                                .map(|attachment| attachment.into())
-                                .collect(),
-                            trigger: Some(trigger.into()),
-                        },
                     )),
                 });
             }
@@ -418,62 +400,6 @@ fn convert_input_to_user_input(
                 },
             ),
         ),
-        AIAgentInput::PassiveSuggestionResult {
-            trigger,
-            suggestion,
-            ..
-        } => {
-            let api_trigger = match trigger {
-                Some(PassiveSuggestionTrigger::ShellCommandCompleted(shell_trigger)) => Some(
-                    api::passive_suggestion_result_type::Trigger::ExecutedShellCommand(
-                        (*shell_trigger.executed_shell_command).into(),
-                    ),
-                ),
-                Some(PassiveSuggestionTrigger::AgentResponseCompleted { .. }) => Some(
-                    api::passive_suggestion_result_type::Trigger::AgentResponseCompleted(
-                        api::passive_suggestion_result_type::AgentResponseCompleted {},
-                    ),
-                ),
-                _ => None,
-            };
-            let api_suggestion = match suggestion {
-                PassiveSuggestionResultType::Prompt { prompt } => Some(
-                    api::passive_suggestion_result_type::Suggestion::Prompt(
-                        api::passive_suggestion_result_type::Prompt { prompt },
-                    ),
-                ),
-                PassiveSuggestionResultType::CodeDiff {
-                    diffs,
-                    summary,
-                    accepted,
-                } => Some(
-                    api::passive_suggestion_result_type::Suggestion::CodeDiff(
-                        api::passive_suggestion_result_type::CodeDiff {
-                            diffs: diffs
-                                .into_iter()
-                                .map(|d| api::passive_suggestion_result_type::code_diff::Diff {
-                                    file_path: d.file_path,
-                                    search: d.search,
-                                    replace: d.replace,
-                                })
-                                .collect(),
-                            summary,
-                            accepted,
-                        },
-                    ),
-                ),
-            };
-            Ok(
-                api::request::input::user_inputs::user_input::Input::PassiveSuggestionResult(
-                    api::request::input::user_inputs::PassiveSuggestionResultInput {
-                        result: Some(api::PassiveSuggestionResultType {
-                            trigger: api_trigger,
-                            suggestion: api_suggestion,
-                        }),
-                    },
-                ),
-            )
-        }
         AIAgentInput::OrchestrationConfigUpdate {
             plan_id,
             config,
@@ -494,38 +420,6 @@ fn convert_input_to_user_input(
         invalid_input => Err(anyhow!(
             "Cannot convert non user query or action result input into API UserInput: {invalid_input:?}"
         ).into()),
-    }
-}
-
-impl From<PassiveSuggestionTrigger> for api::request::input::generate_passive_suggestions::Trigger {
-    fn from(value: PassiveSuggestionTrigger) -> Self {
-        match value {
-            PassiveSuggestionTrigger::FilesChanged => {
-                api::request::input::generate_passive_suggestions::Trigger::FilesChanged(())
-            }
-            PassiveSuggestionTrigger::CommandRun => {
-                api::request::input::generate_passive_suggestions::Trigger::CommandRun(())
-            }
-            PassiveSuggestionTrigger::ShellCommandCompleted(shell_trigger) => {
-                api::request::input::generate_passive_suggestions::Trigger::ShellCommandCompleted(
-                    api::request::input::generate_passive_suggestions::ShellCommandCompleted {
-                        executed_shell_command: Some(
-                            (*shell_trigger.executed_shell_command).into(),
-                        ),
-                        relevant_files: shell_trigger
-                            .relevant_files
-                            .into_iter()
-                            .flat_map(|file| Vec::<api::AnyFileContent>::from(file).into_iter())
-                            .collect(),
-                    },
-                )
-            }
-            PassiveSuggestionTrigger::AgentResponseCompleted { .. } => {
-                api::request::input::generate_passive_suggestions::Trigger::AgentResponseCompleted(
-                    api::request::input::generate_passive_suggestions::AgentResponseCompleted {},
-                )
-            }
-        }
     }
 }
 

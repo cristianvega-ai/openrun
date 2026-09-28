@@ -1,11 +1,14 @@
+use std::sync::Arc;
+
+use itertools::Itertools;
 use typed_path::TypedPathBuf;
 use warp_completer::meta::SpannedItem;
 use warp_completer::parsers::ParsedToken;
+use warp_completer::parsers::hir::ArgType;
 use warp_completer::signatures::CommandRegistry;
 use warpui::App;
 
 use super::*;
-use crate::completer::SessionContext;
 use crate::terminal::model::session::command_executor::testing::TestCommandExecutor;
 use crate::terminal::model::session::{Session, SessionInfo};
 

@@ -1,4 +1,5 @@
 mod agent;
+mod autosuggestions;
 pub mod buffer_model;
 mod classic;
 mod cli_agent;
@@ -33,7 +34,6 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use ai::harness::Harness;
@@ -51,8 +51,7 @@ use parking_lot::FairMutex;
 #[cfg(feature = "local_fs")]
 use parking_lot::Mutex;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Serialize;
 use session_sharing_protocol::common::{AgentAttachment, ParticipantId, ServerConversationToken};
 use settings::{Setting as _, ToggleableSetting};
 use string_offset::{ByteOffset, CharOffset};
@@ -133,10 +132,6 @@ use super::universal_developer_input::{
 use super::view::ambient_agent::{
     AmbientAgentViewModel, AmbientAgentViewModelEvent, is_cloud_agent_pre_first_exchange,
 };
-use super::view::inline_banner::{
-    PromptSuggestionBannerState, ZeroStatePromptSuggestionTriggeredFrom,
-    ZeroStatePromptSuggestionType,
-};
 use super::view::queued_prompts_panel::{QueuedPromptsPanelEvent, QueuedPromptsPanelView};
 use super::view::{
     ExecuteCommandEvent, PADDING_LEFT as TERMINAL_VIEW_PADDING_LEFT, SyncInputType, TerminalAction,
@@ -159,7 +154,6 @@ use crate::ai::agent_conversations_model::{
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::ambient_agents::telemetry::HandoffEntryPoint;
 use crate::ai::attachment_utils::MAX_ATTACHMENT_SIZE_BYTES;
-use crate::ai::block_context::BlockContext;
 use crate::ai::blocklist::agent_view::shortcuts::AgentShortcutViewModel;
 use crate::ai::blocklist::agent_view::{
     AgentInputFooter, AgentInputFooterEvent, AgentViewController, AgentViewEntryOrigin,
@@ -173,7 +167,6 @@ use crate::ai::blocklist::handoff::{
     HandoffLaunchAttachments, PendingCloudLaunch, suggest_handoff_environment,
 };
 use crate::ai::blocklist::prompt::prompt_alert::{PromptAlertEvent, PromptAlertView};
-use crate::ai::blocklist::telemetry_banner::should_collect_ai_ugc_telemetry;
 use crate::ai::blocklist::{
     AttachmentType, BLOCK_CONTEXT_ATTACHMENT_REGEX, BlocklistAIActionModel,
     BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
@@ -191,22 +184,12 @@ use crate::ai::connected_self_hosted_workers::{
 #[cfg(not(target_family = "wasm"))]
 use crate::ai::conversation_export::export_conversation_markdown;
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentVersion};
-use crate::ai::execution_context::execution_context_for_session;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::harness_availability::{
     CloudAgentStartBlocker, HarnessAvailabilityModel, cloud_agent_start_blocker,
 };
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::ai::mcp::TemplatableMCPServerManager;
-use crate::ai::predict::next_command_model::{
-    NextCommandModel, NextCommandModelEvent, NextCommandSuggestionState, ZeroStateSuggestionInfo,
-    is_command_valid, is_next_command_enabled,
-};
-use crate::ai::predict::predict_am_queries::PredictAMQueriesRequest;
-use crate::ai::predict::prompt_suggestions::{
-    has_pending_code_or_unit_test_prompt_suggestion,
-    is_accept_prompt_suggestion_bound_to_ctrl_enter,
-};
 use crate::ai::skills::{SkillOpenOrigin, SkillTelemetryEvent};
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::channel::{Channel, ChannelState};
@@ -224,7 +207,7 @@ use crate::context_chips::display_chip::{DisplayChipConfig, PromptChipShellComma
 use crate::context_chips::prompt_type::PromptType;
 use crate::context_chips::spacing;
 use crate::editor::{
-    AttachedImage as AttachedImageRawData, AutosuggestionLocation, AutosuggestionType,
+    AttachedImage as AttachedImageRawData, AutosuggestionLocation,
     BaselinePositionComputationMethod, CommandXRayAnchor, CrdtOperation, CursorColors,
     DisplayPoint, EditOrigin, EditorAction, EditorDecoratorElements, EditorOptions, EditorSnapshot,
     EditorView, Event as EditorEvent, ImageContextOptions, InteractionState,
@@ -239,7 +222,6 @@ use crate::input_suggestions::{
     Event as InputSuggestionsEvent, HistoryInputSuggestion, InputSuggestions,
     TabCompletionsPreselectOption,
 };
-use crate::network::NetworkStatus;
 use crate::pane_group::PaneGroupAction;
 use crate::pane_group::focus_state::PaneFocusHandle;
 #[cfg(feature = "local_fs")]
@@ -260,7 +242,6 @@ use crate::server::server_api::ServerApi;
 use crate::server::server_api::ai::AttachmentInput;
 use crate::server::server_api::ai::{AIClient, AttachmentFileInfo};
 use crate::server::server_api::presigned_upload::upload_to_target;
-use crate::server::team_scope::RequestTeamScope;
 use crate::server::telemetry::{
     AnonymousUserSignupEntrypoint, CommandXRayTrigger, EnvVarTelemetryMetadata, PaletteSource,
     QueuedPromptSendNowTrigger, SlashCommandAcceptedDetails, SlashMenuSource, TelemetryEvent,
@@ -323,10 +304,9 @@ use crate::terminal::view::ambient_agent::{
     cloud_agent_team_required_toast_message,
 };
 use crate::terminal::view::init::{CAN_ATTACH_FILE_KEY, CLI_AGENT_SESSION_ACTIVE_KEY};
-use crate::terminal::view::inline_banner::{PromptSuggestionsEvent, PromptSuggestionsView};
 use crate::terminal::view::{
-    AIQueryRouting, CodeDiffAction, file_attach_allowed_for_shared_session,
-    resolve_ai_query_routing, resolve_ambient_agent_task_id,
+    AIQueryRouting, file_attach_allowed_for_shared_session, resolve_ai_query_routing,
+    resolve_ambient_agent_task_id,
 };
 use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
@@ -387,7 +367,6 @@ impl DropTargetData for InputDropTargetData {
 }
 
 pub const DEBOUNCE_INPUT_DECORATION_PERIOD: Duration = Duration::from_millis(10);
-pub const DEBOUNCE_AI_QUERY_PREDICTION_PERIOD: Duration = Duration::from_millis(250);
 pub(super) const CLI_AGENT_RICH_INPUT_EDITOR_MAX_HEIGHT: f32 = 236.;
 pub(super) const CLI_AGENT_RICH_INPUT_EDITOR_TOP_PADDING: f32 = 10.;
 pub(super) const CLI_AGENT_RICH_INPUT_EDITOR_BOTTOM_PADDING: f32 = 8.;
@@ -999,7 +978,6 @@ impl HistoryUpMode {
 }
 
 pub enum Event {
-    AutosuggestionAccepted,
     ClearSelectedBlock,
     PageUp,
     PageDown,
@@ -1025,7 +1003,6 @@ pub enum Event {
         // The number of chars cleared from the buffer, if the ctrl-c triggered a buffer clear.
         cleared_buffer_len: usize,
     },
-    Enter,
     ExecuteCommand(Box<ExecuteCommandEvent>),
     ExecuteAIQuery,
     EmacsBindingUsed,
@@ -1062,8 +1039,6 @@ pub enum Event {
     },
     InputFocusedFromMiddleClick,
     EditorFocused,
-    UnhandledCmdEnter,
-    CtrlEnter,
     SignupAnonymousUser {
         entrypoint: AnonymousUserSignupEntrypoint,
     },
@@ -1085,7 +1060,6 @@ pub enum Event {
     OpenFilesPalette {
         source: PaletteSource,
     },
-    TryHandlePassiveCodeDiff(CodeDiffAction),
     ToggleAIDocumentPane {
         document_id: AIDocumentId,
         document_version: AIDocumentVersion,
@@ -1168,15 +1142,6 @@ pub enum InputAction {
     StartNewAgentConversation {
         origin: AgentViewEntryOrigin,
     },
-
-    /// Generate a new Next Command suggestion.
-    CycleNextCommandSuggestion,
-
-    /// Inserts a zero state prompt suggestion into the input buffer and executes the query for Agent Mode.
-    InsertZeroStatePromptSuggestion(ZeroStatePromptSuggestionType),
-
-    /// A passive code diff action.
-    TryHandlePassiveCodeDiff(CodeDiffAction),
 
     /// Clears the AI context menu search query back to the @ character and resets menu state.
     ClearAndResetAIContextMenuQuery,
@@ -1661,7 +1626,6 @@ pub struct Input {
     menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
     tips_completed: ModelHandle<TipsCompleted>,
     editor: ViewHandle<EditorView>,
-    server_api: Arc<ServerApi>,
     input_suggestions: ViewHandle<InputSuggestions>,
     suggestions_mode_model: ModelHandle<InputSuggestionsModeModel>,
     completions_menu_resizable_width: ResizableStateHandle,
@@ -1680,7 +1644,6 @@ pub struct Input {
     command_x_ray_description: Option<Arc<Description>>,
     last_parsed_tokens: Option<decorations::ParsedTokensSnapshot>,
     debounce_input_background_tx: Sender<InputBackgroundJobOptions>,
-    debounce_ai_query_prediction_tx: Sender<()>,
     /// If true, will submit the command in the editor to the shell upon receiving the
     /// precmd message.
     has_pending_command: bool,
@@ -1737,19 +1700,6 @@ pub struct Input {
     /// Today, we only expect to use this for shared session viewers.
     deferred_remote_operations: DeferredRemoteOperations,
 
-    prompt_suggestions_banner_state: Option<PromptSuggestionBannerState>,
-    /// Shared flag checked by the editor's keymap context modifier to determine whether
-    /// to suppress the editor's ctrl-enter newline insertion when a prompt suggestion
-    /// banner is pending.
-    has_prompt_suggestion_banner: Arc<AtomicBool>,
-    /// Whether the most recent intelligent autosuggestion was accepted or not.
-    /// Cleared once a command is run.
-    was_intelligent_autosuggestion_accepted: bool,
-    /// We store info about the last intelligent autosuggestion because we need it for
-    /// data collection when the command completes, but state is cleared when the command is executed.
-    last_intelligent_autosuggestion_result: Option<IntelligentAutosuggestionResult>,
-    next_command_model: ModelHandle<NextCommandModel>,
-
     /// The last block that the user ran. This is used for generating autosuggestions.
     #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     last_user_block_completed: Option<UserBlockCompleted>,
@@ -1762,8 +1712,6 @@ pub struct Input {
     /// Cached hint text to ensure it remains stable during shell initialization hooks
     cached_agent_mode_hint_text: Option<&'static str>,
 
-    predict_am_queries_future_handle: Option<SpawnedFutureHandle>,
-
     attachment_chips: Vec<AttachmentChip>,
 
     is_processing_attached_images: bool,
@@ -1773,7 +1721,6 @@ pub struct Input {
     terminal_input_message_bar: ViewHandle<TerminalInputMessageBar>,
 
     agent_input_footer: ViewHandle<AgentInputFooter>,
-    prompt_suggestions_view: ViewHandle<PromptSuggestionsView>,
     handoff_compose_state: ModelHandle<HandoffComposeState>,
 
     inline_slash_commands_view: ViewHandle<InlineSlashCommandView>,
@@ -1908,15 +1855,6 @@ struct AttachmentChip {
     attachment_type: AttachmentType,
     /// Index into the unified pending_attachments list for deletion.
     index: usize,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct IntelligentAutosuggestionResult {
-    #[serde(rename = "was_autosuggestion_accepted")]
-    pub was_suggestion_accepted: bool,
-    #[serde(rename = "was_autosuggestion_from_ai")]
-    pub is_from_ai: bool,
-    pub predicted_command: String,
 }
 
 /// A map of remote buffer operations that were deferred because
@@ -2259,15 +2197,6 @@ pub fn init(app: &mut AppContext) {
         .collect::<Vec<_>>();
 
     app.register_editable_bindings(slash_command_bindings);
-
-    // Fixed bindings for passive code diffs
-    app.register_fixed_bindings([FixedBinding::new(
-        cmd_or_ctrl_shift("e"),
-        InputAction::TryHandlePassiveCodeDiff(CodeDiffAction::Edit),
-        id!("Input")
-            & id!(flags::CODE_SUGGESTIONS_FLAG)
-            & id!(flags::PASSIVE_CODE_DIFF_KEYBINDINGS_ENABLED),
-    )]);
 
     app.register_fixed_bindings([FixedBinding::new(
         "shift-?",
@@ -2707,7 +2636,6 @@ impl Input {
     pub(crate) fn new(
         model: Arc<FairMutex<TerminalModel>>,
         tips_completed: ModelHandle<TipsCompleted>,
-        server_api: Arc<ServerApi>,
         sessions: ModelHandle<Sessions>,
         size_info: SizeInfo,
         menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
@@ -3031,26 +2959,10 @@ impl Input {
             input_render_state_model_handle.clone(),
         );
 
-        let next_command_model = ctx.add_model(|_| {
-            NextCommandModel::new(
-                sessions.clone(),
-                model.clone(),
-                server_api.clone(),
-                ai_controller.clone(),
-            )
-        });
-        ctx.subscribe_to_model(&next_command_model, |me, _, event, ctx| {
-            me.handle_next_command_model_event(event, ctx);
-        });
-
-        let has_prompt_suggestion_banner = Arc::new(AtomicBool::new(false));
         let editor = {
             // Clones used in render_decorator_elements closure below.
             let prompt_render_helper_clone = prompt_render_helper.clone();
             let model_clone = model.clone();
-            // Clone used in keymap_context_modifier closure below.
-            let terminal_model_for_keymap_context = model.clone();
-            let has_prompt_suggestion_banner_for_keymap = has_prompt_suggestion_banner.clone();
             let input_render_state_model_handle_clone = input_render_state_model_handle.clone();
 
             let ai_input_model = ai_input_model.clone();
@@ -3185,22 +3097,6 @@ impl Input {
                             .set
                             .insert(flags::TERMINAL_INPUT_PAGE_KEYS_HANDLED_BY_INPUT);
 
-                        // When ctrl-enter is bound to accepting prompt suggestions and there's
-                        // a pending passive code diff, suggested prompt, or prompt suggestion
-                        // banner, set a flag so the editor's ctrl-enter binding doesn't match
-                        // (allowing the terminal-level binding to handle it).
-                        if is_accept_prompt_suggestion_bound_to_ctrl_enter(app)
-                            && (has_pending_code_or_unit_test_prompt_suggestion(
-                                &terminal_model_for_keymap_context.lock(),
-                                app,
-                            ) || has_prompt_suggestion_banner_for_keymap
-                                .load(Ordering::Relaxed))
-                        {
-                            context
-                                .set
-                                .insert(flags::CTRL_ENTER_ACCEPTS_PROMPT_SUGGESTION);
-                        }
-
                         if !other_agent_view_controller_clone.as_ref(app).is_active()
                             && !cfg!(target_os = "macos")
                             && !CLIAgentSessionsModel::as_ref(app).is_input_open(terminal_view_id)
@@ -3214,9 +3110,7 @@ impl Input {
                     })),
                     ..Default::default()
                 };
-                EditorView::new(options, ctx)
-                    .with_next_command_model(next_command_model.clone())
-                    .with_context_model(ai_context_model.clone())
+                EditorView::new(options, ctx).with_context_model(ai_context_model.clone())
             })
         };
 
@@ -3365,17 +3259,6 @@ impl Input {
             |_me, _ctx| {},
         );
 
-        let (debounce_ai_query_prediction_tx, debounce_ai_query_prediction_rx) =
-            async_channel::unbounded();
-        let _ = ctx.spawn_stream_local(
-            debounce(
-                DEBOUNCE_AI_QUERY_PREDICTION_PERIOD,
-                debounce_ai_query_prediction_rx,
-            ),
-            |me, _, ctx| me.predict_am_query(ctx),
-            |_me, _ctx| {},
-        );
-
         let voltron_features = Vec1::new(VoltronFeatureView::new(
             VoltronItem::Workflows,
             VoltronFeatureViewHandle::Workflows(workflows_search_view.clone()),
@@ -3492,9 +3375,11 @@ impl Input {
                 me.hide_x_ray(ctx);
             }
 
-            me.editor.update(ctx, |editor, ctx| {
-                editor.maybe_populate_intelligent_autosuggestion(config.input_type, ctx);
-            });
+            if config.input_type.is_ai() {
+                // Command autosuggestions don't apply to AI input.
+                me.editor
+                    .update(ctx, |editor, ctx| editor.clear_autosuggestion(ctx));
+            }
             me.set_zero_state_hint_text(ctx);
             ctx.notify();
         });
@@ -3633,12 +3518,6 @@ impl Input {
                 me.handle_ignored_suggestions_event(event, ctx);
             },
         );
-
-        let prompt_suggestions_view = ctx
-            .add_typed_action_view(|ctx| PromptSuggestionsView::new(ai_input_model.clone(), ctx));
-        ctx.subscribe_to_view(&prompt_suggestions_view, move |me, _, event, ctx| {
-            me.handle_prompt_suggestions_event(event, ctx);
-        });
 
         let slash_command_team_context_resolver =
             UserWorkspaces::team_context_resolver(ctx.handle());
@@ -3969,7 +3848,6 @@ impl Input {
             tips_completed,
             editor,
             model,
-            server_api,
             sessions,
             focus_handle: None,
             active_block_metadata: None,
@@ -3982,7 +3860,6 @@ impl Input {
             command_x_ray_description: None,
             last_parsed_tokens: None,
             debounce_input_background_tx,
-            debounce_ai_query_prediction_tx,
             has_pending_command: false,
             last_word_insertion,
             decorations_future_handle: None,
@@ -4004,20 +3881,13 @@ impl Input {
             deferred_remote_operations,
             shared_session_input_state: None,
             shared_session_presence_manager: None,
-            prompt_suggestions_banner_state: None,
-            has_prompt_suggestion_banner,
-            was_intelligent_autosuggestion_accepted: false,
-            last_intelligent_autosuggestion_result: None,
-            next_command_model,
             last_user_block_completed: None,
             hoverable_handle: Default::default(),
             terminal_view_id,
             #[cfg(feature = "local_fs")]
             conn: None,
-            predict_am_queries_future_handle: None,
             attachment_chips: Default::default(),
             is_processing_attached_images: false,
-            prompt_suggestions_view,
             handoff_compose_state,
             slash_command_model,
             inline_slash_commands_view,
@@ -4276,14 +4146,14 @@ impl Input {
     /// Routes an AI query submission to the correct non-local target, using the same
     /// [`resolve_ai_query_routing`] source of truth as the footer live-VM indicator, so a
     /// cloud/remote conversation never continues on the local agent. Shared by
-    /// [`Self::submit_ai_query_with_routing`] (the Enter / zero-state submit path) and
+    /// [`Self::submit_ai_query_with_routing`] (the Enter submit path) and
     /// `input_cmd_enter`.
     ///
     /// Returns `true` when the submission was handled here (forwarded to the live VM, started a
     /// cloud follow-up, or blocked with a toast) and the caller should stop; `false` when the
-    /// caller should handle the local case (submit locally for Enter, or emit the default
-    /// unhandled-cmd-enter action for Cmd+Enter). Also returns `false` for an executor viewer
-    /// running a local-action slash command such as `/fork`.
+    /// caller should handle the local case (submit locally for Enter; nothing for Cmd+Enter).
+    /// Also returns `false` for an executor viewer running a local-action slash command such as
+    /// `/fork`.
     fn maybe_route_ai_query_to_remote_target(&mut self, ctx: &mut ViewContext<Self>) -> bool {
         // Nothing to route for an empty buffer; let the caller's normal (no-op) handling run.
         if self.editor.as_ref(ctx).buffer_text(ctx).trim().is_empty() {
@@ -4411,13 +4281,9 @@ impl Input {
     /// target via [`Self::maybe_route_ai_query_to_remote_target`] (live viewer, new cloud VM, stale or
     /// read-only), falling back to [`Self::submit_ai_query_local`] for ordinary local panes and
     /// for an executor viewer running a local-action slash command (e.g. `/fork`).
-    fn submit_ai_query_with_routing(
-        &mut self,
-        zero_state_prompt_suggestion_type: Option<ZeroStatePromptSuggestionType>,
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn submit_ai_query_with_routing(&mut self, ctx: &mut ViewContext<Self>) {
         if !self.maybe_route_ai_query_to_remote_target(ctx) {
-            self.submit_ai_query_local(zero_state_prompt_suggestion_type, ctx);
+            self.submit_ai_query_local(ctx);
         }
     }
 
@@ -6292,48 +6158,6 @@ impl Input {
         self.shared_session_presence_manager = Some(presence_manager);
     }
 
-    pub fn set_prompt_suggestions_banner_state(
-        &mut self,
-        banner_state: Option<PromptSuggestionBannerState>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.has_prompt_suggestion_banner
-            .store(banner_state.is_some(), Ordering::Relaxed);
-        self.prompt_suggestions_banner_state = banner_state.clone();
-
-        if let Some(banner_state) = banner_state {
-            self.prompt_suggestions_view.update(ctx, |view, ctx| {
-                view.set_banner_state(banner_state);
-                ctx.notify();
-            });
-        }
-
-        ctx.notify();
-    }
-
-    pub fn maybe_set_prompt_suggestions_banner_state_should_hide(&mut self, should_hide: bool) {
-        if let Some(banner_state) = &mut self.prompt_suggestions_banner_state {
-            banner_state.should_hide = should_hide;
-        }
-    }
-
-    // Auto-attach the last block for this query.
-    fn auto_attach_last_block_for_query(&mut self, ctx: &mut ViewContext<Self>) {
-        let last_block_id = {
-            let model = self.model.lock();
-            model
-                .block_list()
-                .last_non_hidden_block()
-                .map(|block| block.id().clone())
-        };
-
-        if let Some(block_id) = last_block_id {
-            self.ai_context_model.update(ctx, |context_model, ctx| {
-                context_model.set_pending_context_block_ids(vec![block_id], true, ctx);
-            });
-        }
-    }
-
     pub fn clear_attached_context(&mut self, ctx: &mut ViewContext<Self>) {
         self.ai_context_model.update(ctx, |model, ctx| {
             model.reset_context_to_default(ctx);
@@ -6343,44 +6167,6 @@ impl Input {
 
     pub fn ai_input_model(&self) -> &ModelHandle<BlocklistAIInputModel> {
         &self.ai_input_model
-    }
-
-    /// Inserts a zero state prompt suggestion into the input buffer and executes the query for Agent Mode.
-    pub fn insert_zero_state_prompt_suggestion(
-        &mut self,
-        suggestion_type: ZeroStatePromptSuggestionType,
-        triggered_from: ZeroStatePromptSuggestionTriggeredFrom,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let has_any_ai = {
-            let user_workspaces = UserWorkspaces::as_ref(ctx);
-            let scope = user_workspaces.team_context_for_view(ctx);
-            AIRequestUsageModel::as_ref(ctx).has_any_ai_remaining(&scope, ctx)
-        };
-        if !has_any_ai {
-            return;
-        }
-
-        match suggestion_type {
-            ZeroStatePromptSuggestionType::Explain | ZeroStatePromptSuggestionType::Fix => {
-                self.auto_attach_last_block_for_query(ctx);
-            }
-            _ => {}
-        }
-
-        self.focus_input_box(ctx);
-        // TODO(advait): Avoid using user-simulated codepaths here. Revisit function to use here.
-        self.submit_ai_query_with_routing(Some(suggestion_type), ctx);
-
-        send_telemetry_from_ctx!(
-            TelemetryEvent::ZeroStatePromptSuggestionUsed {
-                suggestion_type,
-                triggered_from
-            },
-            ctx
-        );
-
-        ctx.notify()
     }
 
     fn cancel_active_conversation(
@@ -6786,34 +6572,6 @@ impl Input {
         }
     }
 
-    fn handle_next_command_model_event(
-        &mut self,
-        event: &NextCommandModelEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            NextCommandModelEvent::NextCommandSuggestionReady => {
-                let NextCommandSuggestionState::Ready { is_from_cycle, .. } =
-                    self.next_command_model.as_ref(ctx).get_state()
-                else {
-                    return;
-                };
-
-                // If there is already an autosuggestion for some reason, don't replace it to avoid flickering.
-                // But if the suggestion came from cycling, we want to replace it.
-                let editor = self.editor.as_ref(ctx);
-                if !is_from_cycle && editor.active_autosuggestion() {
-                    return;
-                }
-
-                let input_type = self.ai_input_model.as_ref(ctx).input_type();
-                self.editor.update(ctx, |editor, ctx| {
-                    editor.maybe_populate_intelligent_autosuggestion(input_type, ctx);
-                });
-            }
-        }
-    }
-
     #[cfg(feature = "voice_input")]
     pub(super) fn toggle_voice_input(
         &mut self,
@@ -6964,81 +6722,6 @@ impl Input {
             return;
         }
         self.enter_ai_mode(ctx);
-    }
-
-    fn cycle_next_command_suggestion(&mut self, ctx: &mut ViewContext<Self>) {
-        self.next_command_model.update(ctx, |model, ctx| {
-            model.cycle_next_command_suggestion(ctx);
-        });
-        self.editor.update(ctx, |editor, ctx| {
-            editor.clear_autosuggestion(ctx);
-        });
-    }
-
-    /// Predicts the next action using an AI model and past context on blocks within Warp.
-    /// Populates the autosuggestion with the predicted action, if any. Otherwise, falls back to
-    /// existing autosuggestion logic.
-    #[cfg_attr(target_family = "wasm", allow(unused_variables))]
-    fn maybe_predict_next_action_ai(
-        &mut self,
-        block_completed: UserBlockCompleted,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !is_next_command_enabled(ctx) {
-            return;
-        }
-
-        // If the last block was empty, don't create any suggestions.
-        // Also don't create suggestions for requested commands part of an agent mode conversation.
-        if block_completed
-            .command
-            .get_with(|compute| {
-                let model = self.model.lock();
-                compute(model.block_list())
-            })
-            .is_empty()
-            || block_completed.was_part_of_agent_interaction
-        {
-            return;
-        }
-
-        // If we already have an active autosuggestion (e.g. from command corrections), don't regenerate.
-        let editor = self.editor.as_ref(ctx);
-        if editor.active_autosuggestion() {
-            return;
-        }
-
-        // We only have intelligent autosuggestions on empty buffer for now.
-        if !self.buffer_text(ctx).is_empty() {
-            return;
-        }
-
-        // Don't generate any next command suggestions if there is no internet.
-        // This is needed to prevent generating history-based suggestions.
-        if !NetworkStatus::as_ref(ctx).is_online() {
-            return;
-        }
-
-        let Some(session) = self.active_session(ctx) else {
-            return;
-        };
-        let context = execution_context_for_session(&session);
-        let completer_data = self.completer_data();
-        let block_context = Some(BlockContext::from_completed_block(
-            &block_completed,
-            &self.model,
-        ));
-        let previous_result = self.last_intelligent_autosuggestion_result.take();
-        self.next_command_model.update(ctx, |model, ctx| {
-            model.generate_next_command_suggestion(
-                block_completed,
-                context,
-                completer_data,
-                block_context,
-                previous_result,
-                ctx,
-            );
-        });
     }
 
     /// Clear the cached hint text to generate a new one on next render
@@ -7211,27 +6894,9 @@ impl Input {
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            AISettingsChangedEvent::AgentModeQuerySuggestionsEnabled { .. }
-            | AISettingsChangedEvent::IsAnyAIEnabled { .. }
+            AISettingsChangedEvent::IsAnyAIEnabled { .. }
             | AISettingsChangedEvent::IsActiveAIEnabled { .. } => {
                 let ai_settings = AISettings::handle(ctx);
-                if !ai_settings
-                    .as_ref(ctx)
-                    .is_intelligent_autosuggestions_enabled(ctx)
-                    && matches!(
-                        self.editor.as_ref(ctx).active_autosuggestion_type(),
-                        Some(AutosuggestionType::Command {
-                            was_intelligent_autosuggestion: true
-                        })
-                    )
-                {
-                    self.editor.update(ctx, |editor, ctx| {
-                        editor.clear_autosuggestion(ctx);
-                    });
-                    self.next_command_model.update(ctx, |model, _| {
-                        model.clear_state();
-                    });
-                }
                 self.set_zero_state_hint_text(ctx);
 
                 if let AISettingsChangedEvent::IsAnyAIEnabled { .. } = event {
@@ -7584,12 +7249,6 @@ impl Input {
             return false;
         }
 
-        // Save the zero state next command state before clearing it.
-        let zerostate_next_command_suggestion_info = self
-            .next_command_model
-            .as_ref(ctx)
-            .get_zero_state_suggestion_info()
-            .cloned();
         // Clear the auto-suggestion in the editor, so the height of
         // the input box is not inaccurate for its contents. Since we
         // we adjust the height of the long running block to be the same
@@ -7603,17 +7262,11 @@ impl Input {
         // instead) for a similar reason. Specifically, we don't want
         // multi-line commands to have the height of the empty input
         // box because we don't want its contents to be cut off.
-        //
-        // If we had a zero-state autosuggestion and the user created an empty block,
-        // keep the zero-state autosuggestion.
         if !command.is_empty() {
             self.editor.update(ctx, |editor, ctx| {
                 editor.clear_autosuggestion(ctx);
                 editor.clear_all_placeholder_text();
                 ctx.notify();
-            });
-            self.next_command_model.update(ctx, |model, _| {
-                model.clear_state();
             });
         }
 
@@ -7642,51 +7295,6 @@ impl Input {
             .active_block()
             .has_received_precmd()
         {
-            // Skip any empty blocks created by the user. Keep the last zero-state autosuggestion
-            // until the user executes a command.
-            if !command.is_empty()
-                && let Some(ZeroStateSuggestionInfo {
-                    request,
-                    response,
-                    is_from_ai,
-                    history_based_autosuggestion_state,
-                    request_duration_ms,
-                }) = zerostate_next_command_suggestion_info
-            {
-                self.last_intelligent_autosuggestion_result =
-                    Some(IntelligentAutosuggestionResult {
-                        was_suggestion_accepted: self.was_intelligent_autosuggestion_accepted,
-                        is_from_ai,
-                        predicted_command: response.most_likely_action.clone(),
-                    });
-
-                let should_collect_ugc = should_collect_ai_ugc_telemetry(ctx);
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::AgentModePrediction {
-                        was_suggestion_accepted: self.was_intelligent_autosuggestion_accepted,
-                        request_duration_ms,
-                        is_from_ai,
-                        does_actual_command_match_prediction: response.most_likely_action
-                            == command,
-                        does_actual_command_match_history_prediction:
-                            history_based_autosuggestion_state.history_command_prediction == command,
-                        history_prediction_likelihood: history_based_autosuggestion_state
-                            .history_command_prediction_likelihood,
-                        total_history_count: history_based_autosuggestion_state.total_history_count,
-                        actual_next_command_run: should_collect_ugc.then_some(command.to_string()),
-                        history_based_autosuggestion_state: should_collect_ugc
-                            .then_some(history_based_autosuggestion_state.clone()),
-                        generate_ai_input_suggestions_request: should_collect_ugc
-                            .then_some(*request),
-                        generate_ai_input_suggestions_response: should_collect_ugc
-                            .then(|| response.clone())
-                    },
-                    ctx
-                );
-            }
-            // Reset state for whether the user accepted the intelligent autosuggestion.
-            self.was_intelligent_autosuggestion_accepted = false;
-
             self.tips_completed.update(ctx, |tips, ctx| {
                 mark_feature_used_and_write_to_user_defaults(
                     Tip::Hint(TipHint::CreateBlock),
@@ -7966,16 +7574,10 @@ impl Input {
     pub fn set_autosuggestion(
         &mut self,
         autosuggestion: impl Into<String>,
-        autosuggestion_type: AutosuggestionType,
         ctx: &mut ViewContext<Self>,
     ) {
         self.editor.update(ctx, |editor, ctx| {
-            editor.set_autosuggestion(
-                autosuggestion,
-                AutosuggestionLocation::EndOfBuffer,
-                autosuggestion_type,
-                ctx,
-            );
+            editor.set_autosuggestion(autosuggestion, AutosuggestionLocation::EndOfBuffer, ctx);
         })
     }
 
@@ -9553,17 +9155,8 @@ impl Input {
                     suggestions.select_next(ctx);
                 });
             }
-        } else if FeatureFlag::CycleNextCommandSuggestion.is_enabled()
-            && self.editor.as_ref(ctx).is_empty(ctx)
-        {
-            self.cycle_next_command_suggestion(ctx);
         } else {
             self.editor.update(ctx, |editor, ctx| editor.move_down(ctx));
-
-            // Try to expand the most recent passive code diff if it exists.
-            ctx.emit(Event::TryHandlePassiveCodeDiff(
-                CodeDiffAction::ScrollToExpand,
-            ));
         }
     }
 
@@ -9615,36 +9208,13 @@ impl Input {
         };
         self.abort_latest_autosuggestion_future();
 
-        if FeatureFlag::PartialNextCommandSuggestions.is_enabled() && is_next_command_enabled(ctx) {
-            let Some(session) = self.active_session(ctx) else {
-                return;
-            };
-            let context = execution_context_for_session(&session);
-            if let Some(last_user_block_completed) =
-                completer_data.last_user_block_completed.clone()
-            {
-                self.next_command_model.update(ctx, |model, ctx| {
-                    model.generate_next_command_suggestion_with_prefix(
-                        Some(buffer_text),
-                        last_user_block_completed,
-                        context,
-                        completer_data,
-                        None,
-                        None,
-                        ctx,
-                    );
-                });
-                return;
-            }
-        }
-
         let completion_context = completer_data.completion_session_context(ctx);
         let completion_session = completion_context
             .as_ref()
             .map(|completion_context| completion_context.session.clone());
 
         let reverse_chronological_potential_autosuggestions =
-            NextCommandModel::get_reverse_chronological_potential_autosuggestions(
+            autosuggestions::potential_autosuggestions_from_history(
                 &buffer_text,
                 &completer_data,
                 ctx,
@@ -9693,37 +9263,31 @@ impl Input {
                         && let Some((last_command, last_serialized_block)) =
                             &last_user_block_completed_data
                     {
-                        let similar_history_contexts = {
+                        let next_commands = {
                             let mut conn = conn.lock();
-                            NextCommandModel::get_similar_history_context(
+                            autosuggestions::next_commands_from_similar_history(
                                 &mut conn,
                                 last_command,
                                 &last_serialized_block.pwd,
                                 last_serialized_block.exit_code,
                                 last_serialized_block.shell_host.as_ref(),
-                                0,
                             )
                         };
-                        if !similar_history_contexts.is_empty() {
+                        if !next_commands.is_empty() {
                             let mut history_next_command_counts = counter::Counter::<String>::new();
                             // Find the most likely next command after a similar context, out of those that have a matching prefix and aren't ignored.
-                            for history_context in &similar_history_contexts {
-                                if history_context
-                                    .next_command
-                                    .command
-                                    .starts_with(&buffer_text)
-                                    && !ignored_suggestions
-                                        .contains(&history_context.next_command.command)
+                            for next_command in &next_commands {
+                                if next_command.command.starts_with(&buffer_text)
+                                    && !ignored_suggestions.contains(&next_command.command)
                                 {
-                                    history_next_command_counts
-                                        [&history_context.next_command.command] += 1;
+                                    history_next_command_counts[&next_command.command] += 1;
                                 }
                             }
 
                             for (most_likely_next_command, _) in
                                 history_next_command_counts.k_most_common_ordered(5)
                             {
-                                if is_command_valid(
+                                if autosuggestions::is_command_valid(
                                     &most_likely_next_command,
                                     completion_context.as_ref(),
                                     session_env_vars.as_ref(),
@@ -9747,7 +9311,7 @@ impl Input {
                         reverse_chronological_potential_autosuggestions.unwrap_or_default()
                     {
                         if !ignored_suggestions.contains(&reverse_chronological_command.command)
-                            && is_command_valid(
+                            && autosuggestions::is_command_valid(
                                 &reverse_chronological_command.command,
                                 completion_context.as_ref(),
                                 session_env_vars.as_ref(),
@@ -9974,20 +9538,6 @@ impl Input {
 
     /// Whether the given event should trigger a request to generate an AI-based natural language
     /// autosuggestion, due to the buffer content meaningfully changing.
-    fn is_nl_ai_autosuggestion_triggering_event(event: &EditorEvent) -> bool {
-        matches!(
-            event,
-            EditorEvent::Edited(_)
-                | EditorEvent::BufferReplaced
-                | EditorEvent::InsertLastWordPrevCommand
-                | EditorEvent::AutosuggestionAccepted { .. }
-                | EditorEvent::DeleteAllLeft
-                | EditorEvent::BackspaceOnEmptyBuffer
-                | EditorEvent::BackspaceAtBeginningOfBuffer
-                | EditorEvent::MiddleClickPaste
-        )
-    }
-
     fn should_close_ai_context_menu(
         &self,
         event: &EditorEvent,
@@ -10124,21 +9674,6 @@ impl Input {
         }
 
         self.check_slash_menu_disabled_state(ctx);
-
-        let is_ai_input_enabled = self.ai_input_model.as_ref(ctx).is_ai_input_enabled();
-
-        if Self::is_nl_ai_autosuggestion_triggering_event(event)
-            && FeatureFlag::PredictAMQueries.is_enabled()
-            && AISettings::as_ref(ctx).is_natural_language_autosuggestions_enabled(ctx)
-            && is_ai_input_enabled
-            && !self.buffer_text(ctx).is_empty()
-        {
-            // Cancel any pending requests for AM ghosted text predictions.
-            if let Some(future_handle) = self.predict_am_queries_future_handle.take() {
-                future_handle.abort();
-            }
-            let _ = self.debounce_ai_query_prediction_tx.try_send(());
-        }
 
         match event {
             EditorEvent::Edited(edit_origin) => {
@@ -10294,11 +9829,6 @@ impl Input {
                 if check_alias_expansion {
                     self.run_expansion_on_space(ctx);
                 }
-
-                // Abort any inflight request to generate a Next Command suggestion.
-                self.next_command_model.update(ctx, |model, _| {
-                    model.abort_inflight_request();
-                });
 
                 if self.should_apply_decorations(ctx) || is_ai_input_enabled {
                     let mut mode = InputBackgroundJobOptions::default();
@@ -10706,72 +10236,38 @@ impl Input {
                     }
                 }
             }
-            EditorEvent::AutosuggestionAccepted {
-                autosuggestion_type,
-                ..
-            } => {
-                ctx.emit(Event::AutosuggestionAccepted);
-
+            EditorEvent::AutosuggestionAccepted { .. } => {
                 self.input_suggestions
                     .update(ctx, |input_suggestions, ctx| {
                         // We should not restore the buffer to the old state since we're accepting an autosuggestion from the new state.
                         input_suggestions.exit(false, ctx);
                     });
-                match autosuggestion_type {
-                    AutosuggestionType::Command {
-                        was_intelligent_autosuggestion,
-                    } => {
-                        // Switch to shell input mode but preserve current lock state when accepting a command autosuggestion.
-                        self.ai_input_model.update(ctx, |input_model, ctx| {
-                            input_model.set_input_type(InputType::Shell, ctx);
-                        });
-                        if *was_intelligent_autosuggestion {
-                            self.was_intelligent_autosuggestion_accepted = true;
+                // Switch to shell input mode but preserve current lock state when accepting a command autosuggestion.
+                self.ai_input_model.update(ctx, |input_model, ctx| {
+                    input_model.set_input_type(InputType::Shell, ctx);
+                });
+                // This accepted autosuggestion count is used to determine whether to show the right arrow to accept icon
+                // when there's an autosuggestion while the input buffer is not empty.
+                InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
+                    let current_count = *input_settings.autosuggestion_accepted_count.value();
+                    if current_count < MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT {
+                        let new_count = if current_count < 0 {
+                            // Note: there was a bug in the previous implementation of this method which would
+                            // cause it to overflow the i8 value to a negative value. In that case, we know
+                            // that the user has definitely accepted at _least_ 128 autosuggestions, so we can
+                            // set it to the maximum relevant value: MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT
+                            MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT
                         } else {
-                            // This accepted autosuggestion count is used to determine whether to show the right arrow to accept icon
-                            // when there's an autosuggestion while the input buffer is not empty.
-                            // So it should only be incremented when an autosuggestion is accepted while the buffer is not empty (is NOT intelligent/zero-state).
-                            InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
-                                let current_count =
-                                    *input_settings.autosuggestion_accepted_count.value();
-                                if current_count < MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT {
-                                    let new_count = if current_count < 0 {
-                                        // Note: there was a bug in the previous implementation of this method which would
-                                        // cause it to overflow the i8 value to a negative value. In that case, we know
-                                        // that the user has definitely accepted at _least_ 128 autosuggestions, so we can
-                                        // set it to the maximum relevant value: MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT
-                                        MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT
-                                    } else {
-                                        current_count + 1
-                                    };
+                            current_count + 1
+                        };
 
-                                    report_if_error!(
-                                        input_settings
-                                            .autosuggestion_accepted_count
-                                            .set_value(new_count, ctx)
-                                    )
-                                }
-                            })
-                        }
+                        report_if_error!(
+                            input_settings
+                                .autosuggestion_accepted_count
+                                .set_value(new_count, ctx)
+                        )
                     }
-                    AutosuggestionType::AgentModeQuery {
-                        context_block_ids,
-                        was_intelligent_autosuggestion,
-                    } => {
-                        if *was_intelligent_autosuggestion {
-                            self.was_intelligent_autosuggestion_accepted = true;
-                        }
-                        // Switch to AI input mode but preserve current lock state when accepting an Agent Mode query autosuggestion.
-                        self.enter_ai_mode(ctx);
-                        self.ai_context_model.update(ctx, |context_model, ctx| {
-                            context_model.set_pending_context_block_ids(
-                                context_block_ids.clone(),
-                                true,
-                                ctx,
-                            )
-                        });
-                    }
-                };
+                })
             }
             EditorEvent::Navigate(NavigationKey::Up) => {
                 self.editor_up(ctx);
@@ -13157,8 +12653,6 @@ impl Input {
         }
         let command = self.editor.as_ref(ctx).buffer_text(ctx);
 
-        ctx.emit(Event::Enter);
-
         if self
             .suggestions_mode_model
             .as_ref(ctx)
@@ -13414,7 +12908,7 @@ impl Input {
                 return;
             }
 
-            self.submit_ai_query_with_routing(None, ctx);
+            self.submit_ai_query_with_routing(ctx);
         } else {
             if FeatureFlag::WorkflowAliases.is_enabled() {
                 let mut command_string = self.editor.as_ref(ctx).buffer_text(ctx);
@@ -13490,15 +12984,13 @@ impl Input {
         });
     }
 
-    /// Submits the rich-input buffer on Ctrl+Enter when `submit_on_ctrl_enter` is enabled;
-    /// otherwise emits [`Event::CtrlEnter`]. Exposed `pub(crate)` for unit tests.
+    /// Submits the rich-input buffer on Ctrl+Enter when `submit_on_ctrl_enter` is enabled.
+    /// Exposed `pub(crate)` for unit tests.
     pub(crate) fn input_ctrl_enter(&mut self, ctx: &mut ViewContext<Self>) {
         if CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
             && *AISettings::as_ref(ctx).submit_on_ctrl_enter
         {
             self.emit_submit_cli_agent_input(ctx);
-        } else {
-            ctx.emit(Event::CtrlEnter);
         }
     }
 
@@ -13582,108 +13074,10 @@ impl Input {
                 }
 
                 // Cmd+Enter is not a local-submit gesture (Enter is), so only route the
-                // remote/cloud cases here; the local case falls through to the default
-                // unhandled-cmd-enter behavior (e.g. accepting a passive prompt suggestion).
-                if self.maybe_route_ai_query_to_remote_target(ctx) {
-                    return;
-                }
-
-                ctx.emit(Event::UnhandledCmdEnter)
+                // remote/cloud cases here.
+                self.maybe_route_ai_query_to_remote_target(ctx);
             }
         }
-    }
-
-    fn predict_am_query(&mut self, ctx: &mut ViewContext<Self>) {
-        // Cancel any pending requests.
-        if let Some(future_handle) = self.predict_am_queries_future_handle.take() {
-            future_handle.abort();
-        }
-
-        let block = &self.last_user_block_completed;
-        if block.is_none() {
-            return;
-        }
-        let block = block.as_ref().unwrap();
-        let serialized_block = block.serialized_block.get_with(|compute| {
-            let model = self.model.lock();
-            compute(model.block_list())
-        });
-        let (exit_code, working_dir) = (serialized_block.exit_code, serialized_block.pwd.as_ref());
-        let number_of_top_lines_per_grid = 100;
-        let number_of_bottom_lines_per_grid = 200;
-
-        let (processed_input, processed_output) = {
-            let model = self.model.lock();
-            let terminal_width = model.block_list().size().columns;
-
-            if let Some(current_block) = model.block_list().block_with_id(&serialized_block.id) {
-                current_block.get_block_content_summary(
-                    terminal_width,
-                    number_of_top_lines_per_grid,
-                    number_of_bottom_lines_per_grid,
-                )
-            } else {
-                log::warn!(
-                    "Failed to fetch predicted queries, could not find block with ID {:?}",
-                    serialized_block.id
-                );
-                return;
-            }
-        };
-
-        let json_message = json!({
-            "command": processed_input,
-            "output": processed_output,
-            "exit_code": exit_code,
-            "pwd": working_dir,
-        });
-
-        let am_query_input_buffer = self.editor.as_ref(ctx).buffer_text(ctx);
-        let Some(session) = self.active_session(ctx) else {
-            return;
-        };
-        let context = execution_context_for_session(&session);
-
-        let request = PredictAMQueriesRequest {
-            context_messages: vec![json_message.to_string()],
-            partial_query: am_query_input_buffer.clone(),
-            system_context: context.to_json_string(),
-        };
-
-        let server_api = self.server_api.clone();
-        let team_scope = RequestTeamScope::from_scope(
-            &UserWorkspaces::as_ref(ctx).team_context_for_operation(ctx),
-        );
-
-        self.predict_am_queries_future_handle = Some(ctx.spawn(
-            async move {
-                match server_api.predict_am_queries(&request, team_scope).await {
-                    Ok(resp) => Some(resp.suggestion),
-                    Err(err) => {
-                        log::warn!("Failed to fetch predicted queries: {err}");
-                        None
-                    }
-                }
-            },
-            move |me: &mut Self, maybe_suggestion: Option<String>, ctx: &mut ViewContext<Self>| {
-                // Only set the autosuggestion if the input buffer hasn't changed, since we made the original request
-                // i.e. verify the suggestion is still relevant.
-                if am_query_input_buffer != me.editor.as_ref(ctx).buffer_text(ctx) {
-                    return;
-                }
-
-                if let Some(suggestion) = maybe_suggestion {
-                    me.set_autosuggestion(
-                        suggestion,
-                        AutosuggestionType::AgentModeQuery {
-                            context_block_ids: vec![],
-                            was_intelligent_autosuggestion: true,
-                        },
-                        ctx,
-                    );
-                }
-            },
-        ));
     }
 
     /// Re-submits a queued prompt through the correct handler (slash, skill, or regular AI query),
@@ -14121,11 +13515,7 @@ impl Input {
     /// Submit the input buffer contents as an AI query to continue the conversation locally on the
     /// machine. This is the local case of [`Self::submit_ai_query_with_routing`]; prefer calling
     /// that so cloud/remote panes are routed correctly.
-    fn submit_ai_query_local(
-        &mut self,
-        zero_state_prompt_suggestion_type: Option<ZeroStatePromptSuggestionType>,
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn submit_ai_query_local(&mut self, ctx: &mut ViewContext<Self>) {
         self.editor.update(ctx, |editor, ctx| {
             editor.abort_attached_images_future_handle(ctx);
         });
@@ -14187,12 +13577,6 @@ impl Input {
             });
 
             return;
-        }
-
-        if let Some(zero_state_prompt_suggestion_type) = zero_state_prompt_suggestion_type {
-            return self.ai_controller.update(ctx, move |controller, ctx| {
-                controller.send_zero_state_prompt_suggestion(zero_state_prompt_suggestion_type, ctx)
-            });
         }
 
         let ai_query = self.editor.as_ref(ctx).buffer_text(ctx);
@@ -14982,8 +14366,6 @@ impl Input {
                         log::warn!("Tried to access non-existent shared session history model")
                     }
                 }
-            } else if is_next_command_enabled(ctx) {
-                self.maybe_predict_next_action_ai(block_completed, ctx);
             }
 
             ctx.emit(Event::InputStateChanged(InputState::Enabled));
@@ -15308,68 +14690,6 @@ impl Input {
         })
     }
 
-    fn apply_input_banner_padding(
-        &self,
-        banner: Box<dyn Element>,
-        is_compact_mode: bool,
-        input_mode: InputMode,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let constrained_banner = ConstrainedBox::new(banner)
-            .with_height(2. * appearance.line_height_ratio() * appearance.monospace_font_size())
-            .finish();
-        let should_use_udi_spacing = self.should_show_universal_developer_input(app)
-            || self.agent_view_controller.as_ref(app).is_active();
-        let mut container: Container = Container::new(constrained_banner);
-        let (suggestion_to_prompt_padding, suggestion_to_input_border_padding) =
-            if should_use_udi_spacing {
-                (0., 0.)
-            } else if is_compact_mode {
-                (0., 8.)
-            } else {
-                (-12., 8.)
-            };
-
-        container = match input_mode {
-            InputMode::PinnedToTop => container
-                .with_padding_top(suggestion_to_prompt_padding)
-                .with_padding_bottom(suggestion_to_input_border_padding),
-            InputMode::PinnedToBottom | InputMode::Waterfall => container
-                .with_padding_bottom(suggestion_to_prompt_padding)
-                .with_padding_top(suggestion_to_input_border_padding),
-        };
-
-        container.finish()
-    }
-
-    /// Renders a banner that should stay next to the input box.
-    fn render_input_banner(
-        &self,
-        appearance: &Appearance,
-        app: &AppContext,
-        input_mode: InputMode,
-        is_compact_mode: bool,
-    ) -> Option<Box<dyn Element>> {
-        if let Some(prompt_suggestions_banner_state) = &self.prompt_suggestions_banner_state {
-            if prompt_suggestions_banner_state.should_hide {
-                return None;
-            }
-
-            let prompt_suggestions_banner = ChildView::new(&self.prompt_suggestions_view).finish();
-
-            Some(self.apply_input_banner_padding(
-                prompt_suggestions_banner,
-                is_compact_mode,
-                input_mode,
-                appearance,
-                app,
-            ))
-        } else {
-            None
-        }
-    }
-
     fn render_attachment_chips(&self, appearance: &Appearance) -> Option<Box<dyn Element>> {
         if self.attachment_chips.is_empty() {
             None
@@ -15604,26 +14924,6 @@ impl Input {
         self.is_voltron_open
     }
 
-    fn handle_prompt_suggestions_event(
-        &mut self,
-        event: &PromptSuggestionsEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            PromptSuggestionsEvent::SignupAnonymousUser => ctx.emit(Event::SignupAnonymousUser {
-                entrypoint: AnonymousUserSignupEntrypoint::SignUpAIPrompt,
-            }),
-            PromptSuggestionsEvent::OpenBillingAndUsagePage => {
-                ctx.emit(Event::OpenSettings(SettingsSection::BillingAndUsage))
-            }
-            PromptSuggestionsEvent::OpenBillingPortal { team_uid } => {
-                UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
-                    user_workspaces.generate_stripe_billing_portal_link(*team_uid, ctx);
-                });
-            }
-        }
-    }
-
     /// Returns whether the input box is currently pinned to the top of the screen.
     fn is_input_at_top(&self, model: &TerminalModel, ctx: &AppContext) -> bool {
         match InputModeSettings::as_ref(ctx).input_mode.value() {
@@ -15698,19 +14998,6 @@ impl TypedActionView for Input {
                 } else {
                     self.open_conversation_menu(ctx);
                 }
-            }
-            InputAction::CycleNextCommandSuggestion => {
-                self.cycle_next_command_suggestion(ctx);
-            }
-            InputAction::InsertZeroStatePromptSuggestion(suggestion_type) => {
-                self.insert_zero_state_prompt_suggestion(
-                    *suggestion_type,
-                    ZeroStatePromptSuggestionTriggeredFrom::InputBar,
-                    ctx,
-                );
-            }
-            InputAction::TryHandlePassiveCodeDiff(action) => {
-                ctx.emit(Event::TryHandlePassiveCodeDiff(action.clone()));
             }
             InputAction::ToggleAgentViewShortcuts => {
                 self.agent_shortcut_view_model.update(ctx, |model, ctx| {
@@ -15911,10 +15198,6 @@ impl View for Input {
             ctx.set.insert(flags::SLASH_COMMANDS_IN_TERMINAL_FLAG);
         }
 
-        if ai_settings.is_code_suggestions_enabled(app) {
-            ctx.set.insert(flags::CODE_SUGGESTIONS_FLAG);
-        }
-
         if let Some(workflow) = self.workflows_state.selected_workflow_state.clone()
             && workflow.should_show_more_info_view
         {
@@ -16024,21 +15307,6 @@ impl View for Input {
             ctx.set.insert("TerminalView_NonEmptyBlockList");
         }
 
-        // Only enable keybindings for passive code diffs when there is one pending in the
-        // blocklist that is undismissed (i.e. keybindings are shown in the banner/block).
-        // This is to prevent any keybinding conflicts (with actions such as split pane
-        // down on non-Macs).
-        let has_undismissed_passive_code_diff = model_lock
-            .block_list()
-            .last_non_hidden_ai_block_handle(app)
-            .is_some_and(|ai_block| {
-                let block = ai_block.as_ref(app);
-                block.is_passive_conversation() && block.find_undismissed_code_diff(app).is_some()
-            });
-        if has_undismissed_passive_code_diff {
-            ctx.set.insert(flags::PASSIVE_CODE_DIFF_KEYBINDINGS_ENABLED);
-        }
-
         for (_, command) in self.slash_command_data_source.as_ref(app).active_commands() {
             ctx.set.insert(command.name);
         }
@@ -16085,13 +15353,7 @@ impl Autosuggester for Input {
             .and_then(|result| result.strip_prefix(buffer_text.as_str()));
 
         if let Some(autosuggestion) = autosuggestion_result_substring {
-            self.set_autosuggestion(
-                autosuggestion,
-                AutosuggestionType::Command {
-                    was_intelligent_autosuggestion: false,
-                },
-                ctx,
-            );
+            self.set_autosuggestion(autosuggestion, ctx);
         }
     }
 

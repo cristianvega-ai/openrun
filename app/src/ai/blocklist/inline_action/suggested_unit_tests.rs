@@ -1,36 +1,20 @@
 use std::sync::Arc;
 
-use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
-use rand::distributions::Alphanumeric;
-use rand::{Rng as _, thread_rng};
-use warp_core::settings::ToggleableSetting;
 use warp_core::ui::appearance::Appearance;
 use warpui::elements::{
-    Align, ConstrainedBox, Container, CrossAxisAlignment, Expanded, Flex, FormattedTextElement,
-    HighlightedHyperlink, MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement,
-    SavePosition, Shrinkable, SizeConstraintCondition, SizeConstraintSwitch, Text,
+    Align, ConstrainedBox, Container, CrossAxisAlignment, Expanded, Flex, MainAxisAlignment,
+    MainAxisSize, ParentElement, Shrinkable, SizeConstraintCondition, SizeConstraintSwitch, Text,
 };
-use warpui::platform::Cursor;
-use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::{
     AppContext, Element, Entity, FocusContext, SingletonEntity, TypedActionView, View, ViewContext,
 };
 
 use crate::ai::agent::{AIAgentActionId, AIIdentifiers};
-use crate::ai::predict::prompt_suggestions::{
-    ACCEPT_PROMPT_SUGGESTION_KEYBINDING, REJECT_PROMPT_SUGGESTION_KEYSTROKE,
-};
-use crate::server::telemetry::ToggleCodeSuggestionsSettingSource;
-use crate::settings::AISettings;
-use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
-use crate::view_components::action_button::{
-    ButtonSize, KeystrokeSource, NakedTheme, PrimaryTheme,
-};
+use crate::view_components::action_button::{ButtonSize, NakedTheme, PrimaryTheme};
 use crate::view_components::compactible_action_button::{
     CompactibleActionButton, MEDIUM_SIZE_SWITCH_THRESHOLD, render_compact_and_regular_button_rows,
 };
-use crate::{TelemetryEvent, send_telemetry_from_ctx};
 
 const ACCEPT_LABEL: &str = "Generate tests";
 const CANCEL_LABEL: &str = "Dismiss";
@@ -40,15 +24,12 @@ pub enum SuggestedUnitTestsEvent {
     Accept,
     Cancel,
     Blur,
-    OpenSettings,
 }
 
 #[derive(Debug, Clone)]
 pub enum SuggestedUnitTestsAction {
     Accept,
     Cancel,
-    ToggleSetting,
-    OpenSettings,
 }
 
 pub struct SuggestedUnitTestsView {
@@ -58,17 +39,11 @@ pub struct SuggestedUnitTestsView {
 
     is_hidden: bool,
     is_keybindings_hidden: bool,
-    should_show_speedbump: bool,
     title: String,
     description: String,
     query: String,
     accept_button: CompactibleActionButton,
     cancel_button: CompactibleActionButton,
-    speedbump_mouse_state: MouseStateHandle,
-    ai_settings_link_highlight_index: HighlightedHyperlink,
-
-    /// A randomly-generated string prefix to ensure the [`SavePosition`]s in this view are unique.
-    position_id_prefix: String,
 }
 
 impl SuggestedUnitTestsView {
@@ -78,14 +53,11 @@ impl SuggestedUnitTestsView {
         query: String,
         title: String,
         description: String,
-        should_show_speedbump: bool,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let accept_button = CompactibleActionButton::new(
             ACCEPT_LABEL.to_string(),
-            Some(KeystrokeSource::Binding(
-                ACCEPT_PROMPT_SUGGESTION_KEYBINDING,
-            )),
+            None,
             ButtonSize::Small,
             SuggestedUnitTestsAction::Accept,
             Icon::Check,
@@ -95,9 +67,7 @@ impl SuggestedUnitTestsView {
 
         let cancel_button = CompactibleActionButton::new(
             CANCEL_LABEL.to_string(),
-            Some(KeystrokeSource::Fixed(
-                REJECT_PROMPT_SUGGESTION_KEYSTROKE.clone(),
-            )),
+            None,
             ButtonSize::Small,
             SuggestedUnitTestsAction::Cancel,
             Icon::X,
@@ -105,26 +75,16 @@ impl SuggestedUnitTestsView {
             ctx,
         );
 
-        let random_str = thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(8)
-            .map(char::from)
-            .collect();
-
         Self {
             identifiers,
             action_id,
             is_hidden: false,
             is_keybindings_hidden: false,
-            should_show_speedbump,
             title,
             description,
             query,
             accept_button,
             cancel_button,
-            speedbump_mouse_state: Default::default(),
-            ai_settings_link_highlight_index: Default::default(),
-            position_id_prefix: random_str,
         }
     }
 
@@ -134,13 +94,6 @@ impl SuggestedUnitTestsView {
 
     pub fn action_id(&self) -> &AIAgentActionId {
         &self.action_id
-    }
-
-    fn position_id_for_speedbump(&self) -> String {
-        format!(
-            "SuggestedUnitTestsView-speedbump-{}",
-            &self.position_id_prefix
-        )
     }
 
     pub fn is_hidden(&self) -> bool {
@@ -286,80 +239,6 @@ impl SuggestedUnitTestsView {
 
         col.finish()
     }
-
-    fn render_speedbump(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
-        let theme = appearance.theme();
-        let font_color = theme.sub_text_color(theme.background()).into_solid();
-        let font_family = appearance.ui_font_family();
-        let font_size = 12.;
-
-        let checked = AISettings::as_ref(app).is_code_suggestions_enabled(app);
-        let checkbox = appearance
-            .ui_builder()
-            .checkbox(self.speedbump_mouse_state.clone(), Some(font_size))
-            .check(!checked)
-            .with_style(UiComponentStyles {
-                font_color: Some(font_color),
-                font_size: Some(font_size),
-                ..Default::default()
-            })
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(SuggestedUnitTestsAction::ToggleSetting);
-            })
-            .with_cursor(Cursor::PointingHand)
-            .finish();
-
-        let checkbox_text = appearance
-            .ui_builder()
-            .span("Don't show me suggested code banners again")
-            .with_style(UiComponentStyles {
-                font_color: Some(font_color),
-                font_size: Some(font_size),
-                padding: Some(Coords::default().left(4.)),
-                ..Default::default()
-            })
-            .build()
-            .finish();
-
-        let formatted_text = FormattedTextElement::new(
-            FormattedText::new([FormattedTextLine::Line(vec![
-                FormattedTextFragment::hyperlink(
-                    "Manage suggested code banner settings",
-                    "Settings > AI",
-                ),
-            ])]),
-            font_size,
-            font_family,
-            font_family,
-            font_color,
-            self.ai_settings_link_highlight_index.clone(),
-        )
-        .with_hyperlink_font_color(blended_colors::accent_fg_strong(theme).into())
-        .register_default_click_handlers(|_, ctx, _| {
-            ctx.dispatch_typed_action(SuggestedUnitTestsAction::OpenSettings);
-        })
-        .finish();
-
-        let container = Container::new(
-            Flex::row()
-                .with_main_axis_size(MainAxisSize::Max)
-                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_child(
-                    Flex::row()
-                        .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                        .with_children([checkbox, checkbox_text])
-                        .finish(),
-                )
-                .with_child(formatted_text)
-                .finish(),
-        )
-        .with_padding_top(4.)
-        .finish();
-
-        SavePosition::new(container, &self.position_id_for_speedbump()).finish()
-    }
 }
 
 impl View for SuggestedUnitTestsView {
@@ -374,21 +253,11 @@ impl View for SuggestedUnitTestsView {
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let row = Flex::row()
+        Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
             .with_child(self.render_icon(appearance))
             .with_child(Expanded::new(1., self.render_body(appearance, app)).finish())
-            .finish();
-
-        if self.should_show_speedbump {
-            let speedbump = self.render_speedbump(appearance, app);
-            Flex::column()
-                .with_child(row)
-                .with_child(speedbump)
-                .finish()
-        } else {
-            row
-        }
+            .finish()
     }
 }
 
@@ -403,27 +272,6 @@ impl TypedActionView for SuggestedUnitTestsView {
         match action {
             SuggestedUnitTestsAction::Accept => ctx.emit(SuggestedUnitTestsEvent::Accept),
             SuggestedUnitTestsAction::Cancel => ctx.emit(SuggestedUnitTestsEvent::Cancel),
-            SuggestedUnitTestsAction::ToggleSetting => {
-                let checked = AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    settings
-                        .code_suggestions_enabled_internal
-                        .toggle_and_save_value(ctx)
-                });
-                ctx.notify();
-
-                if let Ok(checked) = checked {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::ToggleCodeSuggestionsSetting {
-                            source: ToggleCodeSuggestionsSettingSource::Speedbump,
-                            is_code_suggestions_enabled: checked,
-                        },
-                        ctx
-                    );
-                }
-            }
-            SuggestedUnitTestsAction::OpenSettings => {
-                ctx.emit(SuggestedUnitTestsEvent::OpenSettings)
-            }
         }
     }
 }

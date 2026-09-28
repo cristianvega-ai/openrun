@@ -33,13 +33,12 @@ use crate::ai::agent::{
     BaseUserQuery, CallMCPToolResult, CancellationReason, CloneRepositoryURL,
     CreateDocumentsResult, DocumentContext, EditDocumentsResult, FileContext, FileGlobResult,
     FileGlobV2Match, FileGlobV2Result, FinishedAIAgentOutput, GrepFileMatch, GrepLineMatch,
-    GrepResult, ImageContext, InsertReviewCommentsResult, OutputModelInfo, PassiveCodeDiffEntry,
-    PassiveSuggestionResultType, PassiveSuggestionTrigger, ReadDocumentsResult,
+    GrepResult, ImageContext, InsertReviewCommentsResult, OutputModelInfo, ReadDocumentsResult,
     ReadFilesFailedFile, ReadFilesResult, ReadMCPResourceResult, ReadShellCommandOutputResult,
     RequestCommandOutputResult, RequestFileEditsResult, SearchCodebaseFailureReason,
-    SearchCodebaseResult, ServerOutputId, Shared, ShellCommandCompletedTrigger, ShellCommandError,
-    SuggestNewConversationResult, SuggestPromptResult, TransferShellCommandControlToUserResult,
-    UpdatedFileContext, UploadArtifactResult, UserQueryMode, WriteToLongRunningShellCommandResult,
+    SearchCodebaseResult, ServerOutputId, Shared, ShellCommandError, SuggestNewConversationResult,
+    SuggestPromptResult, TransferShellCommandControlToUserResult, UpdatedFileContext,
+    UploadArtifactResult, UserQueryMode, WriteToLongRunningShellCommandResult,
 };
 use crate::ai::block_context::BlockContext;
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentVersion};
@@ -498,14 +497,7 @@ impl ConvertToExchanges for &api::Task {
                     });
                     true
                 }
-                api::message::Message::PassiveSuggestionResult(passive_result) => {
-                    if let Some(input) =
-                        convert_passive_suggestion_result_to_input(passive_result)
-                    {
-                        current_inputs.push(input);
-                    }
-                    true
-                }
+                api::message::Message::PassiveSuggestionResult(_) => true,
                 api::message::Message::AgentOutput(_)
                 | api::message::Message::AgentReasoning(_)
                 | api::message::Message::Summarization(_)
@@ -1925,63 +1917,6 @@ impl From<api::ExecutedShellCommand> for BlockContext {
     }
 }
 
-/// Converts a persisted `PassiveSuggestionResult` message back to an
-/// [`AIAgentInput::PassiveSuggestionResult`] so the trigger block information
-/// is available after conversation restoration.
-fn convert_passive_suggestion_result_to_input(
-    passive_result: &api::message::PassiveSuggestionResult,
-) -> Option<AIAgentInput> {
-    let api_result = passive_result.result.as_ref()?;
-
-    let trigger = match &api_result.trigger {
-        Some(api::passive_suggestion_result_type::Trigger::ExecutedShellCommand(cmd)) => {
-            PassiveSuggestionTrigger::ShellCommandCompleted(ShellCommandCompletedTrigger {
-                executed_shell_command: Box::new(cmd.clone().into()),
-                // Relevant files are not persisted in the proto message.
-                relevant_files: vec![],
-            })
-        }
-        Some(api::passive_suggestion_result_type::Trigger::AgentResponseCompleted(_)) => {
-            // The exchange_id is not stored in the proto; use a placeholder.
-            PassiveSuggestionTrigger::AgentResponseCompleted {
-                exchange_id: AIAgentExchangeId::default(),
-            }
-        }
-        None => return None,
-    };
-
-    let suggestion = match &api_result.suggestion {
-        Some(api::passive_suggestion_result_type::Suggestion::Prompt(p)) => {
-            PassiveSuggestionResultType::Prompt {
-                prompt: p.prompt.clone(),
-            }
-        }
-        Some(api::passive_suggestion_result_type::Suggestion::CodeDiff(cd)) => {
-            PassiveSuggestionResultType::CodeDiff {
-                diffs: cd
-                    .diffs
-                    .iter()
-                    .map(|d| PassiveCodeDiffEntry {
-                        file_path: d.file_path.clone(),
-                        search: d.search.clone(),
-                        replace: d.replace.clone(),
-                    })
-                    .collect(),
-                summary: cd.summary.clone(),
-                accepted: cd.accepted,
-            }
-        }
-        None => return None,
-    };
-
-    let context = convert_input_context(passive_result.context.as_ref());
-
-    Some(AIAgentInput::PassiveSuggestionResult {
-        trigger: Some(trigger),
-        suggestion,
-        context,
-    })
-}
 pub(crate) fn proto_timestamp_to_local_datetime(seconds: i64, nanos: i32) -> DateTime<Local> {
     let nanos = if nanos < 0 { 0 } else { nanos as u32 };
 
