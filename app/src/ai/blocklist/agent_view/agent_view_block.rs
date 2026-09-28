@@ -23,6 +23,7 @@ use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::BlocklistAIHistoryEvent;
 use crate::terminal::BlockListSettings;
+use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::blended_colors;
 use crate::ui_components::icon_with_status::{IconWithStatusVariant, render_icon_with_status};
 use crate::view_components::DismissibleToast;
@@ -272,7 +273,7 @@ impl View for AgentViewEntryBlock {
 
         let agent_icon = render_icon_with_status(
             IconWithStatusVariant::OzAgent {
-                status: Some(conversation.status().clone()),
+                status: Some(AgentStatus::from(conversation.status())),
                 is_ambient: false,
             },
             24.,

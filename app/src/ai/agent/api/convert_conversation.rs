@@ -33,7 +33,7 @@ use crate::ai::agent::{
     BaseUserQuery, CallMCPToolResult, CancellationReason, CloneRepositoryURL,
     CreateDocumentsResult, DocumentContext, EditDocumentsResult, FileContext, FileGlobResult,
     FileGlobV2Match, FileGlobV2Result, FinishedAIAgentOutput, GrepFileMatch, GrepLineMatch,
-    GrepResult, ImageContext, InsertReviewCommentsResult, OutputModelInfo, ReadDocumentsResult,
+    GrepResult, InsertReviewCommentsResult, OutputModelInfo, ReadDocumentsResult,
     ReadFilesFailedFile, ReadFilesResult, ReadMCPResourceResult, ReadShellCommandOutputResult,
     RequestCommandOutputResult, RequestFileEditsResult, SearchCodebaseFailureReason,
     SearchCodebaseResult, ServerOutputId, Shared, ShellCommandError, SuggestNewConversationResult,
@@ -46,6 +46,7 @@ use crate::ai::execution_context::{WarpAiExecutionContext, WarpAiOsContext};
 use crate::ai::llms::LLMId;
 use crate::terminal::model::block::BlockId;
 use crate::terminal::model::terminal_model::BlockIndex;
+use crate::util::image::ImageContext;
 
 /// How to restore a conversation from the cloud.
 pub enum RestorationMode {

@@ -16,8 +16,8 @@ use super::TerminalView;
 use super::queued_prompts_panel::{
     QueuedPromptsPanelAction, QueuedPromptsPanelEvent, QueuedPromptsPanelView,
 };
+use crate::ai::agent::UserQueryMode;
 use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
-use crate::ai::agent::{ImageContext, UserQueryMode};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::block::FinishReason;
@@ -35,6 +35,7 @@ use crate::terminal::shared_session::SharedSessionStatus;
 use crate::terminal::view::ambient_agent::AmbientAgentViewModelEvent;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::test_util::terminal::{add_window_with_terminal, initialize_app_for_terminal_view};
+use crate::util::image::ImageContext;
 use crate::workspaces::user_workspaces::TeamlessScopeForTest;
 
 fn request_team_scope() -> RequestTeamScope {

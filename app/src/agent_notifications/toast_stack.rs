@@ -16,12 +16,12 @@ use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::ui_components::keyboard_shortcut::KeyboardShortcut;
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle};
 
-use crate::ai::agent_management::notifications::item_rendering::{
+use crate::agent_notifications::item_rendering::{
     NotificationRenderContext, OnExpandClick, create_notification_artifact_buttons_view,
     handle_notification_artifact_buttons_event, render_notification_item_content,
 };
-use crate::ai::agent_management::notifications::{NotificationId, NotificationItem};
-use crate::ai::agent_management::{AgentManagementEvent, AgentNotificationsModel};
+use crate::agent_notifications::{AgentManagementEvent, AgentNotificationsModel};
+use crate::agent_notifications::{NotificationId, NotificationItem};
 use crate::ai::artifacts::{Artifact, ArtifactButtonsRow, ArtifactButtonsRowEvent};
 use crate::appearance::Appearance;
 use crate::terminal::session_settings::SessionSettings;

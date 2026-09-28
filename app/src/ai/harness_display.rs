@@ -10,8 +10,8 @@ use warp_core::ui::theme::color::internal_colors;
 use warp_core::ui::theme::{Fill as WarpThemeFill, WarpTheme};
 
 use crate::ai::agent::conversation::AIAgentHarness;
-use crate::ai::blocklist::CLAUDE_ORANGE;
-use crate::terminal::cli_agent::{GEMINI_BLUE, OPENAI_COLOR, OPENCODE_COLOR};
+use crate::terminal::CLIAgent;
+use crate::terminal::cli_agent::{CLAUDE_ORANGE, GEMINI_BLUE, OPENAI_COLOR, OPENCODE_COLOR};
 use crate::ui_components::icons::Icon;
 
 /// User-visible display name for a [`Harness`].
@@ -35,6 +35,20 @@ pub fn icon_for(harness: Harness) -> Icon {
         Harness::Gemini => Icon::GeminiLogo,
         Harness::Codex => Icon::OpenAILogo,
         Harness::Unknown => Icon::HelpCircle,
+    }
+}
+
+/// Returns the [`CLIAgent`] corresponding to a cloud-agent [`Harness`] when it represents a
+/// third-party agent. Returns `None` for [`Harness::Oz`] (Warp's built-in harness has no
+/// distinct CLI agent identity).
+pub fn cli_agent(harness: Harness) -> Option<CLIAgent> {
+    match harness {
+        Harness::Oz => None,
+        Harness::Claude => Some(CLIAgent::Claude),
+        Harness::Gemini => Some(CLIAgent::Gemini),
+        Harness::OpenCode => Some(CLIAgent::OpenCode),
+        Harness::Codex => Some(CLIAgent::Codex),
+        Harness::Unknown => Some(CLIAgent::Unknown),
     }
 }
 

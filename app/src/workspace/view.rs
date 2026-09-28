@@ -139,6 +139,9 @@ use super::util::{
     WorkspaceMouseStates, WorkspaceState,
 };
 use super::{ActiveSession, TabBarDropTargetData, TabBarLocation, WorkspaceRegistry, util};
+use crate::agent_notifications::toast_stack::AgentNotificationToastStack;
+use crate::agent_notifications::view::{NotificationMailboxView, NotificationMailboxViewEvent};
+use crate::agent_notifications::{AgentManagementEvent, NotificationFilter};
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use crate::ai::agent::CancellationReason;
@@ -147,12 +150,6 @@ use crate::ai::agent::conversation::{AIConversation, AIConversationId};
 use crate::ai::agent::{AIAgentInput, EntrypointType};
 use crate::ai::agent_conversations_model::{
     AgentConversationNavigationSubject, AgentConversationsModel,
-};
-use crate::ai::agent_management::AgentManagementEvent;
-use crate::ai::agent_management::notifications::NotificationFilter;
-use crate::ai::agent_management::notifications::toast_stack::AgentNotificationToastStack;
-use crate::ai::agent_management::notifications::view::{
-    NotificationMailboxView, NotificationMailboxViewEvent,
 };
 use crate::ai::agent_management::telemetry::AgentManagementTelemetryEvent;
 use crate::ai::agent_management::view::{AgentManagementView, AgentManagementViewEvent};
@@ -291,10 +288,11 @@ use crate::server::telemetry::{
 use crate::session_management::{SessionNavigationData, SessionSource, TabNavigationData};
 use crate::settings::{
     AISettings, AISettingsChangedEvent, AccessibilitySettings, AliasExpansionSettings,
-    AppEditorSettings, BlockVisibilitySettings, CodeSettings, CodeSettingsChangedEvent,
-    CtrlTabBehavior, CursorBlink, DebugSettings, DefaultSessionMode, FontSettings, GPUSettings,
-    InputModeSettings, InputSettings, MonospaceFontSize, PaneSettings, PrivacySettings,
-    SelectionSettings, SshSettings, ThemeSettings, active_theme_kind, respect_system_theme,
+    AppEditorSettings, BlockVisibilitySettings, CLIAgentSettings, CLIAgentSettingsChangedEvent,
+    CodeSettings, CodeSettingsChangedEvent, CtrlTabBehavior, CursorBlink, DebugSettings,
+    DefaultSessionMode, FontSettings, GPUSettings, InputModeSettings, InputSettings,
+    MonospaceFontSize, PaneSettings, PrivacySettings, SelectionSettings, SshSettings,
+    ThemeSettings, active_theme_kind, respect_system_theme,
 };
 use crate::settings_view::environments_page::EnvironmentsPage;
 use crate::settings_view::handoff_environment_creation_modal::{
@@ -1922,21 +1920,23 @@ impl Workspace {
         match event {
             RemoveTabConfigConfirmationEvent::Confirm { path } => {
                 // If the removed config was the default, revert to Terminal.
-                let ai_settings = AISettings::as_ref(ctx);
-                let is_removed_default = ai_settings.default_session_mode(ctx)
+                let is_removed_default = AISettings::as_ref(ctx).default_session_mode(ctx)
                     == DefaultSessionMode::TabConfig
-                    && ai_settings.default_tab_config_path() == path.to_string_lossy();
+                    && GeneralSettings::as_ref(ctx).default_tab_config_path()
+                        == path.to_string_lossy();
                 if is_removed_default {
+                    GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
+                        report_if_error!(
+                            settings
+                                .default_tab_config_path
+                                .set_value(String::new(), ctx)
+                        );
+                    });
                     AISettings::handle(ctx).update(ctx, |settings, ctx| {
                         report_if_error!(
                             settings
                                 .default_session_mode_internal
                                 .set_value(DefaultSessionMode::Terminal, ctx)
-                        );
-                        report_if_error!(
-                            settings
-                                .default_tab_config_path
-                                .set_value(String::new(), ctx)
                         );
                     });
                 }
@@ -2940,14 +2940,17 @@ impl Workspace {
             | AISettingsChangedEvent::AutoApproveBypassesCommandDenylist { .. } => {
                 ctx.notify();
             }
-            AISettingsChangedEvent::ShowAgentNotifications { .. } => {
+            _ => (),
+        });
+
+        ctx.subscribe_to_model(&CLIAgentSettings::handle(ctx), |me, _, event, ctx| {
+            if let CLIAgentSettingsChangedEvent::ShowAgentNotifications { .. } = event {
                 // When agent notifications are turned off, close the mailbox if it's open.
-                if !*AISettings::as_ref(ctx).show_agent_notifications {
+                if !*CLIAgentSettings::as_ref(ctx).show_agent_notifications {
                     me.current_workspace_state.is_notification_mailbox_open = false;
                 }
                 ctx.notify();
             }
-            _ => (),
         });
 
         ctx.subscribe_to_model(&OneTimeModalModel::handle(ctx), |me, model, event, ctx| {
@@ -5981,7 +5984,9 @@ impl Workspace {
         let is_any_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
         let ai_settings = AISettings::as_ref(ctx);
         let effective_default = ai_settings.default_session_mode(ctx);
-        let default_tab_config_path = ai_settings.default_tab_config_path().to_string();
+        let default_tab_config_path = GeneralSettings::as_ref(ctx)
+            .default_tab_config_path()
+            .to_string();
         let shortcut_label = keybinding_name_to_display_string(NEW_TAB_BINDING_NAME, ctx);
         let reopen_closed_session_shortcut_label =
             keybinding_name_to_display_string("app:reopen_closed_session", ctx);
@@ -19963,23 +19968,30 @@ impl Workspace {
                 .set
                 .insert(flags::SHOW_BASE_MODEL_PICKER_IN_PROMPT_FLAG);
         }
-        if *ai_settings.should_render_cli_agent_footer.value() {
+        let cli_agent_settings = CLIAgentSettings::as_ref(app);
+        if *cli_agent_settings.should_render_cli_agent_footer.value() {
             context.set.insert(flags::CLI_AGENT_FOOTER_ENABLED);
         }
-        if *ai_settings.auto_toggle_rich_input.value() {
+        if *cli_agent_settings.auto_toggle_rich_input.value() {
             context.set.insert(flags::AUTO_TOGGLE_RICH_INPUT_FLAG);
         }
-        if *ai_settings.auto_open_rich_input_on_cli_agent_start.value() {
+        if *cli_agent_settings
+            .auto_open_rich_input_on_cli_agent_start
+            .value()
+        {
             context
                 .set
                 .insert(flags::AUTO_OPEN_RICH_INPUT_ON_CLI_AGENT_START_FLAG);
         }
-        if *ai_settings.auto_dismiss_rich_input_after_submit.value() {
+        if *cli_agent_settings
+            .auto_dismiss_rich_input_after_submit
+            .value()
+        {
             context
                 .set
                 .insert(flags::AUTO_DISMISS_RICH_INPUT_AFTER_SUBMIT_FLAG);
         }
-        if *ai_settings.show_agent_notifications.value() {
+        if *cli_agent_settings.show_agent_notifications.value() {
             context.set.insert(flags::AGENT_IN_APP_NOTIFICATIONS_FLAG);
         }
 
@@ -20542,21 +20554,24 @@ impl TypedActionView for Workspace {
                 let effective_mode = AISettings::as_ref(ctx).default_session_mode(ctx);
                 match effective_mode {
                     DefaultSessionMode::TabConfig => {
-                        let ai_settings = AISettings::as_ref(ctx);
-                        if let Some(config) = ai_settings.resolved_default_tab_config(ctx) {
+                        if let Some(config) =
+                            GeneralSettings::as_ref(ctx).resolved_default_tab_config(ctx)
+                        {
                             self.open_tab_config(config, ctx);
                         } else {
                             // Config missing or deleted — clear and fall through to Terminal.
+                            GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
+                                report_if_error!(
+                                    settings
+                                        .default_tab_config_path
+                                        .set_value(String::new(), ctx)
+                                );
+                            });
                             AISettings::handle(ctx).update(ctx, |settings, ctx| {
                                 report_if_error!(
                                     settings
                                         .default_session_mode_internal
                                         .set_value(DefaultSessionMode::Terminal, ctx)
-                                );
-                                report_if_error!(
-                                    settings
-                                        .default_tab_config_path
-                                        .set_value(String::new(), ctx)
                                 );
                             });
                             self.add_terminal_tab(false, ctx);
@@ -20670,15 +20685,17 @@ impl TypedActionView for Workspace {
                 #[cfg_attr(not(feature = "local_tty"), allow(unused_variables))]
                 shell,
             } => {
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    report_if_error!(settings.default_session_mode_internal.set_value(*mode, ctx));
-                    if let Some(path) = tab_config_path {
+                if let Some(path) = tab_config_path {
+                    GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                         report_if_error!(
                             settings
                                 .default_tab_config_path
                                 .set_value(path.to_string_lossy().into_owned(), ctx)
                         );
-                    }
+                    });
+                }
+                AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(settings.default_session_mode_internal.set_value(*mode, ctx));
                 });
                 #[cfg(feature = "local_tty")]
                 if let Some(shell) = shell {
@@ -21058,7 +21075,7 @@ impl TypedActionView for Workspace {
             }
             ToggleNotificationMailbox { select_first } => {
                 if FeatureFlag::HOANotifications.is_enabled()
-                    && *AISettings::as_ref(ctx).show_agent_notifications
+                    && *CLIAgentSettings::as_ref(ctx).show_agent_notifications
                 {
                     let opening = !self.current_workspace_state.is_notification_mailbox_open;
                     self.current_workspace_state.is_notification_mailbox_open = opening;
@@ -23142,9 +23159,8 @@ impl View for Workspace {
 
                 if let Some(anchor_label) = anchor_label {
                     let is_already_default = {
-                        let ai_settings = AISettings::as_ref(app);
-                        let current_mode = ai_settings.default_session_mode(app);
-                        let current_path = ai_settings.default_tab_config_path();
+                        let current_mode = AISettings::as_ref(app).default_session_mode(app);
+                        let current_path = GeneralSettings::as_ref(app).default_tab_config_path();
                         match sidecar_item {
                             SidecarItemKind::BuiltIn {
                                 default_mode,
@@ -23692,7 +23708,7 @@ impl View for Workspace {
 
         // Render agent toast stack (for agent-related notifications) if popup is not open
         if FeatureFlag::HOANotifications.is_enabled()
-            && *AISettings::as_ref(app).show_agent_notifications
+            && *CLIAgentSettings::as_ref(app).show_agent_notifications
         {
             if !self.current_workspace_state.is_notification_mailbox_open
                 && let Some(stack_view) = &self.notification_toast_stack

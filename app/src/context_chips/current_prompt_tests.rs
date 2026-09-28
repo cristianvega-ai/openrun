@@ -265,7 +265,7 @@ fn test_shell_chip_is_disabled_when_required_executable_is_missing() {
         app.add_singleton_model(AuthManager::new_for_test);
         app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
         crate::settings::InputSettings::register(&mut app);
-        app.update(crate::settings::AISettings::register_and_subscribe_to_events);
+        app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
         app.add_singleton_model(crate::workspaces::user_workspaces::UserWorkspaces::default_mock);
         #[cfg(windows)]
         app.add_singleton_model(SystemInfo::new);
@@ -416,7 +416,7 @@ fn test_disabling_chips() {
         // Register required singleton models to fix the singleton model error
         app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
         crate::settings::InputSettings::register(&mut app);
-        app.update(crate::settings::AISettings::register_and_subscribe_to_events);
+        app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
         app.add_singleton_model(crate::workspaces::user_workspaces::UserWorkspaces::default_mock);
         #[cfg(windows)]
         app.add_singleton_model(SystemInfo::new);
@@ -617,7 +617,7 @@ fn test_cli_agent_footer_chips_require_a_visible_footer() {
         app.add_singleton_model(AuthManager::new_for_test);
         app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
         crate::settings::InputSettings::register(&mut app);
-        app.update(crate::settings::AISettings::register_and_subscribe_to_events);
+        app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
         app.add_singleton_model(crate::workspaces::user_workspaces::UserWorkspaces::default_mock);
         app.add_singleton_model(|_| CLIAgentSessionsModel::new());
         #[cfg(windows)]
@@ -660,7 +660,7 @@ fn test_cli_agent_footer_chips_require_a_visible_footer() {
             })
         );
 
-        crate::settings::AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        crate::settings::CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .should_render_cli_agent_footer
                 .set_value(false, ctx)
@@ -697,7 +697,7 @@ fn test_ps1_without_active_agent_surface_runs_no_footer_generators() {
         app.add_singleton_model(AuthManager::new_for_test);
         app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
         crate::settings::InputSettings::register(&mut app);
-        app.update(crate::settings::AISettings::register_and_subscribe_to_events);
+        app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
         app.add_singleton_model(crate::workspaces::user_workspaces::UserWorkspaces::default_mock);
         #[cfg(windows)]
         app.add_singleton_model(SystemInfo::new);

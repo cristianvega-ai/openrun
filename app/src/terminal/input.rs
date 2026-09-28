@@ -145,9 +145,7 @@ use super::{
 use crate::ASSETS;
 use crate::ai::AIRequestUsageModel;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::agent::{
-    AIAgentContext, AIAgentExchangeId, CancellationReason, EntrypointType, ImageContext,
-};
+use crate::ai::agent::{AIAgentContext, AIAgentExchangeId, CancellationReason, EntrypointType};
 use crate::ai::agent_conversations_model::{
     AgentConversationNavigationSubject, AgentConversationsModel,
 };
@@ -250,7 +248,8 @@ use crate::server::telemetry::{
 use crate::session_management::SessionNavigationPromptElements;
 use crate::settings::{
     AISettings, AISettingsChangedEvent, AliasExpansionSettings, AppEditorSettings,
-    AppEditorSettingsChangedEvent, InputModeSettings, InputSettings, InputSettingsChangedEvent,
+    AppEditorSettingsChangedEvent, CLIAgentSettings, CLIAgentSettingsChangedEvent,
+    InputModeSettings, InputSettings, InputSettingsChangedEvent,
     MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT,
 };
 use crate::settings_view::{SettingsSection, flags};
@@ -314,7 +313,7 @@ use crate::user_config::WarpConfig;
 use crate::util::bindings::{self, CustomAction, keybinding_name_to_normalized_string};
 #[cfg(feature = "local_fs")]
 use crate::util::file::external_editor;
-use crate::util::image::MAX_IMAGE_COUNT_FOR_QUERY;
+use crate::util::image::{ImageContext, MAX_IMAGE_COUNT_FOR_QUERY};
 use crate::util::truncation::truncate_from_end;
 use crate::view_components::{DismissibleToast, ToastFlavor};
 use crate::voltron::{
@@ -3510,6 +3509,14 @@ impl Input {
 
         ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| {
             me.handle_ai_settings_changed_event(event, ctx)
+        });
+
+        ctx.subscribe_to_model(&CLIAgentSettings::handle(ctx), |me, _, event, ctx| {
+            if let CLIAgentSettingsChangedEvent::SubmitRichInputOnCtrlEnter { .. } = event {
+                // ctrl_enter now depends on the toggle: re-sync so flipping
+                // the setting mid-session takes effect immediately.
+                me.update_cli_agent_enter_settings(ctx);
+            }
         });
 
         ctx.subscribe_to_model(
@@ -6921,11 +6928,6 @@ impl Input {
             #[cfg(feature = "voice_input")]
             AISettingsChangedEvent::VoiceInputEnabled { .. } => {
                 self.update_voice_transcription_options(ctx);
-            }
-            AISettingsChangedEvent::SubmitRichInputOnCtrlEnter { .. } => {
-                // ctrl_enter now depends on the toggle: re-sync so flipping
-                // the setting mid-session takes effect immediately.
-                self.update_cli_agent_enter_settings(ctx);
             }
             _ => {}
         }
@@ -12641,7 +12643,7 @@ impl Input {
             // submitting (Ctrl+Enter handles submission in that mode).
             // Asymmetry: Enter replaces any active selection (the user asked for a newline
             // edit); Ctrl+Enter preserves selections because it is a submit, not an edit.
-            if *AISettings::as_ref(ctx).submit_on_ctrl_enter {
+            if *CLIAgentSettings::as_ref(ctx).submit_on_ctrl_enter {
                 self.editor.update(ctx, |editor, ctx| {
                     editor.user_initiated_insert("\n", PlainTextEditorViewAction::NewLine, ctx);
                 });
@@ -12988,7 +12990,7 @@ impl Input {
     /// Exposed `pub(crate)` for unit tests.
     pub(crate) fn input_ctrl_enter(&mut self, ctx: &mut ViewContext<Self>) {
         if CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
-            && *AISettings::as_ref(ctx).submit_on_ctrl_enter
+            && *CLIAgentSettings::as_ref(ctx).submit_on_ctrl_enter
         {
             self.emit_submit_cli_agent_input(ctx);
         }
@@ -13866,7 +13868,7 @@ impl Input {
         >,
         prompt: String,
         base_attachments: Vec<AgentAttachment>,
-        pending_images: &[crate::ai::agent::ImageContext],
+        pending_images: &[ImageContext],
         pending_files: &[crate::ai::blocklist::PendingFile],
         queued_query_retry: Option<(AIConversationId, usize, QueuedQuery)>,
         ctx: &mut ViewContext<Self>,

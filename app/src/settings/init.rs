@@ -9,6 +9,7 @@ use warpui::{AppContext, SingletonEntity};
 use warpui_extras::user_preferences;
 
 use super::app_icon::AppIconSettings;
+use super::cli_agent::CLIAgentSettings;
 use super::initializer::SettingsInitializer;
 use super::{
     AISettings, AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
@@ -67,6 +68,7 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     GPUSettings::register(ctx);
     GeneralSettings::register(ctx);
     AISettings::register_and_subscribe_to_events(ctx);
+    CLIAgentSettings::register_and_subscribe_to_events(ctx);
     CloudAgentSettings::register(ctx);
     ScrollSettings::register(ctx);
     SelectionSettings::register(ctx);

@@ -55,9 +55,9 @@ use crate::search::command_search::settings::CommandSearchSettings;
 use crate::server::telemetry::TelemetryEvent;
 use crate::settings::ai::AISettings;
 use crate::settings::{
-    AISettingsChangedEvent, AliasExpansionSettings, AppEditorSettings, CodeSettings,
-    CtrlTabBehavior, DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES, DefaultSessionMode, ExtraMetaKeys,
-    GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
+    AISettingsChangedEvent, AliasExpansionSettings, AppEditorSettings, CLIAgentSettings,
+    CodeSettings, CtrlTabBehavior, DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES, DefaultSessionMode,
+    ExtraMetaKeys, GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
     QUAKE_WINDOW_AUTOHIDE_SUPPORTED, QuakeModeSettings, RightClickBehavior, ScrollSettings,
     ScrollSettingsChangedEvent, SelectionSettings, SelectionSettingsChangedEvent, SshSettings,
     TabBehavior,
@@ -1313,7 +1313,7 @@ impl FeaturesPageAction {
             },
             Self::ToggleAgentInAppNotifications => TelemetryEvent::FeaturesPageAction {
                 action: "ToggleAgentInAppNotifications".to_string(),
-                value: to_string(*AISettings::as_ref(ctx).show_agent_notifications),
+                value: to_string(*CLIAgentSettings::as_ref(ctx).show_agent_notifications),
             },
             Self::ToggleAsyncFind => TelemetryEvent::FeaturesPageAction {
                 action: "ToggleAsyncFind".to_string(),
@@ -1776,7 +1776,7 @@ impl TypedActionView for FeaturesPageView {
                 ctx.notify();
             }
             ToggleAgentInAppNotifications => {
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                CLIAgentSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.show_agent_notifications.toggle_and_save_value(ctx));
                 });
                 ctx.notify();
@@ -1949,16 +1949,18 @@ impl TypedActionView for FeaturesPageView {
             }
             SetDefaultSessionMode(mode) => self.set_default_session_mode(mode, ctx),
             SetDefaultTabConfig(path) => {
+                GeneralSettings::handle(ctx).update(ctx, |general_settings, ctx| {
+                    report_if_error!(
+                        general_settings
+                            .default_tab_config_path
+                            .set_value(path.clone(), ctx)
+                    );
+                });
                 AISettings::handle(ctx).update(ctx, |ai_settings, ctx| {
                     report_if_error!(
                         ai_settings
                             .default_session_mode_internal
                             .set_value(DefaultSessionMode::TabConfig, ctx)
-                    );
-                    report_if_error!(
-                        ai_settings
-                            .default_tab_config_path
-                            .set_value(path.clone(), ctx)
                     );
                 });
             }
@@ -3603,7 +3605,9 @@ impl FeaturesPageView {
 
                 let ai_settings = AISettings::as_ref(ctx);
                 let current_mode = ai_settings.default_session_mode(ctx);
-                let current_tab_config_path = ai_settings.default_tab_config_path().to_string();
+                let current_tab_config_path = GeneralSettings::as_ref(ctx)
+                    .default_tab_config_path()
+                    .to_string();
 
                 // Build items: built-in modes (skip TabConfig since configs are listed individually).
                 let mut items: Vec<DropdownItem<FeaturesPageAction>> = DefaultSessionMode::iter()
@@ -4992,8 +4996,7 @@ impl SettingsWidget for DesktopNotificationsWidget {
         }
 
         if FeatureFlag::HOANotifications.is_enabled() {
-            let ai_settings = AISettings::as_ref(app);
-            let show_agent_notifications = *ai_settings.show_agent_notifications;
+            let show_agent_notifications = *CLIAgentSettings::as_ref(app).show_agent_notifications;
             column.add_child(render_body_item::<FeaturesPageAction>(
                 "Show in-app agent notifications".into(),
                 None,

@@ -6,7 +6,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use ai::harness::Harness;
 use ai::skills::SkillProvider;
 use enum_iterator::Sequence;
 use markdown_parser::parse_markdown;
@@ -17,19 +16,21 @@ use warp_completer::parsers::simple::top_level_command;
 use warp_editor::content::buffer::Buffer;
 use warp_editor::content::markdown::MarkdownStyle;
 use warp_util::path::EscapeChar;
-use warpui::{AppContext, SingletonEntity};
 
-use crate::ai::agent::{AgentReviewCommentBatch, DiffSetHunk};
-use crate::ai::blocklist::CLAUDE_ORANGE;
 use crate::code::editor::line::EditorLineLocation;
-use crate::code_review::comments::AttachedReviewCommentTarget;
+use crate::code_review::comments::{AgentReviewCommentBatch, AttachedReviewCommentTarget};
+use crate::code_review::diff_set::DiffSetHunk;
 use crate::server::telemetry::CLIAgentType;
 use crate::ui_components::icons::Icon;
-use crate::workspaces::user_workspaces::UserWorkspaces;
 
-/// UID for the Uber team.
-/// See https://warp.metabaseapp.com/dashboard/1454?team_id=46347
-const UBER_TEAM_UID: &str = "BdVbYjy9LRZcZrYBemSfAF";
+/// Claude/Anthropic brand color (official brand orange #D97757).
+/// Reference: https://github.com/anthropics/skills/blob/main/skills/brand-guidelines/SKILL.md
+pub(crate) const CLAUDE_ORANGE: ColorU = ColorU {
+    r: 0xD9,
+    g: 0x77,
+    b: 0x57,
+    a: 0xFF,
+};
 
 /// Gemini brand blue color
 pub(crate) const GEMINI_BLUE: ColorU = ColorU {
@@ -208,20 +209,6 @@ impl CLIAgent {
     /// Inverse of `to_serialized_name`. Falls back to `Unknown`.
     pub fn from_serialized_name(name: &str) -> CLIAgent {
         serde_json::from_value(name.into()).unwrap_or(CLIAgent::Unknown)
-    }
-
-    /// Returns the [`CLIAgent`] corresponding to a cloud-agent [`Harness`] when it represents a
-    /// third-party agent. Returns `None` for [`Harness::Oz`] (Warp's built-in harness has no
-    /// distinct CLI agent identity).
-    pub fn from_harness(harness: Harness) -> Option<Self> {
-        match harness {
-            Harness::Oz => None,
-            Harness::Claude => Some(CLIAgent::Claude),
-            Harness::Gemini => Some(CLIAgent::Gemini),
-            Harness::OpenCode => Some(CLIAgent::OpenCode),
-            Harness::Codex => Some(CLIAgent::Codex),
-            Harness::Unknown => Some(CLIAgent::Unknown),
-        }
     }
 
     pub fn display_name(&self) -> &'static str {
@@ -404,7 +391,6 @@ impl CLIAgent {
         command: &str,
         escape_char: Option<EscapeChar>,
         aliases: Option<&HashMap<SmolStr, String>>,
-        ctx: &AppContext,
     ) -> Option<CLIAgent> {
         let trimmed = command.trim_start();
         let first_word = Self::extract_first_command(trimmed, escape_char)?;
@@ -422,32 +408,9 @@ impl CLIAgent {
             })
             .unwrap_or(Cow::Borrowed(trimmed));
 
-        // Check if resolved command matches any known CLI agent.
-        // Also matches `aifx agent run claude` as Claude for Uber employees.
         enum_iterator::all::<CLIAgent>()
             .filter(|agent| !matches!(agent, CLIAgent::Unknown))
-            .find(|agent| {
-                agent.matches_command(&resolved_command, escape_char)
-                    || (matches!(agent, CLIAgent::Claude)
-                        && Self::is_aifx_agent_run_claude(&resolved_command, ctx))
-            })
-    }
-
-    /// Returns true if the resolved command is `aifx agent run claude` (Uber's
-    /// internal wrapper around Claude) and the user is on the Uber team.
-    /// We special-case this so Uber employees get the toolbar without needing
-    /// to configure anything.
-    fn is_aifx_agent_run_claude(resolved_command: &str, ctx: &AppContext) -> bool {
-        resolved_command.starts_with("aifx agent run claude")
-            && Self::is_on_uber_team(UserWorkspaces::as_ref(ctx))
-    }
-
-    fn is_on_uber_team(user_workspaces: &UserWorkspaces) -> bool {
-        user_workspaces
-            .workspaces()
-            .iter()
-            .flat_map(|workspace| workspace.teams.iter())
-            .any(|team| team.uid.uid() == UBER_TEAM_UID)
+            .find(|agent| agent.matches_command(&resolved_command, escape_char))
     }
 }
 

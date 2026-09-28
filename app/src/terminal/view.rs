@@ -188,12 +188,9 @@ use crate::ai::agent::conversation::{AIConversation, AIConversationId, Conversat
 use crate::ai::agent::todos::popup::{AgentTodosPopupEvent, AgentTodosPopupView};
 use crate::ai::agent::{
     AIAgentActionId, AIAgentActionType, AIAgentCitation, AIAgentContext, AIAgentExchangeId,
-    AIAgentInput, AIAgentOutputStatus, AIAgentPtyWriteMode, AIAgentTextSection,
-    AgentReviewCommentBatch, CancellationReason, FinishedAIAgentOutput, RenderableAIError,
-    ServerOutputId,
+    AIAgentInput, AIAgentOutputStatus, AIAgentPtyWriteMode, AIAgentTextSection, CancellationReason,
+    FinishedAIAgentOutput, RenderableAIError, ServerOutputId,
 };
-#[cfg(feature = "local_fs")]
-use crate::ai::agent::{CurrentHead, DiffBase};
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::{
     AmbientAgentTask, AmbientAgentTaskId, AmbientConversationStatus,
@@ -267,13 +264,16 @@ use crate::code::editor_management::CodeSource;
 #[cfg(feature = "local_fs")]
 use crate::code_review::DiffSetScope;
 use crate::code_review::comments::{
-    AttachedReviewComment, PendingImportedReviewComment, convert_insert_review_comments,
+    AgentReviewCommentBatch, AttachedReviewComment, PendingImportedReviewComment,
+    convert_insert_review_comments,
 };
 #[cfg(feature = "local_fs")]
 use crate::code_review::context::{
     convert_file_diffs_to_diffset_hunks, create_attachment_reference_and_key,
     register_diffset_attachment,
 };
+#[cfg(feature = "local_fs")]
+use crate::code_review::diff_set::{CurrentHead, DiffBase};
 #[cfg(feature = "local_fs")]
 use crate::code_review::diff_state::LocalDiffStateModel;
 use crate::code_review::diff_state::{DiffMode, GitDeltaPreference};
@@ -317,10 +317,10 @@ use crate::settings::import::model::ImportedConfigModel;
 use crate::settings::import::view::{SettingsImportEvent, SettingsImportView};
 use crate::settings::{
     AISettings, AISettingsChangedEvent, AliasExpansionSettings, AppEditorSettings,
-    BlockVisibilitySettings, BlockVisibilitySettingsChangedEvent, CodeSettings, DebugSettings,
-    DebugSettingsChangedEvent, EmacsBindingsSettings, FontSettings, FontSettingsChangedEvent,
-    InputModeSettings, InputModeSettingsChangedEvent, InputSettings, PaneSettings,
-    PaneSettingsChangedEvent, SelectionSettings, VimBannerSettings,
+    BlockVisibilitySettings, BlockVisibilitySettingsChangedEvent, CLIAgentSettings, CodeSettings,
+    DebugSettings, DebugSettingsChangedEvent, EmacsBindingsSettings, FontSettings,
+    FontSettingsChangedEvent, InputModeSettings, InputModeSettingsChangedEvent, InputSettings,
+    PaneSettings, PaneSettingsChangedEvent, SelectionSettings, VimBannerSettings,
 };
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::settings_view::mcp_servers_page::MCPServersSettingsPage;
@@ -10913,7 +10913,7 @@ impl TerminalView {
                                                 let remote_host =
                                                     me.active_session_remote_host(ctx);
                                                 let should_auto_toggle_input =
-                                                    *AISettings::as_ref(ctx)
+                                                    *CLIAgentSettings::as_ref(ctx)
                                                         .auto_open_rich_input_on_cli_agent_start;
                                                 sessions_model.set_session(
                                                     view_id,
@@ -11838,7 +11838,7 @@ impl TerminalView {
         });
         let remote_host = self.active_session_remote_host(ctx);
         let should_auto_toggle_input =
-            *AISettings::as_ref(ctx).auto_open_rich_input_on_cli_agent_start;
+            *CLIAgentSettings::as_ref(ctx).auto_open_rich_input_on_cli_agent_start;
         // Seed context from the event that caused registration before the
         // listener subscribes to future events.
         CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions_model, ctx| {
@@ -11944,10 +11944,10 @@ impl TerminalView {
     /// CLI agent session. Called after creating a command-detected session or
     /// registering a listener so rich input is shown immediately.
     fn maybe_auto_open_cli_agent_rich_input(&mut self, ctx: &mut ViewContext<Self>) {
-        let ai_settings = AISettings::as_ref(ctx);
-        if !*ai_settings.auto_open_rich_input_on_cli_agent_start
-            || !ai_settings.is_any_ai_enabled(ctx)
-            || !*ai_settings.should_render_cli_agent_footer
+        let cli_agent_settings = CLIAgentSettings::as_ref(ctx);
+        if !*cli_agent_settings.auto_open_rich_input_on_cli_agent_start
+            || !AISettings::as_ref(ctx).is_any_ai_enabled(ctx)
+            || !*cli_agent_settings.should_render_cli_agent_footer
             || !is_rich_input_chip_in_cli_toolbar(ctx)
         {
             return;
@@ -12034,7 +12034,7 @@ impl TerminalView {
                 history_model.update_conversation_status(
                     self.view_id,
                     conversation_id,
-                    status.to_conversation_status(),
+                    ConversationStatus::from(status),
                     ctx,
                 );
             });
@@ -12042,10 +12042,10 @@ impl TerminalView {
 
         // Auto-show/hide rich input based on the setting.
         // Only applies when the session has a plugin listener (rich status info).
-        let ai_settings = AISettings::as_ref(ctx);
-        if *ai_settings.auto_toggle_rich_input
-            && ai_settings.is_any_ai_enabled(ctx)
-            && *ai_settings.should_render_cli_agent_footer
+        let cli_agent_settings = CLIAgentSettings::as_ref(ctx);
+        if *cli_agent_settings.auto_toggle_rich_input
+            && AISettings::as_ref(ctx).is_any_ai_enabled(ctx)
+            && *cli_agent_settings.should_render_cli_agent_footer
             && is_rich_input_chip_in_cli_toolbar(ctx)
         {
             let should_auto_toggle_input = CLIAgentSessionsModel::as_ref(ctx)
@@ -20399,7 +20399,10 @@ impl TerminalView {
     #[cfg(feature = "local_fs")]
     pub fn send_diff_context_to_cli_agent_or_rich_input(
         &mut self,
-        file_diffs: &std::collections::HashMap<String, Vec<crate::ai::agent::DiffSetHunk>>,
+        file_diffs: &std::collections::HashMap<
+            String,
+            Vec<crate::code_review::diff_set::DiffSetHunk>,
+        >,
         ctx: &mut ViewContext<Self>,
     ) -> Option<CliAgentRouting> {
         let text = cli_agent::build_diff_context_prompt(file_diffs);
@@ -25273,7 +25276,7 @@ impl View for TerminalView {
             .is_some()
         {
             context.set.insert(init::CLI_AGENT_SESSION_ACTIVE_KEY);
-            if *AISettings::as_ref(app).should_render_cli_agent_footer {
+            if *CLIAgentSettings::as_ref(app).should_render_cli_agent_footer {
                 context.set.insert(flags::CLI_AGENT_FOOTER_ENABLED);
 
                 if is_rich_input_chip_in_cli_toolbar(app) {

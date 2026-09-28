@@ -213,7 +213,7 @@ impl Input {
 
         let settings = if rich_input_open {
             let submit_on_ctrl_enter =
-                *crate::settings::AISettings::as_ref(ctx).submit_on_ctrl_enter;
+                *crate::settings::CLIAgentSettings::as_ref(ctx).submit_on_ctrl_enter;
             EnterSettings {
                 // Always Emit so input_enter handles menus before submit/newline.
                 enter: EnterAction::Emit,

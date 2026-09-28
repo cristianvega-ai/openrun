@@ -31,7 +31,9 @@ use crate::code_review::github_repo_model::{GitHubRepoEvent, GitHubRepoModel};
 use crate::context_chips::display_chip::GitLineChanges;
 use crate::editor::EditorView;
 use crate::menu::{MenuItem, MenuItemFields};
-use crate::settings::{AISettings, AISettingsChangedEvent, InputSettings, WarpPromptSeparator};
+use crate::settings::{
+    CLIAgentSettings, CLIAgentSettingsChangedEvent, InputSettings, WarpPromptSeparator,
+};
 use crate::terminal::event::BlockType;
 use crate::terminal::model::block::{Block, BlockMetadata};
 use crate::terminal::model::session::{ExecuteCommandOptions, Session, Sessions, SessionsEvent};
@@ -300,10 +302,10 @@ impl CurrentPrompt {
                 }
             },
         );
-        ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| {
+        ctx.subscribe_to_model(&CLIAgentSettings::handle(ctx), |me, _, event, ctx| {
             if matches!(
                 event,
-                AISettingsChangedEvent::ShouldRenderCLIAgentToolbar { .. }
+                CLIAgentSettingsChangedEvent::ShouldRenderCLIAgentToolbar { .. }
             ) {
                 me.update_states_with_new_context(ctx);
             }
@@ -1126,7 +1128,7 @@ impl CurrentPrompt {
             .and_then(|controller| controller.upgrade(ctx))
             .is_some_and(|controller| controller.as_ref(ctx).is_active());
         let cli_agent_footer = self.terminal_view_id.is_some_and(|terminal_view_id| {
-            *AISettings::as_ref(ctx).should_render_cli_agent_footer
+            *CLIAgentSettings::as_ref(ctx).should_render_cli_agent_footer
                 && CLIAgentSessionsModel::as_ref(ctx)
                     .session(terminal_view_id)
                     .is_some()

@@ -25,13 +25,13 @@ use super::{
     terminal_title_fallback_font, uses_outer_group_container, visible_pane_ids_for_detail_target,
     vtab_diff_stats_text,
 };
-use crate::ai::agent::conversation::ConversationStatus;
 use crate::context_chips::display_chip::GitLineChanges;
 use crate::pane_group::pane::IPaneType;
 use crate::pane_group::{PaneId, TerminalPaneId};
 use crate::safe_triangle::SafeTriangle;
 use crate::tab::{ShortcutModifierKind, reveals_shortcut_hints};
 use crate::terminal::CLIAgent;
+use crate::ui_components::agent_status::AgentStatus;
 use crate::workspace::tab_group::{TabGroup, TabGroupId};
 use crate::workspace::tab_settings::VerticalTabsDisplayGranularity;
 
@@ -1049,7 +1049,7 @@ fn primary_labels_dedupe_preserves_first_seen_status() {
         &mut values,
         &mut seen,
         "cargo test",
-        Some(ConversationStatus::InProgress),
+        Some(AgentStatus::InProgress),
     );
 
     assert_eq!(
@@ -1069,13 +1069,13 @@ fn primary_labels_preserve_status_through_aggregation() {
         &mut values,
         &mut seen,
         "Plan a refactor",
-        Some(ConversationStatus::InProgress),
+        Some(AgentStatus::InProgress),
     );
     push_normalized_unique_summary_label(
         &mut values,
         &mut seen,
         "Investigate failure",
-        Some(ConversationStatus::Success),
+        Some(AgentStatus::Success),
     );
     push_normalized_unique_summary_label(&mut values, &mut seen, "cargo build", None);
 
@@ -1084,11 +1084,11 @@ fn primary_labels_preserve_status_through_aggregation() {
         vec![
             VerticalTabsSummaryPrimaryLabel {
                 text: "Plan a refactor".to_string(),
-                status: Some(ConversationStatus::InProgress),
+                status: Some(AgentStatus::InProgress),
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "Investigate failure".to_string(),
-                status: Some(ConversationStatus::Success),
+                status: Some(AgentStatus::Success),
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "cargo build".to_string(),
@@ -1107,7 +1107,7 @@ fn sort_summary_primary_labels_moves_status_first_and_preserves_order() {
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "first conversation".to_string(),
-            status: Some(ConversationStatus::InProgress),
+            status: Some(AgentStatus::InProgress),
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "code pane".to_string(),
@@ -1115,7 +1115,7 @@ fn sort_summary_primary_labels_moves_status_first_and_preserves_order() {
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "second conversation".to_string(),
-            status: Some(ConversationStatus::Success),
+            status: Some(AgentStatus::Success),
         },
         VerticalTabsSummaryPrimaryLabel {
             text: "last terminal".to_string(),
@@ -1130,11 +1130,11 @@ fn sort_summary_primary_labels_moves_status_first_and_preserves_order() {
         vec![
             VerticalTabsSummaryPrimaryLabel {
                 text: "first conversation".to_string(),
-                status: Some(ConversationStatus::InProgress),
+                status: Some(AgentStatus::InProgress),
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "second conversation".to_string(),
-                status: Some(ConversationStatus::Success),
+                status: Some(AgentStatus::Success),
             },
             VerticalTabsSummaryPrimaryLabel {
                 text: "plain terminal".to_string(),
@@ -1190,7 +1190,7 @@ fn summary_search_fragments_include_hidden_overflow_values() {
         primary_labels: vec![
             VerticalTabsSummaryPrimaryLabel {
                 text: "Claude".to_string(),
-                status: Some(ConversationStatus::InProgress),
+                status: Some(AgentStatus::InProgress),
             },
             label("Warp Agent"),
             label("cargo"),

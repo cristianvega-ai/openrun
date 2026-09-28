@@ -94,7 +94,7 @@ pub use queued_query::{QueuedQueryEvent, QueuedQueryModel};
 pub use suggestion_chip_view::*;
 pub use view_util::error_color;
 pub(crate) use view_util::{
-    CLAUDE_ORANGE, ai_brand_color, ai_indicator_height, format_credits,
+    ai_brand_color, ai_indicator_height, format_credits,
     get_ai_block_overflow_menu_element_position_id, get_attached_blocks_chip_element_position_id,
     render_ai_agent_mode_icon, render_ai_follow_up_icon,
 };

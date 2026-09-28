@@ -4,12 +4,12 @@ use warp_core::features::FeatureFlag;
 use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity, ViewHandle, WindowId};
 
 use crate::BlocklistAIHistoryModel;
-use crate::ai::active_agent_views_model::{ActiveAgentViewsEvent, ActiveAgentViewsModel};
-use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
-use crate::ai::agent_management::notifications::{
+use crate::agent_notifications::{
     NotificationCategory, NotificationId, NotificationItem, NotificationItems, NotificationOrigin,
     NotificationSourceAgent,
 };
+use crate::ai::active_agent_views_model::{ActiveAgentViewsEvent, ActiveAgentViewsModel};
+use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
 use crate::ai::artifacts::Artifact;
 use crate::ai::blocklist::{BlocklistAIHistoryEvent, ConversationStatusUpdate, QueuedQueryModel};
 use crate::terminal::cli_agent_sessions::{
@@ -634,5 +634,5 @@ fn active_focused_terminal_id(app: &AppContext) -> Option<EntityId> {
 }
 
 #[cfg(test)]
-#[path = "agent_management_model_tests.rs"]
+#[path = "model_tests.rs"]
 mod tests;

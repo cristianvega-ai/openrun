@@ -75,8 +75,8 @@ use crate::server::team_scope::RequestTeamScope;
 use crate::server::telemetry::PluginChipTelemetryAction;
 use crate::server::telemetry::{PluginChipTelemetryKind, TelemetryEvent};
 use crate::settings::{
-    AISettings, AISettingsChangedEvent, CodeSettings, CodeSettingsChangedEvent, PrivacySettings,
-    PrivacySettingsChangedEvent,
+    AISettings, AISettingsChangedEvent, CLIAgentSettings, CodeSettings, CodeSettingsChangedEvent,
+    PrivacySettings, PrivacySettingsChangedEvent,
 };
 use crate::settings_view::SettingsSection;
 #[cfg(not(target_family = "wasm"))]
@@ -1117,8 +1117,8 @@ impl AgentInputFooter {
                 return None;
             }
 
-            let ai_settings = AISettings::as_ref(app);
-            if !*ai_settings.show_agent_notifications {
+            let cli_agent_settings = CLIAgentSettings::as_ref(app);
+            if !*cli_agent_settings.show_agent_notifications {
                 return None;
             }
 
@@ -1139,7 +1139,8 @@ impl AgentInputFooter {
                     return None;
                 }
                 // Check update chip dismissal.
-                let dismissed_version = ai_settings.plugin_update_chip_dismissed_version(&chip_key);
+                let dismissed_version =
+                    cli_agent_settings.plugin_update_chip_dismissed_version(&chip_key);
                 if !dismissed_version.is_empty()
                     && compare_versions(dismissed_version, min_version).is_ge()
                 {
@@ -1154,7 +1155,8 @@ impl AgentInputFooter {
                 return None;
             }
 
-            let install_chip_dismissed = ai_settings.is_plugin_install_chip_dismissed(&chip_key);
+            let install_chip_dismissed =
+                cli_agent_settings.is_plugin_install_chip_dismissed(&chip_key);
 
             // For remote sessions, we can't check the filesystem.
             if session.is_remote() {
@@ -1166,7 +1168,7 @@ impl AgentInputFooter {
                 // — the plugin may be too old to send structured events.
                 if manager.needs_update() {
                     let dismissed_version =
-                        ai_settings.plugin_update_chip_dismissed_version(&chip_key);
+                        cli_agent_settings.plugin_update_chip_dismissed_version(&chip_key);
                     if !dismissed_version.is_empty()
                         && compare_versions(dismissed_version, min_version).is_ge()
                     {
@@ -2581,12 +2583,12 @@ impl TypedActionView for AgentInputFooter {
                         #[cfg(not(target_family = "wasm"))]
                         if let Some(manager) = plugin_manager_for(session.agent) {
                             let version = manager.minimum_plugin_version().to_owned();
-                            AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                            CLIAgentSettings::handle(ctx).update(ctx, |settings, ctx| {
                                 settings.dismiss_plugin_update_chip(&chip_key, version, ctx);
                             });
                         }
                     } else {
-                        AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                        CLIAgentSettings::handle(ctx).update(ctx, |settings, ctx| {
                             settings.dismiss_plugin_install_chip(&chip_key, ctx);
                         });
                     }

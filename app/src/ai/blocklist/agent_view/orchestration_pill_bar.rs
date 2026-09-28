@@ -36,9 +36,7 @@ use warpui::{
     ViewHandle,
 };
 
-use crate::ai::agent::conversation::{
-    AIConversation, AIConversationId, ConversationStatus, StatusColorStyle,
-};
+use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::artifacts::Artifact;
 use crate::ai::blocklist::agent_view::orchestration_conversation_links::{
     is_conversation_open_in_other_visible_view, pane_group_id_containing_terminal_view,
@@ -62,6 +60,7 @@ use crate::features::FeatureFlag;
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
 use crate::pane_group::pane::view::PaneHeaderAction;
 use crate::terminal::view::TerminalAction;
+use crate::ui_components::agent_status::{AgentStatus, StatusColorStyle};
 use crate::ui_components::icon_with_status::{
     BadgeInnerShape, IconWithStatusVariant, StatusBadgeStyle,
     render_icon_with_status_with_badge_style,
@@ -2494,7 +2493,7 @@ fn render_avatar_with_status_overlay(
     let lockup = render_icon_with_status_with_badge_style(
         IconWithStatusVariant::CustomAvatar {
             avatar,
-            status: Some(status),
+            status: Some(AgentStatus::from(&status)),
             is_ambient: is_remote_child,
         },
         AVATAR_WITH_STATUS_TOTAL_SIZE,

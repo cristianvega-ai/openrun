@@ -4,7 +4,7 @@ use warpui::{AppContext, SingletonEntity};
 
 use crate::auth::AuthStateProvider;
 use crate::features::FeatureFlag;
-use crate::settings::AISettings;
+use crate::settings::{AISettings, CLIAgentSettings};
 use crate::ui_components::icons::Icon;
 use crate::workspace::tab_settings::TabSettings;
 
@@ -86,7 +86,7 @@ impl HeaderToolbarItemKind {
         }
         match self {
             Self::CodeReview => *TabSettings::as_ref(app).show_code_review_button.value(),
-            Self::NotificationsMailbox => *AISettings::as_ref(app).show_agent_notifications,
+            Self::NotificationsMailbox => *CLIAgentSettings::as_ref(app).show_agent_notifications,
             _ => true,
         }
     }

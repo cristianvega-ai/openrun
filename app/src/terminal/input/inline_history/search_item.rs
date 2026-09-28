@@ -12,12 +12,12 @@ use warpui::text_layout::ClipConfig;
 use warpui::{AppContext, Element, SingletonEntity};
 
 use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
-use crate::ai::conversation_status_ui::{STATUS_ELEMENT_PADDING, render_status_element};
 use crate::appearance::Appearance;
 use crate::search::{ItemHighlightState, SearchItem};
 use crate::terminal::history::LinkedWorkflowData;
 use crate::terminal::input::inline_history::data_source::AcceptHistoryItem;
 use crate::terminal::input::inline_menu::styles as inline_styles;
+use crate::ui_components::agent_status::{STATUS_ELEMENT_PADDING, render_status_element};
 use crate::util::time_format::format_approx_duration_from_now_utc;
 
 #[derive(Debug, Clone)]

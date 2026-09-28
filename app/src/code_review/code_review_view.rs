@@ -61,9 +61,7 @@ use super::git_dialog::{GitDialog, GitDialogEvent, GitDialogKind};
 use super::{GlobalCodeReviewEvent, GlobalCodeReviewModel};
 #[cfg(feature = "local_fs")]
 use crate::TelemetryEvent;
-use crate::ai::agent::{
-    AIAgentAttachment, AgentReviewCommentBatch, CurrentHead, DiffBase, DiffSetHunk,
-};
+use crate::ai::agent::AIAgentAttachment;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::appearance::Appearance;
 use crate::code::ShowCommentEditorProvider;
@@ -86,7 +84,8 @@ use crate::code::local_code_editor::{
 use crate::code::view::PendingSaveIntent;
 use crate::code_review::DiffSetScope;
 use crate::code_review::comments::{
-    AttachedReviewCommentTarget, CommentId, ReviewCommentBatch, ReviewCommentBatchEvent,
+    AgentReviewCommentBatch, AttachedReviewCommentTarget, CommentId, ReviewCommentBatch,
+    ReviewCommentBatchEvent,
 };
 use crate::code_review::context::convert_file_diffs_to_diffset_hunks;
 #[cfg(feature = "local_fs")]
@@ -94,6 +93,7 @@ use crate::code_review::context::{
     create_attachment_reference_and_key, register_diffset_attachment,
 };
 use crate::code_review::diff_selector::{DiffSelector, DiffSelectorEvent, DiffTarget};
+use crate::code_review::diff_set::{CurrentHead, DiffBase, DiffSetHunk};
 use crate::code_review::diff_state::{
     DiffHunk, DiffLineType, DiffMode, DiffState, DiffStateModel, DiffStateModelEvent, DiffStats,
     FileDiff, FileDiffAndContent, FileStatusInfo, GitDiffWithBaseContent, GitFileStatus,

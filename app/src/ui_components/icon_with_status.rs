@@ -8,9 +8,9 @@ use warpui::elements::{
     ParentElement, ParentOffsetBounds, Radius, Stack,
 };
 
-use crate::ai::agent::conversation::{ConversationStatus, StatusColorStyle};
 use crate::terminal::CLIAgent;
 use crate::themes::theme::Fill as ThemeFill;
+use crate::ui_components::agent_status::{AgentStatus, StatusColorStyle};
 
 /// Background color used for the Oz agent's circle when it is running in an ambient (cloud)
 /// run. Matches the Oz brand purple used in the cloud-mode design spec.
@@ -134,13 +134,13 @@ pub(crate) enum IconWithStatusVariant {
     /// use a foreground/background pair that flips for light and dark themes; ambient
     /// (cloud) conversations retain the purple brand background and cloud status badge.
     OzAgent {
-        status: Option<ConversationStatus>,
+        status: Option<AgentStatus>,
         is_ambient: bool,
     },
     /// A CLI agent icon on the agent's brand color background.
     CLIAgent {
         agent: CLIAgent,
-        status: Option<ConversationStatus>,
+        status: Option<AgentStatus>,
         is_ambient: bool,
     },
     /// A pre-rendered avatar with an optional status overlay (cloud lobe when
@@ -151,7 +151,7 @@ pub(crate) enum IconWithStatusVariant {
     /// artwork inside it.
     CustomAvatar {
         avatar: Box<dyn Element>,
-        status: Option<ConversationStatus>,
+        status: Option<AgentStatus>,
         is_ambient: bool,
     },
 }
@@ -335,7 +335,7 @@ fn render_neutral_circle(
 #[allow(clippy::too_many_arguments)]
 fn attach_status_overlay(
     circle: Box<dyn Element>,
-    status: Option<&ConversationStatus>,
+    status: Option<&AgentStatus>,
     is_ambient: bool,
     total_size: f32,
     overlay_extra_overhang_ratio: f32,
@@ -368,7 +368,7 @@ fn attach_status_overlay(
 /// the bottom-right of the base circle. Used for agents running in ambient/cloud mode.
 fn render_with_cloud_status_badge(
     circle: Box<dyn Element>,
-    status: Option<&ConversationStatus>,
+    status: Option<&AgentStatus>,
     total_size: f32,
     overlay_extra_overhang_ratio: f32,
     theme: &WarpTheme,
@@ -436,7 +436,7 @@ fn render_with_cloud_status_badge(
 /// Adds a status badge with a cutout ring to the bottom-right of the circle.
 fn render_with_optional_status_badge(
     circle: Box<dyn Element>,
-    status: Option<&ConversationStatus>,
+    status: Option<&AgentStatus>,
     total_size: f32,
     overlay_extra_overhang_ratio: f32,
     badge_style: StatusBadgeStyle,

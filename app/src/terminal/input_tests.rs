@@ -7711,11 +7711,11 @@ fn enter_submits_when_submit_on_ctrl_enter_is_false() {
 
         // Default must be false (guards existing Enter-submits behaviour).
         let default_value =
-            AISettings::handle(&app).read(&app, |settings, _| *settings.submit_on_ctrl_enter);
+            CLIAgentSettings::handle(&app).read(&app, |settings, _| *settings.submit_on_ctrl_enter);
         assert!(!default_value, "submit_on_ctrl_enter must default to false");
 
         // Explicitly confirm false so the test doesn't rely on the global default.
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .submit_on_ctrl_enter
                 .set_value(false, ctx)
@@ -7767,7 +7767,7 @@ fn ctrl_enter_does_not_submit_when_submit_on_ctrl_enter_is_false() {
         initialize_app(&mut app);
 
         // Ensure the setting is false (the default).
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .submit_on_ctrl_enter
                 .set_value(false, ctx)
@@ -7812,7 +7812,7 @@ fn enter_inserts_newline_when_submit_on_ctrl_enter_is_true() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .submit_on_ctrl_enter
                 .set_value(true, ctx)
@@ -7865,7 +7865,7 @@ fn ctrl_enter_submits_when_submit_on_ctrl_enter_is_true() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .submit_on_ctrl_enter
                 .set_value(true, ctx)
@@ -7922,7 +7922,7 @@ fn ctrl_enter_with_selection_preserves_selection_in_submit_when_setting_is_true(
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .submit_on_ctrl_enter
                 .set_value(true, ctx)
@@ -8020,7 +8020,7 @@ fn enter_accepts_inline_menu_item_when_submit_on_ctrl_enter_is_true() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .submit_on_ctrl_enter
                 .set_value(true, ctx)
@@ -8098,7 +8098,7 @@ fn ctrl_enter_inserts_newline_when_submit_on_ctrl_enter_is_false() {
 
         // Ensure the setting is false (the default).
         let default_value =
-            AISettings::handle(&app).read(&app, |settings, _| *settings.submit_on_ctrl_enter);
+            CLIAgentSettings::handle(&app).read(&app, |settings, _| *settings.submit_on_ctrl_enter);
         assert!(!default_value, "submit_on_ctrl_enter must default to false");
 
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;

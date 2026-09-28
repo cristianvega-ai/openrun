@@ -23,7 +23,6 @@ use warpui::{
     ViewHandle, WeakViewHandle,
 };
 
-use crate::ai::agent::AgentReviewCommentBatch;
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code_review::code_review_header::HEADER_BUTTON_PADDING;
@@ -33,6 +32,7 @@ use crate::code_review::code_review_view::{
     CONTENT_LEFT_MARGIN, CONTENT_RIGHT_MARGIN, CodeReviewCommentDebugState, CodeReviewView,
     CodeReviewViewEvent, ReviewActionTargetProvider, render_file_navigation_button,
 };
+use crate::code_review::comments::AgentReviewCommentBatch;
 use crate::code_review::diff_state::DiffStateModel;
 use crate::code_review::telemetry_event::CodeReviewContextDestination;
 use crate::pane_group::pane::view::header::PANE_HEADER_HEIGHT;

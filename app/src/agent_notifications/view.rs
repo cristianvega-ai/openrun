@@ -15,15 +15,13 @@ use warpui::platform::Cursor;
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle};
 
-use crate::ai::agent_management::notifications::item::NotificationFilter;
-use crate::ai::agent_management::notifications::item_rendering::{
+use crate::agent_notifications::item::NotificationFilter;
+use crate::agent_notifications::item_rendering::{
     NotificationRenderContext, create_notification_artifact_buttons_view,
     handle_notification_artifact_buttons_event, render_notification_item_content,
 };
-use crate::ai::agent_management::notifications::{
-    NotificationId, NotificationItem, NotificationItems,
-};
-use crate::ai::agent_management::{AgentManagementEvent, AgentNotificationsModel};
+use crate::agent_notifications::{AgentManagementEvent, AgentNotificationsModel};
+use crate::agent_notifications::{NotificationId, NotificationItem, NotificationItems};
 use crate::ai::artifacts::{Artifact, ArtifactButtonsRow, ArtifactButtonsRowEvent};
 use crate::appearance::Appearance;
 use crate::ui_components::icons::Icon;

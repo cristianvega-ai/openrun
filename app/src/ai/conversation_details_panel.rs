@@ -32,9 +32,7 @@ use warpui::{
 };
 
 use crate::ai::agent::api::ServerConversationToken;
-use crate::ai::agent::conversation::{
-    AIConversation, AIConversationId, ConversationStatus, StatusColorStyle,
-};
+use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent_conversations_model::entry::PrincipalType;
 use crate::ai::agent_conversations_model::{
     AgentConversationEntry, AgentRunDisplayStatus, TaskFetchError,
@@ -62,6 +60,7 @@ use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::ai::AmbientAgentTask;
 use crate::server::team_scope::RequestTeamScope;
 use crate::settings::ai::{AISettings, AISettingsChangedEvent};
+use crate::ui_components::agent_status::StatusColorStyle;
 use crate::ui_components::avatar::{Avatar, AvatarContent};
 use crate::ui_components::blended_colors;
 use crate::ui_components::buttons::icon_button;

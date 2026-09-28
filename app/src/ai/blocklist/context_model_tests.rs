@@ -14,8 +14,8 @@ use warpui::r#async::executor::Background;
 use warpui::{App, EntityId, ModelHandle, SingletonEntity};
 
 use super::{BlocklistAIContextModel, PendingAttachment, PendingFile};
+use crate::ai::agent::AIAgentContext;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::agent::{AIAgentContext, ImageContext};
 use crate::ai::agent_conversations_model::{
     AgentConversationEntry, AgentConversationListEntryState, AgentConversationListPolicy,
 };
@@ -37,6 +37,7 @@ use crate::terminal::model::test_utils::block_size;
 use crate::terminal::model::{BlockId, TerminalModel};
 use crate::test_util::settings::initialize_history_persistence_for_tests;
 use crate::util::git::{PrInfo, RepositoryInfo};
+use crate::util::image::ImageContext;
 
 impl BlocklistAIContextModel {
     pub(crate) fn append_pending_attachments_for_test(

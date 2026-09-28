@@ -51,13 +51,13 @@ use crate::ai::blocklist::block::view_impl::output::are_all_text_sections_empty;
 use crate::ai::execution_context::WarpAiExecutionContext;
 use crate::ai::skills::SkillDescriptor;
 use crate::code::editor_management::CodeSource;
-use crate::code_review::comments::{
-    AttachedReviewComment as CodeReviewComment, ReviewCommentBatch,
-};
+use crate::code_review::comments::AgentReviewCommentBatch;
+use crate::code_review::diff_set::{CurrentHead, DiffBase, DiffSetHunk};
 use crate::search::slash_command_menu::static_commands::commands;
 use crate::server::server_api::{AIApiError, DeserializationError};
 use crate::terminal::model::block::BlockId;
 use crate::terminal::shell::ShellType;
+use crate::util::image::ImageContext;
 
 /// A server supplied ID for a specific AI generated output.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -2442,34 +2442,6 @@ where
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct ImageContext {
-    /// Base64-encoded image data.
-    pub data: String,
-
-    /// MIME type of the media content (e.g., "image/jpeg", "image/png")
-    pub mime_type: String,
-
-    pub file_name: String,
-
-    /// Whether this image was exported from Figma, detected via
-    /// the `Software: Figma` PNG metadata field.
-    #[serde(default)]
-    pub is_figma: bool,
-}
-
-impl std::fmt::Debug for ImageContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // We log dispatching typed actions (with `ImageContext` as an argument) and we don't want
-        // to log any UGC in prod.
-        f.debug_struct("ImageContext")
-            .field("data", &"REDACTED_B64_IMAGE_DATA_UGC")
-            .field("mime_type", &self.mime_type)
-            .field("file_name", &"REDACTED_FILE_NAME_UGC")
-            .finish()
-    }
-}
-
 /// Source of a document content attachment.
 /// Used to identify user-attached plans to track in the UI.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2640,108 +2612,67 @@ impl<'de> Deserialize<'de> for AIAgentAttachment {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CurrentHead {
-    BranchName(String),
-    HeadlessCommitSha(String),
-}
-
-impl CurrentHead {
-    pub fn title(&self) -> String {
-        match self {
-            CurrentHead::BranchName(name) => name.clone(),
+pub fn current_head_to_api_ref(value: CurrentHead) -> warp_multi_agent_api::CurrentRef {
+    warp_multi_agent_api::CurrentRef {
+        r#ref: Some(match value {
+            CurrentHead::BranchName(name) => {
+                warp_multi_agent_api::current_ref::Ref::BranchName(name)
+            }
             CurrentHead::HeadlessCommitSha(sha) => {
-                let short = sha.chars().take(7).collect::<String>();
-                format!("Commit {short}")
+                warp_multi_agent_api::current_ref::Ref::HeadlessCommitSha(sha)
             }
+        }),
+    }
+}
+
+pub fn current_head_to_diff_hunk_api(value: CurrentHead) -> diff_hunk_api::Current {
+    match value {
+        CurrentHead::BranchName(name) => diff_hunk_api::Current::CurrentBranchName(name),
+        CurrentHead::HeadlessCommitSha(sha) => {
+            diff_hunk_api::Current::CurrentHeadlessCommitSha(sha)
         }
     }
 }
 
-impl From<CurrentHead> for warp_multi_agent_api::CurrentRef {
-    fn from(value: CurrentHead) -> Self {
-        Self {
-            r#ref: Some(match value {
-                CurrentHead::BranchName(name) => {
-                    warp_multi_agent_api::current_ref::Ref::BranchName(name)
-                }
-                CurrentHead::HeadlessCommitSha(sha) => {
-                    warp_multi_agent_api::current_ref::Ref::HeadlessCommitSha(sha)
-                }
-            }),
-        }
-    }
-}
-
-impl From<CurrentHead> for diff_hunk_api::Current {
-    fn from(value: CurrentHead) -> Self {
-        match value {
-            CurrentHead::BranchName(name) => diff_hunk_api::Current::CurrentBranchName(name),
-            CurrentHead::HeadlessCommitSha(sha) => {
-                diff_hunk_api::Current::CurrentHeadlessCommitSha(sha)
+pub fn diff_base_to_api_ref(value: DiffBase) -> warp_multi_agent_api::BaseRef {
+    warp_multi_agent_api::BaseRef {
+        r#ref: Some(match value {
+            DiffBase::BranchName(name) => warp_multi_agent_api::base_ref::Ref::BranchName(name),
+            DiffBase::HeadlessCommitSha(sha) => {
+                warp_multi_agent_api::base_ref::Ref::HeadlessCommitSha(sha)
             }
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DiffBase {
-    BranchName(String),
-    HeadlessCommitSha(String),
-    UncommittedChanges,
-}
-
-impl From<DiffBase> for warp_multi_agent_api::BaseRef {
-    fn from(value: DiffBase) -> Self {
-        Self {
-            r#ref: Some(match value {
-                DiffBase::BranchName(name) => warp_multi_agent_api::base_ref::Ref::BranchName(name),
-                DiffBase::HeadlessCommitSha(sha) => {
-                    warp_multi_agent_api::base_ref::Ref::HeadlessCommitSha(sha)
-                }
-                DiffBase::UncommittedChanges => {
-                    warp_multi_agent_api::base_ref::Ref::UncommittedChanges(())
-                }
-            }),
-        }
-    }
-}
-
-impl From<DiffBase> for diff_hunk_api::Base {
-    fn from(value: DiffBase) -> Self {
-        match value {
-            DiffBase::BranchName(branch_name) => diff_hunk_api::Base::BaseBranchName(branch_name),
-            DiffBase::HeadlessCommitSha(sha) => diff_hunk_api::Base::BaseHeadlessCommitSha(sha),
-            DiffBase::UncommittedChanges =>
-            {
-                #[warn(clippy::unit_arg)]
-                diff_hunk_api::Base::UncommittedChanges(())
+            DiffBase::UncommittedChanges => {
+                warp_multi_agent_api::base_ref::Ref::UncommittedChanges(())
             }
+        }),
+    }
+}
+
+pub fn diff_base_to_diff_hunk_api(value: DiffBase) -> diff_hunk_api::Base {
+    match value {
+        DiffBase::BranchName(branch_name) => diff_hunk_api::Base::BaseBranchName(branch_name),
+        DiffBase::HeadlessCommitSha(sha) => diff_hunk_api::Base::BaseHeadlessCommitSha(sha),
+        DiffBase::UncommittedChanges =>
+        {
+            #[warn(clippy::unit_arg)]
+            diff_hunk_api::Base::UncommittedChanges(())
         }
     }
 }
 
-/// A simplified diff hunk for use in DiffSet attachments
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DiffSetHunk {
-    pub line_range: Range<LineCount>,
-    pub diff_content: String,
-    pub lines_added: u32,
-    pub lines_removed: u32,
-}
-
-impl DiffSetHunk {
-    pub fn convert_to_api(self, file_path: String) -> warp_multi_agent_api::diff_set::DiffHunk {
-        warp_multi_agent_api::diff_set::DiffHunk {
-            file_path,
-            line_range: Some(warp_multi_agent_api::FileContentLineRange {
-                start: self.line_range.start.as_usize() as u32,
-                end: self.line_range.end.as_usize() as u32,
-            }),
-            diff_content: self.diff_content,
-            lines_added: self.lines_added,
-            lines_removed: self.lines_removed,
-        }
+pub fn diff_set_hunk_to_api(
+    hunk: DiffSetHunk,
+    file_path: String,
+) -> warp_multi_agent_api::diff_set::DiffHunk {
+    warp_multi_agent_api::diff_set::DiffHunk {
+        file_path,
+        line_range: Some(warp_multi_agent_api::FileContentLineRange {
+            start: hunk.line_range.start.as_usize() as u32,
+            end: hunk.line_range.end.as_usize() as u32,
+        }),
+        diff_content: hunk.diff_content,
+        lines_added: hunk.lines_added,
+        lines_removed: hunk.lines_removed,
     }
 }
 
@@ -2926,21 +2857,6 @@ pub struct ReceivedMessageInput {
     pub addresses: Vec<String>,
     pub subject: String,
     pub message_body: String,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct AgentReviewCommentBatch {
-    /// The review comments in this batch. Uses `code_review::comments::ReviewComment`
-    /// because it contains full target information needed for API conversion and UI rendering.
-    pub comments: Vec<CodeReviewComment>,
-    /// All diff hunks that have comments in this batch attached to them, grouped by file name.
-    pub diff_set: HashMap<String, Vec<DiffSetHunk>>,
-}
-
-impl AgentReviewCommentBatch {
-    pub fn review_comments(&self) -> ReviewCommentBatch {
-        ReviewCommentBatch::from_comments(self.comments.clone())
-    }
 }
 
 /// A simple struct that holds a URL to be used for the CloneRepository input.

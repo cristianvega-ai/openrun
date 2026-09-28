@@ -50,6 +50,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Language server downloads are opt-in](#language-server-downloads-are-opt-in) — the LSP crates can only download with a permit built from the new `allow_language_server_downloads` setting (default off); missing servers show a manual install hint instead of an install button
 - [AI command prediction and passive suggestions](#ai-command-prediction-and-passive-suggestions) — deleted Agent Predict (AI next-command and prompt ghost text), prompt suggestions, suggested code-diff banners, their settings and server endpoints; history-based autosuggestions and command corrections are unchanged
 - [AI-generated commit messages, pull request text and block titles](#ai-generated-commit-messages-pull-request-text-and-block-titles) — the code-review commit and create-PR dialogs no longer ask Warp's AI for text; removed the two text-generation settings and the now-empty Active AI settings category
+- [CLI-agent support moved out of the AI module](#cli-agent-support-moved-out-of-the-ai-module) — CLI agent settings, review/diff and image types, agent status and notifications now live outside `crate::ai`
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1307,3 +1308,42 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for TEL-4: `TelemetryEvent::{ToggleSharedBlockTitleGenerationSetting, ToggleGitOperationsAutogenSetting}`, which nothing emits now.
 - Left for FLAGS-1: `FeatureFlag::SharedBlockTitleGeneration` and its Cargo feature. `FeatureFlag::GitOperationsInCodeReview` still gates the git dialogs.
 - Left for AI-29: the `is_git_operations_ai_enabled` team-policy field in `workspaces/` and `crates/graphql`.
+
+## CLI-agent support moved out of the AI module
+**Why:** Support for third-party CLI agents running in the terminal (Claude Code, Codex, Gemini CLI, OpenCode and others) is kept. That covers the CLI agent toolbar, the Rich Input composer (Ctrl-G), notifications and the mailbox, vertical-tab status and the CLI agents settings page. Much of its code lived in `crate::ai`, which later tasks delete wholesale, so the pieces it needs move to non-AI modules first.
+
+**Removed:**
+- `CLIAgent::from_harness` and the `warp_cli::agent::Harness` import in `terminal/cli_agent.rs`. The cloud-harness mapping now lives with the other harness display helpers as `ai/harness_display.rs::cli_agent`, which is deleted along with `Harness`.
+- The Uber-only special case in CLI agent detection, which treated `aifx agent run claude` as Claude for members of one team (`UBER_TEAM_UID`, the `UserWorkspaces` lookup), and its tests. `CLIAgent::detect` no longer takes an `AppContext`.
+- `CLIAgentSessionStatus::to_conversation_status`.
+- The `disable_telemetry_path` test helper in the notification model tests. The model never reads `ShowAgentNotifications`, so the helper had no effect.
+
+**Modified:**
+- New `settings/cli_agent.rs` with a `CLIAgentSettings` group. Moved from `AISettings` with unchanged setting type names (the storage keys) and `toml_path`s:
+  - `ShouldRenderCLIAgentToolbar`
+  - `AutoToggleRichInput`
+  - `AutoOpenRichInputOnCLIAgentStart`
+  - `AutoDismissRichInputAfterSubmit`
+  - `SubmitRichInputOnCtrlEnter`
+  - `CLIAgentToolbarEnabledCommands`
+  - `ShowAgentNotifications`: it controls the in-app notification mailbox, its toolbar button and the toasts, which carry CLI agent notifications.
+  - `PluginInstallChipDismissedMap` and `PluginUpdateChipDismissedForVersionMap`
+
+  `ToolbarCommandMap`, the `CompiledCommandsForCodingAgentToolbar` singleton, the toolbar-command and plugin-chip helpers, and their tests moved with them. The group is registered in `settings/init.rs` and `test_util/settings.rs`. Readers in the terminal view and input, the toolbar, context chips, workspace, settings pages and onboarding now use `CLIAgentSettings`.
+- `DefaultTabConfigPath` (`general.default_tab_config_path`) moved to `GeneralSettings` (`terminal/general_settings.rs`), along with `default_tab_config_path()` and `resolved_default_tab_config()`. The companion `DefaultSessionMode` setting stays in `AISettings` for now.
+- `CLAUDE_ORANGE` moved from `ai/blocklist/view_util.rs` to `terminal/cli_agent.rs`.
+- `CurrentHead`, `DiffBase` and `DiffSetHunk` moved to the new `code_review/diff_set.rs`, and `AgentReviewCommentBatch` to `code_review/comments/batch.rs`. Their `warp_multi_agent_api` conversions are now free functions in `ai/agent`: `current_head_to_api_ref`, `current_head_to_diff_hunk_api`, `diff_base_to_api_ref`, `diff_base_to_diff_hunk_api`, `diff_set_hunk_to_api` and `comment.rs::attached_review_comment_to_api`. They replace the `From` impls, `DiffSetHunk::convert_to_api` and `From<AttachedReviewComment> for api::ReviewComment`, so `code_review/comments` no longer depends on the agent API.
+- `ImageContext` moved to `util/image.rs`.
+- New neutral status module `ui_components/agent_status.rs`:
+  - It holds `AgentStatus` (in progress, success, error, cancelled, blocked), `StatusColorStyle`, `StatusElementStyle` and `render_status_element`. The last two moved from `ai/conversation_status_ui.rs`, which keeps only the AI impls.
+  - `IconWithStatusVariant`, `agent_icon.rs` and `vertical_tabs.rs` use `AgentStatus`. `CLIAgentSessionStatus::to_agent_status` maps to it directly.
+  - Oz statuses convert through `From<&ConversationStatus>` in `ai/agent/conversation.rs`; the transient-error and waiting-for-events states render as in progress.
+  - Feeding CLI status into Oz conversation history now goes through `From<&CLIAgentSessionStatus> for ConversationStatus` on the AI side.
+- `ai/agent_management/notifications/` and `AgentNotificationsModel` moved to `app/src/agent_notifications/` (`model.rs`, `item.rs`, `item_rendering.rs`, `toast_stack.rs`, `view.rs`). The mailbox keybindings are registered by `agent_notifications::init`, called from `lib.rs`.
+
+**User-visible impact:** None. Existing settings files and stored preferences keep working because the keys are unchanged. Typing `aifx agent run claude` no longer shows the CLI agent toolbar automatically; users of such wrappers can add the command under Settings → Third party CLI agents.
+
+**Notes:**
+- `agent_notifications` keeps the Oz notification origin and source variants, the conversation-history and artifact handling, and the `AgentManagementEvent` name; AI-21 strips them.
+- `terminal/cli_agent.rs` still imports `ai::skills::SkillProvider` (AI-11 removes it). `terminal/cli_agent_sessions` still uses `ai::blocklist::InputConfig` (AI-26 removes it).
+- The Warp-distributed plugin installers are untouched; SWP-09 removes them.

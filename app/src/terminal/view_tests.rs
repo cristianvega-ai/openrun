@@ -54,7 +54,9 @@ use crate::server::ids::{ClientId, SyncId};
 use crate::server::server_api::ai::SpawnAgentRequest;
 use crate::server::team_scope::RequestTeamScope;
 use crate::settings::import::model::ImportedConfigModel;
-use crate::settings::{AISettings, AppEditorSettings, RightClickBehavior, WarpPromptSeparator};
+use crate::settings::{
+    AISettings, AppEditorSettings, CLIAgentSettings, RightClickBehavior, WarpPromptSeparator,
+};
 use crate::tab::NewSessionMenuItem;
 use crate::terminal::alt_screen::should_intercept_mouse;
 use crate::terminal::block_list_element::{SnackbarPoint, SnackbarTranslationMode};
@@ -2283,7 +2285,7 @@ fn test_create_new_block_with_local_status() {
 fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             let _ = settings
                 .auto_dismiss_rich_input_after_submit
                 .set_value(true, ctx);
@@ -8359,7 +8361,7 @@ fn submit_with_plugin_and_auto_toggle_keeps_rich_input_open() {
         initialize_app_for_terminal_view(&mut app);
         // auto_toggle_rich_input defaults to true.
         // Turn on auto_dismiss too — it should be overridden by auto_toggle.
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             let _ = settings
                 .auto_dismiss_rich_input_after_submit
                 .set_value(true, ctx);
@@ -8412,7 +8414,7 @@ fn submit_with_plugin_and_auto_toggle_keeps_rich_input_open() {
 fn submit_with_plugin_but_auto_toggle_off_respects_auto_dismiss() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             let _ = settings.auto_toggle_rich_input.set_value(false, ctx);
             let _ = settings
                 .auto_dismiss_rich_input_after_submit
@@ -9132,7 +9134,7 @@ fn close_cli_agent_rich_input_saves_draft_and_reopen_restores_it() {
 fn submit_cli_agent_rich_input_clears_draft() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             // Keep the input open after submit so we can inspect the buffer.
             let _ = settings
                 .auto_dismiss_rich_input_after_submit
@@ -9918,7 +9920,7 @@ fn active_cli_agent_ignores_non_agent_long_running_command() {
         });
 
         terminal.read(&app, |view, ctx| {
-            assert_eq!(CLIAgent::detect("vim", None, None, ctx), None);
+            assert_eq!(CLIAgent::detect("vim", None, None), None);
             assert_eq!(
                 view.active_cli_agent(ctx),
                 None,

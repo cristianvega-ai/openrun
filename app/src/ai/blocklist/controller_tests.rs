@@ -10,7 +10,7 @@ use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::task::TaskId;
 use crate::ai::agent::{
     AIAgentAttachment, AIAgentContext, AIAgentInput, BaseUserQuery, CancellationReason,
-    ImageContext, UserQueryMode,
+    UserQueryMode,
 };
 use crate::ai::blocklist::local_agent_task_sync_model::map_conversation_status_for_test;
 use crate::ai::blocklist::{
@@ -24,6 +24,7 @@ use crate::terminal::TerminalView;
 use crate::test_util::terminal::{
     add_window_with_id_and_terminal, add_window_with_terminal, initialize_app_for_terminal_view,
 };
+use crate::util::image::ImageContext;
 use crate::workspaces::team::{Team, TeamVisibility};
 use crate::workspaces::user_workspaces::{TeamScope, UserWorkspaces};
 use crate::workspaces::workspace::Workspace;

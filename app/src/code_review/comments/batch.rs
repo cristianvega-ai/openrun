@@ -8,7 +8,25 @@ use super::{
 };
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor::EditorReviewComment;
+use crate::code_review::diff_set::DiffSetHunk;
 use crate::code_review::diff_state::DiffMode;
+
+/// A batch of review comments sent to an agent, together with the diff hunks they are
+/// attached to.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AgentReviewCommentBatch {
+    /// The review comments in this batch. Uses [`AttachedReviewComment`] because it contains
+    /// full target information needed for prompt building and UI rendering.
+    pub comments: Vec<AttachedReviewComment>,
+    /// All diff hunks that have comments in this batch attached to them, grouped by file name.
+    pub diff_set: HashMap<String, Vec<DiffSetHunk>>,
+}
+
+impl AgentReviewCommentBatch {
+    pub fn review_comments(&self) -> ReviewCommentBatch {
+        ReviewCommentBatch::from_comments(self.comments.clone())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReviewCommentBatchEvent {

@@ -13,10 +13,10 @@ use super::{
     AutofireAction, QueuedQuery, QueuedQueryEvent, QueuedQueryId, QueuedQueryModel,
     QueuedQueryOrigin,
 };
-use crate::ai::agent::ImageContext;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::{BlocklistAIHistoryModel, PendingAttachment};
 use crate::test_util::settings::initialize_history_persistence_for_tests;
+use crate::util::image::ImageContext;
 
 /// Helper to drive the singleton `QueuedQueryModel` (plus its required `BlocklistAIHistoryModel`
 /// singleton) inside a test app and capture emitted events.

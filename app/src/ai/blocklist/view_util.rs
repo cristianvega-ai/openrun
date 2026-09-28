@@ -30,15 +30,6 @@ const INTERNAL_WARP_ERROR: &str = "Internal Warp error.";
 pub const FAILED_OUTPUT_USAGE_NOTICE_TEXT: &str = "This response won't count towards your usage.";
 pub const OUT_OF_CREDITS_SUBSCRIBE_LABEL: &str = "Subscribe";
 
-/// Claude/Anthropic brand color (official brand orange #D97757).
-/// Reference: https://github.com/anthropics/skills/blob/main/skills/brand-guidelines/SKILL.md
-pub const CLAUDE_ORANGE: ColorU = ColorU {
-    r: 0xD9,
-    g: 0x77,
-    b: 0x57,
-    a: 0xFF,
-};
-
 /// Returns the color to be used for various AI signifiers
 /// input with AI mode).
 pub fn ai_brand_color(theme: &WarpTheme) -> ColorU {

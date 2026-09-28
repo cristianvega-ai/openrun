@@ -7,12 +7,13 @@
 use base64::Engine;
 use warpui::clipboard::{ClipboardContent, ImageData};
 
-use crate::ai::agent::ImageContext;
 use crate::ai::blocklist::agent_view::agent_input_footer::{
     AgentInputFooter, AgentInputFooterEvent,
 };
 use crate::terminal::cli_agent_sessions::{CLIAgentInputEntrypoint, CLIAgentSessionsModel};
-use crate::util::image::{MAX_IMAGE_SIZE_BYTES_FOR_CLI_AGENT, MIME_SNIFF_BYTES, infer_mime_type};
+use crate::util::image::{
+    ImageContext, MAX_IMAGE_SIZE_BYTES_FOR_CLI_AGENT, MIME_SNIFF_BYTES, infer_mime_type,
+};
 mod warpify_footer;
 
 use std::path::Path;
@@ -51,7 +52,8 @@ use crate::server::telemetry::{
     CLIAgentType, CLISubagentControlState, FileTreeSource, TelemetryEvent,
 };
 use crate::settings::{
-    AISettings, AISettingsChangedEvent, CompiledCommandsForCodingAgentToolbar, InputModeSettings,
+    AISettings, AISettingsChangedEvent, CLIAgentSettings, CLIAgentSettingsChangedEvent,
+    CompiledCommandsForCodingAgentToolbar, InputModeSettings,
 };
 pub use crate::terminal::CLIAgent;
 use crate::terminal::TerminalModel;
@@ -150,8 +152,7 @@ impl TerminalView {
     ) {
         let ai_settings = AISettings::handle(ctx);
         ctx.subscribe_to_model(&ai_settings, |me, _, event, ctx| match event {
-            AISettingsChangedEvent::IsAnyAIEnabled { .. }
-            | AISettingsChangedEvent::ShouldRenderCLIAgentToolbar { .. } => {
+            AISettingsChangedEvent::IsAnyAIEnabled { .. } => {
                 me.maybe_show_use_agent_footer_in_blocklist(ctx);
             }
             AISettingsChangedEvent::ShouldRenderUseAgentToolbarForUserCommands { .. } => {
@@ -167,10 +168,17 @@ impl TerminalView {
                 }
                 me.maybe_show_use_agent_footer_in_blocklist(ctx);
             }
-            AISettingsChangedEvent::CLIAgentToolbarEnabledCommands { .. } => {
+            _ => (),
+        });
+
+        ctx.subscribe_to_model(&CLIAgentSettings::handle(ctx), |me, _, event, ctx| {
+            if matches!(
+                event,
+                CLIAgentSettingsChangedEvent::ShouldRenderCLIAgentToolbar { .. }
+                    | CLIAgentSettingsChangedEvent::CLIAgentToolbarEnabledCommands { .. }
+            ) {
                 me.maybe_show_use_agent_footer_in_blocklist(ctx);
             }
-            _ => (),
         });
 
         ctx.subscribe_to_view(&self.use_agent_footer, |me, _, event, ctx| {
@@ -297,7 +305,7 @@ impl TerminalView {
             // For CLI agent commands, only check the CLI agent footer setting.
             // This is independent of the global AI toggle so that users who
             // disable Warp AI still get the footer for third-party coding agents.
-            if !*ai_settings.should_render_cli_agent_footer {
+            if !*CLIAgentSettings::as_ref(app).should_render_cli_agent_footer {
                 return false;
             }
 
@@ -360,7 +368,6 @@ impl TerminalView {
                     &command,
                     Some(session.shell_family().escape_char()),
                     Some(session.aliases()),
-                    ctx,
                 )
             })
         });
@@ -588,12 +595,12 @@ impl TerminalView {
         let has_plugin = session
             .as_ref()
             .is_some_and(|s| s.supports_rich_status() && s.should_auto_toggle_input);
-        let ai_settings = AISettings::as_ref(ctx);
+        let cli_agent_settings = CLIAgentSettings::as_ref(ctx);
 
-        let should_close = if has_plugin && *ai_settings.auto_toggle_rich_input {
+        let should_close = if has_plugin && *cli_agent_settings.auto_toggle_rich_input {
             false
         } else {
-            *ai_settings.auto_dismiss_rich_input_after_submit
+            *cli_agent_settings.auto_dismiss_rich_input_after_submit
         };
 
         if should_close {

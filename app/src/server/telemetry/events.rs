@@ -18,13 +18,13 @@ use warpui::keymap::Keystroke;
 use warpui::notification::{NotificationSendError, RequestPermissionsOutcome};
 use warpui::rendering::ThinStrokes;
 
+use crate::agent_notifications::NotificationSourceAgent;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::{
     AIAgentActionId, AIAgentExchangeId, AIAgentInput as FullAIAgentInput, AIIdentifiers,
     EntrypointType, ServerOutputId, SuggestedLoggingId,
 };
-use crate::ai::agent_management::notifications::NotificationSourceAgent;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::{

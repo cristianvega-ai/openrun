@@ -498,7 +498,7 @@ impl AmbientAgentViewModel {
     /// Used to drive the correct tab icon for a cloud run as soon as a non-oz harness is
     /// selected, even before the CLI session is registered with [`CLIAgentSessionsModel`].
     pub fn selected_third_party_cli_agent(&self) -> Option<CLIAgent> {
-        CLIAgent::from_harness(self.selected_harness())
+        crate::ai::harness_display::cli_agent(self.selected_harness())
     }
 
     /// True when this pane is a local-to-cloud handoff pane. Set when the handoff opens

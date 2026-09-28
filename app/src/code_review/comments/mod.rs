@@ -5,7 +5,7 @@ mod diff_hunk_parser;
 mod flatten;
 mod pending_imported;
 
-pub(crate) use batch::{ReviewCommentBatch, ReviewCommentBatchEvent};
+pub(crate) use batch::{AgentReviewCommentBatch, ReviewCommentBatch, ReviewCommentBatchEvent};
 #[cfg(test)]
 pub(crate) use comment::ImportedCommentDetails;
 pub(crate) use comment::{

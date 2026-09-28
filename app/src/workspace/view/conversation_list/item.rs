@@ -19,11 +19,11 @@ use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent_conversations_model::{
     AgentConversationEntry, AgentConversationEntryId, AgentConversationProvenance,
 };
-use crate::ai::conversation_status_ui::STATUS_ELEMENT_PADDING;
 use crate::appearance::Appearance;
 use crate::editor::EditorView;
 use crate::menu::Menu;
 use crate::ui_components::agent_icon::agent_conversation_entry_icon_variant;
+use crate::ui_components::agent_status::STATUS_ELEMENT_PADDING;
 use crate::ui_components::icon_with_status::render_icon_with_status;
 use crate::ui_components::icons::Icon;
 use crate::ui_components::menu_button::{MenuDirection, icon_button_with_context_menu};

@@ -2,9 +2,12 @@ use std::collections::HashSet;
 
 use warp_core::settings::macros::define_settings_group;
 use warp_core::settings::{RespectUserSyncSetting, SupportedPlatforms, SyncToCloud};
+use warpui::{AppContext, SingletonEntity as _};
 
 use crate::banner::BannerState;
 use crate::resource_center::Tip;
+use crate::tab_configs::TabConfig;
+use crate::user_config::WarpConfig;
 
 define_settings_group!(GeneralSettings, settings: [
     show_warning_before_quitting: ShowWarningBeforeQuitting {
@@ -169,6 +172,18 @@ define_settings_group!(GeneralSettings, settings: [
         toml_path: "code.editor.auto_open_code_review_pane_on_first_agent_change",
         description: "Whether to automatically open the code review pane when the agent makes its first change.",
     },
+    // The file path of the tab config used when the default session mode is TabConfig.
+    // Only read when mode is TabConfig; ignored for all other modes.
+    // Machine-local (tab config paths vary per machine), so never synced to cloud.
+    default_tab_config_path: DefaultTabConfigPath {
+        type: String,
+        default: String::new(),
+        supported_platforms: SupportedPlatforms::ALL,
+        sync_to_cloud: SyncToCloud::Never,
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        toml_path: "general.default_tab_config_path",
+    },
     bonus_grants_shown: BonusGrantsShown {
         type: HashSet<String>,
         default: HashSet::new(),
@@ -178,3 +193,26 @@ define_settings_group!(GeneralSettings, settings: [
         private: true,
     },
 ]);
+
+impl GeneralSettings {
+    /// Returns the stored default tab config path (only meaningful when the default session
+    /// mode is `TabConfig`).
+    pub fn default_tab_config_path(&self) -> &str {
+        &self.default_tab_config_path
+    }
+
+    /// Looks up the `TabConfig` matching the stored `default_tab_config_path`.
+    /// Returns `None` if the path is empty or no loaded config matches.
+    pub fn resolved_default_tab_config(&self, app: &AppContext) -> Option<TabConfig> {
+        let path_str = self.default_tab_config_path.as_str();
+        if path_str.is_empty() {
+            return None;
+        }
+        let path = std::path::Path::new(path_str);
+        WarpConfig::as_ref(app)
+            .tab_configs()
+            .iter()
+            .find(|config| config.source_path.as_deref().is_some_and(|p| p == path))
+            .cloned()
+    }
+}

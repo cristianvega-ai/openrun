@@ -7,7 +7,7 @@ use warpui::{AppContext, SingletonEntity as _};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::execution_profiles::{ActionPermission, WriteToPtyPermission};
 use crate::settings::ai::DefaultSessionMode;
-use crate::settings::{AISettings, CodeSettings, UsageDisplayUnit};
+use crate::settings::{AISettings, CLIAgentSettings, CodeSettings, UsageDisplayUnit};
 use crate::workspace::tab_settings::TabSettings;
 use crate::workspaces::user_workspaces::{TeamContextForOperation, UserWorkspaces};
 use crate::workspaces::workspace::FtueAccountClass;
@@ -59,7 +59,7 @@ pub(crate) fn apply_account_first_onboarding_settings(
             if let Some(ui) = ui_customization {
                 apply_ui_customization_settings(ui, false, app);
             }
-            AISettings::handle(app).update(app, |settings, ctx| {
+            CLIAgentSettings::handle(app).update(app, |settings, ctx| {
                 report_if_error!(
                     settings
                         .should_render_cli_agent_footer
@@ -114,7 +114,7 @@ pub(crate) fn apply_onboarding_settings(
             if let Some(ui) = ui_customization {
                 apply_ui_customization_settings(ui, false, app);
             }
-            AISettings::handle(app).update(app, |settings, ctx| {
+            CLIAgentSettings::handle(app).update(app, |settings, ctx| {
                 report_if_error!(
                     settings
                         .should_render_cli_agent_footer
@@ -202,7 +202,7 @@ fn apply_agent_settings(
 
     let team_autonomy_settings = UserWorkspaces::as_ref(app).ai_autonomy_settings(team_context);
 
-    AISettings::handle(app).update(app, |settings, ctx| {
+    CLIAgentSettings::handle(app).update(app, |settings, ctx| {
         report_if_error!(
             settings
                 .should_render_cli_agent_footer

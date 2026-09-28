@@ -35,10 +35,8 @@ use warpui::ui_components::text_input::TextInput;
 use warpui::{AppContext, EntityId, SingletonEntity, ViewHandle, WindowId};
 
 use super::{render_group_member_icon_collage, select_unique_pane_kinds};
-use crate::ai::agent::conversation::{ConversationStatus, StatusColorStyle};
-use crate::ai::agent_management::AgentNotificationsModel;
+use crate::agent_notifications::AgentNotificationsModel;
 use crate::ai::cloud_environments::CloudAmbientAgentEnvironment;
-use crate::ai::conversation_status_ui::render_status_element;
 use crate::appearance::Appearance;
 use crate::cloud_object::CloudObjectLookup as _;
 use crate::cloud_object::model::generic_string_model::StringModel;
@@ -64,6 +62,7 @@ use crate::terminal::view::TerminalViewState;
 use crate::terminal::{CLIAgent, TerminalView};
 use crate::themes::theme::Fill as ThemeFill;
 use crate::ui_components::agent_icon::terminal_view_agent_icon_variant;
+use crate::ui_components::agent_status::{AgentStatus, StatusColorStyle, render_status_element};
 use crate::ui_components::buttons::combo_inner_button;
 use crate::ui_components::icon_with_status::{IconWithStatusVariant, render_icon_with_status};
 use crate::ui_components::icons::Icon as UiIcon;
@@ -942,7 +941,7 @@ struct VerticalTabsSummaryPrimaryLabel {
     text: String,
     /// Some when the contributing pane is a conversation with a known status. Drives the
     /// per-line status pill prefix in Summary mode.
-    status: Option<ConversationStatus>,
+    status: Option<AgentStatus>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1025,7 +1024,7 @@ fn push_normalized_unique_summary_label(
     values: &mut Vec<VerticalTabsSummaryPrimaryLabel>,
     seen: &mut HashMap<String, ()>,
     text: &str,
-    status: Option<ConversationStatus>,
+    status: Option<AgentStatus>,
 ) {
     let Some(normalized) = normalize_summary_text(text) else {
         return;
@@ -1040,7 +1039,7 @@ fn push_normalized_unique_summary_label(
     });
 }
 
-/// Stable sort that moves labels with a known `ConversationStatus` ahead of labels without
+/// Stable sort that moves labels with a known `AgentStatus` ahead of labels without
 /// one, while preserving the relative first-seen order within each group. Used in Summary
 /// mode so the visible 3-line title region (and the `+ N more` overflow) prioritizes
 /// conversation lines over plain terminal / non-conversation lines.
@@ -1060,13 +1059,13 @@ fn normalize_summary_text(text: &str) -> Option<String> {
 fn summary_conversation_status_for_terminal(
     terminal_view: &TerminalView,
     app: &AppContext,
-) -> Option<ConversationStatus> {
+) -> Option<AgentStatus> {
     let cli_agent_session = CLIAgentSessionsModel::as_ref(app).session(terminal_view.id());
     if let Some(session) = cli_agent_session
         .filter(|s| s.supports_rich_status())
         .filter(|s| !matches!(s.agent, CLIAgent::Unknown))
     {
-        return Some(session.status.to_conversation_status());
+        return Some(session.status.to_agent_status());
     }
 
     let is_ambient = terminal_view.is_ambient_agent_session(app);
@@ -1076,6 +1075,8 @@ fn summary_conversation_status_for_terminal(
     (has_conversation || is_ambient)
         .then(|| terminal_view.selected_conversation_status_for_display(app))
         .flatten()
+        .as_ref()
+        .map(AgentStatus::from)
 }
 
 fn coalesce_summary_branch_entries(
@@ -6819,10 +6820,7 @@ fn render_detail_badge(
     badge.finish()
 }
 
-fn render_detail_status_pill(
-    status: &ConversationStatus,
-    appearance: &Appearance,
-) -> Box<dyn Element> {
+fn render_detail_status_pill(status: &AgentStatus, appearance: &Appearance) -> Box<dyn Element> {
     let theme = appearance.theme();
     let (icon, color) = status.status_icon_and_color(theme, StatusColorStyle::Standard);
     Container::new(
@@ -6946,9 +6944,12 @@ fn render_terminal_detail_section(
         preferred_agent_tab_titles(&agent_text, agent_tab_text_preference(app));
     let kind_label = terminal_kind_badge_label(agent_text.is_oz_agent, agent_text.cli_agent);
     let status = if let Some(session) = cli_agent_session.filter(|s| s.supports_rich_status()) {
-        Some(session.status.to_conversation_status())
+        Some(session.status.to_agent_status())
     } else if agent_text.is_oz_agent {
-        terminal_view.selected_conversation_status_for_display(app)
+        terminal_view
+            .selected_conversation_status_for_display(app)
+            .as_ref()
+            .map(AgentStatus::from)
     } else {
         None
     };

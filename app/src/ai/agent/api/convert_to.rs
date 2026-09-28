@@ -8,10 +8,12 @@ use chrono::{DateTime, Local, Timelike};
 use warp_multi_agent_api as api;
 
 use crate::ai::agent::base_user_query::warp_client_origin;
+use crate::ai::agent::comment::attached_review_comment_to_api;
 use crate::ai::agent::{
     AIAgentActionResult, AIAgentActionResultType, AIAgentAttachment, AIAgentContext, AIAgentInput,
     BaseUserQuery, DriveObjectPayload, MCPContext, RunningCommand, StaticQueryType, Suggestions,
-    UserQueryMode,
+    UserQueryMode, current_head_to_api_ref, current_head_to_diff_hunk_api, diff_base_to_api_ref,
+    diff_base_to_diff_hunk_api, diff_set_hunk_to_api,
 };
 use crate::ai::block_context::BlockContext;
 
@@ -149,7 +151,7 @@ pub(super) fn convert_input(
                                         review_comments: review_comments
                                             .comments
                                             .into_iter()
-                                            .map(Into::into)
+                                            .map(attached_review_comment_to_api)
                                             .collect(),
                                         diff_set: Some(api::DiffSet {
                                             hunks: review_comments
@@ -157,7 +159,10 @@ pub(super) fn convert_input(
                                                 .into_iter()
                                                 .flat_map(|(file_path, hunks)| {
                                                     hunks.into_iter().map(move |hunk| {
-                                                        hunk.convert_to_api(file_path.clone())
+                                                        diff_set_hunk_to_api(
+                                                            hunk,
+                                                            file_path.clone(),
+                                                        )
                                                     })
                                                 })
                                                 .collect(),
@@ -496,8 +501,8 @@ impl From<AIAgentAttachment> for api::Attachment {
                     diff_content,
                     lines_added,
                     lines_removed,
-                    current: current.map(Into::into),
-                    base: Some(base.into()),
+                    current: current.map(current_head_to_diff_hunk_api),
+                    base: Some(diff_base_to_diff_hunk_api(base)),
                 })),
             },
             AIAgentAttachment::DocumentContent {
@@ -529,11 +534,11 @@ impl From<AIAgentAttachment> for api::Attachment {
                         .flat_map(|(file_path, hunks)| {
                             hunks
                                 .into_iter()
-                                .map(move |hunk| hunk.convert_to_api(file_path.clone()))
+                                .map(move |hunk| diff_set_hunk_to_api(hunk, file_path.clone()))
                         })
                         .collect(),
-                    curr_ref: current.map(Into::into),
-                    base_ref: Some(base.into()),
+                    curr_ref: current.map(current_head_to_api_ref),
+                    base_ref: Some(diff_base_to_api_ref(base)),
                 })),
             },
             AIAgentAttachment::FilePathReference { file_path, .. } => api::Attachment {

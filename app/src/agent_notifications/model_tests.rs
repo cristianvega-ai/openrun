@@ -5,14 +5,14 @@ use warpui::{App, EntityId, ModelHandle, SingletonEntity};
 
 use super::AgentNotificationsModel;
 use crate::BlocklistAIHistoryModel;
-use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
-use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
-use crate::ai::agent_management::notifications::{
+use crate::agent_notifications::{
     NotificationCategory, NotificationFilter, NotificationOrigin, NotificationSourceAgent,
 };
+use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
+use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::artifacts::Artifact;
 use crate::ai::blocklist::BlocklistAIHistoryEvent;
-use crate::settings::AISettings;
+use crate::settings::CLIAgentSettings;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::test_util::settings::initialize_settings_for_tests;
 
@@ -114,7 +114,7 @@ fn add_notification_tracks_unread_activity_when_in_app_notifications_are_hidden(
         let _guard = FeatureFlag::HOANotifications.override_enabled(true);
         let (_history, notifications) = setup_app(&mut app);
 
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
             report_if_error!(settings.show_agent_notifications.set_value(false, ctx));
         });
 
@@ -308,16 +308,6 @@ fn should_trigger_notification_returns_false_for_cancelled() {
 // regardless of status; this still pins the user-visible contract that
 // no stale "Task completed" toast survives a non-terminal transition.
 
-/// Disables `show_agent_notifications` so subsequent `add_notification`
-/// calls skip the `send_telemetry_from_ctx!` branch — the test app does
-/// not register a `TelemetryContextProvider` singleton and the macro
-/// would otherwise panic.
-fn disable_telemetry_path(app: &mut App) {
-    AISettings::handle(app).update(app, |settings, ctx| {
-        report_if_error!(settings.show_agent_notifications.set_value(false, ctx));
-    });
-}
-
 /// Pre-populates a `Complete` notification for `conversation_id` so that a
 /// subsequent non-terminal status update has something to clear.
 fn seed_stale_notification(
@@ -346,7 +336,6 @@ fn waiting_for_events_clears_stale_notification_and_adds_none() {
     App::test((), |mut app| async move {
         let _guard = FeatureFlag::HOANotifications.override_enabled(true);
         let (history, notifications) = setup_app(&mut app);
-        disable_telemetry_path(&mut app);
 
         let conversation = AIConversation::new(false, false);
         let conversation_id = conversation.id();
@@ -390,7 +379,6 @@ fn in_progress_resume_clears_stale_notification_and_adds_none() {
     App::test((), |mut app| async move {
         let _guard = FeatureFlag::HOANotifications.override_enabled(true);
         let (history, notifications) = setup_app(&mut app);
-        disable_telemetry_path(&mut app);
 
         let conversation = AIConversation::new(false, false);
         let conversation_id = conversation.id();

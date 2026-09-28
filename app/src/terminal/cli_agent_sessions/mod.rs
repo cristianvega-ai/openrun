@@ -13,6 +13,7 @@ use warpui::{Entity, EntityId, ModelContext, ModelHandle, SingletonEntity};
 use self::listener::CLIAgentSessionListener;
 use super::CLIAgent;
 use crate::ai::blocklist::InputConfig;
+use crate::ui_components::agent_status::AgentStatus;
 
 /// How long to wait, after observing a synthesized Ctrl-C write to a working
 /// CLI agent session's PTY, for further plugin activity before concluding the
@@ -39,16 +40,13 @@ pub enum CLIAgentSessionStatus {
 }
 
 impl CLIAgentSessionStatus {
-    pub fn to_conversation_status(&self) -> crate::ai::agent::conversation::ConversationStatus {
-        use crate::ai::agent::conversation::ConversationStatus;
+    pub fn to_agent_status(&self) -> AgentStatus {
         match self {
-            CLIAgentSessionStatus::InProgress => ConversationStatus::InProgress,
-            CLIAgentSessionStatus::Success => ConversationStatus::Success,
-            CLIAgentSessionStatus::Failed { .. } => ConversationStatus::Error,
-            CLIAgentSessionStatus::Blocked { message } => ConversationStatus::Blocked {
-                blocked_action: message.clone().unwrap_or_default(),
-            },
-            CLIAgentSessionStatus::Cancelled => ConversationStatus::Cancelled,
+            CLIAgentSessionStatus::InProgress => AgentStatus::InProgress,
+            CLIAgentSessionStatus::Success => AgentStatus::Success,
+            CLIAgentSessionStatus::Failed { .. } => AgentStatus::Error,
+            CLIAgentSessionStatus::Blocked { .. } => AgentStatus::Blocked,
+            CLIAgentSessionStatus::Cancelled => AgentStatus::Cancelled,
         }
     }
 }

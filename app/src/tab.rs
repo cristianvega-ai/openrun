@@ -29,7 +29,6 @@ use warpui::{AppContext, Entity, ModelContext, SingletonEntity, ViewHandle};
 
 use crate::BlocklistAIHistoryModel;
 use crate::ai::agent::conversation::ConversationStatus;
-use crate::ai::conversation_status_ui::{STATUS_ELEMENT_PADDING, render_status_element};
 use crate::appearance::Appearance;
 /// Tab module contains structures related to Tabs (such as TabData or TabComponent) that simplify
 /// the rendering and management of tabs in general.
@@ -43,6 +42,7 @@ use crate::terminal::shared_session::SharedSessionStatus;
 use crate::terminal::shared_session::manager::Manager;
 use crate::terminal::view::TerminalViewState;
 use crate::themes::theme::{AnsiColorIdentifier, Fill as ThemeFill, VerticalGradient};
+use crate::ui_components::agent_status::{STATUS_ELEMENT_PADDING, render_status_element};
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::color_dot::{TAB_COLOR_OPTIONS, render_color_dot};
 use crate::ui_components::icons::{ICON_DIMENSIONS, Icon};

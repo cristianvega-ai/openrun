@@ -15,15 +15,15 @@ use warpui::fonts::Weight;
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{View, ViewContext, ViewHandle};
 
-use crate::ai::agent::conversation::ConversationStatus;
-use crate::ai::agent_management::notifications::item::NotificationSourceAgent;
-use crate::ai::agent_management::notifications::{NotificationCategory, NotificationItem};
+use crate::agent_notifications::item::NotificationSourceAgent;
+use crate::agent_notifications::{NotificationCategory, NotificationItem};
 use crate::ai::agent_management::telemetry::{AgentManagementTelemetryEvent, ArtifactType};
 use crate::ai::artifacts::{
     Artifact, ArtifactButtonsRow, ArtifactButtonsRowEvent, open_screenshot_lightbox,
 };
 use crate::appearance::Appearance;
 use crate::send_telemetry_from_ctx;
+use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::icon_with_status::{IconWithStatusVariant, render_icon_with_status};
 use crate::util::time_format::format_elapsed_since;
 use crate::view_components::action_button::ActionButtonTheme;
@@ -404,7 +404,7 @@ fn render_agent_avatar(
     category: NotificationCategory,
     theme: &WarpTheme,
 ) -> Box<dyn Element> {
-    let status = notification_category_to_conversation_status(category);
+    let status = notification_category_to_agent_status(category);
     let variant = match agent {
         NotificationSourceAgent::Oz { is_ambient } => IconWithStatusVariant::OzAgent {
             status: Some(status),
@@ -425,15 +425,11 @@ fn render_agent_avatar(
     )
 }
 
-fn notification_category_to_conversation_status(
-    category: NotificationCategory,
-) -> ConversationStatus {
+fn notification_category_to_agent_status(category: NotificationCategory) -> AgentStatus {
     match category {
-        NotificationCategory::Complete => ConversationStatus::Success,
-        NotificationCategory::Request => ConversationStatus::Blocked {
-            blocked_action: String::new(),
-        },
-        NotificationCategory::Error => ConversationStatus::Error,
+        NotificationCategory::Complete => AgentStatus::Success,
+        NotificationCategory::Request => AgentStatus::Blocked,
+        NotificationCategory::Error => AgentStatus::Error,
     }
 }
 

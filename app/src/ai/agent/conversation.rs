@@ -70,10 +70,12 @@ use crate::persistence::model::{
     ModelTokenUsage, PRIMARY_AGENT_CATEGORY, PersistedAutoexecuteMode, ToolUsageMetadata,
 };
 use crate::server::ids::ServerId;
+use crate::terminal::cli_agent_sessions::CLIAgentSessionStatus;
 use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::model::block::{
     AgentInteractionMetadata, AgentViewVisibility, BlockId, SerializedAIMetadata, SerializedBlock,
 };
+use crate::ui_components::agent_status::{AgentStatus, StatusColorStyle};
 use crate::ui_components::icons::Icon;
 use crate::workspaces::user_profiles::UserProfileWithUID;
 use crate::{BlocklistAIHistoryModel, GlobalResourceHandlesProvider};
@@ -4771,14 +4773,6 @@ impl From<AIConversationAutoexecuteMode> for PersistedAutoexecuteMode {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum StatusColorStyle {
-    /// Foreground-blend colors (`ansi_fg`) used by the regular status badge.
-    Standard,
-    /// Background-blend colors (`ansi_bg`) used by the cloud overlay badge.
-    Cloud,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ConversationStatus {
     /// Agent is running.
@@ -4816,6 +4810,34 @@ impl std::fmt::Display for ConversationStatus {
             ConversationStatus::Cancelled => write!(f, "Cancelled"),
             ConversationStatus::Blocked { .. } => write!(f, "Blocked"),
             ConversationStatus::WaitingForEvents => write!(f, "Waiting"),
+        }
+    }
+}
+
+impl From<&CLIAgentSessionStatus> for ConversationStatus {
+    fn from(status: &CLIAgentSessionStatus) -> Self {
+        match status {
+            CLIAgentSessionStatus::InProgress => ConversationStatus::InProgress,
+            CLIAgentSessionStatus::Success => ConversationStatus::Success,
+            CLIAgentSessionStatus::Failed { .. } => ConversationStatus::Error,
+            CLIAgentSessionStatus::Blocked { message } => ConversationStatus::Blocked {
+                blocked_action: message.clone().unwrap_or_default(),
+            },
+            CLIAgentSessionStatus::Cancelled => ConversationStatus::Cancelled,
+        }
+    }
+}
+
+impl From<&ConversationStatus> for AgentStatus {
+    fn from(status: &ConversationStatus) -> Self {
+        match status {
+            ConversationStatus::InProgress
+            | ConversationStatus::TransientError
+            | ConversationStatus::WaitingForEvents => AgentStatus::InProgress,
+            ConversationStatus::Success => AgentStatus::Success,
+            ConversationStatus::Error => AgentStatus::Error,
+            ConversationStatus::Cancelled => AgentStatus::Cancelled,
+            ConversationStatus::Blocked { .. } => AgentStatus::Blocked,
         }
     }
 }

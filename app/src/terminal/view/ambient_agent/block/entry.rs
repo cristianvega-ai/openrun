@@ -16,7 +16,6 @@ use warpui::{
 };
 
 use super::super::{AmbientAgentViewModelEvent, Status};
-use crate::ai::agent::conversation::ConversationStatus;
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::ambient_agents::telemetry::{CloudAgentTelemetryEvent, CloudModeEntryPoint};
@@ -25,6 +24,7 @@ use crate::pane_group::pane::{PaneConfiguration, PaneConfigurationEvent, PaneSta
 use crate::terminal::view::ambient_agent::AmbientAgentViewModel;
 use crate::terminal::{BlockListSettings, TerminalManager, TerminalView};
 use crate::ui_components::agent_icon::terminal_view_agent_icon_variant;
+use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::blended_colors;
 use crate::ui_components::icon_with_status::{IconWithStatusVariant, render_icon_with_status};
 const DEFAULT_CLOUD_AGENT_TITLE: &str = "New cloud agent";
@@ -192,17 +192,15 @@ impl AmbientAgentEntryBlock {
         }
     }
 
-    fn ambient_status_for_icon(&self, app: &AppContext) -> Option<ConversationStatus> {
+    fn ambient_status_for_icon(&self, app: &AppContext) -> Option<AgentStatus> {
         match self.ambient_agent_view_model(app)?.status() {
             Status::Setup | Status::Composing => None,
             Status::WaitingForSession { .. } | Status::AgentRunning => {
-                Some(ConversationStatus::InProgress)
+                Some(AgentStatus::InProgress)
             }
-            Status::Failed { .. } => Some(ConversationStatus::Error),
-            Status::NeedsGithubAuth { .. } => Some(ConversationStatus::Blocked {
-                blocked_action: "GitHub authentication required".to_owned(),
-            }),
-            Status::Cancelled { .. } => Some(ConversationStatus::Cancelled),
+            Status::Failed { .. } => Some(AgentStatus::Error),
+            Status::NeedsGithubAuth { .. } => Some(AgentStatus::Blocked),
+            Status::Cancelled { .. } => Some(AgentStatus::Cancelled),
         }
     }
 

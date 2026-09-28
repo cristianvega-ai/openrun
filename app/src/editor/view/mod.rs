@@ -93,7 +93,6 @@ use self::model::{LocalSelections, Selection, UpdateBufferOption};
 use super::Point;
 use super::soft_wrap::{ClampDirection, DisplayPointAndClampDirection};
 use crate::BlocklistAIHistoryModel;
-use crate::ai::agent::ImageContext;
 use crate::ai::blocklist::{BlocklistAIContextModel, InputType, PendingAttachment, PendingFile};
 use crate::appearance::Appearance;
 use crate::channel::{Channel, ChannelState};
@@ -119,7 +118,9 @@ use crate::ui_components::avatar::{Avatar, AvatarContent};
 use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, keybinding_name_to_keystroke};
 use crate::util::clipboard::clipboard_content_with_escaped_paths;
 use crate::util::color::{ContrastingColor, MinimumAllowedContrast};
-use crate::util::image::{MAX_IMAGE_COUNT_FOR_QUERY, MAX_IMAGE_SIZE_BYTES, resize_image};
+use crate::util::image::{
+    ImageContext, MAX_IMAGE_COUNT_FOR_QUERY, MAX_IMAGE_SIZE_BYTES, resize_image,
+};
 use crate::util::merge_ranges;
 use crate::view_components::DismissibleToast;
 #[cfg(feature = "voice_input")]

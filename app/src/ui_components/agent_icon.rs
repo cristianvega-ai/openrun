@@ -11,13 +11,14 @@
 use ai::harness::Harness;
 use warpui::{AppContext, SingletonEntity};
 
-use crate::ai::agent::conversation::ConversationStatus;
 use crate::ai::agent_conversations_model::{
     AgentConversationEntry, AgentConversationsModel, AgentRunDisplayStatus,
 };
+use crate::ai::harness_display;
 use crate::terminal::CLIAgent;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::view::TerminalView;
+use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::icon_with_status::IconWithStatusVariant;
 
 /// Returns the agent-icon variant for a live [`TerminalView`], or `None` when the terminal is
@@ -68,7 +69,9 @@ pub(crate) fn terminal_view_agent_icon_variant(
     if cli_agent_session.is_none()
         && let Some(task) = task_data.as_ref()
     {
-        let status = AgentRunDisplayStatus::from_task(task, app).to_conversation_status();
+        let status = AgentStatus::from(
+            &AgentRunDisplayStatus::from_task(task, app).to_conversation_status(),
+        );
         let harness = task
             .agent_config_snapshot
             .as_ref()
@@ -83,13 +86,16 @@ pub(crate) fn terminal_view_agent_icon_variant(
         cli_session: cli_agent_session.map(|session| CLISessionInputs {
             agent: session.agent,
             has_listener: session.listener.is_some(),
-            status: session.status.to_conversation_status(),
+            status: session.status.to_agent_status(),
             supports_rich_status: session.supports_rich_status(),
         }),
         selected_third_party_cli_agent: terminal_view
             .ambient_agent_view_model()
             .and_then(|model| model.as_ref(app).selected_third_party_cli_agent()),
-        selected_conversation_status: terminal_view.selected_conversation_status_for_display(app),
+        selected_conversation_status: terminal_view
+            .selected_conversation_status_for_display(app)
+            .as_ref()
+            .map(AgentStatus::from),
         has_selected_conversation: terminal_view
             .selected_conversation_display_title(app)
             .is_some(),
@@ -100,7 +106,7 @@ pub(crate) fn terminal_view_agent_icon_variant(
 pub(crate) fn agent_conversation_entry_icon_variant(
     entry: &AgentConversationEntry,
 ) -> IconWithStatusVariant {
-    let status = entry.display.status.to_conversation_status();
+    let status = AgentStatus::from(&entry.display.status.to_conversation_status());
     agent_icon_variant_for_run(
         entry.display.harness.unwrap_or(Harness::Oz),
         status,
@@ -117,7 +123,7 @@ struct TerminalIconInputs {
     /// Claude pre-dispatch). `None` otherwise; task-derived harnesses are handled upstream.
     selected_third_party_cli_agent: Option<CLIAgent>,
     /// The conversation status that the terminal view would surface in its status-icon slot.
-    selected_conversation_status: Option<ConversationStatus>,
+    selected_conversation_status: Option<AgentStatus>,
     /// Whether the terminal view currently has a selected conversation (ambient or local).
     has_selected_conversation: bool,
 }
@@ -128,7 +134,7 @@ struct CLISessionInputs {
     /// Whether the session is backed by a plugin listener. Plugin-backed sessions report
     /// rich status; command-detected sessions only know that an agent is running.
     has_listener: bool,
-    status: ConversationStatus,
+    status: AgentStatus,
     /// Whether the agent's session handler exposes rich status (plugin-backed handlers report
     /// rich status; Codex's OSC 9 handler does not).
     supports_rich_status: bool,
@@ -147,7 +153,7 @@ fn agent_icon_variant_from_terminal_inputs(
         .filter(|s| !matches!(s.agent, CLIAgent::Unknown))
     {
         let status =
-            (session.has_listener && session.supports_rich_status).then(|| session.status.clone());
+            (session.has_listener && session.supports_rich_status).then_some(session.status);
         return Some(IconWithStatusVariant::CLIAgent {
             agent: session.agent,
             status,
@@ -165,7 +171,7 @@ fn agent_icon_variant_from_terminal_inputs(
     {
         return Some(IconWithStatusVariant::CLIAgent {
             agent,
-            status: inputs.selected_conversation_status.clone(),
+            status: inputs.selected_conversation_status,
             is_ambient: true,
         });
     }
@@ -173,7 +179,7 @@ fn agent_icon_variant_from_terminal_inputs(
     // 3. Selected conversation OR ambient (Oz) terminal: Oz agent variant.
     if inputs.has_selected_conversation || inputs.is_ambient {
         return Some(IconWithStatusVariant::OzAgent {
-            status: inputs.selected_conversation_status.clone(),
+            status: inputs.selected_conversation_status,
             is_ambient: inputs.is_ambient,
         });
     }
@@ -187,11 +193,11 @@ fn agent_icon_variant_from_terminal_inputs(
 /// recognize doesn't render an unbranded gray circle.
 pub(crate) fn agent_icon_variant_for_run(
     harness: Harness,
-    status: ConversationStatus,
+    status: AgentStatus,
     is_ambient: bool,
 ) -> IconWithStatusVariant {
     let cli_agent =
-        CLIAgent::from_harness(harness).filter(|agent| !matches!(agent, CLIAgent::Unknown));
+        harness_display::cli_agent(harness).filter(|agent| !matches!(agent, CLIAgent::Unknown));
     match cli_agent {
         Some(agent) => IconWithStatusVariant::CLIAgent {
             agent,

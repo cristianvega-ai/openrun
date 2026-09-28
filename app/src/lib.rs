@@ -1,5 +1,6 @@
 #![allow(clippy::doc_lazy_continuation)]
 
+mod agent_notifications;
 mod ai;
 mod alloc;
 mod antivirus;
@@ -111,10 +112,10 @@ pub mod settings_view;
 pub mod tab_configs;
 pub mod terminal;
 pub mod themes;
+use agent_notifications::AgentNotificationsModel;
 pub use ai::agent::todos::AIAgentTodoList;
 pub use ai::agent::{AIAgentActionResultType, FileEdit, TodoOperation};
 use ai::agent_conversations_model::AgentConversationsModel;
-use ai::agent_management::AgentNotificationsModel;
 use ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
 use ai::execution_profiles::editor::ExecutionProfileEditorManager;
 use ai::execution_profiles::profiles::AIExecutionProfilesModel;
@@ -1158,6 +1159,7 @@ pub(crate) fn initialize_app(
 
     // Register initial keybindings prior to creating menus
     ai::init(ctx);
+    agent_notifications::init(ctx);
     app_services::init(ctx);
     // // TODO: Temporarily disabling keybindings for WASM builds. Will be implemented in future WASM support.
     #[cfg(not(target_family = "wasm"))]

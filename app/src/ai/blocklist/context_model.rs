@@ -18,7 +18,7 @@ use crate::ai::agent::conversation::{
     AIConversation, AIConversationAutoexecuteMode, AIConversationId, ConversationStatus,
 };
 use crate::ai::agent::todos::AIAgentTodoList;
-use crate::ai::agent::{AIAgentAttachment, AIAgentContext, ImageContext};
+use crate::ai::agent::{AIAgentAttachment, AIAgentContext};
 use crate::ai::block_context::BlockContext;
 use crate::ai::document::ai_document_model::AIDocumentId;
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
@@ -30,6 +30,7 @@ use crate::terminal::model::block::{BlockId, BlockMetadata};
 use crate::terminal::model::session::Sessions;
 use crate::terminal::model_events::{ModelEvent, ModelEventDispatcher};
 use crate::util::git::{PrInfo, RepositoryInfo};
+use crate::util::image::ImageContext;
 use crate::workspaces::user_workspaces::TeamContextResolver;
 #[cfg(test)]
 use crate::workspaces::user_workspaces::UserWorkspaces;

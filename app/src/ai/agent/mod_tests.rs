@@ -11,15 +11,16 @@ use warp_multi_agent_api::{FileContent, FileContentLineRange};
 use crate::ai::agent::{
     AIAgentAttachment, AIAgentContext, AIAgentOutput, AIAgentOutputMessage,
     AIAgentOutputMessageType, AIAgentText, AIAgentTextSection, AgentOutputImage,
-    AgentOutputImageLayout, AgentOutputMermaidDiagram, AnyFileContent, CurrentHead, DiffBase,
-    DiffSetHunk, DocumentContentAttachmentSource, DriveObjectPayload, FileContext,
-    FormattedTextWrapper, ImageContext, MessageId, ProgrammingLanguage, RenderableAIError,
-    TransientNetworkErrorKind,
+    AgentOutputImageLayout, AgentOutputMermaidDiagram, AnyFileContent,
+    DocumentContentAttachmentSource, DriveObjectPayload, FileContext, FormattedTextWrapper,
+    MessageId, ProgrammingLanguage, RenderableAIError, TransientNetworkErrorKind,
 };
 use crate::ai::block_context::BlockContext;
 use crate::ai::execution_context::{WarpAiExecutionContext, WarpAiOsContext};
+use crate::code_review::diff_set::{CurrentHead, DiffBase, DiffSetHunk};
 use crate::server::server_api::AIApiError;
 use crate::terminal::shell::ShellType;
+use crate::util::image::ImageContext;
 
 fn to_range(range: Range<u32>) -> Option<FileContentLineRange> {
     Some(FileContentLineRange {
