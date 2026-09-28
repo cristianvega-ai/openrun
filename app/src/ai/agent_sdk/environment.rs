@@ -7,8 +7,8 @@ use inquire::error::InquireError;
 use inquire::{Confirm, Select};
 use serde::Serialize;
 use warp_cli::GlobalOptions;
-use warp_cli::agent::OutputFormat;
 use warp_cli::environment::{EnvironmentCommand, ImageCommand};
+use warp_cli::output_format::OutputFormat;
 use warp_cli::scope::ObjectScope;
 use warp_graphql::queries::get_oauth_connect_tx_status::OauthConnectTxStatus;
 use warp_graphql::queries::list_warp_dev_images::{

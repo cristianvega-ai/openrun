@@ -8,8 +8,9 @@ use bytes::Bytes;
 use comfy_table::Cell;
 use futures::{StreamExt, future};
 use serde::{Deserialize, Serialize};
-use warp_cli::agent::{Harness, OutputFormat, Prompt, RunCloudArgs};
+use warp_cli::agent::{Harness, Prompt, RunCloudArgs};
 use warp_cli::json_filter::JsonOutput;
+use warp_cli::output_format::OutputFormat;
 use warp_cli::scope::TeamSelection;
 use warp_cli::task::{
     ArtifactTypeArg, ExecutionLocationArg, ListTasksArgs, MessageCommand, MessageDeliveredArgs,

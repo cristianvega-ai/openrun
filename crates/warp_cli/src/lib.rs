@@ -8,7 +8,7 @@ use url::Url;
 use warp_core::channel::ChannelState;
 use warp_core::features::FeatureFlag;
 
-use crate::agent::OutputFormat;
+use crate::output_format::OutputFormat;
 
 #[cfg(windows)]
 mod process_handle;
@@ -33,6 +33,7 @@ pub mod local_control;
 pub mod mcp;
 pub mod memory_store;
 pub mod model;
+pub mod output_format;
 pub mod provider;
 pub mod runner;
 pub mod schedule;

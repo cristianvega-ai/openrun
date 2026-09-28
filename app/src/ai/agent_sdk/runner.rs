@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use comfy_table::Cell;
 use serde::Serialize;
 use warp_cli::GlobalOptions;
-use warp_cli::agent::OutputFormat;
+use warp_cli::output_format::OutputFormat;
 use warp_cli::runner::{
     CreateRunnerArgs, DeleteRunnerArgs, ListRunnersArgs, RunnerArchArg, RunnerCommand,
     RunnerMacosVersionArg, RunnerOsArg, RunnerSortByArg, UpdateRunnerArgs, validate_os_config,

@@ -3,7 +3,7 @@ use comfy_table::Cell;
 use futures::future;
 use serde::Serialize;
 use warp_cli::GlobalOptions;
-use warp_cli::agent::OutputFormat;
+use warp_cli::output_format::OutputFormat;
 use warp_cli::schedule::{
     CreateScheduleArgs, DeleteScheduleArgs, GetScheduleArgs, PauseScheduleArgs, ScheduleCommand,
     ScheduleSubcommand, UnpauseScheduleArgs, UpdateScheduleArgs,

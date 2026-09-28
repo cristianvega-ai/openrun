@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use warp_cli::agent::OutputFormat;
+use warp_cli::output_format::OutputFormat;
 use warp_cli::runner::UpdateRunnerArgs;
 use warp_cli::scope::{ObjectScope, TeamSelection};
 use warp_graphql::object::{Space, SpaceType};

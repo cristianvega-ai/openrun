@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use warp_cli::agent::OutputFormat;
+use warp_cli::output_format::OutputFormat;
 
 use super::*;
 

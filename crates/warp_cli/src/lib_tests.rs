@@ -4,8 +4,7 @@ use clap::Parser;
 
 use super::*;
 use crate::agent::{
-    AgentCommand, Harness, OutputFormat, RepositoryForge, RepositoryHeadRef,
-    RepositoryPreparationOverride,
+    AgentCommand, Harness, RepositoryForge, RepositoryHeadRef, RepositoryPreparationOverride,
 };
 use crate::artifact::ArtifactCommand;
 use crate::environment::{EnvironmentCommand, ImageCommand};
@@ -13,6 +12,7 @@ use crate::federate::FederateCommand;
 use crate::harness_support::{HarnessSupportCommand, TaskStatus};
 use crate::integration::IntegrationCommand;
 use crate::memory_store::{MemoryCommand, MemoryStoreCommand};
+use crate::output_format::OutputFormat;
 use crate::runner::RunnerCommand;
 use crate::schedule::ScheduleSubcommand;
 use crate::secret::{CodexMethod, CreateProvider, SecretCommand};

@@ -3,7 +3,7 @@ use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Table};
 use serde::Serialize;
 use serde_json::{Map, Value};
-use warp_cli::agent::OutputFormat;
+use warp_cli::output_format::OutputFormat;
 use warp_graphql::queries::get_simple_integrations::{
     ListedSimpleIntegrationConfig, SimpleIntegration, SimpleIntegrationConnectionStatus,
     SimpleIntegrationsOutput,

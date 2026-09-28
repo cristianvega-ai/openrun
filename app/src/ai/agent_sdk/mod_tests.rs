@@ -4,12 +4,13 @@ use clap::Parser;
 use cloud_object_models::CodeForge;
 use serde_json::json;
 use warp_cli::agent::{
-    AgentCommand, Harness, OutputFormat, RepositoryForge, RepositoryHeadRef,
-    RepositoryPreparationOverride, RunAgentArgs,
+    AgentCommand, Harness, RepositoryForge, RepositoryHeadRef, RepositoryPreparationOverride,
+    RunAgentArgs,
 };
 use warp_cli::artifact::{
     ArtifactCommand, DownloadArtifactArgs, GetArtifactArgs, UploadArtifactArgs,
 };
+use warp_cli::output_format::OutputFormat;
 use warp_cli::task::{MessageCommand, MessageSendArgs, MessageWatchArgs, TaskCommand};
 use warp_cli::{Args, CliCommand, Command};
 use warp_core::telemetry::TelemetryEvent;

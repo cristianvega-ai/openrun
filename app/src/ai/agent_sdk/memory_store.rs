@@ -2,12 +2,12 @@ use anyhow::Result;
 use comfy_table::Cell;
 use serde::Serialize;
 use warp_cli::GlobalOptions;
-use warp_cli::agent::OutputFormat;
 use warp_cli::memory_store::{
     CreateMemoryArgs, DeleteMemoryArgs, GetStoreArgs, ListMemoriesArgs, ListMemoryStoresArgs,
     ListStoreAgentsArgs, ListVersionsArgs, MemoryCommand, MemoryStoreCommand, UpdateMemoryArgs,
     UpdateStoreArgs,
 };
+use warp_cli::output_format::OutputFormat;
 use warpui::platform::TerminationMode;
 use warpui::{AppContext, ModelContext, SingletonEntity};
 

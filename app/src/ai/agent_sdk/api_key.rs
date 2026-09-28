@@ -7,11 +7,11 @@ use chrono::{DateTime, Utc};
 use comfy_table::Cell;
 use inquire::{Confirm, InquireError, Select};
 use serde::Serialize;
-use warp_cli::agent::OutputFormat;
 use warp_cli::api_key::{
     ApiKeyCommand, ApiKeyExpirationArgs, ApiKeySortByArg, CreateApiKeyArgs, ExpireApiKeyArgs,
     ListApiKeysArgs,
 };
+use warp_cli::output_format::OutputFormat;
 use warp_cli::{GlobalOptions, SortOrderArg};
 use warp_graphql::mutations::expire_api_key::ExpireApiKeyResult;
 use warp_graphql::mutations::generate_api_key::GenerateApiKeyResult;

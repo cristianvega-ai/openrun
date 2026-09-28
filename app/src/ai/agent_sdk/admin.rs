@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result};
 use serde::Serialize;
-use warp_cli::agent::OutputFormat;
+use warp_cli::output_format::OutputFormat;
 use warpui::platform::TerminationMode;
 use warpui::{AppContext, SingletonEntity};
 

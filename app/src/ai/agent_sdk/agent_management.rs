@@ -9,9 +9,9 @@ use serde::Serialize;
 use warp_cli::SortOrderArg;
 use warp_cli::agent::{
     AgentCreateArgs, AgentDeleteArgs, AgentGetArgs, AgentListArgs, AgentSortByArg, AgentUpdateArgs,
-    OutputFormat,
 };
 use warp_cli::json_filter::JsonOutput;
+use warp_cli::output_format::OutputFormat;
 use warpui::platform::TerminationMode;
 use warpui::{AppContext, ModelContext, SingletonEntity};
 

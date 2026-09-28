@@ -14,9 +14,7 @@ use driver::AgentDriverError;
 pub(crate) use driver::harness::{ClaudeHarness, task_env_vars, validate_cli_installed};
 use telemetry::CliTelemetryEvent;
 use tracing::Instrument as _;
-use warp_cli::agent::{
-    AgentCommand, AgentProfileCommand, Harness, OutputFormat, Prompt, RunAgentArgs,
-};
+use warp_cli::agent::{AgentCommand, AgentProfileCommand, Harness, Prompt, RunAgentArgs};
 use warp_cli::api_key::ApiKeyCommand;
 use warp_cli::artifact::ArtifactCommand;
 use warp_cli::environment::{EnvironmentCommand, ImageCommand};
@@ -26,6 +24,7 @@ use warp_cli::integration::IntegrationCommand;
 use warp_cli::mcp::MCPCommand;
 use warp_cli::memory_store::{MemoryCommand, MemoryStoreCommand};
 use warp_cli::model::ModelCommand;
+use warp_cli::output_format::OutputFormat;
 use warp_cli::provider::ProviderCommand;
 use warp_cli::runner::RunnerCommand;
 use warp_cli::schedule::ScheduleSubcommand;
