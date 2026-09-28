@@ -47,3 +47,7 @@ pub enum ExecutorCommandEvent {
     /// The command identified by `id` should be cancelled.
     CancelCommand { id: String },
 }
+
+#[cfg(test)]
+#[path = "shared_tests.rs"]
+mod tests;
