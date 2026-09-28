@@ -11946,7 +11946,6 @@ impl TerminalView {
     fn maybe_auto_open_cli_agent_rich_input(&mut self, ctx: &mut ViewContext<Self>) {
         let cli_agent_settings = CLIAgentSettings::as_ref(ctx);
         if !*cli_agent_settings.auto_open_rich_input_on_cli_agent_start
-            || !AISettings::as_ref(ctx).is_any_ai_enabled(ctx)
             || !*cli_agent_settings.should_render_cli_agent_footer
             || !is_rich_input_chip_in_cli_toolbar(ctx)
         {
@@ -12044,7 +12043,6 @@ impl TerminalView {
         // Only applies when the session has a plugin listener (rich status info).
         let cli_agent_settings = CLIAgentSettings::as_ref(ctx);
         if *cli_agent_settings.auto_toggle_rich_input
-            && AISettings::as_ref(ctx).is_any_ai_enabled(ctx)
             && *cli_agent_settings.should_render_cli_agent_footer
             && is_rich_input_chip_in_cli_toolbar(ctx)
         {

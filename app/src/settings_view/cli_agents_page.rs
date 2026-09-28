@@ -8,7 +8,6 @@ use enum_iterator::all;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use regex::Regex;
 use settings::{Setting, ToggleableSetting};
-use warp_core::features::FeatureFlag;
 use warp_errors::report_if_error;
 use warpui::elements::{
     ChildView, Container, CornerRadius, CrossAxisAlignment, Element, Empty, Flex,
@@ -313,7 +312,7 @@ impl SettingsPageMeta for CLIAgentsPageView {
     }
 
     fn should_render(&self, _ctx: &AppContext) -> bool {
-        FeatureFlag::AgentMode.is_enabled()
+        true
     }
 
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {

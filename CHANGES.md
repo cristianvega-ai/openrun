@@ -51,6 +51,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [AI command prediction and passive suggestions](#ai-command-prediction-and-passive-suggestions) — deleted Agent Predict (AI next-command and prompt ghost text), prompt suggestions, suggested code-diff banners, their settings and server endpoints; history-based autosuggestions and command corrections are unchanged
 - [AI-generated commit messages, pull request text and block titles](#ai-generated-commit-messages-pull-request-text-and-block-titles) — the code-review commit and create-PR dialogs no longer ask Warp's AI for text; removed the two text-generation settings and the now-empty Active AI settings category
 - [CLI-agent support moved out of the AI module](#cli-agent-support-moved-out-of-the-ai-module) — CLI agent settings, review/diff and image types, agent status and notifications now live outside `crate::ai`
+- [AI gates removed from CLI-agent support](#ai-gates-removed-from-cli-agent-support) — the CLI agents settings page, Rich Input auto-open/auto-toggle and Rich Input image paste no longer depend on AI being enabled
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1347,3 +1348,20 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - `agent_notifications` keeps the Oz notification origin and source variants, the conversation-history and artifact handling, and the `AgentManagementEvent` name; AI-21 strips them.
 - `terminal/cli_agent.rs` still imports `ai::skills::SkillProvider` (AI-11 removes it). `terminal/cli_agent_sessions` still uses `ai::blocklist::InputConfig` (AI-26 removes it).
 - The Warp-distributed plugin installers are untouched; SWP-09 removes them.
+
+## AI gates removed from CLI-agent support
+**Why:** AI is permanently off in this fork: `AISettings::is_any_ai_enabled` is always false because there are no accounts, and `FeatureFlag::AgentMode` counts as off. Checks on those gates were disabling parts of the third-party CLI agent support that is kept.
+
+**Removed:** None.
+
+**Modified:**
+- `settings_view/cli_agents_page.rs`: the "Third party CLI agents" settings page always renders. It was gated on `FeatureFlag::AgentMode`.
+- `terminal/view.rs`: opening Rich Input automatically when a CLI agent session starts, and closing and reopening it automatically when the agent blocks, no longer require `is_any_ai_enabled`.
+- `terminal/input.rs`: images pasted into the CLI agent Rich Input attach even when AI is off. Other inputs still need AI to attach images.
+
+**User-visible impact:** The CLI agents settings page appears. The "auto open Rich Input" and "auto show/hide Rich Input" settings take effect. Pasted screenshots attach in Rich Input.
+
+**Notes:**
+- Audited `terminal/cli_agent_sessions/**`, `terminal/view/use_agent_footer/**` and `terminal/input/cli_agent.rs`. They contain no AI gates on CLI paths. The `is_any_ai_enabled` check in `use_agent_footer` only gates Warp's own "Use agent" footer, and the CLI branch returns before it.
+- The `AgentView`/`CLIAgentRichInput` overrides in the `terminal/view_tests.rs` Rich Input tests stay. The flag checks they satisfy are in `agent_input_footer/{toolbar_item.rs, mod.rs}` (AI-08) and `ai/blocklist/input_model.rs` (AI-06/AI-26).
+- `FeatureFlag::HOANotifications` and `FeatureFlag::ImageAsContext` are on by default through Cargo features. They still gate the notification mailbox and toasts, and the Rich Input image chips. Later tasks must treat them as permanently on, not as AI-only flags.

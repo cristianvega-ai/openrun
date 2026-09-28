@@ -10615,8 +10615,10 @@ impl Input {
         // Read from app clipboard
         let content = ctx.clipboard().read();
 
-        // If AI is disabled, attachment isn't possible
-        if !AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
+        // Outside the CLI agent rich input, attachment requires AI.
+        if !CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
+            && !AISettings::as_ref(ctx).is_any_ai_enabled(ctx)
+        {
             self.insert_clipboard_text_content(ctx, content);
             return;
         }
