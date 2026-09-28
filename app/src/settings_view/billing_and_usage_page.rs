@@ -40,10 +40,8 @@ use super::settings_page::{
     render_info_icon,
 };
 use crate::ai::AIRequestUsageModel;
-use crate::auth::auth_manager::LoginGatedFeature;
 use crate::auth::auth_state::AuthState;
-use crate::auth::auth_view_modal::AuthViewVariant;
-use crate::auth::{AuthManager, AuthStateProvider, UserUid};
+use crate::auth::{AuthStateProvider, UserUid};
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::pricing::{PricingInfoModel, PricingInfoModelEvent};
@@ -256,8 +254,6 @@ pub struct BillingAndUsagePageView {
     purchase_addon_credits_loading: bool,
     prorated_request_limits_info_mouse_states: Vec<MouseStateHandle>,
     // ── Plan-header mouse states ─────────────────────────────────────────
-    upgrade_link: MouseStateHandle,
-    anonymous_user_sign_up_button: MouseStateHandle,
     enterprise_contact_us_link: MouseStateHandle,
     stripe_billing_portal_link: MouseStateHandle,
     admin_panel_link: MouseStateHandle,
@@ -287,11 +283,6 @@ impl BillingAndUsagePageView {
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |me, _handle, event, ctx| {
             me.handle_workspaces_event(event, ctx);
-            ctx.notify();
-        });
-
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, _, ctx| {
-            me.refresh_addon_credits_settings(ctx);
             ctx.notify();
         });
 
@@ -414,8 +405,6 @@ impl BillingAndUsagePageView {
             addon_credit_denomination_buttons: Default::default(),
             purchase_addon_credits_loading: false,
             prorated_request_limits_info_mouse_states: Default::default(),
-            upgrade_link: MouseStateHandle::default(),
-            anonymous_user_sign_up_button: MouseStateHandle::default(),
             enterprise_contact_us_link: MouseStateHandle::default(),
             stripe_billing_portal_link: MouseStateHandle::default(),
             admin_panel_link: MouseStateHandle::default(),
@@ -782,7 +771,6 @@ impl BillingAndUsagePageView {
 
 #[derive(Debug, Clone)]
 pub enum BillingAndUsagePageEvent {
-    SignupAnonymousUser,
     ShowToast {
         message: String,
         flavor: ToastFlavor,
@@ -818,13 +806,6 @@ impl TypedActionView for BillingAndUsagePageView {
             .is_anonymous_or_logged_out()
             && action.blocked_for_anonymous_user()
         {
-            AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
-                auth_manager.attempt_login_gated_feature(
-                    action.into(),
-                    AuthViewVariant::RequireLoginCloseable,
-                    ctx,
-                )
-            });
             return;
         }
 
@@ -850,18 +831,6 @@ impl TypedActionView for BillingAndUsagePageView {
             }
             BillingAndUsagePageAction::ContactSupport => {
                 AdminActions::contact_support(ctx);
-            }
-            BillingAndUsagePageAction::SignupAnonymousUser => {
-                ctx.emit(BillingAndUsagePageEvent::SignupAnonymousUser);
-            }
-            BillingAndUsagePageAction::AttemptLoginGatedUpgrade => {
-                AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
-                    auth_manager.attempt_login_gated_feature(
-                        action.into(),
-                        AuthViewVariant::RequireLoginCloseable,
-                        ctx,
-                    )
-                });
             }
             BillingAndUsagePageAction::OpenUrl(url) => {
                 ctx.open_url(&url.url);
@@ -1085,8 +1054,6 @@ pub enum BillingAndUsagePageAction {
     },
     OpenWorkspaceAdminPanel,
     ContactSupport,
-    SignupAnonymousUser,
-    AttemptLoginGatedUpgrade,
     UpdateUsageBasedPricingSettings {
         team_uid: ServerId,
         enabled: bool,
@@ -1124,17 +1091,6 @@ impl BillingAndUsagePageAction {
             self,
             Upgrade { .. } | GenerateStripeBillingPortalLink { .. },
         )
-    }
-}
-
-impl From<&BillingAndUsagePageAction> for LoginGatedFeature {
-    fn from(val: &BillingAndUsagePageAction) -> LoginGatedFeature {
-        use BillingAndUsagePageAction::*;
-        match val {
-            Upgrade { .. } => "Upgrade Plan",
-            GenerateStripeBillingPortalLink { .. } => "Generate Stripe Billing Portal Link",
-            _ => "Unknown reason",
-        }
     }
 }
 
@@ -3295,26 +3251,22 @@ impl BillingAndUsagePageView {
             vec![]
         };
 
-        let mut upgrade_cta = FormattedTextElement::new(
-            FormattedText::new([FormattedTextLine::Line(upgrade_cta_text_fragments)]),
-            appearance.ui_font_size(),
-            appearance.ui_font_family(),
-            appearance.ui_font_family(),
-            blended_colors::text_sub(appearance.theme(), appearance.theme().surface_1()),
-            self.requests_highlight_index.clone(),
-        )
-        .with_hyperlink_font_color(appearance.theme().accent().into_solid());
-
-        if AuthStateProvider::as_ref(app)
+        // Upgrading requires an account.
+        if !AuthStateProvider::as_ref(app)
             .get()
             .is_anonymous_or_logged_out()
         {
-            upgrade_cta = upgrade_cta.register_default_click_handlers(|_, ctx, _| {
-                ctx.dispatch_typed_action(BillingAndUsagePageAction::AttemptLoginGatedUpgrade);
-            });
-        } else {
-            upgrade_cta = upgrade_cta.register_default_click_handlers_with_action_support(
-                |hyperlink_lens, event, ctx| match hyperlink_lens {
+            let upgrade_cta = FormattedTextElement::new(
+                FormattedText::new([FormattedTextLine::Line(upgrade_cta_text_fragments)]),
+                appearance.ui_font_size(),
+                appearance.ui_font_family(),
+                appearance.ui_font_family(),
+                blended_colors::text_sub(appearance.theme(), appearance.theme().surface_1()),
+                self.requests_highlight_index.clone(),
+            )
+            .with_hyperlink_font_color(appearance.theme().accent().into_solid())
+            .register_default_click_handlers_with_action_support(|hyperlink_lens, event, ctx| {
+                match hyperlink_lens {
                     warpui::elements::HyperlinkLens::Url(url) => {
                         ctx.open_url(url);
                     }
@@ -3326,15 +3278,15 @@ impl BillingAndUsagePageView {
                             event.dispatch_typed_action(action.clone());
                         }
                     }
-                },
-            );
-        };
+                }
+            });
 
-        usage.add_child(
-            Container::new(upgrade_cta.finish())
-                .with_margin_bottom(16.)
-                .finish(),
-        );
+            usage.add_child(
+                Container::new(upgrade_cta.finish())
+                    .with_margin_bottom(16.)
+                    .finish(),
+            );
+        }
 
         if let (Some(team), Some(billing_metadata)) = (team, billing_metadata)
             && billing_metadata.is_usage_based_pricing_toggleable()
@@ -3426,87 +3378,9 @@ pub(crate) fn sort_user_items_in_place<T>(
 }
 
 impl BillingAndUsagePageView {
-    fn render_anonymous_account_info(
-        &self,
-        auth_state: &AuthState,
-        appearance: &Appearance,
-    ) -> Box<dyn Element> {
-        let button_styles = UiComponentStyles {
-            font_size: Some(14.),
-            font_weight: Some(Weight::Semibold),
-            border_radius: Some(CornerRadius::with_all(Radius::Pixels(4.))),
-            padding: Some(Coords {
-                top: 12.,
-                bottom: 12.,
-                left: 40.,
-                right: 40.,
-            }),
-            ..Default::default()
-        };
-
-        let user_info = appearance
-            .ui_builder()
-            .button(
-                ButtonVariant::Accent,
-                self.anonymous_user_sign_up_button.clone(),
-            )
-            .with_style(button_styles)
-            .with_text_label("Sign up".to_owned())
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(BillingAndUsagePageAction::SignupAnonymousUser);
-            })
-            .finish();
-
-        let mut plan_info = Flex::column()
-            .with_main_axis_alignment(MainAxisAlignment::SpaceEvenly)
-            .with_cross_axis_alignment(CrossAxisAlignment::End);
-        let current_user_id = auth_state.user_id().unwrap_or_default();
-
-        plan_info.add_child(render_customer_type_badge(appearance, "Free".into()));
-        plan_info.add_child(
-            Container::new(
-                appearance
-                    .ui_builder()
-                    .button(ButtonVariant::Link, self.upgrade_link.clone())
-                    .with_text_and_icon_label(
-                        TextAndIcon::new(
-                            TextAndIconAlignment::IconFirst,
-                            "Compare plans",
-                            Icon::CoinsStacked.to_warpui_icon(appearance.theme().accent()),
-                            MainAxisSize::Min,
-                            MainAxisAlignment::Center,
-                            vec2f(14., 14.),
-                        )
-                        .with_inner_padding(4.),
-                    )
-                    .build()
-                    .on_click(move |ctx, _, _| {
-                        ctx.dispatch_typed_action(BillingAndUsagePageAction::Upgrade {
-                            team_uid: None,
-                            user_id: current_user_id,
-                        });
-                    })
-                    .finish(),
-            )
-            .with_margin_top(8.)
-            .finish(),
-        );
-
-        Flex::row()
-            .with_child(
-                Shrinkable::new(
-                    1.0,
-                    Flex::row()
-                        .with_child(user_info)
-                        .with_main_axis_alignment(MainAxisAlignment::Start)
-                        .with_main_axis_size(MainAxisSize::Max)
-                        .finish(),
-                )
-                .finish(),
-            )
-            .with_child(Align::new(plan_info.finish()).right().finish())
-            .with_cross_axis_alignment(CrossAxisAlignment::Start)
+    fn render_anonymous_account_info(&self, appearance: &Appearance) -> Box<dyn Element> {
+        Align::new(render_customer_type_badge(appearance, "Free".into()))
+            .right()
             .finish()
     }
 
@@ -3706,7 +3580,7 @@ impl BillingAndUsagePageView {
 impl BillingAndUsagePageView {
     fn render_plan_header(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
         let account_info = if self.auth_state.is_anonymous_or_logged_out() {
-            self.render_anonymous_account_info(self.auth_state.as_ref(), appearance)
+            self.render_anonymous_account_info(appearance)
         } else {
             self.render_account_info(self.auth_state.as_ref(), app, appearance)
         };

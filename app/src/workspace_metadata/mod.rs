@@ -246,12 +246,7 @@ impl PersistedWorkspace {
         // We pass skip_cached=true so workspaces with persisted entries are still
         // re-scanned to discover newly relevant server types.
         #[cfg(feature = "local_fs")]
-        if !cfg!(any(
-            test,
-            feature = "fast_dev",
-            feature = "integration_tests"
-        )) && !startup_workspace_paths.is_empty()
-        {
+        if !cfg!(any(test, feature = "integration_tests")) && !startup_workspace_paths.is_empty() {
             result.detect_available_servers_for_workspaces(startup_workspace_paths, true, ctx);
         }
 

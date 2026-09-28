@@ -14,8 +14,7 @@ use super::view::free_ai_removal_modal::{
 };
 use crate::ai::blocklist::agent_view::toolbar_item::AgentToolbarItemKind;
 use crate::ai::{AIRequestUsageModel, AIRequestUsageModelEvent};
-use crate::auth::auth_manager::AuthManagerEvent;
-use crate::auth::{AuthManager, AuthStateProvider};
+use crate::auth::AuthStateProvider;
 use crate::channel::{Channel, ChannelState};
 use crate::root_view::has_completed_local_onboarding;
 use crate::settings::{AISettings, CodeSettings};
@@ -92,59 +91,6 @@ impl OneTimeModalModel {
         ctx.subscribe_to_model(&AIRequestUsageModel::handle(ctx), |me, _, event, ctx| {
             if let AIRequestUsageModelEvent::RequestUsageUpdated = event {
                 me.maybe_recheck_free_ai_removal_modal(ctx);
-            }
-        });
-
-        // Subscribe to auth manager events to automatically trigger modal when user becomes onboarded
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, event, ctx| {
-            let AuthManagerEvent::AuthComplete = event else {
-                return;
-            };
-
-            let auth_state = crate::auth::AuthStateProvider::as_ref(ctx).get().clone();
-            let is_existing_user = auth_state.is_onboarded().unwrap_or_default();
-            if is_existing_user {
-                me.has_completed_initial_modal_checks = true;
-                me.check_and_trigger_all_modals(ctx);
-                maybe_ensure_handoff_chip_in_toolbar(ctx);
-            } else {
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    if let Err(e) = settings
-                        .did_check_to_trigger_oz_launch_modal
-                        .set_value(true, ctx)
-                    {
-                        log::warn!("Failed to mark Oz launch modal as dismissed: {e}");
-                    }
-                    if let Err(e) = settings
-                        .did_check_to_trigger_orchestration_launch_modal
-                        .set_value(true, ctx)
-                    {
-                        log::warn!("Failed to mark orchestration launch modal as dismissed: {e}");
-                    }
-                    if let Err(e) = settings
-                        .did_check_to_trigger_agent_cli_launch_modal
-                        .set_value(true, ctx)
-                    {
-                        log::warn!("Failed to mark Warp Agent CLI launch modal as dismissed: {e}");
-                    }
-                    // New signups shouldn't see feature-intro popovers on their second
-                    // startup, so pre-mark every registered feature intro as seen.
-                    for intro in FEATURE_INTROS {
-                        settings.mark_feature_intro_seen(intro.id.as_key(), ctx);
-                    }
-                });
-                // Accounts created after the removal of free AI go through the new
-                // onboarding and are treated as already-noticed (no modal).
-                mark_free_ai_removal_notice_seen(ctx);
-                hoa_onboarding::mark_hoa_onboarding_completed(ctx);
-                GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
-                    if let Err(e) = settings
-                        .did_check_to_trigger_openwarp_launch_modal
-                        .set_value(true, ctx)
-                    {
-                        log::warn!("Failed to mark OpenWarp launch modal as dismissed: {e}");
-                    }
-                });
             }
         });
 

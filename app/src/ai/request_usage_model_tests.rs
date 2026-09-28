@@ -1368,31 +1368,6 @@ fn test_availability_refresh_failure_before_first_success_uses_prefetch_fallback
 }
 
 #[test]
-fn test_reset_server_availability_restores_prefetch_fallback() {
-    App::test((), |mut app| async move {
-        app.add_singleton_model(UserWorkspaces::default_mock);
-        let request_usage_model = add_request_usage_model(&mut app);
-
-        request_usage_model.update(&mut app, |model, ctx| {
-            model.request_limit_info = RequestLimitInfo::new_for_test(10, 5);
-            model.apply_server_availability(
-                Ok(AICreditAvailability::unavailable(
-                    AICreditDenialReason::OutOfCredits,
-                )),
-                ctx,
-            );
-            assert!(!model.has_any_ai_remaining(&TeamlessScopeForTest, ctx));
-
-            // On logout the server decision is cleared and the pre-server-decision
-            // fallback is restored for the next principal.
-            model.reset_server_availability(ctx);
-            assert_eq!(model.server_availability(), None);
-            assert!(model.has_any_ai_remaining(&TeamlessScopeForTest, ctx));
-        });
-    });
-}
-
-#[test]
 fn test_out_of_credits_refined_by_local_byo_key() {
     App::test((), |mut app| async move {
         // BYOK is allowed by policy, but no key has been stored locally.

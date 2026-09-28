@@ -32,7 +32,6 @@ use crate::ai::blocklist::{
 };
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::ai::mcp::TemplateVariable;
-use crate::auth::auth_manager::LoginGatedFeature;
 use crate::channel::Channel;
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::{GenericStringObjectFormat, ObjectType, Space};
@@ -1615,9 +1614,6 @@ pub enum TelemetryEvent {
     },
     AnonymousUserExpirationLockout,
     AnonymousUserLinkedFromBrowser,
-    AnonymousUserAttemptLoginGatedFeature {
-        feature: LoginGatedFeature,
-    },
     AnonymousUserHitCloudObjectLimit,
     NeedsReauth,
     WarpDriveOpened {
@@ -3452,9 +3448,6 @@ impl TelemetryEvent {
             TelemetryEvent::InitiateAnonymousUserSignup { entrypoint } => {
                 Some(json!({"entrypoint": entrypoint}))
             }
-            TelemetryEvent::AnonymousUserAttemptLoginGatedFeature { feature } => {
-                Some(json!({"feature": feature}))
-            }
             TelemetryEvent::ToggleWorkspaceDecorationVisibility {
                 previous_value,
                 new_value,
@@ -4443,7 +4436,6 @@ impl TelemetryEvent {
             | TelemetryEvent::InitiateAnonymousUserSignup { .. }
             | TelemetryEvent::AnonymousUserExpirationLockout
             | TelemetryEvent::AnonymousUserLinkedFromBrowser
-            | TelemetryEvent::AnonymousUserAttemptLoginGatedFeature { .. }
             | TelemetryEvent::AnonymousUserHitCloudObjectLimit
             | TelemetryEvent::NeedsReauth
             | TelemetryEvent::WarpDriveOpened { .. }
@@ -4769,7 +4761,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             | Self::LoginLaterConfirmationButtonClicked
             | Self::AnonymousUserExpirationLockout
             | Self::AnonymousUserLinkedFromBrowser
-            | Self::AnonymousUserAttemptLoginGatedFeature
             | Self::AnonymousUserHitCloudObjectLimit => EnablementState::Always,
 
             Self::AgentModeChangedInputType => EnablementState::Always,
@@ -5236,9 +5227,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::InitiateAnonymousUserSignup => "Anonymous User Initiated Signup",
             Self::AnonymousUserExpirationLockout => "Anonymous User Expiration Lockout",
             Self::AnonymousUserLinkedFromBrowser => "Anonymous User Linked from Browser",
-            Self::AnonymousUserAttemptLoginGatedFeature => {
-                "Anonymous User Attempted Login-Gated Feature"
-            }
             Self::MCPServerCollectionPaneOpened { .. } => "MCP Server Collection Pane Opened",
             Self::MCPServerAdded { .. } => "MCP Server Added",
             Self::MCPTemplateCreated { .. } => "MCP Template Created",
@@ -5726,9 +5714,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::AnonymousUserLinkedFromBrowser => {
                 "Received an auth payload from anonymous user after linking in browser"
-            }
-            Self::AnonymousUserAttemptLoginGatedFeature => {
-                "Anonymous user attempted to access a login-gated feature"
             }
             Self::AnonymousUserHitCloudObjectLimit => {
                 "Anonymous user attempted to create a cloud object past their personal object limit"

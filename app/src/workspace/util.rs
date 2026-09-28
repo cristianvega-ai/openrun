@@ -30,7 +30,7 @@ pub(super) struct WorkspaceMouseStates {
     pub(super) settings_icon: MouseStateHandle,
     pub(super) dismiss_banner_button: MouseStateHandle,
     pub(super) offline_icon: MouseStateHandle,
-    pub(super) avatar_icon: MouseStateHandle,
+    pub(super) user_menu_button: MouseStateHandle,
     pub(super) header_dimming: MouseStateHandle,
     pub(super) right_panel_icon: MouseStateHandle,
     pub(super) notifications_mailbox: MouseStateHandle,
@@ -83,8 +83,6 @@ pub struct WorkspaceState {
     pub is_resource_center_open: bool,
     pub is_command_search_open: bool,
     pub is_agent_management_popup_open: bool,
-    pub is_auth_override_modal_open: bool,
-    pub is_require_login_modal_open: bool,
     pub is_workflow_modal_open: bool,
     pub is_prompt_editor_open: bool,
     pub is_agent_toolbar_editor_open: bool,
@@ -163,8 +161,6 @@ impl WorkspaceState {
         self.is_prompt_editor_open = false;
         self.is_agent_toolbar_editor_open = false;
         self.is_header_toolbar_editor_open = false;
-        self.is_auth_override_modal_open = false;
-        self.is_require_login_modal_open = false;
         self.is_suggested_rule_modal_open = false;
         self.is_suggested_agent_mode_workflow_modal_open = false;
         self.is_enable_auto_reload_modal_open = false;

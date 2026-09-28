@@ -28,7 +28,6 @@ pub enum AiAccessSlideAction {
     SelectSubscription,
     SelectSetUpLater,
     CopyUpgradeUrlClicked,
-    PasteAuthTokenFromClipboardClicked,
     BackClicked,
     NextClicked,
 }
@@ -39,7 +38,6 @@ pub enum AiAccessSlideAction {
 #[derive(Debug, Clone)]
 pub enum AiAccessSlideEvent {
     CopyUpgradeUrlRequested,
-    PasteAuthTokenFromClipboardRequested,
 }
 
 /// The "Choose how to access AI" slide (Warp Agent path). Forks between a paid
@@ -54,7 +52,6 @@ pub struct AiAccessSlide {
     scroll_state: ClippedScrollStateHandle,
     show_auth_prompt_bar: bool,
     copy_url_mouse_state: MouseStateHandle,
-    paste_token_mouse_state: MouseStateHandle,
 }
 
 impl AiAccessSlide {
@@ -68,7 +65,6 @@ impl AiAccessSlide {
             scroll_state: ClippedScrollStateHandle::new(),
             show_auth_prompt_bar: false,
             copy_url_mouse_state: MouseStateHandle::default(),
-            paste_token_mouse_state: MouseStateHandle::default(),
         }
     }
 
@@ -419,12 +415,8 @@ impl View for AiAccessSlide {
         let auth_prompt_bar = render_upgrade_auth_prompt_bar(
             appearance,
             self.copy_url_mouse_state.clone(),
-            self.paste_token_mouse_state.clone(),
             Box::new(|ctx| {
                 ctx.dispatch_typed_action(AiAccessSlideAction::CopyUpgradeUrlClicked);
-            }),
-            Box::new(|ctx| {
-                ctx.dispatch_typed_action(AiAccessSlideAction::PasteAuthTokenFromClipboardClicked);
             }),
         );
 
@@ -504,9 +496,6 @@ impl TypedActionView for AiAccessSlide {
             }
             AiAccessSlideAction::CopyUpgradeUrlClicked => {
                 ctx.emit(AiAccessSlideEvent::CopyUpgradeUrlRequested);
-            }
-            AiAccessSlideAction::PasteAuthTokenFromClipboardClicked => {
-                ctx.emit(AiAccessSlideEvent::PasteAuthTokenFromClipboardRequested);
             }
             AiAccessSlideAction::BackClicked => {
                 self.onboarding_state.update(ctx, |model, ctx| {

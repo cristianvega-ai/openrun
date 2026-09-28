@@ -16,8 +16,8 @@ use crate::model::{
 };
 use crate::slides::{
     AgentSlide, AiAccessSlide, AiAccessSlideEvent, AiSetupSlide, CustomizeUISlide, IntentionSlide,
-    IntroSlide, IntroSlideEvent, OfferSlide, OfferSlideEvent, OfferVariant, OnboardingModelInfo,
-    OnboardingSlide, ThemePickerSlide, ThemePickerSlideEvent, ThirdPartySlide,
+    IntroSlide, OfferSlide, OfferSlideEvent, OfferVariant, OnboardingModelInfo, OnboardingSlide,
+    ThemePickerSlide, ThemePickerSlideEvent, ThirdPartySlide,
 };
 use crate::telemetry::OnboardingEvent;
 
@@ -56,16 +56,8 @@ pub enum AgentOnboardingEvent {
     },
     OnboardingCompleted(SelectedSettings),
     OnboardingSkipped,
-    LoginFromWelcomeRequested,
-    /// Emitted when the user clicks the "Privacy Settings" link on the terminal
-    /// intention theme slide. The variant name encodes that the event is only
-    /// emitted from the terminal-intention theme slide; consumers (e.g. a
-    /// `LoginSlideView` with `LoginSlideSource::PrivacySettingsFromTerminalIntentionTheme`)
-    /// rely on that to select the right visual / back-routing behavior.
-    PrivacySettingsFromTerminalThemeSlideRequested,
     UpgradeRequested,
     UpgradeCopyUrlRequested,
-    UpgradePasteTokenFromClipboardRequested,
     OfferSetUpLaterSelected {
         variant: OfferVariant,
     },
@@ -191,12 +183,6 @@ impl AgentOnboardingView {
             ctx.add_typed_action_view(move |_| IntroSlide::new(onboarding_state))
         };
 
-        ctx.subscribe_to_view(&intro_slide, |_me, _view, event, ctx| match event {
-            IntroSlideEvent::LoginRequested => {
-                ctx.emit(AgentOnboardingEvent::LoginFromWelcomeRequested);
-            }
-        });
-
         let theme_picker_slide = {
             let themes = theme_picker_themes.clone();
             let onboarding_state = onboarding_state.clone();
@@ -247,9 +233,6 @@ impl AgentOnboardingView {
                 AiAccessSlideEvent::CopyUpgradeUrlRequested => {
                     ctx.emit(AgentOnboardingEvent::UpgradeCopyUrlRequested);
                 }
-                AiAccessSlideEvent::PasteAuthTokenFromClipboardRequested => {
-                    ctx.emit(AgentOnboardingEvent::UpgradePasteTokenFromClipboardRequested);
-                }
             });
         }
 
@@ -262,9 +245,6 @@ impl AgentOnboardingView {
                 }
                 OfferSlideEvent::CopyUpgradeUrlRequested => {
                     ctx.emit(AgentOnboardingEvent::UpgradeCopyUrlRequested);
-                }
-                OfferSlideEvent::PasteAuthTokenFromClipboardRequested => {
-                    ctx.emit(AgentOnboardingEvent::UpgradePasteTokenFromClipboardRequested);
                 }
             });
             Some(offer_slide)
@@ -653,9 +633,6 @@ impl AgentOnboardingView {
             }
             ThemePickerSlideEvent::SyncWithOsToggled { enabled } => {
                 ctx.emit(AgentOnboardingEvent::SyncWithOsToggled { enabled: *enabled });
-            }
-            ThemePickerSlideEvent::PrivacySettingsRequested => {
-                ctx.emit(AgentOnboardingEvent::PrivacySettingsFromTerminalThemeSlideRequested);
             }
         }
     }

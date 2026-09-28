@@ -13,7 +13,6 @@ use warpui::{Entity, ModelContext, RequestState, SingletonEntity};
 
 use crate::ai::harness_display;
 use crate::auth::AuthStateProvider;
-use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
 use crate::network::{NetworkStatus, NetworkStatusEvent, NetworkStatusKind};
 use crate::server::ids::ServerId;
 use crate::server::retry_strategies::{
@@ -140,13 +139,6 @@ impl HarnessAvailabilityModel {
                 new_status: NetworkStatusKind::Online,
             } = event
             {
-                me.refresh(ctx);
-            }
-        });
-
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, event, ctx| {
-            if let AuthManagerEvent::AuthComplete = event {
-                me.invalidate_auth_secrets();
                 me.refresh(ctx);
             }
         });

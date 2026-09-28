@@ -23,7 +23,6 @@ use crate::ai::mcp::templatable_manager::TemplatableMCPServerManagerEvent;
 use crate::auth::AuthStateProvider;
 // The auth-completion trigger for the legacy import is compiled out for eval builds.
 #[cfg(not(feature = "agent_mode_evals"))]
-use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::model::persistence::{CloudModelEvent, UpdateSource};
 use crate::cloud_object::{CloudObject as _, GenericStringObjectFormat, JsonObjectType};
@@ -326,13 +325,6 @@ impl AIExecutionProfilesModel {
             // Eval builds never import legacy cloud profiles into settings.
             #[cfg(not(feature = "agent_mode_evals"))]
             if imports_legacy_profiles {
-                if ctx.has_singleton_model::<AuthManager>() {
-                    ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, event, ctx| {
-                        if matches!(event, AuthManagerEvent::AuthComplete) {
-                            me.migrate_settings_profiles(ctx);
-                        }
-                    });
-                }
                 ctx.subscribe_to_model(&CloudModel::handle(ctx), |me, _, event, ctx| {
                     if !me.settings_are_authoritative() {
                         me.handle_cloud_model_event(event, ctx);

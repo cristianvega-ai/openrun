@@ -22,7 +22,7 @@ pub use ai_setup_slide::AiSetupSlide;
 pub use bottom_nav::onboarding_bottom_nav;
 pub use customize_slide::CustomizeUISlide;
 pub use intention_slide::IntentionSlide;
-pub use intro_slide::{IntroSlide, IntroSlideEvent};
+pub use intro_slide::IntroSlide;
 pub use offer_slide::{OfferSlide, OfferSlideEvent, OfferVariant};
 pub use onboarding_slide::OnboardingSlide;
 pub use theme_picker_slide::{ThemePickerSlide, ThemePickerSlideEvent};

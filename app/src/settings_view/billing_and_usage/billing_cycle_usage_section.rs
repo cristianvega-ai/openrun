@@ -15,7 +15,7 @@ use warpui::{
 };
 
 use crate::ai::AIRequestUsageModel;
-use crate::auth::{AuthManager, AuthStateProvider};
+use crate::auth::AuthStateProvider;
 use crate::menu::{self, Menu, MenuItem, MenuItemFields};
 use crate::settings_view::admin_actions::AdminActions;
 use crate::settings_view::billing_and_usage::billing_cycle_usage_common::{
@@ -86,7 +86,6 @@ impl BillingCycleUsageSectionView {
         ctx.subscribe_to_model(&AIRequestUsageModel::handle(ctx), |_, _, _, ctx| {
             ctx.notify()
         });
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |_, _, _, ctx| ctx.notify());
         ctx.subscribe_to_model(&TeamUpdateManager::handle(ctx), |_, _, _, ctx| ctx.notify());
 
         // `prevent_interaction_with_other_elements` so a click on the

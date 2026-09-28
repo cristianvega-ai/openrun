@@ -38,7 +38,6 @@ use crate::ai::pricing_promotion::{
 use crate::ai::request_usage_model::{
     AIRequestUsageModel, AIRequestUsageModelEvent, AMBIENT_AGENT_TRIAL_CREDIT_THRESHOLD,
 };
-use crate::auth::auth_manager::AuthManager;
 use crate::search::slash_command_menu::static_commands::commands;
 use crate::settings::AISettings;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
@@ -83,7 +82,6 @@ pub struct AgentMessageBarMouseStates {
     pub figma_enable_button: MouseStateHandle,
     /// Mouse state handle for dismissing the ambient credits banner.
     pub ambient_credits_banner_close: MouseStateHandle,
-    pub pricing_promotion: MouseStateHandle,
     pub pricing_promotion_close: MouseStateHandle,
 }
 
@@ -111,7 +109,6 @@ impl Entity for AgentMessageBar {
 #[derive(Clone, Debug)]
 pub enum AgentMessageBarAction {
     DismissAmbientCreditsBanner,
-    UpgradePricingPromotion,
     DismissPricingPromotion,
 }
 
@@ -409,8 +406,8 @@ impl View for AgentMessageBar {
             Some(render_dismissible_promo_pill(
                 message,
                 appearance.theme().ansi_fg_green(),
-                Some(self.mouse_states.pricing_promotion.clone()),
-                Some(AgentMessageBarAction::UpgradePricingPromotion),
+                None,
+                None,
                 self.mouse_states.pricing_promotion_close.clone(),
                 AgentMessageBarAction::DismissPricingPromotion,
                 app,
@@ -475,14 +472,6 @@ impl TypedActionView for AgentMessageBar {
                 AIRequestUsageModel::handle(ctx).update(ctx, |model, ctx| {
                     model.dismiss_ambient_credits_banner(ctx);
                 });
-            }
-            AgentMessageBarAction::UpgradePricingPromotion => {
-                PricingPromotionState::handle(ctx).update(ctx, |state, ctx| {
-                    state.record_clicked(PricingPromotionSurface::AgentMessageBar, ctx);
-                });
-                let upgrade_url = AuthManager::handle(ctx)
-                    .update(ctx, |auth_manager, _| auth_manager.upgrade_url());
-                ctx.open_url(&upgrade_url);
             }
             AgentMessageBarAction::DismissPricingPromotion => {
                 PricingPromotionState::handle(ctx).update(ctx, |state, ctx| {

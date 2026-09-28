@@ -57,8 +57,6 @@ use crate::ai::paths::host_native_absolute_path;
 use crate::ai::{AIRequestUsageModel, AIRequestUsageModelEvent};
 use crate::appearance::Appearance;
 use crate::auth::AuthStateProvider;
-use crate::auth::auth_manager::{AuthManager, LoginGatedFeature};
-use crate::auth::auth_view_modal::AuthViewVariant;
 use crate::cloud_object::GenericStringObjectFormat::Json;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
 use crate::cloud_object::{JsonObjectType, ObjectType};
@@ -1480,7 +1478,6 @@ impl Entity for AgentProfilesPageView {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentProfilesPageAction {
     HyperlinkClick(HyperlinkUrl),
-    AttemptLoginGatedUpgrade,
     RemoveFromCommandExecutionAllowlist(AgentModeCommandExecutionPredicate),
     RemoveFromCommandExecutionDenylist(AgentModeCommandExecutionPredicate),
     OpenMCPServerCollection,
@@ -1512,16 +1509,6 @@ pub enum AgentProfilesPageAction {
     CreateProfile,
 }
 
-impl From<&AgentProfilesPageAction> for LoginGatedFeature {
-    fn from(val: &AgentProfilesPageAction) -> LoginGatedFeature {
-        use AgentProfilesPageAction::*;
-        match val {
-            AttemptLoginGatedUpgrade => "Upgrade AI Usage",
-            _ => "Unknown reason",
-        }
-    }
-}
-
 impl TypedActionView for AgentProfilesPageView {
     type Action = AgentProfilesPageAction;
 
@@ -1530,15 +1517,6 @@ impl TypedActionView for AgentProfilesPageView {
             AgentProfilesPageAction::HyperlinkClick(hyperlink) => {
                 ctx.notify();
                 ctx.open_url(&hyperlink.url);
-            }
-            AgentProfilesPageAction::AttemptLoginGatedUpgrade => {
-                AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
-                    auth_manager.attempt_login_gated_feature(
-                        action.into(),
-                        AuthViewVariant::RequireLoginCloseable,
-                        ctx,
-                    )
-                });
             }
             AgentProfilesPageAction::RemoveFromCommandExecutionAllowlist(cmd) => {
                 BlocklistAIPermissions::handle(ctx).update(ctx, |model, ctx| {
@@ -2113,39 +2091,37 @@ impl SettingsWidget for UsageWidget {
             ]
         };
 
-        let mut upgrade_cta = FormattedTextElement::new(
-            FormattedText::new([FormattedTextLine::Line(upgrade_cta_text_fragments)]),
-            appearance.ui_font_size(),
-            appearance.ui_font_family(),
-            appearance.ui_font_family(),
-            styles::description_font_color(true, app).into(),
-            self.requests_highlight_index.clone(),
-        )
-        .with_hyperlink_font_color(appearance.theme().accent().into_solid());
+        let mut column = Flex::column().with_children([
+            render_separator(appearance),
+            usage_header,
+            request_usage_row,
+        ]);
 
-        if AuthStateProvider::as_ref(app)
+        // Upgrading requires an account.
+        if !AuthStateProvider::as_ref(app)
             .get()
             .is_anonymous_or_logged_out()
         {
-            upgrade_cta = upgrade_cta.register_default_click_handlers(|_, ctx, _| {
-                ctx.dispatch_typed_action(AgentProfilesPageAction::AttemptLoginGatedUpgrade);
-            });
-        } else {
-            upgrade_cta = upgrade_cta.register_default_click_handlers(|url, ctx, _| {
+            let upgrade_cta = FormattedTextElement::new(
+                FormattedText::new([FormattedTextLine::Line(upgrade_cta_text_fragments)]),
+                appearance.ui_font_size(),
+                appearance.ui_font_family(),
+                appearance.ui_font_family(),
+                styles::description_font_color(true, app).into(),
+                self.requests_highlight_index.clone(),
+            )
+            .with_hyperlink_font_color(appearance.theme().accent().into_solid())
+            .register_default_click_handlers(|url, ctx, _| {
                 ctx.dispatch_typed_action(AgentProfilesPageAction::HyperlinkClick(url));
-            })
-        }
-
-        Flex::column()
-            .with_children([
-                render_separator(appearance),
-                usage_header,
-                request_usage_row,
+            });
+            column.add_child(
                 Container::new(upgrade_cta.finish())
                     .with_margin_bottom(16.)
                     .finish(),
-            ])
-            .finish()
+            );
+        }
+
+        column.finish()
     }
 }
 

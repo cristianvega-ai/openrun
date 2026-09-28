@@ -1,22 +1,20 @@
 use std::fmt::Display;
 use std::sync::Arc;
 
-use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use settings::macros::{define_settings_group, maybe_define_setting, register_settings_events};
 use settings::{RespectUserSyncSetting, Setting, SupportedPlatforms, SyncToCloud};
 use warp_errors::report_error;
-use warp_graphql::mutations::update_user_settings::UpdateUserSettingsInput;
 pub use warp_terminal::model::secrets::RegexDisplayInfo;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity, UpdateModel};
 
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_state::AuthState;
 use crate::server::server_api::ServerApiProvider;
+use crate::server::server_api::auth::AuthClient;
 #[cfg(any(test, feature = "test-util"))]
 use crate::server::server_api::auth::MockAuthClient;
-use crate::server::server_api::auth::{AuthClient, SyncedUserSettings};
 use crate::terminal::safe_mode_settings::SafeModeSettings;
 use crate::workspaces::workspace::EnterpriseSecretRegex;
 
@@ -162,9 +160,7 @@ impl PrivacySettings {
         );
     }
 
-    /// Returns a new PrivacySettings object initialized from locally cached values. Server-side
-    /// settings are fetched later via `fetch_or_update_settings`, which is called from
-    /// `on_user_fetched` after the user's auth state is established.
+    /// Returns a new PrivacySettings object initialized from locally cached values.
     fn new(ctx: &mut ModelContext<Self>) -> Self {
         let auth_state = AuthStateProvider::as_ref(ctx).get().clone();
         let auth_client = ServerApiProvider::as_ref(ctx).get_auth_client();
@@ -268,60 +264,6 @@ impl PrivacySettings {
         // TODO(zach): this seems incorrect - should we also update the values on disk?
         self.is_cloud_conversation_storage_enabled = true;
         self.is_enterprise_secret_redaction_enabled = false;
-    }
-
-    /// Fetch the user's privacy settings from the server if any or update the server settings.
-    pub fn fetch_or_update_settings(&self, ctx: &mut ModelContext<Self>) {
-        let auth_client_clone = self.auth_client.clone();
-        let _ = ctx.spawn(
-            async move { auth_client_clone.get_user_settings().await },
-            Self::initialize_from_fetched_settings_or_update_settings,
-        );
-    }
-
-    /// Initializes state from the [`SyncedUserSettings`] fetched from the server, if any.
-    /// If there are no settings from the server, updates the server settings with local settings.
-    /// TODO: Make this a server-side db transaction.
-    fn initialize_from_fetched_settings_or_update_settings(
-        &mut self,
-        fetched_settings: Result<Option<SyncedUserSettings>>,
-        ctx: &mut ModelContext<PrivacySettings>,
-    ) {
-        match fetched_settings {
-            Ok(Some(fetched_settings)) => {
-                // Where settings differ, we respect whichever setting that is disabled.
-                self.overwrite_local_settings_if_cloud_disabled(fetched_settings, ctx);
-                // If any local setting is disabled, we have to update the server.
-                if !self.is_cloud_conversation_storage_enabled {
-                    self.update_server_with_local_settings(ctx);
-                }
-            }
-            Ok(None) => {
-                // This indicates the user had not logged in before.
-                log::info!("User has no synced privacy settings.");
-                self.update_server_with_local_settings(ctx);
-            }
-            Err(err) => {
-                report_error!(err.context("Failed to fetch user settings."));
-            }
-        }
-
-        self.initialize_default_regexes_once(ctx);
-    }
-
-    fn overwrite_local_settings_if_cloud_disabled(
-        &mut self,
-        fetched_settings: SyncedUserSettings,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if self.is_cloud_conversation_storage_enabled
-            && !fetched_settings.is_cloud_conversation_storage_enabled
-        {
-            self.set_is_cloud_conversation_storage_enabled(
-                fetched_settings.is_cloud_conversation_storage_enabled,
-                ctx,
-            );
-        }
     }
 
     /// Constructor for tests only.
@@ -444,19 +386,8 @@ impl PrivacySettings {
         ctx.notify();
     }
 
-    /// Disables the default regex trigger, so that it will not be executed.
-    pub fn disable_default_regex_trigger(&mut self, ctx: &mut ModelContext<Self>) {
-        if self
-            .has_initialized_default_secret_regexes
-            .set_value(true, ctx)
-            .is_err()
-        {
-            report_error!("Failed to disable default regex trigger");
-        }
-    }
-
-    /// Initializes the custom secret regex list with the default regexes.
-    /// This will only be executed once per user, and only if they haven't already initialized.
+    /// Adds the recommended secret regexes to the custom list. Runs once per profile, so patterns the
+    /// user removes afterwards stay removed.
     pub fn initialize_default_regexes_once(&mut self, ctx: &mut ModelContext<Self>) {
         // Only initialize if we haven't done so before
         if !*self.has_initialized_default_secret_regexes.value() {
@@ -470,31 +401,6 @@ impl PrivacySettings {
             {
                 report_error!("Failed to set has_initialized_default_secret_regexes flag");
             }
-        }
-    }
-
-    /// Sends request(s) to update server-side user settings with current local values.
-    fn update_server_with_local_settings(&self, ctx: &mut ModelContext<Self>) {
-        if self.auth_state.is_logged_in() {
-            let auth_client = self.auth_client.clone();
-            let snapshot = self.get_snapshot();
-            let _ = ctx.spawn(
-                async move {
-                    let result = auth_client
-                        .update_user_settings(UpdateUserSettingsInput {
-                            cloud_conversation_storage_enabled: snapshot
-                                .cloud_conversation_storage_enabled(),
-                            ..Default::default()
-                        })
-                        .await;
-                    if let Err(err) = result {
-                        report_error!(
-                            err.context("Failed to update server with local privacy settings.")
-                        )
-                    }
-                },
-                |_, _, _| (),
-            );
         }
     }
 }

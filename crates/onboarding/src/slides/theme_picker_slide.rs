@@ -27,29 +27,16 @@ use crate::telemetry::OnboardingEvent;
 
 #[derive(Debug, Clone)]
 pub enum ThemePickerSlideEvent {
-    ThemeSelected {
-        theme_name: String,
-    },
-    SyncWithOsToggled {
-        enabled: bool,
-    },
-    /// Emitted when the user clicks the "Privacy Settings" link on the terminal
-    /// intention theme slide. The parent orchestrator is expected to open the
-    /// privacy settings (e.g. via a LoginSlideView in privacy-only mode).
-    PrivacySettingsRequested,
+    ThemeSelected { theme_name: String },
+    SyncWithOsToggled { enabled: bool },
 }
 
 #[derive(Debug, Clone)]
 pub enum ThemePickerSlideAction {
-    SelectTheme {
-        index: usize,
-    },
+    SelectTheme { index: usize },
     ToggleSyncWithOs,
     BackClicked,
     NextClicked,
-    /// Dispatched when the user clicks the "Privacy Settings" link in the
-    /// terminal-intention disclaimer block below the theme options.
-    PrivacySettingsClicked,
 }
 
 const TOS_URL: &str = "https://www.warp.dev/terms-of-service";
@@ -67,7 +54,6 @@ pub struct ThemePickerSlide {
     sync_with_os: bool,
     sync_with_os_mouse: MouseStateHandle,
     tos_mouse_state: MouseStateHandle,
-    privacy_settings_mouse_state: MouseStateHandle,
     back_button: button::Button,
     next_button: button::Button,
     scroll_state: ClippedScrollStateHandle,
@@ -116,7 +102,6 @@ impl ThemePickerSlide {
             sync_with_os: false,
             sync_with_os_mouse: MouseStateHandle::default(),
             tos_mouse_state: MouseStateHandle::default(),
-            privacy_settings_mouse_state: MouseStateHandle::default(),
             back_button: button::Button::default(),
             next_button: button::Button::default(),
             scroll_state: ClippedScrollStateHandle::new(),
@@ -168,10 +153,8 @@ impl ThemePickerSlide {
             self.render_sync_with_os_section(appearance),
         ];
 
-        // Add the Privacy Settings / Terms of Service disclaimer block below the
-        // theme options when the user has selected the terminal intention, since
-        // the terminal-intent flow skips the login slide (which surfaces the same
-        // links).
+        // Add the Terms of Service disclaimer below the theme options on the
+        // terminal-intention path.
         let state = self.onboarding_state.as_ref(app);
         let is_terminal = matches!(state.intention(), OnboardingIntention::Terminal);
         if !FeatureFlag::AccountFirstOnboarding.is_enabled() && is_terminal {
@@ -549,36 +532,6 @@ impl ThemePickerSlide {
             ..Default::default()
         };
 
-        // The disclaimer block is only rendered on the Terminal-without-Drive
-        // path (see `render_theme_picker_content`), where AI is not part of the
-        // selected onboarding settings; skip the "and AI features" wording.
-        let privacy_line = Flex::row()
-            .with_child(
-                ui_builder
-                    .span("If you'd like to opt out of analytics, you can adjust your ")
-                    .with_style(disclaimer_styles)
-                    .build()
-                    .finish(),
-            )
-            .with_child(
-                ui_builder
-                    .link(
-                        "Privacy Settings".into(),
-                        None,
-                        Some(Box::new(|ctx| {
-                            ctx.dispatch_typed_action(
-                                ThemePickerSlideAction::PrivacySettingsClicked,
-                            );
-                        })),
-                        self.privacy_settings_mouse_state.clone(),
-                    )
-                    .soft_wrap(false)
-                    .with_style(link_styles)
-                    .build()
-                    .finish(),
-            )
-            .finish();
-
         let tos_line = Flex::row()
             .with_child(
                 ui_builder
@@ -606,8 +559,7 @@ impl ThemePickerSlide {
             Flex::column()
                 .with_main_axis_size(MainAxisSize::Min)
                 .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                .with_child(privacy_line)
-                .with_child(Container::new(tos_line).with_margin_top(8.).finish())
+                .with_child(tos_line)
                 .finish(),
         )
         .with_margin_top(24.)
@@ -706,9 +658,6 @@ impl TypedActionView for ThemePickerSlide {
             }
             ThemePickerSlideAction::NextClicked => {
                 self.next(ctx);
-            }
-            ThemePickerSlideAction::PrivacySettingsClicked => {
-                ctx.emit(ThemePickerSlideEvent::PrivacySettingsRequested);
             }
         }
     }

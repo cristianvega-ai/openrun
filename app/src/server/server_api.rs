@@ -12,7 +12,6 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ::http::header::CONTENT_LENGTH;
 use ai::AIClient;
 use anyhow::{Context, Result, anyhow};
 use auth::AuthClient;
@@ -24,7 +23,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use team::TeamClient;
 use warp_core::context_flag::ContextFlag;
-use warp_errors::{AnyhowErrorExt, ErrorExt, register_error, report_error};
+use warp_errors::{AnyhowErrorExt, ErrorExt, register_error};
 use warp_server_client::HttpStatusError;
 use warp_server_client::auth::{AuthClientImpl, AuthEvent};
 use warp_server_client::base_client::{
@@ -41,7 +40,6 @@ use crate::ChannelState;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::get_relevant_files::api::{GetRelevantFiles, GetRelevantFilesResponse};
 use crate::ai::voice::transcribe::{TranscribeRequest, TranscribeResponse};
-use crate::auth::auth_manager::AuthManager;
 use crate::auth::auth_state::AuthState;
 use crate::server::team_scope::RequestTeamScope;
 
@@ -447,25 +445,6 @@ impl ServerApi {
         let client = Arc::new(http_client::Client::new_for_test());
 
         Self::new_with_parts(client, auth_state, tx, None)
-    }
-
-    #[cfg(all(test, feature = "skip_login"))]
-    fn new_for_test_with_bearer_token(
-        bearer_token: Option<String>,
-        event_sender: async_channel::Sender<AuthEvent>,
-    ) -> Self {
-        let auth_state = Arc::new(AuthState::new_logged_out_for_test());
-        if let Some(bearer_token) = bearer_token {
-            auth_state.set_credentials(Some(crate::auth::credentials::Credentials::Bearer(
-                bearer_token,
-            )));
-        }
-        Self::new_with_parts(
-            Arc::new(http_client::Client::new_for_test()),
-            auth_state,
-            event_sender,
-            None,
-        )
     }
 
     /// Sets the ambient agent task ID to be sent with all subsequent requests.
@@ -898,39 +877,6 @@ impl ServerApi {
         }
     }
 
-    /// Sends an authenticated empty POST request to /client/login, which signals to the server
-    /// that the user is logged in.
-    pub async fn notify_login(&self) {
-        match self.get_or_refresh_access_token().await {
-            Ok(auth_token) => {
-                let url = format!("{}/client/login", ChannelState::server_root_url());
-                let mut request = self.base_client.http_client().post(&url);
-                if let Some(token) = auth_token.as_bearer_token() {
-                    request = request.bearer_auth(token);
-                }
-                request = request
-                    // Set the content-length header to 0 because the request has no body.
-                    // Otherwise, the server will return a 411 error. (In other cases, setting
-                    // content-type is sufficient (elides the content-length requirement), but
-                    // since this request has no body, it makes more sense to set content-length.
-                    .header(CONTENT_LENGTH, 0);
-
-                let response = request.send().await;
-                if let Err(err) = response {
-                    report_error!(
-                        anyhow::Error::new(err)
-                            .context("Failed to send POST request to /client/login")
-                    );
-                }
-            }
-            Err(err) => {
-                report_error!(
-                    err.context("Could not retrieve access token for notifying user login")
-                );
-            }
-        }
-    }
-
     pub async fn get_relevant_files(
         &self,
         request: &GetRelevantFiles,
@@ -1042,22 +988,6 @@ impl ServerApiProvider {
             event_receiver,
             move |_, event, ctx| {
                 match event {
-                    AuthEvent::UserAccountDisabled => {
-                        // We dispatch a global action here because the log out code requires
-                        // `server_api`, causing a circular model reference panic when it calls
-                        // `ServerApiProvider` to get access.
-                        // TODO: We should remove this pattern where `ServerApiProvider` responds
-                        // to events; it's prone to these sorts of circular reference issues.
-                        ctx.dispatch_global_action("app:log_out", ());
-                    }
-                    AuthEvent::NeedsReauth => {
-                        // AuthManager depends on a reference to ServerApi, so ServerApi can't easily
-                        // hold a ref to AuthManager. To get around this, we emit an event on ServerApi
-                        // and handle calling the AuthManager here instead.
-                        AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
-                            auth_manager.set_needs_reauth(true, ctx);
-                        });
-                    }
                     AuthEvent::IapChallengeReceived => {
                         IapManager::handle(ctx)
                             .update(ctx, |manager, ctx| manager.handle_challenge(ctx));

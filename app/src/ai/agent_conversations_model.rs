@@ -45,7 +45,6 @@ use crate::ai::blocklist::{
 use crate::ai::cloud_environments::CloudAmbientAgentEnvironment;
 use crate::ai::conversation_navigation::ConversationNavigationData;
 use crate::auth::AuthStateProvider;
-use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
 use crate::cloud_object::CloudObjectLookup as _;
 use crate::network::{NetworkStatus, NetworkStatusEvent, NetworkStatusKind};
 use crate::server::cloud_objects::update_manager::{UpdateManager, UpdateManagerEvent};
@@ -703,10 +702,6 @@ impl AgentConversationsModel {
         let window_manager = WindowManager::handle(ctx);
         ctx.subscribe_to_model(&window_manager, Self::handle_window_state_changed);
 
-        // Subscribe to auth events to retry initial sync when user becomes available
-        let auth_manager = AuthManager::handle(ctx);
-        ctx.subscribe_to_model(&auth_manager, Self::handle_auth_manager_event);
-
         let history_model = BlocklistAIHistoryModel::handle(ctx);
         ctx.subscribe_to_model(&history_model, move |me, _, event, ctx| {
             me.handle_history_event(event, ctx);
@@ -782,22 +777,6 @@ impl AgentConversationsModel {
                     self.update_polling_state(ctx);
                 }
             }
-        }
-    }
-
-    fn handle_auth_manager_event(
-        &mut self,
-        _: ModelHandle<AuthManager>,
-        event: &AuthManagerEvent,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        // When auth completes, start the initial cloud sync if it has not started yet.
-        // Only sync if we're not in CLI mode
-        if matches!(event, AuthManagerEvent::AuthComplete)
-            && self.initial_load_state.can_start_cloud_load()
-            && AppExecutionMode::as_ref(ctx).can_fetch_agent_runs_for_management()
-        {
-            self.fetch_ambient_agent_tasks_and_cloud_convo_metadata(ctx);
         }
     }
 

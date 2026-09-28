@@ -11,8 +11,7 @@ use crate::ai::execution_profiles::{
 };
 use crate::ai::llms::LLMId;
 use crate::ai::mcp::TemplatableMCPServerManager;
-use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
-use crate::auth::user::{TEST_USER_UID, User};
+use crate::auth::user::TEST_USER_UID;
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::cloud_object::model::actions::ObjectActions;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
@@ -23,7 +22,6 @@ use crate::cloud_object::{
 use crate::network::NetworkStatus;
 use crate::server::cloud_objects::update_manager::{InitialLoadResponse, UpdateManager};
 use crate::server::ids::{ServerId, ServerIdAndType, SyncId};
-use crate::server::server_api::ServerApiProvider;
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::{AISettings, PrivacySettings};
 use crate::test_util::settings::initialize_settings_for_tests;
@@ -155,9 +153,8 @@ fn gui_default_execute_commands_remains_always_ask() {
 /// `edit_profile_internal` would silently drop edits made to an `Unsynced`
 /// default profile whenever `personal_drive` returned `None` (logged-out
 /// users). `apply_agent_settings` calls `set_*` on the default profile the
-/// moment onboarding completes, which can happen before the user logs in
-/// (e.g. `LoginSlideEvent::LoginLaterConfirmed`), so those edits must
-/// persist on the local `Unsynced` state rather than being dropped.
+/// moment onboarding completes, so those edits must persist on the local
+/// `Unsynced` state rather than being dropped.
 #[test]
 fn edits_persist_on_unsynced_default_profile_when_logged_out() {
     App::test((), |mut app| async move {
@@ -395,122 +392,6 @@ fn materialized_pending_profile_is_rekeyed_after_server_id_arrives() {
             assert_eq!(
                 model.get_profile_id_by_sync_id(&SyncId::ServerId(server_id), ctx),
                 Some(migrated_key)
-            );
-        });
-    });
-}
-
-#[test]
-fn migration_retries_after_auth_completes() {
-    let _guard = FeatureFlag::FileBackedExecutionProfiles.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        install_singletons(&mut app, AuthStateProvider::new_logged_out_for_test());
-        app.add_singleton_model(|_| ServerApiProvider::new_for_test());
-        app.add_singleton_model(AuthManager::new_for_test);
-
-        let server_id = ServerId::from(504);
-        let legacy_profile = owned_legacy_profile(
-            SyncId::ServerId(server_id),
-            server_id,
-            AIExecutionProfile {
-                name: "Migrated after auth".to_string(),
-                read_files: ActionPermission::AlwaysAllow,
-                ..Default::default()
-            },
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, ctx| {
-            cloud_model.upsert_from_server_object(legacy_profile, ctx);
-        });
-
-        let _profile_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
-        complete_cloud_initial_load(&mut app);
-        app.read(|ctx| {
-            assert!(
-                !AISettings::as_ref(ctx)
-                    .execution_profiles
-                    .is_value_explicitly_set()
-            );
-        });
-
-        AuthManager::handle(&app).update(&mut app, |_auth_manager, ctx| {
-            AuthStateProvider::as_ref(ctx)
-                .get()
-                .set_user(Some(User::test()));
-            ctx.emit(AuthManagerEvent::AuthComplete);
-        });
-
-        let migrated_key = ExecutionProfileId::from_legacy_server_id(server_id);
-        app.read(|ctx| {
-            assert_eq!(
-                AISettings::as_ref(ctx)
-                    .execution_profiles
-                    .value()
-                    .profile(&migrated_key)
-                    .map(|profile| profile.read_files),
-                Some(ActionPermission::AlwaysAllow)
-            );
-        });
-    });
-}
-
-#[test]
-fn auth_completion_waits_for_cloud_initial_load_before_migrating() {
-    let _guard = FeatureFlag::FileBackedExecutionProfiles.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        install_singletons(&mut app, AuthStateProvider::new_logged_out_for_test());
-        app.add_singleton_model(|_| ServerApiProvider::new_for_test());
-        app.add_singleton_model(AuthManager::new_for_test);
-
-        let profile_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
-        AuthManager::handle(&app).update(&mut app, |_auth_manager, ctx| {
-            AuthStateProvider::as_ref(ctx)
-                .get()
-                .set_user(Some(User::test()));
-            ctx.emit(AuthManagerEvent::AuthComplete);
-        });
-
-        app.read(|ctx| {
-            assert!(
-                !AISettings::as_ref(ctx)
-                    .execution_profiles
-                    .is_value_explicitly_set()
-            );
-        });
-
-        let server_id = ServerId::from(516);
-        let legacy_profile = owned_legacy_profile(
-            SyncId::ServerId(server_id),
-            server_id,
-            AIExecutionProfile {
-                name: "Loaded after auth".to_string(),
-                read_files: ActionPermission::AlwaysAllow,
-                ..Default::default()
-            },
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, ctx| {
-            cloud_model.update_objects_from_initial_load(vec![legacy_profile], false, false, ctx);
-        });
-        complete_cloud_initial_load(&mut app);
-
-        let migrated_key = ExecutionProfileId::from_legacy_server_id(server_id);
-        app.read(|ctx| {
-            assert_eq!(
-                AISettings::as_ref(ctx)
-                    .execution_profiles
-                    .value()
-                    .profile(&migrated_key)
-                    .map(|profile| profile.read_files),
-                Some(ActionPermission::AlwaysAllow)
-            );
-        });
-        profile_model.read(&app, |model, ctx| {
-            assert_eq!(
-                model
-                    .get_profile_by_id(&migrated_key, ctx)
-                    .map(|profile| profile.data().name.clone()),
-                Some("Loaded after auth".to_string())
             );
         });
     });

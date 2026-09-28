@@ -85,10 +85,6 @@ impl PricingPromotionState {
         }
     }
 
-    pub fn record_clicked(&self, surface: PricingPromotionSurface, ctx: &mut ModelContext<Self>) {
-        send_telemetry_from_ctx!(PricingPromotionTelemetryEvent::Clicked { surface }, ctx);
-    }
-
     pub fn dismiss(&mut self, surface: PricingPromotionSurface, ctx: &mut ModelContext<Self>) {
         match surface {
             PricingPromotionSurface::AgentMessageBar => self.agent_dismissed = true,
@@ -130,7 +126,6 @@ impl SingletonEntity for PricingPromotionState {}
 #[strum_discriminants(derive(EnumIter))]
 enum PricingPromotionTelemetryEvent {
     Shown { surface: PricingPromotionSurface },
-    Clicked { surface: PricingPromotionSurface },
     Dismissed { surface: PricingPromotionSurface },
 }
 
@@ -141,9 +136,7 @@ impl TelemetryEvent for PricingPromotionTelemetryEvent {
 
     fn payload(&self) -> Option<Value> {
         let surface = match self {
-            Self::Shown { surface } | Self::Clicked { surface } | Self::Dismissed { surface } => {
-                surface
-            }
+            Self::Shown { surface } | Self::Dismissed { surface } => surface,
         };
         Some(json!({
             "surface": surface.as_str(),
@@ -171,7 +164,6 @@ impl TelemetryEventDesc for PricingPromotionTelemetryEventDiscriminants {
     fn name(&self) -> &'static str {
         match self {
             Self::Shown => "PricingPromotion.Shown",
-            Self::Clicked => "PricingPromotion.Clicked",
             Self::Dismissed => "PricingPromotion.Dismissed",
         }
     }
@@ -179,7 +171,6 @@ impl TelemetryEventDesc for PricingPromotionTelemetryEventDiscriminants {
     fn description(&self) -> &'static str {
         match self {
             Self::Shown => "A pricing promotion was shown",
-            Self::Clicked => "A pricing promotion was clicked",
             Self::Dismissed => "A pricing promotion was dismissed",
         }
     }

@@ -32,6 +32,11 @@ impl SettingsPaneManager {
             .clone()
     }
 
+    /// Settings views of every window that has one. Windows still in onboarding have none.
+    pub fn settings_views(&self) -> impl Iterator<Item = &ViewHandle<SettingsView>> {
+        self.panes.values().map(|data| &data.settings_view)
+    }
+
     pub fn register_view(&mut self, window_id: WindowId, view: ViewHandle<SettingsView>) {
         if let Some(data) = self.panes.get_mut(&window_id) {
             data.settings_view = view;

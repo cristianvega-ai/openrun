@@ -33,7 +33,6 @@ use warpui::elements::{
 };
 use warpui::fonts::{Properties, Weight};
 use warpui::keymap::{ContextPredicate, Keystroke};
-use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::ui_components::switch::{SwitchStateHandle, TooltipConfig};
 use warpui::{
@@ -1933,17 +1932,11 @@ impl WarpAgentPageView {
         categories.push(Category::new("Other", other_widgets));
 
         let global_ai_switch_state = SwitchStateHandle::default();
-        let global_ai_sign_up_button = MouseStateHandle::default();
         PageType::new_categorized(
             categories,
             Some(PageTitle::new("Warp Agent").with_trailing_element(
                 move |_view, appearance, app| {
-                    render_global_ai_toggle(
-                        &global_ai_switch_state,
-                        &global_ai_sign_up_button,
-                        appearance,
-                        app,
-                    )
+                    render_global_ai_toggle(&global_ai_switch_state, appearance, app)
                 },
             )),
         )
@@ -2010,7 +2003,6 @@ pub enum WarpAgentPageEvent {
     OpenCustomRouterEditor(Option<crate::ai::custom_model_routers::CustomModelRouter>),
     #[cfg(feature = "local_fs")]
     OpenCustomRouterFile(PathBuf),
-    SignupAnonymousUser,
     ShowModal,
     HideModal,
 }
@@ -2037,7 +2029,6 @@ pub enum WarpAgentPageAction {
     SetOrchestrationMessageDisplayMode(OrchestrationMessageDisplayMode),
     SetPromptSubmissionMode(PromptSubmissionMode),
     SetLongRunningCommandSubmissionMode(LongRunningCommandSubmissionMode),
-    SignupAnonymousUser,
     ToggleAwsBedrockAutoLogin,
     ToggleAwsBedrockCredentialsEnabled,
     RefreshAwsBedrockCredentials,
@@ -2263,9 +2254,6 @@ impl TypedActionView for WarpAgentPageView {
                 });
                 ctx.notify();
             }
-            WarpAgentPageAction::SignupAnonymousUser => {
-                ctx.emit(WarpAgentPageEvent::SignupAnonymousUser);
-            }
             WarpAgentPageAction::ToggleAwsBedrockAutoLogin => {
                 AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.aws_bedrock_auto_login.toggle_and_save_value(ctx));
@@ -2475,7 +2463,6 @@ impl From<ViewHandle<WarpAgentPageView>> for SettingsPageViewHandle {
 /// The page title's trailing widget: the global master switch for all AI features.
 fn render_global_ai_toggle(
     switch_state: &SwitchStateHandle,
-    sign_up_button: &MouseStateHandle,
     appearance: &Appearance,
     app: &AppContext,
 ) -> Box<dyn Element> {
@@ -2510,56 +2497,25 @@ fn render_global_ai_toggle(
         );
     }
 
-    // Show sign-up button for anonymous users, toggle for logged-in users
+    // AI features require an account, so there is nothing to toggle without one.
     if is_anonymous {
         row.add_child(
-            Flex::row()
-                .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_child(
-                    Container::new(
-                        Text::new_inline(
-                            "To use AI features, please create an account.",
-                            appearance.ui_font_family(),
-                            14.,
-                        )
-                        .with_color(
-                            appearance
-                                .theme()
-                                .sub_text_color(appearance.theme().surface_2())
-                                .into_solid(),
-                        )
-                        .finish(),
-                    )
-                    .with_margin_right(16.)
-                    .finish(),
+            Container::new(
+                Text::new_inline(
+                    "AI features require a Warp account.",
+                    appearance.ui_font_family(),
+                    14.,
                 )
-                .with_child(
-                    Container::new(
-                        ui_builder
-                            .button(ButtonVariant::Accent, sign_up_button.clone())
-                            .with_style(UiComponentStyles {
-                                font_size: Some(14.),
-                                font_weight: Some(Weight::Semibold),
-                                border_radius: Some(CornerRadius::with_all(Radius::Pixels(4.))),
-                                padding: Some(Coords {
-                                    top: 8.,
-                                    bottom: 8.,
-                                    left: 24.,
-                                    right: 24.,
-                                }),
-                                ..Default::default()
-                            })
-                            .with_text_label("Sign up".to_owned())
-                            .build()
-                            .on_click(move |ctx, _, _| {
-                                ctx.dispatch_typed_action(WarpAgentPageAction::SignupAnonymousUser);
-                            })
-                            .finish(),
-                    )
-                    .with_padding_right(TOGGLE_BUTTON_RIGHT_PADDING)
-                    .finish(),
+                .with_color(
+                    appearance
+                        .theme()
+                        .sub_text_color(appearance.theme().surface_2())
+                        .into_solid(),
                 )
                 .finish(),
+            )
+            .with_margin_right(16.)
+            .finish(),
         );
     } else {
         row.add_child(
@@ -4439,13 +4395,9 @@ impl SettingsWidget for ApiKeysWidget {
             } else if FeatureFlag::SoloUserByok.is_enabled()
                 && auth_state.is_anonymous_or_logged_out()
             {
-                vec![
-                    FormattedTextFragment::hyperlink_action(
-                        "Create an account",
-                        WarpAgentPageAction::SignupAnonymousUser,
-                    ),
-                    FormattedTextFragment::plain_text(" to use your own API keys."),
-                ]
+                vec![FormattedTextFragment::plain_text(
+                    "Using your own API keys requires a Warp account.",
+                )]
             } else {
                 let user_id = auth_state.user_id().unwrap_or_default();
                 let upgrade_url = UserWorkspaces::upgrade_link(user_id);

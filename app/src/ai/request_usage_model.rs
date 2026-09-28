@@ -412,13 +412,6 @@ impl AIRequestUsageModel {
         );
     }
 
-    /// Clears the server-authoritative availability state, e.g. on logout.
-    pub fn reset_server_availability(&mut self, ctx: &mut ModelContext<Self>) {
-        self.server_availability = ServerAvailabilityState::default();
-        ctx.emit(AIRequestUsageModelEvent::CreditAvailabilityUpdated);
-        ctx.notify();
-    }
-
     pub fn provide_negative_feedback_response_for_ai_conversation(
         &mut self,
         client_conversation_id: AIConversationId,

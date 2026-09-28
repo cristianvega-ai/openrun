@@ -27,8 +27,8 @@ pub enum Credentials {
     Bearer(String),
     /// Authentication derived from an ambient browser session cookie.
     SessionCookie,
-    /// Test credentials used in unit tests, integration tests, and skip_login builds.
-    #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+    /// Test credentials used in unit tests and integration tests.
+    #[cfg(any(test, feature = "integration_tests"))]
     Test,
 }
 
@@ -40,7 +40,7 @@ impl Credentials {
             Credentials::ApiKey { .. } => None,
             Credentials::Bearer(_) => None,
             Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(any(test, feature = "integration_tests"))]
             Credentials::Test => None,
         }
     }
@@ -52,7 +52,7 @@ impl Credentials {
             Credentials::Firebase(_) => None,
             Credentials::Bearer(_) => None,
             Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(any(test, feature = "integration_tests"))]
             Credentials::Test => None,
         }
     }
@@ -64,7 +64,7 @@ impl Credentials {
             Credentials::Firebase(_) => None,
             Credentials::Bearer(_) => None,
             Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(any(test, feature = "integration_tests"))]
             Credentials::Test => None,
         }
     }
@@ -76,7 +76,7 @@ impl Credentials {
             Credentials::ApiKey { .. } => None,
             Credentials::Bearer(_) => None,
             Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(any(test, feature = "integration_tests"))]
             Credentials::Test => None,
         }
     }
@@ -88,7 +88,7 @@ impl Credentials {
             Credentials::ApiKey { key, .. } => AuthToken::ApiKey(key.clone()),
             Credentials::Bearer(token) => AuthToken::Bearer(token.clone()),
             Credentials::SessionCookie => AuthToken::NoAuth,
-            #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(any(test, feature = "integration_tests"))]
             Credentials::Test => AuthToken::NoAuth,
         }
     }
@@ -100,7 +100,7 @@ impl Credentials {
             Credentials::Firebase(_) | Credentials::ApiKey { .. } | Credentials::SessionCookie => {
                 false
             }
-            #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(any(test, feature = "integration_tests"))]
             Credentials::Test => false,
         }
     }
@@ -114,7 +114,7 @@ impl Credentials {
             Credentials::ApiKey { key, .. } => Some(LoginToken::ApiKey(key.clone())),
             Credentials::Bearer(_) => None,
             Credentials::SessionCookie => Some(LoginToken::SessionCookie),
-            #[cfg(any(test, feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(any(test, feature = "integration_tests"))]
             Credentials::Test => None,
         }
     }
@@ -131,12 +131,7 @@ pub enum AuthToken {
     Bearer(String),
     /// No authentication token available (e.g. session cookie auth or test credentials).
     #[cfg_attr(
-        not(any(
-            test,
-            feature = "integration_tests",
-            feature = "skip_login",
-            feature = "test-util"
-        )),
+        not(any(test, feature = "integration_tests", feature = "test-util")),
         allow(dead_code)
     )]
     NoAuth,

@@ -13,12 +13,6 @@ fn promotion_telemetry_payload_includes_surface() {
             "agent_message_bar",
         ),
         (
-            PricingPromotionTelemetryEvent::Clicked {
-                surface: PricingPromotionSurface::AgentMessageBar,
-            },
-            "agent_message_bar",
-        ),
-        (
             PricingPromotionTelemetryEvent::Dismissed {
                 surface: PricingPromotionSurface::TerminalMessageBar,
             },

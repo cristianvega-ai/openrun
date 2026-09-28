@@ -82,10 +82,6 @@ impl AuthSession {
     }
 
     pub async fn get_or_refresh_access_token(&self) -> Result<AuthToken> {
-        if cfg!(feature = "skip_login") {
-            bail!("skip_login enabled; failing all authenticated requests");
-        }
-
         let Some(credentials) = self.auth_state.credentials() else {
             bail!("missing authentication credentials");
         };
@@ -123,7 +119,7 @@ impl AuthSession {
                 }
             }
             Credentials::SessionCookie => Ok(AuthToken::NoAuth),
-            #[cfg(any(feature = "integration_tests", feature = "skip_login"))]
+            #[cfg(feature = "integration_tests")]
             Credentials::Test => Ok(AuthToken::NoAuth),
         }
     }

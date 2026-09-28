@@ -85,7 +85,7 @@ use crate::util::bindings::CustomAction;
 use crate::view_components::{DismissibleToast, ToastLink, ToastType};
 use crate::workflows::CloudWorkflow;
 use crate::workflows::workflow::{Argument, Workflow};
-use crate::workspace::{ToastStack, WorkspaceAction};
+use crate::workspace::ToastStack;
 use crate::{FeatureFlag, UserWorkspaces, send_telemetry_from_ctx};
 
 mod alias_argument_selector;
@@ -2547,20 +2547,16 @@ impl WorkflowView {
             .unwrap_or_else(|| UserWorkspaces::upgrade_link(user_id));
 
         let window_id = ctx.window_id();
-        let toast_link = if self.auth_state.is_anonymous_or_logged_out() {
-            ToastLink::new("Upgrade for more credits.".into())
-                .with_onclick_action(WorkspaceAction::AttemptLoginGatedAIUpgrade)
-        } else {
-            ToastLink::new("Upgrade for more credits.".into()).with_href(upgrade_link)
-        };
+        let mut toast = DismissibleToast::error("Looks like you're out of AI credits.".into());
+        // Upgrading requires an account.
+        if !self.auth_state.is_anonymous_or_logged_out() {
+            toast = toast.with_link(
+                ToastLink::new("Upgrade for more credits.".into()).with_href(upgrade_link),
+            );
+        }
 
         crate::workspace::ToastStack::handle(ctx).update(ctx, |stack, ctx| {
-            stack.add_ephemeral_toast(
-                DismissibleToast::error("Looks like you're out of AI credits.".into())
-                    .with_link(toast_link),
-                window_id,
-                ctx,
-            );
+            stack.add_ephemeral_toast(toast, window_id, ctx);
             ctx.notify();
         });
     }

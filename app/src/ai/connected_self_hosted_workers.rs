@@ -4,7 +4,6 @@ use warp_errors::report_error;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
 use crate::auth::AuthStateProvider;
-use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
 use crate::network::{NetworkStatus, NetworkStatusEvent, NetworkStatusKind};
 use crate::server::ids::ServerId;
 use crate::server::server_api::ServerApiProvider;
@@ -30,21 +29,6 @@ impl ConnectedSelfHostedWorkersModel {
             {
                 me.clear_workers(ctx);
             }
-        });
-
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, event, ctx| match event {
-            AuthManagerEvent::AuthComplete => {
-                me.clear_workers(ctx);
-            }
-            AuthManagerEvent::AuthFailed(_)
-            | AuthManagerEvent::SkippedLogin
-            | AuthManagerEvent::NeedsReauth => {
-                me.clear_workers(ctx);
-            }
-            AuthManagerEvent::CreateAnonymousUserFailed
-            | AuthManagerEvent::AttemptedLoginGatedFeature { .. }
-            | AuthManagerEvent::LoginOverrideDetected(_)
-            | AuthManagerEvent::MintCustomTokenFailed(_) => {}
         });
 
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |me, _, event, ctx| {

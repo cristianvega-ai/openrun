@@ -17,7 +17,7 @@ use super::settings_page::{
     MatchData, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
     render_dropdown_item,
 };
-use crate::auth::{AuthManager, AuthStateProvider};
+use crate::auth::AuthStateProvider;
 use crate::settings::{AISettings, AISettingsChangedEvent, UsageDisplayUnit};
 use crate::view_components::{Dropdown, DropdownItem};
 use crate::workspaces::user_workspaces::UserWorkspaces;
@@ -78,9 +78,6 @@ impl BillingAndUsageDispatchView {
         });
 
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |_, _, _, ctx| {
-            ctx.notify();
-        });
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |_, _, _, ctx| {
             ctx.notify();
         });
         ctx.subscribe_to_model(&AISettings::handle(ctx), |this, _, event, ctx| {

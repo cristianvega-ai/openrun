@@ -11,9 +11,7 @@ use warpui_core::ui_components::link::OnClickFn;
 pub(super) fn render_upgrade_auth_prompt_bar(
     appearance: &Appearance,
     copy_url_mouse_state: MouseStateHandle,
-    paste_token_mouse_state: MouseStateHandle,
     on_copy_url: OnClickFn,
-    on_paste_token: OnClickFn,
 ) -> Box<dyn Element> {
     const BAR_HEIGHT: f32 = 40.;
     const ICON_SIZE: f32 = 14.;
@@ -54,18 +52,6 @@ pub(super) fn render_upgrade_auth_prompt_bar(
         .build()
         .finish();
 
-    let paste_token_link = ui_builder
-        .link(
-            "Click here".into(),
-            None,
-            Some(on_paste_token),
-            paste_token_mouse_state,
-        )
-        .soft_wrap(false)
-        .with_style(link_styles)
-        .build()
-        .finish();
-
     let text_row = Flex::row()
         .with_cross_axis_alignment(CrossAxisAlignment::Center)
         .with_child(icon)
@@ -83,15 +69,7 @@ pub(super) fn render_upgrade_auth_prompt_bar(
         .with_child(copy_url_link)
         .with_child(
             ui_builder
-                .span(" and open the page manually. ")
-                .with_style(text_styles)
-                .build()
-                .finish(),
-        )
-        .with_child(paste_token_link)
-        .with_child(
-            ui_builder
-                .span(" to paste your token from the browser.")
+                .span(" and open the page manually.")
                 .with_style(text_styles)
                 .build()
                 .finish(),

@@ -3258,36 +3258,6 @@ fn test_find_by_token_returns_none_after_remove_conversation() {
 }
 
 #[test]
-fn test_find_by_token_returns_none_after_reset() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        history_model.update(&mut app, |model, _| {
-            model.merge_cloud_conversation_metadata(vec![create_server_metadata(
-                "Cloud conversation",
-                "reset-token",
-                1.0,
-                None,
-            )]);
-        });
-
-        let token = ServerConversationToken::new("reset-token".to_string());
-
-        history_model.read(&app, |model, _| {
-            assert!(model.find_conversation_id_by_server_token(&token).is_some());
-        });
-
-        history_model.update(&mut app, |model, _| {
-            model.reset();
-        });
-
-        history_model.read(&app, |model, _| {
-            assert_eq!(model.find_conversation_id_by_server_token(&token), None);
-        });
-    });
-}
-
-#[test]
 fn test_find_by_token_after_initialize_output_for_response_stream() {
     App::test((), |mut app| async move {
         initialize_history_persistence_for_tests(&mut app);

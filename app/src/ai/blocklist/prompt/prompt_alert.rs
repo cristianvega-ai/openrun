@@ -37,7 +37,6 @@ const UNASSIGNED_USER_SPEND_LIMIT_PRIMARY_TEXT: &str =
     "Spend limit reached for members without a team";
 const WORKSPACE_SPEND_LIMIT_PRIMARY_TEXT: &str = "You've reached this workspace's spend limit";
 
-const ANONYMOUS_USER_REQUEST_LIMIT_ACTION_TEXT: &str = "Sign up for more AI credits";
 const DELINQUENT_DUE_TO_PAYMENT_ISSUE_ACTION_TEXT: &str = "Manage billing";
 const OVERAGES_TOGGLEABLE_BUT_NOT_ENABLED_ACTION_TEXT: &str = "Enable premium overages";
 const MONTHLY_OVERAGES_SPEND_LIMIT_REACHED_ACTION_TEXT: &str = "Increase monthly spend limit";
@@ -124,14 +123,12 @@ fn enterprise_limit_cta(
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptAlertAction {
-    SignUpClickedForAnonymousUser,
     OpenSettingsClicked,
     ManageBillingClicked { team_uid: ServerId },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromptAlertEvent {
-    SignupAnonymousUser,
     OpenBillingAndUsagePage,
     OpenBillingPortal { team_uid: ServerId },
 }
@@ -394,13 +391,7 @@ impl PromptAlertView {
         match state {
             PromptAlertState::NoConnection => {}
             PromptAlertState::AnonymousUserRequestLimitSoftGate
-            | PromptAlertState::AnonymousUserRequestLimitHardGate => {
-                text_fragments.push(FormattedTextFragment::plain_text("  "));
-                text_fragments.push(FormattedTextFragment::hyperlink_action(
-                    ANONYMOUS_USER_REQUEST_LIMIT_ACTION_TEXT,
-                    PromptAlertAction::SignUpClickedForAnonymousUser,
-                ));
-            }
+            | PromptAlertState::AnonymousUserRequestLimitHardGate => {}
             PromptAlertState::DelinquentDueToPaymentIssue => {
                 // Check if user is team admin with billing history
                 let has_billing_history = current_team
@@ -639,9 +630,6 @@ impl TypedActionView for PromptAlertView {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
-            PromptAlertAction::SignUpClickedForAnonymousUser => {
-                ctx.emit(PromptAlertEvent::SignupAnonymousUser);
-            }
             PromptAlertAction::OpenSettingsClicked => {
                 ctx.emit(PromptAlertEvent::OpenBillingAndUsagePage);
             }

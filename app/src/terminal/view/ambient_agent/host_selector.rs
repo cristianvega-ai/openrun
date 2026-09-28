@@ -20,7 +20,6 @@ use warpui::{
 use crate::ai::blocklist::inline_action::orchestration_controls::ORCHESTRATION_WARP_WORKER_HOST;
 use crate::ai::cloud_agent_settings::CloudAgentSettings;
 use crate::ai::connected_self_hosted_workers::ConnectedSelfHostedWorkersModel;
-use crate::auth::auth_manager::{AuthManager, AuthManagerEvent};
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
 use crate::network::{NetworkStatus, NetworkStatusEvent, NetworkStatusKind};
 use crate::terminal::input::{MenuPositioning, MenuPositioningProvider};
@@ -148,11 +147,6 @@ impl HostSelector {
                     new_status: NetworkStatusKind::Online,
                 }
             ) {
-                me.refresh_connected_hosts(ctx);
-            }
-        });
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, event, ctx| {
-            if matches!(event, AuthManagerEvent::AuthComplete) {
                 me.refresh_connected_hosts(ctx);
             }
         });
