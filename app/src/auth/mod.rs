@@ -22,7 +22,6 @@ use itertools::Itertools;
 pub use login_failure_notification::LoginFailureReason;
 pub use user_uid::UserUid;
 use warp_core::channel::ChannelState;
-use warp_core::user_preferences::GetUserPreferences as _;
 use warp_errors::{report_error, report_if_error};
 use warpui::modals::{AlertDialogWithCallbacks, ModalButton};
 use warpui::{AppContext, SingletonEntity};
@@ -34,7 +33,6 @@ use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 #[cfg(not(target_family = "wasm"))]
 use crate::ai::mcp::TemplatableMCPServerManager;
 use crate::ai::request_usage_model::AIRequestUsageModel;
-use crate::ai_assistant::requests::REQUEST_LIMIT_INFO_CACHE_KEY;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::code::editor_management::{CodeEditorStatus, CodeEditorSummary};
 use crate::env_vars::manager::EnvVarCollectionManager;
@@ -335,16 +333,6 @@ fn remove_cloud_persisted_settings(app: &mut AppContext) {
                 );
             }
         });
-    }
-
-    if let Err(e) = app
-        .private_user_preferences()
-        .remove_value(REQUEST_LIMIT_INFO_CACHE_KEY)
-    {
-        report_error!(
-            anyhow::Error::new(e)
-                .context("Failed to remove Request Limit Defaults Key from user defaults")
-        );
     }
 
     // Reset the Privacy Settings in the login screen to default values.

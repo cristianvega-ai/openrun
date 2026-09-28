@@ -46,7 +46,6 @@ pub enum CustomAction {
     Undo,
     Redo,
     CommandPalette,
-    AISearch,
     ClearEditor,
     Find,
     SelectAll,
@@ -114,10 +113,7 @@ pub enum CustomAction {
     WindowsPaste,
     #[cfg(windows)]
     WindowsCopy,
-    /// Also applies to legacy Warp AI (toggles the panel)
     NewAgentModePane,
-    /// Also applies to legacy Warp AI (attaches the selection to the panel editor)
-    AttachSelectionAsAgentModeContext,
     OpenAIFactCollection,
     OpenMCPServerCollection,
     ToggleProjectExplorer,
@@ -280,7 +276,6 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         CustomAction::AddCursorAbove => Keystroke::parse("ctrl-shift-up").ok(),
         CustomAction::AddCursorBelow => Keystroke::parse("ctrl-shift-down").ok(),
         CustomAction::CommandPalette => Keystroke::parse(cmd_or_ctrl_shift("p")).ok(),
-        CustomAction::AISearch => Keystroke::parse("ctrl-`").ok(),
         CustomAction::Find => Keystroke::parse(cmd_or_ctrl_shift("f")).ok(),
         CustomAction::SelectAll => Keystroke::parse("cmdorctrl-a").ok(),
         CustomAction::CommandSearch => Keystroke::parse("ctrl-r").ok(),
@@ -396,9 +391,6 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         CustomAction::CloseCurrentSession => Keystroke::parse(cmd_or_ctrl_shift("w")).ok(),
         CustomAction::ViewChangelog => Keystroke::parse(cmd_or_ctrl_shift("alt-o")).ok(),
         CustomAction::NewAgentModePane => Keystroke::parse("ctrl-space").ok(),
-        CustomAction::AttachSelectionAsAgentModeContext => {
-            Keystroke::parse("ctrl-shift-space").ok()
-        }
         CustomAction::ToggleProjectExplorer => {
             if OperatingSystem::get().is_mac() {
                 Keystroke::parse("ctrl-1").ok()

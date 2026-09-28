@@ -67,7 +67,6 @@ use crate::ai::execution_profiles::ExecutionProfileId;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::{LLMId, LLMPreferences};
 use crate::ai::restored_conversations::RestoredAgentConversations;
-use crate::ai_assistant::AskAIType;
 #[cfg(feature = "local_fs")]
 use crate::app_state::CodePaneSnapShot;
 use crate::app_state::{
@@ -506,7 +505,6 @@ pub enum Event {
     OpenAutoReloadModal {
         purchased_credits: i32,
     },
-    AskAIAssistant(AskAIType),
     /// Pass input sync event up from underlying TerminalViews
     /// to the Workspace to sync throughout the window.
     SyncInput(SyncEvent),
@@ -5137,9 +5135,6 @@ impl PaneGroup {
             PaneEvent::FocusActiveSession => self.focus_active_session(ctx),
             PaneEvent::AppStateChanged => {
                 ctx.emit(Event::AppStateChanged);
-            }
-            PaneEvent::NewPaneInAIMode { initial_query } => {
-                self.add_terminal_pane_in_agent_mode(initial_query.as_deref(), None, ctx)
             }
             PaneEvent::ClearHoveredTabIndex => ctx.emit(Event::ClearHoveredTabIndex),
             #[cfg(feature = "local_fs")]

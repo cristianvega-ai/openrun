@@ -30,7 +30,6 @@ use super::command_parser::{
 use super::workflow::Argument;
 use super::workflow_view::env_var_selector::{EnvVarSelector, EnvVarSelectorEvent};
 use super::{AIWorkflowOrigin, CloudWorkflow};
-use crate::ai::blocklist::ai_brand_color;
 use crate::appearance::Appearance;
 use crate::cloud_object::CloudObjectMetadataExt;
 use crate::cloud_object::model::actions::{ObjectActionType, ObjectActions};
@@ -911,20 +910,10 @@ impl WorkflowsMoreInfoView {
         match &self.workflow {
             WorkflowType::AIGenerated {
                 workflow,
-                origin: source,
+                origin: AIWorkflowOrigin::AgentMode,
             } => {
                 let icon = if FeatureFlag::AgentMode.is_enabled() {
-                    match source {
-                        AIWorkflowOrigin::AgentMode => {
-                            Icon::new(icons::Icon::Prompt.into(), appearance.theme().accent())
-                                .finish()
-                        }
-                        _ => Icon::new(
-                            icons::Icon::Prompt.into(),
-                            ai_brand_color(appearance.theme()),
-                        )
-                        .finish(),
-                    }
+                    Icon::new(icons::Icon::Prompt.into(), appearance.theme().accent()).finish()
                 } else {
                     Icon::new(
                         icons::Icon::AiAssistant.into(),

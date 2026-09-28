@@ -247,9 +247,6 @@ pub enum TerminalAction {
     OpenWorkflowModalForAIWorkflow(Workflow),
     OpenWorkflowModalForBlock(BlockIndex),
     OpenWorkflowModalWithCloudWorkflow(SyncId),
-    AskAIAssistant {
-        block_index: BlockIndex,
-    },
     /// Starts a subshell in the active session.
     TriggerSubshellBootstrap,
     InsertMostRecentCommandCorrection,
@@ -577,7 +574,6 @@ impl fmt::Debug for TerminalAction {
                 f.write_str("OpenWorkflowModalWithCloudWorkflow")
             }
             OpenBlockListContextMenu => f.write_str("OpenBlockListContextMenu"),
-            AskAIAssistant { block_index } => write!(f, "AskAIAssistant({block_index:?})"),
             TriggerSubshellBootstrap => f.write_str("TriggerSubshellBootstrap"),
             InsertMostRecentCommandCorrection => f.write_str("InsertMostRecentCommandCorrection"),
             AliasExpansionBanner(action) => write!(f, "AliasExpansionBanner({action:?}"),

@@ -58,8 +58,6 @@ impl FilterChipRenderer for QueryFilter {
                 match self.icon_svg_path() {
                     None => flex_row.finish(),
                     Some(icon_name) => {
-                        let icon_size = font_size + self.icon_size_offset();
-
                         let icon = Container::new(
                             ConstrainedBox::new(
                                 Icon::new(
@@ -71,8 +69,8 @@ impl FilterChipRenderer for QueryFilter {
                                 )
                                 .finish(),
                             )
-                            .with_width(icon_size)
-                            .with_height(icon_size)
+                            .with_width(font_size)
+                            .with_height(font_size)
                             .finish(),
                         )
                         .with_margin_top(self.icon_margin_top());
@@ -97,7 +95,6 @@ impl FilterChipRenderer for QueryFilter {
     fn icon_color(&self, appearance: &Appearance) -> ColorU {
         match self {
             QueryFilter::History
-            | QueryFilter::NaturalLanguage
             | QueryFilter::Actions
             | QueryFilter::Sessions
             | QueryFilter::Tabs

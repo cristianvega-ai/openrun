@@ -44,11 +44,10 @@ use warpui::accessibility::AccessibilityVerbosity;
 use warpui::elements::DropTargetData;
 use warpui::keymap::{BindingDescription, EditableBinding, FixedBinding};
 
-use crate::ai::blocklist::NEW_AGENT_PANE_LABEL;
 use crate::channel::{Channel, ChannelState};
 use crate::features::FeatureFlag;
 use crate::palette::PaletteMode;
-use crate::server::telemetry::{AgentModeEntrypoint, PaletteSource};
+use crate::server::telemetry::PaletteSource;
 use crate::settings_view::{self, SettingsSection, flags};
 use crate::tab::{NewSessionMenuItem, uses_vertical_tabs};
 use crate::util::bindings::{self, CustomAction, cmd_or_ctrl_shift, is_binding_pty_compliant};
@@ -1276,34 +1275,6 @@ pub fn init(app: &mut AppContext) {
             .with_enabled(|| ContextFlag::WarpEssentials.is_enabled()),
         ]);
     }
-
-    // We use the same binding name for the AI Assistant and block list AI to preserve custom
-    // keybindings between them.
-    app.register_editable_bindings([
-        EditableBinding::new(
-            "workspace:toggle_ai_assistant",
-            *NEW_AGENT_PANE_LABEL,
-            WorkspaceAction::NewPaneInAgentMode {
-                entrypoint: AgentModeEntrypoint::NewPaneBinding,
-                zero_state_prompt_suggestion_type: None,
-            },
-        )
-        .with_enabled(|| FeatureFlag::AgentMode.is_enabled())
-        .with_context_predicate(id!("Workspace") & id!(flags::IS_ANY_AI_ENABLED))
-        .with_group(bindings::BindingGroup::WarpAi.as_str())
-        .with_custom_action(CustomAction::NewAgentModePane),
-        EditableBinding::new(
-            "workspace:toggle_ai_assistant",
-            "Toggle Warp AI",
-            WorkspaceAction::ToggleAIAssistant,
-        )
-        .with_enabled(|| !FeatureFlag::AgentMode.is_enabled())
-        .with_context_predicate(id!("Workspace") & id!(flags::IS_ANY_AI_ENABLED))
-        .with_group(bindings::BindingGroup::WarpAi.as_str())
-        // We use the same custom action as AM so that we don't have
-        // two mac menu items for AM vs Warp AI since they are mutually exclusive.
-        .with_custom_action(CustomAction::NewAgentModePane),
-    ]);
 
     app.register_editable_bindings([
         EditableBinding::new(

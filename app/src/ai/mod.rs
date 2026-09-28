@@ -1,7 +1,5 @@
 //! This module should houses all horizontal/cross-cutting AI functionality throughout
 //! Warp (including Agent Mode).
-//!
-//! The side panel Warp AI implementation lives in `super::ai_assistant`.
 pub(crate) mod active_agent_views_model;
 pub(crate) mod agent;
 pub(crate) mod agent_conversations_model;
@@ -35,6 +33,7 @@ pub(crate) mod custom_endpoints;
 pub(crate) mod custom_model_router_editor;
 pub(crate) mod custom_model_routers;
 pub(crate) mod document;
+pub(crate) mod execution_context;
 #[cfg(not(target_family = "wasm"))]
 pub mod geap_credentials;
 pub(crate) mod get_relevant_files;

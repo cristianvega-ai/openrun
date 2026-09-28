@@ -29,6 +29,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Channel-config loader crate](#channel-config-loader-crate) — deleted `crates/warp_channel_config`, which only the removed channel and TUI binaries used
 - [Client and server-side experiments](#client-and-server-side-experiments) — removed the local A/B bucketing framework and the server-driven experiment state; every experiment keeps the arm new OSS users already got
 - [App-installation detection and the local HTTP server](#app-installation-detection-and-the-local-http-server) — the GUI no longer listens on `127.0.0.1:9277+n`; the jemalloc heap profile is written to a local file instead of served over HTTP
+- [Legacy Warp AI assistant and AI command search](#legacy-warp-ai-assistant-and-ai-command-search) — deleted the Warp AI side panel, every "Ask Warp AI" entry point, AI command search (`#`) and its server endpoints
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -642,3 +643,38 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left for WASM-1: `settings/app_installation_detection.rs` (`UserAppInstallDetectionSettings`, a web-only setting that the host page writes) and `NativeRedirectWidget` in `settings_view/features_page.rs` (the web-only "Open links in desktop app" toggle). Neither talks to the removed server. They drive the web app's open-in-desktop flows in `wasm_nux_dialog.rs`, `drive/index.rs`, `notebooks/notebook.rs`, `workflows/workflow_view.rs`, `terminal/view/pane_impl.rs` and `Workspace::open_link_on_desktop`, which redirects to `warp.dev/download`.
 - `rg 'http_server|9277|install_detection'` still matches unrelated code: the OSC 9277 in-band generator marker in `warp_terminal` and the shell bootstrap scripts, MCP test names such as `explicit_http_server` (AI plan), and SVG path data.
 - The runtime capture of `warp-oss` shows no listening socket. The baseline had `127.0.0.1:9282 LISTEN`.
+
+## Legacy Warp AI assistant and AI command search
+**Why:** The Warp AI side panel and AI command search sent every question to Warp's servers (the `generateDialogue` and `generateCommands` GraphQL mutations). They are built-in AI features, which the offline fork removes.
+
+**Removed:**
+- `app/src/ai_assistant/` — the Warp AI side panel (`AIAssistantPanelView`, transcript, requests model and its request-limit cache, markdown utilities), `AskAIType`, the panel keybindings (`ai_assistant_panel:*`) and its tests.
+- AI command search: `search/command_search/{warp_ai.rs, ai_queries/}` and `search/ai_queries/` (the "translate with Warp AI" source and the Agent Mode prompt-history source), the `CommandSearchItemAction::{OpenWarpAI, TranslateUsingWarpAI, AcceptAIQuery, RunAIQuery}` results, `QueryFilter::NaturalLanguage` (the `#` filter atom) in `warp_search_core`, the out-of-credits "Upgrade" header in command search, and the zero-state `#` sample query and prompt-history chip.
+- The `#` trigger in the terminal input, `InputAction::ShowAiCommandSearch` with its `input:toggle_natural_language_command_search` binding, `CustomAction::AISearch` and its app-menu item, and the `EnableAiCommandSearchHashTrigger` setting (`terminal.input.enable_ai_command_search_hash_trigger`) with its settings-page toggle and keymap flag.
+- "Ask Warp AI" / "Attach as agent context" entry points: the terminal, block and alt-screen context-menu items, the input context-menu "AI command search" and "Ask Warp AI" items, the block toolbelt AI button, the `terminal:ask_ai_assistant*` bindings, `CustomAction::AttachSelectionAsAgentModeContext` and its app-menu item, and `ContextMenuAction::AskAI`, `AskAISource`, `TerminalAction::AskAIAssistant`, the `AskAIAssistant` terminal and pane-group events, `PaneEvent::NewPaneInAIMode`, `TerminalView::{ask_ai, ask_blocklist_ai}`. Both the Agent Mode and the Warp AI branches went, since Agent Mode is treated as permanently off.
+- Workspace: the panel and its focus handling, the header "Warp AI" button, the warm-welcome popup (and its `DismissedWarpAIWarmWelcome` preference key), `WorkspaceAction::{ToggleAIAssistant, ClickedAIAssistantIcon, ShowAIAssistantWarmWelcome, ClickedAIAssistantWarmWelcome, DismissAIAssistantWarmWelcome}`, the "Toggle Warp AI" binding and the disabled Agent Mode binding that shared its `workspace:toggle_ai_assistant` name.
+- The Warp AI panel width (`ModalType::WarpAIWidth`, `WindowSnapshot::warp_ai_width`); window snapshots now write `NULL` to the `windows.warp_ai_width` column.
+- Tips: `TipAction::{AiCommandSearch, WarpAI}`, `WelcomeTipFeature::AiCommandSearch`, `VoltronItem::AiCommands`, and the "AI command search" items in the resource center and the welcome tips.
+- `warpctrl surface ai-assistant toggle` (`ActionKind::SurfaceAiAssistantToggle`, `SurfaceDestination::AiAssistant`).
+- `AIClient::{generate_commands_from_natural_language, generate_dialogue_answer}` and their `ServerApi` implementations.
+- `crates/integration/src/test/ai_assistant.rs` (`test_ask_warp_ai_keybinding_for_selected_block`).
+- AI code that only the removed `pub mod ai_assistant` kept from being reported as dead: `AIClient::{get_ai_conversation_format, download_conversation_transcript_to_path, report_agent_event}`, `AIAgentConversationFormat`, `AIAgentSerializedBlockFormat`, `ReportAgentEvent{Request,Response}`, `AIWorkflowOrigin::{CommandSearch, LegacyWarpAI}`, and never-read `mime_type` / `size_bytes` fields on the task-attachment and file-artifact records. `ATTACH_AS_AGENT_MODE_CONTEXT_TEXT` and `NEW_AGENT_PANE_LABEL` lost their last users.
+
+**Modified:**
+- `app/src/ai/execution_context.rs` — `WarpAiExecutionContext` / `execution_context_for_session` moved here from `ai_assistant/`, so the agent core still builds.
+- `app/src/ai/request_usage_model.rs` — now holds the GraphQL `RequestLimitInfo` / `RequestLimitRefreshDuration` conversions that lived in `ai_assistant/mod.rs`.
+- `search/command_search/view.rs` — `CommandSearchView::new` no longer takes an `AIClient`, `reset_state` no longer takes an execution context, and `CommandSearchEvent::{Close, ItemSelected}` no longer carry the query and filter (they were only used for the `#` buffer handling). Data-source errors still show as a plain header.
+- `terminal/block_list_element.rs` — the block toolbelt is three slots wide; the bookmark, filter and overflow buttons keep their positions.
+- `workspace/view_tests.rs::test_switch_focus_panels` now uses the resource center's keyboard shortcuts page as the right-side panel. `terminal/input_tests.rs` keeps one test that `#` stays literal input; the two tests of the removed setting and hotkey are gone. The `local_control` catalog-size tests expect 83 actions.
+- `server/telemetry/events.rs` — the `CommandSearchItemAction` conversion drops the removed arms (compile fix only).
+- `resources/bundled/skills/warpctrl/SKILL.md` — drops the removed `surface ai-assistant toggle` example.
+
+**User-visible impact:** The Warp AI panel, its header button and welcome popup, "Ask Warp AI" / "Attach as agent context" menu items and keybindings (ctrl-shift-space, ctrl-shift->), and AI command search are gone. Typing `#` at the start of the input is plain text (a shell comment). Command search still covers history, workflows and environment variables. The block hover toolbelt no longer has an AI button. `warpctrl` no longer accepts `surface ai-assistant toggle`. A stored `enable_ai_command_search_hash_trigger` key in `settings.toml` is ignored.
+
+**Notes:**
+- Users who used AI command search or Warp AI have `AiCommandSearch` / `WarpAI` tip entries in the private `WelcomeTipsFeaturesUsed` value. That value no longer parses, so their welcome-tips progress resets once; the next tip they use rewrites it.
+- Left for DB-1: the `windows.warp_ai_width` column (still in `crates/persistence` `schema.rs` and the model structs).
+- Left for the server plan (`crates/graphql` owner): the now-unused `mutations::{generate_commands, generate_dialogue}` and `queries::get_ai_conversation_format` operations.
+- Left for TEL-4: telemetry variants whose callers are gone (`OpenedWarpAI`, `ToggleWarpAI`, `InputAskWarpAI`, `InputAICommandSearch`, `AICommandSearchOpened`, `CommandSearchResultType::{OpenWarpAI, TranslateUsingWarpAI, AIQuery}`, `OpenedWarpAISource`, `AICommandSearchEntrypoint`).
+- Left for AI-15: the AI-gated `AgentModeWorkflows` (saved prompts) filter in command search. Left for AI-25: `CustomAction::NewAgentModePane`, which no binding provides any more. Left for AI-11: `resources/bundled/skills/change-keybinding/SKILL.md` still names `workspace:toggle_ai_assistant`. Left for DRV-1: a comment in `drive/workflows/modal.rs` that cites Warp AI command search.
+- `set_ai_input_mode_with_query` and `InputTypeAutoDetectionSource::AskAi` stay because `ai/agent_sdk` still uses them.

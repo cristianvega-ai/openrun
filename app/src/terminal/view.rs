@@ -258,17 +258,17 @@ use crate::ai::blocklist::usage::request_metadata_turn_view::{
     RequestMetadataTurnView, RequestMetadataTurnViewEvent,
 };
 use crate::ai::blocklist::{
-    AIBlock, AIBlockEvent, ATTACH_AS_AGENT_MODE_CONTEXT_TEXT, AutofireAction,
-    BlocklistAIActionEvent, BlocklistAIActionModel, BlocklistAIContextEvent,
-    BlocklistAIContextModel, BlocklistAIController, BlocklistAIControllerEvent,
-    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, BlocklistAIInputEvent, BlocklistAIInputModel,
-    ClientIdentifiers, ConversationSelection, ConversationStatusUpdate, InputConfig, InputType,
-    InputTypeAutoDetectionSource, LegacyPassiveSuggestionsEvent, LegacyPassiveSuggestionsModel,
-    MaaPassiveSuggestionsEvent, MaaPassiveSuggestionsModel, PRE_REWIND_PREFIX,
-    PassiveSuggestionsModels, PendingAttachment, PendingQueryState, QueuedQuery, QueuedQueryId,
-    QueuedQueryModel, QueuedQueryOrigin, RequestFileEditsFormatKind, ShellCommandExecutor,
-    ShellCommandExecutorEvent, SlashCommandRequest, StartAgentExecutor, StartAgentExecutorEvent,
-    StartAgentRequest, ai_brand_color, block_context_from_terminal_model,
+    AIBlock, AIBlockEvent, AutofireAction, BlocklistAIActionEvent, BlocklistAIActionModel,
+    BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
+    BlocklistAIControllerEvent, BlocklistAIHistoryEvent, BlocklistAIHistoryModel,
+    BlocklistAIInputEvent, BlocklistAIInputModel, ClientIdentifiers, ConversationSelection,
+    ConversationStatusUpdate, InputConfig, InputType, InputTypeAutoDetectionSource,
+    LegacyPassiveSuggestionsEvent, LegacyPassiveSuggestionsModel, MaaPassiveSuggestionsEvent,
+    MaaPassiveSuggestionsModel, PRE_REWIND_PREFIX, PassiveSuggestionsModels, PendingAttachment,
+    PendingQueryState, QueuedQuery, QueuedQueryId, QueuedQueryModel, QueuedQueryOrigin,
+    RequestFileEditsFormatKind, ShellCommandExecutor, ShellCommandExecutorEvent,
+    SlashCommandRequest, StartAgentExecutor, StartAgentExecutorEvent, StartAgentRequest,
+    ai_brand_color, block_context_from_terminal_model,
     get_ai_block_overflow_menu_element_position_id, get_attached_blocks_chip_element_position_id,
     is_lrc_auto_queue_active,
 };
@@ -287,7 +287,6 @@ use crate::ai::predict::prompt_suggestions::{
     is_accept_prompt_suggestion_bound_to_cmd_enter,
     is_accept_prompt_suggestion_bound_to_ctrl_enter,
 };
-use crate::ai_assistant::{ASK_AI_ASSISTANT_TEXT, AskAIType};
 use crate::antivirus::AntivirusInfo;
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::auth::auth_manager::AuthManager;
@@ -350,11 +349,11 @@ use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::{ObjectUid, SyncId};
 use crate::server::server_api::ServerApi;
 use crate::server::telemetry::{
-    self, AgentModeAttachContextMethod, AgentModeEntrypoint, AgentModeRewindEntrypoint,
-    AnonymousUserSignupEntrypoint, BootstrappingInfo, InteractionSource, NotificationAgentVariant,
-    NotificationsTurnedOnSource, PaletteSource, PromptSuggestionViewType,
-    SaveAsWorkflowModalSource, SecretInteraction, SharingDialogSource, SlowBootstrapInfo,
-    TelemetryEvent, ToggleBlockFilterSource, WorkflowTelemetryMetadata,
+    self, AgentModeAttachContextMethod, AgentModeRewindEntrypoint, AnonymousUserSignupEntrypoint,
+    BootstrappingInfo, InteractionSource, NotificationAgentVariant, NotificationsTurnedOnSource,
+    PaletteSource, PromptSuggestionViewType, SaveAsWorkflowModalSource, SecretInteraction,
+    SharingDialogSource, SlowBootstrapInfo, TelemetryEvent, ToggleBlockFilterSource,
+    WorkflowTelemetryMetadata,
 };
 use crate::session_management::{CommandContext, SessionNavigationPromptElements};
 use crate::settings::ai::FocusedTerminalInfo;
@@ -710,8 +709,6 @@ const MOVE_LINE_START_BINDING_NAME: &str = "editor_view:move_to_line_start";
 const MOVE_LINE_END_BINDING_NAME: &str = "editor_view:move_to_line_end";
 
 const DEFAULT_AI_BLOCK_HEIGHT: f32 = 96.;
-
-pub const DEFAULT_ASK_AI_AUTOSUGGESTION_TEXT: &str = "What happened here?";
 
 const WARP_MD_PATH: &str = "WARP.md";
 
@@ -1393,9 +1390,6 @@ pub enum ContextMenuAction {
     EditPrompt,
     EditAgentToolbar,
     EditCLIAgentToolbar,
-    /// Ask AI about the current context. Handled by blocklist AI if its feature flag is enabled and
-    /// the AI assistant panel otherwise.
-    AskAI(AskAISource),
     OpenWorkflowModal,
     CopyAIDebuggingLink {
         conversation_token: ServerConversationToken,
@@ -1480,26 +1474,8 @@ pub enum InputContextMenuAction {
     SelectAll,
     Paste,
     ShowCommandSearch,
-    ShowAICommandSearch,
-    AskWarpAI,
     SaveAsWorkflow,
     ToggleInputHintText,
-}
-
-/// Where a user's question for AI originated. Handled by blocklist AI if the feature flag is
-/// enabled and the AI Assistant panel otherwise.
-#[derive(Clone)]
-pub enum AskAISource {
-    Block(BlockIndex),
-    LastBlock,
-    /// The source is some selected text or selected block, but we're not yet sure which.
-    /// There should never be any cases where both are simultaneously selected.
-    SelectedBlockOrText,
-    /// Question for block list AI about text selected form the terminal or input.
-    SelectedInputText,
-    SelectedTerminalText,
-    /// Question for block list AI about block(s).
-    SelectedBlocks,
 }
 
 // Manually implementing Debug to avoid leaking sensitive information in logs
@@ -1526,7 +1502,6 @@ impl fmt::Debug for ContextMenuAction {
             EditPrompt => f.write_str("EditPrompt"),
             EditAgentToolbar => f.write_str("EditAgentToolbar"),
             EditCLIAgentToolbar => f.write_str("EditCLIAgentToolbar"),
-            AskAI(_) => f.write_str("AskAIAssistant"),
             OpenWorkflowModal => f.write_str("OpenWorkflowModal"),
             OpenShareSessionModal => f.write_str("OpenShareSessionModal"),
             CopyBlockFilteredOutputs => f.write_str("CopyBlockFilteredOutput"),
@@ -1566,8 +1541,6 @@ impl fmt::Debug for InputContextMenuAction {
             SelectAll => f.write_str("SelectAll"),
             Paste => f.write_str("Paste"),
             ShowCommandSearch => f.write_str("CommandSearch"),
-            ShowAICommandSearch => f.write_str("AICommandSearch"),
-            AskWarpAI => f.write_str("AskWarpAI"),
             SaveAsWorkflow => f.write_str("SaveAsWorkflow"),
             ToggleInputHintText => f.write_str("ToggleInputHintText"),
         }
@@ -1697,7 +1670,6 @@ pub enum Event {
     },
     Pane(PaneEvent),
     OpenSettings(SettingsSection),
-    AskAIAssistant(AskAIType),
     /// Event propagates terminal inputs up to the workspace,
     /// to be processed on the way back down through the view hierarchy.
     SyncInput(SyncEvent),
@@ -17071,7 +17043,7 @@ impl TerminalView {
                 None,
                 true,
             ) => {
-                let mut fields = vec![
+                vec![
                     MenuItemFields::new("Copy")
                         .with_on_select_action(TerminalAction::ContextMenu(
                             ContextMenuAction::CopySelectedText,
@@ -17086,27 +17058,7 @@ impl TerminalView {
                             ContextMenuAction::InsertSelectedText,
                         ))
                         .into_item(),
-                ];
-                if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
-                    fields.extend([
-                        MenuItem::Separator,
-                        MenuItemFields::new(if FeatureFlag::AgentMode.is_enabled() {
-                            *ATTACH_AS_AGENT_MODE_CONTEXT_TEXT
-                        } else {
-                            ASK_AI_ASSISTANT_TEXT
-                        })
-                        .with_on_select_action(TerminalAction::ContextMenu(
-                            ContextMenuAction::AskAI(if FeatureFlag::AgentMode.is_enabled() {
-                                AskAISource::SelectedTerminalText
-                            } else {
-                                AskAISource::SelectedBlockOrText
-                            }),
-                        ))
-                        .with_key_shortcut_label(Some("⌃ ⇧ Space"))
-                        .into_item(),
-                    ]);
-                }
-                fields
+                ]
             }
             (
                 BlockListMenuSource::BlockOverflowButton { .. }
@@ -17150,8 +17102,6 @@ impl TerminalView {
                 } else {
                     "Scroll to bottom of blocks"
                 };
-
-                let is_ask_ai_disabled = !is_single_selection;
 
                 let is_copy_commands_disabled =
                     is_single_selection && tail_block.command_to_string().trim().is_empty();
@@ -17268,40 +17218,6 @@ impl TerminalView {
                             ))
                             .into_item(),
                     );
-                }
-
-                if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
-                    if FeatureFlag::AgentMode.is_enabled() {
-                        // We can only attach selected blocks if the input box is visible.
-                        if self.is_input_box_visible(&model, ctx) {
-                            items.extend([
-                                MenuItem::Separator,
-                                MenuItemFields::new(*ATTACH_AS_AGENT_MODE_CONTEXT_TEXT)
-                                    .with_on_select_action(TerminalAction::ContextMenu(
-                                        ContextMenuAction::AskAI(AskAISource::SelectedBlocks),
-                                    ))
-                                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                                        "terminal:ask_ai_assistant",
-                                        ctx,
-                                    ))
-                                    .into_item(),
-                            ]);
-                        }
-                    } else {
-                        items.extend([
-                            MenuItem::Separator,
-                            MenuItemFields::new("Ask Warp AI")
-                                .with_on_select_action(TerminalAction::ContextMenu(
-                                    ContextMenuAction::AskAI(AskAISource::SelectedBlockOrText),
-                                ))
-                                .with_key_shortcut_label(keybinding_name_to_display_string(
-                                    "terminal:ask_ai_assistant",
-                                    ctx,
-                                ))
-                                .with_disabled(is_ask_ai_disabled)
-                                .into_item(),
-                        ]);
-                    }
                 }
 
                 items.append(&mut vec![
@@ -17900,7 +17816,7 @@ impl TerminalView {
             items.extend(self.session_sharing_context_menu_items(&model, false, has_session_link));
         }
 
-        // Section 2: AI Command Search, Ask Warp AI
+        // Section 2: Command search
         items.extend([
             MenuItem::Separator,
             MenuItemFields::new("Command search")
@@ -17914,31 +17830,6 @@ impl TerminalView {
                 .with_disabled(is_editor_disabled)
                 .into_item(),
         ]);
-
-        if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
-            items.push(
-                MenuItemFields::new("AI command search")
-                    .with_on_select_action(TerminalAction::InputContextMenuItem(
-                        InputContextMenuAction::ShowAICommandSearch,
-                    ))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "input:toggle_natural_language_command_search",
-                        ctx,
-                    ))
-                    .with_disabled(is_editor_disabled)
-                    .into_item(),
-            );
-
-            if !selected_input_text.is_empty() && !FeatureFlag::AgentMode.is_enabled() {
-                items.push(
-                    MenuItemFields::new("Ask Warp AI")
-                        .with_on_select_action(TerminalAction::InputContextMenuItem(
-                            InputContextMenuAction::AskWarpAI,
-                        ))
-                        .into_item(),
-                );
-            }
-        }
 
         // Section 3: Teams related
         if !all_current_input_text.is_empty() && WarpDriveSettings::is_warp_drive_enabled(ctx) {
@@ -18115,21 +18006,6 @@ impl TerminalView {
                     .with_key_shortcut_label(Some("⌘-C"))
                     .into_item(),
             );
-            if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
-                menu_items.extend([
-                    MenuItem::Separator,
-                    MenuItemFields::new(if FeatureFlag::AgentMode.is_enabled() {
-                        *ATTACH_AS_AGENT_MODE_CONTEXT_TEXT
-                    } else {
-                        ASK_AI_ASSISTANT_TEXT
-                    })
-                    .with_on_select_action(TerminalAction::ContextMenu(ContextMenuAction::AskAI(
-                        AskAISource::SelectedTerminalText,
-                    )))
-                    .with_key_shortcut_label(Some("⌃-⇧-Space"))
-                    .into_item(),
-                ]);
-            }
         }
 
         if FeatureFlag::CreatingSharedSessions.is_enabled()
@@ -19622,13 +19498,6 @@ impl TerminalView {
         ctx.emit(Event::ShowCommandSearch(Default::default()))
     }
 
-    fn ai_command_search_from_input(&mut self, ctx: &mut ViewContext<Self>) {
-        self.input.update(ctx, |input, ctx| {
-            input.handle_action(&InputAction::ShowAiCommandSearch, ctx)
-        });
-        send_telemetry_from_ctx!(TelemetryEvent::InputAICommandSearch, ctx);
-    }
-
     fn save_as_workflow_from_input(&mut self, ctx: &mut ViewContext<Self>) {
         let (all_current_input_text, selected_input_text) = self.input.read(ctx, |input, ctx| {
             input.editor().read(ctx, |editor, ctx| {
@@ -19750,103 +19619,6 @@ impl TerminalView {
         ctx.emit(Event::OpenPromptEditor);
     }
 
-    /// Handle AI entrypoints, routing to AI in blocklist when possible and falling back to the AI
-    /// Assistant panel.
-    fn ask_ai(&mut self, ask_source: &AskAISource, ctx: &mut ViewContext<Self>) {
-        let semantic_selection = SemanticSelection::as_ref(ctx);
-        let selection_string = self.model.lock().selection_to_string(
-            semantic_selection,
-            self.is_inverted_blocklist(ctx),
-            ctx,
-        );
-
-        let ask_data = match (ask_source, selection_string) {
-            (
-                AskAISource::SelectedBlockOrText | AskAISource::SelectedTerminalText,
-                Some(selection_string),
-            ) => {
-                // Explicitly snapshot and attach the selected text as pending context.
-                // This decouples context from the live selection so the text persists
-                // even if the user changes their selection afterward.
-                self.ai_context_model.update(ctx, |context_model, ctx| {
-                    context_model.set_pending_context_selected_text(
-                        Some(selection_string.clone()),
-                        false,
-                        ctx,
-                    );
-                });
-
-                AskAIType::FromTextSelection {
-                    text: Arc::new(selection_string),
-                    // In the block list terminal view, selected text is attached directly as Agent Mode context.
-                    // In this case, we don't want to re-surface the selected text by rendering "Explain the following..."
-                    // However, we want to keep this prompt for long-running commands and the alt-screen view.
-                    populate_input_box: !self.is_input_box_visible(&self.model.lock(), ctx),
-                }
-            }
-            (
-                AskAISource::Block { .. }
-                | AskAISource::LastBlock
-                | AskAISource::SelectedBlockOrText,
-                _,
-            ) => {
-                let model = self.model.lock();
-                let block_index = match ask_source {
-                    AskAISource::Block(block_index) => Some(*block_index),
-                    // Since we already checked the match arm for SelectedBlockOrText where there is text selection,
-                    // we must be in the selected block case now.
-                    AskAISource::SelectedBlockOrText => self.selected_blocks.tail(),
-                    AskAISource::LastBlock => model.block_list().last_non_hidden_block_by_index(),
-                    AskAISource::SelectedInputText
-                    | AskAISource::SelectedTerminalText
-                    | AskAISource::SelectedBlocks => None,
-                };
-
-                let Some(block) = block_index.and_then(|idx| model.block_list().block_at(idx))
-                else {
-                    return;
-                };
-
-                let input = block.command_to_string();
-                let output = block.output_to_string();
-                AskAIType::FromBlock {
-                    input: Arc::new(input),
-                    output: Arc::new(output),
-                    exit_code: block.exit_code(),
-                    block_index: block.index(),
-                }
-            }
-            (AskAISource::SelectedInputText, _) | (AskAISource::SelectedTerminalText, None) => {
-                let selected_input_text = self.input.read(ctx, |input, ctx| {
-                    input
-                        .editor()
-                        .read(ctx, |editor, ctx| editor.selected_text(ctx))
-                });
-
-                if selected_input_text.is_empty() {
-                    return;
-                }
-
-                send_telemetry_from_ctx!(TelemetryEvent::InputAskWarpAI, ctx);
-                AskAIType::FromTextSelection {
-                    text: Arc::new(selected_input_text),
-                    populate_input_box: true,
-                }
-            }
-            (AskAISource::SelectedBlocks, _) => AskAIType::FromBlocks {
-                block_indices: self.selected_blocks.block_indices().collect::<HashSet<_>>(),
-            },
-        };
-
-        if FeatureFlag::AgentMode.is_enabled() {
-            self.ask_blocklist_ai(&ask_data, ctx);
-        } else {
-            ctx.emit(Event::AskAIAssistant(ask_data.clone()));
-        }
-
-        self.close_context_menu(ctx, false);
-    }
-
     /// Sets the input mode to AI and locks it. If `query` is `Some`, pre-fills the input box with
     /// the given query and focuses the input box.
     pub fn set_ai_input_mode_with_query(
@@ -19869,93 +19641,6 @@ impl TerminalView {
         self.input().update(ctx, |input, ctx| {
             if let Some(query) = query {
                 input.replace_buffer_content(query, ctx);
-            }
-
-            input.focus_input_box(ctx);
-        });
-    }
-
-    /// If the input box is visible, update the AI controller's state and potentially prefill the
-    /// terminal input with an AI query (depending on whether the text selection has already been
-    /// attached as context). If the input box is not visible, make a new pane and do the same.
-    pub fn ask_blocklist_ai(&mut self, ask_type: &AskAIType, ctx: &mut ViewContext<Self>) {
-        let mut context_block_indices = HashSet::new();
-
-        let (initial_query, auto_suggestion) = match ask_type {
-            AskAIType::FromTextSelection {
-                text,
-                populate_input_box,
-            } => {
-                if *populate_input_box {
-                    let query_prefix = "Explain the following:\n";
-                    let formatted_selection = { format!("```\n{}\n```", text.trim()) };
-                    let combined_query = Some(format!("{query_prefix}{formatted_selection}"));
-                    (combined_query, None)
-                } else {
-                    (None, None)
-                }
-            }
-
-            AskAIType::FromBlock { block_index, .. } => {
-                context_block_indices.insert(*block_index);
-                (None, Some(DEFAULT_ASK_AI_AUTOSUGGESTION_TEXT))
-            }
-            AskAIType::FromBlocks { block_indices } => {
-                context_block_indices.extend(block_indices);
-                (None, Some(DEFAULT_ASK_AI_AUTOSUGGESTION_TEXT))
-            }
-
-            AskAIType::FromAICommandSearch { query } => {
-                let query_prefix = "What is the command to: ";
-                (Some(format!("{}{}", query_prefix, query.trim())), None)
-            }
-        };
-
-        // We don't support attaching blocks as context in new panes.
-        if context_block_indices.is_empty() && !self.is_input_box_visible(&self.model.lock(), ctx) {
-            ctx.emit(Event::Pane(PaneEvent::NewPaneInAIMode { initial_query }));
-            return;
-        }
-
-        self.ai_input_model.update(ctx, |ai_input, ctx| {
-            ai_input.set_input_type(
-                InputType::AI,
-                Some(InputTypeAutoDetectionSource::AskAi),
-                ctx,
-            );
-        });
-
-        if !context_block_indices.is_empty() {
-            self.change_block_selections(
-                |selected_blocks| selected_blocks.reset_to_block_indices(context_block_indices),
-                ctx,
-            );
-        }
-
-        let selected_block_ids = self
-            .selected_blocks
-            .to_block_ids(self.model.lock().block_list())
-            .cloned()
-            .collect_vec();
-
-        self.input().update(ctx, |input, ctx| {
-            if let Some(initial_query) = initial_query {
-                input.replace_buffer_content(initial_query.as_str(), ctx);
-            }
-
-            // Don't interfere with potential autosuggestions based on text already in the input
-            // buffer.
-            if input.buffer_text(ctx).is_empty()
-                && let Some(autosuggestion) = auto_suggestion
-            {
-                input.set_autosuggestion(
-                    autosuggestion,
-                    AutosuggestionType::AgentModeQuery {
-                        context_block_ids: selected_block_ids,
-                        was_intelligent_autosuggestion: false,
-                    },
-                    ctx,
-                );
             }
 
             input.focus_input_box(ctx);
@@ -25316,31 +25001,6 @@ impl TerminalView {
             EditPrompt => self.edit_prompt(ctx),
             EditAgentToolbar => ctx.emit(Event::OpenAgentToolbarEditor),
             EditCLIAgentToolbar => ctx.emit(Event::OpenCLIAgentToolbarEditor),
-            AskAI(ask_source) => {
-                if FeatureFlag::AgentMode.is_enabled() {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::AgentModeClickedEntrypoint {
-                            entrypoint: AgentModeEntrypoint::ContextMenu {
-                                selection_type: if matches!(
-                                    ask_source,
-                                    AskAISource::SelectedBlockOrText
-                                        | AskAISource::SelectedTerminalText
-                                        | AskAISource::SelectedInputText
-                                ) {
-                                    telemetry::AgentModeEntrypointSelectionType::Text
-                                } else {
-                                    // The `AskAI` action for the context menu is only triggered
-                                    // with selected text or selected block(s).
-                                    telemetry::AgentModeEntrypointSelectionType::Block
-                                }
-                            },
-                        },
-                        ctx
-                    );
-                }
-
-                self.ask_ai(ask_source, ctx);
-            }
             OpenWorkflowModal => self.open_workflow_modal(ctx),
             OpenShareSessionModal => self.open_share_session_modal(source, ctx),
             StopSharing => self.stop_sharing_session(source, ctx),
@@ -25665,8 +25325,6 @@ impl TerminalView {
             SelectAll => self.select_all_text_from_input(ctx),
             Paste => self.paste_in_input(ctx),
             ShowCommandSearch => self.command_search_from_input(ctx),
-            AskWarpAI => self.ask_ai(&AskAISource::SelectedInputText, ctx),
-            ShowAICommandSearch => self.ai_command_search_from_input(ctx),
             SaveAsWorkflow => self.save_as_workflow_from_input(ctx),
             ToggleInputHintText => self.toggle_input_hint_text(ctx),
         }
@@ -26972,7 +26630,6 @@ impl TypedActionView for TerminalView {
             | CopySharedSessionLink { .. }
             | OpenSharedSessionOnDesktop { .. }
             | MakeAllParticipantsReaders { .. }
-            | AskAIAssistant { .. }
             | ToggleSnackbarInActivePane
             | SetInputModeAgent
             | SetInputModeTerminal
@@ -27371,18 +27028,6 @@ impl TypedActionView for TerminalView {
                 self.open_workflow_modal_with_existing(*workflow_id, ctx)
             }
             OpenBlockListContextMenu => self.open_block_list_context_menu_via_keybinding(ctx),
-            AskAIAssistant { block_index } => {
-                if FeatureFlag::AgentMode.is_enabled() {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::AgentModeClickedEntrypoint {
-                            entrypoint: AgentModeEntrypoint::BlockToolbelt,
-                        },
-                        ctx
-                    );
-                }
-
-                self.ask_ai(&AskAISource::Block(*block_index), ctx)
-            }
             TriggerSubshellBootstrap => self.trigger_subshell_bootstrap(None, false, ctx),
             InsertMostRecentCommandCorrection => self.insert_most_recent_command_correction(ctx),
             AliasExpansionBanner(action) => self.alias_expansion_banner_action(*action, ctx),

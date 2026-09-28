@@ -538,9 +538,6 @@ impl From<&CommandSearchItemAction> for CommandSearchResultType {
             AcceptHistory(_) | ExecuteHistory(_) => Self::History,
             AcceptWorkflow(_) => Self::Workflow,
             AcceptEnvVarCollection(_) => Self::EnvVarCollection,
-            OpenWarpAI => Self::OpenWarpAI,
-            TranslateUsingWarpAI => Self::TranslateUsingWarpAI,
-            AcceptAIQuery(_) | RunAIQuery(_) => Self::AIQuery,
         }
     }
 }

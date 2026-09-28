@@ -320,7 +320,6 @@ pub struct TaskAttachment {
     pub file_id: String,
     pub filename: String,
     pub download_url: String,
-    pub mime_type: String,
 }
 
 /// Returns the trimmed orchestrator agent name, or `None` when empty / whitespace-only.

@@ -7,7 +7,6 @@ use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::icons::Icon;
 use warp_core::ui::theme::Fill;
@@ -38,10 +37,6 @@ lazy_static! {
     };
     static ref PLANS_FILTER_ATOM: FilterAtom = FilterAtom {
         primary_text: "plans:",
-        aliases: vec![]
-    };
-    static ref NATURAL_LANGUAGE_FILTER_ATOM: FilterAtom = FilterAtom {
-        primary_text: "#",
         aliases: vec![]
     };
     static ref ACTIONS_FILTER_ATOM: FilterAtom = FilterAtom {
@@ -161,9 +156,6 @@ pub enum QueryFilter {
     /// Only include results from PlansDataSource.
     Plans,
 
-    /// Only include the Natural Language (AI) command search result.
-    NaturalLanguage,
-
     /// Filter results for command palette actions.
     Actions,
 
@@ -239,7 +231,6 @@ impl QueryFilter {
             QueryFilter::AgentModeWorkflows => "Search prompts",
             QueryFilter::Notebooks => "Search notebooks",
             QueryFilter::Plans => "Search plans",
-            QueryFilter::NaturalLanguage => "e.g. replace string in file",
             QueryFilter::Actions => "Search actions",
             QueryFilter::Sessions => "Search sessions",
             QueryFilter::Tabs => "Search tabs",
@@ -273,7 +264,6 @@ impl QueryFilter {
             QueryFilter::AgentModeWorkflows => &AGENT_MODE_WORKFLOWS_FILTER_ATOM,
             QueryFilter::Notebooks => &NOTEBOOKS_FILTER_ATOM,
             QueryFilter::Plans => &PLANS_FILTER_ATOM,
-            QueryFilter::NaturalLanguage => &NATURAL_LANGUAGE_FILTER_ATOM,
             QueryFilter::Actions => &ACTIONS_FILTER_ATOM,
             QueryFilter::Sessions => &SESSIONS_FILTER_ATOM,
             QueryFilter::Tabs => &NO_FILTER_ATOM,
@@ -305,7 +295,6 @@ impl QueryFilter {
             QueryFilter::AgentModeWorkflows => "prompts",
             QueryFilter::Notebooks => "notebooks",
             QueryFilter::Plans => "plans",
-            QueryFilter::NaturalLanguage => "AI command suggestions",
             QueryFilter::Actions => "actions",
             QueryFilter::Sessions => "sessions",
             QueryFilter::Tabs => "tabs",
@@ -336,13 +325,6 @@ impl QueryFilter {
             QueryFilter::Workflows => Some("bundled/svg/workflow.svg"),
             QueryFilter::Notebooks => Some("bundled/svg/notebook.svg"),
             QueryFilter::Plans => Some("bundled/svg/compass-3.svg"),
-            QueryFilter::NaturalLanguage => {
-                if !FeatureFlag::AgentMode.is_enabled() {
-                    Some(Icon::AiAssistant.into())
-                } else {
-                    Some(Icon::Stars.into())
-                }
-            }
             QueryFilter::Actions => None,
             QueryFilter::Sessions => Some("bundled/svg/terminal-input.svg"),
             QueryFilter::Tabs => Some("bundled/svg/terminal-input.svg"),

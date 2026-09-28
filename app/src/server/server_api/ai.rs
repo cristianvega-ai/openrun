@@ -43,15 +43,6 @@ use warp_graphql::mutations::generate_code_embeddings::{
     GenerateCodeEmbeddings, GenerateCodeEmbeddingsInput, GenerateCodeEmbeddingsResult,
     GenerateCodeEmbeddingsVariables,
 };
-use warp_graphql::mutations::generate_commands::{
-    GenerateCommands, GenerateCommandsInput, GenerateCommandsResult, GenerateCommandsStatus,
-    GenerateCommandsVariables,
-};
-use warp_graphql::mutations::generate_dialogue::{
-    GenerateDialogue, GenerateDialogueInput,
-    GenerateDialogueResult as GenerateDialogueResultGraphql, GenerateDialogueStatus,
-    GenerateDialogueVariables, TranscriptPart as TranscriptPartGraphql,
-};
 use warp_graphql::mutations::generate_metadata_for_command::{
     GenerateMetadataForCommand, GenerateMetadataForCommandInput, GenerateMetadataForCommandResult,
     GenerateMetadataForCommandStatus, GenerateMetadataForCommandVariables,
@@ -132,10 +123,7 @@ use super::harness_support::{UploadField, UploadFieldValue, UploadTarget};
 use crate::ai::BonusGrant;
 pub use crate::ai::agent::UserQueryMode;
 use crate::ai::agent::api::ServerConversationToken;
-use crate::ai::agent::conversation::{
-    AIAgentConversationFormat, AIAgentHarness, AIAgentSerializedBlockFormat,
-    ServerAIConversationMetadata,
-};
+use crate::ai::agent::conversation::{AIAgentHarness, ServerAIConversationMetadata};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 // Re-export ambient agent types for backwards compatibility
 pub use crate::ai::ambient_agents::{
@@ -155,10 +143,6 @@ use crate::ai::llms::{
 #[cfg(feature = "agent_mode_evals")]
 use crate::ai::request_usage_model::RequestLimitInfo;
 use crate::ai::{AICreditAvailability, RequestUsageInfo};
-use crate::ai_assistant::execution_context::WarpAiExecutionContext;
-use crate::ai_assistant::requests::GenerateDialogueResult;
-use crate::ai_assistant::utils::TranscriptPart;
-use crate::ai_assistant::{AIGeneratedCommand, GenerateCommandsFromNaturalLanguageError};
 use crate::drive::workflows::ai_assist::{GeneratedCommandMetadata, GeneratedCommandMetadataError};
 use crate::persistence::model::ConversationUsageMetadata;
 use crate::server::graphql::{get_request_context, get_user_facing_error_message};
@@ -437,19 +421,6 @@ pub struct AgentRunEvent {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct ReportAgentEventRequest {
-    pub event_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub execution_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ref_id: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ReportAgentEventResponse {
-    pub sequence: i64,
-}
-#[derive(Debug, Clone, serde::Serialize)]
 pub struct AgentRunClientEventRequest {
     pub event_uuid: String,
     pub event_name: String,
@@ -692,7 +663,6 @@ pub struct HandoffSnapshotAttachmentInfo {
     pub attachment_id: String,
     pub filename: String,
     pub download_url: String,
-    pub mime_type: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -748,7 +718,6 @@ pub struct FileArtifactRecord {
     pub filepath: String,
     pub description: Option<String>,
     pub mime_type: String,
-    pub size_bytes: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -1240,19 +1209,6 @@ pub struct UpdateMemoryResponse {
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 pub trait AIClient: 'static + Send + Sync {
-    async fn generate_commands_from_natural_language(
-        &self,
-        prompt: String,
-        ai_execution_context: Option<WarpAiExecutionContext>,
-    ) -> Result<Vec<AIGeneratedCommand>, GenerateCommandsFromNaturalLanguageError>;
-
-    async fn generate_dialogue_answer(
-        &self,
-        transcript: Vec<TranscriptPart>,
-        prompt: String,
-        ai_execution_context: Option<WarpAiExecutionContext>,
-    ) -> anyhow::Result<GenerateDialogueResult>;
-
     async fn generate_metadata_for_command(
         &self,
         command: String,
@@ -1408,13 +1364,6 @@ pub trait AIClient: 'static + Send + Sync {
         conversation_id: &str,
     ) -> anyhow::Result<Bytes, anyhow::Error>;
 
-    #[cfg(not(target_family = "wasm"))]
-    async fn download_conversation_transcript_to_path(
-        &self,
-        conversation_id: &str,
-        destination: &Path,
-    ) -> anyhow::Result<(), anyhow::Error>;
-
     async fn submit_run_followup(
         &self,
         run_id: &AmbientAgentTaskId,
@@ -1435,11 +1384,6 @@ pub trait AIClient: 'static + Send + Sync {
         &self,
         conversation_ids: Option<Vec<String>>,
     ) -> anyhow::Result<Vec<ServerAIConversationMetadata>>;
-
-    async fn get_ai_conversation_format(
-        &self,
-        server_conversation_token: ServerConversationToken,
-    ) -> anyhow::Result<AIAgentConversationFormat, anyhow::Error>;
 
     async fn get_block_snapshot(
         &self,
@@ -1631,11 +1575,6 @@ pub trait AIClient: 'static + Send + Sync {
         sequence: i64,
     ) -> anyhow::Result<(), anyhow::Error>;
 
-    async fn report_agent_event(
-        &self,
-        run_id: &str,
-        request: ReportAgentEventRequest,
-    ) -> anyhow::Result<ReportAgentEventResponse, anyhow::Error>;
     async fn post_agent_run_client_event(
         &self,
         run_id: &AmbientAgentTaskId,
@@ -1683,7 +1622,6 @@ fn into_file_artifact_record(
         filepath: artifact.filepath,
         description: artifact.description,
         mime_type: artifact.mime_type,
-        size_bytes: artifact.size_bytes,
     }
 }
 
@@ -1903,99 +1841,6 @@ fn convert_upload_field(
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 impl AIClient for ServerApi {
-    async fn generate_commands_from_natural_language(
-        &self,
-        prompt: String,
-        // TODO: use relevant context from RequestContext and deprecate usage of ai_execution_context
-        _ai_execution_context: Option<WarpAiExecutionContext>,
-    ) -> Result<Vec<AIGeneratedCommand>, GenerateCommandsFromNaturalLanguageError> {
-        let default_err = GenerateCommandsFromNaturalLanguageError::Other;
-
-        let variables = GenerateCommandsVariables {
-            input: GenerateCommandsInput { prompt },
-            request_context: get_request_context(),
-        };
-
-        let operation = GenerateCommands::build(variables);
-        let response = self
-            .send_graphql_request(
-                operation,
-                Some(Duration::from_secs(AI_ASSISTANT_REQUEST_TIMEOUT_SECONDS)),
-            )
-            .await
-            .map_err(|_| default_err)?;
-
-        match response.generate_commands {
-            GenerateCommandsResult::GenerateCommandsOutput(output) => match output.status {
-                GenerateCommandsStatus::GenerateCommandsSuccess(success) => {
-                    Ok(success.commands.into_iter().map(Into::into).collect_vec())
-                }
-                GenerateCommandsStatus::GenerateCommandsFailure(failure) => {
-                    Err(failure.type_.into())
-                }
-                GenerateCommandsStatus::Unknown => {
-                    Err(GenerateCommandsFromNaturalLanguageError::Other)
-                }
-            },
-            _ => Err(GenerateCommandsFromNaturalLanguageError::Other),
-        }
-    }
-
-    async fn generate_dialogue_answer(
-        &self,
-        transcript: Vec<TranscriptPart>,
-        prompt: String,
-        // TODO: use relevant context from RequestContext and deprecate usage of ai_execution_context
-        _ai_execution_context: Option<WarpAiExecutionContext>,
-    ) -> anyhow::Result<GenerateDialogueResult> {
-        let graphql_transcript: Vec<TranscriptPartGraphql> = transcript
-            .into_iter()
-            .map(|part| TranscriptPartGraphql {
-                user: part.raw_user_prompt().to_string(),
-                assistant: part.raw_assistant_answer().to_string(),
-            })
-            .collect();
-        let variables = GenerateDialogueVariables {
-            input: GenerateDialogueInput {
-                transcript: graphql_transcript,
-                prompt,
-            },
-            request_context: get_request_context(),
-        };
-
-        let operation = GenerateDialogue::build(variables);
-        let response = self
-            .send_graphql_request(
-                operation,
-                Some(Duration::from_secs(AI_ASSISTANT_REQUEST_TIMEOUT_SECONDS)),
-            )
-            .await?;
-        match response.generate_dialogue {
-            GenerateDialogueResultGraphql::GenerateDialogueOutput(output) => match output.status {
-                GenerateDialogueStatus::GenerateDialogueSuccess(success) => {
-                    Ok(GenerateDialogueResult::Success {
-                        answer: success.answer,
-                        truncated: success.truncated,
-                        request_limit_info: success.request_limit_info.into(),
-                        transcript_summarized: success.transcript_summarized,
-                    })
-                }
-                GenerateDialogueStatus::GenerateDialogueFailure(failure) => {
-                    Ok(GenerateDialogueResult::Failure {
-                        request_limit_info: failure.request_limit_info.into(),
-                    })
-                }
-                GenerateDialogueStatus::Unknown => Err(anyhow!("failed to generate AI dialogue")),
-            },
-            GenerateDialogueResultGraphql::UserFacingError(e) => {
-                Err(anyhow!(get_user_facing_error_message(e)))
-            }
-            GenerateDialogueResultGraphql::Unknown => {
-                Err(anyhow!("failed to generate AI dialogue"))
-            }
-        }
-    }
-
     async fn generate_metadata_for_command(
         &self,
         command: String,
@@ -2669,43 +2514,6 @@ impl AIClient for ServerApi {
         }
     }
 
-    async fn get_ai_conversation_format(
-        &self,
-        server_conversation_token: ServerConversationToken,
-    ) -> anyhow::Result<AIAgentConversationFormat, anyhow::Error> {
-        use warp_graphql::queries::get_ai_conversation_format::{
-            GetAIConversationFormat, GetAIConversationFormatResult,
-            GetAIConversationFormatVariables,
-        };
-        use warp_graphql::queries::list_ai_conversations::ListAIConversationsInput;
-
-        let conversation_id = server_conversation_token.as_str().to_string();
-        let operation = GetAIConversationFormat::build(GetAIConversationFormatVariables {
-            input: ListAIConversationsInput {
-                conversation_ids: Some(vec![cynic::Id::new(conversation_id)]),
-            },
-            request_context: get_request_context(),
-        });
-        let response = self.send_graphql_request(operation, None).await?;
-
-        match response.list_ai_conversations {
-            GetAIConversationFormatResult::ListAIConversationsOutput(output) => {
-                let conversation = output
-                    .conversations
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| anyhow!("Conversation not found"))?;
-                Ok(convert_conversation_format(conversation.format))
-            }
-            GetAIConversationFormatResult::UserFacingError(e) => {
-                Err(anyhow!(get_user_facing_error_message(e)))
-            }
-            GetAIConversationFormatResult::Unknown => {
-                Err(anyhow!("Failed to get AI conversation format"))
-            }
-        }
-    }
-
     async fn get_block_snapshot(
         &self,
         server_conversation_token: ServerConversationToken,
@@ -3021,7 +2829,6 @@ impl AIClient for ServerApi {
                         file_id: att.file_id.into_inner(),
                         filename: att.filename,
                         download_url: att.download_url,
-                        mime_type: att.mime_type,
                     })
                     .collect();
                 Ok(attachments)
@@ -3176,9 +2983,6 @@ impl AIClient for ServerApi {
                 file_id: attachment.attachment_id,
                 filename: attachment.filename,
                 download_url: attachment.download_url,
-                mime_type: attachment
-                    .mime_type
-                    .unwrap_or_else(|| "application/octet-stream".to_string()),
             })
             .collect())
     }
@@ -3215,18 +3019,6 @@ impl AIClient for ServerApi {
             .get_public_api_response(&format!("agent/conversations/{conversation_id}/transcript"))
             .await?;
         Ok(response.bytes().await?)
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    async fn download_conversation_transcript_to_path(
-        &self,
-        conversation_id: &str,
-        destination: &Path,
-    ) -> anyhow::Result<(), anyhow::Error> {
-        let response = self
-            .get_public_api_response(&format!("agent/conversations/{conversation_id}/transcript"))
-            .await?;
-        write_response_body_to_path(response, destination).await
     }
 
     // --- Orchestrations V2 messaging ---
@@ -3275,16 +3067,6 @@ impl AIClient for ServerApi {
         .await
     }
 
-    async fn report_agent_event(
-        &self,
-        run_id: &str,
-        request: ReportAgentEventRequest,
-    ) -> anyhow::Result<ReportAgentEventResponse, anyhow::Error> {
-        let response: ReportAgentEventResponse = self
-            .post_public_api(&format!("agent/events/{run_id}"), &request)
-            .await?;
-        Ok(response)
-    }
     async fn post_agent_run_client_event(
         &self,
         run_id: &AmbientAgentTaskId,
@@ -3638,23 +3420,6 @@ fn convert_harness(harness: warp_graphql::ai::AgentHarness) -> AIAgentHarness {
             );
             AIAgentHarness::Unknown
         }
-    }
-}
-
-fn convert_block_snapshot_format(
-    format: warp_graphql::ai::SerializedBlockFormat,
-) -> AIAgentSerializedBlockFormat {
-    match format {
-        warp_graphql::ai::SerializedBlockFormat::JsonV1 => AIAgentSerializedBlockFormat::JsonV1,
-    }
-}
-
-fn convert_conversation_format(
-    format: warp_graphql::ai::AIConversationFormat,
-) -> AIAgentConversationFormat {
-    AIAgentConversationFormat {
-        has_task_list: format.has_task_list,
-        block_snapshot: format.block_snapshot.map(convert_block_snapshot_format),
     }
 }
 

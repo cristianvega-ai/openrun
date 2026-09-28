@@ -21,10 +21,6 @@ lazy_static! {
     static ref SAMPLE_QUERY_TO_FILTER: HashMap<&'static str, QueryFilter> = HashMap::from([
         ("history: git checkout", QueryFilter::History),
         ("workflows: run dev server", QueryFilter::Workflows),
-        (
-            "# find \"foo\" in files",
-            QueryFilter::NaturalLanguage
-        ),
     ]);
 }
 
@@ -282,11 +278,11 @@ impl TypedActionView for CommandSearchZeroStateView {
 fn valid_query_filters(app: &AppContext) -> Vec<QueryFilter> {
     let mut filters = vec![QueryFilter::History];
 
-    if FeatureFlag::AgentMode.is_enabled() && AISettings::as_ref(app).is_any_ai_enabled(app) {
-        if FeatureFlag::AgentModeWorkflows.is_enabled() {
-            filters.push(QueryFilter::AgentModeWorkflows);
-        }
-        filters.push(QueryFilter::PromptHistory);
+    if FeatureFlag::AgentMode.is_enabled()
+        && FeatureFlag::AgentModeWorkflows.is_enabled()
+        && AISettings::as_ref(app).is_any_ai_enabled(app)
+    {
+        filters.push(QueryFilter::AgentModeWorkflows);
     }
 
     if WarpDriveSettings::is_warp_drive_enabled(app) {

@@ -48,8 +48,8 @@ use super::llms::LLMId;
 use crate::TelemetryEvent;
 use crate::ai::block_context::BlockContext;
 use crate::ai::blocklist::block::view_impl::output::are_all_text_sections_empty;
+use crate::ai::execution_context::WarpAiExecutionContext;
 use crate::ai::skills::SkillDescriptor;
-use crate::ai_assistant::execution_context::WarpAiExecutionContext;
 use crate::code::editor_management::CodeSource;
 use crate::code_review::comments::{
     AttachedReviewComment as CodeReviewComment, ReviewCommentBatch,
