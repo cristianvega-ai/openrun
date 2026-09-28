@@ -86,8 +86,8 @@ pub enum TipAction {
     HistorySearch,
     CommandSearch,
     SaveNewLaunchConfig,
-    // This toggles Warp Drive rather than opening it. This enum can't directly be
-    // renamed because we serialize it into the welcome tips.
+    // Deprecated: no longer in any section. Kept because this enum is serialized into the
+    // welcome tips, and old clients will have this value in their user defaults.
     OpenWarpDrive,
     // Not shown in any section. Kept so that welcome tips saved by earlier versions, which may
     // contain this value, still deserialize.

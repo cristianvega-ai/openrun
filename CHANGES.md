@@ -45,6 +45,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Hosted web client ties to app.warp.dev](#hosted-web-client-ties-to-appwarpdev) — removed the web client's address-bar sync, open-in-desktop flows, host-page auth handoff and events, remote fonts and assets, and the desktop rewrite of Warp web links into app intents
 - [remote_tty websocket terminal transport](#remote_tty-websocket-terminal-transport) — deleted the web/dev-only PTY-over-websocket transport and its `remote_tty` Cargo feature
 - [Web client crates, scripts and build profiles](#web-client-crates-scripts-and-build-profiles) — deleted the wasm bundle/serve scripts, the `serve-wasm`, `warp_web_event_bus` and `managed_secrets_wasm` crates, and the wasm Cargo profiles
+- [Warp Drive: panel, menus, actions and deep links](#warp-drive-panel-menus-actions-and-deep-links) — removed the Drive panel and index, its left-panel tab, menu, create/import actions, palette source, settings page, `warp://drive` links and web intents; local workflows now always show in command search
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1161,3 +1162,41 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Doc comments in `crates/managed_secrets` that mention `managed_secrets_wasm` stay for AI-18, which deletes that crate.
 - `flake.nix` still lists `jq` and `brotli` in its build inputs; left as is.
 - The wasm-only dependencies of `app` and other crates (`js-sys`, `wasm-bindgen`, `gloo`, `web-sys`, `serde-wasm-bindgen`) and the `cfg(wasm)` branches are left for WASM-2.
+
+## Warp Drive: panel, menus, actions and deep links
+**Why:** Warp Drive stores, syncs and shares objects through Warp's servers. The offline build removes it entirely (user decision 1). This change removes the surfaces a user reaches Drive through. The cloud-object models and sync machinery stay until DRV-2 to DRV-5 remove them.
+
+**Removed:**
+- `app/src/drive/{panel, index, items/*, cloud_object_naming_dialog, empty_trash_confirmation_dialog, drive_helpers, settings, import/*}` with their tests — the Drive panel and index (spaces, folders, trash, sorting, drag and drop), the per-object item views including the AI fact and MCP server items, the create/rename and empty-trash dialogs, the import modal, and the anonymous-user object limits.
+- `WarpDriveSettings`: `warp_drive.enabled`, `warp_drive.sorting_choice` and the private sharing-onboarding flag, plus `DriveSortOrder`, `DriveIndexVariant`, `OpenWarpDriveObjectSettings`, `OpenWarpDriveObjectArgs` and the "auto-open welcome folder" preference.
+- Left panel: the Warp Drive tab, the `workspace:left_panel_warp_drive` (Ctrl-4 / Alt-4) and `workspace:toggle_warp_drive` bindings, the `EnableWarpDrive` context flag, `LeftPanelDisplayedTab::WarpDrive` and `ToolPanelView::WarpDrive`. The Drive index width is no longer read or written; the `windows.warp_drive_index_width` column is left for DB-1.
+- The "Drive" app menu; `CustomAction::{NewPersonal*, NewTeam*, SearchDrive}`; `WorkspaceAction::{Create{Personal,Team}{Notebook,Workflow,Folder,EnvVarCollection,AIPrompt}, ImportTo{Personal,Team}Drive, ExportAllWarpDriveObjects, OpenWarpDrive, ToggleWarpDrive, ViewObjectInWarpDrive, OpenObjectSharingSettings, UndoTrash}` with their keybindings, including `workspace:search_drive` and `workspace:export_all_warp_drive_objects`.
+- Command palette: `search/command_palette/warp_drive/` (with `data_sources_tests.rs`), the `drive:` filter (`QueryFilter::Drive`), `PaletteMode::WarpDrive`, and the palette's workflow, notebook and env-var item actions.
+- Command search: the cloud-workflow and env-var-collection sources (`command_search/workflows/cloud_workflows_data_source.rs`, `command_search/env_var_collections/`) and their accept actions.
+- Settings: `settings_view/warp_drive_page.rs` and `SettingsSection::WarpDrive`; the "Warp Drive" tools-panel toggle on the Appearance page; the Warp Drive chip, its preview images and `UICustomizationSettings::show_warp_drive` in onboarding.
+- warpctrl: `surface.warp_drive.open` and `surface.warp_drive.toggle` (`warpctrl surface warp-drive`), and their mention in the bundled warpctrl skill.
+- Deep links: `UriHost::Drive` (`warp://drive/...`), `WebIntent::DriveObject`, `uri/parse_url_paths.rs`, the `root_view:open_drive_object_*` actions, `NewWorkspaceSource::{NotebookById, WorkflowById}`, notebook links to Drive objects, and `ContextFlag::set_warp_drive_link_only`.
+- Navigation into Drive: `cloud_object/breadcrumbs.rs` and `ui_components/breadcrumb.rs`, the breadcrumb headers and "View in Warp Drive" events in the notebook, workflow, env-var and workflow-modal views, "Show in Warp Drive" in AI documents, and the notebook "Move to <team> space" menu items.
+- `app/src/billing/` — the shared-object quota ("creation denied") modal and its workspace state.
+- The workspace login gate: `WorkspaceAction::blocked_for_anonymous_user` and `From<&WorkspaceAction> for LoginGatedFeature`. With the team-Drive create/import actions gone (and session sharing removed by SS-1), no workspace action needs a login.
+- `Modal`'s header icon (`set_header_icon`, `set_header_icon_color`); the creation-denied modal was its only user.
+- The terminal's Drive-sharing onboarding block, the block "Save as workflow" hover button and the "Save as workflow" context-menu items, all gated on Drive being enabled.
+- The Drive agent tip and the `HitDriveObjectLimitCloseable` sign-up prompt.
+- `integration_testing/warp_drive` and the `test_create_folder_from_command_palette` integration test; the Drive-only unit tests in `workspace/view_tests.rs` and `cloud_object/model/model_tests.rs`.
+- The `UpdateSortingChoice` telemetry variant, whose payload type is gone.
+
+**Modified:**
+- `search/command_search/view.rs`, `zero_state.rs` — local workflows (app, global, `~/.warp/workflows`, project `.warp/workflows`) are always registered, and the `workflows:` filter is always offered. They used to sit behind `is_warp_drive_enabled`, which is always false with no account.
+- `terminal/input/prompts/data_source.rs` — the saved-prompts menu fuzzy-matches prompts itself instead of going through the deleted Drive palette source.
+- `CloudObject` — `to_warp_drive_item` is gone and `containing_objects_path` returns names, for the text breadcrumbs command search still shows.
+- `workspace/view/left_panel.rs` owns `MIN_SIDEBAR_WIDTH` / `MAX_SIDEBAR_WIDTH_RATIO`; `configure_empty_workspace` no longer auto-opens Drive; `/add-prompt` opens the prompt editor pane directly.
+- `TipAction::OpenWarpDrive` is kept but no longer in any section, because welcome tips are serialized with it.
+
+**User-visible impact:** There is no Warp Drive panel, menu, settings page, palette section or `warp://drive` link handling. Cloud notebooks, workflows and env-var collections already in the local database can still be restored in panes until DRV-2 to DRV-4 remove them. Local workflows now show in command search, where the offline build had hidden them. A saved window whose left panel was on the Drive tab restores without its left-panel snapshot.
+
+**Notes:**
+- Kept for later tasks: `drive/workflows/` (DRV-4); `drive/folders` and the access-level types in `drive/sharing/mod.rs` (DRV-5); `drive/cloud_action_confirmation_dialog.rs` (Teams page, TEAM-1); `drive/cloud_object_styling.rs` and `DriveObjectType`, still used for object icon colours by vertical tabs, filter chips and search items (DRV-2 to DRV-4); `drive/export.rs` and `drive/sharing/{dialog, qr_code, style}` (next section); `integration_testing/cloud_object`, used by the cloud notebook and workflow integration tests (DRV-3/DRV-4).
+- Dead code left for its owners: in `CloudModel` / `CloudViewModel` / `UpdateManager` / `SyncQueue` the trash, sort and leave/rename helpers (DRV-5); `search/notebooks` and `search/env_var_collections` fuzzy matchers (DRV-3, DRV-2); `WorkflowModal::open_with_new` (DRV-4); `NotebookView::online_only_operation_allowed` (DRV-3); `ai::facts::view::is_syncing` (AI-15).
+- `OpenWarpDriveObjectInPane` (terminal and pane-group events) stays: AI citations and plans use it to open cloud objects in panes, and the AI tasks own it.
+- `WarpDrivePrivacySettings` is not Drive-only: it holds the telemetry and cloud-conversation-storage toggles, so TEL-1 and the AI plan own it.
+- The Drive login purpose in `auth/login_slide.rs` and `onboarding::WARP_DRIVE_FEATURES` are left for AUTH-1.

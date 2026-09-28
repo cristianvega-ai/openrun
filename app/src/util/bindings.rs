@@ -94,17 +94,10 @@ pub enum CustomAction {
     ToggleSyncTerminalInputsInCurrentTab,
     DisableSyncTerminalInputs,
     ReopenClosedSession,
-    ToggleWarpDrive,
+    ToggleLeftPanel,
     AddWindow,
     CloseCurrentSession,
     CloseWindow,
-    NewPersonalWorkflow,
-    NewPersonalNotebook,
-    NewPersonalEnvVars,
-    NewTeamWorkflow,
-    NewTeamNotebook,
-    NewTeamEnvVars,
-    SearchDrive,
     OpenTeamSettings,
     SharePaneContents,
     #[cfg(windows)]
@@ -114,8 +107,6 @@ pub enum CustomAction {
     OpenAIFactCollection,
     OpenMCPServerCollection,
     ToggleProjectExplorer,
-    NewPersonalAIPrompt,
-    NewTeamAIPrompt,
     OpenRepository,
     NewTerminalTab,
     NewAgentTab,
@@ -377,7 +368,7 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
             }
         }
         CustomAction::AddWindow => Keystroke::parse(cmd_or_ctrl_shift("n")).ok(),
-        CustomAction::ToggleWarpDrive => {
+        CustomAction::ToggleLeftPanel => {
             if OperatingSystem::get().is_mac() {
                 Keystroke::parse("cmd-\\").ok()
             } else {
@@ -433,19 +424,10 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::HistorySearch
         | CustomAction::DisableSyncTerminalInputs
         | CustomAction::ToggleSyncAllTerminalInputsInAllTabs
-        | CustomAction::NewPersonalWorkflow
-        | CustomAction::NewPersonalNotebook
-        | CustomAction::NewPersonalEnvVars
-        | CustomAction::NewTeamWorkflow
-        | CustomAction::NewTeamNotebook
-        | CustomAction::NewTeamEnvVars
-        | CustomAction::SearchDrive
         | CustomAction::OpenTeamSettings
         | CustomAction::SharePaneContents
         | CustomAction::OpenAIFactCollection
         | CustomAction::OpenMCPServerCollection
-        | CustomAction::NewPersonalAIPrompt
-        | CustomAction::NewTeamAIPrompt
         | CustomAction::NewAgentTab => None,
     }
 }

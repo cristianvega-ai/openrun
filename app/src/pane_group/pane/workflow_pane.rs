@@ -6,8 +6,6 @@ use warpui::{AppContext, ModelHandle, SingletonEntity, ViewContext, ViewHandle};
 
 use super::{DetachType, PaneConfiguration, PaneContent, PaneGroup, PaneId, PaneView};
 use crate::app_state::{LeafContents, WorkflowPaneSnapshot};
-use crate::drive::OpenWarpDriveObjectSettings;
-use crate::drive::items::WarpDriveItemId;
 use crate::server::ids::SyncId;
 use crate::workflows::manager::{WorkflowManager, WorkflowOpenSource};
 use crate::workflows::workflow_view::{WorkflowView, WorkflowViewEvent};
@@ -35,7 +33,6 @@ impl WorkflowPane {
 
     pub fn restore(
         workflow_id: Option<SyncId>,
-        settings: OpenWarpDriveObjectSettings,
         ctx: &mut ViewContext<PaneGroup>,
     ) -> anyhow::Result<Self> {
         let window_id = ctx.window_id();
@@ -56,7 +53,6 @@ impl WorkflowPane {
         Ok(WorkflowManager::handle(ctx).update(ctx, |manager, ctx| {
             manager.create_pane(
                 &source,
-                &settings,
                 WorkflowViewMode::supported_view_mode(workflow_id, ctx),
                 window_id,
                 ctx,
@@ -128,7 +124,6 @@ impl PaneContent for WorkflowPane {
         let workflow_id = self.get_view(app).as_ref(app).workflow_id();
         LeafContents::Workflow(WorkflowPaneSnapshot::CloudWorkflow {
             workflow_id: Some(workflow_id),
-            settings: OpenWarpDriveObjectSettings::default(),
         })
     }
 
@@ -159,7 +154,6 @@ fn handle_workflow_event(
 ) {
     match event {
         WorkflowViewEvent::Pane(pane_event) => group.handle_pane_event(pane_id, pane_event, ctx),
-        WorkflowViewEvent::ViewInWarpDrive(id) => view_in_warp_drive(*id, ctx),
         WorkflowViewEvent::RunWorkflow {
             workflow,
             source,
@@ -167,17 +161,6 @@ fn handle_workflow_event(
         } => run_workflow(workflow.clone(), *source, argument_override.clone(), ctx),
         WorkflowViewEvent::UpdatedWorkflow(_id) => {
             log::warn!("Updates not yet handled in pane")
-        }
-        WorkflowViewEvent::OpenDriveObjectShareDialog {
-            cloud_object_type_and_id,
-            invitee_email,
-            source,
-        } => {
-            ctx.emit(crate::pane_group::Event::OpenDriveObjectShareDialog {
-                cloud_object_type_and_id: *cloud_object_type_and_id,
-                invitee_email: invitee_email.clone(),
-                source: *source,
-            });
         }
         WorkflowViewEvent::CreatedWorkflow(_) => {
             // No op in a pane.
@@ -197,8 +180,4 @@ fn run_workflow(
         argument_override,
         workflow_selection_source: WorkflowSelectionSource::WorkflowView,
     });
-}
-
-fn view_in_warp_drive(id: WarpDriveItemId, ctx: &mut ViewContext<PaneGroup>) {
-    ctx.emit(crate::pane_group::Event::ViewInWarpDrive(id))
 }

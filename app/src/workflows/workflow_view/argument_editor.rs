@@ -10,7 +10,6 @@ use warpui::elements::{
     MainAxisSize, ParentElement, Shrinkable,
 };
 use warpui::text_layout::TextStyle;
-use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::{AppContext, Element, SingletonEntity as _, ViewContext, ViewHandle};
 
@@ -32,7 +31,6 @@ use crate::pane_group::PaneEvent;
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons::Icon;
 use crate::workflows::workflow::Workflow;
-use crate::workspace::WorkspaceAction;
 
 const ARGUMENT_INPUT_HEIGHT: f32 = 30.;
 const ARGUMENT_LABEL_TEXT: &str = "Arguments";
@@ -548,7 +546,7 @@ impl WorkflowView {
             )
             && !self.is_for_agent_mode
         {
-            arguments_section.add_child(self.render_env_vars_selector(appearance, app));
+            arguments_section.extend(self.render_env_vars_selector(appearance, app));
         }
 
         Some(arguments_section.finish())
@@ -808,27 +806,14 @@ impl WorkflowView {
         &self,
         appearance: &Appearance,
         app: &AppContext,
-    ) -> Box<dyn Element> {
-        let action_element = if self.env_vars_selector.as_ref(app).has_env_vars(app) {
-            Shrinkable::new(1., ChildView::new(&self.env_vars_selector).finish()).finish()
-        } else {
-            appearance
-                .ui_builder()
-                .button(
-                    ButtonVariant::Secondary,
-                    self.ui_state_handles
-                        .add_environment_variables_mouse_state
-                        .clone(),
-                )
-                .with_centered_text_label("Add environment variables".to_string())
-                .build()
-                .on_click(|ctx, _, _| {
-                    ctx.dispatch_typed_action(WorkspaceAction::CreatePersonalEnvVarCollection);
-                })
-                .finish()
-        };
+    ) -> Option<Box<dyn Element>> {
+        if !self.env_vars_selector.as_ref(app).has_env_vars(app) {
+            return None;
+        }
+        let action_element =
+            Shrinkable::new(1., ChildView::new(&self.env_vars_selector).finish()).finish();
 
-        Flex::row()
+        let row = Flex::row()
             .with_children([
                 appearance
                     .ui_builder()
@@ -845,6 +830,7 @@ impl WorkflowView {
             .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
             .with_main_axis_size(MainAxisSize::Max)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .finish()
+            .finish();
+        Some(row)
     }
 }

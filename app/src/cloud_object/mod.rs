@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -9,24 +9,20 @@ use chrono::{Duration, Utc};
 use derivative::Derivative;
 use lazy_static::lazy_static;
 use regex::Regex;
-use url::Url;
 use warp_core::channel::Channel;
 use warp_core::features::FeatureFlag;
 use warp_graphql::queries::get_updated_cloud_objects::UpdatedObjectInput;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{AppContext, SingletonEntity};
 
-use self::breadcrumbs::ContainingObject;
 use self::model::actions::ObjectActions;
 use self::model::generic_string_model::{
     GenericStringModel, GenericStringObjectId, Serializer, StringModel,
 };
 use self::model::persistence::CloudModel;
-use crate::appearance::Appearance;
 use crate::auth::UserUid;
 use crate::channel::ChannelState;
-use crate::drive::items::WarpDriveItem;
-use crate::drive::{CloudObjectTypeAndId, OpenWarpDriveObjectArgs, OpenWarpDriveObjectSettings};
+use crate::drive::CloudObjectTypeAndId;
 use crate::persistence::ModelEvent;
 use crate::server::cloud_objects::update_manager::InitiatedBy;
 use crate::server::ids::{HashableId, HashedSqliteId, ObjectUid, ServerId, SyncId, ToServerId};
@@ -37,7 +33,6 @@ use crate::workflows::{CloudWorkflow, WorkflowSource};
 use crate::workspaces::user_profiles::UserProfiles;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
-pub mod breadcrumbs;
 pub mod grab_edit_access_modal;
 pub mod model;
 pub mod preference;
@@ -160,10 +155,6 @@ pub trait CloudObject: Debug {
         true
     }
 
-    /// Creates a new Warp Drive item for this object.  Returns None if this
-    /// object is not rendered in Warp Drive.
-    fn to_warp_drive_item(&self, appearance: &Appearance) -> Option<Box<dyn WarpDriveItem>>;
-
     /// Returns the web link of this object. Will return none if we do not support web links
     /// for this particular object (i.e. if it's not yet sync'd to the server, or if we don't
     /// yet support linking to that object type).
@@ -202,12 +193,11 @@ pub trait CloudObject: Debug {
             .into_iter()
             .next_back()
             .expect("Object should have at least one ancestor")
-            .name
     }
 
-    // Returns the path of all the containing "objects" for this object.
+    // Returns the names of all the containing "objects" for this object.
     // This could include folders or spaces.
-    fn containing_objects_path(&self, app: &AppContext) -> Vec<ContainingObject> {
+    fn containing_objects_path(&self, app: &AppContext) -> Vec<String> {
         let space = self.space(app);
 
         match self.metadata().folder_id {
@@ -217,24 +207,20 @@ pub trait CloudObject: Debug {
                     let mut path = vec![];
                     let ancestors = folder.containing_objects_path(app);
                     path.extend(ancestors);
-                    path.push(folder.into());
+                    path.push(folder.display_name());
                     path
                 } else {
                     // if for whatever reason the folder id is messed up,
                     // just default to showing the top-level space it wound up in
-                    vec![space.into_containing_object(app)]
+                    vec![space.name(app)]
                 }
             }
-            None => vec![space.into_containing_object(app)],
+            None => vec![space.name(app)],
         }
     }
 
     fn breadcrumbs(&self, app: &AppContext) -> String {
-        self.containing_objects_path(app)
-            .into_iter()
-            .map(|object| object.name)
-            .collect::<Vec<String>>()
-            .join(" / ")
+        self.containing_objects_path(app).join(" / ")
     }
 
     /// Returns whether this CloudObject is in the given space
@@ -450,15 +436,6 @@ pub trait CloudModelType: Debug + Clone + Send + Sync {
     fn warn_if_unsaved_at_quit(&self) -> bool {
         true
     }
-
-    /// Creates a new warp drive item for this model type. Returns None
-    /// if this object does not render in Warp Drive.
-    fn to_warp_drive_item(
-        &self,
-        id: SyncId,
-        appearance: &Appearance,
-        object: &Self::CloudObjectType,
-    ) -> Option<Box<dyn WarpDriveItem>>;
 
     /// Returns the display name for this model (e.g. to show in the Warp Drive index)
     fn display_name(&self) -> String;
@@ -779,10 +756,6 @@ where
         self.model().renders_in_warp_drive()
     }
 
-    fn to_warp_drive_item(&self, appearance: &Appearance) -> Option<Box<dyn WarpDriveItem>> {
-        self.model().to_warp_drive_item(self.id, appearance, self)
-    }
-
     fn can_export(&self) -> bool {
         self.model().can_export()
     }
@@ -798,47 +771,6 @@ where
     fn clone_box(&self) -> Box<dyn CloudObject> {
         Box::new(self.clone())
     }
-}
-
-/// Extracts the server id and object type from a (caller validated) Drive link.
-/// Intended use is deriving metadata from links such that Warp objects
-/// can be opened natively in Warp with no web interaction.
-pub fn extract_server_id_and_object_type_from_warp_drive_link(
-    url: &Url,
-) -> Option<OpenWarpDriveObjectArgs> {
-    let server_id = url
-        .path_segments()
-        .and_then(|mut segments| segments.next_back())
-        .and_then(|last_segment| last_segment.split('-').next_back())
-        .map(|id| id.to_string());
-
-    let object_type = url.path_segments().and_then(|mut segments| segments.nth(1));
-
-    // Parse the object portion of the path segment (warp.dev/drive/{object})
-    // into an object type
-    let object_type = match object_type {
-        Some("notebook") => ObjectType::Notebook,
-        Some("workflow") => ObjectType::Workflow,
-        _ => return None,
-    };
-    let query_string: HashMap<_, _> = url.query_pairs().collect();
-    let focused_folder_id: Option<ServerId> = query_string
-        .get("focused_folder_id")
-        .and_then(|s| s.to_string().try_into().ok());
-
-    let invitee_email: Option<String> = query_string.get("invitee_email").map(|s| s.to_string());
-
-    Some(OpenWarpDriveObjectArgs {
-        object_type,
-        server_id: match server_id {
-            Some(server_id) => server_id.try_into().ok()?,
-            _ => return None,
-        },
-        settings: OpenWarpDriveObjectSettings {
-            focused_folder_id,
-            invitee_email,
-        },
-    })
 }
 
 impl<'a, K, M> From<&'a dyn CloudObject> for Option<&'a GenericCloudObject<K, M>>

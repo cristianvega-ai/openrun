@@ -21,10 +21,8 @@ use warpui::{
 
 use super::command_dialog::EnvVarCommandDialog;
 use super::menus::Menus;
-use crate::cloud_object::breadcrumbs::ContainingObject;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
 use crate::cloud_object::{CloudObjectEventEntrypoint, Owner};
-use crate::drive::items::WarpDriveItemId;
 use crate::drive::sharing::{ContentEditability, ShareableObject};
 use crate::editor::EditorView;
 use crate::env_vars::active_env_var_collection_data::{
@@ -46,7 +44,6 @@ use crate::server::cloud_objects::update_manager::{FetchSingleObjectOption, Upda
 use crate::server::ids::{ServerId, SyncId};
 use crate::terminal::model::secrets::SecretLevel;
 use crate::terminal::safe_mode_settings::get_secret_obfuscation_mode;
-use crate::ui_components::breadcrumb::{BreadcrumbState, render_breadcrumbs};
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons::Icon;
 use crate::ui_components::menu_button::{
@@ -281,7 +278,6 @@ pub struct EnvVarCollectionView {
     // (the key) or a rendered secret/command button. Once a menu item
     // is selected, we set this to Some(VariableRowIndex())
     pub(super) pending_variable_row_index: Option<VariableRowIndex>,
-    pub(super) breadcrumbs: Vec<BreadcrumbState<ContainingObject>>,
     // State vars used to manage menus; pane_context_menu_offset holds
     // the offset from the parent (i.e. origin of the element saved to
     // the below view_position_id variable) on a user's right click
@@ -305,7 +301,6 @@ pub struct EnvVarCollectionView {
 pub enum EnvVarCollectionEvent {
     Pane(PaneEvent),
     UpdatedEnvVarCollection(SyncId),
-    ViewInWarpDrive(WarpDriveItemId),
     Invoke(EnvVarCollectionType),
 }
 #[derive(Debug, Clone)]
@@ -340,8 +335,6 @@ pub enum EnvVarCollectionAction {
     // Unsaved changes dialog actions
     ForceClose,
     CloseUnsavedChangesDialog,
-    // Breadcrumbs action
-    ViewInWarpDrive(WarpDriveItemId),
 }
 
 /// Defines the view for a collection of environment variables
@@ -554,7 +547,6 @@ impl EnvVarCollectionView {
             title_editor,
             description_editor,
             variable_rows: Vec::new(),
-            breadcrumbs: Vec::new(),
             menus,
             pending_variable_row_index: None,
             pane_context_menu_offset: None,
@@ -951,12 +943,7 @@ impl EnvVarCollectionView {
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            ActiveEnvVarCollectionDataEvent::BreadcrumbsChanged => {
-                self.update_breadcrumbs(ctx);
-                ctx.notify()
-            }
             ActiveEnvVarCollectionDataEvent::CreatedOnServer(server_id) => {
-                self.update_breadcrumbs(ctx);
                 self.pane_configuration.update(ctx, |pane_config, ctx| {
                     pane_config.set_shareable_object(
                         Some(ShareableObject::WarpDriveObject(*server_id)),
@@ -1092,10 +1079,6 @@ impl EnvVarCollectionView {
             .update(ctx, |pane_configuration, ctx| {
                 pane_configuration.set_title(title, ctx)
             });
-    }
-
-    fn view_in_warp_drive(&mut self, id: WarpDriveItemId, ctx: &mut ViewContext<Self>) {
-        ctx.emit(EnvVarCollectionEvent::ViewInWarpDrive(id));
     }
 
     // This is a public re-export of close since it's a trait method
@@ -1296,33 +1279,6 @@ impl View for EnvVarCollectionView {
             .editability(app);
 
         content.extend(self.render_trash_banner(access_level, app));
-
-        content.add_child(
-            Align::new(
-                ConstrainedBox::new(
-                    Align::new(
-                        Container::new(render_breadcrumbs(
-                            self.breadcrumbs.clone(),
-                            appearance,
-                            |ctx, _, breadcrumb| {
-                                ctx.dispatch_typed_action(EnvVarCollectionAction::ViewInWarpDrive(
-                                    breadcrumb.kind.into_item_id(),
-                                ));
-                            },
-                        ))
-                        .with_horizontal_margin(CORE_HORIZONATAL_MARGIN)
-                        .with_vertical_margin(CORE_VERTICAL_MARGIN / 2.)
-                        .finish(),
-                    )
-                    .top_left()
-                    .finish(),
-                )
-                .with_max_width(CORE_MAX_WIDTH)
-                .finish(),
-            )
-            .top_center()
-            .finish(),
-        );
 
         if let TrashStatus::Active = self
             .active_env_var_collection_data
@@ -1535,7 +1491,6 @@ impl TypedActionView for EnvVarCollectionView {
                 self.update_open_modal_state(ctx);
                 ctx.notify();
             }
-            EnvVarCollectionAction::ViewInWarpDrive(id) => self.view_in_warp_drive(*id, ctx),
         }
     }
 }

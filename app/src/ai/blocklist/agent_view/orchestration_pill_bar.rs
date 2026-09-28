@@ -2586,10 +2586,7 @@ const CRUMB_HORIZONTAL_PADDING: f32 = 6.;
 /// `None` for same-pane child views — those render the pill bar with the
 /// active child highlighted instead.
 ///
-/// We render this manually rather than going through
-/// `crate::ui_components::breadcrumb::render_breadcrumbs` because we need a
-/// chevron separator (per the Figma) and per-crumb avatars, neither of which
-/// the shared helper supports today.
+/// Rendered with a chevron separator (per the Figma) and per-crumb avatars.
 ///
 /// `parent_crumb_mouse_state` must be a `MouseStateHandle` owned by the caller
 /// (e.g. on a TerminalView field) so hover and click events persist across

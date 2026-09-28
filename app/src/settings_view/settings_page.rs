@@ -44,7 +44,6 @@ use super::projects_page::ProjectsPageView;
 use super::scripting_page::ScriptingSettingsPageView;
 use super::teams_page::TeamsPageView;
 use super::warp_agent_page::WarpAgentPageView;
-use super::warp_drive_page::WarpDriveSettingsPageView;
 use super::warpify_page::WarpifyPageView;
 use crate::appearance::Appearance;
 use crate::themes::theme::Fill;
@@ -122,7 +121,6 @@ pub enum SettingsPageViewHandle {
     CloudEnvironments(ViewHandle<EnvironmentsPageView>),
     BillingAndUsage(ViewHandle<BillingAndUsageDispatchView>),
     MCPServers(ViewHandle<MCPServersSettingsPageView>),
-    WarpDrive(ViewHandle<WarpDriveSettingsPageView>),
 }
 
 impl SettingsPageViewHandle {
@@ -148,7 +146,6 @@ impl SettingsPageViewHandle {
             CloudEnvironments(view_handle) => ChildView::new(view_handle).finish(),
             BillingAndUsage(view_handle) => ChildView::new(view_handle).finish(),
             MCPServers(view_handle) => ChildView::new(view_handle).finish(),
-            WarpDrive(view_handle) => ChildView::new(view_handle).finish(),
         }
     }
 }

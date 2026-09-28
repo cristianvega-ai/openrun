@@ -33,11 +33,9 @@ use super::workflow_arg_selector::{
 use super::workflow_arg_type_helpers::{self, ArgumentEditorRowIndex};
 use crate::appearance::Appearance;
 use crate::auth::UserUid;
-use crate::cloud_object::breadcrumbs::{ContainingObject, ContainingObjectKind};
-use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
-use crate::cloud_object::{CloudObject, CloudObjectEventEntrypoint, ObjectType, Owner, Revision};
+use crate::cloud_object::model::persistence::CloudModel;
+use crate::cloud_object::{CloudObjectEventEntrypoint, ObjectType, Owner, Revision};
 use crate::drive::cloud_object_styling::warp_drive_icon_color;
-use crate::drive::items::WarpDriveItemId;
 use crate::drive::{CloudObjectTypeAndId, DriveObjectType};
 use crate::editor::{
     EditorOptions, EditorView, EnterAction, EnterSettings, Event as EditorEvent, InteractionState,
@@ -51,7 +49,6 @@ use crate::server::ids::{ClientId, ServerId, SyncId};
 use crate::server::server_api::ai::AIClient;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::ui_components::blended_colors;
-use crate::ui_components::breadcrumb::{self, BreadcrumbState};
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::dialog::{Dialog, dialog_styles};
 use crate::ui_components::icons::{self, ICON_DIMENSIONS, Icon};
@@ -59,7 +56,6 @@ use crate::ui_components::menu_button::{MenuDirection, icon_button_with_context_
 use crate::workflows::CloudWorkflow;
 use crate::workflows::workflow::{Argument, Workflow};
 
-const BREADCRUMBS_VERTICAL_MARGIN: f32 = 6.;
 const MODAL_WIDTH: f32 = 900.;
 const MODAL_VERTICAL_PADDING: f32 = 20.;
 const MODAL_VERTICAL_MARGIN: f32 = 50.;
@@ -149,9 +145,6 @@ pub struct WorkflowModal {
     revision_ts: Option<Revision>,
     pub(super) ai_client: Arc<dyn AIClient>,
     pub(super) ai_metadata_assist_state: AiAssistState,
-    breadcrumbs: Option<Vec<BreadcrumbState<ContainingObject>>>,
-    /// ID of the breadcrumb space/folder a user clicked on before the unsaved dialog popped up
-    clicked_breadcrumb: Option<WarpDriveItemId>,
     menu: ViewHandle<Menu<WorkflowModalAction>>,
     menu_open: bool,
     arguments_clipped_scroll_state: ClippedScrollStateHandle,
@@ -169,7 +162,6 @@ pub enum WorkflowModalAction {
     CloseUnsavedChangesDialog,
     ForceClose,
     AiAssist,
-    ViewInWarpDrive(WarpDriveItemId),
     OpenOverflowMenu,
     CopyObjectToClipboard,
     TrashObject,
@@ -180,7 +172,6 @@ pub enum WorkflowModalEvent {
     UpdatedWorkflow(SyncId),
     AiAssistError(String),
     AiAssistUpgradeError(Option<ServerId>, UserUid),
-    ViewInWarpDrive(WarpDriveItemId),
 }
 
 /// A grouping of various error states the modal can be in. Any of these being
@@ -252,11 +243,6 @@ impl WorkflowModal {
             me.handle_content_editor_event(event, ctx);
         });
 
-        let cloud_model = CloudModel::handle(ctx);
-        ctx.subscribe_to_model(&cloud_model, |me, _, event, ctx| {
-            me.handle_cloud_model_event(event, ctx);
-        });
-
         let menu = ctx.add_typed_action_view(|_ctx| {
             Menu::new()
                 .prevent_interaction_with_other_elements()
@@ -289,8 +275,6 @@ impl WorkflowModal {
             revision_ts: None,
             ai_client,
             ai_metadata_assist_state: AiAssistState::PreRequest,
-            breadcrumbs: Default::default(),
-            clicked_breadcrumb: None,
             menu,
             menu_open: false,
             arguments_clipped_scroll_state: Default::default(),
@@ -413,7 +397,6 @@ impl WorkflowModal {
         self.initial_folder_id = initial_folder_id;
         self.owner = Some(owner);
         self.workflow_id = None;
-        self.compute_breadcrumbs(ctx);
         self.all_workflow_enums =
             workflow_arg_type_helpers::load_workflow_enums_with_owner(owner, ctx);
         ctx.notify();
@@ -596,12 +579,6 @@ impl WorkflowModal {
         let content_is_empty = self.content_editor.as_ref(app).is_empty(app);
 
         title_is_empty && description_is_empty && content_is_empty
-    }
-
-    fn view_in_warp_drive(&mut self, id: WarpDriveItemId, ctx: &mut ViewContext<Self>) {
-        ctx.emit(WorkflowModalEvent::ViewInWarpDrive(id));
-        self.close(false /* force */, ctx);
-        self.clicked_breadcrumb = None;
     }
 
     fn handle_menu_event(&mut self, event: &Event, ctx: &mut ViewContext<Self>) {
@@ -877,51 +854,6 @@ impl WorkflowModal {
                 .update(ctx, |input, ctx| input.move_down(ctx)),
             EditorEvent::Escape => self.close(false, ctx),
             _ => {}
-        }
-    }
-
-    // This method computes the breadcrumb data for the workflow editor. It should be called
-    // every time either the cloud model or workflow ID changes.
-    fn compute_breadcrumbs(&mut self, ctx: &mut ViewContext<Self>) {
-        self.breadcrumbs = self.workflow_id.and_then(|workflow_id| {
-            CloudModel::as_ref(ctx)
-                .get_workflow(&workflow_id)
-                .map(|workflow| {
-                    workflow
-                        .containing_objects_path(ctx)
-                        .into_iter()
-                        .map(BreadcrumbState::new)
-                        .collect::<Vec<_>>()
-                })
-        });
-        ctx.notify()
-    }
-
-    fn handle_cloud_model_event(&mut self, event: &CloudModelEvent, ctx: &mut ViewContext<Self>) {
-        match event {
-            CloudModelEvent::ObjectMoved { type_and_id, .. }
-            | CloudModelEvent::ObjectPermissionsUpdated { type_and_id, .. } => {
-                // Update breadcrumbs if a teammate has moved the workflow elsewhere, or if it's
-                // been shared.
-                if let Some(workflow_id) = self.workflow_id {
-                    // Check that it's the currently active/open workflow
-                    if *type_and_id
-                        == CloudObjectTypeAndId::from_id_and_type(workflow_id, ObjectType::Workflow)
-                    {
-                        self.compute_breadcrumbs(ctx);
-                    }
-                }
-            }
-            CloudModelEvent::NotebookEditorChangedFromServer { .. }
-            | CloudModelEvent::ObjectUpdated { .. }
-            | CloudModelEvent::ObjectTrashed { .. }
-            | CloudModelEvent::ObjectUntrashed { .. }
-            | CloudModelEvent::ObjectCreated { .. }
-            | CloudModelEvent::ObjectDeleted { .. }
-            | CloudModelEvent::ObjectForceExpanded { .. }
-            | CloudModelEvent::ObjectSynced { .. }
-            | CloudModelEvent::InitialLoadCompleted
-            | CloudModelEvent::EnvironmentLastTaskRunTimestampsUpdated => {}
         }
     }
 
@@ -1434,66 +1366,18 @@ impl WorkflowModal {
         )
         .finish();
 
-        // Case 1: Has breadcrumbs, so modal header =
-        // first row = breadcrumbs on left side, overflow menu + close button on right side
-        // second row = workflow icon + title/description
-        if let Some(breadcrumbs) = &self.breadcrumbs {
-            let rendered_breadcrumbs = breadcrumb::render_breadcrumbs(
-                breadcrumbs.clone(),
-                appearance,
-                |ctx, _, object| {
-                    let item_id = match object.kind {
-                        ContainingObjectKind::Object(id) => WarpDriveItemId::Object(id),
-                        ContainingObjectKind::Space(space) => WarpDriveItemId::Space(space),
-                    };
-                    ctx.dispatch_typed_action(WorkflowModalAction::ViewInWarpDrive(item_id));
-                },
-            );
-
-            Container::new(
-                Flex::column()
-                    .with_child(
-                        Container::new(
-                            Flex::row()
-                                .with_main_axis_size(MainAxisSize::Max)
-                                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                                .with_child(Shrinkable::new(1., rendered_breadcrumbs).finish())
-                                .with_child(self.render_header_menu_and_close(appearance))
-                                .finish(),
-                        )
-                        .with_vertical_margin(BREADCRUMBS_VERTICAL_MARGIN)
-                        .finish(),
-                    )
-                    .with_child(
-                        Flex::row()
-                            .with_child(workflow_icon)
-                            .with_child(workflow_title_description)
-                            .finish(),
-                    )
-                    .finish(),
-            )
-            .with_padding_left(MODAL_HORIZONTAL_PADDING)
-            .with_padding_right(MODAL_HORIZONTAL_PADDING)
-            .with_padding_top(MODAL_VERTICAL_PADDING)
-            .with_padding_bottom(MODAL_VERTICAL_PADDING)
-            .finish()
-        }
-        // Case 2: Creating a new workflow has no menu and breadcrumbs, so modal header =
-        // workflow icon + title + close button on first row
-        else {
-            Container::new(
-                Flex::row()
-                    .with_child(workflow_icon)
-                    .with_child(workflow_title_description)
-                    .with_child(self.render_header_menu_and_close(appearance))
-                    .finish(),
-            )
-            .with_padding_left(MODAL_HORIZONTAL_PADDING)
-            .with_padding_right(MODAL_HORIZONTAL_PADDING)
-            .with_padding_top(MODAL_VERTICAL_PADDING)
-            .with_padding_bottom(MODAL_VERTICAL_PADDING)
-            .finish()
-        }
+        Container::new(
+            Flex::row()
+                .with_child(workflow_icon)
+                .with_child(workflow_title_description)
+                .with_child(self.render_header_menu_and_close(appearance))
+                .finish(),
+        )
+        .with_padding_left(MODAL_HORIZONTAL_PADDING)
+        .with_padding_right(MODAL_HORIZONTAL_PADDING)
+        .with_padding_top(MODAL_VERTICAL_PADDING)
+        .with_padding_bottom(MODAL_VERTICAL_PADDING)
+        .finish()
     }
 
     fn render_content_editor(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
@@ -1911,21 +1795,8 @@ impl TypedActionView for WorkflowModal {
             WorkflowModalAction::Close => self.close(false, ctx),
             WorkflowModalAction::Save => self.save_workflow_and_close(ctx),
             WorkflowModalAction::CloseUnsavedChangesDialog => self.hide_unsaved_changes_dialog(ctx),
-            WorkflowModalAction::ForceClose => {
-                self.close(true, ctx);
-                if let Some(id) = self.clicked_breadcrumb {
-                    self.view_in_warp_drive(id, ctx);
-                }
-            }
+            WorkflowModalAction::ForceClose => self.close(true, ctx),
             WorkflowModalAction::AiAssist => self.issue_request(ctx),
-            WorkflowModalAction::ViewInWarpDrive(id) => {
-                if self.should_show_unsaved_changes_dialog(ctx) {
-                    self.clicked_breadcrumb = Some(*id);
-                    self.show_unsaved_changes_dialog(ctx);
-                    return;
-                }
-                self.view_in_warp_drive(*id, ctx)
-            }
             WorkflowModalAction::OpenOverflowMenu => self.open_overflow_menu(ctx),
             WorkflowModalAction::CopyObjectToClipboard => self.copy_object_to_clipboard(ctx),
             WorkflowModalAction::TrashObject => self.trash_object(ctx),

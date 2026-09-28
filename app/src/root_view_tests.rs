@@ -77,20 +77,19 @@ fn set_local_onboarding_completed(app: &mut App, completed: bool) {
 }
 
 #[test]
-fn account_first_requires_login_even_without_ai_or_drive_settings() {
+fn account_first_requires_login_even_without_ai_settings() {
     let _account_first = FeatureFlag::AccountFirstOnboarding.override_enabled(true);
 
-    assert!(requires_post_onboarding_login(false, false, false));
-    assert!(!requires_post_onboarding_login(true, false, false));
+    assert!(requires_post_onboarding_login(false, false));
+    assert!(!requires_post_onboarding_login(true, false));
 }
 
 #[test]
 fn fallback_flow_only_requires_login_for_account_backed_settings() {
     let _account_first = FeatureFlag::AccountFirstOnboarding.override_enabled(false);
 
-    assert!(!requires_post_onboarding_login(false, false, false));
-    assert!(requires_post_onboarding_login(false, true, false));
-    assert!(requires_post_onboarding_login(false, false, true));
+    assert!(!requires_post_onboarding_login(false, false));
+    assert!(requires_post_onboarding_login(false, true));
 }
 
 #[test]
@@ -167,7 +166,6 @@ fn refreshing_pending_onboarding_choices_replaces_stale_settings() {
             show_conversation_history: false,
             show_project_explorer: true,
             show_global_search: false,
-            show_warp_drive: false,
             show_code_review_button: true,
         }),
         cli_agent_toolbar_enabled: true,

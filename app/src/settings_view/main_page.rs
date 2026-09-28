@@ -81,8 +81,6 @@ impl From<&MainPageAction> for LoginGatedFeature {
 
 #[derive(Clone, Copy)]
 pub enum MainSettingsPageEvent {
-    #[allow(dead_code)]
-    OpenWarpDrive,
     SignupAnonymousUser,
 }
 

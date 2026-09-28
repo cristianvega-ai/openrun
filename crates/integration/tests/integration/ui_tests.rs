@@ -190,8 +190,6 @@ integration_tests! {
     #[ignore]
     test_create_session_with_split_pane_while_bootstrapping,
 
-    test_create_folder_from_command_palette,
-
     test_tab_behavior_setting,
 
     test_private_public_settings_routing_with_flag_enabled,

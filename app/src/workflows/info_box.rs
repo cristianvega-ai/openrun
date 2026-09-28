@@ -43,7 +43,6 @@ use crate::ui_components::icons;
 use crate::util::color::coloru_with_opacity;
 use crate::view_components::FilterableDropdownOrientation;
 use crate::workflows::WorkflowType;
-use crate::workspace::WorkspaceAction;
 
 const INFO_BOX_PADDING: f32 = 20.;
 const ARGUMENT_PADDING: f32 = 10.;
@@ -59,9 +58,7 @@ const ENV_VAR_DROPDOWN_WIDTH: f32 = 225.;
 const ENV_VAR_HORIZONTAL_MARGIN: f32 = 20.;
 const ENV_VAR_RIGHT_ELEMENT_VERTICAL_MARGIN: f32 = 5.;
 const ENV_VAR_SPAN_VERTICAL_MARGIN: f32 = 15.;
-const ENV_VAR_BUTTON_HEIGHT: f32 = 30.;
 const ENV_VAR_SPAN: &str = "Environment variables";
-const NEW_ENV_VAR_BUTTON_LABEL: &str = "New environment variables";
 
 /// Scale factor the title should be from the user's current font size.
 const TITLE_FONT_SIZE_SCALE_FACTOR: f32 = 1.12;
@@ -140,7 +137,6 @@ struct ButtonMouseStates {
     save_as_workflow: MouseStateHandle,
     edit_cloud_workflow: MouseStateHandle,
     reset_command: MouseStateHandle,
-    add_env_var_collection: MouseStateHandle,
 }
 
 impl WorkflowsMoreInfoView {
@@ -584,33 +580,10 @@ impl WorkflowsMoreInfoView {
         .finish();
 
         let environment_variables_dropdown = self.environment_variables_dropdown.as_ref()?;
-        let dropdown_element = if environment_variables_dropdown.as_ref(app).has_env_vars(app) {
-            ChildView::new(environment_variables_dropdown).finish()
-        } else {
-            Align::new(
-                ConstrainedBox::new(
-                    appearance
-                        .ui_builder()
-                        .button(
-                            ButtonVariant::Secondary,
-                            self.button_mouse_states.add_env_var_collection.clone(),
-                        )
-                        .with_centered_text_label(NEW_ENV_VAR_BUTTON_LABEL.to_owned())
-                        .build()
-                        .on_click(|ctx, _, _| {
-                            // Create envvars in personal drive for max extensibility (can be moved
-                            // to any team/workspace)
-                            ctx.dispatch_typed_action(
-                                WorkspaceAction::CreatePersonalEnvVarCollection,
-                            )
-                        })
-                        .finish(),
-                )
-                .with_height(ENV_VAR_BUTTON_HEIGHT)
-                .finish(),
-            )
-            .finish()
-        };
+        if !environment_variables_dropdown.as_ref(app).has_env_vars(app) {
+            return None;
+        }
+        let dropdown_element = ChildView::new(environment_variables_dropdown).finish();
 
         let env_var_dropdown = Container::new(dropdown_element)
             .with_vertical_margin(ENV_VAR_RIGHT_ELEMENT_VERTICAL_MARGIN)

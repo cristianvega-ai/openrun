@@ -17,7 +17,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     use warp_core::semantic_selection::SemanticSelection;
 
     use crate::ai::cloud_agent_settings::CloudAgentSettings;
-    use crate::drive::settings::WarpDriveSettings;
     use crate::search::command_search::settings::CommandSearchSettings;
     use crate::settings::app_icon::AppIconSettings;
     use crate::settings::manager::SettingsManager;
@@ -101,7 +100,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     UndoCloseSettings::register(app);
     VimBannerSettings::register(app);
     SharedObjectLimitBannerSettings::register(app);
-    WarpDriveSettings::register(app);
     WindowSettings::register(app);
     CodeSettings::register(app);
     SemanticSelection::register(app);

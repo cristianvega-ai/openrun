@@ -42,7 +42,7 @@ use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::{GenericStringObjectFormat, ObjectType, Space};
 #[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
-use crate::drive::{CloudObjectTypeAndId, DriveSortOrder};
+use crate::drive::CloudObjectTypeAndId;
 use crate::features::FeatureFlag;
 use crate::launch_configs::save_modal::SaveState;
 use crate::notebooks::telemetry::NotebookTelemetryAction;
@@ -536,7 +536,6 @@ impl From<&CommandSearchItemAction> for CommandSearchResultType {
         match action {
             AcceptHistory(_) | ExecuteHistory(_) => Self::History,
             AcceptWorkflow(_) => Self::Workflow,
-            AcceptEnvVarCollection(_) => Self::EnvVarCollection,
         }
     }
 }
@@ -1653,9 +1652,6 @@ pub enum TelemetryEvent {
     AutoGenerateMetadataSuccess,
     AutoGenerateMetadataError {
         error_payload: Value,
-    },
-    UpdateSortingChoice {
-        sorting_choice: DriveSortOrder,
     },
     UndoClose {
         item_type: UndoCloseItemType,
@@ -3168,9 +3164,6 @@ impl TelemetryEvent {
             TelemetryEvent::AutoGenerateMetadataError { error_payload } => {
                 Some(json!({ "error": error_payload }))
             }
-            TelemetryEvent::UpdateSortingChoice { sorting_choice } => {
-                Some(json!({ "sorting_choice": sorting_choice }))
-            }
             TelemetryEvent::UndoClose { item_type } => Some(json!({ "item_type": item_type })),
             TelemetryEvent::PromptEdited { prompt, entrypoint } => Some(json!({
                 "prompt": prompt,
@@ -4552,7 +4545,6 @@ impl TelemetryEvent {
             | TelemetryEvent::CopySecret
             | TelemetryEvent::AutoGenerateMetadataSuccess
             | TelemetryEvent::AutoGenerateMetadataError { .. }
-            | TelemetryEvent::UpdateSortingChoice { .. }
             | TelemetryEvent::UndoClose { .. }
             | TelemetryEvent::PtyThroughput { .. }
             | TelemetryEvent::DuplicateObject(_)
@@ -5066,7 +5058,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::CopySecret => EnablementState::Always,
             Self::AutoGenerateMetadataSuccess => EnablementState::Always,
             Self::AutoGenerateMetadataError => EnablementState::Always,
-            Self::UpdateSortingChoice => EnablementState::Always,
             Self::UndoClose => EnablementState::Always,
             Self::DuplicateObject => EnablementState::Always,
             Self::ExportObject => EnablementState::Always,
@@ -5525,7 +5516,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::CopySecret => "Copy Obfuscated Secret",
             Self::AutoGenerateMetadataSuccess => "Generate Metadata For Workflow Success",
             Self::AutoGenerateMetadataError => "Generate Metadata For Workflow Error",
-            Self::UpdateSortingChoice => "Updated Sorting Choice",
             Self::UndoClose => "Undo Close",
             Self::OpenPromptEditor => "Prompt Editor Opened",
             Self::PromptEdited => "Prompt Edited",
@@ -6200,7 +6190,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AutoGenerateMetadataError => {
                 "Failed to generate metadata for a workflow using Warp AI"
             }
-            Self::UpdateSortingChoice => "Modified the sorting scheme for Warp Drive objects",
             Self::UndoClose => "Re-opened a closed tab or window (undo closing a tab or window)",
             Self::PtyThroughput => "A sample of the max PTY throughput in bytes/sec",
             Self::DuplicateObject => "Cloned a Warp Drive object",

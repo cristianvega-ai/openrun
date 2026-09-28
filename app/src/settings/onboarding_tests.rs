@@ -13,7 +13,6 @@ use crate::ai::mcp::TemplatableMCPServerManager;
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
 use crate::cloud_object::{Revision, ServerAIExecutionProfile, ServerMetadata, ServerPermissions};
-use crate::drive::settings::WarpDriveSettings;
 use crate::network::NetworkStatus;
 use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::{ServerId, SyncId};
@@ -209,7 +208,6 @@ fn account_first_settings_enable_agent_for_authenticated_users_and_apply_ui_choi
                 show_conversation_history: false,
                 show_project_explorer: true,
                 show_global_search: false,
-                show_warp_drive: false,
                 show_code_review_button: true,
             }),
         };
@@ -233,7 +231,6 @@ fn account_first_settings_enable_agent_for_authenticated_users_and_apply_ui_choi
                 assert_eq!(*AISettings::as_ref(ctx).is_any_ai_enabled, expected_ai);
                 assert!(!*TabSettings::as_ref(ctx).use_vertical_tabs);
                 assert!(*TabSettings::as_ref(ctx).show_code_review_button);
-                assert!(!*WarpDriveSettings::as_ref(ctx).enable_warp_drive);
                 assert!(*CodeSettings::as_ref(ctx).show_project_explorer);
                 assert!(!*CodeSettings::as_ref(ctx).show_global_search);
             });

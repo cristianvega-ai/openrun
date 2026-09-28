@@ -132,7 +132,6 @@ const ALL_SECTIONS: &[SettingsSection] = &[
     SettingsSection::Privacy,
     SettingsSection::Scripting,
     SettingsSection::Teams,
-    SettingsSection::WarpDrive,
     SettingsSection::Warpify,
     SettingsSection::WarpAgent,
     SettingsSection::AgentProfiles,
@@ -166,7 +165,6 @@ fn all_sections_list_is_exhaustive() {
             | SettingsSection::Privacy
             | SettingsSection::Scripting
             | SettingsSection::Teams
-            | SettingsSection::WarpDrive
             | SettingsSection::Warpify
             | SettingsSection::WarpAgent
             | SettingsSection::AgentProfiles
@@ -256,10 +254,6 @@ fn from_slug_accepts_legacy_spellings() {
     assert_eq!(
         SettingsSection::from_slug("Oz"),
         Some(SettingsSection::WarpAgent)
-    );
-    assert_eq!(
-        SettingsSection::from_slug("WarpDrive"),
-        Some(SettingsSection::WarpDrive)
     );
     assert_eq!(
         SettingsSection::from_slug("AgentProfiles"),

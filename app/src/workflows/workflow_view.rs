@@ -39,15 +39,12 @@ use crate::ai::AIRequestUsageModel;
 use crate::appearance::Appearance;
 use crate::auth::auth_state::AuthState;
 use crate::auth::{AuthStateProvider, UserUid};
-use crate::cloud_object::breadcrumbs::ContainingObject;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
 use crate::cloud_object::model::view::CloudViewModel;
 use crate::cloud_object::{
     CloudObject, CloudObjectEventEntrypoint, ObjectType, Owner, Revision, Space,
 };
 use crate::drive::cloud_object_styling::warp_drive_icon_color;
-use crate::drive::drive_helpers::has_feature_gated_anonymous_user_reached_workflow_limit;
-use crate::drive::items::WarpDriveItemId;
 use crate::drive::sharing::{ContentEditability, ShareableObject, SharingAccessLevel};
 use crate::drive::workflows::ai_assist::GeneratedCommandMetadataError;
 use crate::drive::workflows::arguments::ArgumentsState;
@@ -58,7 +55,7 @@ use crate::drive::workflows::workflow_arg_selector::{
     WorkflowArgSelector, WorkflowArgSelectorEvent,
 };
 use crate::drive::workflows::workflow_arg_type_helpers::{self, ArgumentEditorRowIndex};
-use crate::drive::{CloudObjectTypeAndId, DriveObjectType, OpenWarpDriveObjectSettings};
+use crate::drive::{CloudObjectTypeAndId, DriveObjectType};
 use crate::editor::{
     EditorOptions, EditorView, EnterAction, EnterSettings, Event as EditorEvent, InteractionState,
     PlainTextEditorViewAction as EditorAction, PropagateAndNoOpNavigationKeys,
@@ -77,11 +74,10 @@ use crate::server::ids::{ClientId, ServerId, SyncId};
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::ai::AIClient;
 use crate::server::telemetry::{
-    CloudObjectTelemetryMetadata, SharingDialogSource, TelemetryCloudObjectType, TelemetryEvent,
+    CloudObjectTelemetryMetadata, TelemetryCloudObjectType, TelemetryEvent,
 };
 use crate::settings::AISettings;
 use crate::terminal::safe_mode_settings::get_secret_obfuscation_mode;
-use crate::ui_components::breadcrumb::{BreadcrumbState, render_breadcrumbs};
 use crate::ui_components::buttons::{accent_icon_button, icon_button};
 use crate::ui_components::dialog::{Dialog, dialog_styles};
 use crate::ui_components::icons::Icon;
@@ -201,7 +197,6 @@ impl WorkflowEditorErrorState {
 
 #[derive(Debug, Clone)]
 pub enum WorkflowAction {
-    ViewInWarpDrive(WarpDriveItemId),
     AddArgument,
     ToggleViewMode,
     RunWorkflow,
@@ -224,12 +219,6 @@ pub enum WorkflowViewEvent {
     Pane(PaneEvent),
     CreatedWorkflow(SyncId),
     UpdatedWorkflow(SyncId),
-    ViewInWarpDrive(WarpDriveItemId),
-    OpenDriveObjectShareDialog {
-        cloud_object_type_and_id: CloudObjectTypeAndId,
-        invitee_email: Option<String>,
-        source: SharingDialogSource,
-    },
     RunWorkflow {
         workflow: Arc<WorkflowType>,
         source: WorkflowSource,
@@ -268,7 +257,6 @@ struct UiStateHandles {
     copy_content_button_mouse_state: MouseStateHandle,
     execute_command_mouse_state: MouseStateHandle,
     alias_header_tool_tip: MouseStateHandle,
-    add_environment_variables_mouse_state: MouseStateHandle,
     clipped_scroll_state: ClippedScrollStateHandle,
 }
 
@@ -288,7 +276,6 @@ pub struct WorkflowView {
     alias_bar: ViewHandle<AliasBar>,
     env_vars_selector: ViewHandle<EnvVarSelector>,
     env_vars_state: EnvironmentVariablesState,
-    breadcrumbs: Vec<BreadcrumbState<ContainingObject>>,
     errors: WorkflowEditorErrorState,
     ui_state_handles: UiStateHandles,
     show_unsaved_changes: Option<UnsavedChangeType>,
@@ -436,7 +423,6 @@ impl WorkflowView {
             alias_bar,
             env_vars_selector,
             env_vars_state: Default::default(),
-            breadcrumbs: Vec::new(),
             errors: WorkflowEditorErrorState::new(),
             ui_state_handles: Default::default(),
             show_unsaved_changes: None,
@@ -562,12 +548,7 @@ impl WorkflowView {
             });
 
             if let Some(workflow) = CloudModel::as_ref(ctx).get_workflow_by_uid(&server_id.uid()) {
-                self.load(
-                    workflow.clone(),
-                    &OpenWarpDriveObjectSettings::default(),
-                    self.workflow_view_mode,
-                    ctx,
-                );
+                self.load(workflow.clone(), self.workflow_view_mode, ctx);
             }
             ctx.notify();
         }
@@ -581,12 +562,7 @@ impl WorkflowView {
             if self.workflow_id.into_client() == result.client_id
                 || self.workflow_id.uid() == result.server_id.unwrap_or_default().uid()
             {
-                self.load(
-                    workflow,
-                    &OpenWarpDriveObjectSettings::default(),
-                    self.workflow_view_mode,
-                    ctx,
-                );
+                self.load(workflow, self.workflow_view_mode, ctx);
             }
         }
     }
@@ -598,52 +574,26 @@ impl WorkflowView {
     fn reset(&mut self, ctx: &mut ViewContext<Self>) {
         let cloud_workflow = self.get_cloud_workflow(ctx);
         if let Some(workflow) = cloud_workflow {
-            self.load(
-                workflow,
-                &OpenWarpDriveObjectSettings::default(),
-                self.workflow_view_mode,
-                ctx,
-            );
+            self.load(workflow, self.workflow_view_mode, ctx);
         }
     }
 
     pub fn wait_for_initial_load_then_load(
         &mut self,
         workflow_id: SyncId,
-        settings: &OpenWarpDriveObjectSettings,
         mode: WorkflowViewMode,
         window_id: WindowId,
         ctx: &mut ViewContext<Self>,
     ) {
         let initial_load_complete = UpdateManager::as_ref(ctx).initial_load_complete();
         // TODO @ianhodge CLD-2002: it could be nice to have a loading screen here while we wait for the load
-        let settings = settings.clone();
         ctx.spawn(initial_load_complete, move |me, _, ctx| {
-            let workflow = CloudModel::as_ref(ctx).get_workflow(&workflow_id).cloned();
-            // If either the focused folder or the workflow can't be found in cloudmodel, fetch the object from the server
-            let fetch_needed = workflow.is_none()
-                || settings
-                    .focused_folder_id
-                    .map(SyncId::ServerId)
-                    .map(|folder_id| CloudModel::as_ref(ctx).get_folder(&folder_id).is_none())
-                    .unwrap_or(false);
-            if fetch_needed {
-                if let Some(server_id) = workflow_id.into_server() {
-                    me.fetch_and_load_workflow(server_id, &settings, mode, window_id, ctx);
-                } else {
-                    log::warn!("Tried to load workflow without server id {workflow_id:?}");
-                }
-            } else if let Some(workflow) = workflow {
-                me.load(workflow, &settings, mode, ctx);
+            if let Some(workflow) = CloudModel::as_ref(ctx).get_workflow(&workflow_id).cloned() {
+                me.load(workflow, mode, ctx);
+            } else if let Some(server_id) = workflow_id.into_server() {
+                me.fetch_and_load_workflow(server_id, mode, window_id, ctx);
             } else {
-                ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                    toast_stack.add_ephemeral_toast_by_type(
-                        ToastType::CloudObjectNotFound,
-                        window_id,
-                        ctx,
-                    );
-                });
-                log::warn!("Tried to open unknown workflow {workflow_id:?}");
+                log::warn!("Tried to load workflow without server id {workflow_id:?}");
             }
         });
     }
@@ -651,28 +601,24 @@ impl WorkflowView {
     fn fetch_and_load_workflow(
         &mut self,
         workflow_id: ServerId,
-        settings: &OpenWarpDriveObjectSettings,
         mode: WorkflowViewMode,
         window_id: WindowId,
         ctx: &mut ViewContext<Self>,
     ) {
-        // If we have a parent folder we are trying to load as a part of this workflow, fetch that instead
-        let id_to_fetch = settings.focused_folder_id.unwrap_or(workflow_id);
         let fetch_cloud_object_rx =
             UpdateManager::handle(ctx).update(ctx, |update_manager, ctx| {
                 update_manager.fetch_single_cloud_object(
-                    &id_to_fetch,
+                    &workflow_id,
                     FetchSingleObjectOption::None,
                     ctx,
                 )
             });
-        let settings = settings.clone();
         ctx.spawn(fetch_cloud_object_rx, move |me, _, ctx| {
             if let Some(workflow) = CloudModel::as_ref(ctx)
                 .get_workflow(&SyncId::ServerId(workflow_id))
                 .cloned()
             {
-                me.load(workflow, &settings, mode, ctx);
+                me.load(workflow, mode, ctx);
             } else {
                 ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
                     toast_stack.add_ephemeral_toast_by_type(
@@ -689,7 +635,6 @@ impl WorkflowView {
     pub fn load(
         &mut self,
         workflow: CloudWorkflow,
-        settings: &OpenWarpDriveObjectSettings,
         mode: WorkflowViewMode,
         ctx: &mut ViewContext<Self>,
     ) {
@@ -815,28 +760,8 @@ impl WorkflowView {
                 });
             }
         }
-        self.update_breadcrumb(ctx);
         self.update_editors_interactivity(ctx);
         self.refresh_pane_overflow_menu(ctx);
-
-        if let Some(focused_folder_id) = settings.focused_folder_id.map(SyncId::ServerId) {
-            self.view_in_warp_drive(
-                WarpDriveItemId::Object(CloudObjectTypeAndId::Folder(focused_folder_id)),
-                ctx,
-            );
-        }
-
-        if let Some(invitee_email) = settings.invitee_email.clone() {
-            let object_id_to_share = settings
-                .focused_folder_id
-                .map(|id| CloudObjectTypeAndId::Folder(SyncId::ServerId(id)))
-                .unwrap_or(CloudObjectTypeAndId::Workflow(workflow.id));
-            ctx.emit(WorkflowViewEvent::OpenDriveObjectShareDialog {
-                cloud_object_type_and_id: object_id_to_share,
-                invitee_email: Some(invitee_email),
-                source: SharingDialogSource::InviteeRequest,
-            });
-        }
 
         if matches!(mode, WorkflowViewMode::View) {
             self.focus_first_argument_value(ctx);
@@ -1793,20 +1718,6 @@ impl WorkflowView {
         });
     }
 
-    fn update_breadcrumb(&mut self, ctx: &mut ViewContext<Self>) {
-        let workflow = self.get_cloud_workflow(ctx);
-
-        if let Some(the_workflow) = workflow {
-            self.breadcrumbs = the_workflow
-                .containing_objects_path(ctx)
-                .into_iter()
-                .map(BreadcrumbState::new)
-                .collect();
-        } else {
-            log::warn!("Workflow not found from cloudmodel, could not update breadcrumb");
-        }
-    }
-
     pub fn focus(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.focus(&self.name_editor);
         ctx.emit(WorkflowViewEvent::Pane(PaneEvent::FocusSelf));
@@ -1992,10 +1903,6 @@ impl WorkflowView {
     }
 
     fn untrash_object(&self, ctx: &mut ViewContext<Self>) {
-        if has_feature_gated_anonymous_user_reached_workflow_limit(ctx) {
-            return;
-        }
-
         UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
             update_manager.untrash_object(
                 CloudObjectTypeAndId::from_id_and_type(self.workflow_id, ObjectType::Workflow),
@@ -2534,10 +2441,6 @@ impl WorkflowView {
         })
     }
 
-    fn view_in_warp_drive(&mut self, id: WarpDriveItemId, ctx: &mut ViewContext<Self>) {
-        ctx.emit(WorkflowViewEvent::ViewInWarpDrive(id));
-    }
-
     fn issue_request(&mut self, ctx: &mut ViewContext<Self>) {
         let ai_client = self.ai_client.clone();
         let command = self.content_editor.as_ref(ctx).buffer_text(ctx);
@@ -2886,24 +2789,6 @@ impl View for WorkflowView {
         };
 
         let mut row = Flex::row();
-        row.add_child(
-            Shrinkable::new(
-                2.,
-                Container::new(render_breadcrumbs(
-                    self.breadcrumbs.clone(),
-                    appearance,
-                    |ctx, _, breadcrumb| {
-                        ctx.dispatch_typed_action(WorkflowAction::ViewInWarpDrive(
-                            breadcrumb.kind.into_item_id(),
-                        ));
-                    },
-                ))
-                .with_horizontal_margin(CORE_HORIZONATAL_MARGIN)
-                .with_vertical_margin(vertical_margin / 2.)
-                .finish(),
-            )
-            .finish(),
-        );
 
         let editability = if FeatureFlag::SharedWithMe.is_enabled() {
             self.editability(app)
@@ -2933,10 +2818,14 @@ impl View for WorkflowView {
         }
 
         content.add_child(
-            row.with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                .with_main_axis_size(MainAxisSize::Max)
-                .finish(),
+            Container::new(
+                row.with_cross_axis_alignment(CrossAxisAlignment::Center)
+                    .with_main_axis_alignment(MainAxisAlignment::End)
+                    .with_main_axis_size(MainAxisSize::Max)
+                    .finish(),
+            )
+            .with_vertical_margin(vertical_margin / 2.)
+            .finish(),
         );
 
         // We use a stack here with two children — an expanded transparent box and
@@ -3057,7 +2946,6 @@ impl TypedActionView for WorkflowView {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
-            WorkflowAction::ViewInWarpDrive(id) => self.view_in_warp_drive(*id, ctx),
             WorkflowAction::AddArgument => self.add_argument(ctx),
             WorkflowAction::ToggleViewMode => self.toggle_view_mode(ctx),
             WorkflowAction::CloseUnsavedDialog => self.hide_unsaved_changes_dialog(ctx),

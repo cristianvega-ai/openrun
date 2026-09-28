@@ -21,7 +21,6 @@ use super::{
 use crate::ai::cloud_agent_settings::CloudAgentSettings;
 use crate::appearance;
 use crate::banner::BannerState;
-use crate::drive::settings::WarpDriveSettings;
 use crate::resource_center::TipsCompleted;
 use crate::search::command_search::settings::CommandSearchSettings;
 use crate::terminal::BlockListSettings;
@@ -85,7 +84,6 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     SshSettings::register(ctx);
     VimBannerSettings::register(ctx);
     SharedObjectLimitBannerSettings::register(ctx);
-    WarpDriveSettings::register(ctx);
     WorkflowAliases::register(ctx);
     EmacsBindingsSettings::register(ctx);
     SameLinePromptBlockSettings::register(ctx);

@@ -503,7 +503,7 @@ fn test_searcher_async_rebuild_coalesces_burst() {
 /// Regression test for a correctness bug in an earlier version of the rebuild coalescer: when a
 /// second rebuild superseded a first, not-yet-applied rebuild, the coalescer reused the first
 /// rebuild's position in the operation queue for the second rebuild's (newer) document set. Any
-/// insert/delete call made in between -- as Warp Drive's per-object updates do -- ended up placed
+/// insert/delete call made in between -- as per-object updates do -- ended up placed
 /// *after* the superseding rebuild in the resolved operation list, even though it was requested
 /// *before* that rebuild. Because inserts overwrite by composite key, the stale interleaved
 /// update would silently win over the newer rebuild's value for the same document.
@@ -543,7 +543,7 @@ fn test_searcher_async_rebuild_preserves_operation_order_with_interleaved_update
     };
 
     // Request a rebuild (R1), then -- before the background writer gets a chance to apply it --
-    // incremental updates land (as Warp Drive's per-object insert calls do), then a second
+    // incremental updates land (as per-object insert calls do), then a second
     // rebuild (R2) is requested whose snapshot holds a newer value for document 1 and no longer
     // contains document 2 at all. R2 supersedes R1 in the coalescer, but the interleaved updates
     // must still be treated as older than R2, since they were requested before it.
