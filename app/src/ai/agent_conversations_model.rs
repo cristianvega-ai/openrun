@@ -266,9 +266,6 @@ impl AgentRunDisplayStatus {
             ConversationStatus::Blocked { blocked_action } => Self::ConversationBlocked {
                 blocked_action: blocked_action.clone(),
             },
-            // Treat a yielded conversation as still in progress for the
-            // agent-run list display so it stays in the working bucket.
-            ConversationStatus::WaitingForEvents => Self::ConversationInProgress,
         }
     }
 
@@ -733,8 +730,6 @@ impl AgentConversationsModel {
             // UpdateTaskDescription, last_updated uses exchange.start_time which is set at append time).
             | BlocklistAIHistoryEvent::UpdatedStreamingExchange { .. }
             | BlocklistAIHistoryEvent::ConversationTransferredBetweenTerminalSurfaces { .. }
-            | BlocklistAIHistoryEvent::NewConversationRequestComplete { .. }
-            | BlocklistAIHistoryEvent::OrchestrationConfigUpdated { .. }
             | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. }
             | BlocklistAIHistoryEvent::UpdatedConversationMetadata { .. } => {}
 

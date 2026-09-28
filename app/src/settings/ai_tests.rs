@@ -4,9 +4,7 @@ use warp_errors::report_if_error;
 use warpui::{App, SingletonEntity};
 
 use super::*;
-use crate::auth::AuthStateProvider;
 use crate::test_util::settings::initialize_settings_for_tests;
-use crate::workspaces::user_workspaces::UserWorkspaces;
 
 #[test]
 fn auto_approve_denylist_bypass_defaults_on_and_is_available_in_gui_settings() {
@@ -26,11 +24,6 @@ fn auto_approve_denylist_bypass_defaults_on_and_is_available_in_gui_settings() {
         .expect("expected auto-approve denylist bypass schema entry");
     let surfaces: SettingSurfaces = (entry.surfaces_fn)();
     assert!(surfaces.includes(SettingsMode::Gui));
-}
-
-fn add_ai_enablement_dependencies_for_test(app: &mut App) {
-    app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(UserWorkspaces::default_mock);
 }
 
 /// A real terminal surface for the [`FocusedTerminalInfo`] cases below, which record the
@@ -304,18 +297,6 @@ fn usage_display_unit_toml_path() {
         UsageDisplayUnit::toml_path(),
         Some("agents.warp_agent.other.usage_display_unit")
     );
-}
-
-#[test]
-fn orchestration_is_enabled_when_ai_is_enabled() {
-    App::test((), |mut app| async move {
-        initialize_settings_for_tests(&mut app);
-        add_ai_enablement_dependencies_for_test(&mut app);
-
-        AISettings::handle(&app).read(&app, |settings, ctx| {
-            assert!(settings.is_orchestration_enabled(ctx));
-        });
-    });
 }
 
 #[test]

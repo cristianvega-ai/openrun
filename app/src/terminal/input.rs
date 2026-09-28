@@ -2918,9 +2918,6 @@ impl Input {
         ctx: &mut ViewContext<Self>,
     ) {
         // Read the origin before dispatch; the row is removed once it fires.
-        if QueuedQueryModel::as_ref(ctx).is_dispatch_blocked(conversation_id) {
-            return;
-        }
         let origin = QueuedQueryModel::as_ref(ctx)
             .queue(conversation_id)
             .iter()
@@ -4437,20 +4434,6 @@ impl Input {
         match input_model.input_type() {
             InputType::Shell => TERMINAL_INPUT_HINT_TEXT.to_owned(),
             InputType::AI => {
-                if let Some(conversation) =
-                    self.ai_context_model.as_ref(app).selected_conversation(app)
-                    && conversation.is_child_agent_conversation()
-                {
-                    let agent_name = conversation.agent_name().unwrap_or("child");
-                    if conversation.status().is_in_progress() {
-                        if is_queue_next_prompt_enabled {
-                            return format!("Queue a follow up for the {agent_name} agent");
-                        }
-                        return format!("Steer the {agent_name} agent");
-                    }
-                    return format!("Ask the {agent_name} agent a follow up");
-                }
-
                 // Follow the `agent_indicator` pattern (see `app/src/tab.rs`):
                 //  * `None` (no conversation, empty, passive, or untitled) => new conversation => "Warp anything"
                 //  * `InProgress`                                           => agent running    => "Steer"

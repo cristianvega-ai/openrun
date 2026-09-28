@@ -507,30 +507,6 @@ fn test_local_conversation_entry_uses_charged_usage_dollar_total() {
 }
 
 #[test]
-fn test_conversation_metadata_child_predicate_matches_conversation() {
-    use crate::ai::blocklist::history_model::AIConversationMetadata;
-
-    // Non-child conversation: neither representation reports a child.
-    let plain = AIConversation::new(false, false);
-    let plain_metadata = AIConversationMetadata::from(&plain);
-    assert!(!plain.is_child_agent_conversation());
-    assert_eq!(
-        plain_metadata.is_child_agent_conversation(),
-        plain.is_child_agent_conversation()
-    );
-
-    // Child conversation: the metadata predicate matches the conversation's.
-    let mut child = AIConversation::new(false, false);
-    child.set_parent_conversation_id(AIConversationId::new());
-    let child_metadata = AIConversationMetadata::from(&child);
-    assert!(child.is_child_agent_conversation());
-    assert_eq!(
-        child_metadata.is_child_agent_conversation(),
-        child.is_child_agent_conversation()
-    );
-}
-
-#[test]
 fn test_get_entries_includes_cloud_metadata_only_entry() {
     App::test((), |mut app| async move {
         let token = "cloud-token-only";
@@ -698,16 +674,9 @@ fn test_server_token_assignment_updates_copy_link_resolution() {
                 reverted_action_ids: None,
                 forked_from_server_conversation_token: None,
                 artifacts_json: None,
-                parent_agent_id: None,
-                agent_name: None,
-                orchestration_harness_type: None,
-                parent_conversation_id: None,
-                is_remote_child: false,
                 root_task_is_optimistic: None,
                 run_id: None,
                 autoexecute_override: None,
-                last_event_sequence: None,
-                pinned: false,
             },
         );
 

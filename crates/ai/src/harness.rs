@@ -39,17 +39,6 @@ impl Harness {
         }
     }
 
-    pub fn parse_orchestration_harness(value: &str) -> Option<Self> {
-        Self::from_name(&value.trim().replace('_', "-"))
-    }
-
-    pub fn parse_local_child_harness(value: &str) -> Option<Self> {
-        match Self::parse_orchestration_harness(value) {
-            Some(harness @ (Self::Claude | Self::OpenCode | Self::Codex)) => Some(harness),
-            Some(Self::Oz) | Some(Self::Gemini) | Some(Self::Unknown) | None => None,
-        }
-    }
-
     /// Parses a harness config-name string (the lowercase name written into
     /// `HarnessConfig::harness_type` by the spawner, e.g. `"claude"`, `"gemini"`, `"oz"`)
     /// into a [`Harness`] variant. Inverse of [`Harness::config_name`]. Returns `None` for

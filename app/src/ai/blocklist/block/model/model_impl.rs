@@ -215,16 +215,10 @@ where
                     }
                 }
                 BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. } => {
-                    // Cross-pane orchestration credit rollup: the collapsed
-                    // footer pill on an orchestrator's AIBlock derives its
-                    // headline number from descendant credits, which the
-                    // existing exchange-scoped notify path above doesn't
-                    // cover. Trigger a re-render on any usage metadata
-                    // change so the pill stays live. Filtering to only
-                    // descendants of this block's conversation would
-                    // require an O(depth) walk per event for every AI
-                    // block in the app; an unconditional notify is cheap
-                    // and tracks live status accurately.
+                    // The collapsed footer pill derives its headline number from
+                    // usage metadata, which the exchange-scoped notify path above
+                    // doesn't cover. Re-render on any usage metadata change so the
+                    // pill stays live.
                     ctx.notify();
                 }
                 _ => {}

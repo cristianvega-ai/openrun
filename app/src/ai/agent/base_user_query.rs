@@ -64,8 +64,8 @@ impl BaseUserQuery {
     /// should carry.
     ///
     /// The server's fields win where it set them; the client's values fill in what it left
-    /// unset. Text the server sent is normalized like typed text (a `/plan` or `/orchestrate`
-    /// prefix is stripped into the mode), unless the server classified the mode differently,
+    /// unset. Text the server sent is normalized like typed text (a `/plan` prefix is stripped
+    /// into the mode), unless the server classified the mode differently,
     /// in which case the text is kept verbatim so the prefix is neither lost nor doubled when
     /// the mode is rendered back in front of it.
     pub(crate) fn seed_input_fields(

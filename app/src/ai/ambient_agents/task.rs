@@ -241,12 +241,6 @@ pub struct RunExecution<'a> {
 
 impl RunExecution<'_> {}
 
-/// Returns the trimmed orchestrator agent name, or `None` when empty / whitespace-only.
-pub fn normalize_orchestrator_agent_name(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
-}
-
 impl AmbientAgentTask {
     /// Returns the short label for this task: trimmed `agent_config_snapshot.name`,
     /// trimmed `title`, or `"Agent"`.
@@ -461,19 +455,6 @@ pub fn cancel_task_with_toast<V: View>(task_id: AmbientAgentTaskId, ctx: &mut Vi
                 let toast = DismissibleToast::default(message);
                 toast_stack.add_ephemeral_toast(toast, window_id, ctx);
             });
-        },
-    );
-}
-
-/// Cancel an ambient agent task without surfacing a toast to the user.
-pub fn cancel_task_silently<V: View>(task_id: AmbientAgentTaskId, ctx: &mut ViewContext<V>) {
-    let ai_client = ServerApiProvider::handle(ctx).as_ref(ctx).get_ai_client();
-    ctx.spawn(
-        async move { ai_client.cancel_ambient_agent_task(&task_id).await },
-        move |_view, result, _| {
-            if let Err(e) = result {
-                report_error!(e.context("Failed to cancel task"));
-            }
         },
     );
 }

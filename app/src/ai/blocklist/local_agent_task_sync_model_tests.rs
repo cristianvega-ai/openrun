@@ -6,10 +6,7 @@ use warp_graphql::ai::{AgentTaskState, PlatformErrorCode};
 use warpui::App;
 
 use super::super::history_model::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
-use super::{
-    LocalAgentTaskSyncModel, classify_renderable_error, map_cli_session_status,
-    map_conversation_status,
-};
+use super::{LocalAgentTaskSyncModel, classify_renderable_error, map_conversation_status};
 use crate::ai::agent::conversation::{AIConversation, ConversationStatus, TaskSyncMode};
 use crate::ai::agent::{
     AIAgentExchange, AIAgentExchangeId, AIAgentOutputStatus, FinishedAIAgentOutput,
@@ -18,7 +15,7 @@ use crate::ai::agent::{
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::llms::LLMId;
 use crate::server::server_api::ai::{AIClient, MockAIClient, TaskStatusUpdate};
-use crate::terminal::cli_agent_sessions::{CLIAgentSessionStatus, CLIAgentSessionsModel};
+use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 
 /// Helper to assert a (state, Option<TaskStatusUpdate>) tuple.
 fn assert_update(
@@ -201,40 +198,6 @@ fn agent_exited_shell_is_failed_with_invalid_request() {
 }
 
 // --- map_conversation_status ---
-
-/// A yielded conversation must report `IN_PROGRESS` to the task service
-/// so the task row stays active across the yield. No status message is
-/// attached because the yield is an internal state.
-#[test]
-fn map_conversation_status_waiting_for_events_reports_in_progress_with_no_message() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let conversation = AIConversation::new(false, false);
-        let conversation_id = conversation.id();
-        let terminal_view_id = warpui::EntityId::new();
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(terminal_view_id, vec![conversation], ctx);
-        });
-        history_model.update(&mut app, |model, ctx| {
-            let conv = model
-                .conversation_mut(&conversation_id)
-                .expect("conversation was just restored");
-            conv.update_status(ConversationStatus::WaitingForEvents, terminal_view_id, ctx);
-        });
-
-        history_model.read(&app, |model, _| {
-            let conv = model.conversation(&conversation_id).unwrap();
-            assert_eq!(conv.status(), &ConversationStatus::WaitingForEvents);
-            let (state, update) = map_conversation_status(conv);
-            assert_eq!(state, AgentTaskState::InProgress);
-            assert!(
-                update.is_none(),
-                "WaitingForEvents must not attach a status message"
-            );
-        });
-    });
-}
 
 #[test]
 fn map_conversation_status_in_progress_reports_in_progress_with_no_message() {
@@ -435,39 +398,6 @@ fn map_conversation_status_error_classifies_status_error() {
     );
 }
 
-// --- map_cli_session_status ---
-
-#[test]
-fn cli_in_progress_maps_correctly() {
-    let (state, update) = map_cli_session_status(&CLIAgentSessionStatus::InProgress);
-    assert_eq!(state, AgentTaskState::InProgress);
-    assert!(update.is_none());
-}
-
-#[test]
-fn cli_success_maps_correctly() {
-    let (state, update) = map_cli_session_status(&CLIAgentSessionStatus::Success);
-    assert_eq!(state, AgentTaskState::Succeeded);
-    assert!(update.is_none());
-}
-
-#[test]
-fn cli_blocked_maps_correctly() {
-    let (state, update) = map_cli_session_status(&CLIAgentSessionStatus::Blocked {
-        message: Some("needs approval".into()),
-    });
-    assert_eq!(state, AgentTaskState::Blocked);
-    let update = update.expect("should have status update");
-    assert!(update.message.contains("needs approval"));
-}
-
-#[test]
-fn cli_blocked_without_message() {
-    let (state, update) = map_cli_session_status(&CLIAgentSessionStatus::Blocked { message: None });
-    assert_eq!(state, AgentTaskState::Blocked);
-    assert!(update.is_none());
-}
-
 // --- Model-level tests ---
 
 /// Parses a fixed UUID into an `AmbientAgentTaskId`. Using a constant uuid
@@ -592,40 +522,6 @@ fn conversation_server_token_assigned_skips_viewer_conversations() {
             counter.load(Ordering::SeqCst),
             0,
             "viewer guard must skip the RPC for token-assigned events"
-        );
-    });
-}
-
-#[test]
-fn conversation_server_token_assigned_skips_remote_child_conversations() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let mut conversation = AIConversation::new(false, false);
-        conversation.set_run_id(fixed_task_id().to_string());
-        conversation.set_server_conversation_token("server-conversation-id".to_string());
-        conversation.mark_as_remote_child();
-        let conversation_id = conversation.id();
-        let terminal_view_id = warpui::EntityId::new();
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(terminal_view_id, vec![conversation], ctx);
-        });
-
-        let (_model, counter) = install_model_with_call_counter(&mut app);
-
-        history_model.update(&mut app, |_, ctx| {
-            ctx.emit(BlocklistAIHistoryEvent::ConversationServerTokenAssigned {
-                conversation_id,
-                terminal_surface_id: terminal_view_id,
-            });
-        });
-
-        pump_spawned_tasks().await;
-
-        assert_eq!(
-            counter.load(Ordering::SeqCst),
-            0,
-            "remote-child guard must skip the RPC for token-assigned events"
         );
     });
 }

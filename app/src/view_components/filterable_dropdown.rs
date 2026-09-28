@@ -35,13 +35,6 @@ pub enum FilterableDropdownEvent {
     Close,
 }
 
-#[derive(Default, Debug, PartialEq)]
-pub enum FilterableDropdownOrientation {
-    Up,
-    #[default]
-    Down,
-}
-
 pub struct FilterableDropdown<A: DropdownItemAction = ()> {
     is_expanded: bool,
     disabled: bool,
@@ -53,7 +46,6 @@ pub struct FilterableDropdown<A: DropdownItemAction = ()> {
     self_handle: WeakViewHandle<Self>,
     selected_item: Option<MenuItem<DropdownAction>>,
     items: Vec<MenuItem<DropdownAction>>,
-    orientation: FilterableDropdownOrientation,
     static_menu_header: Option<&'static str>,
     button_variant: ButtonVariant,
     style_override: Option<UiComponentStyles>,
@@ -75,11 +67,6 @@ pub struct FilterableDropdown<A: DropdownItemAction = ()> {
     menu_width: Option<f32>,
     vertical_margin: f32,
     top_bar_height: f32,
-    /// See `Dropdown::use_overlay_layer`. Mirrors the same opt-out for
-    /// `FilterableDropdown` callers (the orchestrate environment
-    /// picker) that need to render in the parent's Normal layer
-    /// instead of an overlay.
-    use_overlay_layer: bool,
     match_menu_width_to_top_bar: bool,
     _action_type: PhantomData<A>,
 }
@@ -130,7 +117,6 @@ where
             main_axis_size: MainAxisSize::Max,
             selected_item: None,
             items: Default::default(),
-            orientation: Default::default(),
             static_menu_header: None,
             button_variant: ButtonVariant::Outlined,
             style_override: None,
@@ -141,22 +127,12 @@ where
             menu_width: None,
             vertical_margin: DROPDOWN_PADDING,
             top_bar_height: TOP_MENU_BAR_HEIGHT,
-            use_overlay_layer: true,
             match_menu_width_to_top_bar: false,
             _action_type: PhantomData,
         }
     }
 
-    /// See `Dropdown::set_use_overlay_layer`.
-    pub fn set_use_overlay_layer(&mut self, use_overlay_layer: bool, ctx: &mut ViewContext<Self>) {
-        self.use_overlay_layer = use_overlay_layer;
-        ctx.notify();
-    }
-
     /// Override the top-bar height.
-    /// so callers (e.g. the orchestrate environment picker) that mix
-    /// `Dropdown` and `FilterableDropdown` in the same row can size them
-    /// identically.
     pub fn set_top_bar_height(&mut self, height: f32, ctx: &mut ViewContext<Self>) {
         self.top_bar_height = height;
         ctx.notify();
@@ -225,10 +201,6 @@ where
 
     pub fn set_button_variant(&mut self, button_variant: ButtonVariant) {
         self.button_variant = button_variant;
-    }
-
-    pub fn set_orientation(&mut self, orientation: FilterableDropdownOrientation) {
-        self.orientation = orientation;
     }
 
     pub fn add_items(&mut self, items: Vec<DropdownItem<A>>, ctx: &mut ViewContext<Self>) {
@@ -849,28 +821,14 @@ where
 
         let mut dropdown_stack = Stack::new().with_child(self.render_top_bar(appearance));
         if self.is_expanded {
-            let positioning = if self.orientation == FilterableDropdownOrientation::Down {
-                OffsetPositioning::offset_from_save_position_element(
-                    self.top_bar_label(),
-                    vec2f(0., 0.),
-                    PositionedElementOffsetBounds::WindowByPosition,
-                    PositionedElementAnchor::BottomLeft,
-                    ChildAnchor::TopLeft,
-                )
-            } else {
-                OffsetPositioning::offset_from_save_position_element(
-                    self.top_bar_label(),
-                    vec2f(0., 0.),
-                    PositionedElementOffsetBounds::WindowByPosition,
-                    PositionedElementAnchor::TopLeft,
-                    ChildAnchor::BottomLeft,
-                )
-            };
-            if self.use_overlay_layer {
-                dropdown_stack.add_positioned_overlay_child(dropdown_menu, positioning);
-            } else {
-                dropdown_stack.add_positioned_child(dropdown_menu, positioning);
-            }
+            let positioning = OffsetPositioning::offset_from_save_position_element(
+                self.top_bar_label(),
+                vec2f(0., 0.),
+                PositionedElementOffsetBounds::WindowByPosition,
+                PositionedElementAnchor::BottomLeft,
+                ChildAnchor::TopLeft,
+            );
+            dropdown_stack.add_positioned_overlay_child(dropdown_menu, positioning);
         }
         Container::new(dropdown_stack.finish())
             .with_margin_top(self.vertical_margin)

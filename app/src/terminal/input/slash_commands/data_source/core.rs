@@ -55,7 +55,6 @@ fn split_command_and_argument(buffer: &str) -> (&str, Option<&str>) {
 /// These do not depend on GUI-only concepts such as cloud mode or the agent view;
 /// they are computed once per recompute and shared by both surfaces.
 pub struct CommonCommandGates {
-    is_orchestration_enabled: bool,
     is_cli_agent_input: bool,
 }
 
@@ -353,9 +352,6 @@ pub trait SlashCommandDataSource {
         if !command.is_active(availability) {
             return false;
         }
-        if command.name == commands::ORCHESTRATE_NAME && !gates.is_orchestration_enabled {
-            return false;
-        }
         // When CLI agent input is open, restrict to the explicit allowlist.
         if gates.is_cli_agent_input && !CLI_AGENT_INPUT_ALLOWED_COMMANDS.contains(&command.name) {
             return false;
@@ -364,9 +360,7 @@ pub trait SlashCommandDataSource {
     }
 
     fn common_command_gates(&self, ctx: &AppContext) -> CommonCommandGates {
-        let ai_settings = AISettings::as_ref(ctx);
         CommonCommandGates {
-            is_orchestration_enabled: ai_settings.is_orchestration_enabled(ctx),
             is_cli_agent_input: self.is_cli_agent_input_open(ctx),
         }
     }

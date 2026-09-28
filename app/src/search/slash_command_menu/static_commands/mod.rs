@@ -67,7 +67,6 @@ pub enum SlashCommandKind {
     Team,
     Profile,
     Plan,
-    Orchestrate,
     Compact,
     CompactAnd,
     Queue,

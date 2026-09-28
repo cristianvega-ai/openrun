@@ -7,10 +7,10 @@ use warp_server_client::base_client::{CLOUD_AGENT_ID_HEADER, TEAM_UID_HEADER};
 
 use super::super::ServerApi;
 use super::{
-    AIClient, AgentRunEvent, AgentSource, AmbientAgentTaskState, Artifact,
+    AIClient, AgentSource, AmbientAgentTaskState, Artifact,
     ArtifactDownloadResponse, CONNECTED_SELF_HOSTED_WORKERS_PATH, ConnectedSelfHostedWorker,
     ExecutionLocation, ForkConversationResponse, ListConnectedSelfHostedWorkersResponse,
-    ListRunsResponse, ReadAgentMessageResponse, TaskListFilter, TaskStatusUpdate,
+    ListRunsResponse, TaskListFilter, TaskStatusUpdate,
     agent_task_status_message_input, build_fork_conversation_url, build_list_agent_runs_url,
 };
 use crate::cloud_object::notebook_model::NotebookId;
@@ -911,66 +911,6 @@ fn test_artifact_plan_serialize_deserialize_roundtrip() {
     let deserialized: Artifact = serde_json::from_str(&serialized).unwrap();
 
     assert_eq!(original, deserialized);
-}
-
-#[test]
-fn test_deserialize_read_agent_message_response_with_timestamps() {
-    let json = r#"{
-        "message_id": "message-1",
-        "sender_run_id": "run-1",
-        "subject": "Build finished",
-        "body": "Everything passed.",
-        "sent_at": "2026-04-09T20:00:00Z",
-        "delivered_at": "2026-04-09T20:01:00Z",
-        "read_at": "2026-04-09T20:02:00Z"
-    }"#;
-
-    let response: ReadAgentMessageResponse = serde_json::from_str(json).unwrap();
-
-    assert_eq!(response.message_id, "message-1");
-    assert_eq!(response.sender_run_id, "run-1");
-    assert_eq!(response.subject, "Build finished");
-    assert_eq!(response.body, "Everything passed.");
-    assert_eq!(response.sent_at, "2026-04-09T20:00:00Z");
-    assert_eq!(
-        response.delivered_at.as_deref(),
-        Some("2026-04-09T20:01:00Z")
-    );
-    assert_eq!(response.read_at.as_deref(), Some("2026-04-09T20:02:00Z"));
-}
-
-#[test]
-fn test_deserialize_agent_run_events_with_optional_fields() {
-    let json = r#"[
-        {
-            "event_type": "run_started",
-            "run_id": "run-1",
-            "ref_id": null,
-            "execution_id": "exec-1",
-            "occurred_at": "2026-04-09T20:00:00Z",
-            "sequence": 7
-        },
-        {
-            "event_type": "new_message",
-            "run_id": "run-2",
-            "ref_id": "message-9",
-            "execution_id": null,
-            "occurred_at": "2026-04-09T20:05:00Z",
-            "sequence": 8
-        }
-    ]"#;
-
-    let events: Vec<AgentRunEvent> = serde_json::from_str(json).unwrap();
-
-    assert_eq!(events.len(), 2);
-    assert_eq!(events[0].event_type, "run_started");
-    assert_eq!(events[0].execution_id.as_deref(), Some("exec-1"));
-    assert_eq!(events[0].ref_id, None);
-    assert_eq!(events[0].sequence, 7);
-    assert_eq!(events[1].event_type, "new_message");
-    assert_eq!(events[1].ref_id.as_deref(), Some("message-9"));
-    assert_eq!(events[1].execution_id, None);
-    assert_eq!(events[1].sequence, 8);
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! Tests for the auto-fire drain logic that runs from [`super::TerminalView::drain_queued_prompts`].
 //!
-//! `TerminalView` orchestrates the input editor and the singleton `QueuedQueryModel` on
+//! `TerminalView` coordinates the input editor and the singleton `QueuedQueryModel` on
 //! `FinishedReceivingOutput`. The lightweight tests below exercise the per-conversation singleton
 //! semantics directly; the heavier tests construct a full `TerminalView` to validate the V2
 //! cloud-mode integration paths.
@@ -913,10 +913,10 @@ fn multi_cycle_queue_keeps_each_rows_attachments_independent() {
 
 #[test]
 fn finish_reason_is_scoped_to_the_finished_conversation() {
-    // An orchestration pane hosts the lead and local child conversations in one view, so the
-    // most recent block in the pane can belong to a sibling conversation that is still
-    // mid-turn. The per-conversation lookup must report the finished conversation's own block
-    // as Complete (so its queued prompts drain) and the streaming sibling's as unfinished.
+    // A pane can host several conversations in one view, so the most recent block in the
+    // pane can belong to a sibling conversation that is still mid-turn. The per-conversation
+    // lookup must report the finished conversation's own block as Complete (so its queued
+    // prompts drain) and the streaming sibling's as unfinished.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         let terminal = add_window_with_terminal(&mut app, None);
@@ -951,8 +951,8 @@ fn finish_reason_is_scoped_to_the_finished_conversation() {
 fn finished_receiving_output_drains_queue_when_sibling_block_masks_turn_end() {
     // End-to-end through the controller-event path: `FinishedReceivingOutput` for a finished
     // conversation must drain that conversation's queue even when a sibling conversation's
-    // still-streaming block is the most recent block in the pane (orchestration panes host the
-    // lead and local child conversations in one view).
+    // still-streaming block is the most recent block in the pane (a pane can host several
+    // conversations in one view).
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         let terminal = add_window_with_terminal(&mut app, None);

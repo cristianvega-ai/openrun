@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use ai::agent::action::{RunAgentsAgentRunConfig, RunAgentsExecutionMode};
 use settings::Setting;
 #[cfg(feature = "local_fs")]
 use warp_util::path::LineAndColumnArg;
@@ -10,18 +9,12 @@ use warpui::{App, SingletonEntity};
 use super::{AIBlockEvent, open_code_action_event};
 use super::{
     CollapsibleElementState, CollapsibleExpansionState, UserAvatarInfo,
-    default_collapsible_state_for_orchestration_action,
-    default_collapsible_state_for_orchestration_message, received_message_collapsible_id,
     user_avatar_info_for_conversation_creator,
-};
-use crate::ai::agent::{AIAgentActionType, StartAgentExecutionMode};
-use crate::ai::blocklist::action_model::{
-    compose_run_agents_child_prompt, run_agents_to_start_agent_mode,
 };
 use crate::auth::UserUid;
 #[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
-use crate::settings::{AISettings, OrchestrationMessageDisplayMode};
+use crate::settings::AISettings;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::workspaces::user_profiles::{UserProfileWithUID, UserProfiles};
 
@@ -49,66 +42,6 @@ fn collapsed_initializer_starts_collapsed() {
         state.expansion_state,
         CollapsibleExpansionState::Collapsed
     ));
-}
-
-#[test]
-fn orchestration_show_and_collapse_collapses_after_finish() {
-    let mut state = default_collapsible_state_for_orchestration_message(
-        OrchestrationMessageDisplayMode::ShowAndCollapse,
-    );
-
-    state.finish_orchestration_message(OrchestrationMessageDisplayMode::ShowAndCollapse);
-
-    assert!(matches!(
-        state.expansion_state,
-        CollapsibleExpansionState::Collapsed
-    ));
-}
-
-#[test]
-fn orchestration_always_show_stays_expanded_after_finish() {
-    let mut state = default_collapsible_state_for_orchestration_message(
-        OrchestrationMessageDisplayMode::AlwaysShow,
-    );
-
-    state.finish_orchestration_message(OrchestrationMessageDisplayMode::AlwaysShow);
-
-    assert!(matches!(
-        state.expansion_state,
-        CollapsibleExpansionState::Expanded {
-            is_finished: true,
-            scroll_pinned_to_bottom: false
-        }
-    ));
-}
-
-#[test]
-fn orchestration_send_message_starts_collapsed() {
-    let state = default_collapsible_state_for_orchestration_action(
-        &AIAgentActionType::SendMessageToAgent {
-            addresses: vec!["child-agent".to_string()],
-            subject: "Status".to_string(),
-            message: "Body".to_string(),
-        },
-        OrchestrationMessageDisplayMode::AlwaysCollapse,
-    )
-    .expect("send-message actions should get a collapsible state");
-
-    assert!(matches!(
-        state.expansion_state,
-        CollapsibleExpansionState::Collapsed
-    ));
-}
-
-#[test]
-fn non_orchestration_actions_do_not_get_collapsible_state_defaults() {
-    assert!(
-        default_collapsible_state_for_orchestration_action(
-            &AIAgentActionType::OpenCodeReview,
-            OrchestrationMessageDisplayMode::AlwaysCollapse,
-        )
-        .is_none()
-    );
 }
 
 #[cfg(feature = "local_fs")]
@@ -153,80 +86,6 @@ fn open_code_action_routes_links_to_configured_editor_and_non_links_to_warp() {
         } if source == finder_source
     ));
 }
-#[test]
-fn orchestration_show_and_collapse_starts_sent_messages_expanded() {
-    let state = default_collapsible_state_for_orchestration_action(
-        &AIAgentActionType::SendMessageToAgent {
-            addresses: vec!["child-agent".to_string()],
-            subject: "Status".to_string(),
-            message: "Body".to_string(),
-        },
-        OrchestrationMessageDisplayMode::ShowAndCollapse,
-    )
-    .expect("send-message actions should get a collapsible state");
-
-    assert!(matches!(
-        state.expansion_state,
-        CollapsibleExpansionState::Expanded {
-            is_finished: false,
-            scroll_pinned_to_bottom: true
-        }
-    ));
-}
-
-#[test]
-fn orchestration_always_show_starts_sent_messages_expanded() {
-    let state = default_collapsible_state_for_orchestration_action(
-        &AIAgentActionType::SendMessageToAgent {
-            addresses: vec!["child-agent".to_string()],
-            subject: "Status".to_string(),
-            message: "Body".to_string(),
-        },
-        OrchestrationMessageDisplayMode::AlwaysShow,
-    )
-    .expect("send-message actions should get a collapsible state");
-
-    assert!(matches!(
-        state.expansion_state,
-        CollapsibleExpansionState::Expanded {
-            is_finished: false,
-            scroll_pinned_to_bottom: true
-        }
-    ));
-}
-
-#[test]
-fn orchestration_received_messages_follow_initial_message_display_mode() {
-    let show_and_collapse = default_collapsible_state_for_orchestration_message(
-        OrchestrationMessageDisplayMode::ShowAndCollapse,
-    );
-    assert!(matches!(
-        show_and_collapse.expansion_state,
-        CollapsibleExpansionState::Expanded {
-            is_finished: false,
-            scroll_pinned_to_bottom: true
-        }
-    ));
-    let collapsed = default_collapsible_state_for_orchestration_message(
-        OrchestrationMessageDisplayMode::AlwaysCollapse,
-    );
-    assert!(matches!(
-        collapsed.expansion_state,
-        CollapsibleExpansionState::Collapsed
-    ));
-    let expanded = default_collapsible_state_for_orchestration_message(
-        OrchestrationMessageDisplayMode::AlwaysShow,
-    );
-
-    assert!(matches!(
-        expanded.expansion_state,
-        CollapsibleExpansionState::Expanded {
-            is_finished: false,
-            scroll_pinned_to_bottom: true
-        }
-    ));
-}
-
 #[test]
 fn always_show_thinking_stays_expanded_after_finish() {
     App::test((), |mut app| async move {
@@ -294,16 +153,6 @@ fn manual_reexpand_while_streaming_stays_expanded_after_finish() {
 }
 
 #[test]
-fn received_message_collapsible_id_prefixes_row_ids() {
-    let first = received_message_collapsible_id("message-1");
-    let second = received_message_collapsible_id("message-2");
-
-    assert_eq!(&*first, "received-message:message-1");
-    assert_eq!(&*second, "received-message:message-2");
-    assert_ne!(first, second);
-}
-
-#[test]
 fn user_avatar_info_prefers_conversation_creator_profile() {
     App::test((), |app| async move {
         let creator = UserProfileWithUID {
@@ -361,225 +210,6 @@ fn user_avatar_info_uses_cached_profile_for_creator_uid() {
             );
         });
     });
-}
-
-#[test]
-fn compose_child_prompt_concatenates_when_both_non_empty() {
-    let composed = compose_run_agents_child_prompt("base", "do X");
-    assert_eq!(composed, "base\n\ndo X");
-}
-
-#[test]
-fn compose_child_prompt_uses_base_only_when_per_agent_empty() {
-    let composed = compose_run_agents_child_prompt("base", "");
-    assert_eq!(composed, "base");
-}
-
-#[test]
-fn compose_child_prompt_uses_per_agent_only_when_base_empty() {
-    let composed = compose_run_agents_child_prompt("", "do X");
-    assert_eq!(composed, "do X");
-}
-
-#[test]
-fn compose_child_prompt_returns_empty_when_both_empty() {
-    let composed = compose_run_agents_child_prompt("", "");
-    assert_eq!(composed, "");
-}
-
-#[test]
-fn compose_child_prompt_treats_whitespace_only_base_as_empty() {
-    let composed = compose_run_agents_child_prompt("   \n", "do X");
-    assert_eq!(composed, "do X");
-}
-
-fn agent_cfg() -> RunAgentsAgentRunConfig {
-    RunAgentsAgentRunConfig {
-        name: "child".to_string(),
-        prompt: "do X".to_string(),
-        title: "Child".to_string(),
-        agent_identity_uid: String::new(),
-        model_id: String::new(),
-    }
-}
-
-#[test]
-fn remote_arm_propagates_run_fields() {
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Remote {
-            environment_id: "env-1".to_string(),
-            worker_host: "warp".to_string(),
-            runner_id: String::new(),
-        },
-        "oz",
-        "auto",
-        None,
-        &agent_cfg(),
-    )
-    .expect("Remote+oz must convert");
-    let StartAgentExecutionMode::Remote {
-        environment_id,
-        worker_host,
-        harness_type,
-        model_id,
-        title,
-        auth_secret_name,
-        runner_id: _,
-        agent_identity_uid,
-    } = mode
-    else {
-        panic!("expected Remote start-agent mode");
-    };
-    assert_eq!(environment_id, "env-1");
-    assert_eq!(worker_host, "warp");
-    assert_eq!(harness_type, "oz");
-    assert_eq!(model_id, "auto");
-    assert_eq!(title, "Child");
-    assert_eq!(auth_secret_name, None);
-    assert_eq!(agent_identity_uid, None);
-}
-
-#[test]
-fn remote_arm_propagates_agent_identity_uid() {
-    let mut cfg = agent_cfg();
-    cfg.agent_identity_uid = "sa-uid-1".to_string();
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Remote {
-            environment_id: "env-1".to_string(),
-            worker_host: "warp".to_string(),
-            runner_id: String::new(),
-        },
-        "oz",
-        "auto",
-        None,
-        &cfg,
-    )
-    .expect("Remote+oz must convert");
-    let StartAgentExecutionMode::Remote {
-        agent_identity_uid, ..
-    } = mode
-    else {
-        panic!("expected Remote start-agent mode");
-    };
-    assert_eq!(agent_identity_uid.as_deref(), Some("sa-uid-1"));
-}
-
-#[test]
-fn local_arm_rejects_agent_identity_uid() {
-    let mut cfg = agent_cfg();
-    cfg.agent_identity_uid = "sa-uid-1".to_string();
-    let err = run_agents_to_start_agent_mode(&RunAgentsExecutionMode::Local, "", "", None, &cfg)
-        .expect_err("Local + agent_identity_uid must be rejected");
-    assert!(err.contains("agent_identity_uid requires remote execution"));
-}
-
-#[test]
-fn remote_arm_rejects_opencode() {
-    let err = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Remote {
-            environment_id: "env-1".to_string(),
-            worker_host: "warp".to_string(),
-            runner_id: String::new(),
-        },
-        "opencode",
-        "auto",
-        None,
-        &agent_cfg(),
-    )
-    .expect_err("Remote+opencode must be rejected");
-    assert!(err.to_lowercase().contains("opencode"));
-}
-
-#[test]
-fn local_arm_rejects_disabled_codex() {
-    let err = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Local,
-        "codex",
-        "auto",
-        None,
-        &agent_cfg(),
-    )
-    .expect_err("Local+codex must be rejected while disabled");
-    assert_eq!(err, "Local Codex child agents are temporarily disabled.");
-}
-
-#[test]
-fn local_arm_allows_claude() {
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Local,
-        "claude",
-        "auto",
-        None,
-        &agent_cfg(),
-    )
-    .expect("Local+claude should convert");
-    assert!(matches!(
-        mode,
-        StartAgentExecutionMode::Local {
-            harness_type: Some(ref harness_type),
-            model_id: Some(ref model_id),
-        } if harness_type == "claude" && model_id == "auto"
-    ));
-}
-
-#[test]
-fn remote_arm_propagates_claude_auth_secret_into_mode() {
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Remote {
-            environment_id: "env-1".to_string(),
-            worker_host: "warp".to_string(),
-            runner_id: String::new(),
-        },
-        "claude",
-        "auto",
-        Some("my-claude-key"),
-        &agent_cfg(),
-    )
-    .expect("Remote+claude must convert");
-    let StartAgentExecutionMode::Remote {
-        auth_secret_name, ..
-    } = mode
-    else {
-        panic!("expected Remote start-agent mode");
-    };
-    assert_eq!(auth_secret_name.as_deref(), Some("my-claude-key"));
-}
-
-#[test]
-fn remote_arm_filters_whitespace_auth_secret_name_to_none() {
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Remote {
-            environment_id: "env-1".to_string(),
-            worker_host: "warp".to_string(),
-            runner_id: String::new(),
-        },
-        "codex",
-        "auto",
-        Some("   "),
-        &agent_cfg(),
-    )
-    .expect("Remote+codex must convert");
-    let StartAgentExecutionMode::Remote {
-        auth_secret_name, ..
-    } = mode
-    else {
-        panic!("expected Remote start-agent mode");
-    };
-    assert_eq!(auth_secret_name, None);
-}
-
-#[test]
-fn local_arm_ignores_auth_secret_name() {
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Local,
-        "claude",
-        "auto",
-        Some("my-claude-key"),
-        &agent_cfg(),
-    )
-    .expect("Local+claude should convert");
-    // Local children don't carry an auth_secret_name field.
-    assert!(matches!(mode, StartAgentExecutionMode::Local { .. }));
 }
 
 #[test]

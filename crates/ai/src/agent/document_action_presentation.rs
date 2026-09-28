@@ -115,11 +115,8 @@ impl DocumentActionPresentation {
                 | AIAgentActionType::ReadShellCommandOutput { .. }
                 | AIAgentActionType::InsertCodeReviewComments { .. }
                 | AIAgentActionType::FetchConversation { .. }
-                | AIAgentActionType::SendMessageToAgent { .. }
                 | AIAgentActionType::TransferShellCommandControlToUser { .. }
-                | AIAgentActionType::AskUserQuestion { .. }
-                | AIAgentActionType::RunAgents(_)
-                | AIAgentActionType::WaitForEvents { .. },
+                | AIAgentActionType::AskUserQuestion { .. },
                 _,
             ) => None,
         }

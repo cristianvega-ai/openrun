@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use ai::agent::orchestration_config::{OrchestrationConfig, OrchestrationConfigStatus};
 use ai::document::AIDocumentId;
-use ai::harness::Harness;
 use anyhow::Context as _;
 use chrono::{DateTime, Local, TimeZone};
 use itertools::Itertools as _;
@@ -328,16 +326,11 @@ pub struct AIConversation {
     server_conversation_token: Option<ServerConversationToken>,
 
     /// The server-assigned task/run identifier (`ai_tasks.id`) for this
-    /// conversation, used for v2 orchestration.
+    /// conversation.
     ///
     /// For local conversations, parsed from `StreamInit.run_id` on the first
-    /// response. For remote child agents spawned via `POST /agent/run`, set
-    /// from `SpawnAgentResponse.task_id`.
-    ///
-    /// Used for messaging API, events API, poller self-filtering, lifecycle
-    /// reports, parent↔child agent identity, and task status reporting.
-    /// The string form (for APIs that accept a run_id) is obtained via
-    /// `run_id()` which calls `.to_string()` on this field.
+    /// response. The string form (for APIs that accept a run_id) is obtained
+    /// via `run_id()` which calls `.to_string()` on this field.
     task_id: Option<AmbientAgentTaskId>,
 
     /// The server conversation ID of the source conversation if this conversation was forked.
@@ -397,40 +390,6 @@ pub struct AIConversation {
     /// in the agent view.
     is_cli_agent_transcript: bool,
 
-    // TODO(advait): Group child-agent-only fields (parent_agent_id,
-    // agent_name, orchestration_harness_type, parent_conversation_id,
-    // is_remote_child, pinned) into a ChildAgentState sub-struct. See
-    // PR #10777 review.
-    /// Server-side identifier of the parent agent that spawned this child, if any.
-    /// For current orchestration, this holds the parent's `run_id`. Persisted as
-    /// `parent_agent_id` for serde compatibility with older conversation data.
-    parent_agent_id: Option<String>,
-    /// The display name for this agent (e.g. "Agent 1"), assigned by the orchestrator.
-    agent_name: Option<String>,
-    /// Harness metadata associated with this child agent in orchestration flows.
-    orchestration_harness_type: Option<String>,
-    /// The local conversation ID of the parent that spawned this child, if any.
-    parent_conversation_id: Option<AIConversationId>,
-    /// True when this conversation is a placeholder for a child agent executing
-    /// on a remote worker. The parent's client does not drive execution for
-    /// these conversations — the remote worker's own client handles status
-    /// reporting.
-    is_remote_child: bool,
-
-    /// The last event sequence number observed from the v2 orchestration
-    /// event log. Used on restore to resume event delivery without
-    /// re-delivering already-processed events.
-    last_event_sequence: Option<i64>,
-
-    /// Per-plan orchestration configs hydrated from
-    /// `OrchestrationConfigSnapshot` messages in the conversation's task list.
-    /// Keyed by `plan_id`; snapshots with empty `plan_id` are ignored.
-    orchestration_configs: HashMap<String, (OrchestrationConfig, OrchestrationConfigStatus)>,
-
-    /// Whether the user has pinned this child agent in the
-    /// orchestration pill bar. Persisted via `AgentConversationData.pinned`.
-    pinned: bool,
-
     /// How this conversation's status synchronizes to the server task row. Not persisted: it
     /// only matters for the live process that bootstrapped the conversation, and a restored
     /// conversation resumes ordinary synchronization.
@@ -483,14 +442,6 @@ impl AIConversation {
             has_usage_metadata: false,
             fallback_display_title: None,
             artifacts: Vec::new(),
-            parent_agent_id: None,
-            agent_name: None,
-            orchestration_harness_type: None,
-            parent_conversation_id: None,
-            is_remote_child: false,
-            last_event_sequence: None,
-            orchestration_configs: HashMap::new(),
-            pinned: false,
             task_sync_mode: TaskSyncMode::default(),
         }
     }
@@ -619,15 +570,8 @@ impl AIConversation {
             conversation_usage_metadata,
             reverted_action_ids,
             artifacts,
-            parent_agent_id,
-            agent_name,
-            orchestration_harness_type,
-            parent_conversation_id,
-            is_remote_child,
             run_id,
             autoexecute_override,
-            last_event_sequence,
-            pinned,
         ) = if let Some(data) = conversation_data {
             let server_conversation_token = data
                 .server_conversation_token
@@ -658,9 +602,6 @@ impl AIConversation {
                         .ok()
                 })
                 .unwrap_or_default();
-            let parent_conversation_id = data
-                .parent_conversation_id
-                .and_then(|id| AIConversationId::try_from(id).ok());
             let autoexecute_override = if FeatureFlag::RememberFastForwardState.is_enabled() {
                 data.autoexecute_override
                     .map(Into::into)
@@ -675,15 +616,8 @@ impl AIConversation {
                 conversation_usage_metadata,
                 reverted_action_ids,
                 artifacts,
-                data.parent_agent_id,
-                data.agent_name,
-                data.orchestration_harness_type,
-                parent_conversation_id,
-                data.is_remote_child,
                 data.run_id,
                 autoexecute_override,
-                data.last_event_sequence,
-                data.pinned,
             )
         } else {
             (
@@ -694,14 +628,7 @@ impl AIConversation {
                 HashSet::new(),
                 Vec::new(),
                 None,
-                None,
-                None,
-                None,
-                false,
-                None,
                 AIConversationAutoexecuteMode::default(),
-                None,
-                false,
             )
         };
         let total_provider_cost_in_cents = conversation_usage_metadata.total_provider_cost_in_cents;
@@ -736,14 +663,6 @@ impl AIConversation {
             optimistic_cli_subagent_subtask_id: None,
             fallback_display_title: None,
             artifacts,
-            parent_agent_id,
-            agent_name,
-            orchestration_harness_type,
-            parent_conversation_id,
-            is_remote_child,
-            last_event_sequence,
-            orchestration_configs: HashMap::new(),
-            pinned,
             task_sync_mode: TaskSyncMode::default(),
         })
     }
@@ -1184,11 +1103,6 @@ impl AIConversation {
         self.task_id = Some(id);
     }
 
-    /// Returns the server-side agent identifier for orchestration.
-    pub fn orchestration_agent_id(&self) -> Option<String> {
-        self.run_id()
-    }
-
     /// Updates the server conversation token for this conversation.
     ///
     /// This is used internally for session sharing when a forked conversation receives
@@ -1243,96 +1157,6 @@ impl AIConversation {
         self.server_metadata = Some(metadata);
     }
 
-    pub fn parent_agent_id(&self) -> Option<&str> {
-        self.parent_agent_id.as_deref()
-    }
-
-    pub fn set_parent_agent_id(&mut self, id: String) {
-        self.parent_agent_id = Some(id);
-    }
-
-    pub fn agent_name(&self) -> Option<&str> {
-        self.agent_name.as_deref()
-    }
-
-    pub fn set_agent_name(&mut self, name: String) {
-        self.agent_name = Some(name);
-    }
-
-    pub fn orchestration_harness_type(&self) -> Option<&str> {
-        self.orchestration_harness_type.as_deref()
-    }
-
-    pub fn orchestration_harness(&self) -> Option<Harness> {
-        self.orchestration_harness_type
-            .as_deref()
-            .map(parse_orchestration_harness_type)
-            .or_else(|| {
-                self.server_metadata
-                    .as_ref()
-                    .map(|metadata| Harness::from(metadata.harness))
-            })
-    }
-
-    pub fn set_orchestration_harness(&mut self, harness: Harness) {
-        self.orchestration_harness_type = Some(harness.config_name().to_string());
-    }
-
-    pub fn parent_conversation_id(&self) -> Option<AIConversationId> {
-        self.parent_conversation_id
-    }
-
-    pub fn set_parent_conversation_id(&mut self, id: AIConversationId) {
-        self.parent_conversation_id = Some(id);
-    }
-
-    /// Returns the last observed v2 orchestration event sequence number,
-    /// if any. The cursor is per-conversation: the highest sequence the
-    /// streamer has seen on the run-ids this conversation watches
-    /// (`watched_run_ids` for owner-side conversations, the ancestor
-    /// subtree for viewer-mode orchestrator placeholders).
-    pub fn last_event_sequence(&self) -> Option<i64> {
-        self.last_event_sequence
-    }
-
-    /// Updates the last observed v2 orchestration event sequence number.
-    pub fn set_last_event_sequence(&mut self, sequence: i64) {
-        self.last_event_sequence = Some(sequence);
-    }
-
-    /// Returns whether the user has pinned this conversation in the
-    /// orchestration pill bar.
-    pub fn is_pinned(&self) -> bool {
-        self.pinned
-    }
-
-    /// Sets the persisted pin state. Callers must follow up with
-    /// `write_updated_conversation_state` to push the change to SQLite.
-    pub fn set_pinned(&mut self, pinned: bool) {
-        self.pinned = pinned;
-    }
-
-    /// Returns true if this conversation was spawned by a parent orchestrator
-    /// agent — either via a local parent placeholder
-    /// (`parent_conversation_id`, set in the GUI parent) or via the parent's
-    /// server-side run identifier (`parent_agent_id`, stamped in
-    /// driver-hosted processes).
-    pub fn is_child_agent_conversation(&self) -> bool {
-        self.parent_conversation_id.is_some() || self.parent_agent_id.is_some()
-    }
-
-    /// Returns true if this is a placeholder for a child agent executing on a
-    /// remote worker. The parent's client should not report task status for
-    /// these — the remote worker handles it.
-    pub fn is_remote_child(&self) -> bool {
-        self.is_remote_child
-    }
-
-    /// Marks this conversation as a remote child placeholder.
-    pub fn mark_as_remote_child(&mut self) {
-        self.is_remote_child = true;
-    }
-
     /// Returns how this conversation's status synchronizes to the server task row.
     pub fn task_sync_mode(&self) -> TaskSyncMode {
         self.task_sync_mode
@@ -1342,69 +1166,6 @@ impl AIConversation {
     /// right after creating a debug-turn bootstrap conversation with no prior token.
     pub fn set_task_sync_mode(&mut self, mode: TaskSyncMode) {
         self.task_sync_mode = mode;
-    }
-
-    /// Returns the orchestration config and status for a specific plan,
-    /// or `None` if no config has been hydrated for that plan.
-    pub fn orchestration_config_for_plan(
-        &self,
-        plan_id: &str,
-    ) -> Option<(&OrchestrationConfig, OrchestrationConfigStatus)> {
-        self.orchestration_configs
-            .get(plan_id)
-            .map(|(config, status)| (config, *status))
-    }
-
-    /// Returns `true` if at least one plan has an orchestration config.
-    pub fn has_any_orchestration_config(&self) -> bool {
-        !self.orchestration_configs.is_empty()
-    }
-
-    /// Inserts or replaces the orchestration config for a specific plan.
-    /// Returns `true` if the value actually changed.
-    pub fn set_orchestration_config_for_plan(
-        &mut self,
-        plan_id: String,
-        config: OrchestrationConfig,
-        status: OrchestrationConfigStatus,
-    ) -> bool {
-        use std::collections::hash_map::Entry;
-        match self.orchestration_configs.entry(plan_id) {
-            Entry::Occupied(mut entry) => {
-                let existing = entry.get();
-                if existing.0 != config || existing.1 != status {
-                    entry.insert((config, status));
-                    true
-                } else {
-                    false
-                }
-            }
-            Entry::Vacant(entry) => {
-                entry.insert((config, status));
-                true
-            }
-        }
-    }
-
-    /// Returns a reference to the full per-plan config map.
-    pub fn orchestration_configs(
-        &self,
-    ) -> &HashMap<String, (OrchestrationConfig, OrchestrationConfigStatus)> {
-        &self.orchestration_configs
-    }
-
-    /// Bulk-replaces all orchestration configs (used during hydration).
-    /// Returns `true` if the map actually changed.
-    pub fn set_orchestration_configs(
-        &mut self,
-        configs: HashMap<String, (OrchestrationConfig, OrchestrationConfigStatus)>,
-    ) -> bool {
-        if self.orchestration_configs != configs {
-            self.orchestration_configs = configs;
-            true
-        } else {
-            false
-        }
     }
 
     /// Returns a flat list of linearized messages across all tasks, interpolating subtask messages
@@ -1593,9 +1354,6 @@ impl AIConversation {
             // 3p transcript viewers create an internal conversation only so agent-view
             // filtering can associate the restored block snapshot with an active conversation.
             || self.is_cli_agent_transcript()
-            // Child agent conversations spawned by an orchestrator are managed via the parent's
-            // status card and shouldn't clutter the navigation list.
-            || self.is_child_agent_conversation()
     }
 
     pub fn existing_suggestions(&self) -> Option<&Suggestions> {
@@ -2916,32 +2674,6 @@ impl AIConversation {
                                 None => {}
                             }
                         }
-                        Some(api::message::Message::OrchestrationConfigSnapshot(
-                            snapshot,
-                        )) => {
-                            if !snapshot.plan_id.is_empty()
-                                && let Some(config) = snapshot
-                                    .config
-                                    .as_ref()
-                                    .map(OrchestrationConfig::from_proto)
-                                {
-                                    let status = OrchestrationConfigStatus::from_proto(
-                                        snapshot.status.as_ref(),
-                                    );
-                                    if self.set_orchestration_config_for_plan(
-                                        snapshot.plan_id.clone(),
-                                        config,
-                                        status,
-                                    ) {
-                                        ctx.emit(
-                                            BlocklistAIHistoryEvent::OrchestrationConfigUpdated {
-                                                conversation_id: self.id,
-                                                from_restore: false,
-                                            },
-                                        );
-                                    }
-                                }
-                        }
                         Some(api::message::Message::ToolCallResult(tcr)) => {
                             // Shared-session viewers do not own temp directories created by
                             // conversation search subagents.
@@ -3086,30 +2818,6 @@ impl AIConversation {
                 message: Some(message),
                 mask: Some(mask),
             }) => {
-                // Process OrchestrationConfigSnapshot if the updated
-                // message carries one (e.g. create_orchestration_config
-                // tool call result updating a single message in place).
-                if let Some(api::message::Message::OrchestrationConfigSnapshot(snapshot)) =
-                    &message.message
-                    && !snapshot.plan_id.is_empty()
-                    && let Some(config) = snapshot
-                        .config
-                        .as_ref()
-                        .map(OrchestrationConfig::from_proto)
-                {
-                    let status = OrchestrationConfigStatus::from_proto(snapshot.status.as_ref());
-                    if self.set_orchestration_config_for_plan(
-                        snapshot.plan_id.clone(),
-                        config,
-                        status,
-                    ) {
-                        ctx.emit(BlocklistAIHistoryEvent::OrchestrationConfigUpdated {
-                            conversation_id: self.id,
-                            from_restore: false,
-                        });
-                    }
-                }
-
                 let task_id = TaskId::new(task_id);
                 // Updates may target messages from exchanges added by earlier response
                 // streams, so the current stream is not required to have added an
@@ -3612,10 +3320,7 @@ impl AIConversation {
     /// Returns true if any subagent task is currently active (not yet finished).
     ///
     /// This covers both optimistic CLI subagent tasks (created before server
-    /// confirmation) and server-backed subagent tasks. Used to prevent
-    /// piggybacking orchestration events onto followup requests while a
-    /// subagent is active, since subagents cannot interpret those events and
-    /// inserting them breaks tool_use/tool_result ordering requirements.
+    /// confirmation) and server-backed subagent tasks.
     pub fn has_active_subagent(&self) -> bool {
         if self.optimistic_cli_subagent_subtask_id.is_some() {
             return true;
@@ -3700,9 +3405,7 @@ impl AIConversation {
         ctx: &mut ModelContext<BlocklistAIHistoryModel>,
     ) {
         // Don't persist viewer conversations (e.g. shared sessions).
-        // Remote child placeholder conversations are rediscovered on restore via the
-        // ancestor-list seed, so a persisted row would only risk going stale.
-        if self.is_viewing_shared_session || self.is_remote_child {
+        if self.is_viewing_shared_session {
             return;
         }
 
@@ -3766,11 +3469,6 @@ impl AIConversation {
                     .clone()
                     .map(|token| token.into()),
                 artifacts_json,
-                parent_agent_id: self.parent_agent_id.clone(),
-                agent_name: self.agent_name.clone(),
-                orchestration_harness_type: self.orchestration_harness_type.clone(),
-                parent_conversation_id: self.parent_conversation_id.map(|id| id.to_string()),
-                is_remote_child: self.is_remote_child,
                 // Legacy field; retained for backward-compatible
                 // deserialization but no longer written. The optimistic-root
                 // case is now handled by `Task::source_for_persistence`
@@ -3778,8 +3476,6 @@ impl AIConversation {
                 root_task_is_optimistic: None,
                 run_id: self.task_id.map(|id| id.to_string()),
                 autoexecute_override: Some(self.autoexecute_override.into()),
-                last_event_sequence: self.last_event_sequence,
-                pinned: self.pinned,
             },
         };
         ctx.spawn(
@@ -4472,12 +4168,6 @@ fn subagent_pair_message_ids_to_remove(
     extra_ids
 }
 
-fn parse_orchestration_harness_type(value: &str) -> Harness {
-    Harness::from_config_name(value)
-        .or_else(|| Harness::parse_orchestration_harness(value))
-        .unwrap_or(Harness::Unknown)
-}
-
 pub(super) fn update_todo_list_from_todo_op(
     todo_lists: &mut Vec<AIAgentTodoList>,
     op: api::message::update_todos::Operation,
@@ -4778,10 +4468,6 @@ pub enum ConversationStatus {
 
     /// The last turn of the agent resulted in an action whose execution is blocked by the user.
     Blocked { blocked_action: String },
-
-    /// Agent yielded via wait_for_events and is listening for inbound
-    /// input. Quiescent but not terminal.
-    WaitingForEvents,
 }
 
 impl std::fmt::Display for ConversationStatus {
@@ -4793,7 +4479,6 @@ impl std::fmt::Display for ConversationStatus {
             ConversationStatus::TransientError => write!(f, "Reconnecting"),
             ConversationStatus::Cancelled => write!(f, "Cancelled"),
             ConversationStatus::Blocked { .. } => write!(f, "Blocked"),
-            ConversationStatus::WaitingForEvents => write!(f, "Waiting"),
         }
     }
 }
@@ -4814,9 +4499,9 @@ impl From<&CLIAgentSessionStatus> for ConversationStatus {
 impl From<&ConversationStatus> for AgentStatus {
     fn from(status: &ConversationStatus) -> Self {
         match status {
-            ConversationStatus::InProgress
-            | ConversationStatus::TransientError
-            | ConversationStatus::WaitingForEvents => AgentStatus::InProgress,
+            ConversationStatus::InProgress | ConversationStatus::TransientError => {
+                AgentStatus::InProgress
+            }
             ConversationStatus::Success => AgentStatus::Success,
             ConversationStatus::Error => AgentStatus::Error,
             ConversationStatus::Cancelled => AgentStatus::Cancelled,
@@ -4835,7 +4520,6 @@ impl ConversationStatus {
             // Recovery pending: keep the in-progress treatment rather than an error one.
             ConversationStatus::TransientError => in_progress_icon(appearance),
             ConversationStatus::Cancelled => gray_stop_icon(appearance),
-            ConversationStatus::WaitingForEvents => in_progress_icon(appearance),
         }
     }
 
@@ -4881,13 +4565,6 @@ impl ConversationStatus {
                     StatusColorStyle::Cloud => theme.ansi_bg_yellow(),
                 },
             ),
-            ConversationStatus::WaitingForEvents => (
-                Icon::ClockLoader,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_magenta(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_magenta(),
-                },
-            ),
         }
     }
 
@@ -4914,12 +4591,6 @@ impl ConversationStatus {
             self,
             ConversationStatus::Success | ConversationStatus::Error | ConversationStatus::Cancelled
         )
-    }
-
-    /// True iff the agent has yielded via `wait_for_events` and is listening
-    /// for inbound input.
-    pub fn is_waiting_for_events(&self) -> bool {
-        matches!(self, ConversationStatus::WaitingForEvents)
     }
 
     pub fn is_error(&self) -> bool {

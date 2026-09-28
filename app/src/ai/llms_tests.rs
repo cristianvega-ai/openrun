@@ -1,5 +1,3 @@
-use std::cell::Cell;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use warpui::App;
@@ -1325,10 +1323,10 @@ fn selecting_a_custom_profile_default_clears_the_session_override() {
             profiles.set_base_model(&profile_id, Some(custom_model_id.clone()), ctx);
         });
         preferences.update(&mut app, |preferences, ctx| {
-            preferences.set_agent_mode_llm_override(
+            preferences.update_preferred_agent_mode_llm(
                 &TeamlessScopeForTest,
+                &LLMId::from("claude-opus"),
                 surface_id,
-                LLMId::from("claude-opus"),
                 ctx,
             );
             preferences.update_preferred_agent_mode_llm(
@@ -1357,92 +1355,5 @@ fn selecting_a_custom_profile_default_clears_the_session_override() {
                 "auto"
             );
         });
-    });
-}
-
-#[test]
-fn explicit_child_model_pin_preserves_gui_behavior_and_only_emits_for_effective_changes() {
-    App::test((), |mut app| async move {
-        initialize_settings_for_tests(&mut app);
-        app.add_singleton_model(|_| ServerApiProvider::new_for_test());
-        app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-        app.add_singleton_model(AuthManager::new_for_test);
-        app.add_singleton_model(|_| NetworkStatus::new());
-        app.add_singleton_model(UserWorkspaces::default_mock);
-        app.add_singleton_model(CloudModel::mock);
-        app.add_singleton_model(TeamTesterStatus::mock);
-        app.add_singleton_model(SyncQueue::mock);
-        app.add_singleton_model(UpdateManager::mock);
-        let profiles = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
-        let preferences = app.add_singleton_model(preferences_for_profile_model_tests);
-        let active_model_events = Rc::new(Cell::new(0));
-        let captured_events = active_model_events.clone();
-        app.update(|ctx| {
-            ctx.subscribe_to_model(&preferences, move |_, event, _| {
-                if matches!(event, LLMPreferencesEvent::UpdatedActiveAgentModeLLM) {
-                    captured_events.set(captured_events.get() + 1);
-                }
-            });
-        });
-
-        let surface_id = EntityId::new();
-        preferences.update(&mut app, |preferences, ctx| {
-            preferences.set_agent_mode_llm_override(
-                &TeamlessScopeForTest,
-                surface_id,
-                LLMId::from("auto"),
-                ctx,
-            );
-        });
-        assert_eq!(active_model_events.get(), 0);
-        preferences.read(&app, |preferences, ctx| {
-            assert_eq!(
-                preferences
-                    .get_active_base_model(&TeamlessScopeForTest, ctx, Some(surface_id))
-                    .id
-                    .as_str(),
-                "auto"
-            );
-            assert_eq!(
-                preferences
-                    .base_llm_for_terminal_view
-                    .get(&surface_id)
-                    .map(LLMId::as_str),
-                Some("auto")
-            );
-        });
-
-        profiles.update(&mut app, |profiles, ctx| {
-            let profile_id = profiles.active_profile(Some(surface_id), ctx).id().clone();
-            profiles.set_base_model(&profile_id, Some(LLMId::from("claude-opus")), ctx);
-        });
-        preferences.read(&app, |preferences, ctx| {
-            assert_eq!(
-                preferences
-                    .get_active_base_model(&TeamlessScopeForTest, ctx, Some(surface_id))
-                    .id
-                    .as_str(),
-                "auto"
-            );
-        });
-
-        preferences.update(&mut app, |preferences, ctx| {
-            preferences.set_agent_mode_llm_override(
-                &TeamlessScopeForTest,
-                surface_id,
-                LLMId::from("claude-opus"),
-                ctx,
-            );
-        });
-        assert_eq!(active_model_events.get(), 1);
-        preferences.update(&mut app, |preferences, ctx| {
-            preferences.set_agent_mode_llm_override(
-                &TeamlessScopeForTest,
-                surface_id,
-                LLMId::from("claude-opus"),
-                ctx,
-            );
-        });
-        assert_eq!(active_model_events.get(), 1);
     });
 }

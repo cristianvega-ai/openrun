@@ -258,22 +258,6 @@ pub struct EnvironmentFormCopy {
     show_description_character_count: bool,
 }
 
-impl EnvironmentFormCopy {
-    pub fn orchestration_modal() -> Self {
-        Self {
-            name_placeholder: "e.g., dev-env",
-            repos_placeholder_authed: "Browse GitHub repos...",
-            repos_placeholder_unauthed: REPOS_PLACEHOLDER_UNAUTHED,
-            docker_image_label: "Docker image",
-            docker_image_placeholder: "e.g., node:20-alpine",
-            description_placeholder: DESCRIPTION_PLACEHOLDER,
-            setup_commands_placeholder: "e.g., node start",
-            setup_commands_helper: "Press Enter or click the submit button to add each command.",
-            show_description_character_count: false,
-        }
-    }
-}
-
 impl Default for EnvironmentFormCopy {
     fn default() -> Self {
         Self {
@@ -289,6 +273,7 @@ impl Default for EnvironmentFormCopy {
         }
     }
 }
+
 pub struct UpdateEnvironmentForm {
     self_handle: WeakViewHandle<Self>,
     mode: EnvironmentFormMode,
@@ -729,29 +714,6 @@ impl UpdateEnvironmentForm {
     pub fn set_show_share_with_team_controls(&mut self, show: bool, ctx: &mut ViewContext<Self>) {
         self.show_share_with_team_controls = show;
         ctx.notify();
-    }
-    pub fn configure_for_orchestration_modal(&mut self, ctx: &mut ViewContext<Self>) {
-        self.set_copy(EnvironmentFormCopy::orchestration_modal(), ctx);
-        self.show_footer_cancel_button = true;
-        self.show_share_with_team_controls = false;
-        self.field_spacing = 10.;
-        self.description_height = 52.;
-        self.show_repo_helper_text = false;
-        ctx.notify();
-    }
-
-    #[cfg(test)]
-    pub(crate) fn uses_orchestration_modal_configuration_for_test(&self) -> bool {
-        self.copy == EnvironmentFormCopy::orchestration_modal()
-            && !self.show_header
-            && self.show_footer_cancel_button
-            && !self.show_share_with_team_controls
-            && (self.field_spacing - 10.).abs() < f32::EPSILON
-            && (self.description_height - 52.).abs() < f32::EPSILON
-            && !self.show_repo_helper_text
-            && self.github_auth_redirect_target == GithubAuthRedirectTarget::FocusCloudMode
-            && self.auth_source == AuthSource::CloudSetup
-            && self.should_handle_escape_from_editor
     }
 
     #[cfg(test)]

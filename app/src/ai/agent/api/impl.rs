@@ -85,7 +85,6 @@ pub async fn generate_multi_agent_output(
             should_preserve_file_content_in_history: true,
             supports_todos_ui: true,
             supports_linked_code_blocks: FeatureFlag::LinkedCodeBlocks.is_enabled(),
-            supports_started_child_task_message: true,
             supports_suggest_prompt: true,
             supports_read_image_files: FeatureFlag::ReadImageFiles.is_enabled(),
             supports_reasoning_message: true,
@@ -102,9 +101,6 @@ pub async fn generate_multi_agent_output(
                 FeatureFlag::SummarizationViaMessageReplacement.is_enabled(),
             supports_bundled_skills: false,
             supports_research_agent: params.research_agent_enabled,
-            supports_orchestration_v2: supports_orchestration_v2(params.orchestration_enabled),
-            supports_orchestration_runners: params.orchestration_enabled
-                && FeatureFlag::CloudAgentRunners.is_enabled(),
             supports_chatgpt_subscription_error: false,
             custom_model_providers: params.custom_model_providers,
             custom_model_routers: params.custom_model_routers,
@@ -131,8 +127,7 @@ pub async fn generate_multi_agent_output(
             } else {
                 String::new()
             },
-            parent_agent_id: params.parent_agent_id.unwrap_or_default(),
-            agent_name: params.agent_name.unwrap_or_default(),
+            ..Default::default()
         }),
         existing_suggestions: params
             .existing_suggestions
@@ -204,10 +199,6 @@ fn api_keys_with_warp_credit_fallback_setting(
     }
 }
 
-fn supports_orchestration_v2(orchestration_enabled: bool) -> bool {
-    orchestration_enabled
-}
-
 fn get_supported_tools(params: &RequestParams) -> Vec<api::ToolType> {
     let mut supported_tools = vec![
         api::ToolType::Grep,
@@ -246,13 +237,6 @@ fn get_supported_tools(params: &RequestParams) -> Vec<api::ToolType> {
     }
 
     supported_tools.push(api::ToolType::InsertReviewComments);
-
-    if params.orchestration_enabled {
-        supported_tools.extend([api::ToolType::RunAgents, api::ToolType::SendMessageToAgent]);
-        // Declare client-handled wait_for_events so the server doesn't
-        // fall back to the legacy server-handled form.
-        supported_tools.push(api::ToolType::WaitForEvents);
-    }
 
     if FeatureFlag::AskUserQuestion.is_enabled() && params.ask_user_question_enabled {
         supported_tools.push(api::ToolType::AskUserQuestion);

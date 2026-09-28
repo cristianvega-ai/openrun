@@ -40,7 +40,7 @@ use super::imported_comments::render_imported_comments;
 use super::todos::{render_completed_todo_items, render_todos};
 use super::{
     CONTENT_HORIZONTAL_PADDING, CONTENT_ITEM_VERTICAL_MARGIN, WithContentItemSpacing,
-    add_highlights_to_rich_text, orchestration, render_autonomy_checkbox_setting_speedbump_footer,
+    add_highlights_to_rich_text, render_autonomy_checkbox_setting_speedbump_footer,
     render_citation_chips,
 };
 use crate::ai::agent::api::ServerConversationToken;
@@ -80,7 +80,6 @@ use crate::ai::blocklist::inline_action::requested_action::{
     render_requested_action_row, render_requested_action_row_for_text,
 };
 use crate::ai::blocklist::inline_action::requested_command::RequestedCommand;
-use crate::ai::blocklist::inline_action::run_agents_card_view::RunAgentsCardView;
 use crate::ai::blocklist::inline_action::search_codebase::SearchCodebaseView;
 use crate::ai::blocklist::inline_action::suggested_unit_tests::SuggestedUnitTestsView;
 use crate::ai::blocklist::inline_action::web_fetch::WebFetchView;
@@ -151,12 +150,6 @@ pub(crate) struct Props<'a> {
     pub(super) gemini_enterprise_credentials_error_view:
         Option<&'a ViewHandle<GeminiEnterpriseCredentialsErrorView>>,
     pub(super) imported_comments: &'a HashMap<AIAgentActionId, ImportedCommentGroup>,
-    /// Per-orchestrate-action card view. Each `RunAgentsCardView` owns
-    /// its own edit state, button + picker handles, and in-flight
-    /// spawning snapshot; AIBlock just lazily creates the view per
-    /// `AIAgentActionId` and embeds it via `ChildView` when the action
-    /// is rendered. Multi-card lifecycle = AIBlock lifecycle.
-    pub(crate) run_agents_card_views: &'a HashMap<AIAgentActionId, ViewHandle<RunAgentsCardView>>,
     #[cfg(feature = "local_fs")]
     pub(crate) resolved_code_block_paths:
         &'a HashMap<std::path::PathBuf, Option<std::path::PathBuf>>,
@@ -629,42 +622,6 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                             output_items.add_child(render_upload_artifact(props, id, request, app));
                         }
                         AIAgentOutputMessageType::Action(AIAgentAction {
-                            action: AIAgentActionType::RunAgents(_req),
-                            id,
-                            ..
-                        }) => {
-                            // Embed the per-action `RunAgentsCardView`
-                            // via `ChildView`. The view renders a
-                            // "Configuring agents..." placeholder while
-                            // streaming, then transitions to the full
-                            // confirmation card once complete.
-                            should_render_footer = false;
-                            if let Some(card_view) = props.run_agents_card_views.get(id) {
-                                output_items.add_child(ChildView::new(card_view).finish());
-                            }
-                        }
-                        AIAgentOutputMessageType::Action(AIAgentAction {
-                            action:
-                                AIAgentActionType::SendMessageToAgent {
-                                    addresses,
-                                    subject,
-                                    message,
-                                },
-                            id,
-                            ..
-                        }) => {
-                            should_render_footer = false;
-                            output_items.add_child(orchestration::render_send_message(
-                                props,
-                                id,
-                                addresses,
-                                subject,
-                                message,
-                                &output_message.id,
-                                app,
-                            ));
-                        }
-                        AIAgentOutputMessageType::Action(AIAgentAction {
                             action: AIAgentActionType::InsertCodeReviewComments { repo_path, .. },
                             id,
                             ..
@@ -737,13 +694,6 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                                     output_message.id
                                 );
                             }
-                        }
-                        AIAgentOutputMessageType::MessagesReceivedFromAgents { messages } => {
-                            output_items.add_child(
-                                orchestration::render_messages_received_from_agents(
-                                    messages, props, app,
-                                ),
-                            );
                         }
                         AIAgentOutputMessageType::DebugOutput { text } => {
                             if ChannelState::enable_debug_features()

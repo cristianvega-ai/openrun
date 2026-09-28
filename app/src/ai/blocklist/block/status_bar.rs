@@ -1033,9 +1033,7 @@ impl View for BlocklistAIStatusBar {
                         (Some(warping_indicator), true) => warping_indicator,
                         _ => {
                             if agent_view_controller.is_active() {
-                                // The orchestration pill bar in the agent view header
-                                // replaces the legacy child-agent status card rows;
-                                // render only the message bar here.
+                                // Render only the message bar here.
                                 return Flex::column()
                                     .with_child(ChildView::new(&self.agent_message_bar).finish())
                                     .finish();

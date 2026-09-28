@@ -3,12 +3,10 @@
 pub(crate) mod active_agent_views_model;
 pub(crate) mod agent;
 pub(crate) mod agent_conversations_model;
-pub(crate) mod agent_events;
 pub(crate) mod agent_management;
 pub mod ambient_agents;
 pub(crate) mod artifact_download;
 pub mod artifacts;
-pub(crate) mod attachment_utils;
 pub mod auth_secret_types;
 #[cfg(not(target_family = "wasm"))]
 pub mod aws_credentials;
@@ -33,8 +31,6 @@ pub(crate) mod get_relevant_files;
 pub mod harness_availability;
 pub(crate) mod harness_display;
 pub(crate) mod llms;
-pub(crate) mod local_harness_setup;
-pub(crate) mod orchestration;
 pub(crate) mod restored_conversations;
 pub(crate) mod runner_display;
 use warpui::AppContext;

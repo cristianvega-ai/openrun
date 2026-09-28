@@ -157,25 +157,6 @@ pub enum AutofireAction {
     },
 }
 
-/// How queued prompts for a conversation are delivered to the agent. Selected per-conversation;
-/// not user-facing yet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum QueuedPromptDeliveryMode {
-    /// The next queued row is sent only once the conversation fully finishes on its own
-    /// (`FinishedReceivingOutput` with a genuine finish reason). Used for local queueing
-    /// surfaces (`/queue`, the auto-queue toggle, LRC auto-queue).
-    #[default]
-    Queueing,
-    /// A queued row is sent on the next request made for the conversation -- a natural
-    /// continuation (e.g. a tool-result follow-up or an orchestration-event injection) if one
-    /// occurs first, otherwise the conversation going fully idle -- rather than always waiting
-    /// for the whole turn to finish. Each row is still sent as its own individual
-    /// request/exchange, never combined with another queued row. Set automatically for
-    /// conversations bound to an ambient/Oz-driven native run
-    /// (`BlocklistAIController::bind_native_prompt_conversation`).
-    Steering,
-}
-
 /// Per-conversation queue / edit / toggle state.
 /// Lives inside [`QueuedQueryModel::queues`]; a missing key means empty queue, no edit in
 /// progress, and no explicit auto-queue override (so the cached default from
@@ -183,13 +164,6 @@ pub(crate) enum QueuedPromptDeliveryMode {
 #[derive(Default)]
 struct ConversationQueueState {
     queue: Vec<QueuedQuery>,
-    /// True from when this conversation is bound for native startup injections until its
-    /// initial prompt is actually sent. Sharing can deliver startup follow-ups during this
-    /// window; they are held in `queue` until setup finishes, at which point normal dispatch
-    /// (steering or idle-drain, depending on `delivery_mode`) takes over.
-    native_setup_pending: bool,
-    /// How queued rows for this conversation are delivered. See [`QueuedPromptDeliveryMode`].
-    delivery_mode: QueuedPromptDeliveryMode,
     editing: Option<QueuedQueryId>,
     /// Explicit per-conversation override. `None` defers to the model's cached
     /// `default_mode`; `Some` means the user has toggled this conversation
@@ -222,9 +196,6 @@ pub struct QueuedQueryModel {
 /// to so subscribers can filter to the conversation they care about.
 #[derive(Debug, Clone)]
 pub enum QueuedQueryEvent {
-    DispatchStateChanged {
-        conversation_id: AIConversationId,
-    },
     Appended {
         conversation_id: AIConversationId,
         query_id: QueuedQueryId,
@@ -274,76 +245,6 @@ impl Entity for QueuedQueryModel {
 impl SingletonEntity for QueuedQueryModel {}
 
 impl QueuedQueryModel {
-    /// Clears the native setup barrier once the initial prompt has actually been sent. Does
-    /// *not* dispatch any prompt that arrived in the meantime -- the caller
-    /// (`BlocklistAIController::dispatch_queued_warp_agent_prompt`) does that immediately
-    /// afterward, once it's safe to do so (see that method's doc comment for why the two can't
-    /// be combined into one step here).
-    pub(crate) fn finish_native_setup(
-        &mut self,
-        conversation_id: AIConversationId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if let Some(state) = self.queues.get_mut(&conversation_id)
-            && state.native_setup_pending
-        {
-            state.native_setup_pending = false;
-            log::info!(
-                "event=setup_released conversation_id={conversation_id} queue_len={}",
-                state.queue.len(),
-            );
-            ctx.emit(QueuedQueryEvent::DispatchStateChanged { conversation_id });
-        }
-    }
-
-    /// True while native startup follow-ups for `conversation_id` must be held rather than
-    /// dispatched (auto-fire, "Send now", and Enter-to-send all consult this).
-    pub(crate) fn is_dispatch_blocked(&self, conversation_id: AIConversationId) -> bool {
-        self.queues
-            .get(&conversation_id)
-            .is_some_and(|state| state.native_setup_pending)
-    }
-
-    /// Returns the delivery mode for `conversation_id`'s queue, defaulting to `Queueing` when no
-    /// mode has been explicitly set. See [`QueuedPromptDeliveryMode`].
-    pub(crate) fn delivery_mode(
-        &self,
-        conversation_id: AIConversationId,
-    ) -> QueuedPromptDeliveryMode {
-        self.queues
-            .get(&conversation_id)
-            .map(|state| state.delivery_mode)
-            .unwrap_or_default()
-    }
-
-    /// True when `conversation_id`'s queue is in `Steering` mode.
-    pub(crate) fn is_steering(&self, conversation_id: AIConversationId) -> bool {
-        self.delivery_mode(conversation_id) == QueuedPromptDeliveryMode::Steering
-    }
-
-    /// Returns an unlocked row without removing it.
-    pub(crate) fn unlocked_query(
-        &self,
-        conversation_id: AIConversationId,
-        query_id: QueuedQueryId,
-    ) -> Option<&QueuedQuery> {
-        if self.is_dispatch_blocked(conversation_id) {
-            return None;
-        }
-        self.queue(conversation_id)
-            .iter()
-            .find(|row| row.id == query_id && !row.is_locked())
-    }
-
-    /// Returns the unlocked FIFO head, without bypassing an edited row.
-    pub(crate) fn unlocked_head(&self, conversation_id: AIConversationId) -> Option<&QueuedQuery> {
-        let first = self.queue(conversation_id).first()?;
-        if self.editing_row(conversation_id) == Some(first.id) {
-            return None;
-        }
-        self.unlocked_query(conversation_id, first.id)
-    }
-
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         // Drop queue/toggle state for any conversation that is removed, deleted, or cleared
         // from its owning terminal view. Agent-view exit is intentionally NOT subscribed to:
@@ -384,12 +285,8 @@ impl QueuedQueryModel {
     ) {
         match event {
             BlocklistAIHistoryEvent::UpdatedConversationStatus { .. } => {
-                // Steering-mode conversations don't rely on this event to deliver queued rows:
-                // they're dispatched one at a time as soon as a natural request boundary occurs
-                // (see `BlocklistAIController::steer_head_prompt_for_request` and
-                // `dispatch_queued_warp_agent_prompt`). `TerminalView`'s own turn-completion
-                // drain (`drain_queued_prompts`) remains the fallback for both modes once a
-                // turn genuinely finishes.
+                // `TerminalView`'s turn-completion drain (`drain_queued_prompts`) delivers queued
+                // rows once a turn genuinely finishes.
             }
             BlocklistAIHistoryEvent::RemoveConversation {
                 conversation_id, ..
@@ -446,12 +343,10 @@ impl QueuedQueryModel {
     /// conversation finishes successfully. Mirrors [`Self::peek_autofire`]'s gating: false for an
     /// empty queue or a locked head row (which never auto-fires).
     pub fn has_autofireable_prompt(&self, conversation_id: AIConversationId) -> bool {
-        !self.is_dispatch_blocked(conversation_id)
-            && self
-                .queues
-                .get(&conversation_id)
-                .and_then(|state| state.queue.first())
-                .is_some_and(|first| !first.is_locked())
+        self.queues
+            .get(&conversation_id)
+            .and_then(|state| state.queue.first())
+            .is_some_and(|first| !first.is_locked())
     }
 
     /// Marks that a dispatched queued command is running for `conversation_id`. While set, the
@@ -652,10 +547,9 @@ impl QueuedQueryModel {
         let query_id = query.id;
         let state = self.queues.entry(conversation_id).or_default();
         log::info!(
-            "event=queued_prompt_appended conversation_id={conversation_id} query_id={query_id:?} origin={:?} queue_len={} setup_pending={}",
+            "event=queued_prompt_appended conversation_id={conversation_id} query_id={query_id:?} origin={:?} queue_len={}",
             query.origin,
             state.queue.len() + 1,
-            state.native_setup_pending,
         );
         state.queue.push(query);
         ctx.emit(QueuedQueryEvent::Appended {
@@ -675,9 +569,6 @@ impl QueuedQueryModel {
         conversation_id: AIConversationId,
         ctx: &mut ModelContext<Self>,
     ) -> Option<QueuedQuery> {
-        if self.is_dispatch_blocked(conversation_id) {
-            return None;
-        }
         let state = self.queues.get_mut(&conversation_id)?;
         if state.queue.first()?.is_locked() {
             return None;
@@ -698,21 +589,6 @@ impl QueuedQueryModel {
     /// empty queue or a locked head ([`QueuedQuery::is_locked`]). The caller removes the row via
     /// [`Self::remove_fired_row`] once it has been dispatched or restored to the input.
     pub fn peek_autofire(&self, conversation_id: AIConversationId) -> Option<AutofireAction> {
-        if let Some(state) = self.queues.get(&conversation_id)
-            && !state.queue.is_empty()
-            && (self.is_dispatch_blocked(conversation_id) || state.queue[0].is_locked())
-        {
-            log::info!(
-                "event=queue_drain_blocked conversation_id={conversation_id} queue_len={} head_id={:?} setup_pending={} head_locked={}",
-                state.queue.len(),
-                state.queue[0].id,
-                state.native_setup_pending,
-                state.queue[0].is_locked(),
-            );
-        }
-        if self.is_dispatch_blocked(conversation_id) {
-            return None;
-        }
         let state = self.queues.get(&conversation_id)?;
         let first = state.queue.first()?;
         if first.is_locked() {

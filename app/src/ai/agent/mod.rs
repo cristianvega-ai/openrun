@@ -23,7 +23,6 @@ use std::time::Duration;
 // Re-export types that were moved to the ai and ai_types crates.
 pub use ai::agent::action::*;
 pub use ai::agent::action_result::*;
-use ai::agent::orchestration_config::{OrchestrationConfig, OrchestrationConfigStatus};
 pub use ai::agent::{AIAgentCitation, FileLocations};
 pub use ai_types::{AIAgentActionId, EntrypointType};
 use chrono::{DateTime, Local, TimeDelta};
@@ -38,7 +37,7 @@ use uuid::Uuid;
 use warp_core::channel::ChannelState;
 use warp_core::features::FeatureFlag;
 use warp_editor::render::model::LineCount;
-use warp_multi_agent_api::{AgentEvent, AgentType, diff_hunk as diff_hunk_api};
+use warp_multi_agent_api::{AgentType, diff_hunk as diff_hunk_api};
 
 pub use self::api::{MaybeAIAgentOutputMessage, MessageToAIAgentOutputMessageError};
 pub use self::base_user_query::BaseUserQuery;
@@ -637,14 +636,6 @@ impl AIAgentOutput {
                     last_was_action = false;
                 }
                 AIAgentOutputMessageType::ArtifactCreated(_) => continue,
-                AIAgentOutputMessageType::MessagesReceivedFromAgents { messages } => {
-                    result.push(format!("Received {} messages", messages.len()));
-                    last_was_action = false;
-                }
-                AIAgentOutputMessageType::EventsFromAgents { event_ids } => {
-                    result.push(format!("Received {} agent events", event_ids.len()));
-                    last_was_action = false;
-                }
             }
         }
 
@@ -1751,16 +1742,6 @@ impl Display for SubagentCall {
     }
 }
 
-/// Data for a single received message, used for rendering in the UI.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ReceivedMessageDisplay {
-    pub message_id: String,
-    pub sender_agent_id: String,
-    pub addresses: Vec<String>,
-    pub subject: String,
-    pub message_body: String,
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AIAgentOutputMessageType {
@@ -1796,14 +1777,6 @@ pub enum AIAgentOutputMessageType {
     },
     /// Notification that an artifact was created (e.g. a PR).
     ArtifactCreated(ArtifactCreatedData),
-    /// Messages received from other agent conversations.
-    MessagesReceivedFromAgents {
-        messages: Vec<ReceivedMessageDisplay>,
-    },
-    /// Lifecycle events received from other agent conversations.
-    EventsFromAgents {
-        event_ids: Vec<String>,
-    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -1990,12 +1963,6 @@ impl Display for AIAgentOutputMessage {
                     "File artifact uploaded: {filepath} (artifact: {artifact_uid})"
                 )?,
             },
-            AIAgentOutputMessageType::MessagesReceivedFromAgents { messages } => {
-                write!(f, "Received {} messages", messages.len())?
-            }
-            AIAgentOutputMessageType::EventsFromAgents { event_ids } => {
-                write!(f, "Received {} agent events", event_ids.len())?
-            }
         }
 
         if !self.citations.is_empty() {
@@ -2114,25 +2081,6 @@ impl AIAgentOutputMessage {
 
     pub fn with_citations(self, citations: Vec<AIAgentCitation>) -> Self {
         Self { citations, ..self }
-    }
-
-    pub fn messages_received_from_agents(
-        id: MessageId,
-        messages: Vec<ReceivedMessageDisplay>,
-    ) -> Self {
-        Self {
-            id,
-            message: AIAgentOutputMessageType::MessagesReceivedFromAgents { messages },
-            citations: vec![],
-        }
-    }
-
-    pub fn events_from_agents(id: MessageId, event_ids: Vec<String>) -> Self {
-        Self {
-            id,
-            message: AIAgentOutputMessageType::EventsFromAgents { event_ids },
-            citations: vec![],
-        }
     }
 }
 
@@ -2632,14 +2580,11 @@ pub enum UserQueryMode {
     #[default]
     Normal,
     Plan,
-    Orchestrate,
 }
 
 pub fn extract_user_query_mode(query: String) -> (String, UserQueryMode) {
     if let Some(query) = commands::strip_command_prefix(&query, commands::PLAN_NAME) {
         (query, UserQueryMode::Plan)
-    } else if let Some(query) = commands::strip_command_prefix(&query, commands::ORCHESTRATE_NAME) {
-        (query, UserQueryMode::Orchestrate)
     } else {
         (query, UserQueryMode::Normal)
     }
@@ -2656,7 +2601,6 @@ pub fn display_user_query_with_mode(mode: UserQueryMode, query: &str) -> String 
     match mode {
         UserQueryMode::Normal => query.to_owned(),
         UserQueryMode::Plan => format!("{} {query}", commands::PLAN.name),
-        UserQueryMode::Orchestrate => format!("{} {query}", commands::ORCHESTRATE.name),
     }
 }
 
@@ -2733,34 +2677,6 @@ pub enum AIAgentInput {
         result: AIAgentActionResult,
         context: Arc<[AIAgentContext]>,
     },
-
-    /// Messages received from other agent conversations via the message bus.
-    MessagesReceivedFromAgents {
-        messages: Vec<ReceivedMessageInput>,
-    },
-    /// Events received from other agent conversations.
-    EventsFromAgents {
-        events: Vec<AgentEvent>,
-    },
-
-    /// Piggybacked orchestration config update from the plan card.
-    /// Sent on the next outbound request after the user edits the
-    /// config block or toggles approval.
-    OrchestrationConfigUpdate {
-        plan_id: String,
-        config: OrchestrationConfig,
-        status: OrchestrationConfigStatus,
-    },
-}
-
-/// Data for a single message received by an agent from another agent.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReceivedMessageInput {
-    pub message_id: String,
-    pub sender_agent_id: String,
-    pub addresses: Vec<String>,
-    pub subject: String,
-    pub message_body: String,
 }
 
 /// A simple struct that holds a URL to be used for the CloneRepository input.
@@ -2805,13 +2721,6 @@ impl Display for AIAgentInput {
             Self::CloneRepository { .. } => write!(f, "CloneRepository"),
             Self::CodeReview { .. } => write!(f, "CodeReview"),
             Self::SummarizeConversation { .. } => write!(f, "SummarizeConversation"),
-            Self::MessagesReceivedFromAgents { messages } => {
-                write!(f, "MessagesReceivedFromAgents({} messages)", messages.len())
-            }
-            Self::EventsFromAgents { events } => {
-                write!(f, "EventsFromAgents({} events)", events.len())
-            }
-            Self::OrchestrationConfigUpdate { .. } => write!(f, "OrchestrationConfigUpdate"),
         }
     }
 }
@@ -2849,10 +2758,7 @@ impl AIAgentInput {
             Self::AutoCodeDiffQuery { .. }
             | Self::ActionResult { .. }
             | Self::ResumeConversation { .. }
-            | Self::SummarizeConversation { .. }
-            | Self::MessagesReceivedFromAgents { .. }
-            | Self::EventsFromAgents { .. }
-            | Self::OrchestrationConfigUpdate { .. } => None,
+            | Self::SummarizeConversation { .. } => None,
         }
     }
 
@@ -2936,9 +2842,6 @@ impl AIAgentInput {
             | Self::CloneRepository { context, .. }
             | Self::CodeReview { context, .. } => Some(context),
             Self::SummarizeConversation { context, .. } => Some(context),
-            Self::MessagesReceivedFromAgents { .. }
-            | Self::EventsFromAgents { .. }
-            | Self::OrchestrationConfigUpdate { .. } => None,
         }
     }
 
@@ -2961,10 +2864,7 @@ impl AIAgentInput {
             | Self::CreateNewProject { .. }
             | Self::CloneRepository { .. }
             | Self::CodeReview { .. }
-            | Self::SummarizeConversation { .. }
-            | Self::MessagesReceivedFromAgents { .. }
-            | Self::EventsFromAgents { .. }
-            | Self::OrchestrationConfigUpdate { .. } => None,
+            | Self::SummarizeConversation { .. } => None,
         }
     }
 

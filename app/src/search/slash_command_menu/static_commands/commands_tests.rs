@@ -129,12 +129,6 @@ fn set_tab_color_command_requires_argument() {
 }
 
 #[test]
-fn strip_command_prefix_matches_orchestrate() {
-    let result = strip_command_prefix("/orchestrate deploy services", "/orchestrate");
-    assert_eq!(result, Some("deploy services".to_string()));
-}
-
-#[test]
 fn strip_command_prefix_no_match() {
     let result = strip_command_prefix("just a normal query", "/plan");
     assert_eq!(result, None);

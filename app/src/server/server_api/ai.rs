@@ -122,41 +122,6 @@ pub struct RenameConversationResponse {
     pub title: String,
 }
 
-// --- Orchestrations V2 messaging types ---
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SendAgentMessageRequest {
-    pub to: Vec<String>,
-    pub subject: String,
-    pub body: String,
-    pub sender_run_id: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SendAgentMessageResponse {
-    pub message_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct AgentRunEvent {
-    pub event_type: String,
-    pub run_id: String,
-    pub ref_id: Option<String>,
-    pub execution_id: Option<String>,
-    pub occurred_at: String,
-    pub sequence: i64,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ReadAgentMessageResponse {
-    pub message_id: String,
-    pub sender_run_id: String,
-    pub subject: String,
-    pub body: String,
-    pub sent_at: String,
-    pub delivered_at: Option<String>,
-    pub read_at: Option<String>,
-}
 
 /// Response from the artifact endpoint.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -482,71 +447,9 @@ pub trait AIClient: 'static + Send + Sync {
         artifact_uid: &str,
     ) -> anyhow::Result<ArtifactDownloadResponse, anyhow::Error>;
 
-    // --- Orchestrations V2 messaging ---
-
-    async fn send_agent_message(
-        &self,
-        request: SendAgentMessageRequest,
-    ) -> anyhow::Result<SendAgentMessageResponse, anyhow::Error>;
-
-    /// Persists the latest observed event sequence number for a run on the
-    /// server. Used to keep the server-side cursor in sync with the client so
-    /// that driver/cloud restores can resume without replaying events the
-    /// parent has already acted on.
-    async fn update_event_sequence_on_server(
-        &self,
-        run_id: &str,
-        sequence: i64,
-    ) -> anyhow::Result<(), anyhow::Error>;
-
-    async fn mark_message_delivered(&self, message_id: &str) -> anyhow::Result<(), anyhow::Error>;
-
-    async fn read_agent_message(
-        &self,
-        message_id: &str,
-    ) -> anyhow::Result<ReadAgentMessageResponse, anyhow::Error>;
 }
 
 impl ServerApi {
-    pub(crate) async fn post_public_api_response_for_task<B>(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        path: &str,
-        body: &B,
-    ) -> anyhow::Result<http_client::Response>
-    where
-        B: serde::Serialize,
-    {
-        use anyhow::Context as _;
-
-        let auth_token = self
-            .get_or_refresh_access_token()
-            .await
-            .context("Failed to get access token for API request")?;
-
-        let url = format!("{}/api/v1/{}", crate::ChannelState::server_root_url(), path);
-
-        let mut request = self.base_client.http_client().post(&url).json(body);
-        if let Some(token) = auth_token.as_bearer_token() {
-            request = request.bearer_auth(token);
-        }
-
-        for (name, value) in self.ambient_agent_headers_for_task(task_id).await? {
-            request = request.header(name, value);
-        }
-
-        let response = request
-            .send()
-            .await
-            .with_context(|| format!("Failed to send API request to {url}"))?;
-
-        if response.status().is_success() {
-            Ok(response)
-        } else {
-            Err(Self::error_from_response(response).await)
-        }
-    }
-
     async fn get_public_api_with_team_scope<R>(
         &self,
         path: &str,
@@ -561,48 +464,6 @@ impl ServerApi {
                 request_team_scope.and_then(RequestTeamScope::team_uid),
             )
             .await
-    }
-
-    pub(crate) async fn send_agent_message_for_task(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        request: SendAgentMessageRequest,
-    ) -> anyhow::Result<SendAgentMessageResponse, anyhow::Error> {
-        let response = self
-            .post_public_api_response_for_task(task_id, "agent/messages", &request)
-            .await?;
-        let response = response.json::<SendAgentMessageResponse>().await?;
-        Ok(response)
-    }
-
-    pub(crate) async fn mark_message_delivered_for_task(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        message_id: &str,
-    ) -> anyhow::Result<(), anyhow::Error> {
-        self.post_public_api_response_for_task(
-            task_id,
-            &format!("agent/messages/{message_id}/delivered"),
-            &(),
-        )
-        .await?;
-        Ok(())
-    }
-
-    pub(crate) async fn read_agent_message_for_task(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        message_id: &str,
-    ) -> anyhow::Result<ReadAgentMessageResponse, anyhow::Error> {
-        let response = self
-            .post_public_api_response_for_task(
-                task_id,
-                &format!("agent/messages/{message_id}/read"),
-                &(),
-            )
-            .await?;
-        let response = response.json::<ReadAgentMessageResponse>().await?;
-        Ok(response)
     }
 }
 
@@ -1001,49 +862,6 @@ impl AIClient for ServerApi {
     ) -> anyhow::Result<ArtifactDownloadResponse, anyhow::Error> {
         let response: ArtifactDownloadResponse = self
             .get_public_api(&format!("agent/artifacts/{artifact_uid}"))
-            .await?;
-        Ok(response)
-    }
-
-    // --- Orchestrations V2 messaging ---
-
-    async fn send_agent_message(
-        &self,
-        request: SendAgentMessageRequest,
-    ) -> anyhow::Result<SendAgentMessageResponse, anyhow::Error> {
-        let response: SendAgentMessageResponse =
-            self.post_public_api("agent/messages", &request).await?;
-        Ok(response)
-    }
-
-    async fn update_event_sequence_on_server(
-        &self,
-        run_id: &str,
-        sequence: i64,
-    ) -> anyhow::Result<(), anyhow::Error> {
-        #[derive(serde::Serialize)]
-        struct UpdateBody {
-            sequence: i64,
-        }
-
-        self.patch_public_api_unit(
-            &format!("agent/runs/{run_id}/event-sequence"),
-            &UpdateBody { sequence },
-        )
-        .await
-    }
-
-    async fn mark_message_delivered(&self, message_id: &str) -> anyhow::Result<(), anyhow::Error> {
-        self.post_public_api_unit(&format!("agent/messages/{message_id}/delivered"), &())
-            .await
-    }
-
-    async fn read_agent_message(
-        &self,
-        message_id: &str,
-    ) -> anyhow::Result<ReadAgentMessageResponse, anyhow::Error> {
-        let response: ReadAgentMessageResponse = self
-            .post_public_api(&format!("agent/messages/{message_id}/read"), &())
             .await?;
         Ok(response)
     }

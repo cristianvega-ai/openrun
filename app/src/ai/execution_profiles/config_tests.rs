@@ -67,3 +67,22 @@ fn file_collection_rejects_invalid_values_as_a_unit() {
         assert_eq!(ExecutionProfilesConfig::from_file_value(&value), None);
     }
 }
+
+#[test]
+fn file_collection_ignores_the_removed_run_agents_permission() {
+    let value = serde_json::json!({
+        "default": {"apply_code_diffs": "always_allow", "run_agents": "always_allow"},
+        "custom": {"run_agents": "not_a_permission"}
+    });
+
+    let decoded = ExecutionProfilesConfig::from_file_value(&value)
+        .expect("a stale run_agents key must not reject the profile collection");
+
+    let default_profile = decoded
+        .profile(&ExecutionProfileId::default_profile())
+        .expect("default profile should decode");
+    assert_eq!(
+        default_profile.apply_code_diffs,
+        ActionPermission::AlwaysAllow
+    );
+}

@@ -1,11 +1,10 @@
 mod update_queue;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use update_queue::LocalTaskUpdateQueue;
 use warp_graphql::ai::{AgentTaskState, PlatformErrorCode};
-use warpui::{Entity, EntityId, ModelContext, SingletonEntity};
+use warpui::{Entity, ModelContext, SingletonEntity};
 
 use super::history_model::{
     BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate,
@@ -15,9 +14,6 @@ use crate::ai::agent::{AIAgentOutputStatus, FinishedAIAgentOutput, RenderableAIE
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::ai::{AIClient, TaskStatusUpdate};
-use crate::terminal::cli_agent_sessions::{
-    CLIAgentSessionStatus, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
-};
 
 /// Syncs locally-owned conversation state to the server `ai_tasks` row via
 /// `AIClient::update_agent_task`. This includes task state, status message,
@@ -28,16 +24,8 @@ use crate::terminal::cli_agent_sessions::{
 /// and `BlocklistAIHistoryEvent::ConversationServerTokenAssigned` (so the
 /// server conversation token is persisted as soon as the streamed `Init`
 /// event arrives).
-///
-/// For third-party harnesses (e.g. Claude Code), status is derived from
-/// `CLIAgentSessionsModelEvent::StatusChanged`. Because these sessions do
-/// not create conversations in the history model, they are matched through a
-/// `terminal_view_id → task_id` mapping.
 pub struct LocalAgentTaskSyncModel {
     ai_client: Arc<dyn AIClient>,
-    /// Maps terminal view IDs to task IDs for third-party harness runs that
-    /// don't have conversations in `BlocklistAIHistoryModel`.
-    cli_session_task_ids: HashMap<EntityId, AmbientAgentTaskId>,
     /// Serializes and coalesces model-owned updates independently per task.
     update_queue: LocalTaskUpdateQueue,
 }
@@ -80,14 +68,8 @@ impl LocalAgentTaskSyncModel {
             me.handle_history_event(event, ctx);
         });
 
-        let cli_sessions_model = CLIAgentSessionsModel::handle(ctx);
-        ctx.subscribe_to_model(&cli_sessions_model, |me, _, event, ctx| {
-            me.handle_cli_session_event(event, ctx);
-        });
-
         Self {
             ai_client,
-            cli_session_task_ids: HashMap::new(),
             update_queue: LocalTaskUpdateQueue::default(),
         }
     }
@@ -99,37 +81,6 @@ impl LocalAgentTaskSyncModel {
         ctx: &mut ModelContext<Self>,
     ) -> Self {
         Self::new_with_ai_client(ai_client, ctx)
-    }
-
-    /// Test-only equivalent of `register_cli_session` that only records the
-    /// `terminal_view_id → task_id` mapping, without enqueuing the
-    /// IN_PROGRESS report that `register_cli_session` sends via the real
-    /// `AIClient`. Use this in tests that only need
-    /// `cli_harness_task_id_for_terminal_view` to resolve (e.g. exercising
-    /// `TerminalView::conversation_id_for_cli_status_updates`).
-    #[cfg(test)]
-    pub(crate) fn register_cli_session_for_test(
-        &mut self,
-        terminal_view_id: EntityId,
-        task_id: AmbientAgentTaskId,
-    ) {
-        self.cli_session_task_ids.insert(terminal_view_id, task_id);
-    }
-
-    /// Returns the ambient task this terminal pane's CLI-harness session, if
-    /// any, is registered under. Callers use this to identify which local
-    /// `AIConversation` (if any) represents the same run as CLI agent
-    /// lifecycle events observed in this pane — comparing against
-    /// `AIConversation::task_id()` rather than relying on pane-active-
-    /// conversation heuristics alone, since a pane can host conversations
-    /// unrelated to its CLI-harness session (e.g. an earlier native Agent
-    /// Mode conversation). Returns `None` for a purely interactive CLI agent
-    /// session with no ambient task behind it.
-    pub fn cli_harness_task_id_for_terminal_view(
-        &self,
-        terminal_view_id: EntityId,
-    ) -> Option<AmbientAgentTaskId> {
-        self.cli_session_task_ids.get(&terminal_view_id).copied()
     }
 
     fn remove_queued_update_state_for_run_id(&mut self, run_id: Option<&str>) {
@@ -169,28 +120,6 @@ impl LocalAgentTaskSyncModel {
                 self.remove_queued_update_state_for_run_id(run_id.as_deref());
             }
             _ => {}
-        }
-    }
-
-    fn handle_cli_session_event(
-        &mut self,
-        event: &CLIAgentSessionsModelEvent,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        match event {
-            CLIAgentSessionsModelEvent::StatusChanged {
-                terminal_view_id,
-                status,
-                ..
-            } => {
-                self.on_cli_session_status_changed(*terminal_view_id, status, ctx);
-            }
-            // Pane-scoped CLI agent sessions can end between preflight, the
-            // harness, and follow-ups, but the mapping belongs to the driver run.
-            CLIAgentSessionsModelEvent::Started { .. }
-            | CLIAgentSessionsModelEvent::InputSessionChanged { .. }
-            | CLIAgentSessionsModelEvent::Ended { .. }
-            | CLIAgentSessionsModelEvent::SessionUpdated { .. } => {}
         }
     }
 
@@ -242,28 +171,6 @@ impl LocalAgentTaskSyncModel {
         };
 
         self.enqueue_update(task_id, update, ctx);
-    }
-
-    fn on_cli_session_status_changed(
-        &mut self,
-        terminal_view_id: EntityId,
-        status: &CLIAgentSessionStatus,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let Some(&task_id) = self.cli_session_task_ids.get(&terminal_view_id) else {
-            return;
-        };
-
-        let (task_state, status_message) = map_cli_session_status(status);
-        self.enqueue_update(
-            task_id,
-            LocalTaskUpdate {
-                task_state: Some(task_state),
-                status_message,
-                ..LocalTaskUpdate::default()
-            },
-            ctx,
-        );
     }
 
     /// Enqueues a model-owned update without blocking the event producer.
@@ -345,14 +252,6 @@ fn with_local_conversation<T>(
     if conversation.is_viewing_shared_session() {
         return None;
     }
-    // Skip remote child placeholder conversations — the remote worker's
-    // own client handles status reporting. Reporting here would
-    // prematurely move remote tasks from QUEUED to IN_PROGRESS before
-    // the worker can claim them. Local children are NOT skipped because
-    // they execute in this client and have no separate reporter.
-    if conversation.is_remote_child() {
-        return None;
-    }
     let task_id = conversation.task_id()?;
     Some((task_id, make_value(conversation)))
 }
@@ -364,9 +263,6 @@ fn map_conversation_status(
 ) -> (AgentTaskState, Option<TaskStatusUpdate>) {
     match conversation.status() {
         ConversationStatus::InProgress => (AgentTaskState::InProgress, None),
-        // Report WaitingForEvents as IN_PROGRESS so the server task state
-        // matches the local view.
-        ConversationStatus::WaitingForEvents => (AgentTaskState::InProgress, None),
         ConversationStatus::Success => (AgentTaskState::Succeeded, None),
         // Recovery pending: stay IN_PROGRESS, no message — `update_agent_task`
         // can't clear it later, so a "reconnecting" note would linger after resume.
@@ -541,36 +437,6 @@ pub(crate) fn classify_renderable_error(
                 msg,
                 PlatformErrorCode::InternalError,
             )),
-        ),
-    }
-}
-
-/// Maps a `CLIAgentSessionStatus` to an `AgentTaskState` and optional status message.
-fn map_cli_session_status(
-    status: &CLIAgentSessionStatus,
-) -> (AgentTaskState, Option<TaskStatusUpdate>) {
-    match status {
-        CLIAgentSessionStatus::InProgress => (AgentTaskState::InProgress, None),
-        CLIAgentSessionStatus::Success => (AgentTaskState::Succeeded, None),
-        CLIAgentSessionStatus::Failed {
-            error_type,
-            message,
-        } => {
-            // User-actionable errors (bad credentials, org restrictions, billing) map to
-            // FAILED. Everything else (rate limits, server errors, model errors, etc.)
-            // maps to ERROR since they are typically Anthropic's or Warp's fault.
-            // The list of error types on Claude Code comes from https://code.claude.com/docs/en/hooks#stopfailure-input
-            let task_state = match error_type.as_deref() {
-                Some("authentication_failed" | "oauth_org_not_allowed" | "billing_error") => {
-                    AgentTaskState::Failed
-                }
-                _ => AgentTaskState::Error,
-            };
-            (task_state, message.as_ref().map(TaskStatusUpdate::message))
-        }
-        CLIAgentSessionStatus::Blocked { message } => (
-            AgentTaskState::Blocked,
-            message.as_ref().map(TaskStatusUpdate::message),
         ),
     }
 }

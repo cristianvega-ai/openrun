@@ -382,7 +382,7 @@ fn modeled_fields_are_written_over_the_base() {
     // are authoritative here even where they differ from what the base still carries.
     let base = BaseUserQuery::from_proto(api::request::input::UserQuery {
         query: "base text".to_string(),
-        mode: Some(plan_mode()),
+        mode: Some(normal_mode()),
         intended_agent: api::AgentType::Cli.into(),
         origin: Some(api::UserQueryOrigin::default()),
         ..Default::default()
@@ -392,7 +392,7 @@ fn modeled_fields_are_written_over_the_base() {
         context: Arc::new([]),
         static_query_type: None,
         referenced_attachments: HashMap::new(),
-        user_query_mode: UserQueryMode::Orchestrate,
+        user_query_mode: UserQueryMode::Plan,
         running_command: None,
         intended_agent: Some(api::AgentType::Primary),
         base: Some(base),
@@ -401,12 +401,7 @@ fn modeled_fields_are_written_over_the_base() {
     let query = converted_user_query(input);
 
     assert_eq!(query.query, "seeded text");
-    assert_eq!(
-        query.mode,
-        Some(api::UserQueryMode {
-            r#type: Some(api::user_query_mode::Type::Orchestrate(())),
-        })
-    );
+    assert_eq!(query.mode, Some(plan_mode()));
     assert_eq!(query.intended_agent, i32::from(api::AgentType::Primary));
     assert_eq!(query.origin, Some(api::UserQueryOrigin::default()));
 }

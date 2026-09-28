@@ -832,9 +832,6 @@ pub enum AIAgentInput {
     CloneRepository { url: String },
     CodeReview,
     SummarizeConversation,
-    MessagesReceivedFromAgents { message_count: usize },
-    EventsFromAgents { event_count: usize },
-    OrchestrationConfigUpdate,
 }
 
 impl From<FullAIAgentInput> for AIAgentInput {
@@ -855,15 +852,6 @@ impl From<FullAIAgentInput> for AIAgentInput {
             },
             FullAIAgentInput::CodeReview { .. } => Self::CodeReview,
             FullAIAgentInput::SummarizeConversation { .. } => Self::SummarizeConversation,
-            FullAIAgentInput::MessagesReceivedFromAgents { messages } => {
-                Self::MessagesReceivedFromAgents {
-                    message_count: messages.len(),
-                }
-            }
-            FullAIAgentInput::EventsFromAgents { events } => Self::EventsFromAgents {
-                event_count: events.len(),
-            },
-            FullAIAgentInput::OrchestrationConfigUpdate { .. } => Self::OrchestrationConfigUpdate,
         }
     }
 }
@@ -904,9 +892,7 @@ pub enum TelemetryAgentViewEntryOrigin {
     ProjectEntry,
     ClearBuffer,
     DefaultSessionMode,
-    ChildAgent,
     LinearDeepLink,
-    OrchestrationPillBar,
     JumpToLatestAgentMessage,
 }
 
@@ -944,9 +930,7 @@ impl From<AgentViewEntryOrigin> for TelemetryAgentViewEntryOrigin {
             AgentViewEntryOrigin::ProjectEntry => Self::ProjectEntry,
             AgentViewEntryOrigin::ClearBuffer => Self::ClearBuffer,
             AgentViewEntryOrigin::DefaultSessionMode => Self::DefaultSessionMode,
-            AgentViewEntryOrigin::ChildAgent => Self::ChildAgent,
             AgentViewEntryOrigin::LinearDeepLink => Self::LinearDeepLink,
-            AgentViewEntryOrigin::OrchestrationPillBar => Self::OrchestrationPillBar,
             AgentViewEntryOrigin::JumpToLatestAgentMessage => Self::JumpToLatestAgentMessage,
         }
     }

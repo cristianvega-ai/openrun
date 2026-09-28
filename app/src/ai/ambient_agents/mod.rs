@@ -5,5 +5,5 @@ pub mod task;
 pub use ai_types::AmbientAgentTaskId;
 pub use task::{
     AgentConfigSnapshot, AgentSource, AmbientAgentTask, AmbientAgentTaskState, ExecutionLocation,
-    cancel_task_silently, cancel_task_with_toast,
+    cancel_task_with_toast,
 };

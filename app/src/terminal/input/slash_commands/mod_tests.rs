@@ -3,14 +3,13 @@ use crate::search::slash_command_menu::static_commands::{
     Availability, SlashCommandKind, commands,
 };
 
-/// The centralized classifier must mark only the prompt-submitting commands (/compact, /plan,
-/// /orchestrate) as "submitted as a prompt". Every other slash command emits an immediate action
+/// The centralized classifier must mark only the prompt-submitting commands (/compact, /plan) as
+/// "submitted as a prompt". Every other slash command emits an immediate action
 /// and must be treated as "run now" by the prompt-queue gate and the shared-session viewer path.
 #[test]
 fn slash_command_is_submitted_as_prompt_only_for_prompt_commands() {
     assert!(slash_command_is_submitted_as_prompt(&commands::COMPACT));
     assert!(slash_command_is_submitted_as_prompt(&commands::PLAN));
-    assert!(slash_command_is_submitted_as_prompt(&commands::ORCHESTRATE));
 
     for command in [
         &*commands::FORK,
@@ -83,10 +82,6 @@ fn commands_have_typed_identities() {
             command.name
         );
     }
-
-    let command = &*commands::ORCHESTRATE;
-    assert_eq!(command.kind, SlashCommandKind::Orchestrate);
-    assert!(command.supports_surface(settings::SettingsMode::Gui));
 }
 
 #[test]

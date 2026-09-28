@@ -16,6 +16,7 @@ use crate::auth::UserUid;
 use crate::cloud_object::{Revision, ServerMetadata, ServerPermissions};
 use crate::server::ids::ServerId;
 use crate::workspaces::user_profiles::UserProfileWithUID;
+use cloud_object_models::HarnessConfig;
 
 #[test]
 fn test_from_conversation_prefers_server_creator_profile() {
@@ -31,16 +32,9 @@ fn test_from_conversation_prefers_server_creator_profile() {
                 reverted_action_ids: None,
                 forked_from_server_conversation_token: None,
                 artifacts_json: None,
-                parent_agent_id: None,
-                agent_name: None,
-                orchestration_harness_type: None,
-                parent_conversation_id: None,
-                is_remote_child: false,
                 root_task_is_optimistic: None,
                 run_id: None,
                 autoexecute_override: None,
-                last_event_sequence: None,
-                pinned: false,
             },
         );
         conversation.set_server_metadata(create_test_server_metadata(
@@ -231,16 +225,9 @@ fn test_from_conversation_populates_local_conversation_fields() {
                 reverted_action_ids: None,
                 forked_from_server_conversation_token: None,
                 artifacts_json: None,
-                parent_agent_id: None,
-                agent_name: None,
-                orchestration_harness_type: None,
-                parent_conversation_id: None,
                 run_id: None,
                 autoexecute_override: None,
-                last_event_sequence: None,
-                is_remote_child: false,
                 root_task_is_optimistic: None,
-                pinned: false,
             },
         );
 
@@ -319,16 +306,9 @@ fn test_conversation_mode_carries_no_runner() {
                 reverted_action_ids: None,
                 forked_from_server_conversation_token: None,
                 artifacts_json: None,
-                parent_agent_id: None,
-                agent_name: None,
-                orchestration_harness_type: None,
-                parent_conversation_id: None,
-                is_remote_child: false,
                 root_task_is_optimistic: None,
                 run_id: None,
                 autoexecute_override: None,
-                last_event_sequence: None,
-                pinned: false,
             },
         );
 
