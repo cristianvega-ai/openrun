@@ -17,7 +17,6 @@ parking_lot.workspace = true
 pathdiff = "0.2.1"
 rand.workspace = true
 dirs.workspace = true
-hex.workspace = true
 lazy_static.workspace = true
 mime_guess.workspace = true
 regex.workspace = true
@@ -36,9 +35,6 @@ warp_errors.workspace = true
 [target.'cfg(windows)'.dependencies]
 directories.workspace = true
 windows.workspace = true
-
-[target.'cfg(target_family = "wasm")'.dependencies]
-gloo.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 is_executable = "1.0.1"

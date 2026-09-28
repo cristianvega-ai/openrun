@@ -116,9 +116,6 @@ pub enum AgentManagementTelemetryEvent {
     /// User invoked the /continue-locally slash command
     #[cfg(not(target_family = "wasm"))]
     SlashCommandContinueLocally,
-    /// User clicked "Open in Warp" in the tombstone (wasm)
-    #[cfg(target_family = "wasm")]
-    TombstoneOpenInWarp,
     /// User cancelled a cloud run
     CloudRunCancelled { task_id: String },
     /// User forked a conversation
@@ -202,8 +199,6 @@ impl TelemetryEvent for AgentManagementTelemetryEvent {
             AgentManagementTelemetryEvent::DetailsPanelContinueLocally => None,
             #[cfg(not(target_family = "wasm"))]
             AgentManagementTelemetryEvent::SlashCommandContinueLocally => None,
-            #[cfg(target_family = "wasm")]
-            AgentManagementTelemetryEvent::TombstoneOpenInWarp => None,
             AgentManagementTelemetryEvent::CloudRunCancelled { task_id } => {
                 Some(json!({ "task_id": task_id }))
             }
@@ -257,8 +252,6 @@ impl TelemetryEventDesc for AgentManagementTelemetryEventDiscriminants {
             Self::DetailsPanelContinueLocally => "AgentManagement.DetailsPanelContinueLocally",
             #[cfg(not(target_family = "wasm"))]
             Self::SlashCommandContinueLocally => "AgentManagement.SlashCommandContinueLocally",
-            #[cfg(target_family = "wasm")]
-            Self::TombstoneOpenInWarp => "AgentManagement.TombstoneOpenInWarp",
             Self::CloudRunCancelled => "AgentManagement.CloudRunCancelled",
             Self::ConversationForked => "AgentManagement.ConversationForked",
         }
@@ -298,8 +291,6 @@ impl TelemetryEventDesc for AgentManagementTelemetryEventDiscriminants {
             Self::SlashCommandContinueLocally => {
                 "User invoked /continue-locally to fork a cloud conversation locally"
             }
-            #[cfg(target_family = "wasm")]
-            Self::TombstoneOpenInWarp => "User clicked Open in Warp in the tombstone",
             Self::CloudRunCancelled => "User cancelled a cloud run",
             Self::ConversationForked => "User forked a conversation",
         }

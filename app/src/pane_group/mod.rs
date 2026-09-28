@@ -20,7 +20,6 @@ use session_sharing_protocol::common::SessionId;
 use settings::Setting as _;
 use tree::DEFAULT_FLEX_VALUE;
 use typed_path::TypedPath;
-use url::Url;
 use uuid::Uuid;
 use warp_core::command::ExitCode;
 use warp_core::context_flag::ContextFlag;
@@ -97,8 +96,6 @@ use crate::quit_warning::UnsavedStateSummary;
 use crate::resource_center::{
     Tip, TipAction, TipsCompleted, mark_feature_used_and_write_to_user_defaults,
 };
-#[cfg(target_family = "wasm")]
-use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::{ObjectUid, SyncId};
 use crate::server::server_api::ServerApi;
 use crate::server::telemetry::{
@@ -124,7 +121,6 @@ use crate::terminal::model::terminal_model::ConversationTranscriptViewerStatus;
 #[cfg(feature = "remote_tty")]
 use crate::terminal::remote_tty::TerminalManager as RemoteTtyTerminalManager;
 use crate::terminal::session_settings::{NewSessionSource, SessionSettings};
-use crate::terminal::shared_session;
 use crate::terminal::view::inline_banner::{
     ZeroStatePromptSuggestionTriggeredFrom, ZeroStatePromptSuggestionType,
 };
@@ -138,11 +134,9 @@ use crate::terminal::view::{
 };
 use crate::terminal::{
     MockTerminalManager, ShellLaunchData, ShellLaunchState, TerminalManager, TerminalModel,
-    TerminalView,
+    TerminalView, shared_session,
 };
 use crate::undo_close::{UndoCloseStack, UndoCloseStackEvent};
-#[cfg(target_family = "wasm")]
-use crate::uri::browser_url_handler::update_browser_url;
 use crate::util::bindings::{CustomAction, is_binding_pty_compliant};
 #[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::FileTarget;
@@ -6278,47 +6272,6 @@ impl PaneGroup {
         if let Some(pane) = self.focused_pane_content(ctx) {
             pane.focus(ctx);
         }
-
-        #[cfg(target_family = "wasm")]
-        {
-            if ContextFlag::DynamicBrowserUrl.is_enabled() {
-                self.update_browser_url(ctx);
-            }
-        }
-    }
-
-    fn handle_pane_link_updated(&self, pane_id: PaneId, url: Option<Url>, ctx: &AppContext) {
-        log::debug!("Url for pane should be updated pane_id: {pane_id:?}, url: {url:?}");
-        #[cfg(target_family = "wasm")]
-        if pane_id == self.focused_pane_id(ctx) {
-            update_browser_url(url, false);
-        }
-
-        let _ = ctx;
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn update_browser_url(&self, ctx: &mut ViewContext<Self>) {
-        // We need to wait for the app to be loaded before we attempt to get the
-        // shareable links. This is because the links come from CloudModel objects
-
-        let initial_load_complete = UpdateManager::as_ref(ctx).initial_load_complete();
-        ctx.spawn(initial_load_complete, move |me, _, ctx| {
-            if let Some(pane) = me.focused_pane_content(ctx) {
-                match pane.shareable_link(ctx) {
-                    Ok(crate::pane_group::pane::ShareableLink::Base) => {
-                        update_browser_url(None, false)
-                    }
-                    Ok(crate::pane_group::pane::ShareableLink::Pane { url }) => {
-                        update_browser_url(Some(url), false)
-                    }
-                    Err(crate::pane_group::pane::ShareableLinkError::Expected) => {}
-                    Err(crate::pane_group::pane::ShareableLinkError::Unexpected(message)) => {
-                        report_error!("Failed to update browser url", extra: { "message" => %message })
-                    }
-                }
-            }
-        });
     }
 
     /// Focus the active terminal session, if there is one.

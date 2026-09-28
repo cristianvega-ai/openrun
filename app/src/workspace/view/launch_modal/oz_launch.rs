@@ -1,4 +1,4 @@
-use asset_macro::bundled_or_fetched_asset;
+use asset_macro::async_asset;
 use markdown_parser::{FormattedTextFragment, FormattedTextLine};
 use warp_core::send_telemetry_from_ctx;
 use warpui::assets::asset_cache::AssetSource;
@@ -112,16 +112,16 @@ impl Slide for OzLaunchSlide {
         // TODO: Replace with new images once provided.
         match self {
             OzLaunchSlide::CloudAgents => {
-                bundled_or_fetched_asset!("png/oz_cloud_agents.png")
+                async_asset!("png/oz_cloud_agents.png")
             }
             OzLaunchSlide::AgentAutomations => {
-                bundled_or_fetched_asset!("png/oz_agent_automations.png")
+                async_asset!("png/oz_agent_automations.png")
             }
             OzLaunchSlide::AgentManagement => {
-                bundled_or_fetched_asset!("png/oz_agent_management.png")
+                async_asset!("png/oz_agent_management.png")
             }
             OzLaunchSlide::LaunchCredits => {
-                bundled_or_fetched_asset!("png/oz_launch_credits.png")
+                async_asset!("png/oz_launch_credits.png")
             }
         }
     }

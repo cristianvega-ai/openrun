@@ -69,7 +69,7 @@ const INITIAL_TASK_AMOUNT: i32 = 100;
 /// How long to skip refetching a task that just failed with a transient error
 /// (5xx / 408 / 429 / network). Short cooldown — `spawn_with_retry_on_error_when` already
 /// runs fast exponential retries before bubbling up the failure, so this is just enough to
-/// absorb streaming-driven re-entries from `update_transcript_details_panel_data`.
+/// absorb streaming-driven re-entries.
 const TRANSIENT_FETCH_FAILURE_COOLDOWN: Duration = Duration::from_secs(2);
 
 /// How long to skip refetching a task that just failed with a permanent (non-transient) HTTP

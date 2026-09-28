@@ -1,16 +1,12 @@
 //! This module contains the implementation of `BackingView` for `TerminalView`, as well as
 //! business logic for integrating the terminal view with the pane infra (`crate::pane_group`).
-use settings::Setting as _;
-use warp_core::context_flag::ContextFlag;
 use warpui::elements::{
     ConstrainedBox, CrossAxisAlignment, Empty, Flex, MainAxisAlignment, MainAxisSize,
     ParentElement, Shrinkable,
 };
 use warpui::prelude::{ChildView, Container};
 use warpui::text_layout::ClipConfig;
-use warpui::ui_components::components::UiComponent;
-#[cfg(not(target_arch = "wasm32"))]
-use warpui::ui_components::components::UiComponentStyles;
+use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{
     AppContext, Element, ModelHandle, SingletonEntity, TypedActionView, ViewContext,
     WeakModelHandle,
@@ -37,9 +33,6 @@ use crate::pane_group::pane::view::header::components::{
 use crate::pane_group::pane::view::header::{PANE_HEADER_HEIGHT, render_pane_header_draggable};
 use crate::pane_group::pane::{PaneStack, view};
 use crate::pane_group::{BackingView, SplitPaneState, TOGGLE_MAXIMIZE_PANE_BINDING_NAME};
-use crate::settings::app_installation_detection::{
-    UserAppInstallDetectionSettings, UserAppInstallStatus,
-};
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::shared_session::SharedSessionActionSource;
 use crate::terminal::shared_session::manager::Manager;
@@ -51,8 +44,6 @@ use crate::ui_components::icon_with_status::render_icon_with_status;
 use crate::ui_components::{blended_colors, icons};
 use crate::util::bindings::keybinding_name_to_display_string;
 use crate::workspace::tab_settings::TabSettings;
-#[cfg(target_arch = "wasm32")]
-use crate::workspace::{WorkspaceAction, WorkspaceRegistry};
 
 /// Total size of the agent icon-with-status component rendered in the pane header.
 /// Sub-components (circle, badge, cloud) are derived inside `render_icon_with_status`.
@@ -386,34 +377,10 @@ impl TerminalView {
                 .ambient_agent_view_model
                 .as_ref()
                 .is_some_and(|model| model.as_ref(app).is_waiting_for_session());
-        // The gate and the render path are split by target: on desktop the panel is pane-level
-        // and `can_show_conversation_details_ui` is correct. On WASM the panel is
-        // workspace-level; the pane-header button is shown only for surfaces that lack a tab-bar
-        // affordance — i.e. ambient cloud tasks where `get_simplified_wasm_tab_bar_content`
-        // returns `None`. Transcript viewers and shared sessions already show the simplified WASM
-        // tab-bar `(i)` button via `should_show_conversation_details_panel`, so the pane header
-        // must not add a second identical button on those pages.
-        let show_details_button = {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                self.can_show_conversation_details_ui(app)
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                self.should_show_wasm_pane_header_details_button(app)
-            }
-        };
         let button_element = if is_waiting_for_session {
             Some(self.render_ambient_agent_cancel_button(app))
-        } else if show_details_button {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                Some(self.render_conversation_details_toggle_button(app))
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                Some(self.render_wasm_conversation_details_toggle_button(app))
-            }
+        } else if self.can_show_conversation_details_ui(app) {
+            Some(self.render_conversation_details_toggle_button(app))
         } else {
             None
         };
@@ -617,34 +584,17 @@ impl BackingView for TerminalView {
         // Shared-session related items.
         let shared_session_status = model.shared_session_status();
         let is_ambient_agent = self.is_ambient_agent_session(ctx);
-        if shared_session_status.is_viewer() {
-            if !is_ambient_agent {
-                // Disable the item (rather than silently no-op) when the Manager does not yet
-                // have a session id (e.g. during ViewPending while the session is still setting up).
-                let has_session_link =
-                    Manager::as_ref(ctx).has_session_link(&self.view_id, shared_session_status);
-                items.push(
-                    MenuItemFields::new("Copy link")
-                        .with_on_select_action(TerminalAction::CopySharedSessionLink { source })
-                        .with_disabled(!has_session_link)
-                        .into_item(),
-                );
-            }
-
-            if !ContextFlag::HideOpenOnDesktopButton.is_enabled()
-                && *UserAppInstallDetectionSettings::as_ref(ctx)
-                    .user_app_installation_detected
-                    .value()
-                    == UserAppInstallStatus::Detected
-            {
-                items.push(
-                    MenuItemFields::new("Open on Desktop")
-                        .with_on_select_action(TerminalAction::OpenSharedSessionOnDesktop {
-                            source,
-                        })
-                        .into_item(),
-                );
-            }
+        if shared_session_status.is_viewer() && !is_ambient_agent {
+            // Disable the item (rather than silently no-op) when the Manager does not yet
+            // have a session id (e.g. during ViewPending while the session is still setting up).
+            let has_session_link =
+                Manager::as_ref(ctx).has_session_link(&self.view_id, shared_session_status);
+            items.push(
+                MenuItemFields::new("Copy link")
+                    .with_on_select_action(TerminalAction::CopySharedSessionLink { source })
+                    .with_disabled(!has_session_link)
+                    .into_item(),
+            );
         }
 
         // Split-pane related items.
@@ -730,9 +680,6 @@ impl TerminalView {
     }
 
     /// Render the info button for toggling the conversation details panel.
-    /// Only available on non-WASM platforms; on WASM the workspace-level transcript panel is used,
-    /// toggled via `render_wasm_conversation_details_toggle_button`.
-    #[cfg(not(target_arch = "wasm32"))]
     fn render_conversation_details_toggle_button(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
@@ -780,60 +727,6 @@ impl TerminalView {
                 );
             })
             .finish()
-    }
-
-    /// Render the info button for toggling the workspace-level conversation details panel on WASM.
-    /// Shown only for ambient cloud tasks without a tab-bar affordance. Derives open state from
-    /// the authoritative `WorkspaceState` at render time so it stays accurate across pane/tab
-    /// focus changes without any per-view mirroring. Icon color tracks open state (main text when
-    /// open, sub text when closed), matching the desktop button's color logic.
-    #[cfg(target_arch = "wasm32")]
-    fn render_wasm_conversation_details_toggle_button(&self, app: &AppContext) -> Box<dyn Element> {
-        let appearance = Appearance::as_ref(app);
-        let theme = appearance.theme();
-        // Derive open state from the authoritative workspace state at render time rather than
-        // mirroring it into a TerminalView field, which would become stale on focus changes.
-        let is_open = WorkspaceRegistry::as_ref(app)
-            .get(self.window_id, app)
-            .as_ref()
-            .is_some_and(|workspace| {
-                workspace
-                    .as_ref(app)
-                    .current_workspace_state
-                    .is_transcript_details_panel_open
-            });
-        let ui_builder = appearance.ui_builder().clone();
-
-        // Use main text color when panel is open (hover-like appearance), sub color when closed
-        let icon_color = if is_open {
-            blended_colors::text_main(theme, theme.background()).into()
-        } else {
-            blended_colors::text_sub(theme, theme.background()).into()
-        };
-
-        icon_button_with_color(
-            appearance,
-            icons::Icon::Info,
-            is_open, // show active background when panel is open
-            self.conversation_details_panel_toggle_mouse_state.clone(),
-            icon_color,
-        )
-        .with_tooltip(move || {
-            let tooltip_text = if is_open {
-                "Hide details"
-            } else {
-                "Show details"
-            };
-            ui_builder
-                .tool_tip(tooltip_text.to_string())
-                .build()
-                .finish()
-        })
-        .build()
-        .on_click(|ctx, _, _| {
-            ctx.dispatch_typed_action(WorkspaceAction::ToggleConversationTranscriptDetailsPanel);
-        })
-        .finish()
     }
 
     /// Render the indicator for terminal mode (no conversation selected).

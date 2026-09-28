@@ -1,4 +1,4 @@
-use asset_macro::bundled_or_fetched_asset;
+use asset_macro::async_asset;
 use itertools::Itertools;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use pathfinder_color::ColorU;
@@ -403,13 +403,10 @@ impl BuildPlanMigrationModal {
         let theme = appearance.theme();
 
         let image = ConstrainedBox::new(
-            Image::new(
-                bundled_or_fetched_asset!("png/build_spiral.png"),
-                CacheOption::BySize,
-            )
-            .cover()
-            .with_corner_radius(CornerRadius::with_top_right(Radius::Pixels(CORNER_RADIUS)))
-            .finish(),
+            Image::new(async_asset!("png/build_spiral.png"), CacheOption::BySize)
+                .cover()
+                .with_corner_radius(CornerRadius::with_top_right(Radius::Pixels(CORNER_RADIUS)))
+                .finish(),
         )
         .with_width(543.)
         .with_height(335.)

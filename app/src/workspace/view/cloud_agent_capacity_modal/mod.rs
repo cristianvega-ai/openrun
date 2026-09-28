@@ -1,4 +1,4 @@
-use asset_macro::bundled_or_fetched_asset;
+use asset_macro::async_asset;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
@@ -336,7 +336,7 @@ impl CloudAgentCapacityModal {
     fn render_header() -> Box<dyn Element> {
         ConstrainedBox::new(
             Image::new(
-                bundled_or_fetched_asset!("png/concurrency_limit_header.png"),
+                async_asset!("png/concurrency_limit_header.png"),
                 CacheOption::BySize,
             )
             .cover()

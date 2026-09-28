@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use session_sharing_protocol::common::{Scrollback, ScrollbackBlock};
-use url::Url;
 use warp_core::command::ExitCode;
 use warp_core::features::FeatureFlag;
 use warpui::r#async::executor::Background;
@@ -9,7 +8,6 @@ use warpui::units::Lines;
 
 use super::decode_scrollback;
 use crate::assert_lines_approx_eq;
-use crate::channel::ChannelState;
 use crate::terminal::TerminalModel;
 use crate::terminal::color::List;
 use crate::terminal::event_listener::ChannelEventListener;
@@ -17,48 +15,6 @@ use crate::terminal::model::ObfuscateSecrets;
 use crate::terminal::model::block::{BlockId, BlockState, SerializedBlock};
 use crate::terminal::model::test_utils::block_size;
 use crate::themes::default_themes::dark_theme;
-use crate::uri::web_intent_parser::maybe_rewrite_web_url_to_intent;
-
-#[test]
-fn maybe_rewrite_web_url_to_shared_session_intent_rewrites_matching_web_url() {
-    let server_root = ChannelState::server_root_url();
-    let web_url = Url::parse(&format!(
-        "{server_root}/session/00000000-0000-0000-0000-000000000000?pwd=secret&preview=true"
-    ))
-    .expect("valid shared session web URL");
-
-    let maybe_intent = maybe_rewrite_web_url_to_intent(&web_url)
-        .expect("expected shared session web URL to rewrite to an intent URL");
-
-    assert_eq!(maybe_intent.scheme(), ChannelState::url_scheme());
-    assert_eq!(maybe_intent.host_str(), Some("shared_session"));
-    assert_eq!(maybe_intent.path(), "/00000000-0000-0000-0000-000000000000");
-    assert_eq!(maybe_intent.query(), Some("pwd=secret&preview=true"));
-}
-
-#[test]
-fn maybe_rewrite_web_url_to_shared_session_intent_ignores_non_matching_host() {
-    let web_url =
-        Url::parse("https://example.com/session/00000000-0000-0000-0000-000000000000?pwd=secret")
-            .expect("valid web URL with non-matching host");
-
-    let maybe_intent = maybe_rewrite_web_url_to_intent(&web_url);
-
-    assert!(maybe_intent.is_none());
-}
-
-#[test]
-fn maybe_rewrite_web_url_to_shared_session_intent_ignores_invalid_session_id() {
-    let server_root = ChannelState::server_root_url();
-    let web_url = Url::parse(&format!(
-        "{server_root}/session/not-a-valid-session-id?pwd=secret&preview=true",
-    ))
-    .expect("valid web URL with invalid session id path segment");
-
-    let maybe_intent = maybe_rewrite_web_url_to_intent(&web_url);
-
-    assert!(maybe_intent.is_none());
-}
 
 pub fn terminal_model_for_viewer(event_proxy: ChannelEventListener) -> TerminalModel {
     TerminalModel::new_for_shared_session_viewer(

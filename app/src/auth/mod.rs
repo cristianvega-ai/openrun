@@ -10,10 +10,6 @@ pub mod login_slide;
 pub mod needs_sso_link_view;
 pub mod paste_auth_token_modal;
 mod user_properties;
-pub use warp_server_auth::{auth_state, credentials, user, user_uid};
-#[cfg(target_family = "wasm")]
-pub mod web_handoff;
-
 use ::settings::{Setting, ToggleableSetting};
 pub use auth_manager::AuthManager;
 pub use auth_state::AuthStateProvider;
@@ -22,6 +18,7 @@ pub use login_failure_notification::LoginFailureReason;
 pub use user_uid::UserUid;
 use warp_core::channel::ChannelState;
 use warp_errors::report_if_error;
+pub use warp_server_auth::{auth_state, credentials, user, user_uid};
 use warpui::modals::{AlertDialogWithCallbacks, ModalButton};
 use warpui::{AppContext, SingletonEntity};
 
@@ -294,9 +291,6 @@ pub fn log_out(app: &mut AppContext) {
             );
         }
     }
-
-    #[cfg(target_family = "wasm")]
-    crate::platform::wasm::emit_event(crate::platform::wasm::WarpEvent::LoggedOut);
 }
 
 // Reset the privacy settings to their defaults so the next account doesn't inherit them.

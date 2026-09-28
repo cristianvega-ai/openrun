@@ -1,15 +1,11 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use url::Url;
 use warpui::{AppContext, ModelHandle, SingletonEntity, ViewContext, ViewHandle};
 
 use super::super::{DefaultSessionModeBehavior, Direction};
 use super::view::PaneView;
-use super::{
-    DetachType, PaneConfiguration, PaneContent, PaneGroup, PaneId, ShareableLink,
-    ShareableLinkError,
-};
+use super::{DetachType, PaneConfiguration, PaneContent, PaneGroup, PaneId};
 use crate::app_state::{LeafContents, NotebookPaneSnapshot};
 use crate::cloud_object::Space;
 use crate::drive::items::WarpDriveItemId;
@@ -133,27 +129,6 @@ impl PaneContent for NotebookPane {
     fn focus(&self, ctx: &mut ViewContext<PaneGroup>) {
         self.notebook_view(ctx)
             .update(ctx, |view, ctx| view.focus(ctx));
-    }
-
-    fn shareable_link(
-        &self,
-        ctx: &mut ViewContext<PaneGroup>,
-    ) -> Result<ShareableLink, ShareableLinkError> {
-        self.notebook_view(ctx).read(ctx, |view, ctx| {
-            if let Some(link) = view.notebook_link(ctx) {
-                if let Ok(parsed_url) = Url::parse(link.as_str()) {
-                    Ok(ShareableLink::Pane { url: parsed_url })
-                } else {
-                    Err(ShareableLinkError::Unexpected(String::from(
-                        "Failed to parse notebook url",
-                    )))
-                }
-            } else {
-                Err(ShareableLinkError::Unexpected(String::from(
-                    "Could not retrieve notebook url from view",
-                )))
-            }
-        })
     }
 
     fn pane_configuration(&self) -> ModelHandle<PaneConfiguration> {

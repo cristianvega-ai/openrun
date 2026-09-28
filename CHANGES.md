@@ -42,6 +42,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Oz CLI and agent SDK](#oz-cli-and-agent-sdk) — deleted the `oz` command-line interface (every agent, environment, schedule, secret, MCP, memory, artifact and runner subcommand plus `login`/`logout`/`whoami`/`--api-key`), the headless agent SDK driver behind it, and the harness-support/harness-usage server clients
 - [Cloud-agent OpenTelemetry trace export](#cloud-agent-opentelemetry-trace-export) — removed the OTLP span exporter that cloud-agent processes sent traces to Warp with, its dispatch-token credential refresh and the `X-Warp-Traceparent` request header
 - [Agent build cache and harness usage crates](#agent-build-cache-and-harness-usage-crates) — deleted `crates/build_cache` (persistent build caches for sandboxed cloud agents) and `crates/warp_harness_usage` (usage accounting for third-party harness histories)
+- [Hosted web client ties to app.warp.dev](#hosted-web-client-ties-to-appwarpdev) — removed the web client's address-bar sync, open-in-desktop flows, host-page auth handoff and events, remote fonts and assets, and the desktop rewrite of Warp web links into app intents
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1045,3 +1046,77 @@ Each section below covers one removal (a single commit or a small group of relat
 - Their `[workspace.dependencies]` entries and `app/Cargo.toml` dependencies.
 
 **User-visible impact:** None.
+
+## Hosted web client ties to app.warp.dev
+**Why:** The wasm build is Warp's hosted web client. It is served from `app.warp.dev` and embedded in Warp's web app. Its web-only code did several things that tie it to Warp's web app:
+- read and rewrote the `app.warp.dev` address bar;
+- sent users to Warp's login and download pages;
+- loaded fallback fonts and larger images from Warp's asset server;
+- took the signed-in user from the host page, and sent events back to it.
+
+The desktop app also rewrote clicked Warp web links into in-app intents. Offline enterprise use has no web client, so none of this applies.
+
+**Removed:**
+- **Web URL intents and address-bar sync:**
+  - `app/src/uri/{web_intent_parser, browser_url_handler, browser_url_resolution}.rs`. These parsed `<server root>/{session, conversation, drive, settings, action, app}` URLs into `warposs://` intents and read and wrote the browser address bar.
+  - In `lib.rs`: the desktop `set_before_open_url` hook that applied the rewrite to every opened link, the wasm startup intent parsing, and `LaunchMode::add_url`.
+  - The tests for all of the above, in `uri_tests.rs` and `terminal/shared_session/mod_tests.rs`.
+  - In `pane_group`: `PaneGroup::{update_browser_url, handle_pane_link_updated}`, and the terminal pane's `JoinedSession` subscription with `retrieve_shared_session_link`.
+  - `PaneContent::shareable_link` and `ShareableLink`/`ShareableLinkError`, which existed only to fill the address bar. This removed 17 pane implementations.
+- **Web viewer chrome:**
+  - `app/src/wasm_nux_dialog.rs`, the first-run "open in desktop or stay on web" dialog.
+  - `workspace/view/wasm_view.rs`, and the parts of `workspace/view.rs` that used it:
+    - the simplified web tab bar (a Warp logo linking to `warp.dev`, "Open in Warp", and "View all cloud runs" pointing at the Oz site);
+    - the workspace-level conversation transcript details panel and its mobile overlay;
+    - `SimplifiedWasmTabBarContent` and its tests, and the `Workspace_CloudConversationWebViewer` keymap context (the command-palette binding no longer excludes it);
+    - `Workspace::{open_link_on_desktop, redirect_to_sign_in}`;
+    - `WorkspaceAction::{OpenLinkOnDesktop, ToggleConversationTranscriptDetailsPanel, SignInAnonymousWebUser}`;
+    - `WorkspaceState::is_transcript_details_panel_open` and the `warp_logo` mouse state.
+- **"Open on Desktop" and "Run in Warp" entry points:**
+  - The entry points themselves: the Drive index, notebook and workflow context menus, the workflow footer button, the shared-session pane-header menu, and the "Open in Warp" button on the conversation-ended tombstone.
+  - Their actions: `DriveIndexAction::OpenObjectLinkOnDesktop`, `NotebookAction::OpenLinkOnDesktop`, `WorkflowAction::OpenLinkOnDesktop`, `TerminalAction::OpenSharedSessionOnDesktop` and `ConversationEndedTombstoneAction::OpenInWarp`.
+  - `AgentManagementTelemetryEvent::TombstoneOpenInWarp`.
+- **Web-only settings:**
+  - `settings/app_installation_detection.rs` (`UserAppInstallDetectionSettings`, which the host page wrote).
+  - `settings/native_preference.rs` (`NativePreferenceSettings`: `general.user_native_preference` and the dialog-dismissed flag).
+  - The "Open links in desktop app" toggle (`NativeRedirectWidget`) and `FeaturesPageAction::ToggleOpenLinksInDesktopApp`.
+- **Web auth handoff:**
+  - `AuthOnboardingState::WebImport` and `auth/web_handoff.rs` (`WebHandoffView`).
+  - `RootView::{web_handoff, handle_web_handoff_event}` and `AuthManager::initialize_user_from_session_cookie`.
+  - The web branch of anonymous sign-up that navigated the page to Warp's login URL.
+- **Host-page events:**
+  - The `user_handoff` FFI and the `WarpEvent` re-export in `platform/wasm.rs`.
+  - The `LoggedOut`, `SessionJoined`, `ThemeBackgroundChanged` and `ErrorLogged` emit sites, in `auth/mod.rs`, the shared-session viewer, `appearance.rs` and `crates/warp_logging/src/wasm.rs`.
+- **Web link-only context modes:**
+  - `ContextFlag::{HideOpenOnDesktopButton, DynamicBrowserUrl}`.
+  - `ContextFlag::set_{shared_session, conversation, warp_drive_link, settings_link, warp_home_link}_only`, which the web intent parser called.
+  - `ContextFlag::set` and its `FromStr`, which only the web URL's query string used.
+- `app/src/font_fallback.rs`, which fetched fallback fonts from `{server_root_url}/assets/client/static/fallback-fonts/` on wasm.
+- **Remote assets:**
+  - `asset_macro::remote_asset!` and the wasm branch of `bundled_or_fetched_asset!`, which fetched from the page origin.
+  - `warp_util::assets::{make_absolute_url, hashed_asset_path, hashed_asset_url, REMOTE_ASSETS_DIR}` and `app/assets/remote/`.
+  - `copy_async_assets` in `app/build.rs`, which wrote hashed copies for Warp's asset server when `ASSET_TARGET_DIR` was set.
+  - The dependencies only these used: `sha2` in `asset_macro` and in the app build script, and `hex` and `gloo` in `warp_util`.
+
+**Modified:**
+- `bundled_or_fetched_asset!` is now `async_asset!`. It always bundles from `app/assets/async`. It is used by the default themes and four modals.
+  - The wasm `exclude = "async/**"` in `crates/warp_assets` and the `ui_components` example is gone, because wasm no longer fetches those files.
+  - The onboarding layout comment that described the web split was rewritten.
+- The pane-header conversation details button and the pane-level details panel are no longer compiled out on wasm. The workspace-level panel they deferred to is gone.
+  - `TerminalView::should_show_wasm_{conversation_details_panel, pane_header_details_button}` were removed, with their five tests.
+- `RootView::new` picks the auth and onboarding state the same way on every target. `UserAccountDisabled` now logs out on every target, and `DeniedAccessToken` does nothing on any target.
+- `Workspace::render_panels` no longer takes `hide_vertical_tabs`, which only the simplified web tab bar set.
+- `terminal/view/pane_impl.rs`: with "Open on Desktop" gone, the shared-session viewer's pane-header menu check collapsed into one condition.
+- Comments in `terminal/view.rs` and `agent_conversations_model.rs` that pointed at the removed web panel were updated.
+
+**User-visible impact:** None in the desktop app. Every removed control was web-only, or was gated on a web-only setting that is always unset on desktop. The link rewrite only matched the offline server root (`http://offline.invalid`) after NET-0, so opening links behaves the same.
+
+**Notes:**
+- The `wasm32-unknown-unknown` target isn't installed on this machine. Wasm-only code was checked with `rg`, not the compiler.
+- With the setters gone, every `ContextFlag` stays enabled. The 58 remaining `ContextFlag::X.is_enabled()` checks, mostly in files that the Drive, AI and settings tasks are editing, are left for WASM-2 to inline.
+- The generic wasm dependencies in `app/Cargo.toml` (`js-sys`, `wasm-bindgen`, `gloo`, `web-sys`, `serde-wasm-bindgen`) stay for WASM-2. They may matter for wasm feature unification.
+- `Credentials::SessionCookie` and `LoginToken::SessionCookie` in `warp_server_auth`/`warp_server_client` are no longer produced (AUTH-2/SRV-1).
+- `TelemetryEvent::{WebSessionOpenedOnDesktop, WebCloudObjectOpenedOnDesktop}` are no longer emitted (TEL-4).
+- `uri::parse_url_paths` (Drive web links pasted into notebooks) is Drive code and stays for the DRV tasks.
+- Stored values of the removed web settings (`UserNativePreference`, `UserNativePreferenceDialogDismissed`, `UserAppInstallStatus`) are ignored. The desktop app never wrote them.
+- The `set_before_open_url` hook in `warpui_core` stays; the OSC 8 integration tests use it.

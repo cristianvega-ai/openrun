@@ -1,4 +1,4 @@
-use asset_macro::bundled_or_fetched_asset;
+use asset_macro::async_asset;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
 use warp_core::ui::appearance::Appearance;
@@ -177,7 +177,7 @@ impl CodexModal {
     fn render_right_panel(&self) -> Box<dyn Element> {
         ConstrainedBox::new(
             Image::new(
-                bundled_or_fetched_asset!("png/codex_integration.png"),
+                async_asset!("png/codex_integration.png"),
                 CacheOption::BySize,
             )
             .with_corner_radius(CornerRadius::with_right(Radius::Pixels(10.)))

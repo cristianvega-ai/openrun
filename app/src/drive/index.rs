@@ -6,7 +6,6 @@ use futures::Future;
 use itertools::Itertools;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
-use url::Url;
 use warp_core::context_flag::ContextFlag;
 use warp_core::settings::Setting;
 use warp_core::ui::theme::color::internal_colors;
@@ -82,15 +81,10 @@ use crate::server::telemetry::{
     AnonymousUserSignupEntrypoint, SharingDialogSource, TelemetryEvent,
 };
 use crate::settings::SharedObjectLimitBannerSettings;
-use crate::settings::app_installation_detection::{
-    UserAppInstallDetectionSettings, UserAppInstallStatus,
-};
 use crate::ui_components::blended_colors;
 use crate::ui_components::buttons::{highlight, icon_button};
 use crate::ui_components::icons::{ICON_DIMENSIONS, Icon};
 use crate::ui_components::menu_button::{MenuDirection, icon_button_with_context_menu};
-#[cfg(target_family = "wasm")]
-use crate::uri::web_intent_parser::open_url_on_desktop;
 use crate::util::color::coloru_with_opacity;
 use crate::view_components::{Dropdown, DropdownItem};
 use crate::workflows::{CloudWorkflow, WorkflowViewMode};
@@ -274,7 +268,6 @@ pub enum DriveIndexAction {
     CopyWorkflowId(CloudObjectTypeAndId),
     DuplicateObject(CloudObjectTypeAndId),
     CopyObjectLinkToClipboard(String),
-    OpenObjectLinkOnDesktop(Url),
     ExportObject(CloudObjectTypeAndId),
     ToggleNewAssetsMenu(Space),
     ToggleSortingMenu,
@@ -4813,24 +4806,6 @@ impl DriveIndex {
                                     .into_item(),
                             );
                         }
-                        if !warpui::platform::is_mobile_device()
-                            && !ContextFlag::HideOpenOnDesktopButton.is_enabled()
-                            && *UserAppInstallDetectionSettings::as_ref(app)
-                                .user_app_installation_detected
-                                .value()
-                                == UserAppInstallStatus::Detected
-                            && let Some(object_link) = object.object_link()
-                            && let Ok(url) = Url::parse(&object_link)
-                        {
-                            menu_items.push(
-                                MenuItemFields::new("Open on Desktop")
-                                    .with_on_select_action(
-                                        DriveIndexAction::OpenObjectLinkOnDesktop(url),
-                                    )
-                                    .with_icon(Icon::Laptop)
-                                    .into_item(),
-                            );
-                        }
                         // Only allow duplicate if in Personal space, or Team space when online
                         if matches!(space, Space::Personal)
                             || (self.is_online(app) && matches!(space, Space::Team { .. }))
@@ -5716,14 +5691,6 @@ impl TypedActionView for DriveIndex {
                 );
                 ctx.clipboard()
                     .write(ClipboardContent::plain_text(link.to_owned()));
-            }
-            #[cfg(target_family = "wasm")]
-            DriveIndexAction::OpenObjectLinkOnDesktop(url) => {
-                open_url_on_desktop(url);
-            }
-            #[cfg(not(target_family = "wasm"))]
-            DriveIndexAction::OpenObjectLinkOnDesktop(_) => {
-                // No-op when not on wasm
             }
             DriveIndexAction::InvokeEnvVarCollectionInSubshell(id) => {
                 ctx.emit(DriveIndexEvent::InvokeEnvVarCollectionInSubshell(*id))

@@ -11,14 +11,9 @@ use warpui_core::{
     SizeConstraint,
 };
 
-// Onboarding images live under `app/assets/async/` so they are excluded from the WASM
-// binary (RustEmbed excludes `async/**` on wasm targets). They are still bundled normally
-// on native builds. Unlike other `async/` assets these are NOT wired up with
-// `bundled_or_fetched_asset!`, so they cannot be fetched remotely on web. We can't use
-// that macro here because it resolves paths relative to CARGO_MANIFEST_DIR (i.e.
-// `crates/onboarding/`), but the assets live under `app/assets/`. Onboarding is not
-// shown on web, so this is fine.
-// TODO(APP-3934): support the macro outside the app crate
+// Onboarding images live under `app/assets/async/`. Unlike other `async/` assets these are
+// NOT wired up with `async_asset!`, because that macro resolves paths relative to
+// CARGO_MANIFEST_DIR (i.e. `crates/onboarding/`), but the assets live under `app/assets/`.
 pub const ONBOARDING_BG_PATH: &str = "async/png/onboarding/onboarding_bg.png";
 
 const LEFT_COLUMN_WIDTH: f32 = 580.;

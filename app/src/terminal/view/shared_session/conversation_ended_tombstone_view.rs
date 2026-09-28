@@ -161,8 +161,6 @@ pub struct ConversationEndedTombstoneView {
     continue_in_cloud_button: Option<ViewHandle<ActionButton>>,
     #[cfg(not(target_family = "wasm"))]
     continue_locally_button: Option<ViewHandle<ActionButton>>,
-    #[cfg(target_family = "wasm")]
-    open_in_warp_button: Option<ViewHandle<ActionButton>>,
 }
 
 impl ConversationEndedTombstoneView {
@@ -227,34 +225,12 @@ impl ConversationEndedTombstoneView {
             Some(TombstoneCta::ContinueInCloud { .. }) | None => None,
         };
 
-        // In wasm, continuing locally is impossible so we instead
-        // offer to open the conversation in warp (where you can continue locally).
-        #[cfg(target_family = "wasm")]
-        let open_in_warp_button =
-            if matches!(tombstone_cta, Some(TombstoneCta::ContinueInCloud { .. })) {
-                None
-            } else {
-                conversation_id.map(|conv_id| {
-                    ctx.add_typed_action_view(move |_| {
-                        ActionButton::new("Open in Warp", PrimaryTheme)
-                            .with_tooltip("Open this conversation in the Warp desktop app")
-                            .on_click(move |ctx| {
-                                ctx.dispatch_typed_action(
-                                    ConversationEndedTombstoneAction::OpenInWarp(conv_id),
-                                );
-                            })
-                    })
-                })
-            };
-
         let view = Self {
             display_data,
             artifact_buttons_view,
             continue_in_cloud_button,
             #[cfg(not(target_family = "wasm"))]
             continue_locally_button,
-            #[cfg(target_family = "wasm")]
-            open_in_warp_button,
         };
 
         ctx.subscribe_to_view(
@@ -503,17 +479,6 @@ impl ConversationEndedTombstoneView {
             }
         }
 
-        #[cfg(target_family = "wasm")]
-        {
-            // Don't show on mobile devices - they can't use the desktop app
-            if !warpui::platform::wasm::is_mobile_device()
-                && let Some(ref open_in_warp_button) = self.open_in_warp_button
-            {
-                row.add_child(ChildView::new(open_in_warp_button).finish());
-                has_button = true;
-            }
-        }
-
         if !has_button {
             return Empty::new().finish();
         }
@@ -551,8 +516,6 @@ pub enum ConversationEndedTombstoneAction {
     },
     #[cfg(not(target_family = "wasm"))]
     ContinueLocally(AIConversationId),
-    #[cfg(target_family = "wasm")]
-    OpenInWarp(AIConversationId),
 }
 
 impl View for ConversationEndedTombstoneView {
@@ -650,31 +613,6 @@ impl TypedActionView for ConversationEndedTombstoneView {
                 ctx.dispatch_typed_action(&WorkspaceAction::ContinueConversationLocally {
                     conversation_id: *conversation_id,
                 });
-            }
-            #[cfg(target_family = "wasm")]
-            ConversationEndedTombstoneAction::OpenInWarp(conversation_id) => {
-                send_telemetry_from_ctx!(AgentManagementTelemetryEvent::TombstoneOpenInWarp, ctx);
-                let conversation = BlocklistAIHistoryModel::handle(ctx)
-                    .as_ref(ctx)
-                    .conversation(conversation_id);
-
-                if let Some(conversation) = conversation {
-                    if let Some(token) = conversation.server_conversation_token() {
-                        let url_string = token.conversation_link();
-                        if let Ok(url) = url::Url::parse(&url_string) {
-                            ctx.dispatch_typed_action(&WorkspaceAction::OpenLinkOnDesktop(url));
-                        } else {
-                            warp_errors::report_error!(
-                                "Failed to parse conversation URL",
-                                extra: { "url" => %url_string }
-                            );
-                        }
-                    } else {
-                        log::warn!("No server conversation token available for conversation");
-                    }
-                } else {
-                    warp_errors::report_error!("Conversation not found in history model");
-                }
             }
         }
     }

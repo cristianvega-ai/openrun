@@ -420,11 +420,7 @@ pub enum WorkspaceAction {
     },
     Reauth,
     SignupAnonymousUser,
-    SignInAnonymousWebUser,
     OpenLink(String),
-    /// On WASM, opens a given URL in the desktop Warp app (if installed) or redirects to download page.
-    #[cfg(target_family = "wasm")]
-    OpenLinkOnDesktop(url::Url),
     ReopenClosedSession,
     CopySharedSessionLinkFromTab {
         tab_index: usize,
@@ -764,9 +760,6 @@ pub enum WorkspaceAction {
         conversation_id: ServerConversationToken,
         ambient_agent_task_id: Option<AmbientAgentTaskId>,
     },
-    /// Toggle the conversation transcript details panel (WASM-only).
-    #[cfg(target_family = "wasm")]
-    ToggleConversationTranscriptDetailsPanel,
     /// Open a full-window lightbox displaying the given images.
     OpenLightbox {
         images: Vec<lightbox::LightboxImage>,
@@ -1085,7 +1078,6 @@ impl WorkspaceAction {
             | ViewObjectInWarpDrive(_)
             | OpenObjectSharingSettings { .. }
             | TerminateApp
-            | SignInAnonymousWebUser
             | TabHoverWidthStart { .. }
             | TabHoverWidthEnd
             | OpenAIFactCollection
@@ -1145,8 +1137,6 @@ impl WorkspaceAction {
             | ShowTeamSwitcherMenu => false,
             #[cfg(debug_assertions)]
             ShowHoaOnboardingFlow => false,
-            #[cfg(target_family = "wasm")]
-            ToggleConversationTranscriptDetailsPanel => false,
             #[cfg(debug_assertions)]
             OpenBuildPlanMigrationModal
             | ResetBuildPlanMigrationModalState
@@ -1181,8 +1171,6 @@ impl WorkspaceAction {
             OpenEnvironmentManagementPane => false,
             #[cfg(target_os = "linux")]
             DismissWaylandCrashRecoveryBannerAndOpenLink => false,
-            #[cfg(target_family = "wasm")]
-            OpenLinkOnDesktop(_) => false,
             // actions that are related to updating user settings or
             // managing some ui elements (like closing/opening modals)
             // that don't reflect on actual workspace and don't need to

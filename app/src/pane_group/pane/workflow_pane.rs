@@ -2,13 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Context;
-use url::Url;
 use warpui::{AppContext, ModelHandle, SingletonEntity, ViewContext, ViewHandle};
 
-use super::{
-    DetachType, PaneConfiguration, PaneContent, PaneGroup, PaneId, PaneView, ShareableLink,
-    ShareableLinkError,
-};
+use super::{DetachType, PaneConfiguration, PaneContent, PaneGroup, PaneId, PaneView};
 use crate::app_state::{LeafContents, WorkflowPaneSnapshot};
 use crate::drive::OpenWarpDriveObjectSettings;
 use crate::drive::items::WarpDriveItemId;
@@ -143,27 +139,6 @@ impl PaneContent for WorkflowPane {
     /// Focus this pane's contents.
     fn focus(&self, ctx: &mut ViewContext<PaneGroup>) {
         self.get_view(ctx).update(ctx, |view, ctx| view.focus(ctx));
-    }
-
-    fn shareable_link(
-        &self,
-        ctx: &mut ViewContext<PaneGroup>,
-    ) -> Result<ShareableLink, ShareableLinkError> {
-        self.get_view(ctx).read(ctx, |view, ctx| {
-            if let Some(link) = view.workflow_link(ctx) {
-                if let Ok(parsed_url) = Url::parse(link.as_str()) {
-                    Ok(ShareableLink::Pane { url: parsed_url })
-                } else {
-                    Err(ShareableLinkError::Unexpected(String::from(
-                        "Failed to parse workflow url",
-                    )))
-                }
-            } else {
-                Err(ShareableLinkError::Unexpected(String::from(
-                    "Could not retrieve workflow url from view",
-                )))
-            }
-        })
     }
 
     /// Pane-agnostic state that all panes have.

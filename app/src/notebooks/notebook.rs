@@ -8,8 +8,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use secret_redaction::find_secrets_in_text;
 use settings::Setting as _;
-use url::Url;
-use warp_core::context_flag::ContextFlag;
 use warp_editor::editor::NavigationKey;
 use warp_editor::model::{CoreEditorModel, RichTextEditorModel};
 use warp_errors::{report_error, report_if_error};
@@ -74,9 +72,6 @@ use crate::server::telemetry::{
     CloudObjectTelemetryMetadata, NotebookActionEvent, NotebookTelemetryMetadata,
     SharingDialogSource, TelemetryCloudObjectType, TelemetryEvent,
 };
-use crate::settings::app_installation_detection::{
-    UserAppInstallDetectionSettings, UserAppInstallStatus,
-};
 use crate::settings::{
     FontSettings, FontSettingsChangedEvent, NotebookFontSize, decrease_notebook_font_size,
     increase_notebook_font_size,
@@ -84,8 +79,6 @@ use crate::settings::{
 use crate::terminal::safe_mode_settings::get_secret_obfuscation_mode;
 use crate::throttle::throttle;
 use crate::ui_components::icons::{self, Icon};
-#[cfg(target_family = "wasm")]
-use crate::uri::web_intent_parser::open_url_on_desktop;
 use crate::util::bindings::{self, CustomAction};
 use crate::view_components::{DismissibleToast, ToastType};
 use crate::workflows::{WorkflowSource, WorkflowType};
@@ -290,7 +283,6 @@ pub enum NotebookAction {
     CopyToPersonal,
     CopyToClipboard,
     CopyLink(String),
-    OpenLinkOnDesktop(Url),
     Export,
     AttachPlanAsContext(AIDocumentId),
 }
@@ -1425,23 +1417,6 @@ impl NotebookView {
             );
         }
 
-        if !warpui::platform::is_mobile_device()
-            && !ContextFlag::HideOpenOnDesktopButton.is_enabled()
-            && *UserAppInstallDetectionSettings::as_ref(ctx)
-                .user_app_installation_detected
-                .value()
-                == UserAppInstallStatus::Detected
-            && let Some(link) = self.notebook_link(ctx)
-            && let Ok(url) = Url::parse(&link)
-        {
-            menu_items.push(
-                MenuItemFields::new("Open on Desktop")
-                    .with_on_select_action(NotebookAction::OpenLinkOnDesktop(url))
-                    .with_icon(icons::Icon::Laptop)
-                    .into_item(),
-            );
-        }
-
         // Add "Duplicate" to menu
         if active_notebook_data.space(ctx) != Some(Space::Shared) {
             menu_items.push(
@@ -2325,20 +2300,6 @@ impl TypedActionView for NotebookView {
                 cloud_object_type_and_id,
                 new_space,
             } => self.move_to_team_owner(*cloud_object_type_and_id, *new_space, ctx),
-            #[cfg(target_family = "wasm")]
-            NotebookAction::OpenLinkOnDesktop(url) => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::WebCloudObjectOpenedOnDesktop {
-                        object_metadata: self.generic_telemetry_metadata(ctx)
-                    },
-                    ctx
-                );
-                open_url_on_desktop(url);
-            }
-            #[cfg(not(target_family = "wasm"))]
-            NotebookAction::OpenLinkOnDesktop(_) => {
-                // No-op when not on wasm
-            }
             NotebookAction::Export => self.export(ctx),
             NotebookAction::AttachPlanAsContext(id) => {
                 ctx.emit(NotebookEvent::AttachPlanAsContext(*id))

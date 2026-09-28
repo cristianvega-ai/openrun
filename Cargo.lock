@@ -1041,7 +1041,6 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "sha2 0.10.9",
  "syn 2.0.117",
  "warp_util",
 ]
@@ -13821,8 +13820,6 @@ dependencies = [
  "event-listener",
  "futures-lite 1.13.0",
  "futures-util",
- "gloo",
- "hex",
  "is_executable",
  "itertools 0.14.0",
  "lazy_static",

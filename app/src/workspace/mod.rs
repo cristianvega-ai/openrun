@@ -859,7 +859,7 @@ pub fn init(app: &mut AppContext) {
             },
         )
         .with_group(bindings::BindingGroup::Settings.as_str())
-        .with_context_predicate(id!("Workspace") & !id!("Workspace_CloudConversationWebViewer"))
+        .with_context_predicate(id!("Workspace"))
         .with_custom_action(CustomAction::CommandPalette),
         EditableBinding::new(
             "workspace:move_tab_left",

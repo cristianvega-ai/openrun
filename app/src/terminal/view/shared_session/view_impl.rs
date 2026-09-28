@@ -743,28 +743,6 @@ impl TerminalView {
         }
     }
 
-    pub fn open_shared_session_on_desktop(
-        &mut self,
-        source: SharedSessionActionSource,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        #[cfg(target_family = "wasm")]
-        {
-            let shared_session_status = self.model.lock().shared_session_status().clone();
-            let manager = Manager::as_ref(ctx);
-            let Some(session_id) =
-                manager.session_id_for_link(&ctx.view_id(), &shared_session_status)
-            else {
-                return;
-            };
-            if let Ok(url) = url::Url::parse(&join_link(&session_id)) {
-                crate::uri::web_intent_parser::open_url_on_desktop(&url);
-            }
-        }
-
-        send_telemetry_from_ctx!(TelemetryEvent::WebSessionOpenedOnDesktop { source }, ctx);
-    }
-
     /// Updates view state when our own role was changed.
     fn on_self_role_updated(&mut self, role: Role, ctx: &mut ViewContext<Self>) {
         // Update shared session status only if we are an active viewer.

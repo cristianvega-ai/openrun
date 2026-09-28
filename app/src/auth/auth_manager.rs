@@ -3,8 +3,6 @@ use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use settings::Setting as _;
-#[cfg(target_family = "wasm")]
-use url::Url;
 use uuid::Uuid;
 use warp_core::channel::ChannelState;
 use warp_errors::{report_error, report_if_error};
@@ -36,8 +34,6 @@ use crate::settings::PrivacySettings;
 use crate::settings::initializer::SettingsInitializer;
 use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::shared_session::manager::Manager as SharedSessionManager;
-#[cfg(target_family = "wasm")]
-use crate::uri::browser_url_handler::{parse_current_url, update_browser_url};
 use crate::workspaces::team_tester::TeamTesterStatus;
 use crate::{
     GlobalResourceHandlesProvider, TelemetryEvent, persistence, send_telemetry_from_ctx,
@@ -210,19 +206,6 @@ impl AuthManager {
                         LoginToken::Firebase(FirebaseToken::Refresh(refresh_token)),
                         false, /* for_refresh */
                     )
-                    .await
-            },
-            Self::on_user_fetched,
-        );
-    }
-
-    #[cfg(target_family = "wasm")]
-    pub fn initialize_user_from_session_cookie(&self, ctx: &mut ModelContext<Self>) {
-        let auth_client = self.auth_client.clone();
-        let _ = ctx.spawn(
-            async move {
-                auth_client
-                    .fetch_user(LoginToken::SessionCookie, false)
                     .await
             },
             Self::on_user_fetched,
@@ -541,24 +524,7 @@ impl AuthManager {
                             ctx
                         );
                         let login_options_url = me.login_options_url(&custom_token);
-                        if cfg!(target_family = "wasm") {
-                            #[cfg(target_family = "wasm")]
-                            if let Some(current_url) = parse_current_url() {
-                                update_browser_url(
-                                    Url::parse(&format!(
-                                        "{}?redirect_to={}",
-                                        login_options_url,
-                                        current_url.path()
-                                    ))
-                                    .ok(),
-                                    true,
-                                );
-                            } else {
-                                update_browser_url(Url::parse(&login_options_url).ok(), true);
-                            }
-                        } else {
-                            ctx.open_url(&login_options_url);
-                        }
+                        ctx.open_url(&login_options_url);
                     }
                     Err(e) => {
                         ctx.emit(AuthManagerEvent::MintCustomTokenFailed(e));

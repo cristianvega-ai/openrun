@@ -54,7 +54,6 @@ use crate::root_view::QuakeModePinPosition;
 use crate::search::command_search::settings::CommandSearchSettings;
 use crate::server::telemetry::TelemetryEvent;
 use crate::settings::ai::AISettings;
-use crate::settings::native_preference::{NativePreferenceSettings, UserNativePreference};
 use crate::settings::{
     AISettingsChangedEvent, AliasExpansionSettings, AppEditorSettings, CodeSettings,
     CtrlTabBehavior, DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES, DefaultSessionMode, ExtraMetaKeys,
@@ -721,7 +720,6 @@ pub enum FeaturesPageAction {
     ToggleRestoreSession,
     ToggleAutocompleteSymbols,
     ToggleLinuxClipboardSelection,
-    ToggleOpenLinksInDesktopApp,
     ToggleSshReuseControlMaster,
     ToggleSnackbar,
     ToggleLinkTooltip,
@@ -876,15 +874,6 @@ impl FeaturesPageAction {
             Self::ToggleCopyOnSelect => TelemetryEvent::FeaturesPageAction {
                 action: "ToggleCopyOnSelect".to_string(),
                 value: to_string(selection_settings.copy_on_select_enabled()),
-            },
-            Self::ToggleOpenLinksInDesktopApp => TelemetryEvent::FeaturesPageAction {
-                action: "ToggleOpenLinksInDesktopApp".to_string(),
-                value: to_string(matches!(
-                    NativePreferenceSettings::as_ref(ctx)
-                        .user_native_redirect_preference
-                        .value(),
-                    UserNativePreference::Desktop
-                )),
             },
             Self::ToggleSnackbar => {
                 let settings = BlockListSettings::as_ref(ctx);
@@ -1480,27 +1469,6 @@ impl TypedActionView for FeaturesPageView {
                             .toggle_and_save_value(ctx)
                     );
                 })
-            }
-            ToggleOpenLinksInDesktopApp => {
-                NativePreferenceSettings::handle(ctx).update(
-                    ctx,
-                    |native_preference_settings, ctx| {
-                        let new_value = match native_preference_settings
-                            .user_native_redirect_preference
-                            .value()
-                        {
-                            UserNativePreference::Desktop => UserNativePreference::Web,
-                            UserNativePreference::NotSelected | UserNativePreference::Web => {
-                                UserNativePreference::Desktop
-                            }
-                        };
-                        report_if_error!(
-                            native_preference_settings
-                                .user_native_redirect_preference
-                                .set_value(new_value, ctx)
-                        );
-                    },
-                );
             }
             ToggleNotifications => {
                 ctx.dispatch_typed_action(&WorkspaceAction::ToggleNotifications);
@@ -2711,14 +2679,6 @@ impl FeaturesPageView {
     fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
         let mut general_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
             vec![Box::new(DefaultSessionModeWidget::default())];
-
-        let native_preference_settings = NativePreferenceSettings::as_ref(ctx);
-        if native_preference_settings
-            .user_native_redirect_preference
-            .is_supported_on_current_platform()
-        {
-            general_widgets.push(Box::new(NativeRedirectWidget::default()));
-        }
 
         let general_settings = &GeneralSettings::as_ref(ctx);
         if general_settings
@@ -4478,56 +4438,6 @@ fn init_display_count_dropdown(
         }
         _ => dropdown.set_selected_by_name("Active Screen", ctx),
     };
-}
-
-#[derive(Default)]
-struct NativeRedirectWidget {
-    additional_info_link: MouseStateHandle,
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for NativeRedirectWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "link open desktop native redirect url intent deep link deeplink"
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
-            "Open links in desktop app".into(),
-            Some(AdditionalInfo {
-                mouse_state: self.additional_info_link.clone(),
-                on_click_action: None,
-                secondary_text: None,
-                tooltip_override_text: Some(
-                    "Automatically open links in desktop app whenever possible.".into(),
-                ),
-            }),
-            ToggleState::Enabled,
-            appearance,
-            ui_builder
-                .switch(self.switch_state.clone())
-                .check(matches!(
-                    NativePreferenceSettings::as_ref(app)
-                        .user_native_redirect_preference
-                        .value(),
-                    UserNativePreference::Desktop
-                ))
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleOpenLinksInDesktopApp);
-                })
-                .finish(),
-            None,
-        )
-    }
 }
 
 #[derive(Default)]

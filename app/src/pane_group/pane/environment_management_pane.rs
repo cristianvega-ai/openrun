@@ -1,10 +1,7 @@
 use warpui::{AppContext, ModelHandle, ViewContext, ViewHandle};
 
 use super::view::PaneView;
-use super::{
-    DetachType, PaneConfiguration, PaneContent, PaneEvent, PaneGroup, PaneId, ShareableLink,
-    ShareableLinkError,
-};
+use super::{DetachType, PaneConfiguration, PaneContent, PaneEvent, PaneGroup, PaneId};
 use crate::ai::ambient_agents::github_auth_url::GithubAuthRedirectTarget;
 use crate::app_state::{EnvironmentManagementPaneSnapshot, LeafContents};
 use crate::pane_group::focus_state::PaneFocusHandle;
@@ -135,13 +132,6 @@ impl PaneContent for EnvironmentManagementPane {
     fn focus(&self, ctx: &mut ViewContext<PaneGroup>) {
         self.environments_page_view(ctx)
             .update(ctx, |view, ctx| view.focus(ctx));
-    }
-
-    fn shareable_link(
-        &self,
-        _ctx: &mut ViewContext<PaneGroup>,
-    ) -> Result<ShareableLink, ShareableLinkError> {
-        Ok(ShareableLink::Base)
     }
 
     fn pane_configuration(&self) -> ModelHandle<PaneConfiguration> {
