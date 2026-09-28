@@ -29,7 +29,6 @@ use crate::cloud_object::{
     CreateObjectRequest, GenericServerObject, ObjectType, Revision, UpdateCloudObjectResult,
 };
 use crate::drive::CloudObjectTypeAndId;
-use crate::notebooks::{NotebookId, NotebookLocation};
 use crate::persistence::ModelEvent;
 use crate::server::cloud_objects::update_manager::InitiatedBy;
 use crate::server::ids::{ServerId, SyncId};
@@ -51,11 +50,6 @@ pub enum WorkflowSource {
     },
     PersonalCloud,
     WarpAI,
-    Notebook {
-        notebook_id: Option<NotebookId>,
-        team_uid: Option<ServerId>,
-        location: NotebookLocation,
-    },
 
     /// A hardcoded workflow type that allows Warp to surface features as Workflows (e.g.
     /// a command to see our network log)
@@ -152,8 +146,6 @@ pub enum WorkflowType {
         workflow: Workflow,
         origin: AIWorkflowOrigin,
     },
-    /// A workflow that's part of a cloud notebook.
-    Notebook(Workflow),
 }
 
 impl WorkflowType {
@@ -162,7 +154,6 @@ impl WorkflowType {
             WorkflowType::Local(workflow) => workflow,
             WorkflowType::AIGenerated { workflow, .. } => workflow,
             WorkflowType::Cloud(workflow) => &workflow.model().data,
-            WorkflowType::Notebook(workflow) => workflow,
         }
     }
 
@@ -172,12 +163,11 @@ impl WorkflowType {
             WorkflowType::Local(workflow) => workflow,
             WorkflowType::AIGenerated { workflow, .. } => workflow,
             WorkflowType::Cloud(workflow) => workflow.model().data.clone(),
-            WorkflowType::Notebook(workflow) => workflow,
         }
     }
 
     /// The object type and ID for the cloud object containing this workflow, if there is
-    /// one. This is currently only supported for cloud workflows, not workflows within notebooks.
+    /// one.
     pub fn object_id(&self) -> Option<CloudObjectTypeAndId> {
         match self {
             WorkflowType::Cloud(workflow) => Some(CloudObjectTypeAndId::Workflow(workflow.id)),

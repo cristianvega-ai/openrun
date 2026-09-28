@@ -141,7 +141,6 @@ pub use pane::environment_management_pane::EnvironmentManagementPane;
 pub use pane::execution_profile_editor_pane::ExecutionProfileEditorPane;
 pub use pane::file_pane::FilePane;
 pub use pane::network_log_pane::NetworkLogPane;
-pub use pane::notebook_pane::NotebookPane;
 pub use pane::settings_pane::SettingsPane;
 pub use pane::terminal_pane::TerminalPane;
 pub use pane::workflow_pane::WorkflowPane;
@@ -1552,18 +1551,14 @@ impl PaneGroup {
                 Ok((PaneData::new(pane_id), focus))
             }
             LeafContents::Notebook(snapshot) => {
-                let pane: Box<dyn AnyPaneContent + 'static> = match snapshot {
-                    NotebookPaneSnapshot::CloudNotebook { notebook_id } => {
-                        Box::new(NotebookPane::restore(notebook_id, ctx)?)
-                    }
-                    NotebookPaneSnapshot::LocalFileNotebook { path } => Box::new(FilePane::new(
-                        path.map(LocalOrRemotePath::Local),
-                        None,
-                        #[cfg(feature = "local_fs")]
-                        None,
-                        ctx,
-                    )),
-                };
+                let NotebookPaneSnapshot::LocalFileNotebook { path } = snapshot;
+                let pane: Box<dyn AnyPaneContent + 'static> = Box::new(FilePane::new(
+                    path.map(LocalOrRemotePath::Local),
+                    None,
+                    #[cfg(feature = "local_fs")]
+                    None,
+                    ctx,
+                ));
 
                 let pane_id = pane.as_pane().id();
                 pane_contents.insert(pane_id, pane);
@@ -1893,23 +1888,17 @@ impl PaneGroup {
             }
         }
 
-        // Finds the active pane type out of (NotebookPane, TerminalPane)
-        // and extracts selected text from it.
-        let text = if let Some(pane) = self.downcast_pane_by_id::<NotebookPane>(focused_pane_id) {
-            pane.notebook_view(ctx).as_ref(ctx).selected_text(ctx)
-        } else {
-            match self.terminal_view_from_pane_id(focused_pane_id, ctx) {
-                Some(terminal_view) => {
-                    // NOTE: We currently don't have a way to track recency of selection events.
-                    // In lieu of this, we prefer selections to the input editor over the terminal view.
-                    // TODO(vkodithala): Once we have a way to track recency of selection events, we should use that instead.
-                    terminal_view
-                        .as_ref(ctx)
-                        .selected_text_from_input(ctx)
-                        .or_else(|| terminal_view.as_ref(ctx).selected_text(ctx))
-                }
-                _ => None,
+        let text = match self.terminal_view_from_pane_id(focused_pane_id, ctx) {
+            Some(terminal_view) => {
+                // NOTE: We currently don't have a way to track recency of selection events.
+                // In lieu of this, we prefer selections to the input editor over the terminal view.
+                // TODO(vkodithala): Once we have a way to track recency of selection events, we should use that instead.
+                terminal_view
+                    .as_ref(ctx)
+                    .selected_text_from_input(ctx)
+                    .or_else(|| terminal_view.as_ref(ctx).selected_text(ctx))
             }
+            _ => None,
         };
 
         text.filter(|text: &String| !text.is_empty())
@@ -2797,18 +2786,6 @@ impl PaneGroup {
 
     /// Get the notebook view within the pane at `pane_index`.
     #[cfg(any(test, feature = "integration_tests"))]
-    pub fn notebook_view_at_pane_index(
-        &self,
-        pane_index: usize,
-        ctx: &AppContext,
-    ) -> Option<ViewHandle<crate::notebooks::notebook::NotebookView>> {
-        self.content_by_pane_index(pane_index)
-            .and_then(|pane| pane.as_any().downcast_ref::<NotebookPane>())
-            .map(|pane| pane.notebook_view(ctx))
-    }
-
-    /// Get the notebook view within the pane at `pane_index`.
-    #[cfg(any(test, feature = "integration_tests"))]
     pub fn workflow_view_at_pane_index(
         &self,
         pane_index: usize,
@@ -2939,10 +2916,6 @@ impl PaneGroup {
         ctx.emit(Event::TerminalViewStateChanged);
         ctx.emit(Event::AppStateChanged);
         pane_content
-    }
-
-    pub fn notebook_pane_by_pane_id(&self, pane_id: Option<PaneId>) -> Option<&NotebookPane> {
-        self.downcast_pane_by_id(pane_id?)
     }
 
     pub fn workflow_pane_by_pane_id(&self, pane_id: Option<PaneId>) -> Option<&WorkflowPane> {

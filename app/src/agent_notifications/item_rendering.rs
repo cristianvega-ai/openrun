@@ -27,7 +27,6 @@ use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::icon_with_status::{IconWithStatusVariant, render_icon_with_status};
 use crate::util::time_format::format_elapsed_since;
 use crate::view_components::action_button::ActionButtonTheme;
-use crate::workspace::WorkspaceAction;
 
 const COLLAPSED_MAX_CHARS: usize = 100;
 const EXPANDED_MAX_CHARS: usize = 500;
@@ -452,17 +451,6 @@ pub(crate) fn handle_notification_artifact_buttons_event(
     ctx: &mut ViewContext<impl View>,
 ) {
     match event {
-        ArtifactButtonsRowEvent::OpenPlan { notebook_uid } => {
-            send_telemetry_from_ctx!(
-                AgentManagementTelemetryEvent::ArtifactClicked {
-                    artifact_type: ArtifactType::Plan
-                },
-                ctx
-            );
-            ctx.dispatch_typed_action(&WorkspaceAction::OpenNotebook {
-                id: (*notebook_uid).into(),
-            });
-        }
         ArtifactButtonsRowEvent::CopyBranch { branch } => {
             send_telemetry_from_ctx!(
                 AgentManagementTelemetryEvent::ArtifactClicked {

@@ -27,6 +27,7 @@ use crate::cloud_object::model::actions::{
     ObjectAction, ObjectActionHistory, ObjectActionSubtype, ObjectActionType,
 };
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
+use crate::cloud_object::notebook_model::CloudNotebookModel;
 use crate::cloud_object::preference::CloudPreferenceModel;
 use crate::cloud_object::{
     BulkCreateCloudObjectResult, BulkCreateGenericStringObjectsRequest, CloudModelType,
@@ -37,7 +38,6 @@ use crate::cloud_object::{
 };
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::CloudFolderModel;
-use crate::notebooks::CloudNotebookModel;
 use crate::server::cloud_objects::update_manager::InitiatedBy;
 use crate::workflows::CloudWorkflowModel;
 use crate::workflows::workflow_enum::CloudWorkflowEnumModel;

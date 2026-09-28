@@ -31,6 +31,7 @@ use crate::workspaces::user_profiles::UserProfiles;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
 pub mod model;
+pub mod notebook_model;
 pub mod preference;
 
 pub use cloud_objects::cloud_object::*;

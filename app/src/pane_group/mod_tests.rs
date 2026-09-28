@@ -59,8 +59,6 @@ use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
 use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
-use crate::notebooks::manager::NotebookManager;
-use crate::notebooks::notebook::NotebookView;
 use crate::pricing::PricingInfoModel;
 use crate::resource_center::TipsCompleted;
 use crate::search::files::model::FileSearchModel;
@@ -143,7 +141,6 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(LocalWorkflows::new);
     app.add_singleton_model(|_| Prompt::mock());
     app.add_singleton_model(|_| ResizableData::default());
-    app.add_singleton_model(NotebookManager::mock);
     app.add_singleton_model(|_| ActiveSession::default());
     let global_resources = GlobalResourceHandles::mock(app);
     app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(global_resources.clone()));
@@ -246,8 +243,14 @@ fn is_active_session(panes: &PaneGroup, pane_id: PaneId, ctx: &AppContext) -> bo
     panes.active_session_id(ctx).map(Into::into) == Some(pane_id)
 }
 
-fn new_notebook(ctx: &mut ViewContext<PaneGroup>) -> ViewHandle<NotebookView> {
-    ctx.add_typed_action_view(NotebookView::new)
+fn new_file_pane(ctx: &mut ViewContext<PaneGroup>) -> FilePane {
+    FilePane::new(
+        None,
+        None,
+        #[cfg(feature = "local_fs")]
+        None,
+        ctx,
+    )
 }
 
 fn new_ambient_agent_task_id() -> AmbientAgentTaskId {
@@ -1619,7 +1622,7 @@ fn test_restore_closed_pane_restores_hidden_child_when_parent_is_already_fullscr
             let parent_pane_id = get_newly_created_pane_id(panes, &[]);
             panes.add_pane_with_direction(
                 Direction::Right,
-                NotebookPane::new(new_notebook(ctx), ctx),
+                new_file_pane(ctx),
                 false,
                 ctx,
             );
@@ -1968,7 +1971,7 @@ fn test_active_session_id_reset_on_last_pane_close() {
             // Add a non-terminal pane (Notebook) so the pane group remains alive when terminal is closed.
             panes.add_pane_with_direction(
                 Direction::Right,
-                NotebookPane::new(new_notebook(ctx), ctx),
+                new_file_pane(ctx),
                 false, /* focus_new_pane */
                 ctx,
             );
@@ -2021,7 +2024,7 @@ fn test_focus_notebook() {
             // Add a notebook to the left.
             panes.add_pane_with_direction(
                 Direction::Left,
-                NotebookPane::new(new_notebook(ctx), ctx),
+                new_file_pane(ctx),
                 true, /* focus_new_pane */
                 ctx,
             );
@@ -2102,7 +2105,7 @@ fn test_group_without_terminals() {
             // Add a notebook to the left.
             panes.add_pane_with_direction(
                 Direction::Left,
-                NotebookPane::new(new_notebook(ctx), ctx),
+                new_file_pane(ctx),
                 true, /* focus_new_pane */
                 ctx,
             );
@@ -2135,7 +2138,7 @@ fn test_close_active_session() {
             // Add a notebook to the left.
             panes.add_pane_with_direction(
                 Direction::Left,
-                NotebookPane::new(new_notebook(ctx), ctx),
+                new_file_pane(ctx),
                 true, /* focus_new_pane */
                 ctx,
             );
@@ -2502,7 +2505,7 @@ fn test_terminal_pane_headers() {
         pane_group.update(&mut app, |pane_group, ctx| {
             pane_group.add_pane_with_direction(
                 Direction::Left,
-                NotebookPane::new(new_notebook(ctx), ctx),
+                new_file_pane(ctx),
                 true, /* focus_new_pane */
                 ctx,
             );

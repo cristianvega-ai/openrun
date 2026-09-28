@@ -16,7 +16,6 @@ pub(crate) mod environment_management_pane;
 pub(super) mod execution_profile_editor_pane;
 pub(super) mod file_pane;
 pub(super) mod network_log_pane;
-pub(super) mod notebook_pane;
 pub(super) mod settings_pane;
 pub(super) mod terminal_pane;
 pub mod view;
@@ -42,7 +41,6 @@ use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::view::CodeView;
 use crate::menu::MenuItem;
 use crate::notebooks::file::FileNotebookView;
-use crate::notebooks::notebook::NotebookView;
 use crate::pane_group::focus_state::PaneFocusHandle;
 use crate::server::network_log_view::NetworkLogView;
 use crate::settings::PaneSettings;
@@ -112,7 +110,6 @@ impl Display for IPaneId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum IPaneType {
     Terminal,
-    Notebook,
     File,
     Code,
     CodeDiff,
@@ -131,7 +128,6 @@ impl Display for IPaneType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IPaneType::Terminal => write!(f, "Terminal"),
-            IPaneType::Notebook => write!(f, "Notebook"),
             IPaneType::File => write!(f, "File"),
             IPaneType::Code => write!(f, "Code"),
             IPaneType::CodeDiff => write!(f, "Code Diff"),
@@ -170,11 +166,6 @@ impl PaneId {
     /// Creates a [`PaneId`] from a [`ViewContext<PaneView<FileNotebookView>>`]
     pub fn from_file_pane_ctx(ctx: &ViewContext<PaneView<FileNotebookView>>) -> Self {
         Self::new_from_ctx(IPaneType::File, ctx)
-    }
-
-    /// Creates a [`PaneId`] from a [`ViewContext<PaneView<NotebookView>>`]
-    pub fn from_notebook_pane_ctx(ctx: &ViewContext<PaneView<NotebookView>>) -> Self {
-        Self::new_from_ctx(IPaneType::Notebook, ctx)
     }
 
     /// Creates a [`PaneId`] from a [`ViewContext<PaneView<EnvironmentsPageView>>`]
@@ -228,13 +219,6 @@ impl PaneId {
         terminal_pane_view: &ViewHandle<terminal_pane::TerminalPaneView>,
     ) -> Self {
         Self::new(IPaneType::Terminal, terminal_pane_view)
-    }
-
-    /// Creates a [`PaneId`] from a [`PaneView<NotebookView>`] entity ID.
-    pub fn from_notebook_pane_view(
-        notebook_pane_view: &ViewHandle<PaneView<NotebookView>>,
-    ) -> Self {
-        Self::new(IPaneType::Notebook, notebook_pane_view)
     }
 
     /// Creates a [`PaneId`] from a [`PaneView<FileNotebookView>`] entity ID.
@@ -332,10 +316,6 @@ impl PaneId {
         matches!(self.0.pane_type, IPaneType::Terminal)
     }
 
-    pub fn is_notebook_pane(&self) -> bool {
-        matches!(self.0.pane_type, IPaneType::Notebook)
-    }
-
     pub fn is_code_pane(&self) -> bool {
         matches!(self.0.pane_type, IPaneType::Code)
     }
@@ -352,9 +332,9 @@ impl PaneId {
         matches!(self.0.pane_type, IPaneType::EnvironmentManagement)
     }
 
-    /// Returns true if this pane contains a Warp Drive object (notebook, workflow, etc.).
+    /// Returns true if this pane contains a Warp Drive object (workflow, etc.).
     pub fn is_warp_drive_object_pane(&self) -> bool {
-        matches!(self.0.pane_type, IPaneType::Notebook | IPaneType::Workflow)
+        matches!(self.0.pane_type, IPaneType::Workflow)
     }
 
     /// Renders the child view backing this pane.
@@ -362,9 +342,6 @@ impl PaneId {
         let mut element = match self.0.pane_type {
             IPaneType::Terminal => {
                 ChildView::<PaneView<TerminalView>>::with_id(self.0.pane_view_id).finish()
-            }
-            IPaneType::Notebook => {
-                ChildView::<PaneView<NotebookView>>::with_id(self.0.pane_view_id).finish()
             }
             IPaneType::File => {
                 ChildView::<PaneView<FileNotebookView>>::with_id(self.0.pane_view_id).finish()

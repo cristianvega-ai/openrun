@@ -74,7 +74,6 @@ use crate::cloud_object::model::actions::{
 use crate::cloud_object::model::generic_string_model::CloudStringObject;
 use crate::cloud_object::{CloudObject, ObjectIdType};
 use crate::code::editor_management::CodeSource;
-use crate::notebooks::NotebookId;
 use crate::persistence::block_list::{
     get_all_restored_blocks, process_ai_queries_for_uparrow_prompt, read_recent_ai_queries,
 };
@@ -1026,19 +1025,12 @@ fn save_pane_state(
                 .execute(conn)?;
         }
         LeafContents::Notebook(notebook_snapshot) => {
-            let (notebook_id, local_path) = match notebook_snapshot {
-                NotebookPaneSnapshot::CloudNotebook { notebook_id } => (
-                    notebook_id.map(|id| id.sqlite_uid_hash(ObjectIdType::Notebook)),
-                    None,
-                ),
-                NotebookPaneSnapshot::LocalFileNotebook { path } => {
-                    (None, path.clone().map(encode_path))
-                }
-            };
+            let NotebookPaneSnapshot::LocalFileNotebook { path } = notebook_snapshot;
+            let local_path = path.clone().map(encode_path);
 
             let notebook = model::NewNotebookPane {
                 id,
-                notebook_id,
+                notebook_id: None,
                 local_path,
             };
 
@@ -1727,22 +1719,14 @@ fn read_node(conn: &mut SqliteConnection, node: model::PaneNode) -> Result<PaneN
                         .select(model::NotebookPane::as_select())
                         .first(conn)?;
 
-                    let notebook_id = notebook_pane.notebook_id.and_then(|id| {
-                        ClientId::from_hash(&id).map(SyncId::ClientId).or_else(|| {
-                            NotebookId::from_hash(&id).map(|id| SyncId::ServerId(id.into()))
-                        })
-                    });
+                    // Rows without a local path belong to cloud notebook panes, which no longer
+                    // exist.
+                    let Some(local_path) = notebook_pane.local_path else {
+                        bail!("Cloud notebook panes are no longer supported");
+                    };
 
-                    let local_path = notebook_pane.local_path.map(decode_path);
-
-                    // In the database schema, both the `notebook_id` and `local_path` are
-                    // nullable. It's possible for either a file pane or a notebook pane to be open
-                    // to an uneditable notebook. In that case, bias towards cloud notebooks. If
-                    // both are null, it's more likely that the pane was a new, empty cloud
-                    // notebook than an unreadable local file.
-                    LeafContents::Notebook(match local_path {
-                        Some(path) => NotebookPaneSnapshot::LocalFileNotebook { path: Some(path) },
-                        None => NotebookPaneSnapshot::CloudNotebook { notebook_id },
+                    LeafContents::Notebook(NotebookPaneSnapshot::LocalFileNotebook {
+                        path: Some(decode_path(local_path)),
                     })
                 }
                 WORKFLOW_PANE_KIND => {

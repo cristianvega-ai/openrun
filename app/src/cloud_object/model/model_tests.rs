@@ -15,9 +15,8 @@ use crate::auth::user::TEST_USER_UID;
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::cloud_object::model::actions::ObjectActions;
 use crate::cloud_object::model::generic_string_model::GenericStringModel;
-use crate::cloud_object::model::view::{
-    CloudViewModel, EDITOR_TIMEOUT_DURATION_MINUTES, EditorState, UpdateTimestamp,
-};
+use crate::cloud_object::model::view::{CloudViewModel, UpdateTimestamp};
+use crate::cloud_object::notebook_model::{CloudNotebookModel, NotebookId};
 use crate::cloud_object::preference::{CloudPreference, Preference};
 use crate::cloud_object::{
     CloudObjectMetadata, CloudObjectPermissions, CloudObjectStatuses, CloudObjectSyncStatus,
@@ -25,7 +24,6 @@ use crate::cloud_object::{
 };
 use crate::drive::folders::{CloudFolderModel, FolderId};
 use crate::features::FeatureFlag;
-use crate::notebooks::{CloudNotebookModel, NotebookId};
 use crate::server::cloud_objects::listener::ObjectUpdateMessage;
 use crate::server::cloud_objects::update_manager::InitialLoadResponse;
 use crate::server::ids::{ServerId, ServerIdAndType};
@@ -972,58 +970,6 @@ fn test_force_refresh_correctly_resets_timestamp() {
             );
         });
     })
-}
-
-#[test]
-fn test_object_editor_timeout() {
-    App::test((), |mut app| async move {
-        // Setup the app and APIs
-        let cloud_object_server_api_mock = base_mock_cloud_object_server_api();
-        initialize_app(&mut app, Vec::new(), Arc::new(cloud_object_server_api_mock));
-        let notebook_id: SyncId = SyncId::ServerId(1.into());
-        let cloud_notebook = mock_cloud_notebook(notebook_id, "test1".into(), None);
-
-        CloudModel::handle(&app).update(&mut app, |model, _ctx| {
-            // Add a notebook to CloudModel
-            model.add_object(notebook_id, cloud_notebook.clone());
-
-            let notebook = model
-                .get_notebook_mut(&notebook_id)
-                .expect("notebook should exist");
-
-            // Set the editor to be somebody else.
-            notebook.metadata.current_editor_uid = Some("ian@warp.dev".to_string());
-        });
-
-        let current_editor = CloudViewModel::handle(&app).read(&app, |view_model, ctx| {
-            view_model
-                .object_current_editor(&notebook_id.uid(), ctx)
-                .expect("expect editor to be set")
-        });
-        // Assert that the current editor is an active other user
-        assert_eq!(current_editor.state, EditorState::OtherUserActive);
-
-        CloudModel::handle(&app).update(&mut app, |model, _ctx| {
-            let notebook = model
-                .get_notebook_mut(&notebook_id)
-                .expect("notebook should exist");
-
-            // Set the notebook timesteps to be more than the timeout
-            let timeout_timestamp = Utc::now()
-                - chrono::Duration::minutes(EDITOR_TIMEOUT_DURATION_MINUTES)
-                - chrono::Duration::seconds(1);
-            notebook.metadata.revision = Some(Revision::from(timeout_timestamp));
-            notebook.metadata.metadata_last_updated_ts = Some(timeout_timestamp.into());
-        });
-
-        let current_editor = CloudViewModel::handle(&app).read(&app, |view_model, ctx| {
-            view_model
-                .object_current_editor(&notebook_id.uid(), ctx)
-                .expect("expect editor to be set")
-        });
-        // Assert that the current editor is an idle other user
-        assert_eq!(current_editor.state, EditorState::OtherUserIdle);
-    });
 }
 
 #[test]

@@ -15,13 +15,13 @@ use crate::cloud_object::model::actions::{
     ObjectAction, ObjectActionHistory, ObjectActionSubtype, ObjectActionType,
 };
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
+use crate::cloud_object::notebook_model::{CloudNotebookModel, NotebookId};
 use crate::cloud_object::{
     CloudModelType, CloudObjectEventEntrypoint, CreateCloudObjectResult, CreatedCloudObject,
     GenericStringObjectFormat, JsonObjectType, ObjectIdType, ObjectType, Owner, Revision,
     RevisionAndLastEditor, ServerCreationInfo, UpdateCloudObjectResult,
 };
 use crate::drive::CloudObjectTypeAndId;
-use crate::notebooks::{CloudNotebookModel, NotebookId};
 use crate::server::cloud_objects::update_manager::InitiatedBy;
 use crate::server::ids::{ClientId, HashableId, ServerId, ServerIdAndType, SyncId};
 use crate::server::server_api::ServerApiProvider;

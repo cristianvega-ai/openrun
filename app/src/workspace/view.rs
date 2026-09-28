@@ -180,7 +180,6 @@ use crate::menu::{
 };
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::network::{NetworkStatus, NetworkStatusEvent};
-use crate::notebooks::manager::{NotebookManager, NotebookSource};
 use crate::notification::NotificationContext;
 use crate::palette::PaletteMode;
 #[cfg(feature = "local_fs")]
@@ -511,7 +510,6 @@ const KEYBINDINGS_TO_CACHE: [&str; 3] = [
 ];
 
 const WORKFLOW_SPLIT_RATIO: f32 = 0.56;
-const NOTEBOOK_SMART_SPLIT_RATIO: f32 = 0.42;
 
 #[cfg(target_family = "wasm")]
 const MOBILE_OVERLAY_PANEL_WIDTH_RATIO: f32 = 0.9;
@@ -4347,7 +4345,7 @@ impl Workspace {
     }
 
     /// Searches other windows for the given terminal view and focuses it there.
-    /// (Uses the same cross-window dispatch pattern as open_notebook/open_workflow.)
+    /// (Uses the same cross-window dispatch pattern as open_workflow.)
     fn focus_terminal_view_in_other_window(
         &self,
         terminal_view_id: EntityId,
@@ -4751,13 +4749,6 @@ impl Workspace {
                     None,
                     TerminalSessionFallbackBehavior::default(),
                     ctx,
-                );
-            }
-            AgentManagementViewEvent::OpenPlanNotebook { notebook_uid } => {
-                self.open_notebook(
-                    &NotebookSource::Existing((*notebook_uid).into()),
-                    ctx,
-                    false,
                 );
             }
         }
@@ -6370,9 +6361,6 @@ impl Workspace {
 
         let sync_id = object.sync_id();
         match object.object_type() {
-            ObjectType::Notebook => {
-                self.open_notebook(&NotebookSource::Existing(sync_id), ctx, true);
-            }
             ObjectType::Workflow => {
                 self.open_workflow_in_pane(
                     &WorkflowOpenSource::Existing(sync_id),
@@ -6381,57 +6369,6 @@ impl Workspace {
                 );
             }
             _ => {}
-        }
-    }
-
-    /// Open the notebook identified by `source`. If the notebook is already open in another pane,
-    /// that pane is focused. If the notebook is not open, the notebook will be opened in a new
-    /// pane if default_to_new_pane is true; otherwise, it'll be opened in a new tab.
-    pub fn open_notebook(
-        &mut self,
-        source: &NotebookSource,
-        ctx: &mut ViewContext<Self>,
-        default_to_new_pane: bool,
-    ) {
-        let notebook_manager = NotebookManager::handle(ctx);
-        let mut notebook_already_open = false;
-        if let Some((window_id, locator)) = notebook_manager.as_ref(ctx).find_pane(source) {
-            // If the notebook is already open in _this_ workspace, we can switch to it directly.
-            // Otherwise, dispatch an action to the appropriate window. We can't unconditionally
-            // dispatch an action, because that will cause a circular view update.
-            notebook_already_open = true;
-            if window_id == ctx.window_id() {
-                self.focus_pane(locator, ctx);
-            } else if let Some(root_view) = ctx.root_view_id(window_id) {
-                ctx.dispatch_action_for_view(
-                    window_id,
-                    root_view,
-                    "root_view:handle_pane_navigation_event",
-                    &locator,
-                );
-            }
-        } else if default_to_new_pane {
-            let window_id = ctx.window_id();
-            let pane = notebook_manager.update(ctx, |manager, ctx| {
-                manager.create_pane(source, window_id, ctx)
-            });
-            self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-                let smart_split_direction =
-                    pane_group.smart_split_direction(ctx, NOTEBOOK_SMART_SPLIT_RATIO);
-                pane_group.add_pane_with_direction(
-                    smart_split_direction,
-                    pane,
-                    true, /* focus_new_pane */
-                    ctx,
-                );
-            });
-        }
-
-        if let NotebookSource::Existing(notebook_id) = source
-            && !notebook_already_open
-            && !default_to_new_pane
-        {
-            self.add_tab_for_cloud_notebook(*notebook_id, ctx);
         }
     }
 
@@ -10189,18 +10126,6 @@ impl Workspace {
             }
             self.expand_tab_group(group_id, ctx);
         }
-    }
-
-    pub fn add_tab_for_cloud_notebook(&mut self, notebook_id: SyncId, ctx: &mut ViewContext<Self>) {
-        // TODO: We should validate that this notebook exists and fallback if it doesn't
-        let panes_layout = PanesLayout::Snapshot(Box::new(PaneNodeSnapshot::Leaf(LeafSnapshot {
-            is_focused: true,
-            custom_vertical_tabs_title: None,
-            contents: LeafContents::Notebook(NotebookPaneSnapshot::CloudNotebook {
-                notebook_id: Some(notebook_id),
-            }),
-        })));
-        self.add_tab_with_pane_layout(panes_layout, Arc::new(HashMap::new()), None, ctx);
     }
 
     /// Add a tab with a file notebook pane open.
@@ -18579,7 +18504,6 @@ impl TypedActionView for Workspace {
             NewCodeFile => {
                 self.add_tab_for_new_code_file(ctx);
             }
-            OpenNotebook { id } => self.open_notebook(&NotebookSource::Existing(*id), ctx, true),
             RunWorkflow {
                 workflow,
                 workflow_source,

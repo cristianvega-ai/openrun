@@ -27,6 +27,7 @@ use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::appearance::Appearance;
 use crate::auth::auth_state::AuthStateProvider;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
+use crate::cloud_object::notebook_model::{CloudNotebookModel, NotebookId};
 use crate::cloud_object::{CloudObject, CloudObjectEventEntrypoint, Owner};
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::CloudFolder;
@@ -36,7 +37,6 @@ use crate::notebooks::editor::model::{
 };
 use crate::notebooks::editor::rich_text_styles;
 use crate::notebooks::file::MarkdownDisplayMode;
-use crate::notebooks::{CloudNotebookModel, NotebookId};
 use crate::persistence::ModelEvent;
 use crate::server::cloud_objects::update_manager::{
     InitiatedBy, ObjectOperation, OperationSuccessType, UpdateManager, UpdateManagerEvent,
@@ -425,7 +425,6 @@ impl AIDocumentModel {
             | CloudModelEvent::ObjectPermissionsUpdated { .. }
             | CloudModelEvent::ObjectForceExpanded { .. }
             | CloudModelEvent::ObjectCreated { .. }
-            | CloudModelEvent::NotebookEditorChangedFromServer { .. }
             | CloudModelEvent::EnvironmentLastTaskRunTimestampsUpdated => {}
         }
     }

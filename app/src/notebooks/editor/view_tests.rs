@@ -24,7 +24,6 @@ use warpui::{App, Element, Entity, SingletonEntity, TypedActionView, View, ViewH
 use super::{EditorViewAction, LayoutAffectingAssetLoad, RichTextEditorConfig, RichTextEditorView};
 use crate::appearance::Appearance;
 use crate::auth::AuthStateProvider;
-use crate::cloud_object::model::persistence::CloudModel;
 use crate::editor::InteractionState;
 use crate::features::FeatureFlag;
 use crate::notebooks::editor::keys::NotebookKeybindings;
@@ -89,7 +88,6 @@ fn initialize_editor(
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(TerminalKeybindings::new);
-    app.add_singleton_model(CloudModel::mock);
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     let team_client_mock = Arc::new(MockTeamClient::new());
     let workspace_client_mock = Arc::new(MockWorkspaceClient::new());

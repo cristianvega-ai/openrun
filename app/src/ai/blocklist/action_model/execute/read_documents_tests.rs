@@ -11,10 +11,10 @@ use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentModel};
 use crate::appearance::Appearance;
 use crate::cloud_object::model::persistence::CloudModel;
+use crate::cloud_object::notebook_model::{CloudNotebook, CloudNotebookModel};
 use crate::cloud_object::{
     CloudObjectMetadata, CloudObjectPermissions, CloudObjectStatuses, CloudObjectSyncStatus, Owner,
 };
-use crate::notebooks::{CloudNotebook, CloudNotebookModel};
 use crate::server::ids::SyncId;
 use crate::test_util::settings::initialize_settings_for_tests;
 

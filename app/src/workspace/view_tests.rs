@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use pane_group::{NotebookPane, PaneState, SplitPaneState, TerminalPaneId};
+use pane_group::{FilePane, PaneState, SettingsPane, SplitPaneState, TerminalPaneId};
 #[cfg(feature = "local_fs")]
 use repo_metadata::CanonicalizedPath;
 #[cfg(feature = "local_fs")]
@@ -39,7 +39,6 @@ use crate::editor::Event;
 use crate::gpu_state::GPUState;
 use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
-use crate::notebooks::notebook::NotebookView;
 use crate::pane_group::{Direction, PaneGroupAction, PaneId};
 use crate::pricing::PricingInfoModel;
 use crate::server::cloud_objects::listener::Listener;
@@ -49,8 +48,8 @@ use crate::server::server_api::team::{MockTeamClient, TeamClient};
 use crate::server::server_api::workspace::MockWorkspaceClient;
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::PrivacySettings;
-use crate::settings_view::DisplayCount;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
+use crate::settings_view::{DisplayCount, SettingsSection};
 use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
 use crate::system::SystemStats;
 use crate::tab_configs::tab_config::{TabConfigPaneNode, TabConfigPaneType};
@@ -120,7 +119,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     app.add_singleton_model(|_| ObjectActions::new(Vec::new()));
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(TerminalKeybindings::new);
-    app.add_singleton_model(NotebookManager::mock);
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     // QueuedQueryModel subscribes to history events; register after the
     // history model is in place.
@@ -1927,78 +1925,6 @@ fn test_closing_tab_context_menu_restores_active_tab_focus() {
 }
 
 #[test]
-fn test_notebook_pane_tracking() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let workspace = mock_workspace(&mut app);
-
-        workspace.update(&mut app, |workspace, ctx| {
-            // Add a new notebook pane.
-            workspace.open_notebook(
-                &NotebookSource::New {
-                    title: None,
-                    owner: Owner::mock_current_user(),
-                    initial_folder_id: None,
-                },
-                ctx,
-                true,
-            );
-
-            // Get the ID of the new notebook.
-            let pane_group = workspace
-                .get_pane_group_view(0)
-                .expect("Pane group does not exist")
-                .clone();
-            let notebook_view = pane_group
-                .as_ref(ctx)
-                .notebook_view_at_pane_index(0, ctx)
-                .expect("Notebook view was not created")
-                .clone();
-            let notebook_pane_id = pane_group
-                .as_ref(ctx)
-                .pane_id_from_index(0)
-                .expect("Notebook view should have been created");
-            let notebook_id = notebook_view
-                .as_ref(ctx)
-                .notebook_id(ctx)
-                .expect("Notebook should have an ID");
-
-            // The notebook should be registered with the NotebookManager.
-            let (window, locator) = NotebookManager::as_ref(ctx)
-                .find_pane(&NotebookSource::Existing(notebook_id))
-                .expect("Notebook pane should be registered");
-            assert_eq!(window, ctx.window_id());
-            assert_eq!(
-                locator,
-                PaneViewLocator {
-                    pane_group_id: pane_group.id(),
-                    pane_id: notebook_pane_id,
-                }
-            );
-
-            // Re-opening the notebook should not create a new view.
-            workspace.open_notebook(&NotebookSource::Existing(notebook_id), ctx, true);
-            assert_eq!(
-                ctx.views_of_type::<NotebookView>(ctx.window_id()),
-                Some(vec![notebook_view])
-            );
-
-            // Finally, closing the notebook pane should de-register it.
-            pane_group.update(ctx, |pane_group, ctx| {
-                pane_group.handle_action(&PaneGroupAction::RemoveActive, ctx)
-            });
-            assert_eq!(
-                NotebookManager::handle(ctx)
-                    .as_ref(ctx)
-                    .find_pane(&NotebookSource::Existing(notebook_id)),
-                None
-            );
-        });
-    });
-}
-
-#[test]
 fn test_set_active_terminal_input_contents_and_focus_app() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
@@ -2186,10 +2112,9 @@ fn test_focus_notebook() {
 
         let notebook_id = pane_group.update(&mut app, |panes, ctx| {
             // Add a notebook to the left.
-            let notebook_view = ctx.add_typed_action_view(NotebookView::new);
             panes.add_pane_with_direction(
                 Direction::Left,
-                NotebookPane::new(notebook_view, ctx),
+                new_file_pane(ctx),
                 true, /* focus_new_pane */
                 ctx,
             );
@@ -2303,10 +2228,9 @@ fn test_close_active_session() {
 
         let notebook_id = pane_group.update(&mut app, |panes, ctx| {
             // Add a notebook to the left.
-            let notebook_view = ctx.add_typed_action_view(NotebookView::new);
             panes.add_pane_with_direction(
                 Direction::Left,
-                NotebookPane::new(notebook_view, ctx),
+                new_file_pane(ctx),
                 true, /* focus_new_pane */
                 ctx,
             );
@@ -2373,9 +2297,18 @@ fn set_left_panel_visibility_across_tabs(is_enabled: bool, ctx: &mut ViewContext
     });
 }
 
-fn add_notebook_tab(workspace: &mut Workspace, ctx: &mut ViewContext<Workspace>) {
-    let notebook_view = ctx.add_typed_action_view(NotebookView::new);
-    let pane = NotebookPane::new(notebook_view, ctx);
+fn new_file_pane<V: View>(ctx: &mut ViewContext<V>) -> FilePane {
+    FilePane::new(
+        None,
+        None,
+        #[cfg(feature = "local_fs")]
+        None,
+        ctx,
+    )
+}
+
+fn add_settings_tab(workspace: &mut Workspace, ctx: &mut ViewContext<Workspace>) {
+    let pane = SettingsPane::new(SettingsSection::Appearance, None, ctx.window_id(), ctx);
     workspace.add_tab_from_existing_pane(Box::new(pane), workspace.tabs.len(), None, ctx);
 }
 
@@ -2477,9 +2410,9 @@ fn test_left_panel_window_scoped_non_following_tab_does_not_reconcile_but_update
             workspace.open_left_panel(ctx);
             assert!(workspace.left_panel_open);
 
-            // Create a non-following tab (e.g. a notebook), which should not auto-open even though
+            // Create a non-following tab (e.g. settings), which should not auto-open even though
             // the window state is open.
-            add_notebook_tab(workspace, ctx);
+            add_settings_tab(workspace, ctx);
             let non_following_tab_index = find_non_following_tab_index(workspace, ctx);
             workspace.activate_tab(non_following_tab_index, ctx);
 

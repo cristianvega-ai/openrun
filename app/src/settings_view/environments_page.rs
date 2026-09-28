@@ -358,8 +358,7 @@ impl EnvironmentsPageView {
                 | CloudModelEvent::ObjectSynced { .. }
                 | CloudModelEvent::EnvironmentLastTaskRunTimestampsUpdated => {}
                 // Events that never affect environments — skip entirely.
-                CloudModelEvent::NotebookEditorChangedFromServer { .. }
-                | CloudModelEvent::ObjectForceExpanded { .. } => return,
+                CloudModelEvent::ObjectForceExpanded { .. } => return,
             }
             ctx.notify();
         });

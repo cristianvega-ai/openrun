@@ -25,7 +25,7 @@ use crate::ai::blocklist::PendingAttachment;
 use crate::palette::PaletteMode;
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::search;
-use crate::server::ids::{ServerId, SyncId};
+use crate::server::ids::ServerId;
 use crate::server::telemetry::{AddTabWithShellSource, AgentModeEntrypoint, PaletteSource};
 use crate::settings_view::{SettingsAction as SettingsTabAction, SettingsSection};
 use crate::tab::{NewSessionMenuItem, SelectedTabColor};
@@ -453,9 +453,6 @@ pub enum WorkspaceAction {
         full_path: PathBuf,
         line_and_column: Option<LineAndColumnArg>,
     },
-    OpenNotebook {
-        id: SyncId,
-    },
     RunWorkflow {
         workflow: Arc<WorkflowType>,
         workflow_source: WorkflowSource,
@@ -727,7 +724,6 @@ impl WorkspaceAction {
             | NewTabInAgentMode { .. }
             | NewPaneInAgentMode { .. }
             | FixInAgentMode { .. }
-            | OpenNotebook { .. }
             | RunWorkflow { .. }
             | OpenFileInNewTab { .. }
             | RestoreOrNavigateToConversation { .. }

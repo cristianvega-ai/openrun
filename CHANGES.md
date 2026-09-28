@@ -72,6 +72,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Tolerant stored inline-menu heights](#tolerant-stored-inline-menu-heights) — stored per-menu heights ignore keys of removed menus (`skill_menu`, `prompts_menu`, `plan_menu`) instead of failing to parse and discarding all heights
 - [Repository metadata: standing queries and force-included paths](#repository-metadata-standing-queries-and-force-included-paths) — removed the skill-only standing-query results, force-included path list and `StandingQueryResultsUpdated` events from `repo_metadata`
 - [AI credits, usage, billing and promotions UI](#ai-credits-usage-billing-and-promotions-ui) — removed the AI request-usage and credit-availability models, the buy-credits banner and auto-reload modal, the usage popover, Turn panel and usage footer, the Billing and usage settings page, and the pricing-promotion, free-AI-removal, build-plan-migration and Codex modals
+- [Cloud notebooks](#cloud-notebooks) — removed Warp Drive notebooks: the notebook pane and view, the notebook manager, edit-access batons, embedded Drive workflows in the markdown editor, notebook search (`notebooks:` filter, `@` menu category, embed picker) and the plan-notebook buttons; the local markdown file viewer stays
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1626,7 +1627,6 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for DRV-3: `notebook.ai_document_id`, `AIDocumentId` in the notebook cloud model and GraphQL types, `DriveObjectType::Notebook { is_ai_document }`, `Notebook { is_plan }` in vertical tabs and the `is_plan` accessors in `notebooks/`.
 - Left for AI-19: `OrchestrationConfigState::to_orchestration_config` is now only used by its tests. Left for DB-1: the `ai_document_panes` table.
 
-
 ## Warp Drive: environment-variable collections
 **Why:** An environment-variable collection is a Warp Drive object that syncs through Warp's servers, and Drive is removed (user decision 1). Its entry points (the Drive index, the command palette and workflow parameterization) were already gone or depended on cloud objects.
 
@@ -1882,3 +1882,36 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for AI-22 and AI-29: `AISettings::can_use_warp_credits_for_fallback` (the "Warp credits as BYOK fallback" switch on the Warp Agent page and the `allow_use_of_warp_credits` request field).
 - Left for TEL-4: telemetry variants whose callers are gone (`AutoReloadModalClosed`/`AutoReloadModalAction`, `OutOfCreditsBannerClosed`/`OutOfCreditsBannerAction`, `CodexModalOpened`, `CodexModalUseCodexClicked` and the buy-credits, usage-popover and free-AI-removal events).
 - The old free-AI-removal telemetry and the `FreeAiRemovalModalVariant` enum are deleted with the modal.
+
+## Cloud notebooks
+**Why:** Cloud notebooks are Warp Drive objects: they are stored, synced and shared through Warp's servers, and the offline build removes Drive entirely (user decision 1). Local markdown files opened in the rendered viewer (`notebooks/file`, which uses `notebooks/editor`) are not Drive objects and stay.
+
+**Removed:**
+- `notebooks/{notebook.rs, notebook/details_bar.rs, manager.rs, active_notebook_data.rs}` with their tests — `NotebookView` (the editable cloud notebook with title editor, details bar and edit-access banner), the `NotebookManager` singleton (which loaded cloud notebooks at startup, tracked open panes and saved on quit) and `ActiveNotebookData`.
+- `pane_group/pane/notebook_pane.rs`, `IPaneType::Notebook`, `NotebookPaneSnapshot::CloudNotebook`, `Workspace::{open_notebook, add_tab_for_cloud_notebook}`, `WorkspaceAction::OpenNotebook` and the notebook pane kind in vertical tabs (`TypedPane::Notebook`, `SummaryPaneKind::Notebook`, the `is_plan` icon).
+- `search/notebooks/` (fuzzy matcher and data source), `search/notebook_embedding/` (the "Embed" picker) and `search/ai_context_menu/notebooks/`, with `QueryFilter::Notebooks` (`notebooks:` / `n:`), `AIContextMenuCategory::Notebooks` and `BindingGroup::Notebooks`.
+- Embedded Drive workflows in the markdown editor: `notebooks/editor/{embedded_item.rs, embedding_model.rs}`, the "Embed" item in the block insertion menu, `EditorViewAction::{OpenEmbeddedObjectSearch, RemoveEmbeddingAt, EditWorkflow}`, the matching events, `RichTextEditorConfig::embedded_objects_enabled`, the editor model's `CloudModel` subscription and `Icon::EmbedBlock` with `block-embed.svg`.
+- `WorkflowType::Notebook` and `WorkflowSource::Notebook`.
+- `DriveObjectType::Notebook { is_ai_document }` and its colour.
+- Edit access ("baton") for notebooks: `UpdateManager::{grab_notebook_edit_access, give_up_notebook_edit_access, update_notebook_title}`, `ObjectOperation::TakeEditAccess`, `ObjectClient::{grab,give_up}_notebook_edit_access` with their GraphQL mutations, `CloudViewModel::object_current_editor` (`Editor`, `EditorState`), and `CloudModelEvent::NotebookEditorChangedFromServer`.
+- The plan "Open plan" artifact button and its `OpenPlan` / `OpenPlanNotebook` events, `ArtifactType::Plan`, and `MenuSource::TextEditor` in the notebook context menu (only the notebook title used it).
+- Integration tests `test_notebook_pane_tracking`, `test_close_notebook_tab`, `test_close_notebook_window`, `test_restore_snapshot_with_notebooks` (with `restored_notebooks.sqlite`) and the editable-Mermaid notebook test; `integration_testing/notebook/` and `view_getters::notebook_view`.
+
+**Modified:**
+- `cloud_object/notebook_model.rs` — the `CloudModelType` impl for `CloudNotebookModel` moved here from `notebooks/mod.rs`, next to the rest of the cloud-object code that DRV-5 deletes.
+- Notebook command blocks now run as `WorkflowType::Local` with `WorkflowSource::Local`.
+- `notebooks/telemetry.rs`, `NotebookLocation` — cut down to what the file viewer sends (`NotebookLocation` is `LocalFile` only).
+- `persistence/sqlite.rs` — a `notebook_panes` row without a local path (a cloud notebook pane) fails to restore, like the removed AI document pane; its leaf is dropped.
+- Context-menu tests moved from `notebooks/context_menu_tests.rs` to the file viewer (`notebooks/file/mod_tests.rs`), and pane-group and workspace tests that used a notebook pane as a generic pane use a file pane.
+- `test_interleaving_command_and_embedding` became `test_interleaving_command_and_code_blocks`.
+- `assert_cloud_preference_exists` moved to `integration_testing/cloud_object`, `assert_open_in_warp_banner_open` to `integration_testing/terminal`.
+
+**User-visible impact:** Cloud notebooks in the local database can no longer be opened, and a saved window with a cloud notebook pane restores without it. The rendered markdown viewer, its context menu, find bar and runnable command blocks are unchanged, except that a `warp-embedded-object` block in a markdown file is no longer rendered. The `@` menu has no Notebooks category and command search has no `notebooks:` filter. "Open plan" buttons no longer appear on plan artifacts.
+
+**Notes:**
+- Left for DRV-5: the cloud-object side of notebooks (`CloudNotebook` / `CloudNotebookModel`, `ObjectType::Notebook`, `ModelEvent::Upsert{Notebook,Notebooks}`, the SQLite notebook reads and writes, `QueueItem::UpdateNotebook`, the notebook create, update and owner-transfer requests, `CloudModel::get_notebook*`). Generic tests in `update_manager_tests`, `sync_queue_tests` and `model_tests` still use notebooks as sample objects. GraphQL notebook types go with `crates/graphql` (SRV-1).
+- Left for AI-28/AI-29: `CloudNotebookModel::ai_document_id` and `conversation_id` (and `AIDocumentId` in the notebook cloud model and GraphQL types). `AIDocumentModel` still creates and reconciles plan notebooks through them, and `<plan:...>` attachments and plan-restore in the blocklist controller read them. They can go once that model does. `Artifact::Plan.notebook_uid` stays for the same reason.
+- `ContentEditability::RequiresLogin` ("Sign in to edit") stays for the workflow view (DRV-4) and `CloudViewModel`; its notebook tooltip went with `NotebookView`. The anonymous-user object-limit prompts were removed with Drive (DRV-1); `TelemetryEvent::AnonymousUserHitCloudObjectLimit` is left for TEL-4, and the shared-notebook tier limits (`UserWorkspaces::has_capacity_for_shared_notebooks`, `SharedNotebooksPolicy`) for TEAM-1/BILL-1.
+- `uri::parse_url_paths` was already deleted with the Drive deep links (DRV-1), so nothing was left to remove.
+- Left for TEL-3/TEL-4: `NotebookTelemetryAction`, `NotebookActionEvent`, `NotebookTelemetryMetadata` and the telemetry calls in the file viewer; `WorkflowSelectionSource::Notebook`.
+- The editor crates still parse `warp-embedded-object` fenced blocks (`crates/editor`, `crates/markdown_parser`); with no conversion registered the buffer skips them, so a markdown file containing one renders without that block. Removing the parser support is left for the sweep.

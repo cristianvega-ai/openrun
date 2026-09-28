@@ -45,11 +45,11 @@ use crate::ai::blocklist::PersistedAIInput;
 use crate::app_state::AppState;
 use crate::cloud_object::model::actions::ObjectAction;
 use crate::cloud_object::model::generic_string_model::CloudStringObject;
+use crate::cloud_object::notebook_model::CloudNotebook;
 use crate::cloud_object::{
     CloudObject, CloudObjectMetadata, ObjectIdType, RevisionAndLastEditor, ServerCreationInfo,
 };
 use crate::drive::folders::CloudFolder;
-use crate::notebooks::CloudNotebook;
 use crate::server::ids::SyncId;
 use crate::suggestions::ignored_suggestions_model::SuggestionType;
 use crate::terminal::history::PersistedCommand;

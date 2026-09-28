@@ -43,7 +43,6 @@ impl CloudEnvironmentCatalog {
                 | CloudModelEvent::ObjectUpdated { .. }
                 | CloudModelEvent::ObjectTrashed { .. }
                 | CloudModelEvent::ObjectUntrashed { .. }
-                | CloudModelEvent::NotebookEditorChangedFromServer { .. }
                 | CloudModelEvent::ObjectDeleted { .. }
                 | CloudModelEvent::ObjectPermissionsUpdated { .. }
                 | CloudModelEvent::ObjectForceExpanded { .. }

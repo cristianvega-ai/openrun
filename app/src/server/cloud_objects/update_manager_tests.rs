@@ -24,6 +24,7 @@ use crate::cloud_object::model::actions::{
 };
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent, UpdateSource};
+use crate::cloud_object::notebook_model::{CloudNotebook, CloudNotebookModel, NotebookId};
 use crate::cloud_object::preference::{CloudPreferenceModel, Preference};
 use crate::cloud_object::{
     BulkCreateCloudObjectResult, CloudModelType, CloudObjectEventEntrypoint, CloudObjectGuest,
@@ -37,7 +38,6 @@ use crate::cloud_object::{
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::{CloudFolder, CloudFolderModel, FolderId};
 use crate::drive::sharing::SharingAccessLevel;
-use crate::notebooks::{CloudNotebook, CloudNotebookModel, NotebookId};
 use crate::persistence::ModelEvent;
 use crate::server::cloud_objects::listener::ObjectUpdateMessage;
 use crate::server::cloud_objects::test_utils::{
@@ -330,10 +330,10 @@ fn update_notebook(
     app: &mut App,
     update_manager: &ModelHandle<UpdateManager>,
     client_id: ClientId,
-    title: String,
+    data: String,
 ) {
     update_manager.update(app, |update_manager, ctx| {
-        update_manager.update_notebook_title(Arc::new(title), SyncId::ClientId(client_id), ctx);
+        update_manager.update_notebook_data(Arc::new(data), SyncId::ClientId(client_id), ctx);
     });
 }
 
@@ -3061,267 +3061,6 @@ fn test_metadata_after_untrash_item_failure() {
         // We do not optimistically update trashed_ts when untrashing, so there should be no event.
         assert!(cloud_events(&update_manager_struct).is_empty());
     })
-}
-
-#[test]
-fn test_metadata_after_optimistic_grab_baton_success() {
-    App::test(ASSETS, |mut app| async move {
-        initialize_app(&mut app);
-        let mut server_api = mock_server_api();
-        let server_id: ServerId = 123.into();
-        let notebook_id: NotebookId = server_id.into();
-        let sync_id = SyncId::ServerId(notebook_id.into());
-
-        let initial_ts = Utc::now();
-
-        let notebook_metadata = ServerMetadata {
-            uid: ServerId::default(),
-            revision: Revision::now(),
-            metadata_last_updated_ts: initial_ts.into(),
-            trashed_ts: None,
-            folder_id: None,
-            is_welcome_object: false,
-            creator_uid: None,
-            last_editor_uid: None,
-            current_editor_uid: None,
-        };
-
-        let notebook = mock_server_notebook(
-            notebook_id,
-            Owner::mock_current_user(),
-            notebook_metadata.clone(),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(sync_id, CloudNotebook::new_from_server(notebook));
-        });
-
-        // Mock a successful baton grab.
-        let mut grab_metadata = notebook_metadata.clone();
-        grab_metadata.current_editor_uid = Some(TEST_USER_UID.to_string());
-        grab_metadata.metadata_last_updated_ts = (initial_ts + chrono::Duration::seconds(1)).into();
-        server_api
-            .expect_grab_notebook_edit_access()
-            .times(1)
-            .return_once(move |_| Ok(grab_metadata));
-
-        let update_manager_struct = create_update_manager_struct(&mut app, Arc::new(server_api));
-
-        // Grab the baton optimistically.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                update_manager.grab_notebook_edit_access(sync_id, true, ctx);
-                ctx.await_spawned_future(update_manager.spawned_futures[0])
-            })
-            .await;
-
-        assert_current_editor_for_object(&mut app, &sync_id.uid(), Some(TEST_USER_UID));
-        // Ensure that the metadata timestamp from the server response is used.
-        assert_metadata_ts_for_object(
-            &mut app,
-            &sync_id.uid(),
-            (initial_ts + chrono::Duration::seconds(1)).into(),
-        );
-
-        let events = db_events(&update_manager_struct);
-        assert_eq!(events.len(), 1);
-        match &events[0] {
-            ModelEvent::UpdateObjectMetadata { id, metadata } => {
-                assert_eq!(id, &sync_id.sqlite_uid_hash(ObjectIdType::Notebook));
-                assert_eq!(metadata.current_editor_uid.as_deref(), Some(TEST_USER_UID));
-            }
-            _ => panic!("Expected an UpdateObjectMetadata event"),
-        }
-    });
-}
-
-#[test]
-fn test_metadata_after_optimistic_grab_baton_failure() {
-    App::test(ASSETS, |mut app| async move {
-        initialize_app(&mut app);
-        let mut server_api = mock_server_api();
-        let server_id: ServerId = 123.into();
-        let notebook_id: NotebookId = server_id.into();
-        let sync_id = SyncId::ServerId(notebook_id.into());
-
-        let initial_ts = Utc::now();
-
-        let notebook_metadata = ServerMetadata {
-            uid: ServerId::default(),
-            revision: Revision::now(),
-            metadata_last_updated_ts: initial_ts.into(),
-            trashed_ts: None,
-            folder_id: None,
-            is_welcome_object: false,
-            creator_uid: None,
-            last_editor_uid: None,
-            current_editor_uid: None,
-        };
-
-        let notebook = mock_server_notebook(
-            notebook_id,
-            Owner::mock_current_user(),
-            notebook_metadata.clone(),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(sync_id, CloudNotebook::new_from_server(notebook));
-        });
-
-        // Mock a failed baton grab.
-        server_api
-            .expect_grab_notebook_edit_access()
-            .times(1)
-            .return_once(move |_| Err(anyhow::anyhow!("Baton grab failed")));
-
-        let update_manager_struct = create_update_manager_struct(&mut app, Arc::new(server_api));
-
-        // Grab the baton optimistically.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                update_manager.grab_notebook_edit_access(sync_id, true, ctx);
-                ctx.await_spawned_future(update_manager.spawned_futures[0])
-            })
-            .await;
-
-        // On failure, the editor is still updated, but the metadata timestamp is not - future
-        // metadata updates would override it.
-        assert_current_editor_for_object(&mut app, &sync_id.uid(), Some(TEST_USER_UID));
-        assert_metadata_ts_for_object(&mut app, &sync_id.uid(), initial_ts.into());
-
-        let events = db_events(&update_manager_struct);
-        assert!(events.is_empty());
-    });
-}
-
-#[test]
-fn test_metadata_after_non_optimistic_grab_baton_success() {
-    App::test(ASSETS, |mut app| async move {
-        initialize_app(&mut app);
-        let mut server_api = mock_server_api();
-        let server_id: ServerId = 123.into();
-        let notebook_id: NotebookId = server_id.into();
-        let sync_id = SyncId::ServerId(notebook_id.into());
-
-        let initial_ts = Utc::now();
-
-        let notebook_metadata = ServerMetadata {
-            uid: ServerId::default(),
-            revision: Revision::now(),
-            metadata_last_updated_ts: initial_ts.into(),
-            trashed_ts: None,
-            folder_id: None,
-            is_welcome_object: false,
-            creator_uid: None,
-            last_editor_uid: None,
-            current_editor_uid: None,
-        };
-
-        let notebook = mock_server_notebook(
-            notebook_id,
-            Owner::mock_current_user(),
-            notebook_metadata.clone(),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(sync_id, CloudNotebook::new_from_server(notebook));
-        });
-
-        // Mock a successful baton grab.
-        let mut grab_metadata = notebook_metadata.clone();
-        grab_metadata.current_editor_uid = Some(TEST_USER_UID.to_string());
-        grab_metadata.metadata_last_updated_ts = (initial_ts + chrono::Duration::seconds(1)).into();
-        server_api
-            .expect_grab_notebook_edit_access()
-            .times(1)
-            .return_once(move |_| Ok(grab_metadata));
-
-        let update_manager_struct = create_update_manager_struct(&mut app, Arc::new(server_api));
-
-        // Grab the baton optimistically.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                update_manager.grab_notebook_edit_access(sync_id, false, ctx);
-                ctx.await_spawned_future(update_manager.spawned_futures[0])
-            })
-            .await;
-
-        assert_current_editor_for_object(&mut app, &sync_id.uid(), Some(TEST_USER_UID));
-        // Ensure that the metadata timestamp from the server response is used.
-        assert_metadata_ts_for_object(
-            &mut app,
-            &sync_id.uid(),
-            (initial_ts + chrono::Duration::seconds(1)).into(),
-        );
-
-        let events = db_events(&update_manager_struct);
-        assert_eq!(events.len(), 1);
-        match &events[0] {
-            ModelEvent::UpdateObjectMetadata { id, metadata } => {
-                assert_eq!(id, &sync_id.sqlite_uid_hash(ObjectIdType::Notebook));
-                assert_eq!(metadata.current_editor_uid.as_deref(), Some(TEST_USER_UID));
-            }
-            _ => panic!("Expected an UpdateObjectMetadata event"),
-        }
-    });
-}
-
-#[test]
-fn test_metadata_after_non_optimistic_grab_baton_failure() {
-    App::test(ASSETS, |mut app| async move {
-        initialize_app(&mut app);
-        let mut server_api = mock_server_api();
-        let server_id: ServerId = 123.into();
-        let notebook_id: NotebookId = server_id.into();
-        let sync_id = SyncId::ServerId(notebook_id.into());
-
-        let initial_ts = Utc::now();
-
-        let notebook_metadata = ServerMetadata {
-            uid: ServerId::default(),
-            revision: Revision::now(),
-            metadata_last_updated_ts: initial_ts.into(),
-            trashed_ts: None,
-            folder_id: None,
-            is_welcome_object: false,
-            creator_uid: None,
-            last_editor_uid: None,
-            current_editor_uid: None,
-        };
-
-        let notebook = mock_server_notebook(
-            notebook_id,
-            Owner::mock_current_user(),
-            notebook_metadata.clone(),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(sync_id, CloudNotebook::new_from_server(notebook));
-        });
-
-        // Mock a failed baton grab.
-        server_api
-            .expect_grab_notebook_edit_access()
-            .times(1)
-            .return_once(move |_| Err(anyhow::anyhow!("Baton grab failed")));
-
-        let update_manager_struct = create_update_manager_struct(&mut app, Arc::new(server_api));
-
-        // Grab the baton non-optimistically.
-        update_manager_struct
-            .update_manager
-            .update(&mut app, |update_manager, ctx| {
-                update_manager.grab_notebook_edit_access(sync_id, false, ctx);
-                ctx.await_spawned_future(update_manager.spawned_futures[0])
-            })
-            .await;
-
-        // On failure, neither the editor nor the metadata timestamp are updated.
-        assert_current_editor_for_object(&mut app, &sync_id.uid(), None);
-        assert_metadata_ts_for_object(&mut app, &sync_id.uid(), initial_ts.into());
-
-        let events = db_events(&update_manager_struct);
-        assert!(events.is_empty());
-    });
 }
 
 #[test]

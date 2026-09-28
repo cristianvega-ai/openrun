@@ -11,10 +11,6 @@ use crate::ui_components::icons::Icon;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DriveObjectType {
     Workflow,
-    Notebook {
-        /// Whether the notebook was created as an AI Document (plan)
-        is_ai_document: bool,
-    },
     Folder,
 }
 
@@ -22,13 +18,6 @@ impl From<DriveObjectType> for Icon {
     fn from(cloud_object_type: DriveObjectType) -> Icon {
         match cloud_object_type {
             DriveObjectType::Workflow => Icon::Workflow,
-            DriveObjectType::Notebook { is_ai_document } => {
-                if is_ai_document {
-                    Icon::Compass
-                } else {
-                    Icon::Notebook
-                }
-            }
             DriveObjectType::Folder => Icon::Folder,
         }
     }

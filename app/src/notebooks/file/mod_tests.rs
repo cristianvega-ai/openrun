@@ -9,6 +9,7 @@ use repo_metadata::watcher::DirectoryWatcher;
 use string_offset::CharOffset;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::Appearance;
+use warp_editor::model::CoreEditorModel;
 use warp_editor::render::model::BlockItem;
 #[cfg(feature = "local_fs")]
 use warp_files::FileModel;
@@ -18,10 +19,11 @@ use warpui::{App, SingletonEntity, View};
 use super::{FileNotebookAction, FileNotebookView, FileState, MarkdownDisplayMode, SourceFile};
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_manager::AuthManager;
-use crate::cloud_object::model::persistence::CloudModel;
 use crate::notebooks::context_menu::MenuSource;
 use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::notebooks::file::is_markdown_file;
+use crate::pane_group::focus_state::{PaneFocusHandle, PaneGroupFocusState};
+use crate::pane_group::{BackingView as _, PaneId};
 use crate::search::files::model::FileSearchModel;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::team::MockTeamClient;
@@ -50,7 +52,6 @@ fn init_app(app: &mut App) {
     app.add_singleton_model(FileModel::new);
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(TerminalKeybindings::new);
-    app.add_singleton_model(CloudModel::mock);
     app.add_singleton_model(|_| ServerApiProvider::new_for_test());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     app.add_singleton_model(AuthManager::new_for_test);
@@ -469,6 +470,134 @@ fn test_file_notebook_mermaid_context_menu_does_not_show_copy_image() {
 
             let item_names = file_notebook.context_menu.item_names(ctx);
             assert!(!item_names.contains(&"Copy image"));
+        });
+    });
+}
+
+const SPLIT_PANE_ITEMS: [&str; 4] = [
+    "Split pane right",
+    "Split pane left",
+    "Split pane down",
+    "Split pane up",
+];
+
+fn file_notebook_menu_items(
+    file_notebook: &FileNotebookView,
+    ctx: &warpui::ViewContext<FileNotebookView>,
+) -> Vec<String> {
+    file_notebook
+        .context_menu
+        .item_names(ctx)
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn test_file_notebook_context_menu_text_actions() {
+    App::test((), |mut app| async move {
+        init_app(&mut app);
+        let (_, handle) = app.add_window(WindowStyle::NotStealFocus, FileNotebookView::new);
+
+        handle.update(&mut app, |file_notebook, ctx| {
+            file_notebook.open_static("Test Title", "Hello, World!", ctx);
+
+            let source = MenuSource::RichTextEditor {
+                parent_offset: vec2f(0., 0.),
+                editor: file_notebook.editor.clone(),
+            };
+            file_notebook
+                .context_menu
+                .show_context_menu(source.clone(), ctx);
+            assert_eq!(
+                file_notebook_menu_items(file_notebook, ctx),
+                SPLIT_PANE_ITEMS
+            );
+
+            file_notebook.editor.update(ctx, |editor, ctx| {
+                editor
+                    .model()
+                    .update(ctx, |model, ctx| model.select_all(ctx));
+            });
+            file_notebook.context_menu.show_context_menu(source, ctx);
+            let mut expected = vec!["Copy", "----"];
+            expected.extend(SPLIT_PANE_ITEMS);
+            assert_eq!(file_notebook_menu_items(file_notebook, ctx), expected);
+        });
+    });
+}
+
+#[test]
+fn test_file_notebook_context_menu_split_pane_actions() {
+    App::test((), |mut app| async move {
+        init_app(&mut app);
+        let (_, handle) = app.add_window(WindowStyle::NotStealFocus, FileNotebookView::new);
+
+        let pane_id = PaneId::dummy_pane_id();
+        let focus_state = app.add_model(|_| PaneGroupFocusState::new(pane_id, None, true));
+        let focus_handle = PaneFocusHandle::new(pane_id, focus_state.clone());
+
+        handle.update(&mut app, |file_notebook, ctx| {
+            file_notebook.open_static("Test Title", "Hello, World!", ctx);
+            file_notebook.set_focus_handle(focus_handle, ctx);
+
+            let source = MenuSource::RichTextEditor {
+                parent_offset: vec2f(0., 0.),
+                editor: file_notebook.editor.clone(),
+            };
+            file_notebook.context_menu.show_context_menu(source, ctx);
+            let mut expected = Vec::from(SPLIT_PANE_ITEMS);
+            expected.extend(["Maximize pane", "Close pane"]);
+            assert_eq!(file_notebook_menu_items(file_notebook, ctx), expected);
+        });
+
+        focus_state.update(&mut app, |state, ctx| {
+            state.set_in_split_pane_for_test(false, ctx);
+        });
+
+        handle.update(&mut app, |file_notebook, ctx| {
+            let source = MenuSource::RichTextEditor {
+                parent_offset: vec2f(0., 0.),
+                editor: file_notebook.editor.clone(),
+            };
+            file_notebook.context_menu.show_context_menu(source, ctx);
+            assert_eq!(
+                file_notebook_menu_items(file_notebook, ctx),
+                SPLIT_PANE_ITEMS
+            );
+        });
+    });
+}
+
+#[test]
+fn test_file_notebook_context_menu_copy_file_path() {
+    App::test((), |mut app| async move {
+        init_app(&mut app);
+        let (_, handle) = app.add_window(WindowStyle::NotStealFocus, FileNotebookView::new);
+
+        handle.update(&mut app, |file_notebook, ctx| {
+            file_notebook.open_static("Test Title", "Hello, World!", ctx);
+            file_notebook
+                .context_menu
+                .set_copy_file_path(Some("/tmp/notes.md".to_string()));
+
+            let source = MenuSource::RichTextEditor {
+                parent_offset: vec2f(0., 0.),
+                editor: file_notebook.editor.clone(),
+            };
+            file_notebook
+                .context_menu
+                .show_context_menu(source.clone(), ctx);
+            let mut expected = vec!["Copy file path", "----"];
+            expected.extend(SPLIT_PANE_ITEMS);
+            assert_eq!(file_notebook_menu_items(file_notebook, ctx), expected);
+
+            file_notebook.context_menu.set_copy_file_path(None);
+            file_notebook.context_menu.show_context_menu(source, ctx);
+            assert_eq!(
+                file_notebook_menu_items(file_notebook, ctx),
+                SPLIT_PANE_ITEMS
+            );
         });
     });
 }

@@ -17,7 +17,7 @@ use super::{
     agent_task_status_message_input, build_fork_conversation_url, build_list_agent_runs_url,
     build_run_followup_url,
 };
-use crate::notebooks::NotebookId;
+use crate::cloud_object::notebook_model::NotebookId;
 use crate::server::ids::ServerId;
 use crate::server::server_api::presigned_upload::upload_to_target;
 use crate::server::team_scope::RequestTeamScope;

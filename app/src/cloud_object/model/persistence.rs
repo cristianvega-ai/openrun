@@ -12,6 +12,7 @@ use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 use super::generic_string_model::GenericStringObjectId;
 use crate::ai::execution_profiles::CloudAIExecutionProfile;
 use crate::auth::AuthStateProvider;
+use crate::cloud_object::notebook_model::CloudNotebook;
 use crate::cloud_object::{
     CloudModelType, CloudObject, CloudObjectLocation, CloudObjectPermissions, GenericCloudObject,
     GenericServerObject, ObjectIdType, ObjectType, ObjectsToUpdate, Owner, Revision,
@@ -20,7 +21,6 @@ use crate::cloud_object::{
 };
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::{CloudFolder, CloudFolderModel};
-use crate::notebooks::CloudNotebook;
 use crate::persistence::ModelEvent;
 use crate::server::ids::{ClientId, HashableId, ObjectUid, ServerId, SyncId, ToServerId};
 use crate::workflows::workflow::Workflow;
@@ -61,9 +61,6 @@ pub enum CloudModelEvent {
     ObjectUntrashed {
         type_and_id: CloudObjectTypeAndId,
         source: UpdateSource,
-    },
-    NotebookEditorChangedFromServer {
-        notebook_id: SyncId,
     },
     ObjectCreated {
         type_and_id: CloudObjectTypeAndId,
@@ -585,7 +582,6 @@ impl CloudModel {
                 if new_metadata.metadata_last_updated_ts > current_ts
                     || (force_refresh && new_metadata.metadata_last_updated_ts == current_ts)
                 {
-                    let old_editor = object.metadata().current_editor_uid.clone();
                     let old_folder_id = object.metadata().folder_id;
                     let old_trashed_ts = object.metadata().trashed_ts;
 
@@ -601,19 +597,10 @@ impl CloudModel {
                         .has_pending_metadata_change = false;
 
                     if emit_events {
-                        let new_editor = object.metadata().current_editor_uid.clone();
                         let new_folder_id = object.metadata().folder_id;
                         let new_trashed_ts = object.metadata().trashed_ts;
                         // Some metadata updates should emit custom events.
-                        // For example, changes to current editor of a notebook or parent folder of an object
-                        let notebook: Option<&mut CloudNotebook> = object.into();
-                        if let Some(notebook) = notebook
-                            && new_editor != old_editor
-                        {
-                            ctx.emit(CloudModelEvent::NotebookEditorChangedFromServer {
-                                notebook_id: notebook.id,
-                            });
-                        }
+                        // For example, changes to the parent folder of an object
                         if new_folder_id != old_folder_id {
                             ctx.emit(CloudModelEvent::ObjectMoved {
                                 type_and_id: object.cloud_object_type_and_id(),
@@ -727,19 +714,6 @@ impl CloudModel {
             object
                 .permissions_mut()
                 .update_from_new_permissions_ts(new_permissions);
-        }
-    }
-
-    pub fn update_notebook_current_editor(
-        &mut self,
-        notebook_id: SyncId,
-        new_editor_uid: Option<String>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if let Some(notebook) = self.get_notebook_mut(&notebook_id) {
-            notebook.metadata.set_current_editor(new_editor_uid.clone());
-            ctx.emit(CloudModelEvent::NotebookEditorChangedFromServer { notebook_id });
-            ctx.notify();
         }
     }
 

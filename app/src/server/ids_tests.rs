@@ -1,5 +1,5 @@
 use super::{ClientId, ServerId, SyncId};
-use crate::notebooks::NotebookId;
+use crate::cloud_object::notebook_model::NotebookId;
 use crate::workflows::WorkflowId;
 
 #[test]

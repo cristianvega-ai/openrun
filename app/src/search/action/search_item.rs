@@ -192,7 +192,6 @@ impl SearchItemIcon for BindingGroup {
             Self::Close => Icon::X,
             Self::Navigation => Icon::Navigation,
             Self::Workflow => Icon::Workflow,
-            Self::Notebooks => Icon::Notebook,
             Self::Folders => Icon::Folder,
             Self::KeyboardShortcuts => Icon::Keyboard,
             Self::Notifications => Icon::Bell,
@@ -214,12 +213,6 @@ impl SearchItemIcon for BindingGroup {
             }
             Self::WarpAi => appearance.theme().foreground().into_solid(),
             Self::Workflow => warp_drive_icon_color(appearance, DriveObjectType::Workflow),
-            Self::Notebooks => warp_drive_icon_color(
-                appearance,
-                DriveObjectType::Notebook {
-                    is_ai_document: false,
-                },
-            ),
         }
     }
 }

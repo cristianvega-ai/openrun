@@ -687,28 +687,18 @@ impl FileNotebookView {
                         .as_ref()
                         .map(|location| format!("Command from {}", location.name))
                 });
-                let source = workflow.source.unwrap_or(WorkflowSource::Notebook {
-                    notebook_id: None,
-                    team_uid: None,
-                    location: NotebookLocation::LocalFile,
-                });
                 ctx.emit(FileNotebookEvent::RunWorkflow {
                     workflow: workflow_type,
-                    source,
+                    source: WorkflowSource::Local,
                 });
             }
             EditorViewEvent::OpenedBlockInsertionMenu(source) => self.send_telemetry_action(
                 NotebookTelemetryAction::OpenBlockInsertionMenu { source: *source },
                 ctx,
             ),
-            EditorViewEvent::OpenedEmbeddedObjectSearch => {
-                self.send_telemetry_action(NotebookTelemetryAction::OpenEmbeddedObjectSearch, ctx)
-            }
             EditorViewEvent::OpenedFindBar => {
                 self.send_telemetry_action(NotebookTelemetryAction::OpenFindBar, ctx)
             }
-            EditorViewEvent::InsertedEmbeddedObject(info) => self
-                .send_telemetry_action(NotebookTelemetryAction::InsertEmbeddedObject(*info), ctx),
             EditorViewEvent::CopiedBlock { block, entrypoint } => self.send_telemetry_action(
                 NotebookTelemetryAction::CopyBlock {
                     block: *block,
@@ -725,7 +715,6 @@ impl FileNotebookView {
             ),
             EditorViewEvent::Navigate(_)
             | EditorViewEvent::Edited
-            | EditorViewEvent::EditWorkflow(_)
             | EditorViewEvent::CmdEnter
             | EditorViewEvent::EscapePressed
             | EditorViewEvent::TextSelectionChanged => (),

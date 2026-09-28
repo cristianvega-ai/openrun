@@ -15,7 +15,7 @@ use crate::ai::artifact_download::default_download_filename;
 use crate::ai::artifact_download::sanitized_basename;
 #[cfg(feature = "local_fs")]
 use crate::ai::artifact_download::{default_download_directory, download_artifact_bytes};
-use crate::notebooks::NotebookId;
+use crate::cloud_object::notebook_model::NotebookId;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::ai::ArtifactDownloadResponse;
 use crate::view_components::DismissibleToast;

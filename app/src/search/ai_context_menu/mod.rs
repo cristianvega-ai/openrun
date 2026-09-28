@@ -5,7 +5,6 @@ mod conversations;
 mod diffset;
 mod files;
 pub mod mixer;
-mod notebooks;
 pub mod search;
 #[cfg(not(target_family = "wasm"))]
 mod styles;

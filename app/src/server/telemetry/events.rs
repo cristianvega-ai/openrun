@@ -31,14 +31,15 @@ use crate::ai::blocklist::{
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::channel::Channel;
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
+use crate::cloud_object::notebook_model::NotebookId;
 use crate::cloud_object::{GenericStringObjectFormat, ObjectType, Space};
 #[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
 use crate::drive::CloudObjectTypeAndId;
 use crate::features::FeatureFlag;
 use crate::launch_configs::save_modal::SaveState;
+use crate::notebooks::NotebookLocation;
 use crate::notebooks::telemetry::NotebookTelemetryAction;
-use crate::notebooks::{NotebookId, NotebookLocation};
 use crate::palette::PaletteMode;
 use crate::pane_group::PaneDragDropLocation;
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;

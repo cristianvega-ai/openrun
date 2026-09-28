@@ -6,7 +6,7 @@ use warpui::{AppContext, SingletonEntity};
 
 use crate::ai::agent::AIAgentCitation;
 use crate::cloud_object::model::persistence::CloudModel;
-use crate::notebooks::CloudNotebookModel;
+use crate::cloud_object::notebook_model::CloudNotebookModel;
 use crate::workflows::command_parser::command_matches_workflow;
 
 /// Returns true iff the `command` is directly copied from the `document`.

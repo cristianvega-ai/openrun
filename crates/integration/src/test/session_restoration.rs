@@ -1,7 +1,5 @@
 use warp::features::FeatureFlag;
-use warp::integration_testing::notebook::{
-    assert_cloud_preference_exists, assert_notebook_contents, assert_notebook_metadata_revision,
-};
+use warp::integration_testing::cloud_object::assert_cloud_preference_exists;
 use warp::integration_testing::step::{
     new_step_with_default_assertions, new_step_with_default_assertions_for_pane,
 };
@@ -327,44 +325,6 @@ pub fn test_restore_snapshot_with_background_output() -> Builder {
         )
 }
 
-/// Tests restoring a snapshot that includes notebook panes.
-///
-/// The snapshot has a single window with one tab, containing:
-/// * A notebook pane, where the notebook exists
-/// * A notebook pane, where the notebook no longer exists
-/// * A terminal pane
-pub fn test_restore_snapshot_with_notebooks() -> Builder {
-    new_builder()
-        .with_setup(|_utils| {
-            integration_testing::create_file_from_assets(
-                TEST_ONLY_ASSETS,
-                "restored_notebooks.sqlite",
-                &integration_testing::persistence::database_file_path_for_scope(
-                    &integration_testing::persistence::PersistenceScope::App,
-                ),
-            );
-        })
-        .with_step(
-            TestStep::new("Verify that the notebook panes were restored")
-                .add_assertion(assert_pane_title(0, 0, "First Notebook"))
-                // The missing notebook should be replaced with an empty new notebook.
-                .add_assertion(assert_pane_title(0, 1, "Untitled")),
-        )
-        .with_step(
-            new_step_with_default_assertions_for_pane("Wait for terminal pane to bootstrap", 0, 2)
-                .add_assertion(assert_pane_title(
-                    0,
-                    2,
-                    tab_title_in_home_dir("test_restore_snapshot_with_notebooks"),
-                )),
-        )
-        .with_step(
-            TestStep::new("Verify notebook contents")
-                .add_assertion(assert_notebook_contents(0, 0, "Notebook 1 content"))
-                .add_assertion(assert_notebook_contents(0, 1, "")),
-        )
-}
-
 /// Test restoring a snapshot that includes workflow panes - the second pane exists, but the first
 /// is for a deleted workflow.
 pub fn test_restore_snapshot_with_workflows() -> Builder {
@@ -411,7 +371,7 @@ pub fn test_restore_snapshot_with_test_json_object() -> Builder {
 /// https://github.com/warpdotdev/warp-internal/pull/7480
 ///
 /// The two objects have server ids Workflow-ftv7on4HwTeixO2xF5hmKf and Notebook-Flbu686H9XDCHZlYRriVpB
-/// and shareable_object_id 2.
+/// and shareable_object_id 2. Only the workflow is verified.
 pub fn test_restore_snapshot_with_common_shareable_metadata_ids() -> Builder {
     new_builder()
         .with_setup(|_utils| {
@@ -425,9 +385,6 @@ pub fn test_restore_snapshot_with_common_shareable_metadata_ids() -> Builder {
         })
         .with_step(TestStep::new("Verify revision of workflow").add_assertion(
             assert_workflow_metadata_revision("ftv7on4HwTeixO2xF5hmKf", 1676321629559090),
-        ))
-        .with_step(TestStep::new("Verify revision of notebook").add_assertion(
-            assert_notebook_metadata_revision("Flbu686H9XDCHZlYRriVpB", 1690991057168223),
         ))
 }
 
