@@ -5,7 +5,6 @@ use lazy_static::lazy_static;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
 use warp_core::channel::ChannelState;
-use warp_core::context_flag::ContextFlag;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::icons::Icon;
 use warp_errors::{report_error, report_if_error};
@@ -24,8 +23,8 @@ use warpui::ui_components::button::{ButtonVariant, TextAndIcon, TextAndIconAlign
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::ui_components::switch::SwitchStateHandle;
 use warpui::{
-    Action, AppContext, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
-    ViewHandle, WeakViewHandle, id,
+    Action, AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
+    WeakViewHandle, id,
 };
 
 use super::settings_page::{
@@ -41,7 +40,6 @@ use crate::auth::auth_manager::{AuthManager, LoginGatedFeature};
 use crate::auth::auth_state::AuthState;
 use crate::auth::auth_view_modal::AuthViewVariant;
 use crate::auth::{AuthStateProvider, UserUid};
-use crate::autoupdate::{self, AutoupdateStage, AutoupdateState};
 use crate::server::ids::ServerId;
 use crate::settings::cloud_preferences::CloudPreferencesSettings;
 use crate::workspace::WorkspaceAction;
@@ -114,9 +112,6 @@ pub fn handle_experiment_change(app: &mut AppContext) {
 
 #[derive(Debug, Clone)]
 pub enum MainPageAction {
-    Relaunch,
-    DownloadUpdate,
-    CheckForUpdate,
     ToggleSettingsSync,
     Upgrade {
         team_uid: Option<ServerId>,
@@ -155,7 +150,6 @@ impl From<&MainPageAction> for LoginGatedFeature {
 
 #[derive(Clone, Copy)]
 pub enum MainSettingsPageEvent {
-    CheckForUpdate,
     #[allow(dead_code)]
     OpenWarpDrive,
     SignupAnonymousUser,
@@ -192,16 +186,6 @@ impl TypedActionView for MainSettingsPageView {
         }
 
         match action {
-            MainPageAction::Relaunch => {
-                autoupdate::initiate_relaunch_for_update(ctx);
-            }
-            MainPageAction::DownloadUpdate => {
-                autoupdate::manually_download_new_version(ctx);
-            }
-            MainPageAction::CheckForUpdate => {
-                ctx.emit(MainSettingsPageEvent::CheckForUpdate);
-                ctx.notify();
-            }
             MainPageAction::ToggleSettingsSync => {
                 let new_value =
                     CloudPreferencesSettings::handle(ctx).update(ctx, |prefs_settings, ctx| {
@@ -262,12 +246,6 @@ impl MainSettingsPageView {
     pub fn new(ctx: &mut ViewContext<MainSettingsPageView>) -> Self {
         let auth_state = AuthStateProvider::as_ref(ctx).get().clone();
 
-        let autoupdate_state_handle = AutoupdateState::handle(ctx);
-        ctx.observe(
-            &autoupdate_state_handle,
-            Self::handle_autoupdate_state_change,
-        );
-
         ctx.subscribe_to_model(&CloudPreferencesSettings::handle(ctx), |_, _, _, ctx| {
             ctx.notify();
         });
@@ -310,14 +288,6 @@ impl MainSettingsPageView {
             page,
             auth_state,
         }
-    }
-
-    fn handle_autoupdate_state_change(
-        &mut self,
-        _: ModelHandle<AutoupdateState>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        ctx.notify();
     }
 }
 
@@ -829,7 +799,6 @@ impl SettingsWidget for EarnRewardsWidget {
 #[derive(Default)]
 struct VersionInfoWidget {
     copy_version_button_mouse_state: MouseStateHandle,
-    version_info_cta_link_mouse_state: MouseStateHandle,
 }
 
 impl VersionInfoWidget {
@@ -837,105 +806,14 @@ impl VersionInfoWidget {
         &self,
         version: &'static str,
         appearance: &Appearance,
-        app: &AppContext,
     ) -> Box<dyn Element> {
         let faded_text_color = appearance
             .theme()
             .active_ui_text_color()
             .with_opacity(60)
             .into();
-        struct StatusContent {
-            text: &'static str,
-            color: ColorU,
-        }
-        struct CallToActionContent {
-            text: &'static str,
-            action: MainPageAction,
-        }
 
-        let (status_content, call_to_action_content) =
-            if ContextFlag::PromptForVersionUpdates.is_enabled() {
-                let ansi_red: ColorU = appearance.theme().terminal_colors().bright.red.into();
-                match autoupdate::get_update_state(app) {
-                    AutoupdateStage::NoUpdateAvailable => (
-                        Some(StatusContent {
-                            text: "Up to date",
-                            color: faded_text_color,
-                        }),
-                        Some(CallToActionContent {
-                            text: "Check for updates",
-                            action: MainPageAction::CheckForUpdate,
-                        }),
-                    ),
-                    AutoupdateStage::CheckingForUpdate => (
-                        Some(StatusContent {
-                            text: "checking for update...",
-                            color: faded_text_color,
-                        }),
-                        None,
-                    ),
-                    AutoupdateStage::DownloadingUpdate => (
-                        Some(StatusContent {
-                            text: "downloading update...",
-                            color: faded_text_color,
-                        }),
-                        None,
-                    ),
-                    AutoupdateStage::UpdateReady { .. } => (
-                        Some(StatusContent {
-                            text: "Update available",
-                            color: ansi_red,
-                        }),
-                        Some(CallToActionContent {
-                            text: "Relaunch Warp",
-                            action: MainPageAction::Relaunch,
-                        }),
-                    ),
-                    AutoupdateStage::Updating { .. } => (
-                        Some(StatusContent {
-                            text: "Updating...",
-                            color: faded_text_color,
-                        }),
-                        None,
-                    ),
-                    AutoupdateStage::UpdatedPendingRestart { .. } => (
-                        Some(StatusContent {
-                            text: "Installed update",
-                            color: faded_text_color,
-                        }),
-                        Some(CallToActionContent {
-                            text: "Relaunch Warp",
-                            action: MainPageAction::Relaunch,
-                        }),
-                    ),
-                    AutoupdateStage::UnableToUpdateToNewVersion { .. } => (
-                        Some(StatusContent {
-                            text: "A new version of Warp is available but can't be installed",
-                            color: ansi_red,
-                        }),
-                        Some(CallToActionContent {
-                            text: "Update Warp manually",
-                            // note: the handler for this action is a no-op
-                            action: MainPageAction::DownloadUpdate,
-                        }),
-                    ),
-                    AutoupdateStage::UnableToLaunchNewVersion { .. } => (
-                        Some(StatusContent {
-                            text: "A new version of Warp is installed but can't be launched.",
-                            color: ansi_red,
-                        }),
-                        Some(CallToActionContent {
-                            text: "Update Warp manually",
-                            // note: the handler for this action is a no-op
-                            action: MainPageAction::DownloadUpdate,
-                        }),
-                    ),
-                }
-            } else {
-                (None, None)
-            };
-
-        let mut first_row = Flex::row()
+        let first_row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Start)
             .with_child(
                 Shrinkable::new(
@@ -954,25 +832,8 @@ impl VersionInfoWidget {
                 )
                 .finish(),
             );
-        if let Some(call_to_action_content) = call_to_action_content {
-            first_row.add_child(
-                appearance
-                    .ui_builder()
-                    .link(
-                        call_to_action_content.text.into(),
-                        None,
-                        Some(Box::new(move |ctx| {
-                            ctx.dispatch_typed_action(call_to_action_content.action.clone());
-                        })),
-                        self.version_info_cta_link_mouse_state.clone(),
-                    )
-                    .soft_wrap(false)
-                    .build()
-                    .finish(),
-            );
-        }
 
-        let mut second_row = Flex::row()
+        let second_row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Start)
             .with_child(
                 Shrinkable::new(
@@ -1013,17 +874,6 @@ impl VersionInfoWidget {
                 )
                 .finish(),
             );
-        if let Some(status_content) = status_content {
-            second_row.add_child(
-                Text::new_inline(
-                    status_content.text.to_string(),
-                    appearance.ui_font_family(),
-                    REGULAR_TEXT_FONT_SIZE,
-                )
-                .with_color(status_content.color)
-                .finish(),
-            );
-        }
 
         let mut version_info = Flex::column();
         version_info.add_child(first_row.finish());
@@ -1040,17 +890,17 @@ impl SettingsWidget for VersionInfoWidget {
     type View = MainSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "version update"
+        "version"
     }
 
     fn render(
         &self,
         _view: &Self::View,
         appearance: &Appearance,
-        app: &AppContext,
+        _app: &AppContext,
     ) -> Box<dyn Element> {
         if let Some(version) = ChannelState::app_version() {
-            Container::new(self.render_version_info(version, appearance, app))
+            Container::new(self.render_version_info(version, appearance))
                 .with_margin_top(VERTICAL_MARGIN)
                 .finish()
         } else {

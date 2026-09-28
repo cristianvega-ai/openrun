@@ -181,11 +181,11 @@ impl AppearanceManager {
 
         // This function is invoked from multiple call sites, including app
         // startup (before the AppKit event loop drains its ambient pool) and
-        // settings/autoupdate callbacks whose thread of origin varies. Wrap
-        // the body in a local pool so the autoreleased NSStrings (and any
-        // other temporaries Cocoa hands back) are released when this returns.
-        // `autoreleasepool` drains when the closure returns, covering every
-        // exit path (including early returns and panics).
+        // settings callbacks whose thread of origin varies. Wrap the body in a
+        // local pool so the autoreleased NSStrings (and any other temporaries
+        // Cocoa hands back) are released when this returns. `autoreleasepool`
+        // drains when the closure returns, covering every exit path (including
+        // early returns and panics).
         autoreleasepool(|_| {
             // SAFETY: `set_app_icon` only runs on the main thread, since it
             // requires a `&AppContext`, which is only accessible there.

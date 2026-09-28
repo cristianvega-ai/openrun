@@ -25,7 +25,6 @@ pub fn banner_metadata(ctx: &AppContext) -> Option<WorkspaceBannerFields> {
                 action: super::WorkspaceAction::DismissWaylandCrashRecoveryBannerAndOpenLink,
                 variant: super::BannerButtonVariant::Outlined,
                 icon: None,
-                more_info_button_action: None,
             }),
         }),
         // We're not showing anything to the user when we recover from a crash

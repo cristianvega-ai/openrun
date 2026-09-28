@@ -8,7 +8,6 @@ mod app_menus;
 mod app_services;
 mod app_state;
 mod auth;
-mod autoupdate;
 mod banner;
 mod billing;
 mod changelog_model;
@@ -261,7 +260,6 @@ use crate::ai::skills::SkillManager;
 use crate::ai::tui_api_keys::TuiApiKeyRefresher;
 use crate::antivirus::AntivirusInfo;
 use crate::app_state::AppState;
-use crate::autoupdate::{AutoupdateState, RelaunchModel};
 use crate::changelog_model::ChangelogModel;
 use crate::cloud_object::model::actions::{ObjectAction, ObjectActions};
 use crate::cloud_object::model::persistence::CloudModel;
@@ -1100,8 +1098,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
             Ok(_) => std::process::exit(0),
             // If Warp isn't already running, we're good to go.
             Err(app_services::linux::StartupArgsForwardingError::NoExistingInstance) => {}
-            // If we just finished an auto-update, we should continue running.
-            Err(app_services::linux::StartupArgsForwardingError::IgnoredAfterAutoUpdate) => {}
             // If we were unable to perform the forwarding for an unknown reason,
             // it's better to run a second instance than potentially end up in a
             // state where Warp refuses to run even a first instance.
@@ -1123,8 +1119,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
             Ok(_) => std::process::exit(0),
             // If Warp isn't already running, we're good to go.
             Err(app_services::windows::StartupArgsForwardingError::NoExistingInstance) => {}
-            // If we just finished an auto-update, we should continue running.
-            Err(app_services::windows::StartupArgsForwardingError::IgnoredAfterAutoUpdate) => {}
             // If we were unable to perform the forwarding for an unknown reason,
             // it's better to run a second instance than potentially end up in a
             // state where Warp refuses to run even a first instance.
@@ -1815,30 +1809,9 @@ pub(crate) fn initialize_app(
     }
     timer.mark_interval_end("INIT_CRASH_REPORTING");
 
-    if let LaunchMode::App { .. } = launch_mode {
-        autoupdate::check_and_report_update_errors(ctx);
-    }
-
     ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
 
     ctx.set_default_binding_validator(is_binding_cross_platform);
-
-    // Attempt to clean up any old executable, whether or not we were explicitly
-    // launched as part of the auto-update process. We may have failed to remove
-    // the executable on a previous launch of the app and should try again.
-    //
-    // On macOS this deletes `Contents/MacOS/old` from inside the installed app
-    // bundle, so it runs behind the same `can_autoupdate` guard as the rest of
-    // the autoupdate machinery: an execution mode that never autoupdates must
-    // not mutate that bundle. The bundled CLI runs the GUI executable from
-    // inside `Warp.app`, so without this it would rewrite a bundle it does not
-    // own. See APP-2946.
-    if FeatureFlag::Autoupdate.is_enabled()
-        && AppExecutionMode::as_ref(ctx).can_autoupdate()
-        && let Err(e) = autoupdate::remove_old_executable()
-    {
-        report_error!(e.context("Failed to remove old executable"));
-    }
 
     experiments::init(ctx);
 
@@ -1927,7 +1900,6 @@ pub(crate) fn initialize_app(
         // Set the first frame callback to record the app's startup time.
         // This is only sent for logged-in users so that new users don't skew performance metrics.
         let is_screen_reader_enabled = ctx.is_screen_reader_enabled();
-        let from_relaunch = launch_mode.args().finish_update;
         ctx.on_first_frame_drawn(move |ctx| {
             let timing_data = IntervalTimer::handle(ctx).update(ctx, |timer, _| {
                 timer.mark_interval_end("FIRST_FRAME_DRAWN");
@@ -1936,7 +1908,6 @@ pub(crate) fn initialize_app(
             let event = TelemetryEvent::AppStartup(AppStartupInfo {
                 is_session_restoration_on: user_defaults_on_startup.should_restore_session,
                 is_screen_reader_enabled,
-                from_relaunch,
                 is_crash_reporting_enabled,
                 timing_data,
             });
@@ -2120,7 +2091,6 @@ pub(crate) fn initialize_app(
     let display_count = ctx.windows().display_count();
     ctx.add_singleton_model(|_| DisplayCount(display_count));
 
-    ctx.add_singleton_model(|_| RelaunchModel::new());
     ctx.add_singleton_model(|_| ChangelogModel::new(server_api.clone()));
     ctx.add_singleton_model(|_| GitHubAuthNotifier::new());
     ctx.add_singleton_model(|_| NetworkStatus::new());
@@ -2478,8 +2448,6 @@ pub(crate) fn initialize_app(
         ctx.add_singleton_model(ScheduledAgentManager::new);
     }
 
-    AutoupdateState::register(ctx, server_api.clone());
-
     ctx.add_singleton_model(LocalWorkflows::new);
 
     ctx.add_singleton_model(LLMPreferences::new);
@@ -2715,10 +2683,7 @@ pub(crate) fn app_callbacks(
                 manager.terminate(ctx);
             });
 
-            // We want to tear down the terminal server before relaunching for
-            // autoupdate, to ensure we're not running any extra Warp processes
-            // when we bring up the new process.  Additionally, this must occur
-            // after terminating the persistence writer, so we don't keep track
+            // This must occur after terminating the persistence writer, so we don't keep track
             // of the fact that the shell sessions terminated.
             #[cfg(feature = "local_tty")]
             terminal::local_tty::spawner::PtySpawner::handle(ctx).update(ctx, |pty_spawner, _| {
@@ -2728,11 +2693,7 @@ pub(crate) fn app_callbacks(
             #[cfg(all(feature = "local_tty", windows))]
             terminal::local_tty::shutdown_all_pty_event_loops(ctx);
 
-            // Tear down app services before spawning the new process, to
-            // ensure that the new process doesn't find the old process while
-            // attempting to enforce our single-instance policy on Linux.
             app_services::teardown(ctx);
-            autoupdate::spawn_child_if_necessary(ctx);
 
             // Tear down any application profilers that are running, writing
             // results to disk.
@@ -2799,14 +2760,11 @@ pub(crate) fn app_callbacks(
         })),
         on_should_terminate_app: Some(Box::new(move |source, ctx| {
             // Never interrupt a system-initiated termination (logout / restart /
-            // scheduled OS update): both cancel paths below return
+            // scheduled OS update): the cancel path below returns
             // `ApproveTerminateResult::Cancel`, which macOS interprets as Warp
             // refusing to quit. That can abort a scheduled OS update while the
             // quit-warning modal has no visible window to attach to, leaving
-            // Warp waiting on a prompt nobody can see (#12441). Skipping
-            // `apply_pending_update` here doesn't lose the update: the next
-            // update check re-detects it (autoupdate state isn't persisted
-            // across restarts, so the artifact may be re-downloaded).
+            // Warp waiting on a prompt nobody can see (#12441).
             if source == TerminationRequestSource::System {
                 return ApproveTerminateResult::Terminate;
             }
@@ -2817,18 +2775,6 @@ pub(crate) fn app_callbacks(
                 },
                 ctx
             );
-
-            // If there's a pending autoupdate, apply that before showing the unsaved changes
-            // dialog. We apply the update first so that the dialog can force-terminate.
-            let applying_update = autoupdate::apply_pending_update(ctx, |ctx| {
-                // Once the deferred update is applied, re-terminate the app. This termination is
-                // cancellable so that we still show the unsaved changes dialog.
-                log::info!("Deferred autoupdate applied, terminating app");
-                ctx.terminate_app(TerminationMode::Cancellable, None);
-            });
-            if applying_update {
-                return ApproveTerminateResult::Cancel;
-            }
 
             let summary = UnsavedStateSummary::for_app(ctx);
             // Don't show dialog on integration test. Machine can't press buttons.
@@ -2979,8 +2925,6 @@ fn focus_running_window_and_show_native_modal(
 }
 
 fn on_close_app_cancelled(open_navigation_palette: bool, ctx: &mut AppContext) {
-    autoupdate::cancel_relaunch(ctx);
-
     send_telemetry_from_app_ctx!(
         TelemetryEvent::QuitModalCancel {
             nav_palette: open_navigation_palette,

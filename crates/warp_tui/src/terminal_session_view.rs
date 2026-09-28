@@ -2145,8 +2145,7 @@ impl TuiTerminalSessionView {
             | ModelEvent::BlockWorkingDirectoryUpdated(_)
             | ModelEvent::TerminalClear
             | ModelEvent::PromptUpdated
-            | ModelEvent::Handler(_)
-            | ModelEvent::FinishUpdate(_) => ctx.notify(),
+            | ModelEvent::Handler(_) => ctx.notify(),
             ModelEvent::BackgroundBlockStarted => {
                 warp::send_telemetry_from_ctx!(TelemetryEvent::BackgroundBlockStarted, ctx);
                 ctx.notify();

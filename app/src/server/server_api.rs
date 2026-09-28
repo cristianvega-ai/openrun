@@ -26,21 +26,17 @@ use ai::AIClient;
 use anyhow::{Context, Result, anyhow};
 use auth::AuthClient;
 use block::BlockClient;
-use channel_versions::ChannelVersions;
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, Utc};
 use factory::FactoryClient;
-use instant::Instant;
 use managed_mcp::ManagedMcpClient;
 use managed_secrets::AppManagedSecretsClient;
 use object::ObjectClient;
-use parking_lot::Mutex;
 use referral::ReferralsClient;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use team::TeamClient;
 #[cfg(feature = "tui")]
 use tui_onboarding::TuiOnboardingClient;
-use url::Url;
 use warp_core::context_flag::ContextFlag;
 use warp_core::telemetry::TelemetryEvent;
 use warp_errors::{AnyhowErrorExt, ErrorExt, register_error, report_error};
@@ -71,7 +67,6 @@ use crate::server::telemetry::TelemetryApi;
 use crate::settings::PrivacySettingsSnapshot;
 use crate::{ChannelState, settings_view};
 
-pub const FETCH_CHANNEL_VERSIONS_TIMEOUT: std::time::Duration = Duration::from_secs(60);
 #[derive(Serialize)]
 struct AgentTipShownAnalyticsRequest {
     tip: String,
@@ -117,25 +112,6 @@ impl Deref for ServerApi {
 pub struct CloudAgentCapacityError {
     pub error: String,
     pub running_agents: i32,
-}
-
-#[derive(Deserialize, Debug)]
-struct TimeResponse {
-    current_time: DateTime<FixedOffset>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ServerTime {
-    time_at_fetch: DateTime<FixedOffset>,
-    fetched_at: Instant,
-}
-
-impl ServerTime {
-    pub fn current_time(&self) -> DateTime<FixedOffset> {
-        let elapsed = chrono::Duration::from_std(self.fetched_at.elapsed())
-            .expect("duration should not be bigger than limit");
-        self.time_at_fetch + elapsed
-    }
 }
 
 /// Wrapper for deserialization errors. This covers both:
@@ -440,7 +416,6 @@ pub struct ServerApi {
     base_client: Arc<BaseClient>,
     // TODO(jeff): Make `TelemetryApi` another type of client, and move it off `ServerApi`.
     telemetry_api: TelemetryApi,
-    last_server_time: Arc<Mutex<Option<ServerTime>>>,
 }
 
 impl ServerApi {
@@ -500,7 +475,6 @@ impl ServerApi {
         Self {
             base_client,
             telemetry_api,
-            last_server_time: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -1349,112 +1323,6 @@ impl ServerApi {
                 Err(TranscribeError::Transport(e))
             }
         }
-    }
-
-    fn set_server_time(&self, server_time: ServerTime) {
-        let mut last_server_time = self.last_server_time.lock();
-        *last_server_time = Some(server_time);
-    }
-
-    fn cached_server_time(&self) -> Option<ServerTime> {
-        let last_server_time = self.last_server_time.lock();
-        last_server_time.as_ref().cloned()
-    }
-
-    pub async fn server_time(&self) -> Result<ServerTime> {
-        if let Some(cached) = self.cached_server_time() {
-            return Ok(cached);
-        }
-
-        let time_endpoint = format!("{}/current_time", ChannelState::server_root_url());
-        log::info!("Sending server time request to {}", &time_endpoint);
-        let res = self
-            .base_client
-            .http_client()
-            .get(&time_endpoint)
-            .send()
-            .await?;
-
-        if !res.status().is_success() {
-            self.observe_iap_challenge(&res);
-        }
-
-        match res.status() {
-            StatusCode::OK => {
-                let time_response: TimeResponse = res.json().await?;
-                log::info!(
-                    "Received current time from server: {:?}",
-                    &time_response.current_time
-                );
-                let server_time = ServerTime {
-                    time_at_fetch: time_response.current_time,
-                    fetched_at: Instant::now(),
-                };
-                let res = Ok(server_time.clone());
-                self.set_server_time(server_time);
-
-                res
-            }
-            _ => {
-                let payload: ClientError = res.json().await?;
-                Err(anyhow!(payload).context("fetching time from server failed"))
-            }
-        }
-    }
-
-    /// Fetches updated Warp Channel Versions from Warp Server. If it is the first such request of
-    /// the current calendar day, first attempts to call the '/client_version/daily'. If that call
-    /// fails or if it not the first request of the calendar day, returns the result of a call to
-    /// `/client_version'. The caller can specify whether or not changelog information should be
-    /// included in the response based on whether or not it will be used.
-    pub async fn fetch_channel_versions(
-        &self,
-        include_changelogs: bool,
-        is_daily: bool,
-    ) -> Result<ChannelVersions> {
-        let mut url = Url::parse(&ChannelState::server_root_url())
-            .expect("Should not fail to parse server root URL");
-        if is_daily {
-            url.set_path("/client_version/daily");
-        } else {
-            url.set_path("/client_version");
-        }
-        url.query_pairs_mut()
-            .append_pair("include_changelogs", &include_changelogs.to_string());
-
-        if include_changelogs {
-            log::info!("Fetching channel versions and changelogs from Warp server");
-        } else {
-            log::info!("Fetching channel versions (without changelogs) from Warp server");
-        }
-
-        let mut request_builder = self
-            .base_client
-            .http_client()
-            .get(url.as_str())
-            .timeout(FETCH_CHANNEL_VERSIONS_TIMEOUT)
-            .header(EXPERIMENT_ID_HEADER, self.anonymous_id());
-
-        // Authorization for /client_version is optional. Attach authorization header if an access
-        // token is present. First, try to get a valid token. If our cached one is expired, try to
-        // refresh. Failing that, send the expired token.
-        let auth_token = self
-            .get_or_refresh_access_token()
-            .await
-            .ok()
-            .and_then(|token| token.bearer_token())
-            .or_else(|| self.access_token_ignoring_validity());
-        if let Some(token_str) = auth_token {
-            request_builder = request_builder.bearer_auth(token_str);
-        }
-
-        let response = request_builder.send().await?;
-        if !response.status().is_success() {
-            self.observe_iap_challenge(&response);
-        }
-        let versions: ChannelVersions = response.json().await?;
-        log::info!("Received channel versions from Warp server: {versions}");
-        Ok(versions)
     }
 }
 
