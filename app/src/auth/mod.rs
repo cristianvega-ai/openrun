@@ -1,7 +1,7 @@
 pub mod auth_manager;
+pub use warp_server_auth::{auth_state, user_uid};
 #[cfg(test)]
-pub use warp_server_auth::user;
-pub use warp_server_auth::{auth_state, credentials, user_uid};
+pub use warp_server_auth::{credentials, user};
 
 #[cfg(test)]
 pub use auth_manager::AuthManager;

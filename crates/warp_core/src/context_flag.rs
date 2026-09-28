@@ -17,7 +17,6 @@ pub enum ContextFlag {
     WarpEssentials,
     AllowSettingsModalToClose,
     ShowSlowShellStartupBanner,
-    ShowMCPServers,
 }
 
 /// The enablement states for context flags.  As mentioned in the documentation

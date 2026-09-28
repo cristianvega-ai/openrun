@@ -13,17 +13,14 @@ use diesel::result::Error;
 use crate::{
     CloudAIExecutionProfile, CloudAIExecutionProfileModel, CloudAmbientAgentEnvironment,
     CloudAmbientAgentEnvironmentModel, CloudEnvVarCollection, CloudEnvVarCollectionModel,
-    CloudMCPServer, CloudMCPServerModel, CloudPreference, CloudPreferenceModel,
-    CloudScheduledAmbientAgent, CloudScheduledAmbientAgentModel, CloudTemplatableMCPServer,
-    CloudTemplatableMCPServerModel, CloudWorkflowEnum, CloudWorkflowEnumModel,
+    CloudPreference, CloudPreferenceModel, CloudScheduledAmbientAgent,
+    CloudScheduledAmbientAgentModel, CloudWorkflowEnum, CloudWorkflowEnumModel,
 };
 
 pub enum PersistedGenericStringObject {
     Preference(CloudPreference),
     EnvVarCollection(CloudEnvVarCollection),
     WorkflowEnum(CloudWorkflowEnum),
-    MCPServer(CloudMCPServer),
-    TemplatableMCPServer(CloudTemplatableMCPServer),
     AIExecutionProfile(CloudAIExecutionProfile),
     CloudEnvironment(CloudAmbientAgentEnvironment),
     ScheduledAmbientAgent(CloudScheduledAmbientAgent),
@@ -83,30 +80,6 @@ pub fn read_generic_string_objects(
                             to_cloud_object_metadata(metadata),
                             cloud_object_permissions,
                         ))
-                    })
-                }
-                JsonObjectType::MCPServer => {
-                    let model = CloudMCPServerModel::deserialize_owned(&object.data);
-                    model.ok().map(|model| {
-                        PersistedGenericStringObject::MCPServer(CloudMCPServer::new(
-                            object_id,
-                            model,
-                            to_cloud_object_metadata(metadata),
-                            cloud_object_permissions,
-                        ))
-                    })
-                }
-                JsonObjectType::TemplatableMCPServer => {
-                    let model = CloudTemplatableMCPServerModel::deserialize_owned(&object.data);
-                    model.ok().map(|model| {
-                        PersistedGenericStringObject::TemplatableMCPServer(
-                            CloudTemplatableMCPServer::new(
-                                object_id,
-                                model,
-                                to_cloud_object_metadata(metadata),
-                                cloud_object_permissions,
-                            ),
-                        )
                     })
                 }
                 JsonObjectType::AIExecutionProfile => {

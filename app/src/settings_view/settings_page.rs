@@ -36,7 +36,6 @@ use super::code_editor_review_page::EditorAndCodeReviewPageView;
 use super::environments_page::EnvironmentsPageView;
 use super::features_page::FeaturesPageView;
 use super::keybindings::KeybindingsView;
-use super::mcp_servers_page::MCPServersSettingsPageView;
 use super::privacy_page::PrivacyPageView;
 use super::projects_page::ProjectsPageView;
 use super::scripting_page::ScriptingSettingsPageView;
@@ -116,7 +115,6 @@ pub enum SettingsPageViewHandle {
     CLIAgents(ViewHandle<CLIAgentsPageView>),
     CloudEnvironments(ViewHandle<EnvironmentsPageView>),
     BillingAndUsage(ViewHandle<BillingAndUsageDispatchView>),
-    MCPServers(ViewHandle<MCPServersSettingsPageView>),
 }
 
 impl SettingsPageViewHandle {
@@ -139,14 +137,7 @@ impl SettingsPageViewHandle {
             CLIAgents(view_handle) => ChildView::new(view_handle).finish(),
             CloudEnvironments(view_handle) => ChildView::new(view_handle).finish(),
             BillingAndUsage(view_handle) => ChildView::new(view_handle).finish(),
-            MCPServers(view_handle) => ChildView::new(view_handle).finish(),
         }
-    }
-}
-
-impl From<ViewHandle<MCPServersSettingsPageView>> for SettingsPageViewHandle {
-    fn from(view_handle: ViewHandle<MCPServersSettingsPageView>) -> Self {
-        SettingsPageViewHandle::MCPServers(view_handle)
     }
 }
 

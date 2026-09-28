@@ -447,7 +447,6 @@ pub enum WorkspaceAction {
     FixInAgentMode {
         query: String,
     },
-    OpenMCPServerCollection,
     /// Open the Environment Management pane in Create mode.
     OpenEnvironmentManagementPane,
     ToggleAIDocumentPane {
@@ -978,7 +977,6 @@ impl WorkspaceAction {
             | TerminateApp
             | TabHoverWidthStart { .. }
             | TabHoverWidthEnd
-            | OpenMCPServerCollection
             | FocusTerminalViewInWorkspace { .. }
             | FocusPane(..)
             | ShiftSelectTabRange { .. }

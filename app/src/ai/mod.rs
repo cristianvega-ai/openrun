@@ -56,7 +56,6 @@ pub mod cloud_environments;
 pub mod connected_self_hosted_workers;
 pub mod execution_profiles;
 pub(crate) mod loading;
-pub mod mcp;
 
 pub(crate) use ai::paths;
 

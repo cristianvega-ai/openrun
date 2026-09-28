@@ -9,9 +9,8 @@ use warp_graphql::object::ObjectUpdateSuccess;
 
 use crate::cloud_object::{
     RevisionAndLastEditor, ServerAIExecutionProfile, ServerAmbientAgentEnvironment,
-    ServerEnvVarCollection, ServerFolder, ServerMCPServer, ServerObject, ServerPreference,
-    ServerScheduledAmbientAgent, ServerTemplatableMCPServer, ServerWorkflowEnum, TryFromGql,
-    UpdateCloudObjectResult,
+    ServerEnvVarCollection, ServerFolder, ServerObject, ServerPreference,
+    ServerScheduledAmbientAgent, ServerWorkflowEnum, TryFromGql, UpdateCloudObjectResult,
 };
 use crate::server::graphql::get_user_facing_error_message;
 
@@ -63,16 +62,6 @@ pub fn update_generic_string_object_result_to_update_result(
                                 rejected.conflicting_generic_string_object,
                             )?
                         }
-                        GenericStringObjectFormat::JsonMCPServer => {
-                            boxed_rejected_generic_string_object::<ServerMCPServer>(
-                                rejected.conflicting_generic_string_object,
-                            )?
-                        }
-                        GenericStringObjectFormat::JsonTemplatableMCPServer => {
-                            boxed_rejected_generic_string_object::<ServerTemplatableMCPServer>(
-                                rejected.conflicting_generic_string_object,
-                            )?
-                        }
                         GenericStringObjectFormat::JsonCloudEnvironment => {
                             boxed_rejected_generic_string_object::<ServerAmbientAgentEnvironment>(
                                 rejected.conflicting_generic_string_object,
@@ -83,7 +72,9 @@ pub fn update_generic_string_object_result_to_update_result(
                                 rejected.conflicting_generic_string_object,
                             )?
                         }
-                        GenericStringObjectFormat::Unknown => {
+                        GenericStringObjectFormat::JsonMCPServer
+                        | GenericStringObjectFormat::JsonTemplatableMCPServer
+                        | GenericStringObjectFormat::Unknown => {
                             bail!("conflicting generic string object has unknown format")
                         }
                     };

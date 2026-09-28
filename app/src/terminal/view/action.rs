@@ -305,8 +305,6 @@ pub enum TerminalAction {
     },
     SummarizeConversation,
     AddProjectAtCurrentDirectory,
-    OpenViewMCPPane,
-    OpenAddMCPPane,
     OpenEditSkillPane {
         skill_reference: SkillReference,
     },
@@ -606,8 +604,6 @@ impl fmt::Debug for TerminalAction {
             CloseTodoPopup => write!(f, "CloseTodoPopup"),
             ToggleCodeReviewPane { .. } => write!(f, "ToggleCodeReviewPane"),
             AddProjectAtCurrentDirectory => write!(f, "AddProjectAtCurrentDirectory"),
-            OpenViewMCPPane => write!(f, "OpenViewMCPPane"),
-            OpenAddMCPPane => write!(f, "OpenAddMCPPane"),
             OpenEditSkillPane { .. } => write!(f, "OpenEditSkillPane"),
             OpenBillingAndUsagePane => write!(f, "OpenBillingAndUsagePane"),
             OpenConversationsPalette => write!(f, "OpenConversationsPalette"),

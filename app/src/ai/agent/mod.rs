@@ -1433,8 +1433,6 @@ impl AIAgentActionResult {
                 | AIAgentActionResultType::SearchCodebase(SearchCodebaseResult::Cancelled)
                 | AIAgentActionResultType::Grep(GrepResult::Cancelled)
                 | AIAgentActionResultType::FileGlob(FileGlobResult::Cancelled)
-                | AIAgentActionResultType::ReadMCPResource(ReadMCPResourceResult::Cancelled)
-                | AIAgentActionResultType::CallMCPTool(CallMCPToolResult::Cancelled)
                 | AIAgentActionResultType::SuggestNewConversation(
                     SuggestNewConversationResult::Cancelled,
                 )
@@ -2172,33 +2170,6 @@ impl AIAgentOutputMessage {
             citations: vec![],
         }
     }
-}
-
-// Information about what MCP capabilities the client has, to
-// be provided as context for Agent Mode requests.
-#[derive(Debug, Clone)]
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
-pub struct MCPContext {
-    // Old flat structure (deprecated but kept for backward compatibility)
-    #[deprecated]
-    pub resources: Vec<rmcp::model::Resource>,
-    #[deprecated]
-    pub tools: Vec<rmcp::model::Tool>,
-    // New grouped structure
-    pub servers: Vec<MCPServer>,
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
-pub struct MCPServer {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    /// Managed MCP server uid or well-known integration id the server was
-    /// resolved from; empty for local servers. Mirrors `MCPServerConfig.warp_id`.
-    pub warp_id: String,
-    pub resources: Vec<rmcp::model::Resource>,
-    pub tools: Vec<rmcp::model::Tool>,
 }
 
 /// Contains context that may be attached to a user query.

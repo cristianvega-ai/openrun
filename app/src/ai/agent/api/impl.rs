@@ -137,7 +137,7 @@ pub async fn generate_multi_agent_output(
         existing_suggestions: params
             .existing_suggestions
             .map(|suggestions| suggestions.into()),
-        mcp_context: params.mcp_context.map(Into::into),
+        mcp_context: None,
     };
 
     let response_stream = warp_multi_agent_client::generate_multi_agent_output(
@@ -213,8 +213,6 @@ fn get_supported_tools(params: &RequestParams) -> Vec<api::ToolType> {
         api::ToolType::Grep,
         api::ToolType::FileGlob,
         api::ToolType::FileGlobV2,
-        api::ToolType::ReadMcpResource,
-        api::ToolType::CallMcpTool,
         api::ToolType::InitProject,
         api::ToolType::OpenCodeReview,
         api::ToolType::RunShellCommand,

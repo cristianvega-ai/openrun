@@ -16,8 +16,6 @@ pub enum ConvertToAPITypeError {
 pub enum ToolToAIAgentActionError {
     #[error("Missing tool")]
     MissingTool,
-    #[error("Could not parse args for MCP tool call: {0}")]
-    CallMCPToolArgsError(String),
     #[error("Error converting suggest prompt tool call: {0}")]
     SuggestPromptError(String),
     #[error("Received unexpected tool")]

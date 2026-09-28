@@ -9,10 +9,9 @@ use warp_multi_agent_api::response_event::stream_finished;
 use warp_multi_agent_api::{self as api};
 
 use super::schema::{
-    active_mcp_servers, agent_conversations, agent_tasks, ai_document_panes, ambient_agent_panes,
-    app, blocks, cloud_objects_refreshes, code_pane_tabs, code_panes, code_review_panes, commands,
-    env_var_collection_panes, folders, generic_string_objects, ignored_suggestions,
-    mcp_environment_variables, mcp_server_installations, mcp_server_panes, notebook_panes,
+    agent_conversations, agent_tasks, ai_document_panes, ambient_agent_panes, app, blocks,
+    cloud_objects_refreshes, code_pane_tabs, code_panes, code_review_panes, commands,
+    env_var_collection_panes, folders, generic_string_objects, ignored_suggestions, notebook_panes,
     notebooks, object_actions, object_metadata, object_permissions, pane_branches, pane_leaves,
     pane_nodes, panels, projects, settings_panes, tab_groups, tabs, team_members, team_settings,
     teams, terminal_panes, user_profiles, windows, workflow_panes, workflows,
@@ -546,9 +545,6 @@ pub const WORKFLOW_PANE_KIND: &str = "workflow";
 /// The [`pane_leaves::kind`] value for settings panes.
 pub const SETTINGS_PANE_KIND: &str = "settings";
 
-/// The [`pane_leaves::kind`] value for MCP server panes
-pub const MCP_SERVER_PANE_KIND: &str = "mcp_server";
-
 /// The [`pane_leaves::kind`] value for code review panes.
 pub const CODE_REVIEW_PANE_KIND: &str = "code_review";
 
@@ -634,12 +630,6 @@ pub struct NewCodeReviewPane {
 pub struct NewSettingsPane {
     pub id: i32,
     pub current_page: String,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = mcp_server_panes)]
-pub struct NewMCPServerPane {
-    pub id: i32,
 }
 
 #[derive(Identifiable, Queryable, Selectable)]
@@ -830,26 +820,6 @@ pub struct PersistedObjectAction {
     pub latest_timestamp: Option<NaiveDateTime>,
     pub pending: Option<bool>,
     pub processed_at_timestamp: Option<NaiveDateTime>,
-}
-
-#[derive(Debug, Insertable, Queryable, AsChangeset)]
-#[diesel(table_name = mcp_environment_variables)]
-pub struct MCPEnvironmentVariables {
-    pub mcp_server_uuid: Vec<u8>,
-    pub environment_variables: String,
-}
-
-#[derive(Debug, Insertable, Queryable)]
-#[diesel(table_name = active_mcp_servers)]
-pub struct ActiveMCPServer {
-    pub id: i32,
-    pub mcp_server_uuid: String,
-}
-
-#[derive(Debug, Insertable)]
-#[diesel(table_name = active_mcp_servers)]
-pub struct NewActiveMCPServer {
-    pub mcp_server_uuid: String,
 }
 
 // Queryable structs for reading from the database
@@ -1772,19 +1742,6 @@ impl ConversationUsageMetadata {
 pub struct NewIgnoredSuggestion {
     pub suggestion: String,
     pub suggestion_type: String,
-}
-
-#[derive(Insertable, AsChangeset)]
-#[diesel(table_name = mcp_server_installations)]
-#[diesel(treat_none_as_null = true)]
-#[diesel(primary_key(id))]
-pub struct NewMCPServerInstallation {
-    pub id: String,
-    pub templatable_mcp_server: String,
-    pub template_version_ts: NaiveDateTime,
-    pub variable_values: String,
-    pub restore_running: bool,
-    pub last_modified_at: NaiveDateTime,
 }
 
 #[cfg(test)]

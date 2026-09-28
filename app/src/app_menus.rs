@@ -7,7 +7,6 @@ use enclose::enclose;
 use itertools::Itertools;
 use settings::Setting as _;
 use settings::manager::SettingsManager;
-use warp_core::context_flag::ContextFlag;
 use warp_errors::{report_error, report_if_error};
 use warp_util::path::user_friendly_path;
 use warpui::actions::StandardAction;
@@ -61,17 +60,16 @@ const MAX_RECENT_REPOS_IN_MENU: usize = 10;
 
 /// Creates the root app menu bar
 pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
-    let mut menus = vec![
+    MenuBar::new(vec![
         make_new_app_menu(ctx),
         make_new_file_menu(ctx),
         make_new_edit_menu(ctx),
         make_new_view_menu(ctx),
         make_new_tab_menu(ctx),
         make_new_blocks_menu(ctx),
-    ];
-    menus.extend(make_new_ai_menu(ctx));
-    menus.extend([make_new_window_menu(), make_new_help_menu()]);
-    MenuBar::new(menus)
+        make_new_window_menu(),
+        make_new_help_menu(),
+    ])
 }
 
 // Creates the app dock menu
@@ -483,19 +481,6 @@ fn make_new_tab_menu(ctx: &AppContext) -> Menu {
         updateable_custom_item_without_checkmark(CustomAction::CloseTabsRight, ctx),
     ];
     Menu::new("Tab", items)
-}
-
-fn make_new_ai_menu(ctx: &AppContext) -> Option<Menu> {
-    let mut items = vec![];
-
-    if FeatureFlag::McpServer.is_enabled() && ContextFlag::ShowMCPServers.is_enabled() {
-        items.push(updateable_custom_item_without_checkmark(
-            CustomAction::OpenMCPServerCollection,
-            ctx,
-        ));
-    }
-
-    (!items.is_empty()).then(|| Menu::new("AI", items))
 }
 
 fn make_new_blocks_menu(ctx: &AppContext) -> Menu {

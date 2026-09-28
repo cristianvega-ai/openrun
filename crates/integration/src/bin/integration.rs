@@ -55,7 +55,6 @@ pub fn main() -> Result<()> {
             telemetry_config: None,
             crash_reporting_config: None,
             autoupdate_config: None,
-            mcp_static_config: None,
         },
     ));
 
@@ -428,7 +427,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_settings_search_subpage_still_renders_content);
     register_test!(test_settings_search_clear_restores_umbrella_state);
     register_test!(test_settings_search_preserved_on_sidebar_click);
-    register_test!(test_settings_agent_mcp_servers_renders_standalone_page);
 
     register_test!(test_middle_click_paste);
 

@@ -15,7 +15,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use warp_core::features::FeatureFlag;
 use warp_errors::report_error;
-use warp_graphql::mcp_gallery_template::MCPGalleryTemplate;
 use warp_graphql::object_permissions::AccessLevel;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warp_util::sync::Condition;
@@ -33,7 +32,6 @@ use crate::ai::cloud_environments::{AmbientAgentEnvironment, CloudAmbientAgentEn
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::execution_profiles::{AIExecutionProfile, CloudAIExecutionProfileModel};
 #[cfg(not(target_family = "wasm"))]
-use crate::ai::mcp::templatable::{CloudTemplatableMCPServerModel, TemplatableMCPServer};
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::model::actions::{
     ObjectAction, ObjectActionHistory, ObjectActionType, ObjectActions,
@@ -50,8 +48,8 @@ use crate::cloud_object::{
     ObjectDeleteResult, ObjectIdType, ObjectMetadataUpdateResult, ObjectPermissionsUpdateData,
     ObjectType, Owner, Revision, RevisionAndLastEditor, ServerAIExecutionProfile,
     ServerAmbientAgentEnvironment, ServerCloudAgentConfig, ServerCloudObject,
-    ServerEnvVarCollection, ServerMCPServer, ServerMetadata, ServerPermissions, ServerPreference,
-    ServerScheduledAmbientAgent, ServerTemplatableMCPServer, ServerWorkflowEnum, Space,
+    ServerEnvVarCollection, ServerMetadata, ServerPermissions, ServerPreference,
+    ServerScheduledAmbientAgent, ServerWorkflowEnum, Space,
 };
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::{CloudFolderModel, FolderId};
@@ -127,9 +125,6 @@ pub struct ObjectOperationResult {
 pub enum UpdateManagerEvent {
     ObjectOperationComplete {
         result: ObjectOperationResult,
-    },
-    MCPGalleryUpdated {
-        templates: Vec<MCPGalleryTemplate>,
     },
     AmbientTaskUpdated {
         task_id: AmbientAgentTaskId,
@@ -889,41 +884,11 @@ impl UpdateManager {
                         ctx,
                     ));
                 }
-                GenericStringObjectFormat::Json(JsonObjectType::MCPServer) => {
-                    let typed_objects = objects
-                        .iter()
-                        .filter_map(|obj| {
-                            let server_obj: Option<&ServerMCPServer> = obj.into();
-                            server_obj.cloned()
-                        })
-                        .collect::<Vec<_>>();
-                    sqlite_events.push(Self::handle_object_updates(
-                        typed_objects,
-                        force_refresh,
-                        !is_first_load,
-                        ctx,
-                    ));
-                }
                 GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile) => {
                     let typed_objects = objects
                         .iter()
                         .filter_map(|obj| {
                             let server_obj: Option<&ServerAIExecutionProfile> = obj.into();
-                            server_obj.cloned()
-                        })
-                        .collect::<Vec<_>>();
-                    sqlite_events.push(Self::handle_object_updates(
-                        typed_objects,
-                        force_refresh,
-                        !is_first_load,
-                        ctx,
-                    ));
-                }
-                GenericStringObjectFormat::Json(JsonObjectType::TemplatableMCPServer) => {
-                    let typed_objects = objects
-                        .iter()
-                        .filter_map(|obj| {
-                            let server_obj: Option<&ServerTemplatableMCPServer> = obj.into();
                             server_obj.cloned()
                         })
                         .collect::<Vec<_>>();
@@ -1051,12 +1016,6 @@ impl UpdateManager {
         // This is done as a separate call because the timestamps come from GetCloudEnvironments query
         // rather than the generic object sync.
         self.fetch_and_merge_environment_timestamps(ctx);
-
-        if !response.mcp_gallery.is_empty() {
-            ctx.emit(UpdateManagerEvent::MCPGalleryUpdated {
-                templates: response.mcp_gallery,
-            });
-        }
     }
 
     fn handle_team_memberships_changed(&mut self, ctx: &mut ModelContext<UpdateManager>) {
@@ -1807,8 +1766,6 @@ impl UpdateManager {
             // TODO: Figure out how to deal with conflicts for AI rules INT-759
             ServerCloudObject::Folder(_)
             | ServerCloudObject::Preference(_)
-            | ServerCloudObject::MCPServer(_)
-            | ServerCloudObject::TemplatableMCPServer(_)
             | ServerCloudObject::AmbientAgentEnvironment(_)
             | ServerCloudObject::ScheduledAmbientAgent(_)
             | ServerCloudObject::CloudAgentConfig(_) => {}
@@ -1839,22 +1796,6 @@ impl UpdateManager {
         if had_conflicts {
             self.save_in_memory_object_to_sqlite(cloud_model_handle.as_ref(ctx), uid);
         }
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    pub fn update_templatable_mcp_server(
-        &mut self,
-        templatable_mcp_server: TemplatableMCPServer,
-        templatable_mcp_server_id: SyncId,
-        revision_ts: Option<Revision>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_object(
-            CloudTemplatableMCPServerModel::new(templatable_mcp_server),
-            templatable_mcp_server_id,
-            revision_ts,
-            ctx,
-        );
     }
 
     pub fn update_workflow(
@@ -2193,16 +2134,6 @@ impl UpdateManager {
                         ObjectType::Folder => {
                             log::info!("Moving a folder to a new space is not supported yet.");
                             Ok(false)
-                        }
-                        ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                            JsonObjectType::TemplatableMCPServer,
-                        )) => {
-                            object_client
-                                .transfer_generic_string_object_owner(
-                                    GenericStringObjectId::from(server_id),
-                                    destination_owner,
-                                )
-                                .await
                         }
                         ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
                             JsonObjectType::CloudEnvironment,
@@ -3090,27 +3021,6 @@ impl UpdateManager {
             // When adding the initiated_by parameter to this function call, InitiatedBy::User was set as a default value.
             // This can be changed to InitiatedBy::System if this action was automatically kicked off by the system and we do not want a user facing toast.
             InitiatedBy::User,
-            ctx,
-        );
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    pub fn create_templatable_mcp_server(
-        &mut self,
-        templatable_mcp_server: TemplatableMCPServer,
-        client_id: ClientId,
-        owner: Owner,
-        initiated_by: InitiatedBy,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.create_object(
-            CloudTemplatableMCPServerModel::new(templatable_mcp_server),
-            owner,
-            client_id,
-            Default::default(),
-            false,
-            None,
-            initiated_by,
             ctx,
         );
     }

@@ -321,7 +321,6 @@ pub struct AIExecutionProfile {
 
     pub execute_commands: ActionPermission,
     pub write_to_pty: WriteToPtyPermission,
-    pub mcp_permissions: ActionPermission,
     pub ask_user_question: AskUserQuestionPermission,
     pub run_agents: RunAgentsPermission,
 
@@ -333,9 +332,6 @@ pub struct AIExecutionProfile {
 
     /// When the read_files is set to AlwaysAsk, autoread from these directories
     pub directory_allowlist: Vec<PathBuf>,
-
-    pub mcp_allowlist: Vec<uuid::Uuid>,
-    pub mcp_denylist: Vec<uuid::Uuid>,
 
     pub base_model: Option<LLMId>,
     pub coding_model: Option<LLMId>,
@@ -359,14 +355,11 @@ impl Default for AIExecutionProfile {
             read_files: ActionPermission::AgentDecides,
             execute_commands: ActionPermission::AlwaysAsk,
             write_to_pty: WriteToPtyPermission::AlwaysAsk,
-            mcp_permissions: ActionPermission::AgentDecides,
             ask_user_question: AskUserQuestionPermission::AlwaysAsk,
             run_agents: RunAgentsPermission::AlwaysAsk,
             command_denylist: DEFAULT_COMMAND_EXECUTION_DENYLIST.clone(),
             command_allowlist: Vec::new(),
             directory_allowlist: Vec::new(),
-            mcp_allowlist: Vec::new(),
-            mcp_denylist: Vec::new(),
             base_model: None,
             coding_model: None,
             cli_agent_model: None,
@@ -387,14 +380,11 @@ impl AIExecutionProfile {
             read_files: ActionPermission::AlwaysAllow,
             execute_commands: ActionPermission::AlwaysAllow,
             write_to_pty: WriteToPtyPermission::AlwaysAllow,
-            mcp_permissions: ActionPermission::AlwaysAllow,
             ask_user_question: AskUserQuestionPermission::Never,
             run_agents: RunAgentsPermission::AlwaysAllow,
             command_denylist: Vec::new(),
             command_allowlist: Vec::new(),
             directory_allowlist: Vec::new(),
-            mcp_allowlist: Vec::new(),
-            mcp_denylist: Vec::new(),
             base_model: None,
             coding_model: None,
             cli_agent_model: None,

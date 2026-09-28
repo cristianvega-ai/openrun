@@ -421,9 +421,6 @@ impl Input {
 
         // Handle the slash command action based on its kind
         match command.kind {
-            SlashCommandKind::AddMcp => {
-                ctx.dispatch_typed_action(&TerminalAction::OpenAddMCPPane);
-            }
             SlashCommandKind::Agent | SlashCommandKind::New => {
                 // Without this, a fast `/agent` right after an ambient tombstone renders (before
                 // its async task fetch resolves) would fall through to `EnterAgentView` below and
@@ -818,9 +815,6 @@ impl Input {
                 ctx.dispatch_typed_action(&TerminalAction::ToggleCodeReviewPane {
                     entrypoint: CodeReviewPaneEntrypoint::SlashCommand,
                 });
-            }
-            SlashCommandKind::OpenMcpServers | SlashCommandKind::Mcp => {
-                ctx.dispatch_typed_action(&TerminalAction::OpenViewMCPPane);
             }
             SlashCommandKind::OpenSettingsFile => {
                 if !FeatureFlag::SettingsFile.is_enabled() || !cfg!(feature = "local_fs") {

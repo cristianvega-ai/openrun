@@ -8,8 +8,7 @@ use url::{Origin, ParseError, Url};
 use super::Channel;
 use crate::AppId;
 use crate::channel::config::{
-    ChannelConfig, IapConfig, McpOAuthProviderConfig, OzConfig, RudderStackDestination,
-    WarpServerConfig,
+    ChannelConfig, IapConfig, OzConfig, RudderStackDestination, WarpServerConfig,
 };
 use crate::features::FeatureFlag;
 
@@ -56,7 +55,6 @@ impl ChannelState {
                 telemetry_config: None,
                 autoupdate_config: None,
                 crash_reporting_config: None,
-                mcp_static_config: None,
             },
         }
     }
@@ -373,28 +371,6 @@ impl ChannelState {
             .as_ref()
             .map(|ac| ac.show_autoupdate_menu_items)
             .unwrap_or_default()
-    }
-
-    /// Returns the MCP OAuth provider config matching the given client ID, if any.
-    pub fn mcp_oauth_provider_by_client_id(client_id: &str) -> Option<McpOAuthProviderConfig> {
-        CHANNEL_STATE
-            .lock()
-            .config
-            .mcp_static_config
-            .as_ref()
-            .and_then(|c| c.providers.iter().find(|p| p.client_id == client_id))
-            .cloned()
-    }
-
-    /// Returns the MCP OAuth provider config matching the given issuer URL, if any.
-    pub fn mcp_oauth_provider_by_issuer(issuer: &str) -> Option<McpOAuthProviderConfig> {
-        CHANNEL_STATE
-            .lock()
-            .config
-            .mcp_static_config
-            .as_ref()
-            .and_then(|c| c.providers.iter().find(|p| p.issuer == issuer))
-            .cloned()
     }
 
     pub fn url_scheme() -> &'static str {

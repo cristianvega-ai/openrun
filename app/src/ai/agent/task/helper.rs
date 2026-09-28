@@ -111,8 +111,6 @@ impl ToolExt for api::message::tool_call::Tool {
             #[allow(deprecated)]
             Tool::FileGlob(_) => "file_glob",
             Tool::FileGlobV2(_) => "file_glob_v2",
-            Tool::ReadMcpResource(_) => "read_mcp_resource",
-            Tool::CallMcpTool(_) => "call_mcp_tool",
             Tool::WriteToLongRunningShellCommand(_) => "write_to_lrc",
             Tool::ReadDocuments(_) => "read_documents",
             Tool::EditDocuments(_) => "edit_documents",

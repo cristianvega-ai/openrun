@@ -34,7 +34,6 @@ pub use sqlite::database_file_path_for_current_scope;
 pub use sqlite::database_file_path_for_scope;
 #[cfg(any(feature = "local_fs", feature = "integration_tests"))]
 pub use sqlite::establish_ro_connection;
-use uuid::Uuid;
 use warp_core::command::ExitCode;
 use warp_errors::report_error;
 use warp_graphql::scalars::time::ServerTimestamp;
@@ -43,7 +42,6 @@ use warpui::{AppContext, Entity, SingletonEntity};
 
 use self::model::{AgentConversation, AgentConversationData, Project};
 use crate::ai::blocklist::PersistedAIInput;
-use crate::ai::mcp::TemplatableMCPServerInstallation;
 use crate::app_state::AppState;
 use crate::cloud_object::model::actions::ObjectAction;
 use crate::cloud_object::model::generic_string_model::CloudStringObject;
@@ -243,8 +241,6 @@ pub struct PersistedData {
     pub multi_agent_conversations: Vec<AgentConversation>,
     pub projects: Vec<Project>,
     pub ignored_suggestions: Vec<(String, SuggestionType)>,
-    pub mcp_server_installations: HashMap<Uuid, TemplatableMCPServerInstallation>,
-    pub mcp_servers_to_restore: Vec<Uuid>,
     /// Conversation summaries derived at read time for pre-`summary`-column
     /// rows. Drained by `sqlite::initialize`, which hands them to the writer
     /// thread for persistence; not intended for other consumers.
@@ -380,10 +376,6 @@ pub enum ModelEvent {
     DeleteProject {
         path: String,
     },
-    UpsertMCPServerEnvironmentVariables {
-        mcp_server_uuid: Vec<u8>,
-        environment_variables: String,
-    },
     AddIgnoredSuggestion {
         suggestion: String,
         suggestion_type: SuggestionType,
@@ -391,19 +383,6 @@ pub enum ModelEvent {
     RemoveIgnoredSuggestion {
         suggestion: String,
         suggestion_type: SuggestionType,
-    },
-    UpsertMCPServerInstallation {
-        mcp_server_installation: TemplatableMCPServerInstallation,
-    },
-    DeleteMCPServerInstallations {
-        installation_uuids: Vec<Uuid>,
-    },
-    DeleteMCPServerInstallationsByTemplateUuid {
-        template_uuid: Uuid,
-    },
-    UpdateMCPInstallationRunning {
-        installation_uuid: Uuid,
-        running: bool,
     },
     UpsertWorkspaceLanguageServer {
         workspace_path: PathBuf,

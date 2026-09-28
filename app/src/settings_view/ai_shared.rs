@@ -6,8 +6,6 @@
 
 use std::borrow::Cow;
 
-use warp_core::context_flag::ContextFlag;
-use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::elements::{ChildView, Container, Element, Fill, Flex, ParentElement};
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
@@ -21,10 +19,6 @@ use super::settings_page::{
 use crate::ai::blocklist::agent_view::agent_input_footer::editor::AgentToolbarInlineEditor;
 use crate::appearance::Appearance;
 use crate::editor::{EditorView, InteractionState};
-
-pub fn should_show_mcp_servers() -> bool {
-    FeatureFlag::McpServer.is_enabled() && ContextFlag::ShowMCPServers.is_enabled()
-}
 
 pub fn update_editor_interaction_state<V: View>(
     editor: ViewHandle<EditorView>,

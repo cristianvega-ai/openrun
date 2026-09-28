@@ -51,7 +51,6 @@ bitflags! {
 pub enum SlashCommandKind {
     Agent,
     CloudAgent,
-    AddMcp,
     ApiKeys,
     ConnectGrok,
     Upgrade,
@@ -59,7 +58,6 @@ pub enum SlashCommandKind {
     AutoApprove,
     Statusline,
     ResetStatusline,
-    Mcp,
     ViewLogs,
     Voice,
     Theme,
@@ -76,7 +74,6 @@ pub enum SlashCommandKind {
     Fork,
     MoveToCloud,
     OpenCodeReview,
-    OpenMcpServers,
     OpenSettingsFile,
     Feedback,
     OpenRepo,

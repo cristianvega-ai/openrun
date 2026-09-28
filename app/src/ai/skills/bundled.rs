@@ -11,10 +11,9 @@ use warp_errors::report_error;
 use warp_util::host_id::HostId;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warp_util::remote_path::RemotePath;
-use warpui::{AppContext, SingletonEntity};
+use warpui::AppContext;
 
 use super::SkillDescriptor;
-use crate::ai::mcp::{McpIntegration, TemplatableMCPServerManager};
 use crate::keyboard::keybinding_file_path;
 use crate::settings::user_preferences_toml_file_path;
 
@@ -25,20 +24,15 @@ pub enum BundledSkillActivation {
     Always,
     /// Active only when a specific Warp feature is enabled.
     RequiresFeature(FeatureFlag),
-    /// Active only when a specific MCP server is running.
-    RequiresMcp(McpIntegration),
     /// Active only when a specific file exists on disk.
     RequiresFile(PathBuf),
 }
 
 impl BundledSkillActivation {
-    pub fn is_enabled(&self, ctx: &AppContext) -> bool {
+    pub fn is_enabled(&self, _ctx: &AppContext) -> bool {
         match self {
             Self::Always => true,
             Self::RequiresFeature(feature) => feature.is_enabled(),
-            Self::RequiresMcp(integration) => {
-                TemplatableMCPServerManager::as_ref(ctx).is_mcp_server_running(*integration)
-            }
             Self::RequiresFile(path) => path.exists(),
         }
     }
@@ -176,11 +170,7 @@ impl BundledSkill {
     /// Detect all skill definitions under the given resources root on the
     /// local filesystem, rendering skill content against this host.
     async fn detect_in_resources_dir(resources_dir: PathBuf) -> Self {
-        let (mut definitions, figma_definitions) = futures::join!(
-            load_bundled_skill_definitions(&resources_dir),
-            load_figma_skill_definitions(&resources_dir)
-        );
-        definitions.extend(figma_definitions);
+        let definitions = load_bundled_skill_definitions(&resources_dir).await;
         Self { definitions }
     }
 
@@ -268,14 +258,7 @@ impl BundledSkill {
         let definitions = definitions
             .into_iter()
             .map(|(id, skill, activation)| {
-                // MCP-gated skills carry their integration's brand icon, like
-                // the local figma catalog loaded from `mcp_skills/figma`.
-                let icon = match &activation {
-                    BundledSkillActivation::RequiresMcp(McpIntegration::Figma) => Icon::Figma,
-                    BundledSkillActivation::Always
-                    | BundledSkillActivation::RequiresFeature(_)
-                    | BundledSkillActivation::RequiresFile(_) => icon_for_bundled_skill(&id),
-                };
+                let icon = icon_for_bundled_skill(&id);
                 (
                     id,
                     BundledSkillDefinition {
@@ -323,28 +306,6 @@ async fn load_bundled_skill_definitions(
                 skill,
                 activation,
                 icon,
-            };
-            (id, bundled)
-        })
-        .collect()
-}
-
-/// Load Figma-specific bundled skills from the `figma/` subdirectory.
-async fn load_figma_skill_definitions(
-    resources_dir: &Path,
-) -> HashMap<String, BundledSkillDefinition> {
-    let figma_skills_dir = resources_dir
-        .join("bundled")
-        .join("mcp_skills")
-        .join("figma");
-    read_bundled_skills(&figma_skills_dir, resources_dir)
-        .await
-        .into_iter()
-        .map(|(id, skill)| {
-            let bundled = BundledSkillDefinition {
-                skill,
-                activation: BundledSkillActivation::RequiresMcp(McpIntegration::Figma),
-                icon: Icon::Figma,
             };
             (id, bundled)
         })
@@ -493,10 +454,6 @@ pub(crate) fn activation_for_bundled_skill(
             BundledSkillActivation::RequiresFile(resources_dir.join("settings_schema.json"))
         }
         "warpctrl" => BundledSkillActivation::RequiresFeature(FeatureFlag::WarpControlCli),
-        // Gate the Factory MCP skill on the same flag that attaches the
-        // Factory MCP server, so the skill and the server it documents roll
-        // out together.
-        "factory-mcp" => BundledSkillActivation::RequiresFeature(FeatureFlag::FactoryMcp),
         _ => BundledSkillActivation::Always,
     }
 }

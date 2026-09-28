@@ -32,9 +32,6 @@ use crate::ai::document::ai_document_model::AIDocumentModel;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::harness_availability::HarnessAvailabilityModel;
 use crate::ai::llms::LLMPreferences;
-use crate::ai::mcp::gallery::MCPGalleryManager;
-use crate::ai::mcp::templatable_manager::TemplatableMCPServerManager;
-use crate::ai::mcp::{FileBasedMCPManager, FileMCPWatcher};
 use crate::ai::restored_conversations::RestoredAgentConversations;
 use crate::ai::skills::SkillManager;
 use crate::auth::AuthManager;
@@ -110,7 +107,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     app.add_singleton_model(TeamTesterStatus::mock);
     app.add_singleton_model(TeamUpdateManager::mock);
     app.add_singleton_model(UpdateManager::mock);
-    app.add_singleton_model(MCPGalleryManager::new);
     app.add_singleton_model(CloudViewModel::mock);
     app.add_singleton_model(Listener::mock);
     app.add_singleton_model(|_| Appearance::mock());
@@ -153,15 +149,12 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     app.add_singleton_model(|ctx| AITipModel::new_for_agent_tips(ctx));
     app.add_singleton_model(|_| SettingsPaneManager::new());
 
-    // Initialize file-based MCP dependencies.
+    // Initialize repository and directory watchers.
     app.add_singleton_model(|_| DetectedRepositories::default());
     app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
     app.add_singleton_model(DirectoryWatcher::new);
     app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
-    app.add_singleton_model(FileMCPWatcher::new);
-    app.add_singleton_model(|_| FileBasedMCPManager::default());
 
-    app.add_singleton_model(|_| TemplatableMCPServerManager::default());
     #[cfg(feature = "local_fs")]
     app.add_singleton_model(FileModel::new);
     app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));

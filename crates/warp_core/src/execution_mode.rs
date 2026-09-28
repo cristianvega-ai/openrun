@@ -20,17 +20,6 @@ impl ExecutionMode {
             ExecutionMode::App => "warp-app",
         }
     }
-
-    /// Whether a CLI-based MCP server can fall back to inheriting this process's PATH when
-    /// no explicit `mcp_execution_path` setting is available.
-    ///
-    /// The desktop app keeps requiring a shell-derived path, so a failed MCP spawn surfaces
-    /// as an actionable toast instead of silently launching with the wrong PATH.
-    pub fn can_inherit_process_path_for_mcp(&self) -> bool {
-        match self {
-            ExecutionMode::App => false,
-        }
-    }
 }
 
 /// Model tracking the mode that Warp is running in.
@@ -64,11 +53,6 @@ impl AppExecutionMode {
         self.is_app()
     }
 
-    /// Whether the app can automatically start MCP servers from the previous session.
-    pub fn can_autostart_mcp_servers(&self) -> bool {
-        self.is_app()
-    }
-
     /// Whether the app can show interactive onboarding UIs (e.g. the onboarding
     /// callout tutorial). Onboarding requires a user to interact with it.
     pub fn can_show_onboarding(&self) -> bool {
@@ -83,12 +67,6 @@ impl AppExecutionMode {
     /// Returns the client ID to report to the server.
     pub fn client_id(&self) -> &'static str {
         self.mode.client_id()
-    }
-
-    /// Whether a CLI-based MCP server can fall back to inheriting this process's PATH when
-    /// no explicit `mcp_execution_path` setting is available.
-    pub fn can_inherit_process_path_for_mcp(&self) -> bool {
-        self.mode.can_inherit_process_path_for_mcp()
     }
 }
 

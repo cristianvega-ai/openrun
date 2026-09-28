@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use ai::document::DEFAULT_PLANNING_DOCUMENT_TITLE;
 use chrono::Local;
+pub(crate) use execute::MalformedFinalLineProxyEvent;
 pub use execute::{
     AskUserQuestionExecutor, EditAcceptAndContinueClickedEvent, EditAcceptClickedEvent,
     EditResolvedEvent, EditStats, NewConversationDecision, PromptSuggestionExecutor,
@@ -28,7 +29,6 @@ pub use execute::{
     ShellCommandExecutorEvent, StartAgentExecutor, StartAgentExecutorEvent, StartAgentRequest,
     StartAgentRequestId, TEAM_CHANGED_DURING_CHILD_LAUNCH_ERROR,
 };
-pub(crate) use execute::{MalformedFinalLineProxyEvent, coerce_integer_args};
 #[cfg(test)]
 pub(crate) use execute::{compose_run_agents_child_prompt, run_agents_to_start_agent_mode};
 use futures::future::{BoxFuture, join_all};

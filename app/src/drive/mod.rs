@@ -17,8 +17,6 @@ pub enum DriveObjectType {
     },
     Folder,
     EnvVarCollection,
-    MCPServer,
-    MCPServerCollection,
 }
 
 impl From<DriveObjectType> for Icon {
@@ -34,8 +32,6 @@ impl From<DriveObjectType> for Icon {
             }
             DriveObjectType::Folder => Icon::Folder,
             DriveObjectType::EnvVarCollection => Icon::EnvVarCollection,
-            DriveObjectType::MCPServer => Icon::Dataflow,
-            DriveObjectType::MCPServerCollection => Icon::Dataflow,
         }
     }
 }

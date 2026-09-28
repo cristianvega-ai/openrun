@@ -267,7 +267,7 @@ use crate::server::server_api::ai::AIClient;
 use crate::server::server_api::{ServerApi, ServerApiProvider};
 use crate::server::telemetry::{
     AddTabWithShellSource, EnvVarTelemetryMetadata, FileTreeSource, LaunchConfigUiLocation,
-    MCPServerCollectionPaneEntrypoint, NotificationsTurnedOnSource, PaletteSource, TabRenameEvent,
+    NotificationsTurnedOnSource, PaletteSource, TabRenameEvent,
 };
 use crate::session_management::{SessionNavigationData, SessionSource, TabNavigationData};
 use crate::settings::{
@@ -283,7 +283,6 @@ use crate::settings_view::handoff_environment_creation_modal::{
     HandoffEnvironmentCreationModal, HandoffEnvironmentCreationModalEvent,
 };
 use crate::settings_view::keybindings::{KeybindingChangedEvent, KeybindingChangedNotifier};
-use crate::settings_view::mcp_servers_page::MCPServersSettingsPage;
 use crate::settings_view::pane_manager::SettingsPaneManager;
 use crate::settings_view::{SettingsSection, SettingsView, SettingsViewEvent, flags};
 #[cfg(all(target_os = "windows", feature = "local_tty"))]
@@ -12920,16 +12919,6 @@ impl Workspace {
                         .add_ephemeral_toast(DismissibleToast::new(message.clone(), *flavor), ctx);
                 });
             }
-            SettingsViewEvent::OpenMCPServerCollection => {
-                self.show_settings_with_section(Some(SettingsSection::AgentMCPServers), ctx);
-
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::MCPServerCollectionPaneOpened {
-                        entrypoint: MCPServerCollectionPaneEntrypoint::Settings,
-                    },
-                    ctx
-                );
-            }
             SettingsViewEvent::OpenCustomRouterEditor(router) => {
                 self.open_custom_router_editor_pane(None, router.clone(), ctx);
             }
@@ -13904,10 +13893,6 @@ impl Workspace {
             }
             pane_group::Event::OpenCLIAgentToolbarEditor => {
                 self.open_cli_agent_toolbar_editor(ctx);
-            }
-            pane_group::Event::OpenMCPSettingsPage { page } => {
-                // Open the MCP servers settings page to the list page
-                self.open_mcp_servers_page(page.unwrap_or_default(), None, ctx);
             }
             #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
             pane_group::Event::OpenFileInWarp { path, session } => {
@@ -15677,20 +15662,6 @@ impl Workspace {
 
         self.settings_pane.update(ctx, |view, ctx| {
             view.open_teams_page_email_invite(email_invite, ctx);
-        });
-    }
-
-    /// Opens the MCP servers settings page, optionally triggering auto-install of a gallery MCP.
-    pub fn open_mcp_servers_page(
-        &mut self,
-        page: MCPServersSettingsPage,
-        autoinstall_gallery_title: Option<&str>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.show_settings_with_section(Some(SettingsSection::AgentMCPServers), ctx);
-
-        self.settings_pane.update(ctx, |view, ctx| {
-            view.open_mcp_servers_page(page, autoinstall_gallery_title, ctx);
         });
     }
 
@@ -19453,9 +19424,6 @@ impl Workspace {
         if *ai_settings.warp_drive_context_enabled.value() {
             context.set.insert(flags::WARP_DRIVE_CONTEXT_FLAG);
         }
-        if *ai_settings.file_based_mcp_enabled.value() {
-            context.set.insert(flags::FILE_BASED_MCP_FLAG);
-        }
         if *ai_settings.can_use_warp_credits_for_fallback.value() {
             context.set.insert(flags::WARP_CREDIT_FALLBACK_FLAG);
         }
@@ -21028,16 +20996,6 @@ impl TypedActionView for Workspace {
                         });
                     }
                 });
-            }
-            OpenMCPServerCollection => {
-                self.show_settings_with_section(Some(SettingsSection::AgentMCPServers), ctx);
-
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::MCPServerCollectionPaneOpened {
-                        entrypoint: MCPServerCollectionPaneEntrypoint::Global,
-                    },
-                    ctx
-                );
             }
             OpenEnvironmentManagementPane => {
                 self.open_environment_management_pane(None, EnvironmentsPage::Create, ctx);

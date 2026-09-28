@@ -30,15 +30,14 @@ use crate::ai::agent::todos::AIAgentTodoList;
 use crate::ai::agent::{
     AIAgentActionResult, AIAgentActionResultType, AIAgentContext, AIAgentExchange,
     AIAgentExchangeId, AIAgentInput, AIAgentOutput, AIAgentOutputMessage, AIAgentOutputStatus,
-    BaseUserQuery, CallMCPToolResult, CancellationReason, CloneRepositoryURL,
-    CreateDocumentsResult, DocumentContext, EditDocumentsResult, FileContext, FileGlobResult,
-    FileGlobV2Match, FileGlobV2Result, FinishedAIAgentOutput, GrepFileMatch, GrepLineMatch,
-    GrepResult, InsertReviewCommentsResult, OutputModelInfo, ReadDocumentsResult,
-    ReadFilesFailedFile, ReadFilesResult, ReadMCPResourceResult, ReadShellCommandOutputResult,
-    RequestCommandOutputResult, RequestFileEditsResult, SearchCodebaseFailureReason,
-    SearchCodebaseResult, ServerOutputId, Shared, ShellCommandError, SuggestNewConversationResult,
-    SuggestPromptResult, TransferShellCommandControlToUserResult, UpdatedFileContext,
-    UploadArtifactResult, UserQueryMode, WriteToLongRunningShellCommandResult,
+    BaseUserQuery, CancellationReason, CloneRepositoryURL, CreateDocumentsResult, DocumentContext,
+    EditDocumentsResult, FileContext, FileGlobResult, FileGlobV2Match, FileGlobV2Result,
+    FinishedAIAgentOutput, GrepFileMatch, GrepLineMatch, GrepResult, InsertReviewCommentsResult,
+    OutputModelInfo, ReadDocumentsResult, ReadFilesFailedFile, ReadFilesResult,
+    ReadShellCommandOutputResult, RequestCommandOutputResult, RequestFileEditsResult,
+    SearchCodebaseFailureReason, SearchCodebaseResult, ServerOutputId, Shared, ShellCommandError,
+    SuggestNewConversationResult, SuggestPromptResult, TransferShellCommandControlToUserResult,
+    UpdatedFileContext, UploadArtifactResult, UserQueryMode, WriteToLongRunningShellCommandResult,
 };
 use crate::ai::block_context::BlockContext;
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentVersion};
@@ -248,7 +247,6 @@ pub(crate) fn convert_input_context(context: Option<&api::InputContext>) -> Arc<
                 data,
                 mime_type,
                 file_name: "image".to_string(), // Default file name since proto doesn't have it
-                is_figma: false, // This field is only used for detecting Figma pngs in the input and is not meaningful for restored conversations.
             }));
         }
     }
@@ -904,127 +902,6 @@ pub(crate) fn convert_tool_call_result_to_input(
                 context,
             })
         }
-        Some(ToolCallResultType::ReadMcpResource(result)) => {
-            let mcp_result = match &result.result {
-                Some(api::read_mcp_resource_result::Result::Success(success)) => {
-                    let resource_contents = success
-                        .contents
-                        .iter()
-                        .map(|content| {
-                            match &content.content_type {
-                                Some(api::mcp_resource_content::ContentType::Text(text)) => {
-                                    rmcp::model::ResourceContents::TextResourceContents {
-                                        uri: content.uri.clone(),
-                                        mime_type: Some(text.mime_type.clone()),
-                                        text: text.content.clone(),
-                                        meta: None,
-                                    }
-                                }
-                                Some(api::mcp_resource_content::ContentType::Binary(binary)) => {
-                                    rmcp::model::ResourceContents::BlobResourceContents {
-                                        uri: content.uri.clone(),
-                                        mime_type: Some(binary.mime_type.clone()),
-                                        blob: String::from_utf8_lossy(&binary.data).into_owned(),
-                                        meta: None,
-                                    }
-                                }
-                                None => {
-                                    // Default to text if no content type is specified
-                                    rmcp::model::ResourceContents::TextResourceContents {
-                                        uri: content.uri.clone(),
-                                        mime_type: None,
-                                        text: "".to_string(),
-                                        meta: None,
-                                    }
-                                }
-                            }
-                        })
-                        .collect();
-
-                    ReadMCPResourceResult::Success { resource_contents }
-                }
-                Some(api::read_mcp_resource_result::Result::Error(error)) => {
-                    ReadMCPResourceResult::Error(error.message.clone())
-                }
-                None => ReadMCPResourceResult::Cancelled,
-            };
-
-            Some(AIAgentInput::ActionResult {
-                result: AIAgentActionResult {
-                    id: tool_call_id.into(),
-                    task_id: task_id.clone(),
-                    result: AIAgentActionResultType::ReadMCPResource(mcp_result),
-                },
-                context,
-            })
-        }
-        Some(ToolCallResultType::CallMcpTool(result)) => {
-            let mcp_tool_result = match &result.result {
-                Some(api::call_mcp_tool_result::Result::Success(success)) => {
-                    let results = success
-                        .results
-                        .iter()
-                        .map(|api_result| match &api_result.result {
-                            Some(api::call_mcp_tool_result::success::result::Result::Text(
-                                text,
-                            )) => rmcp::model::ContentBlock::text(text.text.clone()),
-                            Some(api::call_mcp_tool_result::success::result::Result::Image(
-                                image,
-                            )) => rmcp::model::ContentBlock::image(
-                                String::from_utf8_lossy(&image.data).to_string(),
-                                image.mime_type.clone(),
-                            ),
-                            Some(api::call_mcp_tool_result::success::result::Result::Resource(
-                                resource,
-                            )) => match &resource.content_type {
-                                Some(api::mcp_resource_content::ContentType::Text(text)) => {
-                                    rmcp::model::ContentBlock::resource(
-                                        rmcp::model::ResourceContents::text(
-                                            text.content.clone(),
-                                            resource.uri.clone(),
-                                        ),
-                                    )
-                                }
-                                Some(api::mcp_resource_content::ContentType::Binary(binary)) => {
-                                    rmcp::model::ContentBlock::resource(
-                                        rmcp::model::ResourceContents::BlobResourceContents {
-                                            uri: resource.uri.clone(),
-                                            mime_type: Some(binary.mime_type.clone()),
-                                            blob: String::from_utf8_lossy(&binary.data).to_string(),
-                                            meta: None,
-                                        },
-                                    )
-                                }
-                                None => rmcp::model::ContentBlock::resource(
-                                    rmcp::model::ResourceContents::text(
-                                        String::new(),
-                                        resource.uri.clone(),
-                                    ),
-                                ),
-                            },
-                            None => rmcp::model::ContentBlock::text(String::new()),
-                        })
-                        .collect();
-
-                    let result = rmcp::model::CallToolResult::success(results);
-
-                    CallMCPToolResult::Success { result }
-                }
-                Some(api::call_mcp_tool_result::Result::Error(error)) => {
-                    CallMCPToolResult::Error(error.message.clone())
-                }
-                None => CallMCPToolResult::Cancelled,
-            };
-
-            Some(AIAgentInput::ActionResult {
-                result: AIAgentActionResult {
-                    id: tool_call_id.into(),
-                    task_id: task_id.clone(),
-                    result: AIAgentActionResultType::CallMCPTool(mcp_tool_result),
-                },
-                context,
-            })
-        }
         Some(ToolCallResultType::ReadSkill(result)) => {
             let read_skill_result = match &result.result {
                 Some(api::read_skill_result::Result::Success(success)) => {
@@ -1604,12 +1481,6 @@ fn create_cancelled_result_for_tool_call(
         #[allow(deprecated)]
         ToolType::FileGlob(_) => AIAgentActionResultType::FileGlob(FileGlobResult::Cancelled),
         ToolType::FileGlobV2(_) => AIAgentActionResultType::FileGlobV2(FileGlobV2Result::Cancelled),
-        ToolType::ReadMcpResource(_) => {
-            AIAgentActionResultType::ReadMCPResource(ReadMCPResourceResult::Cancelled)
-        }
-        ToolType::CallMcpTool(_) => {
-            AIAgentActionResultType::CallMCPTool(CallMCPToolResult::Cancelled)
-        }
         ToolType::ReadSkill(_) => AIAgentActionResultType::ReadSkill(ReadSkillResult::Cancelled),
         ToolType::SuggestNewConversation(_) => {
             AIAgentActionResultType::SuggestNewConversation(SuggestNewConversationResult::Cancelled)

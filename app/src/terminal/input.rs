@@ -186,7 +186,6 @@ use crate::ai::harness_availability::{
     CloudAgentStartBlocker, HarnessAvailabilityModel, cloud_agent_start_blocker,
 };
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
-use crate::ai::mcp::TemplatableMCPServerManager;
 use crate::ai::skills::{SkillOpenOrigin, SkillTelemetryEvent};
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::channel::{Channel, ChannelState};
@@ -1041,8 +1040,6 @@ pub enum Event {
         diff_mode: DiffMode,
     },
     OpenConversationHistory,
-    OpenViewMCPPane,
-    OpenAddMCPPane,
     OpenEnvironmentManagementPane,
     OpenFilesPalette {
         source: PaletteSource,
@@ -1161,12 +1158,6 @@ pub enum InputAction {
 
     /// Clears attached blocks and text selection context.
     ClearAttachedContext,
-
-    /// Fired when the "Get Figma MCP" contextual button is clicked.
-    FigmaAddButtonClicked,
-
-    /// Fired when the "Enable Figma MCP" contextual button is clicked.
-    FigmaEnableButtonClicked,
 
     /// Activates `&` cloud handoff compose mode from the message bar hint.
     ActivateCloudHandoff,
@@ -15028,16 +15019,6 @@ impl TypedActionView for Input {
                     InlineModelSelectorTab::BaseAgent,
                     ctx,
                 );
-            }
-            InputAction::FigmaAddButtonClicked => {
-                TemplatableMCPServerManager::handle(ctx).update(ctx, |manager, ctx| {
-                    manager.install_figma_from_gallery(ctx);
-                });
-            }
-            InputAction::FigmaEnableButtonClicked => {
-                TemplatableMCPServerManager::handle(ctx).update(ctx, |manager, ctx| {
-                    manager.enable_figma_mcp(ctx);
-                });
             }
             InputAction::ClearAttachedContext => {
                 self.clear_attached_context(ctx);

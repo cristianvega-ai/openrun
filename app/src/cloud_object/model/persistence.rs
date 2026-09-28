@@ -510,14 +510,8 @@ impl CloudModel {
             ServerCloudObject::WorkflowEnum(workflow_enum) => {
                 self.upsert_from_server_object(workflow_enum, ctx);
             }
-            ServerCloudObject::MCPServer(mcp_server) => {
-                self.upsert_from_server_object(mcp_server, ctx);
-            }
             ServerCloudObject::AIExecutionProfile(ai_execution_profile) => {
                 self.upsert_from_server_object(ai_execution_profile, ctx);
-            }
-            ServerCloudObject::TemplatableMCPServer(templatable_mcp_server) => {
-                self.upsert_from_server_object(templatable_mcp_server, ctx);
             }
             ServerCloudObject::AmbientAgentEnvironment(ambient_agent_environment) => {
                 self.upsert_from_server_object(ambient_agent_environment, ctx);

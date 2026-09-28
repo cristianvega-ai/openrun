@@ -34,17 +34,6 @@ pub static CLOUD_AGENT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand
     argument: Some(Argument::optional().with_execute_on_selection()),
 });
 
-pub const ADD_MCP: StaticCommand = StaticCommand {
-    name: "/add-mcp",
-    description: "Add a new MCP server via the MCP settings page",
-    kind: SlashCommandKind::AddMcp,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/dataflow.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
 pub const RESET_STATUSLINE: StaticCommand = StaticCommand {
     name: "/reset-statusline",
     description: "Reset the statusline to its default items and ordering",
@@ -73,16 +62,6 @@ pub const AUTO_APPROVE: StaticCommand = StaticCommand {
         .union(Availability::ACTIVE_CONVERSATION)
         .union(Availability::AI_ENABLED)
         .union(Availability::NOT_CLOUD_AGENT),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const MCP: StaticCommand = StaticCommand {
-    name: "/mcp",
-    description: "View and manage MCP servers",
-    kind: SlashCommandKind::Mcp,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::AI_ENABLED,
     auto_enter_ai_mode: false,
     argument: None,
 };
@@ -349,18 +328,6 @@ pub const OPEN_CODE_REVIEW: StaticCommand = StaticCommand {
         icon_path: "bundled/svg/diff.svg",
     },
     availability: Availability::REPOSITORY,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const OPEN_MCP_SERVERS: StaticCommand = StaticCommand {
-    name: "/open-mcp-servers",
-    description: "Open MCP servers",
-    kind: SlashCommandKind::OpenMcpServers,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/dataflow.svg",
-    },
-    availability: Availability::AI_ENABLED,
     auto_enter_ai_mode: false,
     argument: None,
 };
@@ -834,7 +801,6 @@ fn all_commands(settings_mode: settings::SettingsMode) -> Vec<StaticCommand> {
 
 fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
     let mut commands = vec![
-        ADD_MCP,
         AUTO_APPROVE,
         COST,
         EXIT,
@@ -844,8 +810,6 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         UPGRADE,
         MANAGE_BILLING,
         LOGOUT,
-        MCP,
-        OPEN_MCP_SERVERS,
         AGENT.clone(),
         CLEAR,
         NEW.clone(),

@@ -55,6 +55,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Accounts: login, sign-up and SSO](#accounts-login-sign-up-and-sso) — removed every login, sign-up, SSO, web-handoff, paste-token and reauth flow and the Account page; the app is permanently in the no-account state and deletes the previously stored credential once
 - [Rules, facts, memory and saved prompts](#rules-facts-memory-and-saved-prompts) — removed the AI Rules (Knowledge) pane and settings page, agent memory and rule suggestions, saved prompts (Agent Mode workflows) and their slash commands, menus, panes and modals
 - [CLI-agent footer split out of the agent footer](#cli-agent-footer-split-out-of-the-agent-footer) — the third-party CLI agent toolbar is now its own `CLIAgentFooter` view in `terminal/view/cli_agent_footer/`, with its own item type, layout editor and lenient stored-layout parsing
+- [MCP (Model Context Protocol)](#mcp-model-context-protocol) — deleted the `mcp` crate, the MCP server managers, gallery, OAuth and file-based discovery, the MCP settings page, Drive item and slash commands, the agent's MCP tool and resource actions, MCP execution-profile permissions and the Figma MCP prompt chip
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1468,3 +1469,32 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - The plugin install/update chips and `write_install_log` are unchanged apart from moving; SWP-09 removes them.
 - The `AgentView` overrides in `unregister_cli_agent_session_restores_unlocked_input_config` and `input_tests.rs::test_shell_lock_respected_when_slash_command_typed` stay: both exercise `ai/blocklist/input_model.rs`, which AI-26 owns.
 - The CLI footer's chips take their `DisplayChipConfig` from `Input` without the ambient-agent model, since cloud sessions are going away.
+## MCP (Model Context Protocol)
+**Why:** MCP let the built-in agent call tools and read resources from MCP servers the user installed, from a Warp-hosted gallery and managed servers synced through Warp Drive (with team sharing and server-side OAuth client registration). The agent that consumed them is being removed, and the gallery, sharing and managed servers cannot work offline (ai.md AI-14).
+
+**Removed:**
+- `crates/mcp` (server runtime over `rmcp`, SSE/streamable-HTTP transports, OAuth including the loopback callback) and the `rmcp` dependency from `app`, `crates/ai` and `[workspace.dependencies]`; `handlebars`, `chrono`, `uuid` and `warp_errors` from `cloud_object_models`.
+- `app/src/ai/mcp/` (the legacy and templatable server managers, gallery, file-based discovery for Claude, Codex, Warp and agent config files, installation persistence, parsing, logs, built-in servers) and the `TemplatableMCPServerManager`, `FileBasedMCPManager`, `FileMCPWatcher` and `MCPGalleryManager` singletons with their test-helper registrations.
+- `settings_view/{mcp_servers_page*, mcp_servers/}` and `SettingsSection::AgentMCPServers` (nav entry, slug, palette page, saved-session slug), the "Auto-spawn servers from third-party agents" setting (`FileBasedMcpEnabled`) and its toggle, `MCPExecutionPath` (the login-shell PATH used to launch servers) and the code in `TerminalView` that fed it.
+- The MCP Drive items (`drive/items/mcp_server{,_collection}.rs`), `DriveObjectType`/`WarpDriveItemId::MCPServer[Collection]`, `JsonObjectType::{MCPServer, TemplatableMCPServer}`, `cloud_object_models/src/mcp*.rs` (`MCPServer`, `TemplatableMCPServer` and their cloud models) and their branches in the sync queue, update manager, object client, persistence and `ServerCloudObject`; the MCP gallery GraphQL query fields and `create_managed_mcp_client_config`; the `active_mcp_servers`, `mcp_server_installations`, `mcp_environment_variables` and `mcp_server_panes` reads and writes (`ModelEvent::*MCP*`, `PersistedData::mcp_*`, `AppState::running_mcp_servers`, `MCP_SERVER_PANE_KIND` and the row structs). The tables stay until DB-1.
+- The agent's `CallMCPTool` and `ReadMCPResource` actions, results and executors, their API conversions, persistence variants, redaction arms, permission checks, the request-time `MCPContext`, and the MCP tool-call and resource renderers in the AI block (`RequestedActionViewType`, the JSON tree view and `ui_components/json_tree.rs`). The MCP config file "protected path" write denial and the "open MCP config" button in code diffs went with them.
+- `McpStaticConfig`/`McpOAuthProviderConfig` in `warp_core::channel` (and every binary's `mcp_static_config: None`), `ContextFlag::ShowMCPServers`, `ExecutionMode::can_inherit_process_path_for_mcp`, `AppExecutionMode::can_autostart_mcp_servers` and `warp_home_mcp_config_file_path` with the `~/.warp/.mcp.json` watcher.
+- MCP OAuth deep links: `UriHost::Mcp` (`warposs://mcp/...`), `warposs://settings/mcp` and the `root_view:open_mcp_settings_*` actions.
+- `/add-mcp`, `/mcp` and `/open-mcp-servers`, `TerminalAction`/`InputEvent::{OpenViewMCPPane, OpenAddMCPPane}`, the "Open MCP Servers" action, binding and menu items, the "Open Settings: MCP Servers" binding and the MCP agent tips.
+- The MCP parts of execution profiles: `mcp_permissions`, `mcp_allowlist` and `mcp_denylist` (model, settings profile file, onboarding autonomy presets, the profile editor, the profiles page and the profile summary), and `AISettings::is_mcp_permission_editable`.
+- Telemetry variants and payload types for MCP (`MCPServerAdded`, `MCPTemplateCreated`, ...).
+- Figma MCP: the "Get/Enable Figma MCP" prompt chip, Figma-PNG detection (`ImageContext::is_figma`, `editor/view/figma_utils`), the Figma bundled skills catalog (`resources/bundled/mcp_skills`) and the `add-mcp-server` and `factory-mcp` bundled skills, `BundledSkillActivation::RequiresMcp`, `Icon::Figma[Colored]`.
+- `warp_core::ui::external_product_icon` (brand icons that only MCP server cards used, including the Sentry one) and the unused Heroku, Notion, Resend, Sentry, You.com, Composio and Figma SVGs; `AvatarContent::ExternalProductIcon`, `RedNotificationDot::default_styles`, `CloudObjectUuid[Lookup]` and `semantic_creator`.
+
+**Modified:**
+- `GenericStringObjectFormat` in the GraphQL crate keeps the `JsonMCPServer` and `JsonTemplatableMCPServer` variants (the schema-bound enum needs every server value); the Drive sync paths skip them like any unknown format.
+- Protobuf conversions ignore MCP tool calls from the server: the request no longer advertises `CallMcpTool`/`ReadMcpResource` tools and sends no MCP context.
+- The Drive menu no longer lists MCP servers. The AI menu keeps only its rules item until AI-15 removes it.
+- Persisted agent-action serialization drops the MCP variants (nothing deserialized them).
+
+**User-visible impact:** No MCP servers page, `/add-mcp`, `/mcp`, `/open-mcp-servers`, MCP Drive folder, Settings > MCP servers, `warposs://settings/mcp` or MCP OAuth callback. Agent profiles have no "Call MCP servers" permission. Servers a user configured in `.mcp.json`, Claude or Codex config files are no longer started by the app (third-party CLI agents keep using their own config).
+
+**Notes:**
+- Cargo features and `FeatureFlag` variants named for MCP (`McpServer`, `McpOauth`, `FileBasedMcp`, `McpDebuggingIds`, `MCPGroupedServerContext`, `McpJsonTreeView`, `WellKnownMcpIds`, `FactoryMcp`, `FigmaDetection`) stay for FLAGS-1.
+- Left for other tasks: `ToolCallStats::{read_mcp_resource_stats, call_mcp_tool_stats}` in `persistence::model` and the GraphQL usage query (AI-30/SRV-1); `mcp_servers` in `cloud_agent_config.rs` and `scheduled_ambient_agent.rs` (AI-18/AI-29); `mcp_servers_json` in the simple-integration GraphQL types and the schema files (SRV-1); the two MCP tips in `terminal/view/ambient_agent/tips.rs` (AI-17a); the `factory-files` and `claude-api` bundled skills that mention MCP (AI-11); the `.mcp.json` entry in the preview-config migration test (CFG-1); the MCP tables and columns in `persistence/schema.rs` and migrations (DB-1).
+- `simple_logger`'s rotation support was added for MCP server logs and no longer has a caller.

@@ -19,11 +19,6 @@ pub struct ImageContext {
     pub mime_type: String,
 
     pub file_name: String,
-
-    /// Whether this image was exported from Figma, detected via
-    /// the `Software: Figma` PNG metadata field.
-    #[serde(default)]
-    pub is_figma: bool,
 }
 
 impl std::fmt::Debug for ImageContext {

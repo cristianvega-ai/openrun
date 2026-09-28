@@ -125,10 +125,9 @@ impl LogManager {
     /// it accumulates `config.max_file_size_bytes` of writes, keeping up to
     /// `config.max_rotation` rotated copies on disk and discarding older ones.
     ///
-    /// This is the entry point used by callers that produce high-volume logs
-    /// over long-lived sessions — primarily MCP server stderr/stdout capture,
-    /// where a single chatty server could otherwise grow its log file
-    /// unboundedly across a multi-day session (warpdotdev/warp#7723).
+    /// This is the entry point for callers that produce high-volume logs over
+    /// long-lived sessions, where a single chatty source could otherwise grow
+    /// its log file unboundedly.
     pub fn register_with_rotation(
         &mut self,
         namespace: &str,

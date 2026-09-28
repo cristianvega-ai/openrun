@@ -35,8 +35,6 @@ use crate::ai::connected_self_hosted_workers::ConnectedSelfHostedWorkersModel;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::harness_availability::HarnessAvailabilityModel;
 use crate::ai::llms::LLMPreferences;
-use crate::ai::mcp::gallery::MCPGalleryManager;
-use crate::ai::mcp::templatable_manager::TemplatableMCPServerManager;
 use crate::ai::restored_conversations::RestoredAgentConversations;
 use crate::ai::skills::SkillManager;
 use crate::auth::AuthStateProvider;
@@ -257,7 +255,6 @@ pub fn initialize_app(app: &mut App) {
     app.add_singleton_model(TeamTesterStatus::mock);
     app.add_singleton_model(TeamUpdateManager::mock);
     app.add_singleton_model(UpdateManager::mock);
-    app.add_singleton_model(MCPGalleryManager::new);
     app.add_singleton_model(Listener::mock);
     app.add_singleton_model(|_| Appearance::mock());
     app.add_singleton_model(PrivacySettings::mock);
@@ -310,7 +307,6 @@ pub fn initialize_app(app: &mut App) {
     #[cfg(feature = "voice_input")]
     app.add_singleton_model(voice_input::VoiceInput::new);
     app.add_singleton_model(|_| IgnoredSuggestionsModel::new(vec![]));
-    app.add_singleton_model(|_| TemplatableMCPServerManager::default());
     app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
     app.add_singleton_model(|_| {
         crate::ai::document::ai_document_model::AIDocumentModel::new_for_test()
@@ -352,7 +348,7 @@ pub fn initialize_app(app: &mut App) {
     app.add_singleton_model(PersistedWorkspace::new_for_test);
     app.add_singleton_model(|ctx| crate::ai::agent_tips::AITipModel::new_for_agent_tips(ctx));
     // `LocalShellState` captures the user's interactive login-shell PATH (used
-    // for MCP executable resolution). Tests don't exercise that capture, so
+    // for executable resolution). Tests don't exercise that capture, so
     // register the singleton in its `NotLoaded` state to satisfy callers that
     // look it up via `LocalShellState::handle(ctx)`.
     app.add_singleton_model(|_| LocalShellState::NotLoaded);
@@ -8247,7 +8243,6 @@ fn should_upload_cloud_followup_attachments_matches_cloud_mode_image_context_fla
         data: base64::engine::general_purpose::STANDARD.encode(b"fake image"),
         mime_type: "image/png".to_string(),
         file_name: "test.png".to_string(),
-        is_figma: false,
     });
 
     assert!(
@@ -8299,7 +8294,6 @@ fn upload_files_then_submit_cloud_followup_restores_input_on_upload_error() {
             data: base64::engine::general_purpose::STANDARD.encode(b"fake image"),
             mime_type: "image/png".to_string(),
             file_name: "test.png".to_string(),
-            is_figma: false,
         });
         let task_id: crate::ai::ambient_agents::AmbientAgentTaskId =
             "11111111-1111-1111-1111-111111111111".parse().unwrap();

@@ -175,7 +175,7 @@ fn simple_logger_with_rotation_rolls_active_file_over_when_threshold_exceeded() 
 
 /// Without a rotation config, the same write volume that rotates a configured
 /// logger must NOT rotate an unconfigured one. Pins the backward-compatibility
-/// guarantee: existing callers (everything other than the MCP path) see
+/// guarantee: existing callers see
 /// unchanged truncate-on-create behavior.
 #[test]
 fn simple_logger_without_rotation_does_not_rotate_even_at_high_volume() {

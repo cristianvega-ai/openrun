@@ -9,7 +9,6 @@ use crate::ai::agent::{AIAgentAction, AIAgentActionId, AIAgentActionResultType};
 use crate::ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use crate::ai::mcp::templatable_manager::TemplatableMCPServerManager;
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::network::NetworkStatus;
@@ -84,7 +83,6 @@ fn initialize_ask_user_question_test(
     app.add_singleton_model(TeamTesterStatus::mock);
     app.add_singleton_model(UpdateManager::mock);
     app.add_singleton_model(CloudModel::mock);
-    app.add_singleton_model(|_| TemplatableMCPServerManager::default());
     app.add_singleton_model(UserWorkspaces::default_mock);
     let profiles = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
     app.add_singleton_model(BlocklistAIPermissions::new);
