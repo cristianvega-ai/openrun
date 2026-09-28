@@ -354,7 +354,7 @@ pub fn initialize_app(app: &mut App) {
     app.add_singleton_model(PersistedWorkspace::new_for_test);
     app.add_singleton_model(|ctx| crate::ai::agent_tips::AITipModel::new_for_agent_tips(ctx));
     // `LocalShellState` captures the user's interactive login-shell PATH (used
-    // for MCP/sbx executable resolution). Tests don't exercise that capture, so
+    // for MCP executable resolution). Tests don't exercise that capture, so
     // register the singleton in its `NotLoaded` state to satisfy callers that
     // look it up via `LocalShellState::handle(ctx)`.
     app.add_singleton_model(|_| LocalShellState::NotLoaded);
@@ -4115,39 +4115,6 @@ fn test_new_conversation_input_trigger_remains_single_step_in_non_empty_agent_vi
                 .active_conversation_id()
                 .expect("agent view should still be active");
             assert_ne!(active_conversation_id, conversation_id);
-        });
-    });
-}
-
-#[test]
-fn test_create_docker_sandbox_slash_command_executes_and_clears_buffer() {
-    App::test((), |mut app| async move {
-        let _docker_sandbox_flag = FeatureFlag::LocalDockerSandbox.override_enabled(true);
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(
-            &mut app, None, /* history_file_commands */
-            None,
-        )
-        .await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        input.update(&mut app, |input, ctx| {
-            input.user_insert("draft text", ctx);
-            let handled = input.execute_slash_command(
-                &commands::CREATE_DOCKER_SANDBOX,
-                None,
-                SlashCommandTrigger::input(),
-                /*is_queued_prompt*/ false,
-                None,
-                None,
-                ctx,
-            );
-            assert!(handled);
-        });
-
-        input.read(&app, |input, ctx| {
-            assert!(input.buffer_text(ctx).is_empty());
         });
     });
 }

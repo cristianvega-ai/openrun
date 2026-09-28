@@ -486,10 +486,6 @@ fn on_shell_determined<S: TerminalSurface>(
             executable_path: shell_starter.logical_shell_path().to_owned(),
             shell_type: shell_starter.shell_type(),
         },
-        ShellStarter::DockerSandbox(docker_starter) => ShellLaunchData::Executable {
-            executable_path: docker_starter.logical_shell_path().to_owned(),
-            shell_type: docker_starter.shell_type(),
-        },
         ShellStarter::Wsl(shell_starter) => ShellLaunchData::WSL {
             distro: shell_starter.distribution().to_owned(),
         },
@@ -510,7 +506,6 @@ fn on_shell_determined<S: TerminalSurface>(
     // args. For zsh and MSYS2, enqueue_init_script injects this same ID.
     let generated_session_id = match &shell_starter {
         ShellStarter::Direct(starter) | ShellStarter::MSYS2(starter) => starter.session_id(),
-        ShellStarter::DockerSandbox(starter) => starter.session_id(),
         ShellStarter::Wsl(starter) => starter.session_id(),
     };
     manager

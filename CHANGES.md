@@ -38,6 +38,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Codebase indexing and project rules](#codebase-indexing-and-project-rules) — removed codebase indexing (embeddings synced to Warp's servers), project rules (`AGENTS.md`/`WARP.md` as agent context), `/init`, `/index` and `/open-project-rules`; Settings > Code > Projects now lists each repo's language servers
 - [TUI rendering layer and TUI modes in the core crates](#tui-rendering-layer-and-tui-modes-in-the-core-crates) — deleted the ratatui-backed TUI element library, presenter and runtime from `warpui_core`, the char-cell editor layout, and the TUI settings, logging and execution modes
 - [Changelog](#changelog) — removed the changelog model, the "What's New?" resource-center section, the changelog toast and its setting, `/changelog`, the "What's new" and "View latest changelog" entry points and the agent zero-state "Latest updates" section
+- [Docker sandbox sessions and local child-agent harnesses](#docker-sandbox-sessions-and-local-child-agent-harnesses) — removed `sbx` Docker sandbox tabs, `/docker-sandbox`, the sandbox shell type and the agent-SDK launcher for local Claude Code/Codex child agents
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -957,3 +958,25 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left for the AI settings removal: `ShouldShowOzUpdatesInZeroState` / `ShouldExpandOzUpdates` in `settings/ai.rs`, the "Show Warp Agent changelog" toggle in `settings_view/warp_agent_page.rs` and the `SHOW_OZ_UPDATES_IN_ZERO_STATE_FLAG` keymap flag. They no longer control anything.
 - Left for LINKS-1: the resource center's Docs/Slack/Feedback footer and the warp.dev links in the "Advanced Setup" content section (shown only when `AvatarInTabBar` is off). With the changelog gone, the default main page has no content of its own, so LINKS-1 may reduce the resource center to the keybindings page.
 - Existing `ChangelogVersions` entries in users' preferences are left in place and never read.
+
+## Docker sandbox sessions and local child-agent harnesses
+**Why:** Docker sandbox sessions were built on the agent SDK: opening one ran `sbx` to start a container, prepared an Oz cloud-agent environment inside it and reported an environment snapshot to Oz. Local third-party child harnesses (Claude Code or Codex children started by an Oz orchestrator) were launched through the agent SDK's harness driver. Both go with the Oz CLI and agent SDK, which have no place in an offline fork (ai.md decision D8, master decision 9).
+
+**Removed:**
+- `app/src/terminal/view/docker_sandbox/`, `app/src/terminal/local_tty/docker_sandbox.rs`, `crates/warp_terminal/src/local_tty/docker_sandbox.rs` — sandbox tab creation, `sbx` path resolution, in-container environment setup and the sandbox shell starter.
+- The sandbox shell type: `ShellLaunchData::DockerSandbox`, `ShellStarter::DockerSandbox`, `SessionPlatform::DockerSandbox`, `AvailableShell`'s `Config::DockerSandbox`, the `sbx run` PTY spawn path in `crates/warp_terminal/src/local_tty/unix.rs` (with its test), the Windows rejection arm and `PtySpawnError::UnsupportedShellStarter`, and `bootstrap::raw_init_shell_script_for_shell`, which only the sandbox used.
+- Entry points: `DefaultSessionMode::DockerSandbox`, the "Local Docker Sandbox" new-session menu item and its sidecar, `WorkspaceAction::AddDockerSandboxTab`, the `/docker-sandbox` slash command (`SlashCommandKind::CreateDockerSandbox`, `InputEvent::CreateDockerSandbox`) and its test.
+- `app/src/pane_group/pane/local_harness_launch.rs` and its tests — prepared and ran hidden local Claude Code/Codex child agents through the agent SDK harness driver.
+- `CliAgentPluginManager::has_local_marketplace_override` and the Claude/Codex marketplace-override detection (with tests), which only that launcher used.
+
+**Modified:**
+- `pane_group/pane/terminal_pane.rs` — a StartAgent request for a local third-party harness now ends in an error child conversation ("Local child agents do not support third-party harnesses.") instead of launching.
+- `terminal/model/session/command_executor.rs`, `terminal/writeable_pty/pty_controller.rs`, `terminal/local_shell/mod.rs`, `terminal/local_tty/terminal_manager.rs`, `shell_indicator.rs`, `integration_testing/terminal/util.rs`, `ai/blocklist/agent_view/agent_input_footer/mod.rs`, `settings_view/features_page.rs`, `workspace/view.rs` — dropped their sandbox arms and comments.
+
+**User-visible impact:** No Docker sandbox tabs, no `/docker-sandbox` command and no "Local Docker Sandbox" default session mode. A stored `general.default_session_mode = "docker_sandbox"` no longer parses, so the default (Terminal) applies. A restored pane that was a sandbox session reopens with the default shell, because its persisted launch data no longer parses.
+
+**Notes:**
+- `FeatureFlag::LocalDockerSandbox` stays for FLAGS-1. `Icon::Docker` and `docker.svg` stay because the cloud-environment UI still uses them (AI-18).
+- `crates/isolation_platform` still has a `docker_sandbox` isolation type (workload tokens for cloud agents running inside a sandbox); AI-18 deletes that crate.
+- Deferred to AI-19: `ai/local_harness_setup.rs`. It is the orchestration picker's policy for which local harnesses are selectable, and its only users are `ai/orchestration/` and the RunAgents executor, which AI-19 deletes.
+- Deferred to the tasks that delete their last users (AI-17a, AI-19, AI-21, AI-24, AI-27): `ai/harness_availability.rs` (the server-fetched list of cloud harnesses, their models and auth secrets) and `ai/harness_display.rs` (harness names, icons and colors). Their consumers are the ambient-agent harness/model/auth-secret selectors, orchestration config, agent management, the conversation details panel, the agent footer and the profile/model selector.

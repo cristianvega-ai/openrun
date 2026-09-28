@@ -206,18 +206,6 @@ pub static CREATE_ENVIRONMENT: LazyLock<StaticCommand> = LazyLock::new(|| Static
     ),
 });
 
-pub const CREATE_DOCKER_SANDBOX: StaticCommand = StaticCommand {
-    name: "/docker-sandbox",
-    description: "Create a new docker sandbox terminal session",
-    kind: SlashCommandKind::CreateDockerSandbox,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/docker.svg",
-    },
-    availability: Availability::LOCAL.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
 pub static CREATE_NEW_PROJECT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
     name: "/create-new-project",
     description: "Have Oz walk you through creating a new coding project",
@@ -930,10 +918,6 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         VIEW_LOGS,
         VOICE,
     ];
-
-    if FeatureFlag::LocalDockerSandbox.is_enabled() {
-        commands.push(CREATE_DOCKER_SANDBOX);
-    }
 
     commands.push(PROMPTS.clone());
 

@@ -506,9 +506,6 @@ pub enum DefaultSessionMode {
     /// New sessions open a user-defined tab config.
     /// The specific config is identified by the companion `default_tab_config_path` setting.
     TabConfig,
-    /// New sessions open in a local Docker sandbox.
-    /// Requires the `LocalDockerSandbox` feature flag; falls back to `Terminal` when disabled.
-    DockerSandbox,
 }
 
 settings::macros::implement_setting_for_enum!(
@@ -530,7 +527,6 @@ impl DefaultSessionMode {
             DefaultSessionMode::Agent => "Agent",
             DefaultSessionMode::CloudAgent => "Cloud agent",
             DefaultSessionMode::TabConfig => "Tab Config",
-            DefaultSessionMode::DockerSandbox => "Local Docker Sandbox",
         }
     }
 }
@@ -1988,15 +1984,6 @@ impl AISettings {
             // Agent and CloudAgent require AI to be enabled.
             DefaultSessionMode::Agent | DefaultSessionMode::CloudAgent => {
                 if self.is_any_ai_enabled(app) {
-                    mode
-                } else {
-                    DefaultSessionMode::Terminal
-                }
-            }
-            // DockerSandbox is gated on its feature flag; fall back to Terminal
-            // when disabled so a stale stored value doesn't wedge the user.
-            DefaultSessionMode::DockerSandbox => {
-                if FeatureFlag::LocalDockerSandbox.is_enabled() {
                     mode
                 } else {
                     DefaultSessionMode::Terminal

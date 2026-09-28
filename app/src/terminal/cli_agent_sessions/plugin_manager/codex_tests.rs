@@ -439,12 +439,10 @@ fn does_not_need_update_for_non_git_marketplace_override() {
     // TODO: Audit that the environment access only happens in single-threaded code.
     unsafe { std::env::set_var("CODEX_HOME", dir.path()) };
     let result = CodexPluginManager::new(None, None, None).needs_update();
-    let has_override = CodexPluginManager::new(None, None, None).has_local_marketplace_override();
     // TODO: Audit that the environment access only happens in single-threaded code.
     unsafe { std::env::remove_var("CODEX_HOME") };
 
     assert!(!result);
-    assert!(has_override);
 }
 
 fn write_plugin_config(dir: &Path, plugin_key: &str, enabled: bool) {

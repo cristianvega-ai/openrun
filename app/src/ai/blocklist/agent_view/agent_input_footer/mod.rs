@@ -1206,24 +1206,6 @@ impl AgentInputFooter {
         if session.is_remote() {
             return true;
         }
-        // Docker sandbox sessions run inside a container; our auto-install
-        // path operates on the host's shell config and would install the
-        // plugin in the wrong place. Fall back to the manual-instructions
-        // modal so the user can paste the install command into the sandbox
-        // PTY and install inside the container.
-        //
-        // `ShellLaunchData` is only available on native builds; wasm builds
-        // can't produce a `DockerSandbox` variant either way.
-        #[cfg(not(target_family = "wasm"))]
-        {
-            let shell_data = {
-                let model = self.terminal_model.lock();
-                model.active_shell_launch_data().cloned()
-            };
-            if matches!(shell_data, Some(ShellLaunchData::DockerSandbox { .. })) {
-                return true;
-            }
-        }
         sessions_model.has_plugin_auto_failed(session.agent, &session.remote_host)
     }
 
@@ -1290,20 +1272,6 @@ impl AgentInputFooter {
             None => (None, None),
             // WSL is not supported for auto-install.
             Some(ShellLaunchData::WSL { .. }) => return false,
-            // Auto-install isn't supported for Docker sandbox sessions — the
-            // install would run against the *host's* shell config, not the
-            // container's. `should_use_manual_mode` already routes sandbox
-            // sessions to the manual-instructions modal, so this arm is a
-            // defensive fallthrough; users can still install the plugin by
-            // pasting the command into the sandbox PTY themselves.
-            //
-            // TODO(advait): Add native auto-install support for sandboxes,
-            // e.g. by routing the install through the session's in-band
-            // executor so it runs inside the container and targets the
-            // container's shell / package layout. A common use case will be
-            // running a 3p harness (e.g. Claude Code) inside a sandbox and
-            // needing the Warp plugin to integrate with it.
-            Some(ShellLaunchData::DockerSandbox { .. }) => return false,
         };
 
         // Await the interactive PATH so nvm-installed tools like `claude`

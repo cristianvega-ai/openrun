@@ -143,13 +143,6 @@ impl CliAgentPluginManager for CodexPluginManager {
         )
     }
 
-    fn has_local_marketplace_override(&self) -> bool {
-        let Ok(codex_dir) = codex_home_dir() else {
-            return false;
-        };
-        codex_warp_marketplace_config(&codex_dir).is_some_and(|config| !config.is_git())
-    }
-
     async fn install(&self) -> Result<(), PluginInstallError> {
         if !FeatureFlag::CodexPlugin.is_enabled() {
             return Ok(());
