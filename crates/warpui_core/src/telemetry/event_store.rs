@@ -42,14 +42,6 @@ pub struct Event {
 /// Represents the type of telemetry event and its contents.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum EventPayload {
-    IdentifyUser {
-        user_id: String,
-        anonymous_id: String,
-    },
-    AppActive {
-        user_id: Option<String>,
-        anonymous_id: String,
-    },
     NamedEvent {
         user_id: Option<String>,
         anonymous_id: String,
@@ -92,73 +84,6 @@ impl EventStore {
         log::info!("Recorded telemetry event: {event:#?}");
 
         self.events.push_back(event);
-    }
-
-    // Register an Identify User telemetry event
-    // Create a new session if the session is stale
-    pub(super) fn record_identify_user_event(
-        &mut self,
-        user_id: String,
-        anonymous_id: String,
-        timestamp: DateTime<Utc>,
-    ) {
-        let session_created_at = if self.is_session_stale(timestamp) {
-            self.current_session_created_at = timestamp;
-            timestamp
-        } else {
-            self.current_session_created_at
-        };
-        self.last_event_timestamp_seen = self.last_event_timestamp_seen.max(timestamp);
-        self.events.push_back(Event {
-            session_created_at,
-            payload: EventPayload::IdentifyUser {
-                user_id,
-                anonymous_id,
-            },
-            timestamp,
-            contains_ugc: false,
-        });
-    }
-
-    // Called every time app is active
-    // If session is fresh and the last event on the queue is an App Active event, collapse them
-    // Else, it behaves like `record_event`
-    pub(super) fn record_app_active(
-        &mut self,
-        user_id: Option<String>,
-        anonymous_id: String,
-        timestamp: DateTime<Utc>,
-    ) {
-        if !self.is_session_stale(timestamp)
-            && let Some(last_event) = self.events.back_mut().filter(|event| {
-                event.payload
-                    == EventPayload::AppActive {
-                        user_id: user_id.clone(),
-                        anonymous_id: anonymous_id.clone(),
-                    }
-            })
-        {
-            last_event.timestamp = timestamp;
-            self.last_event_timestamp_seen = self.last_event_timestamp_seen.max(timestamp);
-            return;
-        }
-
-        let session_created_at = if self.is_session_stale(timestamp) {
-            self.current_session_created_at = timestamp;
-            timestamp
-        } else {
-            self.current_session_created_at
-        };
-        self.last_event_timestamp_seen = self.last_event_timestamp_seen.max(timestamp);
-        self.events.push_back(Event {
-            session_created_at,
-            payload: EventPayload::AppActive {
-                user_id,
-                anonymous_id,
-            },
-            timestamp,
-            contains_ugc: false,
-        });
     }
 
     /// Returns a newly [`Event`], while also updating `Self::last_event_timestamp_seen` and

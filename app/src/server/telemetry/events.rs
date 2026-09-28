@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -4702,8 +4704,7 @@ impl TelemetryEvent {
         }
     }
 
-    /// Returns whether the event contains user generated content, indicating it should
-    /// be sent to a dedicated rudderstack source.
+    /// Returns whether the event contains user generated content.
     pub fn contains_ugc(&self) -> bool {
         match self {
             TelemetryEvent::GrepToolFailed { .. } => true,

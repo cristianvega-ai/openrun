@@ -1,12 +1,9 @@
-//! Best-effort secret redaction for telemetry payloads.
+//! Best-effort, unconditional secret redaction for strings that leave the device.
 //!
 //! Unlike the AI-side secret redaction in `app/src/ai/blocklist/block/secret_redaction.rs`,
 //! which is gated on the user's secret-redaction (a.k.a. "safe mode") setting and is used
-//! for visual obfuscation in the terminal, the redaction in this module is unconditional:
-//! we always do a redaction pass on telemetry payloads that may contain user-generated
-//! content, regardless of the user's safe-mode setting. The two settings are deliberately
-//! decoupled — visual obfuscation is a UX preference, while telemetry-side redaction is a
-//! defence-in-depth measure for data leaving the device.
+//! for visual obfuscation in the terminal, the redaction in this module runs regardless of the
+//! user's safe-mode setting.
 //!
 //! The regex used for redaction always includes the default patterns defined in
 //! `crate::terminal::model::secrets::regexes::DEFAULT_REGEXES_WITH_NAMES`. Any custom
@@ -14,24 +11,21 @@
 //! enterprise secret redaction) are layered on top of those defaults.
 //!
 //! This module is intentionally lightweight: it does byte-range matching only and does
-//! not track `SecretLevel`s or character ranges, since the telemetry path doesn't need
-//! either.
+//! not track `SecretLevel`s or character ranges.
 use std::collections::HashSet;
 use std::ops::Range;
 
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use regex_automata::meta::Regex;
-use serde_json::Value;
 use warp_errors::report_error;
 
 use crate::terminal::model::secrets::regexes::DEFAULT_REGEXES_WITH_NAMES;
 const REDACTION_REPLACEMENT_CHARACTER: &str = "*";
 lazy_static! {
-    /// Regex used to redact secrets from telemetry payloads. Initialized with the
-    /// default patterns so that redaction works even before the user's privacy
-    /// settings are loaded (and even for users who have never configured any
-    /// custom patterns).
+    /// Regex used by [`redact_secrets_in_string`]. Initialized with the default patterns so that
+    /// redaction works even before the user's privacy settings are loaded (and even for users who
+    /// have never configured any custom patterns).
     static ref TELEMETRY_SECRETS_REGEX: RwLock<Regex> = RwLock::new(build_default_regex());
 }
 /// Builds a regex containing only the default patterns. Used to seed the static
@@ -115,16 +109,6 @@ fn replace_byte_ranges_with_asterisks(input: &mut String, mut ranges: Vec<Range<
     for range in merged.into_iter().rev() {
         let len = range.end - range.start;
         input.replace_range(range, &REDACTION_REPLACEMENT_CHARACTER.repeat(len));
-    }
-}
-/// Walks a [`Value`] and runs [`redact_secrets_in_string`] on every string within
-/// it. Non-string scalars (numbers, booleans, nulls) are left untouched.
-pub fn redact_secrets_in_value(value: &mut Value) {
-    match value {
-        Value::String(s) => redact_secrets_in_string(s),
-        Value::Array(arr) => arr.iter_mut().for_each(redact_secrets_in_value),
-        Value::Object(obj) => obj.values_mut().for_each(redact_secrets_in_value),
-        Value::Null | Value::Bool(_) | Value::Number(_) => {}
     }
 }
 #[cfg(test)]

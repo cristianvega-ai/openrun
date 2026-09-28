@@ -91,22 +91,6 @@ pub fn record_event(
     );
 }
 
-pub fn record_identify_user_event(user_id: String, anonymous_id: String, timestamp: DateTime<Utc>) {
-    let mut telemetry = TELEMETRY.lock();
-    telemetry.record_identify_user_event(user_id, anonymous_id, timestamp);
-}
-
-/// Adds a 'App Active' event to the global event queue.  This should only be called in an async
-/// context.
-pub fn record_app_active_event(
-    user_id: Option<String>,
-    anonymous_id: String,
-    timestamp: DateTime<Utc>,
-) {
-    let mut telemetry = TELEMETRY.lock();
-    telemetry.record_app_active(user_id, anonymous_id, timestamp);
-}
-
 pub fn flush_events() -> Vec<Event> {
     TELEMETRY.lock().events.drain(..).collect()
 }

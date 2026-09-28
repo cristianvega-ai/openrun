@@ -171,8 +171,6 @@ impl SystemInfo {
     ///
     /// The threshold check uses `memory_footprint` (which includes swapped
     /// and compressed pages) so we actually detect high memory situations.
-    /// The Rudderstack telemetry event still reports `rss` so existing
-    /// dashboards are unaffected.
     ///
     /// A crossing of the threshold is only reported once it's confirmed still excessive on the next
     /// poll tick, rather than on the tick that first observed it, so a short-lived spike that's
@@ -221,7 +219,6 @@ impl SystemInfo {
         let memory_breakdown = memory_footprint::memory_breakdown();
 
         // Send a telemetry event indicating that memory usage is extreme.
-        // Report RSS here to keep Rudderstack dashboards consistent.
         let total_application_usage_bytes = rss.as_u64();
         send_telemetry_sync_from_ctx!(
             TelemetryEvent::MemoryUsageHigh {

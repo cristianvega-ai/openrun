@@ -21,6 +21,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Channel binaries and private config loader](#channel-binaries-and-private-config-loader) — deleted the `warp`/`stable`/`dev`/`preview` GUI binaries, their channel assets and the build-time `warp-channel-config` embedding
 - [Computer use and agent screen recording](#computer-use-and-agent-screen-recording) — deleted the `computer_use` crate, the agent's computer-use and screen-recording tools, stored screenshots and the related settings
 - [Current input UI made permanent](#current-input-ui-made-permanent) — legacy flag-off input paths removed outside `app/src/ai`
+- [Telemetry collection (RudderStack)](#telemetry-collection-rudderstack) — stopped collecting, persisting and sending usage telemetry; removed the RudderStack pipeline and the telemetry privacy toggle
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -403,3 +404,55 @@ Each section below covers one removal (a single commit or a small group of relat
 - Four dead-code warnings remain in AI files, for code that only the removed legacy paths used; the AI tasks delete it: `ai/blocklist/history_model.rs::last_conversation_id`, `ai/blocklist/view_util.rs::render_ai_follow_up_icon` (and its re-export in `ai/blocklist/mod.rs`), and `ai/agent/conversation.rs::{create,clear}_optimistic_cli_subagent_task_for_test`.
 - AI-only behavior on the kept flag-on paths (agent view entry points, the model selector, the voice button plumbing and the agent-mode setup banner removal hook) is left for the AI tasks to strip.
 
+## Telemetry collection (RudderStack)
+**Why:** The app queued usage events in memory and sent them in batches to RudderStack, Warp's analytics pipeline. It also wrote unsent events to a JSON file at quit and uploaded them on the next launch, could append every event to a local telemetry log file, and recorded "Active App Usage" and daily app-focus events on timers. An offline enterprise build must not collect, persist or send usage data.
+
+**Removed:**
+- `app/src/server/telemetry/collector.rs`: the `TelemetryCollector` singleton. It flushed to RudderStack every 30s, sent active-usage events every 60s, uploaded the events persisted at the last quit, and flushed or persisted again at shutdown.
+- `app/src/server/telemetry/rudder_message.rs` and `LICENSE-RUDDER-SDK-RUST.txt`: the RudderStack message types (adapted from rudder-sdk-rust) and their license. The license entry is also gone from `script/prepare_bundled_resources` and `script/windows/prepare_bundled_resources.ps1`.
+- `app/src/server/telemetry/context.rs`: the OS and user-agent context attached to RudderStack messages.
+- `app/src/server/telemetry/context_provider.rs`: `AppTelemetryContextProvider`, which supplied the user ID and anonymous ID for events. Its singleton registration is gone from `lib.rs` and from about 30 test setups.
+- In `app/src/server/telemetry/mod.rs`: `TelemetryApi` (the HTTPS client, the batch sender, persistence to `rudder_telemetry_events.json`, and telemetry-to-file via `persist_events_to_telemetry_log_file`) and `clear_event_queue`.
+- `app/src/server/telemetry_ext.rs` and its tests: the conversion of queued events into RudderStack batch messages.
+- `ServerApi::{send_telemetry_event, flush_telemetry_events, flush_persisted_events_to_rudder, persist_telemetry_events}` and the `telemetry_api` field.
+- `ServerApi::send_agent_tip_shown_analytics_event` (a POST to `/analytics/agent-tip-shown`) and its caller in `ai/blocklist/block/status_bar.rs`.
+- The `SessionAbandonedBeforeBootstrap` send in `TerminalView::drop`, which called `ServerApi::send_telemetry_event` directly instead of going through the macros. The `privacy_settings_snapshot` and `background_executor` fields existed only for it and are gone, as is the never-assigned `bootstrap_start` field.
+- `AuthManager`'s post-login identify and login events and the forced flush that followed them. The `notify_login` call stays.
+- `crates/warpui_core/src/app_focus_telemetry.rs` and its tests, `AppContext::{record_app_focus, record_app_blur, try_record_daily_app_focus_duration}`, and the `on_become_active`, blur and terminate hooks in `lib.rs` that called them.
+- In the `warpui_core` event store: the `IdentifyUser` and `AppActive` payloads and `record_identify_user_event`/`record_app_active_event`.
+- `AppExecutionMode::send_telemetry_at_shutdown` (`warp_core`) and the telemetry-file rotation in `warp_logging::rotate_log_files`.
+- The telemetry privacy toggle:
+  - `IsTelemetryEnabled` (`privacy.telemetry_enabled`, storage key `TelemetryEnabled`) in `WarpDrivePrivacySettings`, and `TELEMETRY_ENABLED_DEFAULTS_KEY`.
+  - `PrivacySettings::{is_telemetry_enabled, set_is_telemetry_enabled}` and `PrivacySettingsChangedEvent::UpdateIsTelemetryEnabled`.
+  - The org-forced telemetry state: `PrivacySettings::{is_telemetry_force_enabled, set_is_telemetry_force_enabled}` and `UserWorkspaces::is_telemetry_force_enabled`.
+  - The telemetry fields of `PrivacySettingsSnapshot`, `should_disable_telemetry`, and the test-only `mock`.
+  - `AuthClient::set_is_telemetry_enabled` and `SyncedUserSettings::is_telemetry_enabled`.
+- Telemetry UI:
+  - On the Privacy settings page: the "Help improve Warp" widget (`AppAnalyticsWidget`) and `PrivacyPageAction::ToggleTelemetry`.
+  - The "app analytics" Command Palette toggle and `flags::TELEMETRY_FLAG`.
+  - The telemetry switch in the login and auth privacy overlay (`auth/login_slide.rs`, `auth/auth_view_body.rs`, `auth/auth_view_shared_helpers.rs`).
+  - The trigger in `workspace/view.rs` that showed the telemetry-policy banner to existing users.
+- Tests that asserted on emitted or persisted events: `notebooks::test_edit_telemetry`, the event-queue assertions in `warp_tui`'s `nld_slash_command_toggles_and_reports_its_effects`, `server/telemetry/mod_tests.rs`, the `telemetry_ext` tests, the app-focus tests, and the app-active event-store tests. The event-store session tests now use named events.
+
+**Modified:**
+- `send_telemetry_from_ctx!` and `send_telemetry_from_app_ctx!` (`warp_core`), plus `send_telemetry_sync_from_ctx!`, `send_telemetry_sync_from_app_ctx!` and `send_telemetry_on_executor!` (`server/telemetry/macros.rs`), are now no-ops. They evaluate and discard their arguments, so the existing call sites still type-check, with no dependency on `ServerApiProvider`, `PrivacySettings` or the `TelemetryContextModel` singleton. Trait imports that only the old macro bodies used were removed.
+- `app/src/server/telemetry/events.rs`: added a module-level `#![allow(dead_code)]` so events whose last call site is deleted don't warn, and dropped a doc comment that mentioned RudderStack.
+- `ai::blocklist::telemetry_banner::should_collect_ai_ugc_telemetry`: dropped the `is_telemetry_enabled` parameter, and with it the `GlobalAIAnalyticsCollection` branch that required telemetry to be on. Its callers were updated.
+- `PrivacySettings::get_snapshot` no longer takes a context. The server settings sync no longer sends `telemetry_enabled`, and the Warp Drive preference sync covers only cloud conversation storage.
+- Session sharing (`terminal/shared_session/{sharer,viewer}/network.rs`) sends `telemetry_context: None` instead of OS info.
+- `server/telemetry/secret_redaction.rs`: dropped `redact_secrets_in_value`, which only served RudderStack payloads. `redact_secrets_in_string` stays because the agent SDK harness (`ai/agent_sdk/driver/{harness/mod.rs, termination/unix.rs}`) still calls it; the module goes when the AI tasks remove those callers or TEL-4 deletes `app/src/server/`.
+- `system/info.rs` and `remote_server/unix/mod.rs`: removed comments that described the RudderStack pipeline.
+
+**User-visible impact:** No usage data is collected, written to disk or sent. The Privacy page no longer shows "Help improve Warp", the login privacy overlay has no telemetry switch, and the Command Palette no longer offers to enable or disable app analytics. An existing `privacy.telemetry_enabled` value in the settings file is ignored. A `rudder_telemetry_events.json` left in the state directory by an earlier version is no longer read or deleted.
+
+**Notes:**
+- The no-op macros are temporary shims. Also kept until then: the `TelemetryEvent` trait, `TelemetryContextProvider` and `MockTelemetryContextProvider` (still registered by some tests), the `warpui_core` event store and its `record_telemetry_*` macros (which nothing calls now), `events.rs`, and `PrintTelemetryEvents`. TEL-2 and TEL-3 delete the call sites; TEL-4 deletes the framework and `app/src/server/`.
+- `TelemetryConfig`, `RudderStackConfig`, `RudderStackDestination` and `ChannelState::{rudderstack_non_ugc_destination, rudderstack_ugc_destination, telemetry_file_name, is_telemetry_available}` are no longer used. CFG-1 removes them.
+- These have no remaining code; FLAGS-1 removes them:
+  - Feature flags: `SendTelemetryToFile`, `WithSandboxTelemetry`, `RecordAppActiveEvents` and `GlobalAIAnalyticsCollection`.
+  - Cargo features: `send_telemetry_to_file`, `record_app_active_events` and `global_ai_analytics_collection`.
+- Left for the AI tasks (not sinks):
+  - `ai/blocklist/telemetry_banner.rs` (`TelemetryBanner` and `should_collect_ai_ugc_telemetry`), `TerminalView::insert_telemetry_banner` (still called during new-user onboarding, behind the off-by-default `GlobalAIAnalyticsBanner` flag) and `GeneralSettings::telemetry_banner_dismissed`.
+  - The analytics opt-out copy in `crates/onboarding/src/slides/theme_picker_slide.rs`.
+  - The AI-owned telemetry enums and the Oz OTLP trace export in `app/src/tracing`.
+- Minimal compile fixes in AI-owned files: `ai/blocklist/{block.rs, input_model.rs, action_model/execute/grep.rs, action_model/execute/run_agents.rs, block/status_bar.rs, telemetry_banner.rs}`, `ai/agent_sdk/driver.rs`, `coding_entrypoints/create_project_view.rs`, `tui/mod.rs`, and the test setups in `ai/blocklist/{history_model_tests.rs, prompt/prompt_alert_tests.rs}`.
