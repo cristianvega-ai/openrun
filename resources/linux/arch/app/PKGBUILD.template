@@ -1,10 +1,10 @@
 pkgname=warp-terminal@@CHANNEL_SUFFIX@@
 pkgver=@@VERSION@@
 pkgrel=@@RELEASE@@
-pkgdesc="Warp, the Rust-based terminal for developers and teams"
+pkgdesc="Warp terminal, offline enterprise build"
 arch=('@@ARCH@@')
-url="https://warp.dev"
-license=('custom')
+url="https://github.com/cristianvega-ai/openrun"
+license=('AGPL-3.0-only')
 depends=(
 	'curl'
 	'default-cursors'

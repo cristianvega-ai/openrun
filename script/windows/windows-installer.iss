@@ -2,8 +2,8 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 #include "environment.iss"
 
-#define MyAppPublisher "Denver Technologies, Inc."
-#define MyAppURL "https://www.warp.dev/"
+#define MyAppPublisher "OpenRun Maintainers"
+#define MyAppURL "https://github.com/cristianvega-ai/openrun"
 #ifndef MyAppName
   #define MyAppName "WarpDev"
 #endif
@@ -44,7 +44,6 @@ UninstallDisplayName={#MyAppName}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
-AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 ArchitecturesAllowed={#Arch}
 ArchitecturesInstallIn64BitMode={#Arch}
@@ -61,16 +60,11 @@ WizardSmallImageFile="installer-images\warp-logo.bmp"
 WizardImageFile="installer-images\warp-banner.bmp"
 SetupIconFile="..\..\app\channels\{#ReleaseChannel}\icon\no-padding\icon.ico"
 UninstallDisplayIcon="{app}\icon.ico"
-; Force close previous Warp if it hasn't shut down yet.
-; In the update flow we already warn the user if they have something running and make them confirm
-; before running this installer. Therefore, we are good to force close Warp without fear of losing
-; unsaved work.
-; VSCode does something similar:
-; https://github.com/microsoft/vscode/blob/aac9914f93551f894b8df1e4680bd847e7636be3/build/win32/code.iss#L41
+; Force close previous Warp if it hasn't shut down yet. Interactive installs are already gated
+; by the AppMutex check below, so this only applies to silent installs.
 CloseApplications=force
-; For manual installs: if Warp is running, show a dialog prompting the user to close it
-; before Setup proceeds. Returned empty for background updates so the check is skipped.
-AppMutex={code:GetAppMutex}
+; If Warp is running, show a dialog prompting the user to close it before Setup proceeds.
+AppMutex={#AppMutexName}
 SetupMutex={#AppMutexName}Setup
 ; Version 1809 / Build 18362 is required for ConPTY. See https://github.com/microsoft/vscode-docs/blob/9d736b662fdde3fed17d8bc2ed70bfea4ae20636/docs/supporting/troubleshoot-terminal-launch.md?plain=1#L66/
 MinVersion=10.0.18362
@@ -156,80 +150,13 @@ begin
 #endif
 end;
 
-{ Returns true when the installer was launched by Warp's auto-update code.
-  The auto-update path passes /update=1 on the command line and /NOCLOSEAPPLICATIONS
-  so that the installer does not forcibly kill the running Warp process. Instead we
-  wait for Warp to exit naturally by polling the app mutex below. }
-function IsBackgroundUpdate(): Boolean;
-begin
-  Result := ExpandConstant('{param:update|false}') <> 'false';
-end;
-
-{ For background updates, return an empty mutex name so that Inno Setup skips its
-  built-in "application is running" dialog - we handle the wait ourselves. For manual
-  installs, return the real mutex name so the user is prompted to close Warp first. }
-function GetAppMutex(Value: string): string;
-begin
-  if IsBackgroundUpdate() then
-    Result := ''
-  else
-    Result := '{#AppMutexName}';
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   BinDir: string;
   CmdScriptName: string;
   CmdScriptPath: string;
   CmdScriptContent: string;
-  WaitCounter: Integer;
-  ResultCode: Integer;
 begin
-  { Background update: the installer was launched while Warp was still running.
-    We passed /NOCLOSEAPPLICATIONS so Inno won't kill it. Wait here - before any
-    files are touched - for Warp to release its single-instance mutex, which
-    happens as part of normal process exit. }
-  if CurStep = ssInstall then
-  begin
-    if IsBackgroundUpdate() then
-    begin
-      Log('Background update: waiting for Warp to exit (mutex: {#AppMutexName})...');
-      WaitCounter := 0;
-      while CheckForMutexes('{#AppMutexName}') and (WaitCounter < 30) do
-      begin
-        Sleep(500);
-        WaitCounter := WaitCounter + 1;
-      end;
-      if CheckForMutexes('{#AppMutexName}') then
-      begin
-        Log('Warp mutex still held after timeout; force-killing remaining processes.');
-        { Kill by image name. {#MyAppExeName} (e.g. warp.exe, dev.exe) is unique
-          enough that collateral damage is not a concern. OpenConsole.exe is NOT
-          killed by name because it is shared with Windows Terminal; instead we
-          rely on Warp's Job Object (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) to
-          cascade-kill any child OpenConsole.exe processes when warp.exe dies. }
-        Exec('taskkill.exe', '/f /im {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-        if ResultCode <> 0 then
-          Log('force-kill failed for {#MyAppExeName} (exit code: ' + IntToStr(ResultCode) + ')');
-        Sleep(1000);
-      end
-      else
-      begin
-        Log('Warp has exited; proceeding with file installation.');
-        { The minidump crash-reporter is a child process (same exe name) that
-          may outlive the main Warp process. It holds the executable file open,
-          which causes the file-copy step to fail with "Access is denied".
-          We identify it by the "minidump-server" argument in its command line. }
-        Exec('powershell.exe',
-          '-NoProfile -NoLogo -Command "$stopError = 0; Get-CimInstance Win32_Process -Filter \"Name=''{#MyAppExeName}'' and CommandLine like ''%minidump-server%''\" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorVariable e -ErrorAction SilentlyContinue; if ($e) { $stopError = $e[0].Exception.HResult } }; exit $stopError"',
-          '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-        if ResultCode <> 0 then
-          Log('minidump-server cleanup failed (exit code: ' + IntToStr(ResultCode) + ')');
-        Sleep(500);
-      end;
-    end;
-  end;
-
   { After a successful install, write a helper script for running the Warp CLI. }
   { We use this to add a "warp-" prefix (e.g. "warp-preview.cmd" vs. "preview.exe") }
   if CurStep = ssPostInstall then begin
@@ -241,15 +168,8 @@ begin
     if not DirExists(BinDir) then
       CreateDir(BinDir);
 
-    { Determine the channel-specific script name.  These values must match
-      `Channel::cli_command_name` in the Rust source. }
-#if ReleaseChannel == "stable"
-    CmdScriptName := 'oz.cmd'
-#elif ReleaseChannel == "oss"
-    CmdScriptName := 'warp-oss.cmd';
-#else
-    CmdScriptName := 'oz-{#ReleaseChannel}.cmd';
-#endif
+    { Determine the channel-specific script name (e.g. "warp-oss.cmd"). }
+    CmdScriptName := 'warp-{#ReleaseChannel}.cmd';
 
     { Create the helper CMD script }
     CmdScriptPath := BinDir + '\' + CmdScriptName;
