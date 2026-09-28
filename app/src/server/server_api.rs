@@ -4,7 +4,6 @@ pub mod factory;
 pub mod integrations;
 pub mod managed_secrets;
 pub mod object;
-pub(crate) mod presigned_upload;
 pub mod team;
 pub mod workspace;
 

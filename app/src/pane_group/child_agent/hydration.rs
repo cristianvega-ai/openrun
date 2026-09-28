@@ -9,7 +9,6 @@ use crate::ai::agent_conversations_model::AgentConversationsModel;
 use crate::ai::ambient_agents::{AmbientAgentTask, AmbientAgentTaskId};
 use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::history_model::CloudConversationData;
 use crate::pane_group::{PaneGroup, PaneId, TerminalPane, TerminalViewResources};
 use crate::terminal::model::terminal_model::ConversationTranscriptViewerStatus;
 use crate::terminal::view::load_ai_conversation::{
@@ -52,7 +51,7 @@ impl PaneGroup {
             if self
                 .create_child_loading_placeholder(
                     child_conversation,
-                    AgentViewEntryOrigin::CloudAgent,
+                    AgentViewEntryOrigin::ChildAgent,
                     ctx,
                 )
                 .is_none()
@@ -88,7 +87,7 @@ impl PaneGroup {
                     .or_else(|| {
                         self.create_child_loading_placeholder(
                             child_conversation,
-                            AgentViewEntryOrigin::CloudAgent,
+                            AgentViewEntryOrigin::ChildAgent,
                             ctx,
                         )
                     });
@@ -108,7 +107,7 @@ impl PaneGroup {
                 {
                     let _ = self.create_child_loading_placeholder(
                         child_conversation,
-                        AgentViewEntryOrigin::CloudAgent,
+                        AgentViewEntryOrigin::ChildAgent,
                         ctx,
                     );
                 }
@@ -150,12 +149,11 @@ impl PaneGroup {
                 return;
             }
             let merged = match conversation {
-                Some(CloudConversationData::Oz(cloud)) => {
-                    let tasks: Vec<warp_multi_agent_api::Task> = cloud
+                Some(cloud_conversation) => {
+                    let tasks: Vec<warp_multi_agent_api::Task> = cloud_conversation
                         .all_tasks()
                         .filter_map(|task| task.source().cloned())
                         .collect();
-                    let cloud_conversation = *cloud;
                     match BlocklistAIHistoryModel::handle(ctx).update(ctx, |history, _| {
                         history.hydrate_remote_child_placeholder_with_cloud_transcript(
                             child_id,
@@ -173,13 +171,6 @@ impl PaneGroup {
                         }
                     }
                 }
-                Some(CloudConversationData::CLIAgent(_)) => {
-                    log::warn!(
-                        "child transcript upgrade unsupported \
-                         CLI transcript child_conversation_id={child_id:?}"
-                    );
-                    return;
-                }
                 None => {
                     log::warn!(
                         "child transcript upgrade fetch-empty \
@@ -196,7 +187,7 @@ impl PaneGroup {
                 }
             };
 
-            group.restore_child_passive_transcript(pane_id, child_id, task_id, merged, ctx);
+            group.restore_child_passive_transcript(pane_id, child_id, merged, ctx);
         });
     }
 
@@ -205,7 +196,6 @@ impl PaneGroup {
         &mut self,
         pane_id: PaneId,
         child_id: AIConversationId,
-        task_id: AmbientAgentTaskId,
         merged: AIConversation,
         ctx: &mut ViewContext<Self>,
     ) {
@@ -217,7 +207,7 @@ impl PaneGroup {
                 let model_handle = manager.model();
                 let mut model = model_handle.lock();
                 model.set_conversation_transcript_viewer_status(Some(
-                    ConversationTranscriptViewerStatus::ViewingAmbientConversation(task_id),
+                    ConversationTranscriptViewerStatus::ViewingLocalConversation,
                 ));
             });
         }

@@ -123,11 +123,6 @@ pub enum AgentViewEntryOrigin {
     AcceptedPassiveCodeDiff,
     /// Entered agent view by starting conversation with an inline code review submission.
     InlineCodeReview,
-    /// Entered agent view through a cloud agent prompt.
-    CloudAgent,
-    /// Entered agent view by opening an existing non-Oz cloud agent run (live shared-session
-    /// viewer or transcript viewer).
-    ThirdPartyCloudAgent,
     /// Entered agent view via the CLI (e.g. `warp agent run`).
     Cli,
     /// Entered agent view by adding an image (drag-and-drop or paste).
@@ -196,10 +191,6 @@ pub enum AutoTriggerBehavior {
 }
 
 impl AgentViewEntryOrigin {
-    pub fn is_cloud_agent(&self) -> bool {
-        matches!(self, Self::CloudAgent)
-    }
-
     pub fn should_autotrigger_request(&self) -> AutoTriggerBehavior {
         match self {
             AgentViewEntryOrigin::SlashCommand { trigger } if !trigger.is_keybinding() => {
@@ -713,8 +704,7 @@ impl AgentViewController {
         ctx: &mut ModelContext<Self>,
     ) -> Result<AIConversationId, EnterAgentViewError> {
         // Block entry to fullscreen mode if there's an active long-running command. Transcript
-        // viewers and 3p cloud viewers are exempt: in those contexts the long-running block is
-        // either a restored snapshot or the harness CLI we want to wrap in agent-view chrome.
+        // viewers are exempt: there the long-running block is a restored snapshot.
         let is_long_running = {
             let terminal_model = self.terminal_model.lock();
             terminal_model
@@ -722,7 +712,6 @@ impl AgentViewController {
                 .active_block()
                 .is_active_and_long_running()
                 && !terminal_model.is_conversation_transcript_viewer()
-                && !matches!(&origin, AgentViewEntryOrigin::ThirdPartyCloudAgent)
         };
 
         if is_long_running {
@@ -799,8 +788,8 @@ impl AgentViewController {
                     history_model.start_new_conversation(
                         self.terminal_view_id,
                         false,
-                        matches!(&origin, AgentViewEntryOrigin::CloudAgent),
-                        matches!(&origin, AgentViewEntryOrigin::ThirdPartyCloudAgent),
+                        false,
+                        false,
                         ctx,
                     )
                 });
@@ -817,15 +806,10 @@ impl AgentViewController {
             original_conversation_length: exchange_count,
         };
 
-        let is_cloud = matches!(
-            origin,
-            AgentViewEntryOrigin::CloudAgent | AgentViewEntryOrigin::ThirdPartyCloudAgent
-        );
-
         self.terminal_model
             .lock()
             .block_list_mut()
-            .enter_conversation_context(conversation_id, display_mode.is_inline(), is_cloud);
+            .enter_conversation_context(conversation_id, display_mode.is_inline());
 
         // An empty child placeholder is still an existing run, not a brand-new
         // cloud conversation. This applies to owner-side remote children and
@@ -965,14 +949,12 @@ impl AgentViewController {
             .map(|conversation| conversation.exchange_count())
             .unwrap_or(0);
 
-        let was_ambient_agent = origin == AgentViewEntryOrigin::CloudAgent;
         ctx.emit(AgentViewControllerEvent::ExitedAgentView {
             conversation_id,
             origin,
             display_mode,
             original_exchange_count: original_conversation_length,
             final_exchange_count,
-            was_ambient_agent,
             is_exit_before_new_entrance,
         });
     }
@@ -997,8 +979,6 @@ pub enum AgentViewControllerEvent {
         original_exchange_count: usize,
         /// The number of exchanges in the conversation when agent view is being exited.
         final_exchange_count: usize,
-        /// Whether this was an ambient (cloud) agent session.
-        was_ambient_agent: bool,
         /// Whether this exit is immediately followed by entering a new agent view.
         /// (e.g. Cmd+K while already in agent view to start a new conversation).
         is_exit_before_new_entrance: bool,

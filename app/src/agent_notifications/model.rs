@@ -112,10 +112,7 @@ impl AgentNotificationsModel {
                     ctx.emit(AgentManagementEvent::NotificationUpdated);
                 }
             }
-            ActiveAgentViewsEvent::TerminalViewFocused
-            | ActiveAgentViewsEvent::WindowClosed
-            | ActiveAgentViewsEvent::AmbientSessionOpened { .. }
-            | ActiveAgentViewsEvent::AmbientSessionClosed { .. } => {}
+            ActiveAgentViewsEvent::TerminalViewFocused | ActiveAgentViewsEvent::WindowClosed => {}
         }
     }
 
@@ -578,7 +575,7 @@ impl TerminalViewMetadata {
         };
         let view = terminal_view.as_ref(app);
         Self {
-            is_ambient: view.is_cloud_agent_session(),
+            is_ambient: false,
             branch: view.current_git_branch(app),
         }
     }

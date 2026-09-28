@@ -6,55 +6,16 @@ use persistence::model::{AgentConversationData, ChargedUsageTotals, Conversation
 use warp_multi_agent_api as api;
 use warpui::{App, EntityId, SingletonEntity};
 
-use super::{ConversationDetailsData, ConversationDetailsPanel, PanelMode};
+use super::{ConversationDetailsData, PanelMode};
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{
     AIAgentHarness, AIConversation, AIConversationId, ServerAIConversationMetadata,
 };
-use crate::ai::ambient_agents::task::{
-    AgentConfigSnapshot, HarnessConfig, RequestUsage, TaskPrincipalInfo,
-};
-use crate::ai::ambient_agents::{AmbientAgentTask, AmbientAgentTaskState};
 use crate::ai::blocklist::history_model::BlocklistAIHistoryModel;
 use crate::auth::UserUid;
 use crate::cloud_object::{Revision, ServerMetadata, ServerPermissions};
 use crate::server::ids::ServerId;
 use crate::workspaces::user_profiles::UserProfileWithUID;
-
-fn create_test_task(task_id: &str) -> AmbientAgentTask {
-    let now = Utc::now();
-    AmbientAgentTask {
-        task_id: task_id.parse().unwrap(),
-        parent_run_id: None,
-        title: "Task".to_string(),
-        state: AmbientAgentTaskState::Succeeded,
-        prompt: "test".to_string(),
-        created_at: now,
-        started_at: None,
-        updated_at: now,
-        run_time: Some("PT1S".parse().unwrap()),
-        status_message: None,
-        source: None,
-        execution_location: None,
-        session_id: None,
-        session_link: None,
-        creator: Some(TaskPrincipalInfo {
-            creator_type: "USER".to_string(),
-            uid: "user-1".to_string(),
-            display_name: Some("User 1".to_string()),
-        }),
-        executor: None,
-        conversation_id: None,
-        request_usage: None,
-        agent_config_snapshot: None,
-        artifacts: vec![],
-        is_sandbox_running: false,
-        last_event_sequence: None,
-        children: vec![],
-        debug_agent_available: false,
-        scope: None,
-    }
-}
 
 #[test]
 fn test_from_conversation_prefers_server_creator_profile() {
@@ -220,56 +181,6 @@ fn create_test_server_metadata(
 }
 
 #[test]
-fn test_from_task_includes_linked_directory_when_run_id_matches() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let conversation_id = AIConversationId::new();
-        let task_id = "550e8400-e29b-41d4-a716-000000004000";
-        let directory = "/tmp/run-id-directory";
-
-        let conversation = create_restored_conversation(
-            conversation_id,
-            "root-task",
-            directory,
-            AgentConversationData {
-                server_conversation_token: None,
-                conversation_usage_metadata: None,
-                reverted_action_ids: None,
-                forked_from_server_conversation_token: None,
-                artifacts_json: None,
-                parent_agent_id: None,
-                agent_name: None,
-                orchestration_harness_type: None,
-                parent_conversation_id: None,
-                is_remote_child: false,
-                root_task_is_optimistic: None,
-                run_id: Some(task_id.to_string()),
-                autoexecute_override: None,
-                last_event_sequence: None,
-                pinned: false,
-            },
-        );
-
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(EntityId::new(), vec![conversation], ctx);
-        });
-
-        let task = create_test_task(task_id);
-        app.update(|ctx| {
-            let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-            assert!(matches!(
-                data.mode,
-                PanelMode::Task {
-                    directory: Some(ref task_directory),
-                    ..
-                } if task_directory == directory
-            ));
-        });
-    });
-}
-
-#[test]
 fn test_from_conversation_metadata_passes_harness_through() {
     for harness in [
         None,
@@ -298,67 +209,6 @@ fn test_from_conversation_metadata_passes_harness_through() {
             "harness {harness:?} should pass through"
         );
     }
-}
-
-#[test]
-fn test_from_task_resolves_harness() {
-    App::test((), |mut app| async move {
-        let _history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        // Base task has `agent_config_snapshot: None`; cloning lets us mutate per case.
-        let base_task = create_test_task("550e8400-e29b-41d4-a716-000000004020");
-
-        app.update(|ctx| {
-            // No snapshot → harness unknown.
-            let data = ConversationDetailsData::from_task(&base_task, None, None, ctx);
-            assert_eq!(data.harness, None);
-
-            // Snapshot without an explicit harness → default to Warp Agent.
-            let mut task = base_task.clone();
-            task.agent_config_snapshot = Some(AgentConfigSnapshot::default());
-            let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-            assert_eq!(data.harness, Some(Harness::Oz));
-
-            // Snapshot with explicit harness_type.
-            for harness in [
-                Harness::Oz,
-                Harness::Claude,
-                Harness::Gemini,
-                Harness::Unknown,
-            ] {
-                let mut task = base_task.clone();
-                task.agent_config_snapshot = Some(AgentConfigSnapshot {
-                    harness: Some(HarnessConfig::from_harness_type(harness)),
-                    ..Default::default()
-                });
-                let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-                assert_eq!(data.harness, Some(harness), "harness {harness:?}");
-            }
-        });
-    });
-}
-
-#[test]
-fn test_from_task_populates_executor() {
-    App::test((), |mut app| async move {
-        let _history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-        let mut task = create_test_task("550e8400-e29b-41d4-a716-000000004030");
-        task.executor = Some(TaskPrincipalInfo {
-            creator_type: "service_account".to_string(),
-            uid: "agent-uid".to_string(),
-            display_name: Some("Deploy Agent".to_string()),
-        });
-
-        app.update(|ctx| {
-            let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-            assert_eq!(
-                data.executor
-                    .as_ref()
-                    .map(|executor| executor.display_name.as_str()),
-                Some("Deploy Agent")
-            );
-        });
-    });
 }
 
 #[test]
@@ -449,171 +299,6 @@ fn test_from_conversation_uses_charged_usage_dollar_total() {
             let data = ConversationDetailsData::from_conversation(&conversation, ctx);
 
             assert_eq!(data.cost_in_cents, Some(36.0));
-        });
-    });
-}
-
-#[test]
-fn test_from_task_uses_server_reported_dollar_cost() {
-    App::test((), |mut app| async move {
-        app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let mut task = create_test_task("550e8400-e29b-41d4-a716-000000004060");
-        task.request_usage = Some(RequestUsage {
-            inference_cost: Some(10.0),
-            compute_cost: Some(2.0),
-            platform_cost: Some(3.0),
-            inference_cost_usd: Some(0.18),
-            compute_cost_usd: Some(0.036),
-            platform_cost_usd: Some(0.054),
-        });
-
-        app.update(|ctx| {
-            let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-
-            assert_eq!(data.cost_in_cents, Some(27.0));
-        });
-    });
-}
-
-#[test]
-fn test_oz_run_url_present_for_task_and_absent_for_conversation() {
-    // The Status chip is only clickable (navigating to the Oz run view) when
-    // `oz_run_url` yields a URL, which happens for task-backed runs but not for
-    // plain local conversations.
-    App::test((), |mut app| async move {
-        let _history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-        let task_id = "550e8400-e29b-41d4-a716-000000004050";
-        let task = create_test_task(task_id);
-
-        app.update(|ctx| {
-            // Task mode → the chip should link to the Oz run view.
-            let task_data = ConversationDetailsData::from_task(&task, None, None, ctx);
-            let url = ConversationDetailsPanel::oz_run_url(&task_data)
-                .expect("a task with a task_id should produce an Oz run URL");
-            assert!(
-                url.ends_with(&format!("/runs/{task_id}")),
-                "unexpected Oz run URL: {url}"
-            );
-        });
-
-        // Conversation mode → there is no run view to navigate to.
-        let conversation_data = ConversationDetailsData::from_conversation_metadata(
-            AIConversationId::new(),
-            "Title".to_string(),
-            None,
-            Utc::now().with_timezone(&Local),
-            None,
-            None,
-            None,
-            vec![],
-            None,
-            None,
-            None,
-            None,
-            Some(Harness::Oz),
-        );
-        assert!(ConversationDetailsPanel::oz_run_url(&conversation_data).is_none());
-    });
-}
-
-#[test]
-fn test_from_task_includes_linked_directory_when_server_token_matches() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let conversation_id = AIConversationId::new();
-        let server_token = "server-token-123";
-        let directory = "/tmp/server-token-directory";
-
-        let conversation = create_restored_conversation(
-            conversation_id,
-            "root-task",
-            directory,
-            AgentConversationData {
-                server_conversation_token: Some(server_token.to_string()),
-                conversation_usage_metadata: None,
-                reverted_action_ids: None,
-                forked_from_server_conversation_token: None,
-                artifacts_json: None,
-                parent_agent_id: None,
-                agent_name: None,
-                orchestration_harness_type: None,
-                parent_conversation_id: None,
-                is_remote_child: false,
-                root_task_is_optimistic: None,
-                run_id: None,
-                autoexecute_override: None,
-                last_event_sequence: None,
-                pinned: false,
-            },
-        );
-
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(EntityId::new(), vec![conversation], ctx);
-        });
-
-        let mut task = create_test_task("550e8400-e29b-41d4-a716-000000004001");
-        task.conversation_id = Some(server_token.to_string());
-
-        app.update(|ctx| {
-            let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-            assert!(matches!(
-                data.mode,
-                PanelMode::Task {
-                    directory: Some(ref task_directory),
-                    ..
-                } if task_directory == directory
-            ));
-        });
-    });
-}
-
-#[test]
-fn test_from_task_carries_the_runner_the_run_named() {
-    App::test((), |mut app| async move {
-        app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let mut task = create_test_task("550e8400-e29b-41d4-a716-000000005001");
-        task.agent_config_snapshot = Some(AgentConfigSnapshot {
-            environment_id: Some("env-1".to_string()),
-            runner_id: Some("runner-macos".to_string()),
-            ..Default::default()
-        });
-
-        app.update(|ctx| {
-            let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-            assert!(matches!(
-                data.mode,
-                PanelMode::Task {
-                    runner_id: Some(ref runner_id),
-                    ..
-                } if runner_id == "runner-macos"
-            ));
-        });
-    });
-}
-
-#[test]
-fn test_from_task_leaves_the_runner_absent_when_the_run_names_none() {
-    App::test((), |mut app| async move {
-        app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let mut task = create_test_task("550e8400-e29b-41d4-a716-000000005002");
-        task.agent_config_snapshot = Some(AgentConfigSnapshot {
-            environment_id: Some("env-1".to_string()),
-            ..Default::default()
-        });
-
-        app.update(|ctx| {
-            let data = ConversationDetailsData::from_task(&task, None, None, ctx);
-            assert!(matches!(
-                data.mode,
-                PanelMode::Task {
-                    runner_id: None,
-                    ..
-                }
-            ));
         });
     });
 }

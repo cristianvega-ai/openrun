@@ -43,7 +43,6 @@ use crate::ai::agent::conversation::{AIConversation, AIConversationId};
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::history_model::CloudConversationData;
 use crate::ai::blocklist::inline_action::code_diff_view::CodeDiffView;
 use crate::ai::blocklist::{
     BlocklistAIHistoryModel, InputConfig, InputType, SerializedBlockListItem,
@@ -2404,7 +2403,6 @@ impl PaneGroup {
     /// Create a new pane group for a view-only cloud conversation.
     pub fn new_for_conversation_transcript_viewer(
         conversation: AIConversation,
-        ambient_agent_task_id: Option<AmbientAgentTaskId>,
         tips_completed: ModelHandle<TipsCompleted>,
         user_default_shell_unsupported_banner_model_handle: ModelHandle<BannerState>,
         server_api: Arc<ServerApi>,
@@ -2419,7 +2417,6 @@ impl PaneGroup {
                                    ctx: &mut ViewContext<Self>| {
             let (view, terminal_manager) = PaneGroup::create_conversation_viewer(
                 conversation.clone(),
-                ambient_agent_task_id,
                 resources,
                 view_bounds.size(),
                 ctx,
@@ -2496,8 +2493,7 @@ impl PaneGroup {
     /// Uses the active session view as the target.
     pub fn load_data_into_conversation_transcript_viewer(
         &mut self,
-        conversation: CloudConversationData,
-        ambient_agent_task_id: Option<AmbientAgentTaskId>,
+        conversation: AIConversation,
         ctx: &mut ViewContext<Self>,
     ) {
         // Get the active terminal view
@@ -2505,20 +2501,14 @@ impl PaneGroup {
             report_error!("No active terminal view to load conversation into");
             return;
         };
-        self.load_data_into_transcript_viewer(
-            terminal_view,
-            conversation,
-            ambient_agent_task_id,
-            ctx,
-        );
+        self.load_data_into_transcript_viewer(terminal_view, conversation, ctx);
     }
 
     /// Load conversation data into a specific transcript viewer terminal view.
     fn load_data_into_transcript_viewer(
         &mut self,
         terminal_view: ViewHandle<TerminalView>,
-        cloud_conversation: CloudConversationData,
-        ambient_agent_task_id: Option<AmbientAgentTaskId>,
+        conversation: AIConversation,
         ctx: &mut ViewContext<Self>,
     ) {
         let terminal_manager = self
@@ -2527,80 +2517,30 @@ impl PaneGroup {
             .and_then(|tpid| self.terminal_session_by_id(tpid))
             .map(|session| session.terminal_manager(ctx));
 
-        let ambient_agent_task_id =
-            ambient_agent_task_id.or_else(|| Self::ambient_agent_task_id(&cloud_conversation));
-
         BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, _ctx| {
             history_model
                 .mark_terminal_surface_as_conversation_transcript_viewer(terminal_view.id());
         });
 
         if let Some(ref terminal_manager) = terminal_manager {
-            let status = if let Some(task_id) = ambient_agent_task_id {
-                ConversationTranscriptViewerStatus::ViewingAmbientConversation(task_id)
-            } else {
-                ConversationTranscriptViewerStatus::ViewingLocalConversation
-            };
-
             terminal_manager.update(ctx, |terminal_manager, _ctx| {
                 terminal_manager
                     .model()
                     .lock()
-                    .set_conversation_transcript_viewer_status(Some(status));
+                    .set_conversation_transcript_viewer_status(Some(
+                        ConversationTranscriptViewerStatus::ViewingLocalConversation,
+                    ));
             });
         }
 
-        match cloud_conversation {
-            CloudConversationData::Oz(mut conversation) => {
-                if ambient_agent_task_id.is_some() {
-                    conversation.set_is_viewing_shared_session(true);
-                }
-                terminal_view.update(ctx, |view, ctx| {
-                    view.restore_conversation_after_view_creation(
-                        RestoredAIConversation::new(*conversation),
-                        true,
-                        RestoreConversationEntryBehavior::EnterRestoredConversation,
-                        ctx,
-                    );
-                });
-            }
-            CloudConversationData::CLIAgent(cli_conversation) => {
-                if !FeatureFlag::AgentHarness.is_enabled() {
-                    log::warn!("AgentHarness flag is disabled; ignoring CLI agent conversation");
-                    return;
-                }
-                let fallback_title = cli_conversation.metadata.title.clone();
-                terminal_view.update(ctx, |view, ctx| {
-                    view.restore_conversation_and_directory_context(
-                        CloudConversationData::CLIAgent(cli_conversation),
-                        true,
-                        RestoreConversationEntryBehavior::PreserveAgentViewState,
-                        false,
-                        |_, _| {},
-                        ctx,
-                    );
-                    // 3p runs have no materialized AIConversation, so enter agent view with a
-                    // fresh vehicle conversation and retag the restored snapshot block onto it so
-                    // it passes `should_hide_block`'s agent view filter.
-                    if let Some(vehicle_conversation_id) =
-                        view.enter_agent_view_for_restored_cli_agent(fallback_title, ctx)
-                    {
-                        view.model
-                            .lock()
-                            .block_list_mut()
-                            .attach_non_startup_blocks_to_conversation(vehicle_conversation_id);
-                    }
-                });
-            }
-        };
-
-        // Register the transcript viewer as an ambient session so it appears in the Active section
-        // of the conversation list.
-        if let Some(task_id) = ambient_agent_task_id {
-            ActiveAgentViewsModel::handle(ctx).update(ctx, |active_views, ctx| {
-                active_views.register_ambient_session(terminal_view.id(), task_id, ctx);
-            });
-        }
+        terminal_view.update(ctx, |view, ctx| {
+            view.restore_conversation_after_view_creation(
+                RestoredAIConversation::new(conversation),
+                true,
+                RestoreConversationEntryBehavior::EnterRestoredConversation,
+                ctx,
+            );
+        });
 
         ctx.notify();
     }
@@ -3848,19 +3788,6 @@ impl PaneGroup {
         success
     }
 
-    fn ambient_agent_task_id(
-        cloud_conversation: &CloudConversationData,
-    ) -> Option<AmbientAgentTaskId> {
-        match cloud_conversation {
-            CloudConversationData::Oz(conversation) => conversation
-                .server_metadata()
-                .and_then(|metadata| metadata.ambient_agent_task_id),
-            CloudConversationData::CLIAgent(cli_conversation) => {
-                cli_conversation.metadata.ambient_agent_task_id
-            }
-        }
-    }
-
     /// Clear all panes that were hidden due to being closed (for undo functionality)
     /// This is typically called when starting pane rearrangement operations
     fn clear_hidden_closed_panes(&mut self, ctx: &mut ViewContext<Self>) {
@@ -4470,7 +4397,6 @@ impl PaneGroup {
 
     fn create_conversation_viewer(
         conversation: AIConversation,
-        ambient_agent_task_id: Option<AmbientAgentTaskId>,
         resources: TerminalViewResources,
         initial_size: Vector2F,
         ctx: &mut ViewContext<Self>,
@@ -4490,7 +4416,6 @@ impl PaneGroup {
             Some(ConversationRestorationInNewPaneType::Historical {
                 conversation,
                 should_use_live_appearance: true,
-                ambient_agent_task_id,
             }),
             initial_size,
             ctx.window_id(),
@@ -4498,30 +4423,20 @@ impl PaneGroup {
         );
         let terminal_manager = terminal_init.manager;
         let terminal_view = terminal_init.view;
-        // Set the conversation viewer status based on whether this is an ambient agent conversation
-        let viewer_status = ambient_agent_task_id
-            .map(ConversationTranscriptViewerStatus::ViewingAmbientConversation)
-            .unwrap_or(ConversationTranscriptViewerStatus::ViewingLocalConversation);
 
         terminal_manager.update(ctx, |terminal_manager, _ctx| {
             terminal_manager
                 .model()
                 .lock()
-                .set_conversation_transcript_viewer_status(Some(viewer_status.clone()));
+                .set_conversation_transcript_viewer_status(Some(
+                    ConversationTranscriptViewerStatus::ViewingLocalConversation,
+                ));
         });
 
         BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, _ctx| {
             history_model
                 .mark_terminal_surface_as_conversation_transcript_viewer(terminal_view.id());
         });
-
-        // Register the transcript viewer as an ambient session so it appears in the Active section
-        // of the conversation list.
-        if let Some(task_id) = ambient_agent_task_id {
-            ActiveAgentViewsModel::handle(ctx).update(ctx, |active_views, ctx| {
-                active_views.register_ambient_session(terminal_view.id(), task_id, ctx);
-            });
-        }
 
         (terminal_view, terminal_manager)
     }
@@ -4636,27 +4551,12 @@ impl PaneGroup {
     pub fn replace_loading_pane_with_terminal(
         &mut self,
         loading_pane_id: PaneId,
-        cloud_conversation: CloudConversationData,
+        conversation: AIConversation,
         ctx: &mut ViewContext<Self>,
     ) -> bool {
-        let restoration = match cloud_conversation {
-            CloudConversationData::Oz(conversation) => {
-                ConversationRestorationInNewPaneType::Historical {
-                    conversation: *conversation,
-                    should_use_live_appearance: true,
-                    ambient_agent_task_id: None,
-                }
-            }
-            CloudConversationData::CLIAgent(cli_conversation) => {
-                if !FeatureFlag::AgentHarness.is_enabled() {
-                    log::warn!("AgentHarness flag is disabled; ignoring CLI agent conversation");
-                    return false;
-                }
-                ConversationRestorationInNewPaneType::HistoricalCLIAgent {
-                    conversation: *cli_conversation,
-                    should_use_live_appearance: true,
-                }
-            }
+        let restoration = ConversationRestorationInNewPaneType::Historical {
+            conversation,
+            should_use_live_appearance: true,
         };
 
         // Get the initial working directory from the restored conversation.

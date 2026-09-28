@@ -267,11 +267,6 @@ impl PaneContent for TerminalPane {
             }
         });
         let active_session = terminal_view.as_ref(ctx).active_session().clone();
-        let active_stack_view = pane_stack.as_ref(ctx).active_view().clone();
-        let active_ambient_session_registration = active_stack_view
-            .as_ref(ctx)
-            .ambient_agent_task_id()
-            .map(|task_id| (active_stack_view.id(), task_id));
         ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
             model.register_agent_view_controller(
                 &agent_view_controller,
@@ -279,9 +274,6 @@ impl PaneContent for TerminalPane {
                 terminal_view_id,
                 ctx,
             );
-            if let Some((terminal_view_id, task_id)) = active_ambient_session_registration {
-                model.register_ambient_session(terminal_view_id, task_id, ctx);
-            }
         });
     }
 
@@ -328,7 +320,6 @@ impl PaneContent for TerminalPane {
         ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
             for terminal_view_id in terminal_view_ids {
                 model.unregister_agent_view_controller(terminal_view_id, ctx);
-                model.unregister_ambient_session(terminal_view_id, ctx);
             }
         });
 

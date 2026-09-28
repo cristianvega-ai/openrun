@@ -186,24 +186,6 @@ pub(super) fn convert_input(
                     )),
                 });
             }
-            AIAgentInput::StartFromAmbientRunPrompt {
-                ambient_run_id,
-                context,
-                attachments_dir,
-            } => {
-                return Ok(api::request::Input {
-                    context: Some(convert_context(context.as_ref())),
-                    r#type: Some(api::request::input::Type::StartFromAmbientRunPrompt(
-                        api::request::input::StartFromAmbientRunPrompt {
-                            ambient_run_id,
-                            // Deprecated, we always resolve base_prompt from the stored task config.
-                            runtime_base_prompt: String::new(),
-                            runtime_skill: None,
-                            attachments_dir: attachments_dir.unwrap_or_default(),
-                        },
-                    )),
-                });
-            }
             other_input => match convert_input_to_user_input(other_input) {
                 Ok(api_input) => api_inputs.push(api_input),
                 Err(ConvertToAPITypeError::Ignore) => (),

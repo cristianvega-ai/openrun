@@ -60,13 +60,11 @@ use crate::ai::harness_availability::HarnessAvailabilityModel;
 use crate::ai::harness_display;
 use crate::app_state::PersistedAgentManagementFilters;
 use crate::appearance::Appearance;
-use crate::auth::AuthStateProvider;
 use crate::editor::{
     EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys,
     PropagateHorizontalNavigationKeys, SingleLineEditorOptions, TextOptions,
 };
 use crate::menu::{MenuItem, MenuItemFields};
-use crate::server::team_scope::RequestTeamScope;
 use crate::settings::UsageDisplayUnit;
 use crate::settings::ai::{AISettings, AISettingsChangedEvent};
 use crate::ui_components::agent_icon::agent_conversation_entry_icon_variant;
@@ -227,7 +225,6 @@ impl AgentManagementView {
                 UserWorkspacesEvent::WindowTeamChanged { window_id }
                     if *window_id == ctx.window_id()
             ) {
-                me.trigger_filter_fetch(ctx);
                 me.update_creator_dropdown(ctx);
                 me.update_environment_dropdown(ctx);
                 me.get_tasks_from_model(ctx);
@@ -401,10 +398,6 @@ impl AgentManagementView {
         view.sync_with_loaded_filters(ctx);
         view.update_creator_dropdown(ctx);
         view.update_environment_dropdown(ctx);
-        if view.filters != AgentManagementFilters::default() {
-            view.trigger_filter_fetch(ctx);
-        }
-
         view.get_tasks_from_model(ctx);
         view
     }
@@ -888,42 +881,10 @@ impl AgentManagementView {
         }
     }
 
-    /// Common handler for filter changes: fetch, refresh tasks, and save.
+    /// Common handler for filter changes: refresh tasks and save.
     fn on_filter_changed(&mut self, ctx: &mut ViewContext<Self>) {
-        self.trigger_filter_fetch(ctx);
         self.get_tasks_from_model(ctx);
         ctx.dispatch_global_action("workspace:save_app", ());
-    }
-
-    /// Trigger a server fetch for tasks matching current filters.
-    fn trigger_filter_fetch(&self, ctx: &mut ViewContext<Self>) {
-        let current_user_uid = AuthStateProvider::handle(ctx)
-            .as_ref(ctx)
-            .get()
-            .user_id()
-            .map(|uid| uid.as_string());
-        if let Some(uid) = current_user_uid {
-            let filters = self.filters.clone();
-            let scope = UserWorkspaces::as_ref(ctx).team_context_for_operation(ctx);
-            let request_team_scope = RequestTeamScope::from_scope(&scope);
-            AgentConversationsModel::handle(ctx).update(ctx, |model, ctx| {
-                model.fetch_tasks_for_filters(&filters, &uid, request_team_scope, ctx);
-            });
-        }
-    }
-
-    /// Shows the setup guide from a deep-link/action without toggling it off on repeated calls.
-    pub(crate) fn show_setup_guide_from_link(&mut self, ctx: &mut ViewContext<Self>) {
-        if !self.is_viewing_setup_guide {
-            send_telemetry_from_ctx!(AgentManagementTelemetryEvent::OpenSetupGuide, ctx);
-        }
-        self.is_viewing_setup_guide = true;
-        ctx.notify();
-    }
-
-    #[cfg(test)]
-    pub(crate) fn is_showing_setup_guide(&self) -> bool {
-        self.is_viewing_setup_guide
     }
 
     pub(crate) fn apply_environment_filter_from_link(
@@ -1192,15 +1153,6 @@ impl AgentManagementView {
                             ctx
                         );
                     }
-                    ManagementCardItemId::AmbientRun(task_id) => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::SessionLinkCopied {
-                                task_id: task_id.to_string(),
-                                copied_from: OpenedFrom::ManagementView,
-                            },
-                            ctx
-                        );
-                    }
                 }
 
                 ctx.clipboard()
@@ -1274,7 +1226,6 @@ impl AgentManagementView {
     ) {
         match event {
             AgentConversationsModelEvent::ConversationsLoaded
-            | AgentConversationsModelEvent::NewTasksReceived
             | AgentConversationsModelEvent::TasksUpdated => {
                 self.update_creator_dropdown(ctx);
                 self.update_environment_dropdown(ctx);
@@ -2323,7 +2274,8 @@ impl TypedActionView for AgentManagementView {
                     }
                     self.is_viewing_setup_guide = false;
                 } else {
-                    self.show_setup_guide_from_link(ctx);
+                    send_telemetry_from_ctx!(AgentManagementTelemetryEvent::OpenSetupGuide, ctx);
+                    self.is_viewing_setup_guide = true;
                 }
                 ctx.notify();
             }
@@ -2348,15 +2300,6 @@ impl TypedActionView for AgentManagementView {
                         send_telemetry_from_ctx!(
                             AgentManagementTelemetryEvent::ConversationOpened {
                                 conversation_id: conversation_id.to_string(),
-                                opened_from: OpenedFrom::ManagementView,
-                            },
-                            ctx
-                        );
-                    }
-                    ManagementCardItemId::AmbientRun(task_id) => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::CloudRunOpened {
-                                task_id: task_id.to_string(),
                                 opened_from: OpenedFrom::ManagementView,
                             },
                             ctx

@@ -29,27 +29,6 @@ use crate::persistence::model::{
 };
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::ai::AIClient;
-use crate::terminal::model::block::SerializedBlock;
-
-/// A conversation transcript from a CLI agent harness (e.g. Claude Code).
-#[derive(Debug, Clone)]
-pub struct CLIAgentConversation {
-    /// Server metadata about this conversation.
-    pub metadata: ServerAIConversationMetadata,
-    /// A snapshot of the final agent TUI state.
-    pub block: SerializedBlock,
-}
-
-/// Representation of the conversation data that can be fetched from cloud storage.
-///
-/// The exact format depends on the agent harness that produced the conversation.
-pub enum CloudConversationData {
-    /// A conversation produced by the Oz harness, which we can materialize into the
-    /// [`AIConversation`] data model.
-    Oz(Box<AIConversation>),
-    /// A conversation produced by an external CLI agent harness.
-    CLIAgent(Box<CLIAgentConversation>),
-}
 
 /// Converts an `AgentConversation` from the database to an `AIConversation`.
 /// This utility function extracts the conversion logic that was originally embedded
@@ -108,7 +87,7 @@ pub async fn load_conversation_from_server(
     conversation_id: AIConversationId,
     server_conversation_token: ServerConversationToken,
     server_api: Arc<dyn AIClient>,
-) -> Option<CloudConversationData> {
+) -> Option<AIConversation> {
     if !FeatureFlag::CloudConversations.is_enabled() {
         return None;
     }
@@ -123,60 +102,25 @@ pub async fn load_conversation_from_server(
         .await
     {
         Ok((conversation_data, server_metadata)) => {
-            match server_metadata.harness {
-                AIAgentHarness::Oz => {
-                    // Convert Oz conversations to an AIConversation.
-                    match convert_conversation_data_to_ai_conversation(
-                        conversation_id,
-                        &conversation_data,
-                        server_metadata,
-                        RestorationMode::Continue,
-                    ) {
-                        Some(conversation) => {
-                            log::info!("Loaded Oz conversation {conversation_id} from server");
-                            Some(CloudConversationData::Oz(Box::new(conversation)))
-                        }
-                        None => {
-                            log::warn!(
-                                "Failed to convert Oz server conversation data for {conversation_id}"
-                            );
-                            None
-                        }
-                    }
+            if server_metadata.harness != AIAgentHarness::Oz {
+                log::warn!(
+                    "Ignoring conversation {conversation_id}: unsupported harness {:?}",
+                    server_metadata.harness
+                );
+                return None;
+            }
+            match convert_conversation_data_to_ai_conversation(
+                conversation_id,
+                &conversation_data,
+                server_metadata,
+                RestorationMode::Continue,
+            ) {
+                Some(conversation) => {
+                    log::info!("Loaded conversation {conversation_id} from server");
+                    Some(conversation)
                 }
-                AIAgentHarness::ClaudeCode | AIAgentHarness::Gemini | AIAgentHarness::Codex => {
-                    if !FeatureFlag::AgentHarness.is_enabled() {
-                        log::warn!(
-                            "Ignoring non-Oz conversation {conversation_id}: AgentHarness flag is disabled"
-                        );
-                        return None;
-                    }
-                    // Fetch snapshot data for third-party harness conversations.
-                    match server_api
-                        .get_block_snapshot(server_conversation_token)
-                        .await
-                    {
-                        Ok(block) => {
-                            log::info!("Loaded CLI agent block snapshot for {conversation_id}");
-                            Some(CloudConversationData::CLIAgent(Box::new(
-                                CLIAgentConversation {
-                                    metadata: server_metadata,
-                                    block,
-                                },
-                            )))
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to fetch block snapshot for {conversation_id}: {e:#}"
-                            );
-                            None
-                        }
-                    }
-                }
-                AIAgentHarness::Unknown => {
-                    log::warn!(
-                        "Ignoring conversation {conversation_id}: server reported an unknown harness; this client may be out of date"
-                    );
+                None => {
+                    log::warn!("Failed to convert server conversation data for {conversation_id}");
                     None
                 }
             }
@@ -190,9 +134,9 @@ pub async fn load_conversation_from_server(
 
 /// Boxes a future with the right type for the platform.
 /// On WASM, futures must not implement Send.
-fn box_future<F>(f: F) -> warpui::r#async::BoxFuture<'static, Option<CloudConversationData>>
+fn box_future<F>(f: F) -> warpui::r#async::BoxFuture<'static, Option<AIConversation>>
 where
-    F: Future<Output = Option<CloudConversationData>> + warpui::r#async::Spawnable,
+    F: Future<Output = Option<AIConversation>> + warpui::r#async::Spawnable,
 {
     cfg_if::cfg_if! {
         if #[cfg(target_family = "wasm")] {
@@ -242,12 +186,10 @@ impl BlocklistAIHistoryModel {
         &self,
         conversation_id: AIConversationId,
         ctx: &AppContext,
-    ) -> warpui::r#async::BoxFuture<'static, Option<CloudConversationData>> {
+    ) -> warpui::r#async::BoxFuture<'static, Option<AIConversation>> {
         // First check if the conversation is already in memory
         if let Some(conversation) = self.conversations_by_id.get(&conversation_id) {
-            return box_future(futures::future::ready(Some(CloudConversationData::Oz(
-                Box::new(conversation.clone()),
-            ))));
+            return box_future(futures::future::ready(Some(conversation.clone())));
         }
 
         // Check metadata to determine the source
@@ -262,9 +204,7 @@ impl BlocklistAIHistoryModel {
 
         if metadata.has_local_data {
             // Load from local database synchronously
-            let result = self
-                .load_conversation_from_db(&conversation_id)
-                .map(|c| CloudConversationData::Oz(Box::new(c)));
+            let result = self.load_conversation_from_db(&conversation_id);
             box_future(futures::future::ready(result))
         } else {
             // Load from server asynchronously
@@ -298,7 +238,7 @@ impl BlocklistAIHistoryModel {
         &mut self,
         server_token: &ServerConversationToken,
         ctx: &AppContext,
-    ) -> warpui::r#async::BoxFuture<'static, Option<CloudConversationData>> {
+    ) -> warpui::r#async::BoxFuture<'static, Option<AIConversation>> {
         let conversation_id =
             self.get_or_set_canonical_conversation_id_for_server_token(server_token);
         if self.conversations_by_id.contains_key(&conversation_id)

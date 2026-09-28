@@ -1,40 +1,18 @@
 //! Ambient agent task types and utilities.
 
-use ai::harness::Harness;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-pub use cloud_object_models::{AgentConfigSnapshot, HarnessAuthSecretsConfig, HarnessConfig};
+pub use cloud_object_models::AgentConfigSnapshot;
 use iso8601_duration::Duration as Iso8601Duration;
 use serde::{Deserialize, Serialize};
-use url::Url;
-use uuid::Uuid;
-use warp_core::ui::theme::WarpTheme;
 use warp_errors::report_error;
-use warpui::color::ColorU;
 use warpui::{SingletonEntity, View, ViewContext};
 
 use super::AmbientAgentTaskId;
 use crate::ai::artifacts::{Artifact, deserialize_artifacts};
 use crate::server::server_api::ServerApiProvider;
-use crate::ui_components::icons::Icon;
 use crate::view_components::DismissibleToast;
 use crate::workspace::ToastStack;
 
-fn parse_session_id_from_link(session_link: &str) -> Option<Uuid> {
-    Url::parse(session_link).ok().and_then(|url| {
-        url.path_segments()
-            .into_iter()
-            .flatten()
-            .last()
-            .and_then(|segment| segment.parse().ok())
-    })
-}
-
-fn parse_execution_session_id(execution: RunExecution<'_>) -> Option<Uuid> {
-    execution
-        .session_id
-        .and_then(|id| id.parse().ok())
-        .or_else(|| execution.session_link.and_then(parse_session_id_from_link))
-}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentSource {
     Linear,
@@ -98,28 +76,6 @@ impl AgentSource {
             AgentSource::RunScorer => "Scorer",
             AgentSource::Autofix => "Self-improvement",
             AgentSource::BenchmarkTrial => "Benchmark",
-        }
-    }
-
-    /// Returns true when tasks from this source must not accept user-triggered cloud follow-ups.
-    pub fn blocks_cloud_followups(&self) -> bool {
-        match self {
-            AgentSource::GitHubAction
-            | AgentSource::GitHubWebhook
-            | AgentSource::GitLabWebhook
-            | AgentSource::RunScorer
-            | AgentSource::Autofix
-            | AgentSource::BenchmarkTrial => true,
-            AgentSource::Linear
-            | AgentSource::AgentWebhook
-            | AgentSource::Slack
-            | AgentSource::Cli
-            | AgentSource::ScheduledAgent
-            | AgentSource::Interactive
-            | AgentSource::WebApp
-            | AgentSource::CloudMode
-            | AgentSource::Orchestration
-            | AgentSource::Jira => false,
         }
     }
 
@@ -283,34 +239,7 @@ pub struct RunExecution<'a> {
     pub is_sandbox_running: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AmbientAgentLiveSessionState {
-    /// The task does not currently have a running execution with a joinable session signal.
-    Inactive,
-    /// The task has a running execution, but this client does not have a parsed
-    /// shared-session id it can attach to.
-    ActiveUnattachable,
-    /// The task has a running execution and this client can attach to its shared session.
-    Attachable { session_id: Uuid },
-}
-
-impl RunExecution<'_> {
-    pub fn has_joinable_session(&self) -> bool {
-        self.session_id.is_some() || self.session_link.is_some()
-    }
-
-    pub fn is_active(&self) -> bool {
-        self.is_sandbox_running && self.has_joinable_session()
-    }
-}
-
-/// Represents a single attachment input from the client (e.g., file upload)
-#[derive(Clone, Debug, Serialize)]
-pub struct AttachmentInput {
-    pub file_name: String,
-    pub mime_type: String,
-    pub data: String, // base64-encoded data
-}
+impl RunExecution<'_> {}
 
 /// Returns the trimmed orchestrator agent name, or `None` when empty / whitespace-only.
 pub fn normalize_orchestrator_agent_name(raw: &str) -> Option<String> {
@@ -319,10 +248,6 @@ pub fn normalize_orchestrator_agent_name(raw: &str) -> Option<String> {
 }
 
 impl AmbientAgentTask {
-    pub fn run_id(&self) -> AmbientAgentTaskId {
-        self.task_id
-    }
-
     /// Returns the short label for this task: trimmed `agent_config_snapshot.name`,
     /// trimmed `title`, or `"Agent"`.
     pub fn display_name(&self) -> &str {
@@ -347,33 +272,6 @@ impl AmbientAgentTask {
         self.conversation_id.as_deref()
     }
 
-    /// The third-party CLI harness this task is configured to run, if any. `None` means the
-    /// task runs on Warp's native Oz harness (the default when no harness is configured), whose
-    /// conversations are represented locally in `BlocklistAIHistoryModel`. A `Some` task has no
-    /// such local conversation, whether or not its CLI-harness session has started yet — callers
-    /// that route or gate on "is this task backed by a native conversation" must check this
-    /// independent of runtime CLI-session state.
-    pub fn third_party_harness_type(&self) -> Option<Harness> {
-        let harness_type = self
-            .agent_config_snapshot
-            .as_ref()
-            .and_then(|config| config.harness.as_ref())?
-            .harness_type;
-        (harness_type != Harness::Oz).then_some(harness_type)
-    }
-
-    /// Whether this task is configured for a third-party CLI harness rather than Oz.
-    pub fn is_third_party_harness(&self) -> bool {
-        self.third_party_harness_type().is_some()
-    }
-
-    /// Returns true when this task's source must not accept user-triggered cloud follow-ups.
-    pub fn blocks_cloud_followups(&self) -> bool {
-        self.source
-            .as_ref()
-            .is_some_and(AgentSource::blocks_cloud_followups)
-    }
-
     pub fn active_run_execution(&self) -> RunExecution<'_> {
         RunExecution {
             session_id: self.session_id.as_deref(),
@@ -383,51 +281,8 @@ impl AmbientAgentTask {
         }
     }
 
-    pub fn active_execution_session_id(&self) -> Option<&str> {
-        let execution = self.active_run_execution();
-        if self.supports_live_session() && execution.is_active() {
-            execution.session_id
-        } else {
-            None
-        }
-    }
-
-    /// Returns the canonical live-session state for this task from the client's perspective.
-    ///
-    /// This separates task liveness from attachability: an in-progress task can have an active
-    /// execution without a usable shared-session id. FAILED/ERROR tasks may also remain live while
-    /// their sandbox is retained for debugging. Callers should not treat either case as a completed
-    /// transcript/follow-up state.
-    pub fn active_live_session_state(&self) -> AmbientAgentLiveSessionState {
-        let execution = self.active_run_execution();
-        if !self.supports_live_session() || !execution.is_active() {
-            return AmbientAgentLiveSessionState::Inactive;
-        }
-
-        match parse_execution_session_id(execution) {
-            Some(session_id) => AmbientAgentLiveSessionState::Attachable { session_id },
-            None => AmbientAgentLiveSessionState::ActiveUnattachable,
-        }
-    }
-
-    pub fn active_execution_conversation_id(&self) -> Option<&str> {
-        if self.has_active_execution() {
-            self.conversation_id()
-        } else {
-            None
-        }
-    }
-
-    pub fn has_active_execution(&self) -> bool {
-        self.supports_live_session() && self.active_run_execution().is_active()
-    }
-
     pub fn is_terminal_run_state(&self) -> bool {
         self.state.is_terminal()
-    }
-
-    pub fn can_submit_cloud_followup(&self) -> bool {
-        self.is_terminal_run_state() && !self.has_active_execution()
     }
 
     /// Total credits used (inference + compute + platform).
@@ -455,25 +310,6 @@ impl AmbientAgentTask {
     /// Server-reported run duration.
     pub fn run_time(&self) -> Option<ChronoDuration> {
         self.run_time.and_then(|run_time| run_time.to_chrono())
-    }
-
-    /// Creator's display name, if available.
-    pub fn creator_display_name(&self) -> Option<String> {
-        self.creator.as_ref().and_then(|c| c.display_name.clone())
-    }
-
-    /// Principal the run executed as, formatted for user-facing surfaces.
-    pub fn executor_display_name(&self) -> Option<String> {
-        self.executor.as_ref().and_then(|e| e.display_name.clone())
-    }
-
-    fn supports_live_session(&self) -> bool {
-        matches!(
-            self.state,
-            AmbientAgentTaskState::InProgress
-                | AmbientAgentTaskState::Failed
-                | AmbientAgentTaskState::Error
-        )
     }
 }
 
@@ -513,25 +349,6 @@ impl AmbientAgentTaskState {
         }
     }
 
-    pub fn is_working(&self) -> bool {
-        match self {
-            AmbientAgentTaskState::Queued
-            | AmbientAgentTaskState::Pending
-            | AmbientAgentTaskState::Claimed
-            | AmbientAgentTaskState::InProgress => true,
-            AmbientAgentTaskState::Succeeded
-            | AmbientAgentTaskState::Failed
-            | AmbientAgentTaskState::Error
-            | AmbientAgentTaskState::Blocked
-            | AmbientAgentTaskState::Cancelled
-            | AmbientAgentTaskState::Unknown => false,
-        }
-    }
-
-    pub fn is_cancellable(&self) -> bool {
-        self.is_working()
-    }
-
     pub fn is_failure_like(&self) -> bool {
         match self {
             AmbientAgentTaskState::Failed
@@ -559,24 +376,6 @@ impl AmbientAgentTaskState {
             | AmbientAgentTaskState::Pending
             | AmbientAgentTaskState::Claimed
             | AmbientAgentTaskState::InProgress => false,
-        }
-    }
-
-    pub fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
-        match self {
-            AmbientAgentTaskState::Queued
-            | AmbientAgentTaskState::Pending
-            | AmbientAgentTaskState::Claimed
-            | AmbientAgentTaskState::InProgress => (Icon::ClockLoader, theme.ansi_fg_magenta()),
-            AmbientAgentTaskState::Succeeded => (Icon::Check, theme.ansi_fg_green()),
-            AmbientAgentTaskState::Failed
-            | AmbientAgentTaskState::Error
-            | AmbientAgentTaskState::Unknown => (Icon::Triangle, theme.ansi_fg_red()),
-            AmbientAgentTaskState::Blocked => (Icon::StopFilled, theme.ansi_fg_yellow()),
-            AmbientAgentTaskState::Cancelled => (
-                Icon::Cancelled,
-                theme.disabled_text_color(theme.background()).into_solid(),
-            ),
         }
     }
 }
@@ -630,19 +429,9 @@ pub enum TaskStatusErrorCode {
     Unknown,
 }
 
-impl TaskStatusErrorCode {
-    pub fn is_environment_setup_failure(&self) -> bool {
-        matches!(self, TaskStatusErrorCode::EnvironmentSetupFailed)
-    }
-}
+impl TaskStatusErrorCode {}
 
-impl TaskStatusMessage {
-    pub fn is_environment_setup_failure(&self) -> bool {
-        self.error_code
-            .as_ref()
-            .is_some_and(TaskStatusErrorCode::is_environment_setup_failure)
-    }
-}
+impl TaskStatusMessage {}
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct RequestUsage {

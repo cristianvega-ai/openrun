@@ -12,7 +12,6 @@ use warpui::{AppContext, SingletonEntity as _, TypedActionView, WindowId};
 
 use self::docker::open_docker_container;
 use crate::ai::agent::api::ServerConversationToken;
-use crate::ai::ambient_agents::github_auth_notifier::GitHubAuthNotifier;
 use crate::features::FeatureFlag;
 use crate::launch_configs::launch_config::LaunchConfig;
 use crate::linear::{LinearAction, LinearIssueWork};
@@ -229,11 +228,6 @@ impl UriHost {
                         );
                     }
                     Some("environments") => {
-                        // Notify that GitHub auth completed so views can refresh
-                        GitHubAuthNotifier::handle(ctx).update(ctx, |notifier, ctx| {
-                            notifier.notify_auth_completed(ctx);
-                        });
-
                         // Open settings page unless auth was initiated from cloud setup
                         // (cloud setup users should stay on their current page)
                         let source = query_string.get("source").map(|s| s.as_ref());
@@ -695,7 +689,6 @@ enum Action {
     },
     Docker,
     OpenRepo,
-    CloudAgentSetup,
     NewAgentConversation,
     CreateEnvironment {
         repos: Vec<String>,
@@ -713,7 +706,6 @@ impl Action {
             }
             "/docker/open_subshell" => Ok(Self::Docker),
             "/open-repo" => Ok(Self::OpenRepo),
-            "/cloud_agent_setup" => Ok(Self::CloudAgentSetup),
             "/new_agent_conversation" => Ok(Self::NewAgentConversation),
             "/create_environment" => {
                 let repos = url
@@ -796,36 +788,6 @@ impl Action {
                     }
                 }
             }
-            Action::CloudAgentSetup => {
-                let window_id =
-                    primary_window_id.or_else(|| Some(open_new_window_get_handles(None, ctx).0));
-
-                let Some(window_id) = window_id else {
-                    log::warn!("unable to determine window for cloud agent setup action");
-                    return;
-                };
-
-                let Some(mut workspaces) = ctx.views_of_type::<Workspace>(window_id) else {
-                    log::warn!(
-                        "no workspace found in window {window_id} for cloud agent setup action"
-                    );
-                    return;
-                };
-
-                match workspaces.pop() {
-                    Some(workspace) => {
-                        workspace.update(ctx, |workspace, ctx| {
-                            workspace
-                                .handle_action(&WorkspaceAction::OpenCloudAgentSetupGuide, ctx);
-                        });
-                    }
-                    _ => {
-                        log::warn!(
-                            "no workspace views in window {window_id} for cloud agent setup action"
-                        );
-                    }
-                }
-            }
             Action::NewAgentConversation => {
                 let window_id =
                     primary_window_id.or_else(|| Some(open_new_window_get_handles(None, ctx).0));
@@ -882,7 +844,6 @@ impl Action {
             | Self::OpenFileEditor { .. }
             | Self::CreateEnvironment { .. }
             | Self::OpenRepo
-            | Self::CloudAgentSetup
             | Self::NewAgentConversation => W::default(),
             Self::NewTab => W::ShowPrimaryWindow(WindowActivationFallbackBehavior::Notify {
                 title: "New tab created".to_owned(),

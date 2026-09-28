@@ -1162,13 +1162,7 @@ impl BlocklistAIController {
         ai_input: AIAgentInput,
         ctx: &mut ModelContext<Self>,
     ) {
-        let target_conversation =
-            if matches!(ai_input, AIAgentInput::StartFromAmbientRunPrompt { .. }) {
-                self.native_prompt_conversation_id
-                    .or_else(|| self.context_model.as_ref(ctx).selected_conversation_id(ctx))
-            } else {
-                self.context_model.as_ref(ctx).selected_conversation_id(ctx)
-            };
+        let target_conversation = self.context_model.as_ref(ctx).selected_conversation_id(ctx);
         let which_task = match target_conversation {
             Some(id) => {
                 let Some(conversation) = BlocklistAIHistoryModel::as_ref(ctx).conversation(&id)

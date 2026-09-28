@@ -31,7 +31,6 @@ use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::StartAgentExecutionMode;
 use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent_conversations_model::AgentConversationsModel;
-use crate::ai::ambient_agents::github_auth_notifier::GitHubAuthNotifier;
 use crate::ai::ambient_agents::task::TaskPrincipalInfo;
 use crate::ai::ambient_agents::{
     AgentSource, AmbientAgentTask, AmbientAgentTaskId, AmbientAgentTaskState,
@@ -66,7 +65,6 @@ use crate::server::cloud_objects::listener::Listener;
 use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::ServerId;
 use crate::server::server_api::ServerApiProvider;
-use crate::server::server_api::presigned_upload::HttpStatusError;
 use crate::server::sync_queue::SyncQueue;
 use crate::server::team_scope::RequestTeamScope;
 use crate::settings::PrivacySettings;
@@ -95,6 +93,7 @@ use crate::workspaces::user_profiles::UserProfiles;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::workspaces::workspace::Workspace;
 use crate::{AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandlesProvider};
+use warp_server_client::HttpStatusError;
 
 fn initialize_app(app: &mut App) {
     initialize_app_with_history(app, Vec::new());
@@ -184,7 +183,6 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(|_| PricingInfoModel::new());
     app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
-    app.add_singleton_model(|_| GitHubAuthNotifier::new());
     app.add_singleton_model(AgentConversationsModel::new);
 }
 

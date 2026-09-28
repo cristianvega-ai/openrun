@@ -615,9 +615,7 @@ impl EnvironmentsPageView {
         event: &UpdateManagerEvent,
         ctx: &mut ViewContext<Self>,
     ) {
-        let UpdateManagerEvent::ObjectOperationComplete { result } = event else {
-            return;
-        };
+        let UpdateManagerEvent::ObjectOperationComplete { result } = event;
 
         // Check if this is a successful update for our pending save
         if let (ObjectOperation::Update, OperationSuccessType::Success) =

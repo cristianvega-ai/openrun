@@ -1802,7 +1802,7 @@ fn test_agent_origin_block_can_be_attached_to_other_conversation() {
     let expected_origin_conversation_id = AIConversationId::new();
     let other_conversation_id = AIConversationId::new();
 
-    block_list.enter_conversation_context(expected_origin_conversation_id, false, false);
+    block_list.enter_conversation_context(expected_origin_conversation_id, false);
     let user_block_index = insert_block(&mut block_list, "user", "output");
     let user_block_id = block_list.block_at(user_block_index).unwrap().id().clone();
 
@@ -1826,7 +1826,7 @@ fn test_agent_origin_block_can_be_attached_to_other_conversation() {
         _ => panic!("Expected agent visibility for agent-origin block"),
     }
 
-    block_list.enter_conversation_context(other_conversation_id, false, false);
+    block_list.enter_conversation_context(other_conversation_id, false);
     let user_block_index = block_list.block_index_for_id(&user_block_id).unwrap();
     let user_block = block_list.block_at(user_block_index).unwrap();
     assert!(!user_block.is_empty(block_list.transcript_scope()));
@@ -2473,7 +2473,7 @@ fn agent_transcript_navigable_items_include_prompts_and_user_shell_blocks() {
     let mut block_list =
         new_bootstrapped_block_list(None, None, ChannelEventListener::new_for_test());
     let conversation_id = AIConversationId::new();
-    block_list.enter_conversation_context(conversation_id, false, false);
+    block_list.enter_conversation_context(conversation_id, false);
 
     // User-query AI segment (navigable).
     let prompt_1 = EntityId::new();

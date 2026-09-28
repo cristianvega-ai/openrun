@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -39,22 +38,15 @@ use warp_graphql::queries::get_available_harnesses::{
 use warp_graphql::queries::get_feature_model_choices::{
     GetFeatureModelChoices, GetFeatureModelChoicesVariables,
 };
-use warp_graphql::queries::setup_failure_debug_authorization::{
-    SetupFailureDebugAuthorization, SetupFailureDebugAuthorizationInput,
-    SetupFailureDebugAuthorizationResult, SetupFailureDebugAuthorizationVariables,
-};
 use warp_multi_agent_api::ConversationData;
 
 use super::ServerApi;
-use super::presigned_upload::{UploadField, UploadTarget};
-pub use crate::ai::agent::UserQueryMode;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{AIAgentHarness, ServerAIConversationMetadata};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 // Re-export ambient agent types for backwards compatibility
 pub use crate::ai::ambient_agents::{
     AgentConfigSnapshot, AgentSource, AmbientAgentTask, AmbientAgentTaskState, ExecutionLocation,
-    TaskStatusMessage, task::AttachmentInput,
 };
 use crate::ai::artifacts::Artifact;
 use crate::ai::harness_availability::HarnessAvailability;
@@ -66,7 +58,6 @@ use crate::drive::workflows::ai_assist::{GeneratedCommandMetadata, GeneratedComm
 use crate::persistence::model::ConversationUsageMetadata;
 use crate::server::graphql::{get_request_context, get_user_facing_error_message};
 use crate::server::team_scope::RequestTeamScope;
-use crate::terminal::model::block::SerializedBlock;
 
 const AI_ASSISTANT_REQUEST_TIMEOUT_SECONDS: u64 = 30;
 
@@ -83,24 +74,6 @@ fn agent_task_status_message_input(update: TaskStatusUpdate) -> AgentTaskStatusM
         error_code: update.error_code,
         error: update.platform_error.map(|info| (*info).into()),
     }
-}
-
-fn public_api_user_query_mode(mode: UserQueryMode) -> &'static str {
-    match mode {
-        UserQueryMode::Normal => "normal",
-        UserQueryMode::Plan => "plan",
-        UserQueryMode::Orchestrate => "orchestrate",
-    }
-}
-
-fn serialize_user_query_mode_for_public_api<S>(
-    mode: &UserQueryMode,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_str(public_api_user_query_mode(*mode))
 }
 
 impl TaskStatusUpdate {
@@ -120,78 +93,6 @@ impl TaskStatusUpdate {
             error_code: Some(error_code),
             platform_error: Some(Box::new(PlatformErrorInfo::new(error_code, false))),
         }
-    }
-}
-
-/// JSON payload sent to the public `POST /agent/run` API.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SpawnAgentRequest {
-    /// None for skill-only or conversation-only invocations; omitted on the wire.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt: Option<String>,
-    /// The public API accepts lowercase mode strings (`normal`, `plan`, or `orchestrate`).
-    #[serde(serialize_with = "serialize_user_query_mode_for_public_api")]
-    pub mode: UserQueryMode,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: Option<AgentConfigSnapshot>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub team: Option<bool>,
-    /// Agent identity UID to use as the execution principal for the run.
-    #[serde(rename = "agent_identity_uid", skip_serializing_if = "Option::is_none")]
-    pub agent_identity_uid: Option<String>,
-    /// Use a Claude-compatible skill as the base prompt.
-    /// Format: "repo:skill_name" or just "skill_name".
-    /// The skill is resolved at runtime in the agent environment.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub skill: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<AttachmentInput>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub interactive: Option<bool>,
-    /// Populated when a cloud agent spawns a child run via the public API.
-    /// Not yet wired through the local start_agent flow.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_run_id: Option<String>,
-    /// Base64-encoded `warp.multi_agent.v1.Skill` payloads to restore as runtime skills.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub runtime_skills: Vec<String>,
-    /// Base64-encoded `warp.multi_agent.v1.Attachment` payloads to restore as referenced attachments.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub referenced_attachments: Vec<String>,
-    /// Server-side conversation id to resume against (sets `task.AgentConversationID`).
-    /// For local-to-cloud handoff this is the forked conversation id returned by
-    /// `POST /agent/conversations/{conversation_id}/fork` at chip-click time.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub conversation_id: Option<String>,
-    /// References a batch of files previously uploaded to handoff/{token}/
-    /// via `POST /agent/handoff/upload-snapshot`. The server stores the token on the new run's
-    /// queued execution input and resolves the prefix in place at rehydration time.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub initial_snapshot_token: Option<InitialSnapshotToken>,
-    /// When `Some(true)`, the cloud agent skips the end-of-run snapshot upload.
-    /// Set by the client when cloud conversation storage is disabled.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub snapshot_disabled: Option<bool>,
-    /// True when the source conversation was part of an orchestration tree at
-    /// handoff time. Only set on local-to-cloud handoff spawns from an
-    /// orchestrated source; absent otherwise. The server uses it to inject the
-    /// universal hidden first-turn orchestration handoff message.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub orchestration_handoff: Option<bool>,
-}
-
-/// Server-minted token returned by `POST /agent/handoff/upload-snapshot` that scopes a batch
-/// of presigned upload URLs to `handoff/{token}/`. The client passes it
-/// back via `SpawnAgentRequest.initial_snapshot_token`; the server stores it on the new run's
-/// queued execution input so rehydration discovery can read the same prefix.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct InitialSnapshotToken(String);
-
-impl InitialSnapshotToken {
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
@@ -219,11 +120,6 @@ pub struct RenameConversationRequest {
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct RenameConversationResponse {
     pub title: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct RunFollowupRequest {
-    pub message: String,
 }
 
 // --- Orchestrations V2 messaging types ---
@@ -260,14 +156,6 @@ pub struct ReadAgentMessageResponse {
     pub sent_at: String,
     pub delivered_at: Option<String>,
     pub read_at: Option<String>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct SpawnAgentResponse {
-    pub task_id: AmbientAgentTaskId,
-    pub run_id: String,
-    #[serde(default)]
-    pub at_capacity: bool,
 }
 
 /// Response from the artifact endpoint.
@@ -347,78 +235,6 @@ pub struct FileArtifactResponseData {
     pub filename: String,
     pub description: Option<String>,
     pub size_bytes: Option<i64>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct AttachmentFileInfo {
-    pub filename: String,
-    pub mime_type: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct PrepareAttachmentUploadsRequest {
-    pub files: Vec<AttachmentFileInfo>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct DownloadAttachmentsRequest {
-    pub attachment_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct AttachmentDownloadInfo {
-    pub attachment_id: String,
-    pub download_url: String,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct DownloadAttachmentsResponse {
-    pub attachments: Vec<AttachmentDownloadInfo>,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct AttachmentUploadInfo {
-    pub attachment_id: String,
-    /// Presigned URL form of [`Self::upload_target`], kept for compatibility.
-    /// It only describes a plain `PUT`, so it cannot express the presigned POST
-    /// form that self-hosted S3 storage requires.
-    pub upload_url: String,
-    /// Absent when the server predates the upload-target contract.
-    #[serde(default)]
-    pub upload_target: Option<UploadTarget>,
-}
-
-impl AttachmentUploadInfo {
-    /// The target to upload this attachment to, synthesizing a presigned `PUT`
-    /// from [`Self::upload_url`] when the server did not send an upload target.
-    pub fn resolve_upload_target(&self, content_type: &str) -> UploadTarget {
-        self.upload_target.clone().unwrap_or_else(|| UploadTarget {
-            url: self.upload_url.clone(),
-            method: "PUT".to_string(),
-            headers: HashMap::from([("Content-Type".to_string(), content_type.to_string())]),
-            fields: Vec::new(),
-        })
-    }
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct PrepareAttachmentUploadsResponse {
-    pub attachments: Vec<AttachmentUploadInfo>,
-}
-
-#[derive(Debug, Clone)]
-pub struct FileArtifactUploadHeaderInfo {
-    pub name: String,
-    pub value: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct FileArtifactUploadTargetInfo {
-    pub url: String,
-    pub method: String,
-    pub headers: Vec<FileArtifactUploadHeaderInfo>,
-    /// Ordered multipart form fields for presigned POST uploads.
-    pub fields: Vec<UploadField>,
 }
 
 /// Filter parameters for listing ambient agent tasks.
@@ -503,10 +319,6 @@ pub(crate) fn build_list_agent_runs_url(limit: i32, filter: &TaskListFilter) -> 
     }
 
     url
-}
-
-pub(crate) fn build_run_followup_url(run_id: &AmbientAgentTaskId) -> String {
-    format!("agent/runs/{run_id}/followups")
 }
 
 pub(crate) fn build_fork_conversation_url(conversation_id: &str) -> String {
@@ -619,12 +431,6 @@ pub trait AIClient: 'static + Send + Sync {
         debug_agent_active: Option<bool>,
     ) -> anyhow::Result<(), anyhow::Error>;
 
-    async fn spawn_agent(
-        &self,
-        request: SpawnAgentRequest,
-        team_scope: RequestTeamScope,
-    ) -> anyhow::Result<SpawnAgentResponse, anyhow::Error>;
-
     /// Materialize a server-side fork of a conversation.
     async fn fork_conversation(
         &self,
@@ -651,12 +457,6 @@ pub trait AIClient: 'static + Send + Sync {
         task_id: &AmbientAgentTaskId,
     ) -> anyhow::Result<AmbientAgentTask, anyhow::Error>;
 
-    async fn submit_run_followup(
-        &self,
-        run_id: &AmbientAgentTaskId,
-        request: RunFollowupRequest,
-    ) -> anyhow::Result<(), anyhow::Error>;
-
     async fn get_ai_conversation(
         &self,
         server_conversation_token: ServerConversationToken,
@@ -666,11 +466,6 @@ pub trait AIClient: 'static + Send + Sync {
         &self,
         conversation_ids: Option<Vec<String>>,
     ) -> anyhow::Result<Vec<ServerAIConversationMetadata>>;
-
-    async fn get_block_snapshot(
-        &self,
-        server_conversation_token: ServerConversationToken,
-    ) -> anyhow::Result<SerializedBlock, anyhow::Error>;
 
     async fn delete_ai_conversation(
         &self,
@@ -682,32 +477,10 @@ pub trait AIClient: 'static + Send + Sync {
         task_id: &AmbientAgentTaskId,
     ) -> anyhow::Result<(), anyhow::Error>;
 
-    /// Authorizes a REMOTE-2661 debug agent prompt against a retained environment-setup-failure
-    /// session, called by the sharer with its own workload token. Anything short of `Ok(true)`
-    /// means the caller must reject the prompt.
-    async fn setup_failure_debug_authorization(
-        &self,
-        task_id: AmbientAgentTaskId,
-        workload_token: String,
-        participant_firebase_uid: String,
-    ) -> anyhow::Result<bool, anyhow::Error>;
-
     async fn get_artifact_download(
         &self,
         artifact_uid: &str,
     ) -> anyhow::Result<ArtifactDownloadResponse, anyhow::Error>;
-
-    async fn prepare_attachments_for_upload(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        files: &[AttachmentFileInfo],
-    ) -> anyhow::Result<PrepareAttachmentUploadsResponse, anyhow::Error>;
-
-    async fn download_task_attachments(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        attachment_ids: &[String],
-    ) -> anyhow::Result<DownloadAttachmentsResponse, anyhow::Error>;
 
     // --- Orchestrations V2 messaging ---
 
@@ -1046,18 +819,6 @@ impl AIClient for ServerApi {
         }
     }
 
-    async fn spawn_agent(
-        &self,
-        request: SpawnAgentRequest,
-        team_scope: RequestTeamScope,
-    ) -> anyhow::Result<SpawnAgentResponse, anyhow::Error> {
-        debug_assert_eq!(request.team, Some(team_scope.team_uid().is_some()));
-        let response: SpawnAgentResponse = self
-            .post_public_api_for_team("agent/run", &request, team_scope)
-            .await?;
-        Ok(response)
-    }
-
     async fn list_connected_self_hosted_workers(
         &self,
         team_scope: RequestTeamScope,
@@ -1111,15 +872,6 @@ impl AIClient for ServerApi {
             .get_public_api(&format!("agent/runs/{task_id}"))
             .await?;
         Ok(response)
-    }
-
-    async fn submit_run_followup(
-        &self,
-        run_id: &AmbientAgentTaskId,
-        request: RunFollowupRequest,
-    ) -> anyhow::Result<(), anyhow::Error> {
-        self.post_public_api_unit(&build_run_followup_url(run_id), &request)
-            .await
     }
 
     async fn get_ai_conversation(
@@ -1210,25 +962,6 @@ impl AIClient for ServerApi {
         }
     }
 
-    async fn get_block_snapshot(
-        &self,
-        server_conversation_token: ServerConversationToken,
-    ) -> anyhow::Result<SerializedBlock, anyhow::Error> {
-        let conversation_id = server_conversation_token.as_str();
-        // Make sure to use `SerializedBlock::from_json` to correctly handle the serialized
-        // command and output grid contents.
-        let response = self
-            .get_public_api_response(&format!(
-                "agent/conversations/{conversation_id}/block-snapshot"
-            ))
-            .await?;
-        let json_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| anyhow!("Failed to read block snapshot for {conversation_id}: {e}"))?;
-        SerializedBlock::from_json(&json_bytes)
-    }
-
     async fn delete_ai_conversation(
         &self,
         server_conversation_token: String,
@@ -1262,76 +995,12 @@ impl AIClient for ServerApi {
         Ok(())
     }
 
-    async fn setup_failure_debug_authorization(
-        &self,
-        task_id: AmbientAgentTaskId,
-        workload_token: String,
-        participant_firebase_uid: String,
-    ) -> anyhow::Result<bool, anyhow::Error> {
-        let variables = SetupFailureDebugAuthorizationVariables {
-            input: SetupFailureDebugAuthorizationInput {
-                task_id: task_id.to_string().into(),
-                workload_token,
-                participant_firebase_uid,
-            },
-            request_context: get_request_context(),
-        };
-        let operation = SetupFailureDebugAuthorization::build(variables);
-        let response = self.send_graphql_request(operation, None).await?;
-
-        match response.setup_failure_debug_authorization {
-            SetupFailureDebugAuthorizationResult::SetupFailureDebugAuthorizationOutput(output) => {
-                Ok(output.authorized)
-            }
-            SetupFailureDebugAuthorizationResult::UserFacingError(error) => {
-                Err(anyhow!(get_user_facing_error_message(error)))
-            }
-            SetupFailureDebugAuthorizationResult::Unknown => {
-                Err(anyhow!("Failed to authorize setup failure debug prompt"))
-            }
-        }
-    }
-
     async fn get_artifact_download(
         &self,
         artifact_uid: &str,
     ) -> anyhow::Result<ArtifactDownloadResponse, anyhow::Error> {
         let response: ArtifactDownloadResponse = self
             .get_public_api(&format!("agent/artifacts/{artifact_uid}"))
-            .await?;
-        Ok(response)
-    }
-
-    async fn prepare_attachments_for_upload(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        files: &[AttachmentFileInfo],
-    ) -> anyhow::Result<PrepareAttachmentUploadsResponse, anyhow::Error> {
-        let request = PrepareAttachmentUploadsRequest {
-            files: files.to_vec(),
-        };
-        let response: PrepareAttachmentUploadsResponse = self
-            .post_public_api(
-                &format!("agent/runs/{task_id}/attachments/prepare"),
-                &request,
-            )
-            .await?;
-        Ok(response)
-    }
-
-    async fn download_task_attachments(
-        &self,
-        task_id: &AmbientAgentTaskId,
-        attachment_ids: &[String],
-    ) -> anyhow::Result<DownloadAttachmentsResponse, anyhow::Error> {
-        let request = DownloadAttachmentsRequest {
-            attachment_ids: attachment_ids.to_vec(),
-        };
-        let response: DownloadAttachmentsResponse = self
-            .post_public_api(
-                &format!("agent/runs/{task_id}/attachments/download"),
-                &request,
-            )
             .await?;
         Ok(response)
     }

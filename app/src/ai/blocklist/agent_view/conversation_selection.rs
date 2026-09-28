@@ -99,7 +99,13 @@ impl AgentConversationListPolicy for AgentViewConversationSelection {
             .selected_conversation_id(app)
             .map(AgentConversationEntryId::Conversation);
         let open_terminal_view_id =
-            ActiveAgentViewsModel::as_ref(app).get_terminal_view_id_for_entry(entry, app);
+            entry
+                .identity
+                .local_conversation_id
+                .and_then(|conversation_id| {
+                    ActiveAgentViewsModel::as_ref(app)
+                        .get_terminal_view_id_for_conversation(conversation_id, app)
+                });
         classify_gui_list_entry(
             selected_entry_id,
             entry.id,

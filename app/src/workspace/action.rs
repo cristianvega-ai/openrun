@@ -20,7 +20,6 @@ use super::view::WorkspaceBanner;
 use crate::ai::agent::AIAgentExchangeId;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::PendingAttachment;
 use crate::palette::PaletteMode;
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
@@ -424,7 +423,6 @@ pub enum WorkspaceAction {
         /// The entrypoint that triggered this action.
         entrypoint: AgentModeEntrypoint,
     },
-    OpenCloudAgentSetupGuide,
     /// Dismisses the Wayland crash recovery banner and opens a link to our docs page with more
     /// information.
     #[cfg(target_os = "linux")]
@@ -585,7 +583,6 @@ pub enum WorkspaceAction {
     /// Used when CloudConversations is enabled and the sandbox is not running.
     OpenConversationTranscriptViewer {
         conversation_id: ServerConversationToken,
-        ambient_agent_task_id: Option<AmbientAgentTaskId>,
     },
     /// Open a full-window lightbox displaying the given images.
     OpenLightbox {
@@ -774,7 +771,6 @@ impl WorkspaceAction {
             | DispatchToSettingsTab { .. }
             | ToggleResourceCenter
             | ToggleUserMenu
-            | OpenCloudAgentSetupGuide
             | ToggleKeybindingsPage
             | ShowCommandSearch(_)
             | TriggerExternalCtrlTFileSearch

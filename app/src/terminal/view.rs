@@ -168,7 +168,6 @@ use crate::ai::agent::{
     FinishedAIAgentOutput, RenderableAIError, ServerOutputId,
 };
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
-use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::agent_view::orchestration_conversation_links::pane_group_id_containing_terminal_view;
 use crate::ai::blocklist::agent_view::{
     AgentViewController, AgentViewControllerEvent, AgentViewConversationSelection,
@@ -2959,9 +2958,7 @@ impl TerminalView {
                 let should_refresh_details_panel = matches!(
                     event,
                     AgentConversationsModelEvent::TasksUpdated
-                        | AgentConversationsModelEvent::NewTasksReceived
                         | AgentConversationsModelEvent::ConversationUpdated { .. }
-                        | AgentConversationsModelEvent::ConversationArtifactsUpdated { .. }
                 );
                 // Only refresh panel if it's currently open (avoids unnecessary work)
                 if should_refresh_details_panel && me.is_conversation_details_panel_open {
@@ -6198,21 +6195,6 @@ impl TerminalView {
             .as_ref(app)
             .agent_view_state()
             .active_conversation_id()
-    }
-
-    /// The ambient agent task associated with this terminal's model, if any.
-    pub fn ambient_agent_task_id(&self) -> Option<AmbientAgentTaskId> {
-        self.model.lock().ambient_agent_task_id()
-    }
-
-    pub fn active_conversation_task_id(&self, app: &AppContext) -> Option<AmbientAgentTaskId> {
-        let history = BlocklistAIHistoryModel::as_ref(app);
-        let conversation_id = self.active_conversation_id(app).or_else(|| {
-            self.ai_context_model
-                .as_ref(app)
-                .selected_conversation_id(app)
-        })?;
-        history.conversation(&conversation_id)?.task_id()
     }
 
     fn is_in_agent_or_cli_attach_context(&self, app: &AppContext) -> bool {

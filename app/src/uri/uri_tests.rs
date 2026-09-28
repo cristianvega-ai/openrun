@@ -422,18 +422,6 @@ fn test_action_open_file_editor_parse_rejects_invalid_line_or_column() {
 }
 
 #[test]
-fn test_action_cloud_agent_setup_parse() {
-    let url = Url::parse(&format!(
-        "{}://action/cloud_agent_setup",
-        ChannelState::url_scheme()
-    ))
-    .unwrap();
-
-    let action = Action::parse(&url).unwrap();
-    assert!(matches!(action, Action::CloudAgentSetup));
-}
-
-#[test]
 fn test_action_new_agent_conversation_parse() {
     let url = Url::parse(&format!(
         "{}://action/new_agent_conversation",

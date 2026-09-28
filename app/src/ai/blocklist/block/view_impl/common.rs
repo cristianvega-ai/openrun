@@ -3510,7 +3510,6 @@ pub(super) fn query_prefix_highlight_len(
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::CodeReview { .. }
             | AIAgentInput::SummarizeConversation { .. }
-            | AIAgentInput::StartFromAmbientRunPrompt { .. }
             | AIAgentInput::ActionResult { .. }
             | AIAgentInput::MessagesReceivedFromAgents { .. }
             | AIAgentInput::EventsFromAgents { .. }

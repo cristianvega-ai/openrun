@@ -103,25 +103,6 @@ fn take_typeahead_for_input_is_none_when_typeahead_is_empty() {
     assert_eq!(model.take_typeahead_for_input(), None);
 }
 
-#[test]
-fn is_cloud_agent_conversation_only_true_for_ambient_transcripts() {
-    use std::str::FromStr;
-
-    let task_id = "123e4567-e89b-12d3-a456-426614174000";
-
-    // Baseline: not viewing a transcript.
-    let mut model = TerminalModel::mock(None, None);
-    assert!(!model.is_cloud_agent_conversation());
-
-    // Viewing an ambient conversation transcript is a cloud agent conversation.
-    model.set_conversation_transcript_viewer_status(Some(
-        ConversationTranscriptViewerStatus::ViewingAmbientConversation(
-            AmbientAgentTaskId::from_str(task_id).expect("valid task id"),
-        ),
-    ));
-    assert!(model.is_cloud_agent_conversation());
-}
-
 fn iterm_file_osc(name: &str, inline: bool, payload: &[u8]) -> String {
     let inline = if inline { "1" } else { "0" };
     format!(

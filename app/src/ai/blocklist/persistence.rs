@@ -79,7 +79,6 @@ impl TryFrom<&AIAgentInput> for PersistedAIInputType {
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::CodeReview { .. }
             | AIAgentInput::SummarizeConversation { .. }
-            | AIAgentInput::StartFromAmbientRunPrompt { .. }
             | AIAgentInput::MessagesReceivedFromAgents { .. }
             | AIAgentInput::EventsFromAgents { .. }
             | AIAgentInput::OrchestrationConfigUpdate { .. } => Err(anyhow::anyhow!(

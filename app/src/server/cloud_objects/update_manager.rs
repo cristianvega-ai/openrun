@@ -13,7 +13,6 @@ use futures::stream::AbortHandle;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
-use warp_core::features::FeatureFlag;
 use warp_errors::report_error;
 use warp_graphql::object_permissions::AccessLevel;
 use warp_graphql::scalars::time::ServerTimestamp;
@@ -26,7 +25,6 @@ use warpui::{
 
 use super::listener::ObjectUpdateMessage;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::ai::cloud_environments::{AmbientAgentEnvironment, CloudAmbientAgentEnvironmentModel};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
@@ -119,13 +117,7 @@ pub struct ObjectOperationResult {
 
 #[derive(Debug)]
 pub enum UpdateManagerEvent {
-    ObjectOperationComplete {
-        result: ObjectOperationResult,
-    },
-    AmbientTaskUpdated {
-        task_id: AmbientAgentTaskId,
-        timestamp: DateTime<Utc>,
-    },
+    ObjectOperationComplete { result: ObjectOperationResult },
 }
 
 /// An enum for choosing the behavior of the fetch_single_cloud_object function.
@@ -1007,24 +999,6 @@ impl UpdateManager {
         self.refresh_updated_objects(ctx);
     }
 
-    fn handle_ambient_task_changed(
-        &mut self,
-        task_id: String,
-        timestamp: DateTime<Utc>,
-        ctx: &mut ModelContext<UpdateManager>,
-    ) {
-        let task_id = match task_id.parse::<AmbientAgentTaskId>() {
-            Ok(task_id) => task_id,
-            Err(err) => {
-                report_error!(anyhow::Error::from(err).context(format!(
-                    "AmbientTaskUpdated has unparseable task_id: {task_id}"
-                )));
-                return;
-            }
-        };
-        ctx.emit(UpdateManagerEvent::AmbientTaskUpdated { task_id, timestamp });
-    }
-
     /// Fetches environment "last used" timestamps from the server and merges them
     /// into the in-memory environment objects.
     fn fetch_and_merge_environment_timestamps(&mut self, ctx: &mut ModelContext<UpdateManager>) {
@@ -1175,11 +1149,7 @@ impl UpdateManager {
             ObjectUpdateMessage::TeamMembershipsChanged => {
                 self.handle_team_memberships_changed(ctx);
             }
-            ObjectUpdateMessage::AmbientTaskUpdated { task_id, timestamp } => {
-                if FeatureFlag::AmbientAgentsRTC.is_enabled() {
-                    self.handle_ambient_task_changed(task_id, timestamp, ctx);
-                }
-            }
+            ObjectUpdateMessage::AmbientTaskUpdated { .. } => {}
         }
     }
 

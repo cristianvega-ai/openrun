@@ -32,9 +32,7 @@ use warpui::{
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent_conversations_model::entry::PrincipalType;
-use crate::ai::agent_conversations_model::{
-    AgentConversationEntry, AgentRunDisplayStatus, TaskFetchError,
-};
+use crate::ai::agent_conversations_model::{AgentConversationEntry, AgentRunDisplayStatus};
 use crate::ai::agent_management::details_action_buttons::{
     ActionButtonsConfig, AgentDetailsButtonEvent, ConversationActionButtonsRow,
 };
@@ -83,8 +81,6 @@ const HARNESS_ICON_IN_CIRCLE: f32 = 9.0;
 const PLATFORM_ICON_SIZE: f32 = 14.0;
 const LABEL_VALUE_GAP: f32 = 4.0;
 const SECTION_HEADER_GAP: f32 = 8.0;
-const RUN_METADATA_ACCESS_DENIED_TITLE: &str = "Run metadata is not available";
-const RUN_METADATA_ACCESS_DENIED_DESCRIPTION: &str = "You can view this shared session, but run metadata is only visible to users with access to this run.";
 
 /// Panel rendering mode.
 #[derive(Debug, Clone, PartialEq)]
@@ -138,7 +134,6 @@ struct PanelMouseStates {
     copy_run_id: MouseStateHandle,
     copy_environment_id: MouseStateHandle,
     copy_docker_image: MouseStateHandle,
-    copy_fetch_error: MouseStateHandle,
     copy_error: MouseStateHandle,
     copy_setup_commands: MouseStateHandle,
     copy_initial_query: MouseStateHandle,
@@ -154,7 +149,6 @@ enum CopyButtonKind {
     RunId,
     EnvironmentId,
     DockerImage,
-    FetchError,
     Error,
     SetupCommands,
     InitialQuery,
@@ -251,33 +245,9 @@ pub struct ConversationDetailsData {
     copy_link_url: Option<String>,
     /// Execution harness for this conversation/task.
     harness: Option<Harness>,
-    /// Error details displayed when the API call to fetch run data failed.
-    fetch_error: Option<TaskFetchError>,
 }
 
 impl ConversationDetailsData {
-    fn directory_for_task(task: &AmbientAgentTask, app: &AppContext) -> Option<String> {
-        let history_model = BlocklistAIHistoryModel::as_ref(app);
-        let conversation_id = history_model
-            .conversation_id_for_agent_id(&task.run_id().to_string())
-            .or_else(|| {
-                task.conversation_id().and_then(|conversation_id| {
-                    history_model.find_conversation_id_by_server_token(
-                        &ServerConversationToken::new(conversation_id.to_string()),
-                    )
-                })
-            })?;
-
-        history_model
-            .conversation(&conversation_id)
-            .and_then(|conversation| conversation.initial_working_directory())
-            .or_else(|| {
-                history_model
-                    .get_conversation_metadata(&conversation_id)
-                    .and_then(|metadata| metadata.initial_working_directory.clone())
-            })
-    }
-
     /// Build details data from an in-memory `AIConversation`. Used both by the WASM
     /// transcript/shared-session details panel and by the native pane-level details panel
     /// when the active conversation is a local (non-cloud) Warp Agent run.
@@ -374,72 +344,6 @@ impl ConversationDetailsData {
             source_prompt: conversation.initial_query(),
             copy_link_url,
             harness,
-            fetch_error: None,
-        }
-    }
-
-    pub fn from_task(
-        task: &AmbientAgentTask,
-        open_action: Option<WorkspaceAction>,
-        copy_link_url: Option<String>,
-        app: &AppContext,
-    ) -> Self {
-        let error_message = if task.state.is_failure_like() {
-            task.status_message.as_ref().map(|m| m.message.clone())
-        } else {
-            None
-        };
-
-        let environment_id = task
-            .agent_config_snapshot
-            .as_ref()
-            .and_then(|config| config.environment_id.clone());
-
-        let runner_id = task
-            .agent_config_snapshot
-            .as_ref()
-            .and_then(|config| config.runner_id.clone());
-
-        let credits = task.credits_used();
-
-        let harness = task.agent_config_snapshot.as_ref().and_then(|config| {
-            config
-                .harness
-                .as_ref()
-                .map(|h| h.harness_type)
-                .or(Some(Harness::Oz))
-        });
-
-        ConversationDetailsData {
-            mode: PanelMode::Task {
-                task_id: Some(task.run_id()),
-                directory: Self::directory_for_task(task, app),
-                display_status: Some(AgentRunDisplayStatus::from_task(task, app)),
-                error_message,
-                environment_id,
-                runner_id,
-                conversation_id: task.conversation_id().map(str::to_string),
-            },
-            // Intentionally uses task.title; revisit when product decides
-            // whether to also show the short orchestrator label here.
-            title: task.title.clone(),
-            created_at: Some(task.created_at.with_timezone(&Local)),
-            artifacts: task.artifacts.clone(),
-            credits,
-            total_tokens: None,
-            cost_in_cents: task.cost_in_cents(),
-            run_time: task.run_time(),
-            open_action,
-            creator: task
-                .creator
-                .as_ref()
-                .filter(|c| c.display_name.is_some())
-                .map(PrincipalInfo::from),
-            executor: task.executor.as_ref().map(PrincipalInfo::from),
-            source_prompt: Some(task.prompt.clone()),
-            copy_link_url,
-            harness,
-            fetch_error: None,
         }
     }
 
@@ -513,7 +417,6 @@ impl ConversationDetailsData {
                 source_prompt,
                 copy_link_url,
                 harness,
-                fetch_error: None,
             };
         }
 
@@ -541,40 +444,6 @@ impl ConversationDetailsData {
             source_prompt,
             copy_link_url,
             harness,
-            fetch_error: None,
-        }
-    }
-
-    /// Minimal details data for when we only know the task id (e.g. shared sessions)
-    /// but have not loaded the full `AmbientAgentTask` yet.
-    pub(crate) fn from_task_id(
-        task_id: AmbientAgentTaskId,
-        fetch_error: Option<TaskFetchError>,
-    ) -> Self {
-        ConversationDetailsData {
-            mode: PanelMode::Task {
-                task_id: Some(task_id),
-                directory: None,
-                display_status: None,
-                error_message: None,
-                environment_id: None,
-                runner_id: None,
-                conversation_id: None,
-            },
-            title: "Cloud agent run".to_string(),
-            creator: None,
-            executor: None,
-            created_at: None,
-            credits: None,
-            total_tokens: None,
-            cost_in_cents: None,
-            run_time: None,
-            artifacts: vec![],
-            open_action: None,
-            source_prompt: None,
-            copy_link_url: None,
-            harness: None,
-            fetch_error,
         }
     }
 
@@ -617,7 +486,6 @@ impl ConversationDetailsData {
             source_prompt: initial_query,
             copy_link_url,
             harness,
-            fetch_error: None,
         }
     }
 }
@@ -637,7 +505,6 @@ pub enum ConversationDetailsPanelAction {
     CopyRunId,
     CopyEnvironmentId,
     CopyDockerImage,
-    CopyFetchError,
     CopyError,
     CopySetupCommands(String),
     CopyInitialQuery,
@@ -1253,97 +1120,6 @@ impl ConversationDetailsPanel {
         )
     }
 
-    fn render_fetch_error_notice(
-        &self,
-        fetch_error: &TaskFetchError,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let theme = appearance.theme();
-        let ui_font_size = appearance.ui_font_size();
-        if fetch_error.is_access_denied() {
-            let icon_color = blended_colors::text_sub(theme, theme.surface_1());
-            let notice_icon =
-                ConstrainedBox::new(Icon::Info.to_warpui_icon(icon_color.into()).finish())
-                    .with_width(STATUS_ICON_SIZE)
-                    .with_height(STATUS_ICON_SIZE)
-                    .finish();
-
-            let title = Text::new(
-                RUN_METADATA_ACCESS_DENIED_TITLE,
-                appearance.ui_font_family(),
-                ui_font_size,
-            )
-            .with_color(blended_colors::text_main(theme, theme.surface_1()))
-            .with_style(Properties::default().weight(Weight::Semibold))
-            .with_selectable(true)
-            .finish();
-            let description = Text::new(
-                RUN_METADATA_ACCESS_DENIED_DESCRIPTION,
-                appearance.ui_font_family(),
-                ui_font_size - 1.,
-            )
-            .with_color(icon_color)
-            .with_selectable(true)
-            .soft_wrap(true)
-            .finish();
-
-            let notice_text = Flex::column()
-                .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                .with_child(title)
-                .with_child(
-                    Container::new(description)
-                        .with_margin_top(LABEL_VALUE_GAP)
-                        .finish(),
-                )
-                .finish();
-            let notice_row = Flex::row()
-                .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                .with_child(Container::new(notice_icon).with_margin_right(8.).finish())
-                .with_child(Expanded::new(1., notice_text).finish())
-                .finish();
-
-            return Container::new(notice_row)
-                .with_uniform_padding(10.)
-                .with_background(coloru_with_opacity(blended_colors::neutral_2(theme), 70))
-                .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-                .finish();
-        }
-
-        let error_icon = ConstrainedBox::new(
-            Icon::Triangle
-                .to_warpui_icon(theme.ansi_fg_red().into())
-                .finish(),
-        )
-        .with_width(STATUS_ICON_SIZE)
-        .with_height(STATUS_ICON_SIZE)
-        .finish();
-        let error_text = render_copyable_text_field(
-            CopyableTextFieldConfig::new(fetch_error.message().to_string())
-                .with_font_size(ui_font_size)
-                .with_text_color(theme.ansi_fg_red())
-                .with_wrap_text(true)
-                .with_icon_size(16.)
-                .with_mouse_state(self.mouse_state_for_copy_button(CopyButtonKind::FetchError))
-                .with_last_copied_at(self.copy_feedback_times.get(&CopyButtonKind::FetchError))
-                .with_cross_axis_alignment(CrossAxisAlignment::Start),
-            |ctx| {
-                ctx.dispatch_typed_action(ConversationDetailsPanelAction::CopyFetchError);
-            },
-            app,
-        );
-        let error_row = Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Start)
-            .with_child(Container::new(error_icon).with_margin_right(4.).finish())
-            .with_child(Expanded::new(1., error_text).finish())
-            .finish();
-        Container::new(error_row)
-            .with_uniform_padding(8.)
-            .with_background(coloru_with_opacity(theme.ansi_fg_red(), 10))
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-            .finish()
-    }
-
     fn render_status_section(&self, appearance: &Appearance) -> Option<Box<dyn Element>> {
         let theme = appearance.theme();
         let ui_font_size = appearance.ui_font_size();
@@ -1880,7 +1656,6 @@ impl ConversationDetailsPanel {
             CopyButtonKind::RunId => self.mouse_states.copy_run_id.clone(),
             CopyButtonKind::EnvironmentId => self.mouse_states.copy_environment_id.clone(),
             CopyButtonKind::DockerImage => self.mouse_states.copy_docker_image.clone(),
-            CopyButtonKind::FetchError => self.mouse_states.copy_fetch_error.clone(),
             CopyButtonKind::Error => self.mouse_states.copy_error.clone(),
             CopyButtonKind::SetupCommands => self.mouse_states.copy_setup_commands.clone(),
             CopyButtonKind::InitialQuery => self.mouse_states.copy_initial_query.clone(),
@@ -2029,15 +1804,6 @@ impl View for ConversationDetailsPanel {
             .with_margin_bottom(FIELD_SPACING)
             .finish(),
         );
-
-        // Fetch error banner (shown when the API call to load run data failed)
-        if let Some(fetch_error) = &self.data.fetch_error {
-            content.add_child(
-                Container::new(self.render_fetch_error_notice(fetch_error, appearance, app))
-                    .with_margin_bottom(FIELD_SPACING)
-                    .finish(),
-            );
-        }
 
         // Status section
         if let Some(status_section) = self.render_status_section(appearance) {
@@ -2347,13 +2113,6 @@ impl TypedActionView for ConversationDetailsPanel {
                             self.record_copy(CopyButtonKind::DockerImage, ctx);
                         }
                     }
-                }
-            }
-            ConversationDetailsPanelAction::CopyFetchError => {
-                if let Some(error) = &self.data.fetch_error {
-                    ctx.clipboard()
-                        .write(ClipboardContent::plain_text(error.message().to_string()));
-                    self.record_copy(CopyButtonKind::FetchError, ctx);
                 }
             }
             ConversationDetailsPanelAction::CopyError => {

@@ -23,7 +23,6 @@ use crate::ai::agent::{
     AIAgentActionId, AIAgentExchangeId, AIAgentInput as FullAIAgentInput, AIIdentifiers,
     EntrypointType, ServerOutputId, SuggestedLoggingId,
 };
-use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::{
     AIBlockResponseRating, CommandExecutionPermissionAllowedReason, InputType, QueuedQueryOrigin,
@@ -833,7 +832,6 @@ pub enum AIAgentInput {
     CloneRepository { url: String },
     CodeReview,
     SummarizeConversation,
-    StartFromAmbientRunPrompt,
     MessagesReceivedFromAgents { message_count: usize },
     EventsFromAgents { event_count: usize },
     OrchestrationConfigUpdate,
@@ -857,7 +855,6 @@ impl From<FullAIAgentInput> for AIAgentInput {
             },
             FullAIAgentInput::CodeReview { .. } => Self::CodeReview,
             FullAIAgentInput::SummarizeConversation { .. } => Self::SummarizeConversation,
-            FullAIAgentInput::StartFromAmbientRunPrompt { .. } => Self::StartFromAmbientRunPrompt,
             FullAIAgentInput::MessagesReceivedFromAgents { messages } => {
                 Self::MessagesReceivedFromAgents {
                     message_count: messages.len(),
@@ -887,7 +884,6 @@ pub enum TelemetryAgentViewEntryOrigin {
     AcceptedUnitTestSuggestion,
     AcceptedPassiveCodeDiff,
     InlineCodeReview,
-    AmbientAgent,
     Cli,
     ImageAdded,
     SlashCommand,
@@ -910,7 +906,6 @@ pub enum TelemetryAgentViewEntryOrigin {
     DefaultSessionMode,
     ChildAgent,
     LinearDeepLink,
-    ThirdPartyCloudAgent,
     OrchestrationPillBar,
     JumpToLatestAgentMessage,
 }
@@ -932,8 +927,6 @@ impl From<AgentViewEntryOrigin> for TelemetryAgentViewEntryOrigin {
             AgentViewEntryOrigin::AcceptedUnitTestSuggestion => Self::AcceptedUnitTestSuggestion,
             AgentViewEntryOrigin::AcceptedPassiveCodeDiff => Self::AcceptedPassiveCodeDiff,
             AgentViewEntryOrigin::InlineCodeReview => Self::InlineCodeReview,
-            AgentViewEntryOrigin::CloudAgent => Self::AmbientAgent,
-            AgentViewEntryOrigin::ThirdPartyCloudAgent => Self::ThirdPartyCloudAgent,
             AgentViewEntryOrigin::Cli => Self::Cli,
             AgentViewEntryOrigin::ImageAdded => Self::ImageAdded,
             AgentViewEntryOrigin::SlashCommand { .. } => Self::SlashCommand,
@@ -2385,32 +2378,6 @@ pub enum TelemetryEvent {
     CodexModalOpened,
     /// Emitted when the user clicks "Use Codex" in the Codex modal.
     CodexModalUseCodexClicked,
-    /// Emitted when the cloud agent capacity modal is opened.
-    CloudAgentCapacityModalOpened,
-    /// Emitted when the cloud agent capacity modal is dismissed.
-    CloudAgentCapacityModalDismissed,
-    /// Emitted when the user clicks the upgrade button in the cloud agent capacity modal.
-    CloudAgentCapacityModalUpgradeClicked,
-    /// Emitted when a RequestComputerUse action is approved (manually or auto-executed).
-    ComputerUseApproved {
-        client_conversation_id: AIConversationId,
-        server_conversation_id: Option<String>,
-        is_autoexecuted: bool,
-        ambient_agent_task_id: Option<AmbientAgentTaskId>,
-    },
-    /// Emitted when a RequestComputerUse action is cancelled/rejected.
-    ComputerUseCancelled {
-        client_conversation_id: AIConversationId,
-        server_conversation_id: Option<String>,
-        ambient_agent_task_id: Option<AmbientAgentTaskId>,
-    },
-    /// Emitted when computer use is enabled for a cloud agent run but the host cannot provide it
-    /// (e.g. no display), so the run's requests omit the computer-use tools. At most once per run.
-    ComputerUseUnavailable {
-        ambient_agent_task_id: AmbientAgentTaskId,
-        /// Whether the client is running inside a sandbox (a Warp-hosted cloud agent).
-        sandboxed: bool,
-    },
     /// Emitted when a warp://linear deeplink is opened.
     LinearIssueLinkOpened,
     /// Emitted when the user commits a non-empty edit to a queued prompt row.
@@ -3831,37 +3798,6 @@ impl TelemetryEvent {
             TelemetryEvent::CodexModalOpened => None,
             TelemetryEvent::CodexModalUseCodexClicked => None,
             TelemetryEvent::LinearIssueLinkOpened => None,
-            TelemetryEvent::CloudAgentCapacityModalOpened => None,
-            TelemetryEvent::CloudAgentCapacityModalDismissed => None,
-            TelemetryEvent::CloudAgentCapacityModalUpgradeClicked => None,
-            TelemetryEvent::ComputerUseApproved {
-                client_conversation_id,
-                server_conversation_id,
-                is_autoexecuted,
-                ambient_agent_task_id,
-            } => Some(json!({
-                "client_conversation_id": client_conversation_id,
-                "server_conversation_id": server_conversation_id,
-                "is_autoexecuted": is_autoexecuted,
-                "ambient_agent_task_id": ambient_agent_task_id.map(|id| id.to_string()),
-            })),
-            TelemetryEvent::ComputerUseCancelled {
-                client_conversation_id,
-                server_conversation_id,
-                ambient_agent_task_id,
-            } => Some(json!({
-                "client_conversation_id": client_conversation_id,
-                "server_conversation_id": server_conversation_id,
-                "ambient_agent_task_id": ambient_agent_task_id.map(|id| id.to_string()),
-            })),
-            TelemetryEvent::ComputerUseUnavailable {
-                ambient_agent_task_id,
-                sandboxed,
-            } => Some(json!({
-                "ambient_agent_task_id": ambient_agent_task_id.to_string(),
-                "sandboxed": sandboxed,
-                "os": std::env::consts::OS,
-            })),
             TelemetryEvent::LoginButtonClicked { source }
             | TelemetryEvent::LoginLaterButtonClicked { source }
             | TelemetryEvent::LoginLaterConfirmationButtonClicked { source }
@@ -4277,13 +4213,7 @@ impl TelemetryEvent {
             | TelemetryEvent::ToggleUseAgentToolbarSetting { .. }
             | TelemetryEvent::CodexModalOpened
             | TelemetryEvent::CodexModalUseCodexClicked
-            | TelemetryEvent::LinearIssueLinkOpened
-            | TelemetryEvent::CloudAgentCapacityModalOpened
-            | TelemetryEvent::CloudAgentCapacityModalDismissed
-            | TelemetryEvent::CloudAgentCapacityModalUpgradeClicked
-            | TelemetryEvent::ComputerUseApproved { .. }
-            | TelemetryEvent::ComputerUseCancelled { .. }
-            | TelemetryEvent::ComputerUseUnavailable { .. } => false,
+            | TelemetryEvent::LinearIssueLinkOpened => false,
             #[cfg(feature = "local_fs")]
             TelemetryEvent::CodePaneOpened { .. }
             | TelemetryEvent::CodePanelsFileOpened { .. }
@@ -4769,16 +4699,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::ToggleUseAgentToolbarSetting { .. } => EnablementState::Always,
             Self::CodexModalOpened | Self::CodexModalUseCodexClicked => EnablementState::Always,
             Self::LinearIssueLinkOpened => EnablementState::Always,
-            Self::CloudAgentCapacityModalOpened
-            | Self::CloudAgentCapacityModalDismissed
-            | Self::CloudAgentCapacityModalUpgradeClicked => {
-                EnablementState::Flag(FeatureFlag::CloudMode)
-            }
-            Self::ComputerUseApproved
-            | Self::ComputerUseCancelled
-            | Self::ComputerUseUnavailable => {
-                EnablementState::Flag(FeatureFlag::AgentModeComputerUse)
-            }
             Self::QueuedPromptEdited
             | Self::QueuedPromptDeleted
             | Self::QueuedPromptReordered
@@ -5255,14 +5175,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::CodexModalOpened => "CodexModal.Opened",
             Self::CodexModalUseCodexClicked => "CodexModal.UseCodexClicked",
             Self::LinearIssueLinkOpened => "Linear.IssueLinkOpened",
-            Self::CloudAgentCapacityModalOpened => "AmbientAgent.ConcurrencyModal.Opened",
-            Self::CloudAgentCapacityModalDismissed => "AmbientAgent.ConcurrencyModal.Dismissed",
-            Self::CloudAgentCapacityModalUpgradeClicked => {
-                "AmbientAgent.ConcurrencyModal.UpgradeClicked"
-            }
-            Self::ComputerUseApproved => "ComputerUse.Approved",
-            Self::ComputerUseCancelled => "ComputerUse.Cancelled",
-            Self::ComputerUseUnavailable => "ComputerUse.Unavailable",
         }
     }
 
@@ -6019,20 +5931,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::CodexModalUseCodexClicked => "User clicked 'Use Codex' in the Codex modal",
             Self::LinearIssueLinkOpened => {
                 "User opened a warp://linear deeplink to work on an issue"
-            }
-            Self::CloudAgentCapacityModalOpened => "User opened the cloud agent capacity modal",
-            Self::CloudAgentCapacityModalDismissed => {
-                "User dismissed the cloud agent capacity modal"
-            }
-            Self::CloudAgentCapacityModalUpgradeClicked => {
-                "User clicked the upgrade button in the cloud agent capacity modal"
-            }
-            Self::ComputerUseApproved => {
-                "A RequestComputerUse action was approved (manually or auto-executed)"
-            }
-            Self::ComputerUseCancelled => "A RequestComputerUse action was cancelled/rejected",
-            Self::ComputerUseUnavailable => {
-                "Computer use was enabled for a cloud agent run but unavailable on the host"
             }
             Self::QueuedPromptEdited => "User committed a non-empty edit to a queued prompt row",
             Self::QueuedPromptDeleted => "User deleted a queued prompt row",

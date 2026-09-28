@@ -443,11 +443,10 @@ pub(crate) fn classify_renderable_error(
             user_display_message,
         } => (
             AgentTaskState::Failed,
-            Some(TaskStatusUpdate::with_error_code(
-                user_display_message.as_deref().unwrap_or(
-                    "Your team has run out of credits. Purchase more credits to continue.",
-                ),
-                PlatformErrorCode::InsufficientCredits,
+            Some(TaskStatusUpdate::message(
+                user_display_message
+                    .as_deref()
+                    .unwrap_or("The request quota was exceeded."),
             )),
         ),
         RenderableAIError::ServerOverloaded => (

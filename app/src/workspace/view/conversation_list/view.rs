@@ -25,7 +25,7 @@ use warpui::{
 };
 
 use super::view_model::{ConversationEntry, ConversationListViewModel};
-use crate::ai::active_agent_views_model::{ActiveAgentViewsModel, ConversationOrTaskId};
+use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent_conversations_model::{
     AgentConversationEntryId, AgentConversationNavigationSubject, AgentConversationsModel,
@@ -374,15 +374,13 @@ impl ConversationListView {
         active_items.sort_by(|a, b| {
             let get_time = |item: &ListItem| match item {
                 ListItem::Conversation { entry, .. } => {
-                    let entry_time = active_views_model
-                        .get_last_opened_time(&ConversationOrTaskId::from(entry.id));
+                    let AgentConversationEntryId::Conversation(entry_conversation_id) = entry.id;
+                    let entry_time =
+                        active_views_model.get_last_opened_time(&entry_conversation_id);
                     let local_time = model
                         .get_item_by_id(&entry.id, ctx)
                         .and_then(|item| item.identity.local_conversation_id)
-                        .and_then(|id| {
-                            active_views_model
-                                .get_last_opened_time(&ConversationOrTaskId::ConversationId(id))
-                        });
+                        .and_then(|id| active_views_model.get_last_opened_time(&id));
                     entry_time.max(local_time)
                 }
                 _ => None,
@@ -601,26 +599,14 @@ impl ConversationListView {
     }
 
     fn send_open_telemetry(id: &AgentConversationEntryId, ctx: &mut ViewContext<Self>) {
-        match id {
-            AgentConversationEntryId::Conversation(conversation_id) => {
-                send_telemetry_from_ctx!(
-                    AgentManagementTelemetryEvent::ConversationOpened {
-                        conversation_id: conversation_id.to_string(),
-                        opened_from: OpenedFrom::ConversationList,
-                    },
-                    ctx
-                );
-            }
-            AgentConversationEntryId::AmbientRun(task_id) => {
-                send_telemetry_from_ctx!(
-                    AgentManagementTelemetryEvent::CloudRunOpened {
-                        task_id: task_id.to_string(),
-                        opened_from: OpenedFrom::ConversationList,
-                    },
-                    ctx
-                );
-            }
-        }
+        let AgentConversationEntryId::Conversation(conversation_id) = id;
+        send_telemetry_from_ctx!(
+            AgentManagementTelemetryEvent::ConversationOpened {
+                conversation_id: conversation_id.to_string(),
+                opened_from: OpenedFrom::ConversationList,
+            },
+            ctx
+        );
     }
 
     /// Activate the currently selected item by dispatching the appropriate WorkspaceAction
@@ -1340,8 +1326,7 @@ impl View for ConversationListView {
                                     // a prompt is sent).
                                     let can_rename = local_conversation_id.is_some_and(|id| {
                                         *section == ConversationSection::Active
-                                            || open_conversation_ids
-                                                .contains(&ConversationOrTaskId::ConversationId(id))
+                                            || open_conversation_ids.contains(&id)
                                     });
 
                                     let overflow_menu_display = match overflow_menu_state {

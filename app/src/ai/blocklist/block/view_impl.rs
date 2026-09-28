@@ -1307,7 +1307,6 @@ impl AIAgentInput {
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::SummarizeConversation { .. }
-            | AIAgentInput::StartFromAmbientRunPrompt { .. }
             | AIAgentInput::ActionResult { .. }
             | AIAgentInput::MessagesReceivedFromAgents { .. }
             | AIAgentInput::EventsFromAgents { .. }

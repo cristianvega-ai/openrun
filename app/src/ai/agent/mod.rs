@@ -2727,16 +2727,6 @@ pub enum AIAgentInput {
         context: Arc<[AIAgentContext]>,
     },
 
-    /// Start a conversation using the prompt stored for an ambient agent run.
-    /// The server resolves the prompt from the run's latest known prompt.
-    StartFromAmbientRunPrompt {
-        ambient_run_id: String,
-        context: Arc<[AIAgentContext]>,
-        /// Optional directory path where the client downloaded task attachments.
-        /// Passed to the server so it can construct correct file paths for the LLM.
-        attachments_dir: Option<String>,
-    },
-
     /// The result of an `AIAgentAction`, relayed back to the LLM for it to continue answering a
     /// user query.
     ActionResult {
@@ -2815,7 +2805,6 @@ impl Display for AIAgentInput {
             Self::CloneRepository { .. } => write!(f, "CloneRepository"),
             Self::CodeReview { .. } => write!(f, "CodeReview"),
             Self::SummarizeConversation { .. } => write!(f, "SummarizeConversation"),
-            Self::StartFromAmbientRunPrompt { .. } => write!(f, "StartFromAmbientRunPrompt"),
             Self::MessagesReceivedFromAgents { messages } => {
                 write!(f, "MessagesReceivedFromAgents({} messages)", messages.len())
             }
@@ -2861,7 +2850,6 @@ impl AIAgentInput {
             | Self::ActionResult { .. }
             | Self::ResumeConversation { .. }
             | Self::SummarizeConversation { .. }
-            | Self::StartFromAmbientRunPrompt { .. }
             | Self::MessagesReceivedFromAgents { .. }
             | Self::EventsFromAgents { .. }
             | Self::OrchestrationConfigUpdate { .. } => None,
@@ -2946,8 +2934,7 @@ impl AIAgentInput {
             | Self::CreateEnvironment { context, .. }
             | Self::CreateNewProject { context, .. }
             | Self::CloneRepository { context, .. }
-            | Self::CodeReview { context, .. }
-            | Self::StartFromAmbientRunPrompt { context, .. } => Some(context),
+            | Self::CodeReview { context, .. } => Some(context),
             Self::SummarizeConversation { context, .. } => Some(context),
             Self::MessagesReceivedFromAgents { .. }
             | Self::EventsFromAgents { .. }
@@ -2975,7 +2962,6 @@ impl AIAgentInput {
             | Self::CloneRepository { .. }
             | Self::CodeReview { .. }
             | Self::SummarizeConversation { .. }
-            | Self::StartFromAmbientRunPrompt { .. }
             | Self::MessagesReceivedFromAgents { .. }
             | Self::EventsFromAgents { .. }
             | Self::OrchestrationConfigUpdate { .. } => None,

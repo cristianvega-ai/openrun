@@ -195,7 +195,6 @@ use workspace::sync_inputs::SyncedInputState;
 
 use self::features::FeatureFlag;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::ambient_agents::github_auth_notifier::GitHubAuthNotifier;
 use crate::ai::connected_self_hosted_workers::ConnectedSelfHostedWorkersModel;
 use crate::ai::document::ai_document_model::AIDocumentModel;
 use crate::ai::harness_availability::HarnessAvailabilityModel;
@@ -1059,7 +1058,6 @@ pub(crate) fn initialize_app(
     let display_count = ctx.windows().display_count();
     ctx.add_singleton_model(|_| DisplayCount(display_count));
 
-    ctx.add_singleton_model(|_| GitHubAuthNotifier::new());
     ctx.add_singleton_model(|_| NetworkStatus::new());
     ctx.add_singleton_model(|_| SystemStats::new());
     ctx.add_singleton_model(|_| KeybindingChangedNotifier::new());

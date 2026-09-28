@@ -56,14 +56,14 @@ fn assert_update(
 // --- classify_renderable_error ---
 
 #[test]
-fn quota_limit_is_failed_with_insufficient_credits() {
+fn quota_limit_is_failed_without_an_error_code() {
     assert_update(
         classify_renderable_error(&RenderableAIError::QuotaLimit {
             user_display_message: None,
         }),
         AgentTaskState::Failed,
-        Some(PlatformErrorCode::InsufficientCredits),
-        Some("credits"),
+        None,
+        Some("quota"),
     );
 }
 
@@ -303,8 +303,8 @@ fn map_conversation_status_error_classifies_exchange_error() {
     assert_update(
         map_conversation_status(&conversation),
         AgentTaskState::Failed,
-        Some(PlatformErrorCode::InsufficientCredits),
-        Some("credits"),
+        None,
+        Some("quota"),
     );
 }
 
@@ -406,14 +406,14 @@ fn map_conversation_status_error_classifies_status_error_other_as_error() {
     let mut conversation = AIConversation::new(false, false);
     conversation.set_status_for_test(ConversationStatus::Error);
     conversation.set_status_error_for_test(Some(RenderableAIError::other(
-        "Out of credits. Upgrade your Warp plan to continue running cloud agents.",
+        "Failed to resolve the requested skill.",
         false,
     )));
     assert_update(
         map_conversation_status(&conversation),
         AgentTaskState::Error,
         Some(PlatformErrorCode::InternalError),
-        Some("Out of credits"),
+        Some("Failed to resolve"),
     );
 }
 

@@ -31,8 +31,7 @@ pub(crate) fn redact_inputs(inputs: &mut [AIAgentInput]) {
             }
             AIAgentInput::CreateNewProject { context, .. }
             | AIAgentInput::CloneRepository { context, .. }
-            | AIAgentInput::ResumeConversation { context }
-            | AIAgentInput::StartFromAmbientRunPrompt { context, .. } => {
+            | AIAgentInput::ResumeConversation { context } => {
                 redact_context(Arc::make_mut(context));
             }
             AIAgentInput::SummarizeConversation { prompt, context } => {
