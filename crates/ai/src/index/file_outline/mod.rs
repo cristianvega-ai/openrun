@@ -13,9 +13,8 @@ use std::sync::Arc;
 
 use ignore::gitignore::Gitignore;
 use itertools::Itertools;
+use repo_metadata::{Entry, FileId};
 use serde::{Deserialize, Serialize};
-
-use crate::index::{Entry, FileId};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FileSymbols {

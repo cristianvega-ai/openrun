@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use repo_metadata::entry::is_file_parsable;
+use repo_metadata::{DirectoryEntry, Entry, FileMetadata};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use string_offset::ByteOffset;
@@ -17,12 +18,12 @@ use super::hash::MerkleHash;
 use super::serialized_tree::{SerializedFilesystemInfo, SerializedMerkleNode};
 use super::tree::UpdateFileResult;
 use super::{ContentHash, DirEntryOrFragment, NodeHash};
+use crate::index::THREADPOOL;
 use crate::index::full_source_code_embedding::Error;
 use crate::index::full_source_code_embedding::chunker::chunk_code;
 use crate::index::full_source_code_embedding::fragment_metadata::{
     FragmentMetadata, LeafToFragmentMetadataUpdates,
 };
-use crate::index::{DirectoryEntry, Entry, FileMetadata, THREADPOOL};
 
 /// ID that uniquely identifies a node in the merkle tree. It contains the node type
 /// as well as metadata that distinguishes nodes of the same type.

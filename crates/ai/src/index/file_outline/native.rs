@@ -9,19 +9,19 @@ use futures::channel::oneshot;
 use ignore::gitignore::Gitignore;
 use itertools::Itertools;
 use rayon::prelude::*;
-use repo_metadata::RepositoryUpdate;
 use repo_metadata::entry::{BudgetExceededBehavior, IgnoredPathStrategy, is_file_parsable};
+use repo_metadata::{Entry, FileId, FileMetadata, RepositoryUpdate};
 use streaming_iterator::StreamingIterator;
 use syntax_tree::TextSlice;
 use warp_errors::report_error;
 use warp_util::standardized_path::StandardizedPath;
 
+use crate::index::THREADPOOL;
 use crate::index::file_outline::{FileOutline, Outline, Symbol};
-use crate::index::{Entry, FileId, FileMetadata, THREADPOOL};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "local_fs")] {
-        use crate::index::matches_gitignores;
+        use repo_metadata::matches_gitignores;
     }
 }
 

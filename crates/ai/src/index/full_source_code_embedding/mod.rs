@@ -31,7 +31,7 @@ pub enum Error {
     #[error("Not a git repository")]
     NotAGitRepository,
     #[error("Build tree error {0:#}")]
-    BuildTreeError(#[from] crate::index::BuildTreeError),
+    BuildTreeError(#[from] repo_metadata::BuildTreeError),
     #[error("Unsupported platform")]
     UnsupportedPlatform,
     #[error("Invalid hash: {0:#}")]

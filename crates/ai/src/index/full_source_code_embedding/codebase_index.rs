@@ -45,11 +45,8 @@ cfg_if::cfg_if! {
             DiffMerkleTreeError::*,
             sync_client::SyncTask,
         };
-        use crate::index::{
-            Entry,
-            matches_gitignores,
-            full_source_code_embedding::sync_client::CodebaseIndexSyncOperation,
-        };
+        use crate::index::full_source_code_embedding::sync_client::CodebaseIndexSyncOperation;
+        use repo_metadata::{Entry, matches_gitignores};
         use warp_core::send_telemetry_from_ctx;
         use warp_core::interval_timer::IntervalTimer;
         use warpui_core::r#async::Timer;

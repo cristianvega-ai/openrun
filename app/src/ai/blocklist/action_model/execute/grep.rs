@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use futures::FutureExt;
 use futures::future::BoxFuture;
+use secret_redaction::redact_secrets;
 use warp_errors::report_error;
 use warp_util::standardized_path::StandardizedPath;
 use warpui::r#async::FutureExt as AsyncFutureExt;
@@ -16,7 +17,6 @@ use super::{
     get_server_output_id, is_file_path, is_git_repository,
 };
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::agent::redaction::redact_secrets;
 use crate::ai::agent::{
     AIAgentAction, AIAgentActionResultType, AIAgentActionType, GrepFileMatch, GrepLineMatch,
     GrepResult, ServerOutputId,

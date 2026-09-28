@@ -9,10 +9,9 @@ mod tree;
 pub(super) use hash::MerkleHash;
 pub use hash::{ContentHash, NodeHash};
 pub(super) use node::NodeLens;
+use repo_metadata::Entry;
 pub(super) use serialized_tree::SerializedCodebaseIndex;
 pub(super) use tree::MerkleTree;
-
-use crate::index::Entry;
 cfg_if::cfg_if! {
     if #[cfg(feature = "local_fs")] {
         pub(super) use node::NodeId;

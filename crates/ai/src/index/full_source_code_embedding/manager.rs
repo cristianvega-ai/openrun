@@ -11,7 +11,8 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "local_fs")] {
         use chrono::Utc;
         use super::changed_files::ChangedFiles;
-        use crate::index::{is_git_internal_path, matches_gitignores};
+        use repo_metadata::entry::is_git_internal_path;
+        use repo_metadata::matches_gitignores;
         use ignore::gitignore::Gitignore;
         use notify_debouncer_full::notify::{RecursiveMode, WatchFilter};
         use warp_core::features::FeatureFlag;
