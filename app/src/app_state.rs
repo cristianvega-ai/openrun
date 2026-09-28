@@ -135,8 +135,6 @@ pub enum LeafContents {
     Code(CodePaneSnapShot),
     EnvironmentManagement(EnvironmentManagementPaneSnapshot),
     Settings(SettingsPaneSnapshot),
-    CustomRouterEditor,
-    ExecutionProfileEditor,
     CodeReview(CodeReviewPaneSnapshot),
     /// The in-app network log pane. Not persisted across restarts because the
     /// backing log is an in-memory ring buffer that starts empty on launch.
@@ -167,8 +165,6 @@ impl LeafContents {
             | LeafContents::Notebook(_)
             | LeafContents::Code(_)
             | LeafContents::Settings(_)
-            | LeafContents::CustomRouterEditor
-            | LeafContents::ExecutionProfileEditor
             | LeafContents::CodeReview(_) => true,
         }
     }

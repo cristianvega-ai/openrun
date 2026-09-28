@@ -199,8 +199,6 @@ use crate::ai::blocklist::{
 use crate::ai::conversation_details_panel::ConversationDetailsData;
 use crate::ai::conversation_details_panel::ConversationDetailsPanelEvent;
 use crate::ai::conversation_utils;
-use crate::ai::execution_profiles::ExecutionProfileId;
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::get_relevant_files::controller::GetRelevantFilesController;
 use crate::ai::llms::{LLMId, LLMModelHost, LLMPreferences};
 use crate::antivirus::AntivirusInfo;
@@ -1474,9 +1472,6 @@ pub enum Event {
         force_open: bool,
     },
     SlowBootstrap,
-    OpenAgentProfileEditor {
-        profile_id: ExecutionProfileId,
-    },
     ShowToast {
         message: String,
         flavor: ToastFlavor,
@@ -14983,7 +14978,7 @@ impl TerminalView {
                 self.copy(ctx);
             }
             AIBlockEvent::OpenSettings => {
-                ctx.emit(Event::OpenSettings(SettingsSection::WarpAgent));
+                ctx.emit(Event::OpenSettings(SettingsSection::ThirdPartyCLIAgents));
             }
             #[cfg(feature = "local_fs")]
             AIBlockEvent::OpenCodeInWarp { source, layout } => {
@@ -15030,13 +15025,6 @@ impl TerminalView {
                         diff_mode,
                     });
                 }
-            }
-            AIBlockEvent::OpenActiveAgentProfileEditor => {
-                let profiles_model = AIExecutionProfilesModel::as_ref(ctx);
-                let active_profile = profiles_model.active_profile(Some(self.view_id), ctx);
-                ctx.emit(Event::OpenAgentProfileEditor {
-                    profile_id: active_profile.id().clone(),
-                });
             }
             AIBlockEvent::OpenThemeChooser => {
                 ctx.emit(Event::OpenThemeChooser);

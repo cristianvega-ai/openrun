@@ -48,10 +48,9 @@ use super::block_list::{
     upsert_ai_query,
 };
 use super::model::{
-    self, CODE_PANE_KIND, EXECUTION_PROFILE_EDITOR_PANE_KIND, NOTEBOOK_PANE_KIND, NewApp,
-    NewCommand, NewTab, NewTabGroup, NewTeam, NewWindow, NewWorkspace, NewWorkspaceMetadata,
-    NewWorkspaceTeam, Project, SETTINGS_PANE_KIND, TERMINAL_PANE_KIND, Tab, TabGroup, Window,
-    WorkspaceMetadata as WorkspaceMetadataModel,
+    self, CODE_PANE_KIND, NOTEBOOK_PANE_KIND, NewApp, NewCommand, NewTab, NewTabGroup, NewTeam,
+    NewWindow, NewWorkspace, NewWorkspaceMetadata, NewWorkspaceTeam, Project, SETTINGS_PANE_KIND,
+    TERMINAL_PANE_KIND, Tab, TabGroup, Window, WorkspaceMetadata as WorkspaceMetadataModel,
 };
 use super::{
     BlockCompleted, FinishedCommandMetadata, ModelEvent, PersistedData, PersistedDataScope,
@@ -946,9 +945,6 @@ fn save_pane_state(
         LeafContents::Code(_) => CODE_PANE_KIND,
         LeafContents::Settings(_) => SETTINGS_PANE_KIND,
         LeafContents::CodeReview(_) => CODE_REVIEW_PANE_KIND,
-        LeafContents::ExecutionProfileEditor | LeafContents::CustomRouterEditor => {
-            EXECUTION_PROFILE_EDITOR_PANE_KIND
-        }
         LeafContents::EnvironmentManagement(_) | LeafContents::NetworkLog => {
             // These pane types are filtered out before this function is
             // called; see `LeafContents::is_persisted` and the skip in
@@ -1091,9 +1087,6 @@ fn save_pane_state(
             diesel::insert_into(schema::code_review_panes::dsl::code_review_panes)
                 .values(code_review)
                 .execute(conn)?;
-        }
-        LeafContents::ExecutionProfileEditor | LeafContents::CustomRouterEditor => {
-            // Editor panes: no pane-specific data to save.
         }
         LeafContents::NetworkLog => {
             // Unreachable: filtered by `is_persisted` in `save_app_state`.

@@ -551,24 +551,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         context,
         flags::SMART_SELECT_FLAG,
     ));
-    if AISettings::as_ref(app).is_any_ai_enabled(app) {
-        toggle_binding_pairs.push(
-            ToggleSettingActionPair::new(
-                "help block in new sessions",
-                builder(SettingsAction::FeaturesPageToggle(
-                    FeaturesPageAction::ToggleShowTerminalZeroStateBlock,
-                )),
-                context,
-                flags::SHOW_TERMINAL_ZERO_STATE_BLOCK_FLAG,
-            )
-            .is_supported_on_current_platform(
-                TerminalSettings::as_ref(app)
-                    .show_terminal_zero_state_block
-                    .is_supported_on_current_platform(),
-            ),
-        );
-    }
-
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "terminal input message line",
         builder(SettingsAction::FeaturesPageToggle(
@@ -734,7 +716,6 @@ pub enum FeaturesPageAction {
     ToggleCodeAsDefaultEditor,
     ToggleShowInputHintText,
     ToggleUseAudibleBell,
-    ToggleShowTerminalZeroStateBlock,
     TogglePreferLowPowerGPU,
     ToggleVimMode,
     ToggleVimUnnamedSystemClipboard,
@@ -1240,10 +1221,6 @@ impl FeaturesPageAction {
             Self::SetPreferredGraphicsBackend(backend) => TelemetryEvent::FeaturesPageAction {
                 action: "SetPreferredGraphicsBackend".to_string(),
                 value: format!("{backend:?}"),
-            },
-            Self::ToggleShowTerminalZeroStateBlock => TelemetryEvent::FeaturesPageAction {
-                action: "ToggleShowTerminalZeroStateBlock".to_string(),
-                value: to_string(*TerminalSettings::as_ref(ctx).show_terminal_zero_state_block),
             },
             Self::ToggleLinuxClipboardSelection => {
                 let selection_setting =
@@ -2021,15 +1998,6 @@ impl TypedActionView for FeaturesPageView {
                 });
                 ctx.update_rendering_config(|config| config.backend_preference = *graphics_backend);
                 self.graphics_backend_preference_changed = true;
-            }
-            ToggleShowTerminalZeroStateBlock => {
-                TerminalSettings::handle(ctx).update(ctx, |terminal_settings, ctx| {
-                    report_if_error!(
-                        terminal_settings
-                            .show_terminal_zero_state_block
-                            .toggle_and_save_value(ctx)
-                    );
-                });
             }
             ToggleLinuxClipboardSelection => {
                 SelectionSettings::handle(ctx).update(ctx, |selection_settings, ctx| {
@@ -2923,8 +2891,6 @@ impl FeaturesPageView {
         {
             terminal_widgets.push(Box::new(AudibleBellWidget::default()));
         }
-
-        terminal_widgets.push(Box::new(ShowTerminalZeroStateBlockWidget::default()));
 
         terminal_widgets.push(Box::new(SmartSelectWidget::default()));
         terminal_widgets.push(Box::new(CopyOnSelectWidget::default()));
@@ -6605,48 +6571,6 @@ impl SettingsWidget for SmartSelectWidget {
 #[derive(Default)]
 struct CopyOnSelectWidget {
     switch_state: SwitchStateHandle,
-}
-
-#[derive(Default)]
-struct ShowTerminalZeroStateBlockWidget {
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for ShowTerminalZeroStateBlockWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "zero state new conversation terminal block welcome output first"
-    }
-
-    fn should_render(&self, app: &AppContext) -> bool {
-        AISettings::as_ref(app).is_any_ai_enabled(app)
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-        let terminal_settings = TerminalSettings::as_ref(app);
-        render_body_item::<FeaturesPageAction>(
-            "Show help block in new sessions".into(),
-            None,
-            ToggleState::Enabled,
-            appearance,
-            ui_builder
-                .switch(self.switch_state.clone())
-                .check(*terminal_settings.show_terminal_zero_state_block)
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleShowTerminalZeroStateBlock)
-                })
-                .finish(),
-            None,
-        )
-    }
 }
 
 impl SettingsWidget for CopyOnSelectWidget {

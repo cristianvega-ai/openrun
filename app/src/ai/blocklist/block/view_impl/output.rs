@@ -1138,7 +1138,9 @@ fn render_search_codebase(
                                             ctx.dispatch_typed_action(
                                                 WorkspaceAction::ShowSettingsPageWithSearch {
                                                     search_query: "Autonomy".to_string(),
-                                                    section: Some(SettingsSection::WarpAgent),
+                                                    section: Some(
+                                                        SettingsSection::ThirdPartyCLIAgents,
+                                                    ),
                                                 },
                                             );
                                         })),

@@ -195,8 +195,6 @@ pub struct AIExecutionProfilesModel {
     source: ProfileSource,
     /// State of the one-time import into the settings collection.
     settings_migration_state: SettingsMigrationState,
-    /// Whether post-auth onboarding must preserve the materialized default profile.
-    preserve_profile_onboarding_overrides: bool,
     /// Previous settings snapshot used only to classify collection change events.
     last_settings_profiles: ExecutionProfilesConfig,
     /// The default profile can be in one of two states:
@@ -389,7 +387,6 @@ impl AIExecutionProfilesModel {
         let mut model = Self {
             source,
             settings_migration_state,
-            preserve_profile_onboarding_overrides: settings_profiles_are_explicit,
             last_settings_profiles,
             default_profile_state,
             profile_id_to_sync_id,
@@ -453,7 +450,6 @@ impl AIExecutionProfilesModel {
         match update_result {
             Ok(()) => {
                 self.settings_migration_state = SettingsMigrationState::PendingExplicitSync;
-                self.preserve_profile_onboarding_overrides = true;
                 true
             }
             Err(error) => {
@@ -498,7 +494,6 @@ impl AIExecutionProfilesModel {
                 .is_value_explicitly_set()
         {
             self.settings_migration_state = SettingsMigrationState::PendingExplicitSync;
-            self.preserve_profile_onboarding_overrides = true;
         }
     }
 
@@ -527,7 +522,6 @@ impl AIExecutionProfilesModel {
             .execution_profiles
             .is_value_explicitly_set()
         {
-            self.preserve_profile_onboarding_overrides = true;
             self.settings_migration_state = SettingsMigrationState::Complete;
             return;
         }
@@ -564,7 +558,7 @@ impl AIExecutionProfilesModel {
             .collect::<Vec<_>>();
         legacy_profiles.sort_by(|(left, _), (right, _)| left.as_str().cmp(right.as_str()));
 
-        let (profiles, preserve_profile_onboarding_overrides) = if legacy_profiles.is_empty() {
+        let profiles = if legacy_profiles.is_empty() {
             let mut profile = super::create_default_from_legacy_settings(ctx);
             if let Some(base_llm_id) = ctx
                 .private_user_preferences()
@@ -578,7 +572,7 @@ impl AIExecutionProfilesModel {
             }
             let mut profiles = ExecutionProfilesConfig::default();
             profiles.insert(ExecutionProfileId::default_profile(), profile);
-            (profiles, false)
+            profiles
         } else {
             if !legacy_profiles.iter().any(|(id, _)| id.is_default()) {
                 legacy_profiles.insert(
@@ -589,11 +583,8 @@ impl AIExecutionProfilesModel {
                     ),
                 );
             }
-            (
-                ExecutionProfilesConfig::from_profiles(IndexMap::from_iter(legacy_profiles))
-                    .expect("legacy migration inserts a default profile"),
-                true,
-            )
+            ExecutionProfilesConfig::from_profiles(IndexMap::from_iter(legacy_profiles))
+                .expect("legacy migration inserts a default profile")
         };
 
         let update_result = AISettings::handle(ctx).update(ctx, |settings, ctx| {
@@ -601,21 +592,12 @@ impl AIExecutionProfilesModel {
         });
         match update_result {
             Ok(()) => {
-                self.preserve_profile_onboarding_overrides = preserve_profile_onboarding_overrides;
                 self.settings_migration_state = SettingsMigrationState::Complete;
                 log::info!("Migrated legacy execution profiles to the settings collection");
             }
             Err(error) => {
                 report_error!(error.context("Failed to migrate execution profiles to settings"));
             }
-        }
-    }
-    /// Returns whether onboarding must leave the existing default profile unchanged.
-    pub fn should_preserve_onboarding_profile(&self, ctx: &AppContext) -> bool {
-        if self.settings_are_authoritative() {
-            self.preserve_profile_onboarding_overrides
-        } else {
-            self.default_profile(ctx).sync_id().is_some()
         }
     }
 
@@ -786,7 +768,6 @@ impl AIExecutionProfilesModel {
             if self.source.imports_legacy_profiles() {
                 self.settings_migration_state =
                     SettingsMigrationState::for_launch(self.source, settings_profiles_are_explicit);
-                self.preserve_profile_onboarding_overrides = settings_profiles_are_explicit;
                 self.default_profile_state = DefaultProfileState::Unsynced {
                     id: ExecutionProfileId::default_profile(),
                     profile: AIExecutionProfile {

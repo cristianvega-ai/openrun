@@ -199,10 +199,7 @@ impl UriHost {
                 // - warp://settings?q={query} - opens settings with the search bar pre-filled
                 // - warp://settings?widget={widget_id} - opens settings scrolled to a widget
                 // - warp://settings/teams?invite={email} - opens team settings with invite modal
-                // - warp://settings/environments - opens environments settings page
-                // - warp://settings/platform - opens platform settings page
                 // - warp://settings/appearance - opens appearance settings page (themes, fonts, etc.)
-                // - warp://settings/warp_agent - opens the Warp Agent settings page (inference / API keys)
                 let query_string: HashMap<_, _> = url.query_pairs().collect();
                 // A bare `warp://settings` (or a trailing slash) yields an empty path
                 // segment; treat that as "no sub-page" so the query-param routing below
@@ -227,25 +224,10 @@ impl UriHost {
                             ctx,
                         );
                     }
-                    Some("environments") => {
-                        // Open settings page unless auth was initiated from cloud setup
-                        // (cloud setup users should stay on their current page)
-                        let source = query_string.get("source").map(|s| s.as_ref());
-                        let skip_settings = source == Some(CLOUD_SETUP_SOURCE);
-                        if !skip_settings {
-                            dispatch_action_in_new_or_existing_window(
-                                primary_window_id,
-                                "root_view:open_settings_page_in_existing_window",
-                                "root_view:open_settings_page_in_new_window",
-                                &SettingsSection::CloudEnvironments,
-                                ctx,
-                            );
-                        }
-                    }
                     // No special sub-page: route the bare host, the `q` (search) and
                     // `widget` (scroll-to) query params, and the simple section
-                    // sub-pages (e.g. platform, appearance,
-                    // warp_agent) resolved via `settings_section_for_simple_subpage`.
+                    // sub-pages (e.g. appearance) resolved via
+                    // `settings_section_for_simple_subpage`.
                     maybe_simple_subpage => {
                         let simple_section =
                             maybe_simple_subpage.and_then(settings_section_for_simple_subpage);
@@ -1197,9 +1179,7 @@ fn dispatch_action_in_new_or_existing_window<T: 'static>(
 
 fn settings_section_for_simple_subpage(subpage: &str) -> Option<SettingsSection> {
     match subpage {
-        "platform" => Some(SettingsSection::WarpCloudAgentAPIKeys),
         "appearance" => Some(SettingsSection::Appearance),
-        "warp_agent" => Some(SettingsSection::WarpAgent),
         _ => None,
     }
 }

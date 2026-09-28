@@ -12,13 +12,11 @@ use warp_core::ui::Icon;
 use warp_core::ui::appearance::Appearance;
 use warp_editor::render::element::VerticalExpansionBehavior;
 use warpui::elements::{
-    Align, Border, ChildAnchor, ChildView, Clipped, ConstrainedBox, Container, CornerRadius,
-    CrossAxisAlignment, Expanded, Flex, MainAxisSize, MouseStateHandle, OffsetPositioning,
-    ParentElement, PositionedElementAnchor, PositionedElementOffsetBounds, Radius, ScrollbarWidth,
-    Stack, Text,
+    Border, ChildAnchor, ChildView, Clipped, ConstrainedBox, Container, CornerRadius,
+    CrossAxisAlignment, Flex, MainAxisSize, MouseStateHandle, OffsetPositioning, ParentElement,
+    PositionedElementAnchor, PositionedElementOffsetBounds, Radius, ScrollbarWidth, Stack, Text,
 };
 use warpui::keymap::{Context, EditableBinding, FixedBinding, Keystroke};
-use warpui::ui_components::components::UiComponent as _;
 use warpui::{
     AppContext, Element, Entity, EntityId, EventContext, ModelHandle, SingletonEntity,
     TypedActionView, UpdateView, View, ViewContext, ViewHandle,
@@ -180,7 +178,6 @@ pub enum RequestedCommandViewEvent {
     TextSelected,
     CopiedEmptyText,
     EditorFocused,
-    OpenActiveAgentProfileEditor,
 }
 
 #[derive(Debug, Clone)]
@@ -193,7 +190,6 @@ pub enum RequestedCommandViewAction {
     CloseEditMode,
     FocusEditor,
     ToggleExpanded,
-    OpenActiveAgentProfileEditor,
     SelectText,
 }
 
@@ -701,19 +697,13 @@ impl RequestedCommandView {
                 },
             ) if show_for_action_id == &self.action_id => {
                 *shown.lock() = true;
-                Some(Self::render_profile_autoexecution_info_footer(
-                    self.manage_autonomy_settings_link_handle.clone(),
-                    app,
-                ))
+                Some(Self::render_profile_autoexecution_info_footer(app))
             }
             _ => None,
         }
     }
 
-    fn render_profile_autoexecution_info_footer(
-        settings_link_handle: MouseStateHandle,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
+    fn render_profile_autoexecution_info_footer(app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
 
@@ -747,30 +737,6 @@ impl RequestedCommandView {
                     )
                     .with_color(blended_colors::text_sub(theme, theme.surface_1()))
                     .with_selectable(false)
-                    .finish(),
-                )
-                .with_child(
-                    Expanded::new(
-                        1.,
-                        Align::new(
-                            appearance
-                                .ui_builder()
-                                .link(
-                                    "Manage command execution setting".into(),
-                                    None,
-                                    Some(Box::new(move |ctx| {
-                                        ctx.dispatch_typed_action(
-                                            RequestedCommandViewAction::OpenActiveAgentProfileEditor,
-                                        );
-                                    })),
-                                    settings_link_handle,
-                                )
-                                .build()
-                                .finish(),
-                        )
-                        .right()
-                        .finish(),
-                    )
                     .finish(),
                 )
                 .finish(),
@@ -1491,9 +1457,6 @@ impl TypedActionView for RequestedCommandView {
             }
             RequestedCommandViewAction::ToggleExpanded => {
                 self.set_is_header_expanded(!self.is_header_expanded, ctx)
-            }
-            RequestedCommandViewAction::OpenActiveAgentProfileEditor => {
-                ctx.emit(RequestedCommandViewEvent::OpenActiveAgentProfileEditor)
             }
             RequestedCommandViewAction::SelectText => {
                 ctx.emit(RequestedCommandViewEvent::TextSelected);

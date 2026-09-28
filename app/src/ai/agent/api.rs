@@ -28,7 +28,6 @@ use crate::ai::execution_profiles::AIExecutionProfileAppExt;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::{LLMId, LLMPreferences};
 use crate::server::server_api::AIApiError;
-use crate::settings::AISettings;
 use crate::terminal::safe_mode_settings::get_secret_obfuscation_mode;
 use crate::workspaces::user_workspaces::{TeamScope, UserWorkspaces};
 
@@ -138,7 +137,6 @@ pub struct RequestParams {
     /// `custom_model_providers`: the selected model's `config_key` indexes into this
     /// registry. `None` when no custom router is selected.
     pub custom_model_routers: Option<warp_multi_agent_api::request::settings::CustomModelRouters>,
-    pub allow_use_of_warp_credits: bool,
     pub autonomy_level: warp_multi_agent_api::AutonomyLevel,
     pub isolation_level: warp_multi_agent_api::IsolationLevel,
     pub web_search_enabled: bool,
@@ -188,7 +186,6 @@ impl RequestParams {
             api_keys: None,
             custom_model_providers: None,
             custom_model_routers: None,
-            allow_use_of_warp_credits: false,
             autonomy_level: Default::default(),
             isolation_level: Default::default(),
             web_search_enabled: false,
@@ -236,7 +233,6 @@ impl RequestParams {
                 &request_input.coding_model_id,
             )
         });
-        let allow_use_of_warp_credits = *AISettings::as_ref(app).can_use_warp_credits_for_fallback;
 
         let autonomy_level = warp_multi_agent_api::AutonomyLevel::Supervised;
         let isolation_level = warp_multi_agent_api::IsolationLevel::None;
@@ -283,7 +279,6 @@ impl RequestParams {
             api_keys,
             custom_model_providers,
             custom_model_routers,
-            allow_use_of_warp_credits,
             autonomy_level,
             isolation_level,
             web_search_enabled,

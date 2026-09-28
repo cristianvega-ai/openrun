@@ -28,18 +28,15 @@ use warpui::{Action, AppContext, SingletonEntity, ViewContext, ViewHandle};
 
 use super::SettingsSection;
 use super::about_page::AboutPageView;
-use super::agent_profiles_page::AgentProfilesPageView;
 use super::appearance_page::AppearanceSettingsPageView;
 use super::cli_agents_page::CLIAgentsPageView;
 use super::code_editor_review_page::EditorAndCodeReviewPageView;
-use super::environments_page::EnvironmentsPageView;
 use super::features_page::FeaturesPageView;
 use super::keybindings::KeybindingsView;
 use super::privacy_page::PrivacyPageView;
 use super::projects_page::ProjectsPageView;
 use super::scripting_page::ScriptingSettingsPageView;
 use super::teams_page::TeamsPageView;
-use super::warp_agent_page::WarpAgentPageView;
 use super::warpify_page::WarpifyPageView;
 use crate::appearance::Appearance;
 use crate::themes::theme::Fill;
@@ -103,14 +100,10 @@ pub enum SettingsPageViewHandle {
     Projects(ViewHandle<ProjectsPageView>),
     EditorAndCodeReview(ViewHandle<EditorAndCodeReviewPageView>),
     Teams(ViewHandle<TeamsPageView>),
-    WarpCloudAgentAPIKeys(ViewHandle<super::platform_page::PlatformPageView>),
     Privacy(ViewHandle<PrivacyPageView>),
     Warpify(ViewHandle<WarpifyPageView>),
     Scripting(ViewHandle<ScriptingSettingsPageView>),
-    WarpAgent(ViewHandle<WarpAgentPageView>),
-    AgentProfiles(ViewHandle<AgentProfilesPageView>),
     CLIAgents(ViewHandle<CLIAgentsPageView>),
-    CloudEnvironments(ViewHandle<EnvironmentsPageView>),
 }
 
 impl SettingsPageViewHandle {
@@ -124,14 +117,10 @@ impl SettingsPageViewHandle {
             Projects(view_handle) => ChildView::new(view_handle).finish(),
             EditorAndCodeReview(view_handle) => ChildView::new(view_handle).finish(),
             Teams(view_handle) => ChildView::new(view_handle).finish(),
-            WarpCloudAgentAPIKeys(view_handle) => ChildView::new(view_handle).finish(),
             Privacy(view_handle) => ChildView::new(view_handle).finish(),
             Warpify(view_handle) => ChildView::new(view_handle).finish(),
             Scripting(view_handle) => ChildView::new(view_handle).finish(),
-            WarpAgent(view_handle) => ChildView::new(view_handle).finish(),
-            AgentProfiles(view_handle) => ChildView::new(view_handle).finish(),
             CLIAgents(view_handle) => ChildView::new(view_handle).finish(),
-            CloudEnvironments(view_handle) => ChildView::new(view_handle).finish(),
         }
     }
 }
@@ -295,34 +284,6 @@ pub fn render_sub_sub_header(
                     Text::new_inline(text_name, appearance.ui_font_family(), CONTENT_FONT_SIZE)
                         .with_style(Properties::default().weight(Weight::Bold))
                         .with_color(appearance.theme().active_ui_text_color().into())
-                        .finish(),
-                )
-                .left()
-                .finish(),
-            )
-            .with_padding_bottom(4.)
-            .finish(),
-        )
-        .finish()
-}
-
-pub fn render_custom_size_header(
-    appearance: &Appearance,
-    text_name: impl Into<Cow<'static, str>>,
-    font_size: f32,
-    color_override: Option<Fill>,
-) -> Box<dyn Element> {
-    Flex::row()
-        .with_child(
-            Container::new(
-                Align::new(
-                    Text::new_inline(text_name, appearance.ui_font_family(), font_size)
-                        .with_style(Properties::default().weight(Weight::Bold))
-                        .with_color(
-                            color_override
-                                .unwrap_or(appearance.theme().active_ui_text_color())
-                                .into(),
-                        )
                         .finish(),
                 )
                 .left()
@@ -504,24 +465,6 @@ pub fn render_body_item_label<T: Clone + Action>(
     render_body_item_label_internal(
         label_text,
         None,
-        label_color_override,
-        additional_info,
-        toggle_state,
-        appearance,
-    )
-}
-
-pub fn render_body_item_label_with_icon<T: Clone + Action>(
-    label_text: String,
-    icon: Icon,
-    label_color_override: Option<Fill>,
-    additional_info: Option<AdditionalInfo<T>>,
-    toggle_state: ToggleState,
-    appearance: &Appearance,
-) -> Box<dyn Element> {
-    render_body_item_label_internal(
-        label_text,
-        Some(icon),
         label_color_override,
         additional_info,
         toggle_state,
@@ -775,74 +718,6 @@ pub(crate) fn render_dropdown_item<T: DropdownItemAction>(
         .finish(),
     )
     .with_child(dropdown.finish())
-    .finish()
-}
-
-pub(crate) fn render_settings_info_banner(
-    text: &str,
-    subtext: Option<&str>,
-    appearance: &Appearance,
-) -> Box<dyn Element> {
-    let icon = Container::new(
-        ConstrainedBox::new(
-            Icon::AlertCircle
-                .to_warpui_icon(appearance.theme().active_ui_text_color())
-                .finish(),
-        )
-        .with_width(16.)
-        .with_height(16.)
-        .finish(),
-    )
-    .with_margin_right(8.)
-    .finish();
-
-    let text = {
-        let mut children = vec![
-            Container::new(
-                Text::new(
-                    text.to_string(),
-                    appearance.ui_font_family(),
-                    appearance.ui_font_size(),
-                )
-                .with_color(appearance.theme().active_ui_text_color().into())
-                .finish(),
-            )
-            .finish(),
-        ];
-
-        if let Some(subtext) = subtext {
-            children.push(
-                Container::new(
-                    Text::new(
-                        subtext.to_string(),
-                        appearance.ui_font_family(),
-                        appearance.ui_font_size() - 1.,
-                    )
-                    .with_color(
-                        appearance
-                            .theme()
-                            .sub_text_color(appearance.theme().background())
-                            .into(),
-                    )
-                    .finish(),
-                )
-                .with_margin_top(4.)
-                .finish(),
-            );
-        }
-
-        Shrinkable::new(1.0, Flex::column().with_children(children).finish()).finish()
-    };
-
-    Container::new(
-        Flex::row()
-            .with_children(vec![icon, text])
-            .with_main_axis_size(MainAxisSize::Max)
-            .finish(),
-    )
-    .with_background_color(appearance.theme().accent_overlay().into())
-    .with_uniform_padding(12.)
-    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
     .finish()
 }
 

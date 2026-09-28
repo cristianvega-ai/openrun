@@ -3384,7 +3384,7 @@ impl Input {
                 });
             }
             InlineProfileSelectorEvent::ManageProfiles => {
-                ctx.emit(Event::OpenSettings(SettingsSection::AgentProfiles));
+                ctx.emit(Event::OpenSettings(SettingsSection::ThirdPartyCLIAgents));
             }
             InlineProfileSelectorEvent::Dismissed => {
                 if self

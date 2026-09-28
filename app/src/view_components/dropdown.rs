@@ -274,34 +274,6 @@ where
         }
     }
 
-    /// When `render_popup_externally` is true, the dropdown skips its
-    /// internal popup rendering even when expanded. Callers must use
-    /// [`Self::render_menu_as_overlay`] to obtain the popup and attach it
-    /// to an outer [`Stack`] as a positioned overlay child, ensuring the
-    /// popup paints on top of all subsequent sibling form content.
-    pub fn set_render_popup_externally(&mut self, value: bool, ctx: &mut ViewContext<Self>) {
-        self.render_popup_externally = value;
-        ctx.notify();
-    }
-
-    /// Returns the open menu element and its positioning for external
-    /// rendering, or `None` when the dropdown is closed or
-    /// `render_popup_externally` is not set.
-    pub fn render_menu_as_overlay(&self) -> Option<(Box<dyn Element>, OffsetPositioning)> {
-        if !self.is_expanded || !self.render_popup_externally {
-            return None;
-        }
-        let menu: Box<dyn Element> = ChildView::new(&self.dropdown).finish();
-        let positioning = OffsetPositioning::offset_from_save_position_element(
-            self.top_bar_label(),
-            vec2f(0., 0.),
-            PositionedElementOffsetBounds::WindowByPosition,
-            self.element_anchor,
-            self.child_anchor,
-        );
-        Some((menu, positioning))
-    }
-
     pub fn set_font_color(&mut self, color: ColorU, ctx: &mut ViewContext<Self>) {
         self.font_color = Some(color);
         ctx.notify();
@@ -361,22 +333,6 @@ where
     ) {
         self.element_anchor = element_anchor;
         self.child_anchor = child_anchor;
-        ctx.notify();
-    }
-
-    /// When enabled, the open menu sizes itself to the last rendered width of
-    /// the dropdown's top bar. This is useful for flexible dropdowns whose
-    /// trigger width is determined by parent layout rather than a fixed max.
-    pub fn set_match_menu_width_to_top_bar(
-        &mut self,
-        match_width: bool,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.match_menu_width_to_top_bar = match_width;
-        let top_bar_label = self.top_bar_label();
-        self.dropdown.update(ctx, |menu, _ctx| {
-            menu.set_width_match_position_id(match_width.then_some(top_bar_label));
-        });
         ctx.notify();
     }
 
@@ -473,29 +429,6 @@ where
         });
         self.selected_item = self.selected_item(ctx);
         ctx.notify();
-    }
-
-    /// Returns a clone of the concrete item action for the currently selected
-    /// item, if any.
-    ///
-    /// This reads the dropdown's mirrored selection state (kept current via
-    /// menu events), so it is reliable even when the popup is rendered
-    /// externally via [`Self::set_render_popup_externally`], where the
-    /// selection action does not bubble through this view's own element
-    /// subtree to fire the item action.
-    pub fn selected_action(&self) -> Option<A>
-    where
-        A: Clone,
-    {
-        let DropdownAction::SelectActionAndClose(action) =
-            self.selected_item.as_ref()?.item_on_select_action()?
-        else {
-            return None;
-        };
-        // Deref the `Box<dyn DropdownItemAction>` to the inner trait object
-        // before `as_any`: the blanket `Action` impl also covers `Box<_>`, so
-        // calling `as_any` on the box would downcast the box, not the action.
-        (**action).as_any().downcast_ref::<A>().cloned()
     }
 
     pub fn set_top_bar_max_width(&mut self, max_width: f32) {

@@ -21,7 +21,6 @@ pub(crate) mod conversation_rename;
 pub(crate) mod conversation_status_ui;
 pub(crate) mod conversation_utils;
 pub(crate) mod custom_endpoints;
-pub(crate) mod custom_model_router_editor;
 pub(crate) mod custom_model_routers;
 pub(crate) mod document;
 pub(crate) mod execution_context;

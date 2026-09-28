@@ -722,11 +722,6 @@ fn handle_terminal_view_event(
                     force_open: *force_open,
                 });
             }
-            Event::OpenAgentProfileEditor { profile_id } => {
-                ctx.emit(pane_group::Event::OpenAgentProfileEditor {
-                    profile_id: profile_id.clone(),
-                });
-            }
             Event::InsertCodeReviewComments {
                 repo_path,
                 comments,

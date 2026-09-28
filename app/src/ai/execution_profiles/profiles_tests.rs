@@ -193,7 +193,7 @@ fn edits_persist_on_unsynced_default_profile_when_logged_out() {
 }
 
 #[test]
-fn explicit_local_collection_is_preserved_from_onboarding() {
+fn explicit_local_collection_is_kept_after_initial_load() {
     let _guard = FeatureFlag::FileBackedExecutionProfiles.override_enabled(true);
 
     App::test((), |mut app| async move {
@@ -214,12 +214,9 @@ fn explicit_local_collection_is_preserved_from_onboarding() {
             });
         });
 
-        let profile_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
+        app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         complete_cloud_initial_load(&mut app);
 
-        profile_model.read(&app, |model, ctx| {
-            assert!(model.should_preserve_onboarding_profile(ctx));
-        });
         app.read(|ctx| {
             assert!(
                 AISettings::as_ref(ctx)

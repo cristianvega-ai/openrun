@@ -22,7 +22,7 @@ use warpui::{AppContext, Entity, ModelContext, SingletonEntity, UpdateModel, Wea
 use crate::ai::execution_profiles::ExecutionProfilesConfig;
 use crate::auth::AuthStateProvider;
 use crate::terminal::TerminalView;
-use crate::workspaces::user_workspaces::{TeamScope, UserWorkspaces};
+use crate::workspaces::user_workspaces::UserWorkspaces;
 
 pub enum FocusedTerminalInfoEvent {
     TerminalInfoUpdated,
@@ -717,43 +717,6 @@ define_settings_group!(AISettings, settings: [
         description: "Whether Warp should route eligible requests through your workspace's Gemini Enterprise Google Cloud project.",
     }
 
-    // Used to determine whether the "Latest updates" section of the agent view
-    // zero state is expanded or collapsed by default.
-    should_expand_oz_updates: ShouldExpandOzUpdates {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Never,
-        surface: settings::SettingSurfaces::GUI,
-        private: true,
-    }
-
-    // Used to determine whether the "Latest updates" section of the agent view
-    // zero state is shown or hidden.
-    should_show_oz_updates_in_zero_state: ShouldShowOzUpdatesInZeroState {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: false,
-        toml_path: "agents.warp_agent.other.should_show_oz_updates_in_zero_state",
-        description: "Whether the \"What's new\" section is shown in the agent view.",
-    }
-
-    // Whether or not the user has enabled fallback to Warp credits for user-provided models.
-    can_use_warp_credits_for_fallback: CanUseWarpCreditsForFallback {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::ALL,
-        private: false,
-        storage_key: "CanUseWarpCreditsWithByok",
-        toml_path: "cloud_platform.third_party_api_keys.can_use_warp_credits_with_byok",
-        description: "Whether Warp credits can be used as a fallback for user-provided models.",
-    }
-
     should_render_use_agent_footer_for_user_commands: ShouldRenderUseAgentToolbarForUserCommands {
         type: bool,
         default: true,
@@ -948,77 +911,6 @@ impl AISettings {
 
     pub fn is_command_denylist_editable(&self, app: &AppContext) -> bool {
         self.is_any_ai_enabled(app)
-    }
-
-    pub(crate) fn is_command_allowlist_editable(
-        &self,
-        scope: &impl TeamScope,
-        app: &AppContext,
-    ) -> bool {
-        let set_by_workspace = UserWorkspaces::as_ref(app)
-            .ai_autonomy_settings(scope)
-            .has_override_for_execute_commands_allowlist();
-
-        self.is_any_ai_enabled(app) && !set_by_workspace
-    }
-
-    pub(crate) fn is_directory_allowlist_editable(
-        &self,
-        scope: &impl TeamScope,
-        app: &AppContext,
-    ) -> bool {
-        let set_by_workspace = UserWorkspaces::as_ref(app)
-            .ai_autonomy_settings(scope)
-            .has_override_for_read_files_allowlist();
-
-        self.is_any_ai_enabled(app) && !set_by_workspace
-    }
-
-    pub(crate) fn is_execute_commands_permissions_editable(
-        &self,
-        scope: &impl TeamScope,
-        app: &AppContext,
-    ) -> bool {
-        let set_by_workspace = UserWorkspaces::as_ref(app)
-            .ai_autonomy_settings(scope)
-            .has_override_for_execute_commands();
-
-        self.is_any_ai_enabled(app) && !set_by_workspace
-    }
-
-    pub(crate) fn is_write_to_pty_permissions_editable(
-        &self,
-        scope: &impl TeamScope,
-        app: &AppContext,
-    ) -> bool {
-        let set_by_workspace = UserWorkspaces::as_ref(app)
-            .ai_autonomy_settings(scope)
-            .has_override_for_write_to_pty();
-        self.is_any_ai_enabled(app) && !set_by_workspace
-    }
-
-    pub(crate) fn is_read_files_permissions_editable(
-        &self,
-        scope: &impl TeamScope,
-        app: &AppContext,
-    ) -> bool {
-        let set_by_workspace = UserWorkspaces::as_ref(app)
-            .ai_autonomy_settings(scope)
-            .has_override_for_read_files();
-
-        self.is_any_ai_enabled(app) && !set_by_workspace
-    }
-
-    pub(crate) fn is_code_diffs_permissions_editable(
-        &self,
-        scope: &impl TeamScope,
-        app: &AppContext,
-    ) -> bool {
-        let set_by_workspace = UserWorkspaces::as_ref(app)
-            .ai_autonomy_settings(scope)
-            .has_override_for_code_diffs();
-
-        self.is_any_ai_enabled(app) && !set_by_workspace
     }
 
     pub fn is_ask_user_question_permissions_editable(&self, app: &AppContext) -> bool {

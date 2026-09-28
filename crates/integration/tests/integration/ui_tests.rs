@@ -271,6 +271,7 @@ integration_tests! {
     test_settings_search_filters_top_level_pages,
     test_settings_search_filters_subpages,
     test_settings_search_subpage_still_renders_content,
+    test_settings_search_top_level_page_still_renders_content,
     test_settings_search_clear_restores_umbrella_state,
     test_settings_search_preserved_on_sidebar_click,
 

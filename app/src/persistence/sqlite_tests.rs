@@ -1198,6 +1198,37 @@ fn test_sqlite_restore_and_save_survive_stale_workflow_pane_rows() {
 }
 
 #[test]
+fn test_sqlite_restore_skips_stale_profile_editor_pane_and_keeps_the_split() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let app_state = AppState {
+        windows: vec![window_with_tabs(
+            vec![tab_with_root(PaneNodeSnapshot::Branch(BranchSnapshot {
+                direction: SplitDirection::Horizontal,
+                children: vec![
+                    (PaneFlex(0.5), terminal_leaf(4)),
+                    (PaneFlex(0.5), settings_leaf()),
+                ],
+            }))],
+            0,
+        )],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+    rewrite_settings_panes_as_kind(&mut conn, "execution_profile_editor");
+
+    let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
+        .expect("a stale profile editor pane must not fail the read")
+        .app_state
+        .expect("app state should be present for the full scope");
+    assert_eq!(restored.windows[0].tabs.len(), 1, "the tab is kept");
+    assert_eq!(terminal_uuid(&restored.windows[0].tabs[0].root), vec![4]);
+}
+
+#[test]
 fn test_sqlite_restore_skips_cloud_notebook_pane_without_losing_the_tab() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");

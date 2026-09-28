@@ -2981,9 +2981,6 @@ impl AIBlock {
                 // Actions within the editor should clear all other text selections
                 self.clear_other_selections(Some(view.id()), ctx.window_id(), ctx);
             }
-            RequestedCommandViewEvent::OpenActiveAgentProfileEditor => {
-                ctx.emit(AIBlockEvent::OpenActiveAgentProfileEditor);
-            }
         }
     }
 
@@ -3351,7 +3348,7 @@ impl AIBlock {
                 // Synchronous dispatch here can panic with "Circular view update".
                 ctx.dispatch_typed_action_deferred(WorkspaceAction::ShowSettingsPageWithSearch {
                     search_query: "aws bedrock".to_string(),
-                    section: Some(SettingsSection::WarpAgent),
+                    section: Some(SettingsSection::ThirdPartyCLIAgents),
                 });
             }
         });
@@ -3393,7 +3390,7 @@ impl AIBlock {
                 // Synchronous dispatch here can panic with "Circular view update".
                 ctx.dispatch_typed_action_deferred(WorkspaceAction::ShowSettingsPageWithSearch {
                     search_query: "gemini enterprise".to_string(),
-                    section: Some(SettingsSection::WarpAgent),
+                    section: Some(SettingsSection::ThirdPartyCLIAgents),
                 });
             }
         });
@@ -5267,7 +5264,6 @@ pub enum AIBlockEvent {
         entrypoint: CodeReviewPaneEntrypoint,
     },
     DismissedPassiveBlock,
-    OpenActiveAgentProfileEditor,
     /// Run the configured AWS auth refresh command to fix expired Bedrock credentials
     RunAwsLoginCommand,
     /// Emitted when a passive code diff has loaded its diffs and is ready to display.
@@ -5898,7 +5894,7 @@ impl TypedActionView for AIBlock {
             AIBlockAction::ConfigureAwsLoginCommand => {
                 ctx.dispatch_typed_action(&WorkspaceAction::ShowSettingsPageWithSearch {
                     search_query: "aws bedrock".to_string(),
-                    section: Some(SettingsSection::WarpAgent),
+                    section: Some(SettingsSection::ThirdPartyCLIAgents),
                 });
             }
             AIBlockAction::ToggleImportedCommentCollapsed {

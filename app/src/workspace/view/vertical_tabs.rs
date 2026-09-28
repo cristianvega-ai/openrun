@@ -896,7 +896,6 @@ pub(super) enum SummaryPaneKind {
     File,
     Settings,
     EnvironmentManagement,
-    ExecutionProfileEditor,
     Other,
 }
 
@@ -3577,7 +3576,6 @@ enum TypedPane<'a> {
     File,
     Settings,
     EnvironmentManagement,
-    ExecutionProfileEditor,
     Other,
 }
 
@@ -3606,7 +3604,6 @@ impl TypedPane<'_> {
             TypedPane::File => SummaryPaneKind::File,
             TypedPane::Settings => SummaryPaneKind::Settings,
             TypedPane::EnvironmentManagement => SummaryPaneKind::EnvironmentManagement,
-            TypedPane::ExecutionProfileEditor => SummaryPaneKind::ExecutionProfileEditor,
             TypedPane::Other => SummaryPaneKind::Other,
         }
     }
@@ -3622,7 +3619,6 @@ impl TypedPane<'_> {
             TypedPane::File => "File",
             TypedPane::Settings => "Settings",
             TypedPane::EnvironmentManagement => "Environments",
-            TypedPane::ExecutionProfileEditor => "Execution Profile",
             TypedPane::Other => "Other",
         }
     }
@@ -3639,7 +3635,6 @@ impl TypedPane<'_> {
             | TypedPane::File
             | TypedPane::Settings
             | TypedPane::EnvironmentManagement
-            | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => None,
         }
     }
@@ -3651,7 +3646,6 @@ impl TypedPane<'_> {
             TypedPane::CodeDiff => WarpIcon::Diff,
             TypedPane::File => WarpIcon::File,
             TypedPane::Settings | TypedPane::EnvironmentManagement => WarpIcon::Gear,
-            TypedPane::ExecutionProfileEditor => WarpIcon::Lightning,
             TypedPane::Other => WarpIcon::File,
         }
     }
@@ -3792,7 +3786,6 @@ fn build_vertical_tabs_summary_data(
             | TypedPane::File
             | TypedPane::Settings
             | TypedPane::EnvironmentManagement
-            | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => {
                 push_normalized_unique_summary_label(
                     &mut primary_labels,
@@ -3931,7 +3924,6 @@ impl<'a> PaneProps<'a> {
             | TypedPane::File
             | TypedPane::Settings
             | TypedPane::EnvironmentManagement
-            | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => {
                 non_terminal_search_text_fragments(self.generated_or_tab_title(), &self.subtitle)
             }
@@ -4341,8 +4333,7 @@ impl PaneGroup {
             IPaneType::File => TypedPane::File,
             IPaneType::Settings => TypedPane::Settings,
             IPaneType::EnvironmentManagement => TypedPane::EnvironmentManagement,
-            IPaneType::ExecutionProfileEditor => TypedPane::ExecutionProfileEditor,
-            IPaneType::CustomRouterEditor | IPaneType::NetworkLog => TypedPane::Other,
+            IPaneType::NetworkLog => TypedPane::Other,
             #[cfg(test)]
             IPaneType::Dummy => TypedPane::Other,
         }
@@ -5049,7 +5040,6 @@ pub(super) fn render_summary_pane_kind_icon_circle(
         | SummaryPaneKind::File
         | SummaryPaneKind::Settings
         | SummaryPaneKind::EnvironmentManagement
-        | SummaryPaneKind::ExecutionProfileEditor
         | SummaryPaneKind::Other => {
             let (icon, icon_color) = summary_pane_kind_icon(kind, appearance);
             (
@@ -5117,7 +5107,6 @@ fn summary_pane_kind_icon(
         SummaryPaneKind::Settings | SummaryPaneKind::EnvironmentManagement => {
             (WarpIcon::Gear, main_text)
         }
-        SummaryPaneKind::ExecutionProfileEditor => (WarpIcon::Lightning, sub_text),
         SummaryPaneKind::Other => (WarpIcon::File, sub_text),
     }
 }
@@ -6941,7 +6930,6 @@ fn render_detail_section(
         | TypedPane::File
         | TypedPane::Settings
         | TypedPane::EnvironmentManagement
-        | TypedPane::ExecutionProfileEditor
         | TypedPane::Other => Empty::new().finish(),
     }
 }

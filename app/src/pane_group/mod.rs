@@ -42,7 +42,6 @@ use crate::ai::blocklist::inline_action::code_diff_view::CodeDiffView;
 use crate::ai::blocklist::{
     BlocklistAIHistoryModel, InputConfig, InputType, SerializedBlockListItem,
 };
-use crate::ai::execution_profiles::ExecutionProfileId;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::{LLMId, LLMPreferences};
 use crate::ai::restored_conversations::RestoredAgentConversations;
@@ -125,9 +124,7 @@ mod tests;
 
 pub use pane::code_diff_pane::CodeDiffPane;
 pub use pane::code_pane::CodePane;
-pub use pane::custom_router_editor_pane::CustomRouterEditorPane;
 pub use pane::environment_management_pane::EnvironmentManagementPane;
-pub use pane::execution_profile_editor_pane::ExecutionProfileEditorPane;
 pub use pane::file_pane::FilePane;
 pub use pane::network_log_pane::NetworkLogPane;
 pub use pane::settings_pane::SettingsPane;
@@ -569,9 +566,6 @@ pub enum Event {
     #[cfg(feature = "local_fs")]
     FileDeleted {
         path: PathBuf,
-    },
-    OpenAgentProfileEditor {
-        profile_id: ExecutionProfileId,
     },
     RepoChanged,
     AttachPathAsContext {
@@ -1540,10 +1534,6 @@ impl PaneGroup {
             }
             LeafContents::CodeReview(_) => {
                 Err(anyhow::anyhow!("Code review panes are no longer supported"))
-            }
-            LeafContents::ExecutionProfileEditor | LeafContents::CustomRouterEditor => {
-                // Editor panes are not restored from persistence.
-                Err(anyhow::anyhow!("Can't restore editor panes"))
             }
             LeafContents::NetworkLog => {
                 // Network log panes are intentionally not restored. Two

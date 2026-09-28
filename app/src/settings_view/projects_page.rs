@@ -392,7 +392,7 @@ impl SettingsWidget for LanguageServerDownloadsWidget {
 }
 
 /// Stable id of the language-server downloads toggle, used to scroll the settings page to it.
-pub(crate) fn language_server_downloads_widget_id() -> &'static str {
+pub fn language_server_downloads_widget_id() -> &'static str {
     LanguageServerDownloadsWidget::static_widget_id()
 }
 

@@ -11,9 +11,7 @@
 pub(super) mod code_diff_pane;
 pub(super) mod code_diff_pane_model;
 pub(super) mod code_pane;
-pub(super) mod custom_router_editor_pane;
 pub(crate) mod environment_management_pane;
-pub(super) mod execution_profile_editor_pane;
 pub(super) mod file_pane;
 pub(super) mod network_log_pane;
 pub(super) mod settings_pane;
@@ -34,7 +32,6 @@ use warpui::{
 pub use self::view::{PaneHeaderAction, PaneHeaderCustomAction, PaneView, PaneViewEvent};
 use super::{ActivationReason, LeafContents, PaneGroup, PaneGroupAction};
 use crate::ai::blocklist::inline_action::code_diff_view::CodeDiffView;
-use crate::ai::execution_profiles::editor::ExecutionProfileEditorView;
 #[cfg(feature = "local_fs")]
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::view::CodeView;
@@ -113,8 +110,6 @@ pub(crate) enum IPaneType {
     CodeDiff,
     EnvironmentManagement,
     Settings,
-    CustomRouterEditor,
-    ExecutionProfileEditor,
     NetworkLog,
     /// A pane type only for tests.
     #[cfg(test)]
@@ -130,8 +125,6 @@ impl Display for IPaneType {
             IPaneType::CodeDiff => write!(f, "Code Diff"),
             IPaneType::EnvironmentManagement => write!(f, "Environment Management"),
             IPaneType::Settings => write!(f, "Settings"),
-            IPaneType::CustomRouterEditor => write!(f, "Custom Router Editor"),
-            IPaneType::ExecutionProfileEditor => write!(f, "Execution Profile Editor"),
             IPaneType::NetworkLog => write!(f, "Network Log"),
             #[cfg(test)]
             IPaneType::Dummy => write!(f, "Dummy"),
@@ -186,20 +179,6 @@ impl PaneId {
         Self::new_from_ctx(IPaneType::Settings, ctx)
     }
 
-    /// Creates a [`PaneId`] from a [`ViewContext<PaneView<CustomRouterEditorView>>`]
-    pub fn from_custom_router_editor_pane_ctx(
-        ctx: &ViewContext<PaneView<crate::ai::custom_model_router_editor::CustomRouterEditorView>>,
-    ) -> Self {
-        Self::new_from_ctx(IPaneType::CustomRouterEditor, ctx)
-    }
-
-    /// Creates a [`PaneId`] from a [`ViewContext<PaneView<ExecutionProfileEditorView>>`]
-    pub fn from_execution_profile_editor_pane_ctx(
-        ctx: &ViewContext<PaneView<ExecutionProfileEditorView>>,
-    ) -> Self {
-        Self::new_from_ctx(IPaneType::ExecutionProfileEditor, ctx)
-    }
-
     /// Creates a [`PaneId`] from a [`ViewContext<PaneView<NetworkLogView>>`].
     pub fn from_network_log_pane_ctx(ctx: &ViewContext<PaneView<NetworkLogView>>) -> Self {
         Self::new_from_ctx(IPaneType::NetworkLog, ctx)
@@ -244,23 +223,6 @@ impl PaneId {
         settings_pane_view: &ViewHandle<PaneView<SettingsView>>,
     ) -> Self {
         Self::new(IPaneType::Settings, settings_pane_view)
-    }
-
-    /// Creates a [`PaneId`] from a [`PaneView<CustomRouterEditorView>`] entity ID.
-    pub fn from_custom_router_editor_pane_view(
-        view: &ViewHandle<PaneView<crate::ai::custom_model_router_editor::CustomRouterEditorView>>,
-    ) -> Self {
-        Self::new(IPaneType::CustomRouterEditor, view)
-    }
-
-    /// Creates a [`PaneId`] from a [`PaneView<ExecutionProfileEditorView>`] entity ID.
-    pub fn from_execution_profile_editor_pane_view(
-        execution_profile_editor_pane_view: &ViewHandle<PaneView<ExecutionProfileEditorView>>,
-    ) -> Self {
-        Self::new(
-            IPaneType::ExecutionProfileEditor,
-            execution_profile_editor_pane_view,
-        )
     }
 
     /// Creates a [`PaneId`] from a [`PaneView<NetworkLogView>`] entity ID.
@@ -336,14 +298,6 @@ impl PaneId {
             }
             IPaneType::Settings => {
                 ChildView::<PaneView<SettingsView>>::with_id(self.0.pane_view_id).finish()
-            }
-            IPaneType::CustomRouterEditor => ChildView::<
-                PaneView<crate::ai::custom_model_router_editor::CustomRouterEditorView>,
-            >::with_id(self.0.pane_view_id)
-            .finish(),
-            IPaneType::ExecutionProfileEditor => {
-                ChildView::<PaneView<ExecutionProfileEditorView>>::with_id(self.0.pane_view_id)
-                    .finish()
             }
             IPaneType::NetworkLog => {
                 ChildView::<PaneView<NetworkLogView>>::with_id(self.0.pane_view_id).finish()

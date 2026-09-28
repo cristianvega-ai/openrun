@@ -114,7 +114,6 @@ pub use ai::agent::todos::AIAgentTodoList;
 pub use ai::agent::{AIAgentActionResultType, FileEdit, TodoOperation};
 use ai::agent_conversations_model::AgentConversationsModel;
 use ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
-use ai::execution_profiles::editor::ExecutionProfileEditorManager;
 use ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use auth::auth_manager::AuthManager;
 use auth::auth_state::{AuthState, AuthStateProvider};
@@ -903,7 +902,6 @@ pub(crate) fn initialize_app(
     App::record_last_active_timestamp();
 
     ctx.add_singleton_model(|_| SettingsPaneManager::new());
-    ctx.add_singleton_model(|_| ExecutionProfileEditorManager::default());
     ctx.add_singleton_model(|_| NetworkLogPaneManager::default());
     ctx.add_singleton_model(|_| pricing::PricingInfoModel::new());
     ctx.add_singleton_model(|ctx| {

@@ -1096,24 +1096,9 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(
-            "workspace:show_ai_settings_page",
-            BindingDescription::new("Open Settings: AI"),
-            WorkspaceAction::ShowSettingsPage(SettingsSection::WarpAgent),
-        )
-        .with_enabled(|| FeatureFlag::AgentMode.is_enabled())
-        .with_group(bindings::BindingGroup::Settings.as_str())
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
             "workspace:show_settings_code_page",
             BindingDescription::new("Open Settings: Code"),
             WorkspaceAction::ShowSettingsPage(SettingsSection::Projects),
-        )
-        .with_group(bindings::BindingGroup::Settings.as_str())
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
-            "workspace:show_settings_environments_page",
-            BindingDescription::new("Open Settings: Environments"),
-            WorkspaceAction::ShowSettingsPage(SettingsSection::CloudEnvironments),
         )
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace")),

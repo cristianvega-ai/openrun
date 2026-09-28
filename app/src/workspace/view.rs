@@ -136,8 +136,6 @@ use crate::ai::blocklist::{
     SerializedBlockListItem, SlashCommandRequest,
 };
 use crate::ai::conversation_utils;
-use crate::ai::execution_profiles::ExecutionProfileId;
-use crate::ai::execution_profiles::editor::ExecutionProfileEditorManager;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::LLMPreferences;
 use crate::app_state::{
@@ -182,10 +180,9 @@ use crate::palette::PaletteMode;
 use crate::pane_group::FilePane;
 use crate::pane_group::pane::ActionOrigin;
 use crate::pane_group::{
-    self, AnyPaneContent, CodeDiffPane, CodePane, CodeReviewPanelArg, CustomRouterEditorPane,
-    Direction as PaneGroupDirection, Direction, EnvironmentManagementPane,
-    ExecutionProfileEditorPane, NetworkLogPane, NewTerminalOptions, PaneGroup, PaneId, PanesLayout,
-    TabBarHoverIndex, TerminalPaneId,
+    self, AnyPaneContent, CodeDiffPane, CodePane, CodeReviewPanelArg,
+    Direction as PaneGroupDirection, Direction, EnvironmentManagementPane, NetworkLogPane,
+    NewTerminalOptions, PaneGroup, PaneId, PanesLayout, TabBarHoverIndex, TerminalPaneId,
 };
 use crate::persistence::ModelEvent;
 use crate::projects::ProjectManagementModel;
@@ -317,9 +314,7 @@ use crate::util::file::external_editor::settings::OpenConversationPreference;
 use crate::util::links;
 use crate::util::openable_file_type::FileTarget;
 #[cfg(feature = "local_fs")]
-use crate::util::openable_file_type::{
-    EditorLayout, resolve_file_target_to_open_in_warp, resolve_file_target_with_editor_choice,
-};
+use crate::util::openable_file_type::{EditorLayout, resolve_file_target_with_editor_choice};
 use crate::util::traffic_lights::{TrafficLightMouseStates, TrafficLightSide, traffic_light_data};
 use crate::util::truncation::truncate_from_end;
 use crate::view_components::{
@@ -351,7 +346,6 @@ use crate::workspace::{ForkFromExchange, ForkedConversationDestination};
 use crate::workspace_metadata::PersistedWorkspace;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
-use crate::workspaces::workspace::AdminEnablementSetting;
 use crate::{
     AgentNotificationsModel, BlocklistAIHistoryModel, GlobalResourceHandles, TelemetryEvent,
     send_telemetry_from_ctx,
@@ -6606,45 +6600,6 @@ impl Workspace {
         }
     }
 
-    /// Open the Execution Profile Editor pane
-    pub fn open_execution_profile_editor_pane(
-        &mut self,
-        direction: Option<Direction>,
-        profile_id: ExecutionProfileId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let manager = ExecutionProfileEditorManager::handle(ctx);
-
-        if let Some(locator) = manager.as_ref(ctx).find_pane(ctx.window_id(), &profile_id) {
-            self.focus_pane(locator, ctx);
-            return;
-        }
-
-        let pane = ExecutionProfileEditorPane::new(profile_id, ctx);
-        let direction = direction.unwrap_or(Direction::Right);
-        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-            pane_group
-                .add_pane_with_direction(direction, pane, true /* focus_new_pane */, ctx);
-        });
-    }
-
-    /// Opens a custom model router editor pane in a right-split.
-    ///
-    /// Pass `existing = None` to create a new router or `existing = Some(router)` to edit one.
-    pub fn open_custom_router_editor_pane(
-        &mut self,
-        direction: Option<Direction>,
-        existing: Option<crate::ai::custom_model_routers::CustomModelRouter>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let pane = CustomRouterEditorPane::new(existing, ctx);
-        let direction = direction.unwrap_or(Direction::Right);
-        self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-            pane_group
-                .add_pane_with_direction(direction, pane, true /* focus_new_pane */, ctx);
-        });
-    }
-
     /// Open the Environment Management pane in a split pane (default direction is right).
     pub fn open_environment_management_pane(
         &mut self,
@@ -11531,20 +11486,8 @@ impl Workspace {
                         .add_ephemeral_toast(DismissibleToast::new(message.clone(), *flavor), ctx);
                 });
             }
-            SettingsViewEvent::OpenCustomRouterEditor(router) => {
-                self.open_custom_router_editor_pane(None, router.clone(), ctx);
-            }
-            SettingsViewEvent::OpenExecutionProfileEditor(profile_id) => {
-                self.open_execution_profile_editor_pane(None, profile_id.clone(), ctx);
-            }
             SettingsViewEvent::OpenLspLogs { log_path } => {
                 self.open_lsp_logs(log_path, ctx);
-            }
-            SettingsViewEvent::OpenCustomRouterFile(path) => {
-                #[cfg(feature = "local_fs")]
-                self.open_custom_router_file(path, ctx);
-                #[cfg(not(feature = "local_fs"))]
-                let _ = path;
             }
         }
     }
@@ -12383,9 +12326,6 @@ impl Workspace {
             pane_group::Event::FileDeleted { path } => {
                 self.close_tabs_with_file_path(path, ctx);
             }
-            pane_group::Event::OpenAgentProfileEditor { profile_id } => {
-                self.open_execution_profile_editor_pane(None, profile_id.clone(), ctx);
-            }
             pane_group::Event::OpenEnvironmentManagementPane => {
                 self.open_environment_management_pane(
                     None,
@@ -12908,28 +12848,6 @@ impl Workspace {
             let tail_command = tail_command_for_shell(shell_family, log_path);
             terminal.set_pending_command(&tail_command, ctx);
         });
-    }
-
-    /// Opens a custom model router's YAML config file in Warp's own editor.
-    ///
-    /// Unlike most "open file" flows, this always uses the Warp code editor
-    /// rather than honoring the user's external/system editor preference, since
-    /// the button is specifically for editing the router config inside Warp.
-    #[cfg(feature = "local_fs")]
-    fn open_custom_router_file(&mut self, path: &Path, ctx: &mut ViewContext<Self>) {
-        let settings = EditorSettings::as_ref(ctx);
-        let target = resolve_file_target_to_open_in_warp(path, settings, None);
-        self.open_file_with_target(
-            path.to_path_buf(),
-            target,
-            None,
-            CodeSource::Link {
-                path: path.to_path_buf(),
-                range_start: None,
-                range_end: None,
-            },
-            ctx,
-        );
     }
 
     /// Runs a workflow in whichever terminal input is currently active.
@@ -16218,7 +16136,6 @@ impl Workspace {
     }
 
     fn add_toggle_setting_context_flags(&self, app: &AppContext, context: &mut Context) {
-        let privacy_settings = PrivacySettings::as_ref(app);
         let editor_settings = AppEditorSettings::as_ref(app);
         let semantic_selection_settings = SemanticSelection::as_ref(app);
         let selection_settings = SelectionSettings::as_ref(app);
@@ -16388,17 +16305,6 @@ impl Workspace {
         if *safe_mode_settings.safe_mode_enabled.value() {
             context.set.insert(flags::SAFE_MODE_FLAG);
         }
-        if matches!(
-            UserWorkspaces::as_ref(app).get_cloud_conversation_storage_enablement_setting(),
-            AdminEnablementSetting::RespectUserSetting
-        ) {
-            context
-                .set
-                .insert(flags::CLOUD_CONVERSATION_STORAGE_EDITABLE_FLAG);
-        }
-        if privacy_settings.is_cloud_conversation_storage_enabled {
-            context.set.insert(flags::CLOUD_CONVERSATION_STORAGE_FLAG);
-        }
 
         if editor_settings.cursor_blink.value() == &CursorBlink::Enabled {
             context.set.insert(flags::CURSOR_BLINK_CONTEXT_FLAG);
@@ -16549,11 +16455,6 @@ impl Workspace {
         if *terminal_settings.use_audible_bell {
             context.set.insert(flags::USE_AUDIBLE_BELL_CONTEXT_FLAG);
         }
-        if *terminal_settings.show_terminal_zero_state_block.value() {
-            context
-                .set
-                .insert(flags::SHOW_TERMINAL_ZERO_STATE_BLOCK_FLAG);
-        }
         if matches!(
             terminal_settings.alt_screen_padding.value(),
             crate::terminal::settings::AltScreenPaddingMode::Custom { .. }
@@ -16567,11 +16468,6 @@ impl Workspace {
         }
 
         let ai_settings = AISettings::as_ref(app);
-        if *ai_settings.should_show_oz_updates_in_zero_state.value() {
-            context
-                .set
-                .insert(flags::SHOW_OZ_UPDATES_IN_ZERO_STATE_FLAG);
-        }
         if *ai_settings.include_agent_commands_in_history.value() {
             context
                 .set
@@ -16582,10 +16478,6 @@ impl Workspace {
             context
                 .set
                 .insert(flags::AUTO_APPROVE_BYPASSES_COMMAND_DENYLIST_FLAG);
-        }
-
-        if *ai_settings.can_use_warp_credits_for_fallback.value() {
-            context.set.insert(flags::WARP_CREDIT_FALLBACK_FLAG);
         }
         if *session_settings.show_model_selectors_in_prompt.value() {
             context

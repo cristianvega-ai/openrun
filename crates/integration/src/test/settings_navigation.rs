@@ -12,12 +12,13 @@ use warp::integration_testing::settings::{
     press_settings_nav_down, press_settings_nav_up, type_settings_search,
 };
 use warp::integration_testing::terminal::wait_until_bootstrapped_single_pane_for_tab;
-use warp::settings_view::{SettingsSection, cli_agent_settings_widget_id};
+use warp::settings_view::{
+    SettingsSection, cli_agent_settings_widget_id, language_server_downloads_widget_id,
+};
 
 use super::{Builder, new_builder};
 
-/// Label of the umbrella that groups the agent subpages.
-const AGENTS_UMBRELLA: &str = "Agents";
+/// Label of the umbrella that groups the code subpages.
 const CODE_UMBRELLA: &str = "Code";
 
 // ---------------------------------------------------------------------------
@@ -31,26 +32,32 @@ pub fn test_settings_mouse_navigation_through_umbrella() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(open_settings_page(SettingsSection::Appearance))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, false))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
         // Expanding the umbrella reveals its subpages but must not move the
         // selection off Appearance.
-        .with_step(click_settings_umbrella(AGENTS_UMBRELLA))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, true))
+        .with_step(click_settings_umbrella(CODE_UMBRELLA))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, true))
         .with_step(assert_settings_section(SettingsSection::Appearance))
         .with_step(assert_settings_nav_subpage_visible(
-            SettingsSection::AgentProfiles,
+            SettingsSection::EditorAndCodeReview,
             true,
         ))
         // Clicking a subpage selects it.
-        .with_step(click_settings_nav_subpage(SettingsSection::AgentProfiles))
-        .with_step(assert_settings_section(SettingsSection::AgentProfiles))
+        .with_step(click_settings_nav_subpage(
+            SettingsSection::EditorAndCodeReview,
+        ))
+        .with_step(assert_settings_section(
+            SettingsSection::EditorAndCodeReview,
+        ))
         // Collapsing while still on a subpage hides the row but keeps the
         // selection, so the content pane does not change out from under us.
-        .with_step(click_settings_umbrella(AGENTS_UMBRELLA))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, false))
-        .with_step(assert_settings_section(SettingsSection::AgentProfiles))
+        .with_step(click_settings_umbrella(CODE_UMBRELLA))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
+        .with_step(assert_settings_section(
+            SettingsSection::EditorAndCodeReview,
+        ))
         .with_step(assert_settings_nav_subpage_visible(
-            SettingsSection::AgentProfiles,
+            SettingsSection::EditorAndCodeReview,
             false,
         ))
 }
@@ -64,7 +71,7 @@ pub fn test_settings_mouse_navigation_through_umbrella() -> Builder {
 pub fn test_settings_keyboard_navigation_down_into_collapsed_umbrella() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        // The Code umbrella sits directly below the Agents umbrella.
+        // The Code umbrella sits directly below the Third party CLI agents page.
         .with_step(open_settings_page(SettingsSection::ThirdPartyCLIAgents))
         .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
         .with_step(press_settings_nav_down())
@@ -77,14 +84,14 @@ pub fn test_settings_keyboard_navigation_down_into_collapsed_umbrella() -> Build
 pub fn test_settings_keyboard_navigation_up_into_collapsed_umbrella() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        // The Agents umbrella sits directly above the Code umbrella.
-        .with_step(open_settings_page(SettingsSection::Projects))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, false))
+        // The Teams page sits directly below the Code umbrella.
+        .with_step(open_settings_page(SettingsSection::Teams))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
         .with_step(press_settings_nav_up())
         .with_step(assert_settings_section(
-            SettingsSection::ThirdPartyCLIAgents,
+            SettingsSection::EditorAndCodeReview,
         ))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, true))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, true))
 }
 
 /// Collapsing an umbrella while one of its subpages is selected keeps arrow
@@ -93,15 +100,15 @@ pub fn test_settings_keyboard_navigation_up_into_collapsed_umbrella() -> Builder
 pub fn test_settings_keyboard_navigation_after_manual_collapse() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        .with_step(open_settings_page(SettingsSection::AgentProfiles))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, true))
+        .with_step(open_settings_page(SettingsSection::Projects))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, true))
         // Collapse the umbrella while still viewing one of its subpages.
-        .with_step(click_settings_umbrella(AGENTS_UMBRELLA))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, false))
-        .with_step(assert_settings_section(SettingsSection::AgentProfiles))
+        .with_step(click_settings_umbrella(CODE_UMBRELLA))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
+        .with_step(assert_settings_section(SettingsSection::Projects))
         // Down should continue past the umbrella, not restart from the top.
         .with_step(press_settings_nav_down())
-        .with_step(assert_settings_section(SettingsSection::Projects))
+        .with_step(assert_settings_section(SettingsSection::Teams))
 }
 
 // ---------------------------------------------------------------------------
@@ -133,20 +140,18 @@ pub fn test_settings_search_filters_subpages() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(open_settings_page(SettingsSection::Appearance))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, false))
-        .with_step(type_settings_search("codex"))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, true))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
+        .with_step(type_settings_search("npm"))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, true))
         .with_step(assert_settings_nav_subpage_visible(
-            SettingsSection::ThirdPartyCLIAgents,
+            SettingsSection::Projects,
             true,
         ))
         .with_step(assert_settings_nav_subpage_visible(
-            SettingsSection::AgentProfiles,
+            SettingsSection::EditorAndCodeReview,
             false,
         ))
-        .with_step(assert_settings_section(
-            SettingsSection::ThirdPartyCLIAgents,
-        ))
+        .with_step(assert_settings_section(SettingsSection::Projects))
 }
 
 /// A search that matches only one subpage must still render that subpage's
@@ -159,7 +164,27 @@ pub fn test_settings_search_subpage_still_renders_content() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(open_settings_page(SettingsSection::Appearance))
-        // The CLI agent widget lives on the Third party CLI agents subpage, and
+        // The language server widget lives on the Projects subpage, and
+        // nothing has rendered it yet.
+        .with_step(assert_settings_widget_rendered(
+            language_server_downloads_widget_id(),
+            false,
+        ))
+        .with_step(type_settings_search("npm"))
+        .with_step(assert_settings_section(SettingsSection::Projects))
+        .with_step(assert_settings_widget_rendered(
+            language_server_downloads_widget_id(),
+            true,
+        ))
+}
+
+/// A search that matches only the Third party CLI agents page selects it and
+/// renders its content.
+pub fn test_settings_search_top_level_page_still_renders_content() -> Builder {
+    new_builder()
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(open_settings_page(SettingsSection::Appearance))
+        // The CLI agent widget lives on the Third party CLI agents page, and
         // nothing has rendered it yet.
         .with_step(assert_settings_widget_rendered(
             cli_agent_settings_widget_id(),
@@ -181,11 +206,11 @@ pub fn test_settings_search_clear_restores_umbrella_state() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(open_settings_page(SettingsSection::Appearance))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, false))
-        .with_step(type_settings_search("codex"))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, true))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
+        .with_step(type_settings_search("npm"))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, true))
         .with_step(clear_settings_search())
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, false))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, false))
         .with_step(assert_settings_nav_page_visible(
             SettingsSection::About,
             true,
@@ -198,10 +223,14 @@ pub fn test_settings_search_preserved_on_sidebar_click() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(open_settings_page(SettingsSection::Appearance))
-        .with_step(type_settings_search("agent"))
-        .with_step(assert_umbrella_expanded(AGENTS_UMBRELLA, true))
-        .with_step(click_settings_nav_subpage(SettingsSection::WarpAgent))
-        .with_step(assert_settings_section(SettingsSection::WarpAgent))
+        .with_step(type_settings_search("code"))
+        .with_step(assert_umbrella_expanded(CODE_UMBRELLA, true))
+        .with_step(click_settings_nav_subpage(
+            SettingsSection::EditorAndCodeReview,
+        ))
+        .with_step(assert_settings_section(
+            SettingsSection::EditorAndCodeReview,
+        ))
         // The query survives the click, and so does the filtered sidebar.
         .with_step(assert_settings_nav_page_visible(
             SettingsSection::About,
