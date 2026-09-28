@@ -770,12 +770,6 @@ fn test_conflicting_notebook_read_only() {
         // While there are conflicts, the user should not be able to start editing.
         notebook_view.update(&mut app, |notebook_view, ctx| {
             notebook_view.grab_edit_access_or_display_access_dialog(ctx);
-            assert!(
-                !notebook_view
-                    .active_notebook_data
-                    .as_ref(ctx)
-                    .show_grab_edit_access_modal
-            );
             assert_eq!(notebook_view.mode(ctx), Mode::View);
         });
 

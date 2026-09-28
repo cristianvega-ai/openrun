@@ -46,6 +46,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [remote_tty websocket terminal transport](#remote_tty-websocket-terminal-transport) — deleted the web/dev-only PTY-over-websocket transport and its `remote_tty` Cargo feature
 - [Web client crates, scripts and build profiles](#web-client-crates-scripts-and-build-profiles) — deleted the wasm bundle/serve scripts, the `serve-wasm`, `warp_web_event_bus` and `managed_secrets_wasm` crates, and the wasm Cargo profiles
 - [Warp Drive: panel, menus, actions and deep links](#warp-drive-panel-menus-actions-and-deep-links) — removed the Drive panel and index, its left-panel tab, menu, create/import actions, palette source, settings page, `warp://drive` links and web intents; local workflows now always show in command search
+- [Warp Drive: sharing, export and cloud-object dialogs](#warp-drive-sharing-export-and-cloud-object-dialogs) — removed the sharing/guest/link-sharing dialog and pane-header share button, Drive export, the grab-edit-access modal, cloud-object activity toasts and the shared-object limit banner settings
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1200,3 +1201,29 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - `OpenWarpDriveObjectInPane` (terminal and pane-group events) stays: AI citations and plans use it to open cloud objects in panes, and the AI tasks own it.
 - `WarpDrivePrivacySettings` is not Drive-only: it holds the telemetry and cloud-conversation-storage toggles, so TEL-1 and the AI plan own it.
 - The Drive login purpose in `auth/login_slide.rs` and `onboarding::WARP_DRIVE_FEATURES` are left for AUTH-1.
+
+## Warp Drive: sharing, export and cloud-object dialogs
+**Why:** Sharing, guest access, link sharing and export all work on Warp Drive objects through Warp's servers, and the offline build removes Drive (user decision 1). The same sharing dialog also served session sharing and AI-conversation sharing, which cannot work offline: NET-0 configured no session server, and conversation links point at warp.dev.
+
+**Removed:**
+- `app/src/drive/sharing/{dialog/*, qr_code, style}` — the sharing dialog (guests, teams, "anyone with the link", access levels, inherited ACLs, invite by email, the shared-session QR code), plus `ShareableObject` and the `SubjectExt` / `UserKindExt` / `TeamKindExt` display helpers. The `qrcode` dependency goes with it.
+- `pane_group/pane/view/header/sharing.rs` — the pane-header share and "view-only" buttons, `PaneAction::ShareContents` and its `pane:share_pane_contents` binding, `CustomAction::SharePaneContents`, `PaneConfiguration::{set_shareable_object, toggle_sharing_dialog, open_sharing_qr_code}` and their events, and `HeaderRenderContext::sharing_controls`.
+- Callers that only fed the dialog: the notebook, workflow, env-var and AI-document views, the agent-view pane header, the shared-session sharer/viewer paths (`update_shared_session_pane_header`, `open_shared_session_qr_code`, `WorkspaceAction::OpenSharedSessionQrCode`), the AI block "Copy share link" / "Share conversation" menu items and the conversation-list "Share conversation" item.
+- `app/src/drive/export.rs` (`ExportManager` singleton) with its tests, the notebook and env-var "Export" menu items, `notebooks::export_notebook`, and the "Export your data" link in the auth-override warning.
+- `app/src/cloud_object/grab_edit_access_modal.rs` — the notebook "steal edit access" modal. When another user is actively editing, the notebook now just stays read-only.
+- `app/src/cloud_object/toast_message.rs` — the "saved to", "moved to", trash, permanent-deletion and conflict toasts for cloud objects, and `WorkspaceAction::{HandleConflictingWorkflow, HandleConflictingEnvVarCollection}` behind the conflict toasts.
+- `app/src/settings/shared_object_limit_banner.rs` — `SharedObjectLimitBannerSettings`, the dismissal state for the plan-limit banner in the Drive index.
+- The link-sharing policy checks `is_anyone_with_link_sharing_enabled` / `is_direct_link_sharing_enabled` with their tests, and the chip-editor options only the dialog used (`WordBlockEditorView::{with_layout, with_styles, set_propagate_navigation_keys, set_editor_buffer_text}`, the horizontal layout, the `Navigate` event).
+
+**Modified:**
+- `util/filename.rs` — `safe_filename` (and its test) moves here from `drive/export.rs`; AI document export still uses it.
+- `drive/sharing/mod.rs` keeps only `SharingAccessLevel` and `ContentEditability`, which the cloud-object views and `CloudViewModel` still use until DRV-2 to DRV-5.
+- `HeaderRenderContext` loses its lifetime parameter, updated at every `render_header_content` signature.
+
+**User-visible impact:** Panes no longer have a share button or a read-only indicator, and there is no sharing dialog, QR code or link-copy option for Drive objects, shared sessions or AI conversations. Notebooks and env-var collections can no longer be exported, and cloud-object operations no longer show activity toasts.
+
+**Notes:**
+- `SharingDialogSource` and the `OpenedSharingDialog` telemetry variant live in `server/telemetry/events.rs` and are left for TEL-4. `SharedSessionActionSource::SharingDialog` is left for SS-2 (SS-1 landed first and kept the viewer-side enum).
+- Dead code left for its owners: `terminal/view/shared_session/adapter.rs` `started_at` (SS-2); the `UpdateManager` permission, guest and leave operations and `ObjectOperationResult::num_objects` (DRV-5); `CloudModel::get_all_exportable_object_ids` and `CloudModelType::can_export` (DRV-5); `workflows/export_workflow.rs` (DRV-4).
+- `integration_testing/cloud_object` stays for the cloud notebook and workflow integration tests (DRV-3, DRV-4).
+- `app/src/ai/blocklist/mod.rs` already has an unused re-export of `render_ai_follow_up_icon` on `offline-terminal`, left by the AI input change; it is not part of this change.

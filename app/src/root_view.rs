@@ -54,8 +54,6 @@ use crate::auth::login_slide::{LoginSlideEvent, LoginSlideSource, LoginSlideView
 use crate::auth::needs_sso_link_view::NeedsSsoLinkView;
 use crate::auth::paste_auth_token_modal::{PasteAuthTokenModalEvent, PasteAuthTokenModalView};
 use crate::auth::{AuthStateProvider, LoginFailureReason};
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::drive::export::ExportManager;
 use crate::features::FeatureFlag;
 use crate::interval_timer::IntervalTimer;
 use crate::launch_configs::launch_config;
@@ -3331,9 +3329,6 @@ impl RootView {
                     self.log_out(&(), ctx);
                 }
             }
-            AuthOverrideWarningModalEvent::BulkExport => {
-                self.export_all_warp_drive_objects(ctx);
-            }
         }
     }
 
@@ -3350,15 +3345,6 @@ impl RootView {
         ctx.emit(RootViewEvent::AuthOnboardingStateChanged);
         self.focus(ctx);
         ctx.notify();
-    }
-
-    fn export_all_warp_drive_objects(&mut self, ctx: &mut ViewContext<Self>) {
-        let window_id = ctx.window_id();
-        let cloud_model = CloudModel::as_ref(ctx);
-        let exportable_objects = cloud_model.get_all_exportable_object_ids();
-        ExportManager::handle(ctx).update(ctx, move |export_manager, ctx| {
-            export_manager.export(window_id, &exportable_objects, ctx);
-        });
     }
 
     pub fn focus(&mut self, ctx: &mut ViewContext<Self>) -> bool {

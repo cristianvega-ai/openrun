@@ -36,7 +36,7 @@ use crate::cloud_object::{
 };
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::{CloudFolder, CloudFolderModel, FolderId};
-use crate::drive::sharing::{SharingAccessLevel, Subject, UserKind};
+use crate::drive::sharing::SharingAccessLevel;
 use crate::notebooks::{CloudNotebook, CloudNotebookModel, NotebookId};
 use crate::persistence::ModelEvent;
 use crate::server::cloud_objects::listener::ObjectUpdateMessage;
@@ -57,6 +57,7 @@ use crate::workflows::workflow_enum::{
 };
 use crate::workflows::{CloudWorkflow, CloudWorkflowModel, WorkflowId};
 use crate::workspaces::user_profiles::{UserProfileWithUID, UserProfiles};
+use cloud_objects::drive::sharing::{Subject, UserKind};
 
 fn create_object<K, M>(
     app: &mut App,

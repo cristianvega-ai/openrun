@@ -60,7 +60,7 @@ use crate::ai::llms::{
 use crate::auth::AuthManager;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::cloud_object::{CloudObject, CloudObjectGuest};
-use crate::drive::sharing::{SharingAccessLevel, Subject, UserKind};
+use crate::drive::sharing::SharingAccessLevel;
 use crate::features::FeatureFlag;
 use crate::network::NetworkStatus;
 use crate::server::cloud_objects::update_manager::UpdateManager;
@@ -81,10 +81,10 @@ use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::workspaces::workspace::{
     AdminEnablementSetting, ByoFirstPartyKey, EnforceableSetting, HostEnablementSetting,
-    LinkSharingSettings, LlmHostSettings, ManagedByokByoePolicy, MultiAdminPolicy,
-    PurchaseAddOnCreditsPolicy, SplitListSetting, TeamByoSettings, TeamLinkSharingSettings,
-    Workspace, WorkspaceMember, WorkspaceMemberUsageInfo,
+    LlmHostSettings, ManagedByokByoePolicy, MultiAdminPolicy, PurchaseAddOnCreditsPolicy,
+    SplitListSetting, TeamByoSettings, Workspace, WorkspaceMember, WorkspaceMemberUsageInfo,
 };
+use cloud_objects::drive::sharing::{Subject, UserKind};
 
 #[derive(Default)]
 struct CachedResources {
@@ -2429,118 +2429,6 @@ fn member_byo_policy_follows_a_window_reconciled_onto_another_team() {
                 ),
                 "the window reconciled onto the restrictive team, so its policy applies now"
             );
-        });
-    })
-}
-
-fn two_teams_with_opposing_link_sharing_policy() -> (Team, Team) {
-    fn link_sharing_settings(permitted: bool) -> TeamLinkSharingSettings {
-        let setting = EnforceableSetting {
-            value: permitted,
-            is_enforced_by_workspace: false,
-        };
-        TeamLinkSharingSettings {
-            anyone_with_link_sharing_enabled: setting.clone(),
-            direct_link_sharing_enabled: setting,
-        }
-    }
-
-    let (mut team_a, mut team_b) = two_teams();
-    team_a.settings.link_sharing = link_sharing_settings(true);
-    team_b.settings.link_sharing = link_sharing_settings(false);
-    (team_a, team_b)
-}
-
-#[test]
-fn link_sharing_follows_each_scopes_team() {
-    let (team_a, team_b) = two_teams_with_opposing_link_sharing_policy();
-    let mut workspace = workspace_for_test(&team_a);
-    workspace.teams.push(team_b.clone());
-
-    App::test((), |mut app| async move {
-        initialize_window_team_test_app(&mut app, vec![workspace]);
-
-        app.read(|ctx| {
-            let user_workspaces = UserWorkspaces::as_ref(ctx);
-            let scope_a = TeamContextForOperation::new_for_test(team_a.uid);
-            let scope_b = TeamContextForOperation::new_for_test(team_b.uid);
-
-            assert!(user_workspaces.is_anyone_with_link_sharing_enabled(&scope_a));
-            assert!(user_workspaces.is_direct_link_sharing_enabled(&scope_a));
-            assert!(!user_workspaces.is_anyone_with_link_sharing_enabled(&scope_b));
-            assert!(!user_workspaces.is_direct_link_sharing_enabled(&scope_b));
-        });
-    })
-}
-
-fn assert_teamless_scope_reads_workspace_link_sharing_policy(permitted: bool) {
-    let (_team_a, team_b) = two_teams_with_opposing_link_sharing_policy();
-    let mut workspace = workspace_for_test(&team_b);
-    workspace.teams.clear();
-    workspace.settings.link_sharing_settings = LinkSharingSettings {
-        anyone_with_link_sharing_enabled: permitted,
-        direct_link_sharing_enabled: permitted,
-    };
-
-    App::test((), |mut app| async move {
-        initialize_window_team_test_app(&mut app, vec![workspace]);
-
-        app.read(|ctx| {
-            let user_workspaces = UserWorkspaces::as_ref(ctx);
-            let scope = TeamlessScopeForTest;
-            assert_eq!(
-                user_workspaces.is_anyone_with_link_sharing_enabled(&scope),
-                permitted
-            );
-            assert_eq!(
-                user_workspaces.is_direct_link_sharing_enabled(&scope),
-                permitted
-            );
-        });
-    })
-}
-
-#[test]
-fn link_sharing_for_a_teamless_scope_follows_a_permissive_workspace() {
-    assert_teamless_scope_reads_workspace_link_sharing_policy(true);
-}
-
-#[test]
-fn link_sharing_for_a_teamless_scope_follows_a_restrictive_workspace() {
-    assert_teamless_scope_reads_workspace_link_sharing_policy(false);
-}
-
-#[test]
-fn link_sharing_fails_open_for_an_unresolvable_team() {
-    let (_team_a, team_b) = two_teams_with_opposing_link_sharing_policy();
-    let mut workspace = workspace_for_test(&team_b);
-    workspace.settings.link_sharing_settings = LinkSharingSettings {
-        anyone_with_link_sharing_enabled: false,
-        direct_link_sharing_enabled: false,
-    };
-
-    App::test((), |mut app| async move {
-        initialize_window_team_test_app(&mut app, vec![workspace]);
-
-        let scope = TeamContextForOperation::new_for_test(9999.into());
-        app.read(|ctx| {
-            let user_workspaces = UserWorkspaces::as_ref(ctx);
-            assert!(user_workspaces.is_anyone_with_link_sharing_enabled(&scope));
-            assert!(user_workspaces.is_direct_link_sharing_enabled(&scope));
-        });
-    })
-}
-
-#[test]
-fn link_sharing_fails_open_without_a_workspace() {
-    App::test((), |mut app| async move {
-        initialize_window_team_test_app(&mut app, vec![]);
-
-        app.read(|ctx| {
-            let user_workspaces = UserWorkspaces::as_ref(ctx);
-            let scope = TeamlessScopeForTest;
-            assert!(user_workspaces.is_anyone_with_link_sharing_enabled(&scope));
-            assert!(user_workspaces.is_direct_link_sharing_enabled(&scope));
         });
     })
 }

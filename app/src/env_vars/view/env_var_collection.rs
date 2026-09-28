@@ -23,7 +23,7 @@ use super::command_dialog::EnvVarCommandDialog;
 use super::menus::Menus;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent};
 use crate::cloud_object::{CloudObjectEventEntrypoint, Owner};
-use crate::drive::sharing::{ContentEditability, ShareableObject};
+use crate::drive::sharing::ContentEditability;
 use crate::editor::EditorView;
 use crate::env_vars::active_env_var_collection_data::{
     ActiveEnvVarCollection, ActiveEnvVarCollectionData, ActiveEnvVarCollectionDataEvent,
@@ -319,7 +319,6 @@ pub enum EnvVarCollectionAction {
     CopyLink(String),
     Duplicate,
     Trash,
-    Export,
     // Secret button related actions
     SelectSecretManager(SecretManager),
     DisplayCommandDialog,
@@ -652,12 +651,6 @@ impl EnvVarCollectionView {
         let title = collection.title.clone().unwrap_or_default();
 
         self.set_pane_title(if title.is_empty() { "Untitled" } else { &title }, ctx);
-        if let Some(server_id) = env_var_collection.id.into_server() {
-            self.pane_configuration.update(ctx, |pane_config, ctx| {
-                pane_config
-                    .set_shareable_object(Some(ShareableObject::WarpDriveObject(server_id)), ctx);
-            });
-        }
 
         let description = collection.description.clone().unwrap_or_default();
 
@@ -943,14 +936,6 @@ impl EnvVarCollectionView {
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            ActiveEnvVarCollectionDataEvent::CreatedOnServer(server_id) => {
-                self.pane_configuration.update(ctx, |pane_config, ctx| {
-                    pane_config.set_shareable_object(
-                        Some(ShareableObject::WarpDriveObject(*server_id)),
-                        ctx,
-                    );
-                });
-            }
             ActiveEnvVarCollectionDataEvent::TrashStatusChanged => {
                 self.pane_configuration.update(ctx, |pane_config, ctx| {
                     pane_config.refresh_pane_header_overflow_menu_items(ctx)
@@ -1455,7 +1440,6 @@ impl TypedActionView for EnvVarCollectionView {
             }
             EnvVarCollectionAction::Duplicate => self.duplicate_env_var_collection(ctx),
             EnvVarCollectionAction::Trash => self.trash_env_var_collection(ctx),
-            EnvVarCollectionAction::Export => self.export_env_var_collection(ctx),
             EnvVarCollectionAction::SelectSecretManager(secret_manager) => {
                 self.fetch_secret(secret_manager.clone(), ctx)
             }
@@ -1536,7 +1520,7 @@ impl BackingView for EnvVarCollectionView {
 
     fn render_header_content(
         &self,
-        _ctx: &view::HeaderRenderContext<'_>,
+        _ctx: &view::HeaderRenderContext,
         app: &AppContext,
     ) -> view::HeaderContent {
         let title = self.title_editor.as_ref(app).buffer_text(app);

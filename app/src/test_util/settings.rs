@@ -24,9 +24,8 @@ pub fn initialize_settings_for_tests(app: &mut App) {
         AISettings, AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
         BlockVisibilitySettings, CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings,
         GPUSettings, InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
-        SameLinePromptBlockSettings, ScrollSettings, SelectionSettings,
-        SharedObjectLimitBannerSettings, SshSettings, ThemeSettings, VimBannerSettings,
-        init_and_register_user_preferences,
+        SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings, ThemeSettings,
+        VimBannerSettings, init_and_register_user_preferences,
     };
     use crate::terminal::BlockListSettings;
     use crate::terminal::general_settings::GeneralSettings;
@@ -99,7 +98,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     ThemeSettings::register(app);
     UndoCloseSettings::register(app);
     VimBannerSettings::register(app);
-    SharedObjectLimitBannerSettings::register(app);
     WindowSettings::register(app);
     CodeSettings::register(app);
     SemanticSelection::register(app);

@@ -44,13 +44,10 @@ use super::telemetry::NotebookTelemetryAction;
 use super::{CloudNotebookModel, NotebookId, NotebookLocation, styles};
 use crate::ai::document::ai_document_model::AIDocumentId;
 use crate::appearance::Appearance;
-use crate::cloud_object::grab_edit_access_modal::{GrabEditAccessModal, GrabEditAccessModalEvent};
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent, UpdateSource};
 use crate::cloud_object::model::view::{Editor, EditorState};
 use crate::cloud_object::{CloudObject, CloudObjectEventEntrypoint, ObjectType, Owner, Space};
 use crate::drive::CloudObjectTypeAndId;
-use crate::drive::export::ExportManager;
-use crate::drive::sharing::ShareableObject;
 use crate::editor::{
     EditOrigin, EditorView, Event as EditorEvent, InteractionState, PropagateAndNoOpNavigationKeys,
     SingleLineEditorOptions, TextColors, TextOptions,
@@ -205,7 +202,6 @@ pub struct NotebookView {
     details_bar: DetailsBar,
     title: ViewHandle<EditorView>,
     input: ViewHandle<RichTextEditorView>,
-    grab_edit_access_modal: ViewHandle<GrabEditAccessModal>,
     focused: bool,
     last_focused_component: FocusedComponent,
     active_notebook_data: ModelHandle<ActiveNotebookData>,
@@ -266,7 +262,6 @@ pub enum NotebookAction {
     CopyToPersonal,
     CopyToClipboard,
     CopyLink(String),
-    Export,
     AttachPlanAsContext(AIDocumentId),
 }
 
@@ -360,11 +355,6 @@ impl NotebookView {
             notebook.handle_input_editor_event(event, ctx);
         });
 
-        let grab_edit_access_modal = ctx.add_typed_action_view(|_| GrabEditAccessModal::new());
-        ctx.subscribe_to_view(&grab_edit_access_modal, |notebook, _, event, ctx| {
-            notebook.handle_grab_edit_access_modal_event(event, ctx);
-        });
-
         let user_workspaces = UserWorkspaces::handle(ctx);
         ctx.observe(&user_workspaces, Self::on_user_workspaces_update);
 
@@ -385,7 +375,6 @@ impl NotebookView {
             details_bar: DetailsBar::new(),
             title,
             input,
-            grab_edit_access_modal,
             focused: false,
             last_focused_component: FocusedComponent::Input,
             active_notebook_data,
@@ -553,17 +542,6 @@ impl NotebookView {
             }
             ActiveNotebookDataEvent::CreatedOnServer => {
                 ctx.emit(NotebookEvent::Pane(PaneEvent::AppStateChanged));
-                if let Some(id) = self
-                    .active_notebook_data
-                    .as_ref(ctx)
-                    .id()
-                    .and_then(SyncId::into_server)
-                {
-                    self.pane_configuration.update(ctx, |pane_config, ctx| {
-                        pane_config
-                            .set_shareable_object(Some(ShareableObject::WarpDriveObject(id)), ctx);
-                    })
-                }
             }
             ActiveNotebookDataEvent::TrashStatusChanged | ActiveNotebookDataEvent::MovedToSpace => {
                 self.pane_configuration.update(ctx, |pane_config, ctx| {
@@ -636,35 +614,6 @@ impl NotebookView {
             }
             _ => (),
         }
-    }
-
-    /// Handle an event from the [`GrabEditAccessModal`]. This lets users steal edit access from
-    /// other users.
-    fn handle_grab_edit_access_modal_event(
-        &mut self,
-        event: &GrabEditAccessModalEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            GrabEditAccessModalEvent::Close => {
-                self.active_notebook_data
-                    .update(ctx, |active_notebook_data, ctx| {
-                        active_notebook_data.show_grab_edit_access_modal = false;
-                        ctx.notify();
-                    });
-            }
-            GrabEditAccessModalEvent::GrabEditAccess => {
-                self.active_notebook_data
-                    .update(ctx, |active_notebook_data, ctx| {
-                        active_notebook_data.show_grab_edit_access_modal = false;
-                        ctx.notify();
-                    });
-                log::info!("Explicitly grabbing edit access, stealing from active editor");
-                self.grab_edit_access(false, ctx);
-                self.send_telemetry_action(NotebookTelemetryAction::GrabEditingBaton, ctx);
-            }
-        }
-        ctx.notify();
     }
 
     /// Reload an updated notebook.
@@ -1119,10 +1068,7 @@ impl NotebookView {
             .current_editor(ctx)
             .unwrap_or(Editor::no_editor());
         if current_editor.state == EditorState::OtherUserActive {
-            self.active_notebook_data.update(ctx, |data, ctx| {
-                data.show_grab_edit_access_modal = true;
-                ctx.notify();
-            });
+            log::info!("Not grabbing edit access, the notebook is being edited");
         } else {
             log::info!("Explicitly grabbing edit access, no active editor");
             self.grab_edit_access(true, ctx);
@@ -1199,23 +1145,6 @@ impl NotebookView {
                     CloudObjectTypeAndId::from_id_and_type(notebook_id, ObjectType::Notebook),
                     ctx,
                 );
-            });
-        }
-    }
-
-    /// Start exporting this notebook.
-    fn export(&self, ctx: &mut ViewContext<Self>) {
-        if let Some(notebook_id) = self.notebook_id(ctx) {
-            let window_id = ctx.window_id();
-            ExportManager::handle(ctx).update(ctx, |export_manager, ctx| {
-                export_manager.export(
-                    window_id,
-                    &[CloudObjectTypeAndId::from_id_and_type(
-                        notebook_id,
-                        ObjectType::Notebook,
-                    )],
-                    ctx,
-                )
             });
         }
     }
@@ -1357,16 +1286,6 @@ impl NotebookView {
             );
         }
 
-        #[cfg(feature = "local_fs")]
-        {
-            menu_items.push(
-                MenuItemFields::new("Export")
-                    .with_on_select_action(NotebookAction::Export)
-                    .with_icon(icons::Icon::Download)
-                    .into_item(),
-            );
-        }
-
         // Add "Trash" to menu
         if self.is_online(ctx)
             && (!FeatureFlag::SharedWithMe.is_enabled() || access_level.can_trash())
@@ -1470,16 +1389,6 @@ impl NotebookView {
     ) -> SpawnedFutureHandle {
         self.set_title(&notebook.model().title, ctx);
         self.set_content(&notebook, ctx);
-
-        if let Some(server_id) = notebook.id.into_server() {
-            self.pane_configuration
-                .update(ctx, |pane_configuration, ctx| {
-                    pane_configuration.set_shareable_object(
-                        Some(ShareableObject::WarpDriveObject(server_id)),
-                        ctx,
-                    );
-                });
-        }
 
         self.active_notebook_data.update(ctx, |data, _| {
             data.open_existing(notebook.id);
@@ -2063,14 +1972,6 @@ impl View for NotebookView {
         if self
             .active_notebook_data
             .as_ref(app)
-            .show_grab_edit_access_modal
-        {
-            stack.add_child(ChildView::new(&self.grab_edit_access_modal).finish());
-        }
-
-        if self
-            .active_notebook_data
-            .as_ref(app)
             .feature_not_available()
         {
             stack.add_child(self.render_sync_banner(
@@ -2170,7 +2071,6 @@ impl TypedActionView for NotebookView {
                     );
                 });
             }
-            NotebookAction::Export => self.export(ctx),
             NotebookAction::AttachPlanAsContext(id) => {
                 ctx.emit(NotebookEvent::AttachPlanAsContext(*id))
             }
@@ -2205,7 +2105,7 @@ impl BackingView for NotebookView {
 
     fn render_header_content(
         &self,
-        _ctx: &view::HeaderRenderContext<'_>,
+        _ctx: &view::HeaderRenderContext,
         app: &AppContext,
     ) -> view::HeaderContent {
         view::HeaderContent::simple(self.pane_configuration.as_ref(app).title())

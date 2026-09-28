@@ -6,7 +6,6 @@ use warpui::{SingletonEntity, ViewContext, ViewHandle};
 use super::env_var_collection::{EnvVarCollectionAction, EnvVarCollectionView, VariableRowIndex};
 use crate::cloud_object::{CloudObject, GenericStringObjectFormat, Space};
 use crate::drive::CloudObjectTypeAndId;
-use crate::drive::export::ExportManager;
 use crate::env_vars::active_env_var_collection_data::TrashStatus;
 use crate::external_secrets::SecretManager;
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
@@ -400,14 +399,6 @@ impl EnvVarCollectionView {
             );
         }
 
-        #[cfg(feature = "local_fs")]
-        menu_items.push(
-            MenuItemFields::new("Export")
-                .with_on_select_action(EnvVarCollectionAction::Export)
-                .with_icon(Icon::Download)
-                .into_item(),
-        );
-
         menu_items
     }
 
@@ -467,24 +458,6 @@ impl EnvVarCollectionView {
                 );
             });
             ctx.notify();
-        }
-    }
-
-    pub(super) fn export_env_var_collection(&self, ctx: &mut ViewContext<Self>) {
-        if let Some(env_var_collection_id) = self.env_var_collection_id(ctx) {
-            let window_id = ctx.window_id();
-            ExportManager::handle(ctx).update(ctx, |export_manager, ctx| {
-                export_manager.export(
-                    window_id,
-                    &[CloudObjectTypeAndId::from_generic_string_object(
-                        GenericStringObjectFormat::Json(
-                            crate::cloud_object::JsonObjectType::EnvVarCollection,
-                        ),
-                        env_var_collection_id,
-                    )],
-                    ctx,
-                )
-            });
         }
     }
 }

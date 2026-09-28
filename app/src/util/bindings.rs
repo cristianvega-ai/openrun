@@ -99,7 +99,6 @@ pub enum CustomAction {
     CloseCurrentSession,
     CloseWindow,
     OpenTeamSettings,
-    SharePaneContents,
     #[cfg(windows)]
     WindowsPaste,
     #[cfg(windows)]
@@ -425,7 +424,6 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::DisableSyncTerminalInputs
         | CustomAction::ToggleSyncAllTerminalInputsInAllTabs
         | CustomAction::OpenTeamSettings
-        | CustomAction::SharePaneContents
         | CustomAction::OpenAIFactCollection
         | CustomAction::OpenMCPServerCollection
         | CustomAction::NewAgentTab => None,
