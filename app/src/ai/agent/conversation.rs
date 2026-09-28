@@ -197,11 +197,9 @@ fn footer_model_token_usage(
         .collect()
 }
 
-/// Conversation usage totals for compact displays (e.g. the TUI footer's
-/// usage entry).
+/// Conversation usage totals for compact displays.
 ///
-/// A projection computed on demand from existing conversation state — named
-/// so the underlying types don't leak through `tui_export`.
+/// A projection computed on demand from existing conversation state.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ConversationUsageTotals {
     /// Total credits spent (inference + platform), from the server's
@@ -3928,9 +3926,9 @@ impl AIConversation {
         self.total_token_usage_by_model.values().cloned().collect()
     }
 
-    /// Compact usage totals for lightweight displays (e.g. the TUI footer's
-    /// usage entry): the GUI-consistent credits total plus the server-seeded
-    /// provider cost and any permitted live per-request deltas.
+    /// Compact usage totals for lightweight displays: the GUI-consistent credits
+    /// total plus the server-seeded provider cost and any permitted live
+    /// per-request deltas.
     pub fn usage_totals(&self) -> ConversationUsageTotals {
         ConversationUsageTotals {
             credits_spent: self.inference_credits_spent() + self.platform_credits_spent(),

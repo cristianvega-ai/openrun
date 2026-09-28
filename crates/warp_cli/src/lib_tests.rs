@@ -19,14 +19,6 @@ use crate::secret::{CodexMethod, CreateProvider, SecretCommand};
 use crate::task::{MessageCommand, TaskCommand};
 
 #[test]
-fn identifies_worker_subcommands() {
-    assert!(is_worker_invocation("ripgrep-search"));
-    #[cfg(unix)]
-    assert!(is_worker_invocation(&terminal_server_subcommand()));
-    assert!(!is_worker_invocation("--prompt"));
-}
-
-#[test]
 fn agent_run_accepts_git_valid_substituted_branch_override() {
     let base = r#"{"code_forge":"GITHUB","repo_owner":"source","repo_name":"warp","head":{"type":"BRANCH","value":"frozen/prepare"},"clone_from":{"code_forge":"GITHUB","owner":"target","repo":"warp"},"preserve_origin":true}"#;
     let valid = base.replace("frozen/prepare", "release+candidate");

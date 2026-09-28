@@ -91,7 +91,6 @@ fn prepared_remote_request_matches_gui_wire_semantics() {
                 ctx,
             )
             .unwrap();
-            assert_eq!(prepared.display_name, "researcher");
             assert_eq!(
                 prepared.spawn_request.prompt.as_deref(),
                 Some("Inspect the code")
@@ -286,14 +285,6 @@ fn cloud_startup_presentations_preserve_gui_copy_and_child_retry_semantics() {
             action_label: Some("Authenticate with GitHub"),
             primary_url: Some("https://example.com/auth".to_string()),
         }
-    );
-    assert_eq!(
-        CloudAgentStartupPresentation::github_auth(
-            "https://example.com/auth",
-            CloudAgentStartupAuthFlow::RerunOrchestrationRequest,
-        )
-        .detail,
-        "Authenticate with GitHub, then run the orchestration request again."
     );
 }
 

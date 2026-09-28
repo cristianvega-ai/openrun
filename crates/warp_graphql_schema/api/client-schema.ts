@@ -103,7 +103,6 @@ const clientQueries = [
   'task',
   'taskGitCredentials',
   'taskSecrets',
-  'tuiOnboardingMarkers',
   'listAIConversations',
   'suggestCloudEnvironmentImage'
 ];

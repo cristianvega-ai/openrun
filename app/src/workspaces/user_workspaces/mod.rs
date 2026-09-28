@@ -184,7 +184,7 @@ pub enum SoleTeamError {
 }
 
 impl UserWorkspaces {
-    #[cfg(any(test, all(feature = "tui", feature = "test-util")))]
+    #[cfg(test)]
     pub fn mock(
         team_client: Arc<dyn TeamClient>,
         workspace_client: Arc<dyn WorkspaceClient>,
@@ -314,19 +314,6 @@ impl UserWorkspaces {
         }
     }
 
-    pub fn warp_agent_cli_upgrade_link(user_id: Option<UserUid>) -> String {
-        let upgrade_link = user_id.map_or_else(
-            || {
-                format!(
-                    "{}{}",
-                    ChannelState::server_root_url().trim_end_matches('/'),
-                    STRIPE_SUBSCRIPTION_INTERVAL_PAGE_PREFIX
-                )
-            },
-            Self::upgrade_link,
-        );
-        format!("{upgrade_link}?source=warp-agent-cli")
-    }
     pub fn admin_billing_link_for_team(team_uid: ServerId) -> String {
         format!(
             "{}/admin/{team_uid}/billing",

@@ -185,7 +185,7 @@ pub enum RespectUserSyncSetting {
 pub enum SettingsMode {
     /// The full desktop GUI application.
     Gui,
-    /// The headless terminal-UI front-end (the `warp_tui` crate).
+    /// The headless terminal-UI front-end.
     Tui,
 }
 
@@ -247,7 +247,7 @@ pub struct SettingSurfaces(u8);
 impl SettingSurfaces {
     /// The desktop GUI application only.
     pub const GUI: Self = Self(1 << 0);
-    /// The headless terminal-UI front-end (the `warp_tui` crate) only.
+    /// The headless terminal-UI front-end only.
     pub const TUI: Self = Self(1 << 1);
     /// Every surface (currently GUI and TUI).
     pub const ALL: Self = Self(Self::GUI.0 | Self::TUI.0);

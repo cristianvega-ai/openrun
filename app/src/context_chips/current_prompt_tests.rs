@@ -597,7 +597,7 @@ fn test_chips_to_run_only_includes_active_surface_configurations() {
 }
 
 #[test]
-fn test_cli_agent_footer_chips_require_a_visible_supported_footer() {
+fn test_cli_agent_footer_chips_require_a_visible_footer() {
     App::test((), |mut app| async move {
         app.add_singleton_model(|_| Prompt::mock());
         app.add_singleton_model(SessionSettings::new_with_defaults);
@@ -660,14 +660,6 @@ fn test_cli_agent_footer_chips_require_a_visible_supported_footer() {
             })
         );
 
-        CLIAgentSessionsModel::handle(&app).update(&mut app, |sessions, ctx| {
-            sessions.set_session(terminal_view_id, session_for(CLIAgent::WarpTui), ctx);
-        });
-        assert!(cli_footer_chips(&app).is_empty());
-
-        CLIAgentSessionsModel::handle(&app).update(&mut app, |sessions, ctx| {
-            sessions.set_session(terminal_view_id, session_for(CLIAgent::Claude), ctx);
-        });
         crate::settings::AISettings::handle(&app).update(&mut app, |settings, ctx| {
             settings
                 .should_render_cli_agent_footer

@@ -1283,30 +1283,6 @@ fn test_window_team_assignment_inherits_from_source_or_default_team() {
 }
 
 #[test]
-fn warp_agent_cli_upgrade_link_is_channel_aware_and_user_bound() {
-    let user_uid = UserUid::new("user-123");
-
-    assert_eq!(
-        UserWorkspaces::warp_agent_cli_upgrade_link(Some(user_uid)),
-        format!(
-            "{}{STRIPE_SUBSCRIPTION_INTERVAL_PAGE_PREFIX}/user/{user_uid}?source=warp-agent-cli",
-            ChannelState::server_root_url(),
-        )
-    );
-}
-
-#[test]
-fn warp_agent_cli_upgrade_link_uses_channel_aware_fallback_without_a_user() {
-    assert_eq!(
-        UserWorkspaces::warp_agent_cli_upgrade_link(None),
-        format!(
-            "{}{STRIPE_SUBSCRIPTION_INTERVAL_PAGE_PREFIX}?source=warp-agent-cli",
-            ChannelState::server_root_url().trim_end_matches('/'),
-        )
-    );
-}
-
-#[test]
 fn admin_billing_link_for_default_team_targets_the_first_admin_team() {
     let email = "admin@example.com";
     let user_uid = UserUid::new("admin");

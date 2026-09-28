@@ -69,8 +69,8 @@ pub struct CommonCommandGates {
     is_cli_agent_input: bool,
 }
 
-/// Subscribe a concrete surface data source to dependencies that affect both GUI and TUI command
-/// availability. The callback remains concrete, so this helper does not require a surface trait.
+/// Subscribe a concrete surface data source to dependencies that affect command availability.
+/// The callback remains concrete, so this helper does not require a surface trait.
 pub(super) fn subscribe_to_shared_dependencies<T>(
     active_session: &ModelHandle<ActiveSession>,
     cli_subagent_controller: &ModelHandle<CLISubagentController>,
@@ -163,7 +163,7 @@ pub(super) fn subscribe_to_shared_dependencies<T>(
     );
 }
 
-/// State shared by GUI and TUI slash command data sources.
+/// State shared by slash command data sources.
 ///
 /// Surface-neutral behavior is provided by [`SlashCommandDataSource`]. Surface-specific behavior
 /// such as agent view, cloud mode, compact rendering, recomputation, and event emission lives on
@@ -196,7 +196,7 @@ impl SlashCommandDataSourceState {
     }
 }
 
-/// Surface-neutral slash command behavior shared by GUI and TUI data sources.
+/// Surface-neutral slash command behavior shared by slash command data sources.
 ///
 /// Implementors provide access to their shared state. Default methods own the behavior whose
 /// meaning is identical across surfaces, while each concrete surface retains lifecycle wiring,
@@ -224,7 +224,7 @@ pub trait SlashCommandDataSource {
         self.state().active_commands_by_id.iter()
     }
 
-    /// Classifies slash command input consistently across GUI and TUI surfaces.
+    /// Classifies slash command input consistently across surfaces.
     fn parse_input(&self, buffer: &str, ctx: &AppContext) -> ParsedSlashCommandInput {
         if !buffer.starts_with('/') {
             return ParsedSlashCommandInput::None;

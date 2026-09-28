@@ -24,6 +24,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Telemetry collection (RudderStack)](#telemetry-collection-rudderstack) — stopped collecting, persisting and sending usage telemetry; removed the RudderStack pipeline and the telemetry privacy toggle
 - [Block sharing (web permalinks)](#block-sharing-web-permalinks) — removed the "Share block" modal, block permalinks and embeds, the Shared blocks settings page, and the related menu items, keybindings and server client
 - [Referrals, rewards and referral-unlocked themes](#referrals-rewards-and-referral-unlocked-themes) — removed the Referrals page, invite entry points, the reward modal and the server referral client; the two reward themes are always available as "Nebula" and "Opal"
+- [Warp TUI front-end](#warp-tui-front-end) — deleted the login-gated "Warp Agent CLI" (`crates/warp_tui`), its app integration, settings, onboarding client and TUI skills
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -513,3 +514,41 @@ Each section below covers one removal (a single commit or a small group of relat
 - The `ThemeKind::SentReferralReward` / `ReceivedReferralReward` variant names and the `ReferralReward` serde alias are kept on purpose. They are the values stored in `settings.toml` and user defaults, so renaming them would reset users' theme choice. This is the only remaining `referral` match in `app/src` apart from the telemetry below. Both themes stay `schemars(skip)`, so the generated settings schema still omits these legacy value names.
 - `TelemetryEvent::CopyInviteLink` ("Copy Link" on the referral modal) is no longer emitted. TEL-4 deletes it.
 - The `GetReferralInfo` and `SendReferralInviteEmails` operations in `crates/graphql` have no callers now, and `CreateAnonymousUser` always sends `referral_code: None`. They go with the crate in SRV-1. Anonymous-user creation itself is removed by AUTH-1.
+
+## Warp TUI front-end
+**Why:** `crates/warp_tui` was the "Warp Agent CLI", a headless terminal UI whose only purpose was to front Warp's own agent. It required a Warp account (device-code login), talked to Warp's servers for onboarding markers, usage and MCP, had its own autoupdater, and re-exported large parts of the app's AI and server APIs through `app/src/tui_export.rs`. None of that has a place in an offline terminal without built-in AI.
+
+**Removed:**
+- `crates/warp_tui` — the TUI crate: the `warp-tui`, `warp-tui-oss`, `warp-tui-dev`, `warp-tui-preview` and `warp-tui-stable` binaries, its autoupdater, its channel-config embedding `build.rs`, benches and tests.
+- `app/src/tui/` (device login model, TUI MCP manager, user info, TUI telemetry), `app/src/tui_export.rs` and `app/src/tui_export/`, `app/src/tui_onboarding_markers*.rs`, `app/src/tui_test_support.rs`.
+- `app/src/lib.rs` — `LaunchMode::Tui`, `TuiEntryPoint`, `TuiMountFn`, `run_tui`, `run_tui_cli_command`, `run_tui_worker_if_requested`, the `.tui` secure-storage service suffix, the TUI-only app callbacks, the non-blocking startup IAP authentication path, the TUI API-key refresher and the per-launch-mode `set_settings_mode` call (the settings mode now always defaults to GUI).
+- Persistence scopes `PersistenceScope::Tui` and `PersistedDataScope::TuiFrontend` (the separate `tui/warp.sqlite` database).
+- Settings groups `TuiAutoupdateSettings`, `TuiThemeSettings`, `TuiVoiceSettings`, `TuiZeroStateSettings` (`app/src/settings/tui_*.rs`) and the TUI-only AI settings `TuiStatusline` (`agents.statusline`) and `TuiUsageDisplayMode` (`agents.usage_display_mode`).
+- `app/src/server/server_api/tui_onboarding.rs`, the `tuiOnboardingMarkers` GraphQL query (`crates/graphql/src/api/queries/tui_onboarding_markers.rs`) and its entries in the client schema (`crates/warp_graphql_schema/api/schema.graphql`, `client-schema.ts`).
+- `app/src/ai/tui_api_keys.rs` — the cross-process API-key revision file.
+- `CLIAgent::WarpTui` and the `CLIAgentType::WarpTui` telemetry value, together with the logic that detected `warp`/`warp-tui`/`run-tui` in a pane and hid the input box and "Use agent" footer (`is_running_warp_tui`, `supports_cli_agent_footer`).
+- `UserWorkspaces::warp_agent_cli_upgrade_link` (the `?source=warp-agent-cli` upgrade URL) and its tests.
+- The TUI slash-command data sources (`TuiSlashCommandDataSource`, `TuiZeroStateDataSource`) and TUI-only helpers (`record_autodetection_toggle_from_slash_command`, `saved_prompt_text_for_id`, `AgentModeAutoDetectionSettingOrigin::SlashCommand`).
+- The bundled `tui-migrate-setup` skill (`resources/bundled/skills/tui-migrate-setup`), its `TuiOnly` activation and its template variables, plus the `warp_core::paths` helpers that only it used (`gui_config_local_dir`, `gui_mcp_config_file_path`, `gui_app_id_for_channel`).
+- Other code that only the TUI reached: `CodeEditorModel::new_tui` and the char-cell visual-row kill helpers, `vim_visual_selection_ranges`, `PtyIntent::Interrupt`/`write_interrupt`, the TUI terminal-manager adapter (`create_tui_model`) and its `SshRemoteServerSupport` switch, `web_logout_url_with_continue`, `warp_cli::is_worker_invocation`, `AIExecutionProfile::default_profile_for_tui` and the TUI profile seeding, `AgentViewEntryOrigin::Tui`, `HandoffSurface::Tui`, and AI orchestration/handoff/MCP helpers exported only through `tui_export` (location snapshot, `harness_is_selectable`, `oz_run_url`, `OZ_ENVIRONMENTS_URL`, handoff environment/model setters, `WatchedRunStatusChanged`, the MCP `AuthenticationRequired`/`CredentialsChanged` events and credential accessors).
+- The `tui` feature in `app/Cargo.toml` and the `release-tui` / `release-tui-debug-assertions` profiles in the workspace `Cargo.toml`.
+- `.agents/skills/tui-testing` and `.agents/skills/tui-ui-guidelines`.
+
+**Modified:**
+- Test-only constructors that were gated on `any(test, all(feature = "tui", feature = "test-util"))` are now `cfg(test)`; MCP helpers gated on `any(feature = "tui", test)` are now `cfg(test)`.
+- `app/src/terminal/local_tty/terminal_manager.rs`, `app/src/terminal/model_events.rs` — the local terminal manager has a single constructor; SSH remote-server use depends only on the feature flag and the session type.
+- `AGENTS.md` — removed the TUI front-end sections, the `script/run-tui` command and TUI testing guidance. The kept skills (`add-feature-flag`, `remove-feature-flag`, `promote-feature`, `gui-ui-guidelines`, `gui-integration-test`, `gui-settings-ui`, `rust-unit-tests`) no longer point at `crates/warp_tui` or the TUI skills.
+- Doc comments in `crates/settings`, `crates/editor`, `crates/warp_terminal`, `crates/warp_channel_config`, `crates/warpui_core` and shared app modules no longer name `warp_tui` or describe TUI consumers.
+
+**User-visible impact:** The Warp Agent CLI binaries no longer exist. In the GUI, running `warp`, `warp-dev` or `warp-tui` in a pane is an ordinary command: it is no longer treated as a CLI agent that hides the input box and footer. TUI-only settings (`agents.statusline`, `agents.usage_display_mode`, TUI theme, voice, zero-state and autoupdate) are ignored if present in `settings.toml`. The `tui-migrate-setup` bundled skill is gone.
+
+**Notes:**
+- Left for AI-04 (TUI rendering layer and modes in core crates): the `tui` features of `warpui_core` and `warp_terminal` (nothing enables them now), `ratatui`, `SettingsMode::Tui`, `ExecutionMode::Tui`, `LogFrontend::Tui` and the app branches that match them (`settings/mod.rs::user_preferences_toml_file_path`, `settings/init.rs`, `settings/cloud_preferences_syncer.rs`, `warp_managed_paths_watcher.rs`, the deferred global-server autostart in `ai/mcp/file_based_manager.rs` and `use_tui_loopback` in `ai/mcp/templatable_manager/native.rs`, `settings/schema_generation.rs`), `warp_core::paths::{tui_config_local_dir, tui_mcp_config_file_path, tui_state_dir}`, the char-cell editor layout in `crates/editor` (`RenderState::new_tui`, `char_cell_display`) and its remaining branches in `app/src/code/editor/model.rs`, and `settings::set_settings_mode` (no longer called).
+- Left for AI-24: the TUI-only static slash commands (`/exit`, `/logout`, `/theme`, `/voice`, `/upgrade`, `/statusline`, …) and `SlashCommandSurfaces::{TuiOnly, GuiAndTui}`. Left for AI-33: `SettingSurfaces::TUI`.
+- Left for SRV-1: the `tui_version` field in `crates/channel_versions` (SRV-1 deletes the crate).
+- `app/src/ai/**` still has doc comments describing GUI/TUI sharing; the AI tasks that delete those modules remove them.
+- Left for the AI onboarding/launch-modal task (ai.md: `workspace/view/agent_cli_launch_modal/` and its `one_time_modal_model.rs` state): the GUI modal that advertised the Warp Agent CLI. Left for the account/auth removal: the `warp-agent-cli` OAuth client id in `crates/warp_server_client/src/auth/session.rs`, used by the shared device-authorization flow.
+- `ProfileSource::SettingsCollection { migrates_legacy_cloud_profiles: false }` in `ai/execution_profiles/profiles.rs` (the non-migrating settings backend) was only reached by the TUI and is now unreachable; its test in `ai/llms_tests.rs` was removed. The AI task that deletes execution profiles removes the branch.
+- One dead-code warning is left on purpose: the `CodeEditorModelEvent::UnifiedDiffComputed` payload was only kept alive by the `warp_tui` re-export of `CodeEditorModelEvent` and is now read only by tests. It belongs to the AI code-diff accept flow (`CodeSource::AIAction`) and goes with that flow.
+- The server APIs that `tui_export.rs` re-exported (`AuthStateProvider`, `ServerApiProvider`, `changelog_model`, `TelemetryEvent`, `server::ids`, `team_scope`, `server_api::ai`) are no longer pinned by the TUI; the server tasks can now delete them.
+- Existing `tui/warp.sqlite` databases, the TUI config directory and `.tui` keychain entries on users' machines are left untouched.
