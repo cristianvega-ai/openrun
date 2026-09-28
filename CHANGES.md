@@ -73,8 +73,10 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Repository metadata: standing queries and force-included paths](#repository-metadata-standing-queries-and-force-included-paths) — removed the skill-only standing-query results, force-included path list and `StandingQueryResultsUpdated` events from `repo_metadata`
 - [AI credits, usage, billing and promotions UI](#ai-credits-usage-billing-and-promotions-ui) — removed the AI request-usage and credit-availability models, the buy-credits banner and auto-reload modal, the usage popover, Turn panel and usage footer, the Billing and usage settings page, and the pricing-promotion, free-AI-removal, build-plan-migration and Codex modals
 - [Cloud notebooks](#cloud-notebooks) — removed Warp Drive notebooks: the notebook pane and view, the notebook manager, edit-access batons, embedded Drive workflows in the markdown editor, notebook search (`notebooks:` filter, `@` menu category, embed picker) and the plan-notebook buttons; the local markdown file viewer stays
+- [Integration test triage](#integration-test-triage) — deleted the two integration tests for the removed Warp Drive "Create a New Personal/Team Workflow" actions; documented the remaining failures (SSH tests that need a gcloud IAP tunnel to a Warp-owned GCP VM)
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
+
 ## <Area>
 **Why:** <reason it was removed or changed>
 
@@ -1915,3 +1917,17 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - `uri::parse_url_paths` was already deleted with the Drive deep links (DRV-1), so nothing was left to remove.
 - Left for TEL-3/TEL-4: `NotebookTelemetryAction`, `NotebookActionEvent`, `NotebookTelemetryMetadata` and the telemetry calls in the file viewer; `WorkflowSelectionSource::Notebook`.
 - The editor crates still parse `warp-embedded-object` fenced blocks (`crates/editor`, `crates/markdown_parser`); with no conversion registered the buffer skips them, so a markdown file containing one renders without that block. Removing the parser support is left for the sweep.
+
+## Integration test triage
+**Why:** `cargo nextest run --workspace --features warp/gui -E 'package(integration)'` ended with failures. Each one was re-run alone and compared with the project baseline commit `cb2416204` to tell regressions from failures that predate the project.
+
+**Removed:**
+- `test_create_personal_workflow_pane_from_command_palette` and `test_create_team_workflow_pane_from_command_palette` (`crates/integration/src/test/workflows.rs`, registered in `tests/integration/ui_tests.rs` and `src/bin/integration.rs`). They ran the "Create a New Personal Workflow" and "Create a New Team Workflow" command-palette actions, which went with the Warp Drive panel, menus and actions. Both pass at baseline.
+- Test helpers with no caller left: `assert_no_workflow_pane_open`, `assert_no_team_workflow_pane_open`, `assert_open_workflow_pane_count_equals`, `assert_open_team_workflow_pane_count_equals` (`app/src/integration_testing/workflow/assertion.rs`) and `go_offline`/`go_online` (`app/src/integration_testing/assertions.rs`).
+
+**User-visible impact:** None. Test-only change.
+
+**Notes:**
+- Still failing, unchanged, and they also fail at baseline: `shell_integration_tests::{test_ssh_into_sh, test_ssh_into_ash, test_ssh_wrapper_into_bash, test_ssh_wrapper_into_zsh}` and `ui_tests::test_ssh_with_shell_override`. They SSH to a VM in Warp's GCP project (`warp-ssh-integration-testing`) through `gcloud compute start-iap-tunnel`, so they need the `gcloud` CLI, Google credentials and network access. They time out at "Wait for password prompt". They can only pass with that infrastructure and are expected to fail in this offline fork. The remote-subshell tests that use the same tunnel (`test_can_bootstrap_remote_{bash,zsh}_subshell`) are already `#[ignore]`d.
+- The settings-file tests that were flaky under machine load (`test_settings_file_hot_reload_applies_new_values`, `test_settings_file_migration_from_native_store`, `test_execution_profiles_load_from_settings_file`, `test_execution_profile_model_persists_and_hot_reloads_settings_file`, `test_preview_config_dir_migration`) passed in both full runs and alone. Re-run them alone if they time out under load.
+- Left for DRV-4/TEAM-1: the tests that still drive cloud objects, teams or the RTC websocket (`crates/integration/src/test/websockets.rs`, `join_a_workspace`, `create_a_personal_workflow`) still pass but cover code those tasks delete; `WorkflowView::is_team_workflow` has no test caller left.
