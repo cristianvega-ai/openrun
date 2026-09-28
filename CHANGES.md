@@ -28,6 +28,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [TUI dev script](#tui-dev-script) — removed `script/run-tui` and the presubmit note about `warp_tui`
 - [Channel-config loader crate](#channel-config-loader-crate) — deleted `crates/warp_channel_config`, which only the removed channel and TUI binaries used
 - [Client and server-side experiments](#client-and-server-side-experiments) — removed the local A/B bucketing framework and the server-driven experiment state; every experiment keeps the arm new OSS users already got
+- [App-installation detection and the local HTTP server](#app-installation-detection-and-the-local-http-server) — the GUI no longer listens on `127.0.0.1:9277+n`; the jemalloc heap profile is written to a local file instead of served over HTTP
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -618,3 +619,26 @@ Each section below covers one removal (a single commit or a small group of relat
 - Stale comments left in files owned by other tasks: the `CreatingSharedSessions` doc in `crates/warp_features/src/lib.rs` still links `ServerExperiment` (FLAGS-1); the `ExperimentId` storage-key comment in `crates/warp_server_auth/src/anonymous_id.rs` (AUTH-2, which deletes the anonymous ID); the "warp drive preferences experiment" comment in `settings/cloud_preferences_syncer.rs` (settings sync removal).
 - `crates/warp_graphql_schema/api/schema.graphql` still declares `experiments` on `User`; SRV-1 deletes the schema.
 - The remote-runner picker code in `run_agents_card_view.rs`, `orchestration_config_block.rs` and `orchestration_controls.rs` is now unreachable. AI-19 deletes it with orchestration.
+
+## App-installation detection and the local HTTP server
+**Why:** Every GUI instance started an HTTP server on `127.0.0.1`, port 9277 plus a per-channel offset (9282 for `warp-oss`). It served two routes. `/install_detection` answered CORS requests from `https://warp.dev`, any `*.warp.dev` origin and `localhost:8080/8082`, so Warp's web pages could tell that the desktop app was installed. `/debug/pprof/heap` returned a jemalloc heap profile when the `jemalloc_pprof` feature was on. An offline build must not expose an endpoint for Warp's websites, and a developer heap dump does not need a network listener.
+
+**Removed:**
+- `crates/app-installation-detection` (the CORS router for `*.warp.dev`) and `crates/http_server` (the `HttpServer` singleton, its private tokio runtime and the port table), with their `[workspace.dependencies]` entries and the dependencies in `app` and `crates/integration`.
+- `LaunchMode::should_start_local_http_server` and the `HttpServer` registration in `initialize_app` (`lib.rs`).
+- `profiling::make_router` and its axum handler `handle_get_heap`.
+- The comment in the wasm-only `Workspace::open_link_on_desktop` that described the `localhost:9277/install_detection` endpoint.
+
+**Modified:**
+- `app/src/profiling.rs` — with `jemalloc_pprof`, `dump_heap_profile_to_disk` now writes the jemalloc heap profile (gzipped pprof, unsymbolized as before) to `jemalloc-heap-<timestamp>.pb.gz` in the profile output directory. That is the working directory for dev builds, or the state directory for release bundles. `dhat_heap_profiling` still takes precedence when both features are on.
+- `app/src/workspace/mod.rs` — the "Write heap profile to disk" command-palette action (`workspace:dump_heap_profile`) is registered with either `dhat_heap_profiling` or `jemalloc_pprof`, so jemalloc builds keep an on-demand heap dump.
+- `app/Cargo.toml` — `tracing-subscriber` now enables `env-filter` itself. `app/src/tracing/native.rs` uses `EnvFilter`, which had only compiled because `app-installation-detection` turned the feature on through Cargo feature unification.
+
+**User-visible impact:** Warp no longer opens a listening socket at startup. Warp's web pages can no longer detect the desktop app. Developer builds with `jemalloc_pprof` get their heap profile from the command palette as a file, instead of `curl http://127.0.0.1:<port>/debug/pprof/heap`.
+
+**Notes:**
+- `local_control` (`warpctrl`) did not depend on `http_server`. It runs its own axum listener on an ephemeral loopback port, only when `FeatureFlag::WarpControlCli` is enabled and the user opts in, so it is off by default. It keeps the `axum` dependency of `app`.
+- Remaining users of `axum`: `app` (only `local_control`), `crates/serve-wasm` (with `axum-extra`) and `crates/mcp` as a dev-dependency. Remaining users of `tower-http`: `reqwest` 0.13 (its client-side redirect and decompression layers) and `crates/serve-wasm`. The `tower-http` workspace dependency stays for `serve-wasm`, which WASM-1 deletes; `tower-http` then remains only as a `reqwest` internal.
+- Left for WASM-1: `settings/app_installation_detection.rs` (`UserAppInstallDetectionSettings`, a web-only setting that the host page writes) and `NativeRedirectWidget` in `settings_view/features_page.rs` (the web-only "Open links in desktop app" toggle). Neither talks to the removed server. They drive the web app's open-in-desktop flows in `wasm_nux_dialog.rs`, `drive/index.rs`, `notebooks/notebook.rs`, `workflows/workflow_view.rs`, `terminal/view/pane_impl.rs` and `Workspace::open_link_on_desktop`, which redirects to `warp.dev/download`.
+- `rg 'http_server|9277|install_detection'` still matches unrelated code: the OSC 9277 in-band generator marker in `warp_terminal` and the shell bootstrap scripts, MCP test names such as `explicit_http_server` (AI plan), and SVG path data.
+- The runtime capture of `warp-oss` shows no listening socket. The baseline had `127.0.0.1:9282 LISTEN`.

@@ -5,6 +5,8 @@
 //! * `dhat_heap_profiling` enables use of dhat to produce heap profiles
 //! * `jemalloc_auto_heap_profiling` enables the jemalloc allocator and
 //!   automatic heap profile generation every 500MB of memory allocated.
+//! * `jemalloc_pprof` enables the jemalloc allocator with sampled heap
+//!   profiling, written in pprof format on demand.
 //!
 //! If run from a release bundle, profiles will be written to
 //! [`warp_core::paths::state_dir()`].  Otherwise, profiles will be written
@@ -68,10 +70,29 @@ pub async fn dump_heap_profile_to_disk() -> anyhow::Result<std::path::PathBuf> {
             let path = heap_profile_path();
             dump_dhat_heap_profile();
             Ok(path)
+        } else if #[cfg(feature = "jemalloc_pprof")] {
+            dump_jemalloc_pprof_heap_profile().await
         } else {
             anyhow::bail!("heap profiling is not enabled in this build");
         }
     }
+}
+
+/// Writes the current jemalloc heap profile as a gzipped pprof protobuf and
+/// returns its path.
+#[cfg(feature = "jemalloc_pprof")]
+async fn dump_jemalloc_pprof_heap_profile() -> anyhow::Result<std::path::PathBuf> {
+    let prof_ctl = jemalloc_pprof::PROF_CTL
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("heap profiler not initialized"))?;
+    let mut prof_ctl = prof_ctl.lock().await;
+    anyhow::ensure!(prof_ctl.activated(), "heap profiling not activated");
+
+    let pprof = prof_ctl.dump_pprof()?;
+    let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let path = profile_output_dir().join(format!("jemalloc-heap-{timestamp}.pb.gz"));
+    std::fs::write(&path, pprof)?;
+    Ok(path)
 }
 
 /// Returns the path at which heap profiles will be written.
@@ -109,7 +130,11 @@ fn write_pprof_report(report: pprof::Report) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(any(feature = "dhat_heap_profiling", feature = "pprof_cpu_profiling"))]
+#[cfg(any(
+    feature = "dhat_heap_profiling",
+    feature = "jemalloc_pprof",
+    feature = "pprof_cpu_profiling"
+))]
 fn profile_output_dir() -> std::path::PathBuf {
     cfg_if::cfg_if! {
         if #[cfg(feature = "release_bundle")] {
@@ -120,41 +145,4 @@ fn profile_output_dir() -> std::path::PathBuf {
             })
         }
     }
-}
-
-#[cfg(not(target_family = "wasm"))]
-pub fn make_router() -> axum::Router {
-    let router = axum::Router::new();
-
-    #[cfg(feature = "jemalloc_pprof")]
-    let router = router.route("/debug/pprof/heap", axum::routing::get(handle_get_heap));
-
-    router
-}
-
-#[cfg(feature = "jemalloc_pprof")]
-pub async fn handle_get_heap()
--> Result<impl axum::response::IntoResponse, (axum::http::StatusCode, String)> {
-    let Some(prof_ctl) = jemalloc_pprof::PROF_CTL.as_ref() else {
-        return Err((
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "heap profiler not initialized".into(),
-        ));
-    };
-    let mut prof_ctl = prof_ctl.lock().await;
-
-    if !prof_ctl.activated() {
-        return Err((
-            axum::http::StatusCode::FORBIDDEN,
-            "heap profiling not activated".into(),
-        ));
-    }
-
-    let pprof = prof_ctl.dump_pprof().map_err(|err| {
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            err.to_string(),
-        )
-    })?;
-    Ok(pprof)
 }

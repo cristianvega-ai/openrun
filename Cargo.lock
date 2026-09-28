@@ -445,23 +445,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
 
 [[package]]
-name = "app-installation-detection"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-extra",
- "command",
- "nix 0.26.4",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "win32job",
-]
-
-[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6232,21 +6215,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http_server"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "axum",
- "log",
- "tokio",
- "tower",
- "tower-http",
- "warp_core",
- "warp_errors",
- "warpui_core",
-]
-
-[[package]]
 name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6743,7 +6711,6 @@ name = "integration"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "app-installation-detection",
  "backtrace",
  "cfg-if",
  "chrono",
@@ -14621,7 +14588,6 @@ dependencies = [
  "ai_types",
  "alphanumeric-sort",
  "anyhow",
- "app-installation-detection",
  "arrayvec",
  "asset_cache",
  "asset_macro",
@@ -14712,7 +14678,6 @@ dependencies = [
  "hex",
  "http 1.4.0",
  "http_client",
- "http_server",
  "hyper",
  "image",
  "indexmap 2.12.0",

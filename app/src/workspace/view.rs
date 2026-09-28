@@ -23301,12 +23301,6 @@ impl Workspace {
         if !is_app_installed {
             // App not installed - redirect to download page
             ctx.open_url("https://warp.dev/download");
-            // In webapp code we cannot distinguish between
-            // the localhost:9277/install_detection endpoint not running (not installed) vs
-            // the browser blocking Local Network Access which results in CORS error;
-            // the browser intentionally obscures the error root cause for privacy reasons.
-            // Many users' browser settings will block Local Network Access so this will end up redirecting to download page,
-            // even if they have the app installed.
             let toast_message = format!(
                 "Have Warp installed but redirecting to download page?\nEnable Local Network Access for {} in your browser.",
                 ChannelState::server_root_url()

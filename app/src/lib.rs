@@ -497,15 +497,6 @@ impl LaunchMode {
         }
     }
 
-    /// Whether this launch mode should start the local loopback HTTP server
-    /// (`crates/http_server`), which serves app-installation detection and profiling on a
-    /// fixed port. Only GUI instances start it, since co-located windowless processes (daemon,
-    /// CLI, proxy) would otherwise contend for the fixed port.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
-    fn should_start_local_http_server(&self) -> bool {
-        self.is_gui()
-    }
-
     /// Returns `true` if this process can build and sync codebase indices.
     fn supports_indexing(&self) -> bool {
         match self {
@@ -2190,16 +2181,6 @@ pub(crate) fn initialize_app(
         aliases.connect(ctx);
     });
 
-    #[cfg(not(target_family = "wasm"))]
-    if launch_mode.should_start_local_http_server() {
-        ctx.add_singleton_model(move |ctx| {
-            let routers = vec![
-                app_installation_detection::make_router(),
-                profiling::make_router(),
-            ];
-            http_server::HttpServer::new(routers, ctx)
-        });
-    }
     #[cfg(feature = "local_fs")]
     if matches!(
         launch_mode,
