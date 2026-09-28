@@ -25,6 +25,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Block sharing (web permalinks)](#block-sharing-web-permalinks) — removed the "Share block" modal, block permalinks and embeds, the Shared blocks settings page, and the related menu items, keybindings and server client
 - [Referrals, rewards and referral-unlocked themes](#referrals-rewards-and-referral-unlocked-themes) — removed the Referrals page, invite entry points, the reward modal and the server referral client; the two reward themes are always available as "Nebula" and "Opal"
 - [Warp TUI front-end](#warp-tui-front-end) — deleted the login-gated "Warp Agent CLI" (`crates/warp_tui`), its app integration, settings, onboarding client and TUI skills
+- [TUI dev script](#tui-dev-script) — removed `script/run-tui` and the presubmit note about `warp_tui`
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -552,3 +553,16 @@ Each section below covers one removal (a single commit or a small group of relat
 - One dead-code warning is left on purpose: the `CodeEditorModelEvent::UnifiedDiffComputed` payload was only kept alive by the `warp_tui` re-export of `CodeEditorModelEvent` and is now read only by tests. It belongs to the AI code-diff accept flow (`CodeSource::AIAction`) and goes with that flow.
 - The server APIs that `tui_export.rs` re-exported (`AuthStateProvider`, `ServerApiProvider`, `changelog_model`, `TelemetryEvent`, `server::ids`, `team_scope`, `server_api::ai`) are no longer pinned by the TUI; the server tasks can now delete them.
 - Existing `tui/warp.sqlite` databases, the TUI config directory and `.tui` keychain entries on users' machines are left untouched.
+
+## TUI dev script
+**Why:** The Warp Agent CLI (`crates/warp_tui`) is gone, so the script that built and ran it has nothing left to build. The packaging side (the `tui` bundle artifact and the Windows TUI installer) was already removed in [Packaging: Warp release infrastructure](#packaging-warp-release-infrastructure).
+
+**Removed:**
+- `script/run-tui` — built and ran a local `warp-tui-oss` binary.
+
+**Modified:**
+- `script/presubmit` — dropped the comment about `warp_tui` enabling `warp/tui` through feature unification.
+
+**User-visible impact:** None for users. Contributors can no longer run the TUI.
+
+**Notes:** None.
