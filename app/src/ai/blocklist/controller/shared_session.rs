@@ -836,16 +836,12 @@ impl BlocklistAIController {
             // representation lives in `LocalAgentTaskSyncModel`/`CLIAgentSessionsModel`, never
             // in `BlocklistAIHistoryModel`, so a conversation created here would silently become
             // the run's wrong canonical conversation ID once it reports a server token.
-            // `accept_agent_prompt` (`terminal_view_adaptor.rs`) is the primary gate that routes
-            // these prompts to `PendingCliHarnessPromptQueue` before they ever reach this
-            // method; reaching here for such a task means that gate was bypassed by a bug.
             if !bootstraps_setup_failure_debug
                 && let Some(task_id) = self.cli_harness_backed_task_id(ctx)
             {
                 report_error!(
                     "Refused to create a native conversation for a task backed by a registered \
-                     CLI-harness session; this prompt should have been routed to \
-                     PendingCliHarnessPromptQueue by accept_agent_prompt",
+                     CLI-harness session",
                     extra: { "task_id" => %task_id }
                 );
                 return;

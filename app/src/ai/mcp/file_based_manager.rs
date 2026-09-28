@@ -141,17 +141,6 @@ impl FileBasedMCPManager {
         ctx.emit(FileBasedMCPManagerEvent::InitialGlobalMcpScanComplete { wait_server_uuids });
     }
 
-    /// Returns the frozen initial-global-scan wait set, or `None` while the scan is pending.
-    ///
-    /// The watcher runs during application initialization, so a driver created later can miss
-    /// the transient completion event. This cached result preserves the settled snapshot.
-    pub fn initial_global_scan_result(&self) -> Option<Vec<Uuid>> {
-        match &self.initial_global_scan_state {
-            InitialGlobalMcpScanState::Complete(uuids) => Some(uuids.clone()),
-            InitialGlobalMcpScanState::Pending(_) => None,
-        }
-    }
-
     /// Get file-based MCP servers in scope for the given current working directory.
     pub fn get_servers_for_working_directory(
         &self,

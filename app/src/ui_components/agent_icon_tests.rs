@@ -10,8 +10,8 @@
 //!
 //! Adding a new canonical state is a one-enum-variant + one `expected` arm + one `*_inputs`
 //! arm change; the table test below enforces every surface agrees.
+use ai::harness::Harness;
 use chrono::Utc;
-use warp_cli::agent::Harness;
 
 use super::{
     CLISessionInputs, TerminalIconInputs, agent_conversation_entry_icon_variant,

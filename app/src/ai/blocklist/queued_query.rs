@@ -348,19 +348,6 @@ impl Entity for QueuedQueryModel {
 impl SingletonEntity for QueuedQueryModel {}
 
 impl QueuedQueryModel {
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
-    pub(crate) fn begin_native_setup(
-        &mut self,
-        conversation_id: AIConversationId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.queues
-            .entry(conversation_id)
-            .or_default()
-            .native_setup_pending = true;
-        ctx.emit(QueuedQueryEvent::DispatchStateChanged { conversation_id });
-    }
-
     /// Clears the native setup barrier once the initial prompt has actually been sent. Does
     /// *not* dispatch any prompt that arrived in the meantime -- the caller
     /// (`BlocklistAIController::dispatch_queued_warp_agent_prompt`) does that immediately
@@ -391,19 +378,6 @@ impl QueuedQueryModel {
             .is_some_and(|state| state.native_setup_pending)
     }
 
-    /// Sets the delivery mode for `conversation_id`'s queue. See [`QueuedPromptDeliveryMode`].
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
-    pub(crate) fn set_delivery_mode(
-        &mut self,
-        conversation_id: AIConversationId,
-        mode: QueuedPromptDeliveryMode,
-    ) {
-        self.queues
-            .entry(conversation_id)
-            .or_default()
-            .delivery_mode = mode;
-    }
-
     /// Returns the delivery mode for `conversation_id`'s queue, defaulting to `Queueing` when no
     /// mode has been explicitly set. See [`QueuedPromptDeliveryMode`].
     pub(crate) fn delivery_mode(
@@ -419,14 +393,6 @@ impl QueuedQueryModel {
     /// True when `conversation_id`'s queue is in `Steering` mode.
     pub(crate) fn is_steering(&self, conversation_id: AIConversationId) -> bool {
         self.delivery_mode(conversation_id) == QueuedPromptDeliveryMode::Steering
-    }
-
-    /// Whether setup or queued injections still need to finish, including attachment preparation.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
-    pub(crate) fn has_pending_native_injections(&self, conversation_id: AIConversationId) -> bool {
-        self.queues
-            .get(&conversation_id)
-            .is_some_and(|state| state.native_setup_pending || !state.queue.is_empty())
     }
 
     /// Returns a prepared, unlocked row without removing it.
@@ -505,31 +471,6 @@ impl QueuedQueryModel {
             conversation_id,
             query_id,
         });
-    }
-
-    /// Removes and returns every row queued for `conversation_id`, in FIFO order, emitting a
-    /// `Removed` event for each. Used by
-    /// `BlocklistAIController::unbind_native_prompt_conversation` to drop any prompts that never
-    /// made it out when the run ends, regardless of whether they were queued locally or via a
-    /// shared-session injection.
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
-    pub(crate) fn clear_queue(
-        &mut self,
-        conversation_id: AIConversationId,
-        ctx: &mut ModelContext<Self>,
-    ) -> Vec<QueuedQuery> {
-        let Some(state) = self.queues.get_mut(&conversation_id) else {
-            return Vec::new();
-        };
-        let cleared = std::mem::take(&mut state.queue);
-        state.editing = None;
-        for row in &cleared {
-            ctx.emit(QueuedQueryEvent::Removed {
-                conversation_id,
-                query_id: row.id,
-            });
-        }
-        cleared
     }
 
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {

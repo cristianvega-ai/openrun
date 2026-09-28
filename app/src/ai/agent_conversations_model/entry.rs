@@ -1,6 +1,6 @@
+use ai::harness::Harness;
 use chrono::{DateTime, Utc};
 use session_sharing_protocol::common::SessionId;
-use warp_cli::agent::Harness;
 use warp_core::features::FeatureFlag;
 use warpui::{AppContext, SingletonEntity};
 

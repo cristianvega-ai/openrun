@@ -1,4 +1,4 @@
-use warp_cli::agent::Harness;
+use ai::harness::Harness;
 
 use crate::features::FeatureFlag;
 #[cfg(not(target_family = "wasm"))]

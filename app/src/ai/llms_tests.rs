@@ -5,7 +5,6 @@ use std::sync::Arc;
 use warpui::App;
 
 use super::*;
-use crate::LaunchMode;
 use crate::ai::aws_credentials::AwsCredentialRefresher;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::mcp::TemplatableMCPServerManager;
@@ -622,9 +621,7 @@ fn active_models_fall_back_to_usable_choice_or_custom_endpoint_when_default_disa
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
 
-        app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
 
         let custom_model_id = LLMId::from("custom-config-key");
@@ -751,9 +748,7 @@ fn active_models_use_default_when_usable() {
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
 
-        app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
 
         let models = ModelsByFeature {
@@ -805,9 +800,7 @@ fn reconcile_preserves_custom_models_saved_on_execution_profile() {
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
 
-        let profiles_model = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
 
         let custom_model_id = LLMId::from("custom-model-config-key");
@@ -923,9 +916,7 @@ fn team_catalog_hydration_preserves_shared_profile_and_resolves_against_active_t
             manager.subscribe_to_settings_changes(ctx);
         });
 
-        let profiles_model = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
         let profile_id = profiles_model.read(&app, |profiles, _| profiles.default_profile_id());
         profiles_model.update(&mut app, |profiles, ctx| {
@@ -989,9 +980,7 @@ fn reconcile_clears_unavailable_base_model_preference() {
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
 
-        let profiles_model = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
         let profile_id = profiles_model.read(&app, |profiles, _| profiles.default_profile_id());
         let unavailable_model_id = LLMId::from("unavailable-model");
@@ -1040,9 +1029,7 @@ fn reconcile_clears_requires_upgrade_base_model_preference_without_byok() {
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
 
-        let profiles_model = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
         let profile_id = profiles_model.read(&app, |profiles, _| profiles.default_profile_id());
 
@@ -1104,9 +1091,7 @@ fn reconcile_preserves_custom_endpoint_models_not_configured_locally() {
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
 
-        let profiles_model = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
 
         // Simulate a model ID from a custom endpoint on another device.
@@ -1203,9 +1188,7 @@ fn reconcile_preserves_custom_router_models_not_configured_locally() {
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
 
-        let profiles_model = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
 
         // Simulate a local custom-router id from another device.
@@ -1335,9 +1318,7 @@ fn selecting_a_custom_profile_default_clears_the_session_override() {
         app.add_singleton_model(SyncQueue::mock);
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
-        let profiles = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let custom_model_id = LLMId::from("custom-endpoint");
         let preferences = app.add_singleton_model(|ctx| {
             let mut preferences = preferences_for_profile_model_tests(ctx);
@@ -1403,9 +1384,7 @@ fn explicit_child_model_pin_preserves_gui_behavior_and_only_emits_for_effective_
         app.add_singleton_model(SyncQueue::mock);
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
-        let profiles = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profiles = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let preferences = app.add_singleton_model(preferences_for_profile_model_tests);
         let active_model_events = Rc::new(Cell::new(0));
         let captured_events = active_model_events.clone();

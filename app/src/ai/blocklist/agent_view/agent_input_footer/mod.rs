@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ai::document::{AIDocumentId, AIDocumentVersion};
+use ai::harness::Harness;
 use chrono::{DateTime, Local};
 use parking_lot::FairMutex;
 use pathfinder_color::ColorU;
@@ -25,7 +26,6 @@ use toolbar_item::AgentToolbarItemKind;
 use voice_input::{
     StartListeningError, VoiceInputLifecycle, VoiceInputLifecycleState, VoiceSessionResult,
 };
-use warp_cli::agent::Harness;
 use warp_core::ui::color::ContrastingColor;
 use warp_core::ui::color::blend::Blend;
 use warp_core::ui::color::contrast::MinimumAllowedContrast;

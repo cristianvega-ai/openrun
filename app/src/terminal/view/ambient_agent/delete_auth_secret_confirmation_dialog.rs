@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
+use ai::harness::Harness;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
-use warp_cli::agent::Harness;
 use warp_managed_secrets::client::SecretOwner;
 use warpui::elements::{Align, ChildView, Container, Dismiss, DropShadow, Empty};
 use warpui::ui_components::components::UiComponent;

@@ -6,13 +6,13 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use ai::harness::Harness;
 use ai::skills::SkillProvider;
 use enum_iterator::Sequence;
 use markdown_parser::parse_markdown;
 use pathfinder_color::ColorU;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
-use warp_cli::agent::Harness;
 use warp_completer::parsers::simple::top_level_command;
 use warp_editor::content::buffer::Buffer;
 use warp_editor::content::markdown::MarkdownStyle;

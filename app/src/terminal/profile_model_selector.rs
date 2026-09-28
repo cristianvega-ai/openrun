@@ -23,7 +23,7 @@ use warpui::{
 const SIDECAR_HORIZONTAL_GAP: f32 = 8.;
 const SIDECAR_POSITION_ID: &str = "model_sidecar_panel";
 
-use warp_cli::agent::Harness;
+use ai::harness::Harness;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::color::{Opacity, coloru_with_opacity};
 use warp_core::ui::theme::Fill;

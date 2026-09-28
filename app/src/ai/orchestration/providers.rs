@@ -2,8 +2,8 @@
 //! persistence helpers for orchestration edit flows. No GUI types.
 
 use ai::agent::action::RunAgentsRequest;
+use ai::harness::Harness;
 use settings::Setting;
-use warp_cli::agent::Harness;
 use warp_errors::report_if_error;
 use warpui::{AppContext, SingletonEntity};
 

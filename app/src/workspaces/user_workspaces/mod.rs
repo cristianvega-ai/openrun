@@ -44,11 +44,11 @@ use crate::workspaces::workspace::{
 };
 pub(crate) mod billing_workspace_settings;
 pub(crate) mod team_workspace_settings;
+#[cfg(not(target_family = "wasm"))]
+pub(crate) use team_workspace_settings::GeminiEnterpriseBackgroundHost;
 pub(crate) use team_workspace_settings::TeamContextForOperationResolver;
 #[cfg(test)]
 pub(crate) use team_workspace_settings::TeamlessScopeForTest;
-#[cfg(not(target_family = "wasm"))]
-pub(crate) use team_workspace_settings::{GeminiEnterpriseBackgroundHost, TeamScopeForCli};
 pub use team_workspace_settings::{
     ResolvedTeamScope, TeamContext, TeamContextForOperation, TeamContextResolver, TeamScope,
 };
@@ -1687,27 +1687,6 @@ impl UserWorkspaces {
         } else {
             panic!("No workspace found. Did you call setup_test_workspace()?");
         }
-    }
-
-    /// Sets the sandboxed-agent command denylist on [`Self::setup_test_workspace`]'s team, the
-    /// team [`Self::sandboxed_agent_execute_commands_denylist_for_scope`] reads for a scope on
-    /// it.
-    pub fn update_team_sandboxed_agent_denylist<F>(&mut self, f: F, ctx: &mut ModelContext<Self>)
-    where
-        F: FnOnce(&mut SplitListSetting<String>),
-    {
-        self.update_current_workspace(
-            |workspace| {
-                f(&mut workspace
-                    .teams
-                    .first_mut()
-                    .expect("test workspace should have a team")
-                    .settings
-                    .sandboxed_agent
-                    .execute_commands_denylist);
-            },
-            ctx,
-        );
     }
 
     pub fn update_ai_autonomy_settings<F>(&mut self, f: F, ctx: &mut ModelContext<Self>)

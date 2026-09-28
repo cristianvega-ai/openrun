@@ -5,8 +5,8 @@ mod query;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
+use ai::harness::Harness;
 use chrono::{DateTime, Utc};
-use clap::ValueEnum;
 pub use entry::{
     AgentConversationEntry, AgentConversationEntryId, AgentConversationNavigationSubject,
     AgentConversationProvenance,
@@ -17,7 +17,6 @@ use instant::Instant;
 use itertools::Itertools;
 pub use query::query_conversation_entries;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use warp_cli::agent::Harness;
 use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::WarpTheme;
@@ -310,8 +309,7 @@ impl Serialize for HarnessFilter {
 impl<'de> Deserialize<'de> for HarnessFilter {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
-        Ok(Harness::from_str(&raw, false)
-            .ok()
+        Ok(Harness::from_name(&raw)
             .map(HarnessFilter::Specific)
             .unwrap_or(HarnessFilter::All))
     }

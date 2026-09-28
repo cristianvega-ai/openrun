@@ -290,10 +290,10 @@ fn resolve_interactive_defaults(
     ctx: &ViewContext<RunAgentsCardView>,
 ) {
     if orchestration_config_state.model_id.is_empty() {
-        let harness = warp_cli::agent::Harness::parse_orchestration_harness(
+        let harness = ai::harness::Harness::parse_orchestration_harness(
             &orchestration_config_state.harness_type,
         );
-        if matches!(harness, Some(warp_cli::agent::Harness::Oz) | None)
+        if matches!(harness, Some(ai::harness::Harness::Oz) | None)
             && let Some(base) = block_model.base_model(ctx).map(|id| id.to_string())
         {
             orchestration_config_state.model_id = base;
@@ -626,10 +626,10 @@ impl RunAgentsCardView {
                 .resolve_from_config(config);
         }
         if new_state.orchestration_config_state.model_id.is_empty() {
-            let harness = warp_cli::agent::Harness::parse_orchestration_harness(
+            let harness = ai::harness::Harness::parse_orchestration_harness(
                 &new_state.orchestration_config_state.harness_type,
             );
-            if matches!(harness, Some(warp_cli::agent::Harness::Oz) | None)
+            if matches!(harness, Some(ai::harness::Harness::Oz) | None)
                 && let Some(base) = self.block_model.base_model(ctx).map(|id| id.to_string())
             {
                 new_state.orchestration_config_state.model_id = base;
@@ -826,7 +826,7 @@ impl RunAgentsCardView {
         ) {
             return;
         }
-        let Some(harness) = warp_cli::agent::Harness::parse_orchestration_harness(
+        let Some(harness) = ai::harness::Harness::parse_orchestration_harness(
             &self
                 .orchestration_edit_state
                 .orchestration_config_state
@@ -1458,7 +1458,7 @@ impl TypedActionView for RunAgentsCardView {
                     &mut self.orchestration_edit_state.orchestration_config_state,
                     ctx,
                 );
-                if let Some(harness) = warp_cli::agent::Harness::parse_orchestration_harness(
+                if let Some(harness) = ai::harness::Harness::parse_orchestration_harness(
                     &self
                         .orchestration_edit_state
                         .orchestration_config_state

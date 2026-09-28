@@ -33,3 +33,28 @@ fn harness_from_config_name_round_trips_unknown() {
         Some(Harness::Unknown),
     );
 }
+
+#[test]
+fn harness_from_name_accepts_aliases_and_ignores_case() {
+    assert_eq!(Harness::from_name("claude-code"), Some(Harness::Claude));
+    assert_eq!(Harness::from_name("Open-Code"), Some(Harness::OpenCode));
+    assert_eq!(Harness::from_name("CODEX"), Some(Harness::Codex));
+    assert_eq!(Harness::from_name("unknown"), None);
+    assert_eq!(
+        Harness::parse_orchestration_harness(" claude_code "),
+        Some(Harness::Claude)
+    );
+}
+
+#[test]
+fn harness_parse_local_child_harness_rejects_oz() {
+    assert_eq!(Harness::parse_local_child_harness("oz"), None);
+    assert_eq!(
+        Harness::parse_local_child_harness("opencode"),
+        Some(Harness::OpenCode)
+    );
+    assert_eq!(
+        Harness::parse_local_child_harness("codex"),
+        Some(Harness::Codex)
+    );
+}

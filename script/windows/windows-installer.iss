@@ -157,7 +157,7 @@ var
   CmdScriptPath: string;
   CmdScriptContent: string;
 begin
-  { After a successful install, write a helper script for running the Warp CLI. }
+  { After a successful install, write a helper script that runs Warp from the command line. }
   { We use this to add a "warp-" prefix (e.g. "warp-preview.cmd" vs. "preview.exe") }
   if CurStep = ssPostInstall then begin
     { Add Warp to PATH if requested }
@@ -174,7 +174,6 @@ begin
     { Create the helper CMD script }
     CmdScriptPath := BinDir + '\' + CmdScriptName;
     CmdScriptContent := '@echo off' + #13#10 +
-                       'set "WARP_CLI_MODE=1"' + #13#10 +
                        '"' + ExpandConstant('{app}\{#MyAppExeName}') + '" %*' + #13#10;
     
     SaveStringToFile(CmdScriptPath, CmdScriptContent, False);

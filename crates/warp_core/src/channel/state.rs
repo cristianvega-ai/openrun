@@ -19,7 +19,14 @@ lazy_static! {
 
 #[cfg(feature = "test-util")]
 lazy_static! {
-    static ref MOCK_SERVER: Mutex<mockito::ServerGuard> = Mutex::new(mockito::Server::new());
+    // `mockito::Server::new` blocks on its own runtime, which panics when the first URL lookup
+    // happens on a thread that is already driving async tasks, so the server is created on a
+    // dedicated thread.
+    static ref MOCK_SERVER: Mutex<mockito::ServerGuard> = Mutex::new(
+        std::thread::spawn(mockito::Server::new)
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+    );
     static ref MOCK_SERVER_URL: String = MOCK_SERVER.lock().url();
     static ref APP_VERSION: Mutex<Option<&'static str>> = Mutex::new(None);
 }

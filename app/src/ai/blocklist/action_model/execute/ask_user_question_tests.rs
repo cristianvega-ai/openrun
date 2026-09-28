@@ -3,7 +3,6 @@ use ai::agent::action_result::{AskUserQuestionAnswerItem, AskUserQuestionResult}
 use warpui::{App, EntityId, ModelHandle};
 
 use super::*;
-use crate::LaunchMode;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::task::TaskId;
 use crate::ai::agent::{AIAgentAction, AIAgentActionId, AIAgentActionResultType};
@@ -87,9 +86,7 @@ fn initialize_ask_user_question_test(
     app.add_singleton_model(CloudModel::mock);
     app.add_singleton_model(|_| TemplatableMCPServerManager::default());
     app.add_singleton_model(UserWorkspaces::default_mock);
-    let profiles = app.add_singleton_model(|ctx| {
-        AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-    });
+    let profiles = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
     app.add_singleton_model(BlocklistAIPermissions::new);
     // Ensure asking questions is allowed by default regardless of compile-time profile
     // defaults (e.g. agent_mode_evals overrides ask_user_question to Never).

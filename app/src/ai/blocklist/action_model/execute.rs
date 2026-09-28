@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use ai::agent::action_result::{InsertReviewCommentsResult, RequestCommandOutputResult};
+use ai::agent::action_result::InsertReviewCommentsResult;
 pub use ask_user_question::AskUserQuestionExecutor;
 use call_mcp_tool::CallMCPToolExecutor;
 pub(crate) use call_mcp_tool::coerce_integer_args;
@@ -66,7 +66,6 @@ use suggest_new_conversation::SuggestNewConversationExecutor;
 pub use suggest_prompt::PromptSuggestionExecutor;
 use upload_artifact::UploadArtifactExecutor;
 use wait_for_events::WaitForEventsExecutor;
-use warp_core::execution_mode::AppExecutionMode;
 #[cfg(feature = "local_fs")]
 use warp_files::{FileModel, TextFileReadResult};
 #[cfg(feature = "local_fs")]
@@ -287,8 +286,7 @@ impl BlocklistAIActionExecutor {
     ) -> Self {
         let read_files_executor =
             ctx.add_model(|_| ReadFilesExecutor::new(active_session.clone(), terminal_view_id));
-        let upload_artifact_executor = ctx
-            .add_model(|_| UploadArtifactExecutor::new(active_session.clone(), terminal_view_id));
+        let upload_artifact_executor = ctx.add_model(|_| UploadArtifactExecutor);
         let search_codebase_executor = ctx.add_model(|ctx| {
             SearchCodebaseExecutor::new(
                 active_session.clone(),
@@ -578,44 +576,11 @@ impl BlocklistAIActionExecutor {
             conversation_id,
         };
         let can_auto_execute = self.should_autoexecute(input, ctx);
-        let is_agent_autonomous = AppExecutionMode::as_ref(ctx).is_autonomous();
-
-        // The agent cannot auto execute and either:
-        // - the agent is interactive, OR
-        // - the agent is autonomous and the action was not requesting command output
-        let needs_confirmation = !(is_user_initiated
-            || can_auto_execute
-            || (is_agent_autonomous && action.action.is_request_command_output()));
-        if needs_confirmation {
+        if !(is_user_initiated || can_auto_execute) {
             return TryExecuteResult::NotExecuted {
                 action: Box::new(action),
                 reason: NotExecutedReason::NeedsConfirmation,
             };
-        } else if !is_user_initiated && !can_auto_execute && is_agent_autonomous {
-            // It must be the case that the autonomous agent is requesting a denylisted command.
-            if let AIAgentActionType::RequestCommandOutput { command, .. } = &action.action {
-                let action_id = action.id.clone();
-                let result = AIAgentActionResultType::RequestCommandOutput(
-                    RequestCommandOutputResult::Denylisted {
-                        command: command.clone(),
-                    },
-                );
-
-                ctx.emit(BlocklistAIActionExecutorEvent::ExecutingAction {
-                    action_id: action_id.clone(),
-                });
-                ctx.emit(BlocklistAIActionExecutorEvent::FinishedAction {
-                    result: Arc::new(AIAgentActionResult {
-                        id: action_id,
-                        task_id: action.task_id.clone(),
-                        result,
-                    }),
-                    conversation_id,
-                    cancellation_reason: None,
-                });
-
-                return TryExecuteResult::ExecutedSync;
-            }
         }
 
         let action_clone = action.clone();

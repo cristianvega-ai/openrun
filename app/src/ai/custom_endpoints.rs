@@ -6,7 +6,6 @@ use settings::Setting;
 use uuid::Uuid;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
-use crate::LaunchMode;
 use crate::global_resource_handles::GlobalResourceHandlesProvider;
 use crate::settings::{AISettings, AISettingsChangedEvent, SettingsFileError};
 use crate::user_config::{WarpConfig, WarpConfigUpdateEvent};
@@ -14,12 +13,11 @@ use crate::user_config::{WarpConfig, WarpConfigUpdateEvent};
 const CUSTOM_ENDPOINTS_TOML_KEY: &str = "custom_endpoints";
 
 struct CustomEndpointSettingsModel {
-    imports_legacy_endpoints: bool,
     settings_invalid: bool,
 }
 
 impl CustomEndpointSettingsModel {
-    fn new(launch_mode: &LaunchMode, ctx: &mut ModelContext<Self>) -> Self {
+    fn new(ctx: &mut ModelContext<Self>) -> Self {
         let settings_invalid = GlobalResourceHandlesProvider::as_ref(ctx)
             .get()
             .settings_file_error
@@ -51,13 +49,7 @@ impl CustomEndpointSettingsModel {
                 | WarpConfigUpdateEvent::Settings => {}
             },
         );
-        let mut model = Self {
-            imports_legacy_endpoints: matches!(
-                launch_mode,
-                LaunchMode::App { .. } | LaunchMode::Test { .. }
-            ),
-            settings_invalid,
-        };
+        let mut model = Self { settings_invalid };
         model.sync_or_migrate(ctx);
         model
     }
@@ -70,7 +62,7 @@ impl CustomEndpointSettingsModel {
             return;
         }
         let setting = &AISettings::as_ref(ctx).custom_endpoints;
-        if setting.is_value_explicitly_set() || !self.imports_legacy_endpoints {
+        if setting.is_value_explicitly_set() {
             set_active_definitions(setting.value().clone(), ctx);
             return;
         }
@@ -105,8 +97,8 @@ impl Entity for CustomEndpointSettingsModel {
 
 impl SingletonEntity for CustomEndpointSettingsModel {}
 
-pub(crate) fn init(launch_mode: &LaunchMode, ctx: &mut AppContext) {
-    ctx.add_singleton_model(|ctx| CustomEndpointSettingsModel::new(launch_mode, ctx));
+pub(crate) fn init(ctx: &mut AppContext) {
+    ctx.add_singleton_model(CustomEndpointSettingsModel::new);
 }
 
 pub(crate) fn add(params: CustomEndpointParams, ctx: &mut AppContext) -> anyhow::Result<usize> {

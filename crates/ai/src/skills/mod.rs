@@ -5,6 +5,7 @@ mod parser;
 mod read_skills;
 mod skill_provider;
 mod skill_reference;
+mod skill_spec;
 pub use conversion::{
     SkillConversionError, SkillPathOrigin, skill_reference_from_api_skill_ref,
     skill_reference_from_read_skill_ref,
@@ -23,3 +24,4 @@ pub use skill_provider::{
     provider_rank,
 };
 pub use skill_reference::SkillReference;
+pub use skill_spec::SkillSpec;

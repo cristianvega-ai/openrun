@@ -10,8 +10,6 @@ static GLOBAL_EXECUTION_MODE: OnceLock<ExecutionMode> = OnceLock::new();
 pub enum ExecutionMode {
     /// Warp is running as a normal desktop app.
     App,
-    /// Warp is running as a CLI.
-    Sdk,
 }
 
 impl ExecutionMode {
@@ -20,7 +18,6 @@ impl ExecutionMode {
     pub fn client_id(&self) -> &'static str {
         match self {
             ExecutionMode::App => "warp-app",
-            ExecutionMode::Sdk => "warp-cli",
         }
     }
 
@@ -28,33 +25,25 @@ impl ExecutionMode {
     /// no explicit `mcp_execution_path` setting is available.
     ///
     /// The desktop app keeps requiring a shell-derived path, so a failed MCP spawn surfaces
-    /// as an actionable toast instead of silently launching with the wrong PATH. The SDK CLI
-    /// receives an authoritative PATH from its launcher (an interactive shell or a CLI
-    /// invocation) before Warp starts, so inheriting it is safe and is the only PATH
-    /// available to a fresh SDK process before terminal bootstrap populates
-    /// `mcp_execution_path`.
+    /// as an actionable toast instead of silently launching with the wrong PATH.
     pub fn can_inherit_process_path_for_mcp(&self) -> bool {
         match self {
             ExecutionMode::App => false,
-            ExecutionMode::Sdk => true,
         }
     }
 }
 
 /// Model tracking the mode that Warp is running in.
-///
-/// This gates functionality that's disabled when Warp is running in SDK mode.
 #[derive(Clone, Debug)]
 pub struct AppExecutionMode {
     mode: ExecutionMode,
-    is_sandboxed: bool,
 }
 
 impl AppExecutionMode {
     /// Create an `AppExecutionMode` model with the execution mode set.
-    pub fn new(mode: ExecutionMode, is_sandboxed: bool, _ctx: &mut ModelContext<Self>) -> Self {
+    pub fn new(mode: ExecutionMode, _ctx: &mut ModelContext<Self>) -> Self {
         let _ = GLOBAL_EXECUTION_MODE.set(mode);
-        Self { mode, is_sandboxed }
+        Self { mode }
     }
 
     /// True if running as an interactive app client.
@@ -81,23 +70,14 @@ impl AppExecutionMode {
     }
 
     /// Whether the app can show interactive onboarding UIs (e.g. the onboarding
-    /// callout tutorial). Onboarding requires a user to interact with it, so it
-    /// is disabled in headless modes like SDK/CLI.
+    /// callout tutorial). Onboarding requires a user to interact with it.
     pub fn can_show_onboarding(&self) -> bool {
         self.is_app()
     }
 
     /// Whether the app can sync agent conversations (tasks and cloud conversation metadata).
-    /// In CLI mode, we don't need this data since there's no user viewing it.
     pub fn can_fetch_agent_runs_for_management(&self) -> bool {
         self.is_app()
-    }
-
-    /// If true, the app is running autonomously, without a user present.
-    /// Wherever possible, prefer more targeted capability checks like
-    /// [`Self::can_autostart_mcp_servers`].
-    pub fn is_autonomous(&self) -> bool {
-        matches!(self.mode, ExecutionMode::Sdk)
     }
 
     /// Returns the client ID to report to the server.
@@ -109,12 +89,6 @@ impl AppExecutionMode {
     /// no explicit `mcp_execution_path` setting is available.
     pub fn can_inherit_process_path_for_mcp(&self) -> bool {
         self.mode.can_inherit_process_path_for_mcp()
-    }
-
-    /// If true, Warp is running in a sandbox like a Docker container or VM, rather than directly
-    /// on a user machine.
-    pub fn is_sandboxed(&self) -> bool {
-        self.is_sandboxed
     }
 }
 

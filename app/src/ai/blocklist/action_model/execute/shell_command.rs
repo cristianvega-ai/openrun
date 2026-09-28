@@ -11,7 +11,6 @@ use futures_lite::pin;
 use itertools::Itertools;
 use parking_lot::FairMutex;
 use warp_core::command::ExitCode;
-use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_util::path::ShellFamily;
 use warpui::r#async::{Spawnable, Timer};
@@ -191,10 +190,6 @@ impl ShellCommandExecutor {
                         TelemetryEvent::AutoexecutedAgentModeRequestedCommand { reason },
                         ctx
                     );
-                } else if let CommandExecutionPermission::Denied(reason) = autoexecution_permission
-                    && AppExecutionMode::as_ref(ctx).is_autonomous()
-                {
-                    log::warn!("Command denied during autonomous execution, reason: {reason:?}");
                 }
                 autoexecution_permission.is_allowed()
             }

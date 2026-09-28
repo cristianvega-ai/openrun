@@ -1,4 +1,4 @@
-use warp_cli::agent::Harness;
+use ai::harness::Harness;
 use warpui::{AppContext, EntityId, ModelHandle, SingletonEntity};
 
 use crate::ai::agent::api::ServerConversationToken;

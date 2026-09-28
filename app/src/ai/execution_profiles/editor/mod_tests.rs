@@ -4,7 +4,6 @@ use warp_core::features::FeatureFlag;
 use warpui::App;
 
 use super::ui_helpers::context_window_snap_values;
-use crate::LaunchMode;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::execution_profiles::{
     AIExecutionProfile, AIExecutionProfileAppExt as _, has_configurable_context_window,
@@ -73,9 +72,7 @@ fn assert_context_window_limit_for_request(
         app.add_singleton_model(SyncQueue::mock);
         app.add_singleton_model(UpdateManager::mock);
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
-        app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
         let llm_preferences = app.add_singleton_model(LLMPreferences::new);
 
         let profile_model_id = model.id.clone();

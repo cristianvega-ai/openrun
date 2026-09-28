@@ -354,8 +354,7 @@ impl TemplatableMCPServerManager {
                 AuthManagerEvent::CreateAnonymousUserFailed
                 | AuthManagerEvent::AttemptedLoginGatedFeature { .. }
                 | AuthManagerEvent::LoginOverrideDetected(_)
-                | AuthManagerEvent::MintCustomTokenFailed(_)
-                | AuthManagerEvent::ReceivedDeviceAuthorizationCode { .. } => {}
+                | AuthManagerEvent::MintCustomTokenFailed(_) => {}
             });
 
             let server_api_provider = ServerApiProvider::handle(ctx);
@@ -641,15 +640,6 @@ impl TemplatableMCPServerManager {
         });
     }
 
-    /// Get all runnable MCP servers (templatable installations).
-    pub fn get_all_runnable_mcp_servers(ctx: &AppContext) -> Vec<(Uuid, String)> {
-        TemplatableMCPServerManager::as_ref(ctx)
-            .get_installed_templatable_servers()
-            .iter()
-            .map(|(uuid, installation)| (*uuid, installation.templatable_mcp_server().name.clone()))
-            .collect()
-    }
-
     /// Get all cloud synced MCP servers (templatable templates).
     pub fn get_all_cloud_synced_mcp_servers(ctx: &AppContext) -> HashMap<Uuid, String> {
         TemplatableMCPServerManager::as_ref(ctx)
@@ -741,16 +731,6 @@ impl TemplatableMCPServerManager {
             },
             ctx,
         );
-    }
-
-    /// Spawns an ephemeral MCP server started via the CLI (`oz agent run --mcp`).
-    pub fn spawn_cli_ephemeral_server(
-        &mut self,
-        installation: TemplatableMCPServerInstallation,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.cli_spawned_server_uuids.insert(installation.uuid());
-        self.spawn_ephemeral_server(installation, ctx);
     }
 
     /// Reconciles built-in Warp-hosted MCP servers (currently the Factory
@@ -999,8 +979,6 @@ impl TemplatableMCPServerManager {
         // to the server initialization task, if the server requires OAuth.
         let (oauth_result_tx, oauth_result_rx) = async_channel::unbounded();
 
-        let is_headless = AppExecutionMode::as_ref(ctx).is_autonomous();
-
         let mut persisted_credentials = self.server_credentials.get(&template_uuid).cloned();
         if persisted_credentials.is_none() && FeatureFlag::FileBasedMcp.is_enabled() {
             persisted_credentials = installation
@@ -1028,7 +1006,7 @@ impl TemplatableMCPServerManager {
                 callback_mode,
                 uuid: installation_uuid,
                 persisted_credentials,
-                is_headless,
+                is_headless: false,
                 is_file_based,
                 persist_credentials: Box::new(move |installation_uuid, credentials| {
                     let spawner = persist_spawner.clone();

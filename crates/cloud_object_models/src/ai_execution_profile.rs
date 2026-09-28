@@ -8,7 +8,6 @@ use cloud_objects::ids::GenericStringObjectId;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use warp_core::features::FeatureFlag;
 
 use crate::{JsonModel, JsonSerializer};
 
@@ -401,39 +400,6 @@ impl AIExecutionProfile {
             cli_agent_model: None,
             context_window_limit: None,
             autosync_plans_to_warp_drive: false,
-            web_search_enabled: true,
-        }
-    }
-
-    /// This creates a CLI-specific profile that will never ask the user for permission,
-    /// since we cannot do so in a non-interactive setting.
-    pub fn create_default_cli_profile(is_sandboxed: bool) -> Self {
-        let command_denylist = if is_sandboxed {
-            Vec::new()
-        } else {
-            DEFAULT_COMMAND_EXECUTION_DENYLIST.to_vec()
-        };
-
-        Self {
-            name: "Default (CLI)".to_owned(),
-            is_default_profile: true,
-            apply_code_diffs: ActionPermission::AlwaysAllow,
-            read_files: ActionPermission::AlwaysAllow,
-            execute_commands: ActionPermission::AlwaysAllow,
-            mcp_permissions: ActionPermission::AlwaysAllow,
-            write_to_pty: WriteToPtyPermission::AlwaysAllow,
-            ask_user_question: AskUserQuestionPermission::Never,
-            run_agents: RunAgentsPermission::AlwaysAllow,
-            command_denylist,
-            command_allowlist: DEFAULT_COMMAND_EXECUTION_ALLOWLIST.to_vec(),
-            directory_allowlist: Vec::new(),
-            mcp_allowlist: Vec::new(),
-            mcp_denylist: Vec::new(),
-            base_model: None,
-            coding_model: None,
-            cli_agent_model: None,
-            context_window_limit: None,
-            autosync_plans_to_warp_drive: FeatureFlag::SyncAmbientPlans.is_enabled(),
             web_search_enabled: true,
         }
     }

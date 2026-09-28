@@ -4,8 +4,8 @@
 
 use ai::agent::action::RunAgentsExecutionMode;
 use ai::agent::orchestration_config::OrchestrationConfigStatus;
+use ai::harness::Harness;
 use pathfinder_geometry::vector::vec2f;
-use warp_cli::agent::Harness;
 use warp_core::send_telemetry_from_ctx;
 use warp_graphql::queries::get_runners::RunnerSortBy;
 use warpui::elements::{

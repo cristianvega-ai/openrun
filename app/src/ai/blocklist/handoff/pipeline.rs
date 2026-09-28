@@ -20,6 +20,7 @@
 
 use std::collections::HashSet;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -31,8 +32,7 @@ use warp_errors::report_error;
 use warp_util::standardized_path::StandardizedPath;
 use warpui::{AppContext, EntityId, ModelHandle, SingletonEntity};
 
-use super::snapshot::{HandoffUploadResult, SnapshotUploadTarget, upload_handoff_snapshot};
-use super::touched_repos::extract_paths_from_conversation;
+use super::touched_repos::{derive_touched_workspace, extract_paths_from_conversation};
 use super::{HandoffLaunchAttachments, PendingCloudLaunch};
 use crate::ai::agent::conversation::{AIConversation, AIConversationId};
 use crate::ai::agent::{CancellationReason, extract_user_query_mode};
@@ -66,7 +66,7 @@ const HANDOFF_APPLY_SNAPSHOT_PROMPT: &str = "Apply the workspace changes from my
 ///
 /// This input keeps UI discovery outside the shared pipeline: the caller
 /// supplies the relevant terminal/model handles, current working directory,
-/// snapshot execution target, launch payload, and policy facts. Preparation
+/// launch payload, and policy facts. Preparation
 /// consumes these values synchronously and returns a frontend-neutral
 /// [`PendingHandoff`].
 pub struct HandoffPrepareInput {
@@ -77,7 +77,6 @@ pub struct HandoffPrepareInput {
     controller: ModelHandle<BlocklistAIController>,
     context: ModelHandle<BlocklistAIContextModel>,
     current_working_directory: Option<String>,
-    snapshot_target: SnapshotUploadTarget,
     has_long_running_command: bool,
     launch: Option<PendingCloudLaunch>,
     transfer_pending_attachments: bool,
@@ -95,7 +94,6 @@ impl HandoffPrepareInput {
         history: ModelHandle<BlocklistAIHistoryModel>,
         controller: ModelHandle<BlocklistAIController>,
         context: ModelHandle<BlocklistAIContextModel>,
-        snapshot_target: SnapshotUploadTarget,
         entry_point: HandoffEntryPoint,
         surface: HandoffSurface,
     ) -> Self {
@@ -107,7 +105,6 @@ impl HandoffPrepareInput {
             controller,
             context,
             current_working_directory: None,
-            snapshot_target,
             has_long_running_command: false,
             launch: None,
             transfer_pending_attachments: true,
@@ -280,7 +277,6 @@ pub struct PendingHandoff {
     selected_model_id: String,
     model_is_cloud_runnable: bool,
     config: AgentConfigSnapshot,
-    snapshot_target: SnapshotUploadTarget,
     snapshot_disabled: bool,
     orchestration_handoff: Option<bool>,
     team_scope: RequestTeamScope,
@@ -353,7 +349,6 @@ pub fn prepare_handoff(
         controller,
         context,
         current_working_directory,
-        snapshot_target,
         has_long_running_command,
         launch,
         transfer_pending_attachments,
@@ -546,7 +541,6 @@ pub fn prepare_handoff(
         selected_model_id: model_id,
         model_is_cloud_runnable,
         config,
-        snapshot_target,
         snapshot_disabled,
         orchestration_handoff,
         team_scope,
@@ -833,10 +827,9 @@ async fn fork_source_conversation(
     })
 }
 
-/// Uploads workspace state and converts the fork stage into spawn-ready data.
-///
-/// Snapshot upload failure is non-fatal: the returned stage records the
-/// failure and omits the token so execution can still create the cloud run.
+/// Derives the workspace the source touched and converts the fork stage into
+/// spawn-ready data. No workspace snapshot is uploaded, so the cloud run starts
+/// without an initial snapshot token.
 async fn prepare_snapshot_for_spawn(forked: ForkedHandoff) -> SnapshotSettledHandoff {
     let PendingHandoff {
         source_conversation: _,
@@ -853,23 +846,17 @@ async fn prepare_snapshot_for_spawn(forked: ForkedHandoff) -> SnapshotSettledHan
         selected_model_id: _,
         model_is_cloud_runnable: _,
         config,
-        snapshot_target,
         snapshot_disabled,
         orchestration_handoff,
         team_scope,
     } = forked.pending;
-    let (workspace, snapshot_result) = upload_handoff_snapshot(source_paths, snapshot_target).await;
+    let local_paths: Vec<PathBuf> = source_paths
+        .iter()
+        .map(|path| path.to_local_path_lossy())
+        .collect();
+    let workspace = derive_touched_workspace(local_paths).await;
     let derived_workspace_had_content =
         !workspace.repos.is_empty() || !workspace.orphan_files.is_empty();
-    let (initial_snapshot_token, snapshot_failed) = match snapshot_result {
-        Ok(HandoffUploadResult::Uploaded(token)) => (Some(token), false),
-        Ok(HandoffUploadResult::EmptyWorkspace) => (None, false),
-        Err(error) => {
-            let _ = error;
-            log::warn!("Handoff snapshot upload failed; continuing without a snapshot");
-            (None, true)
-        }
-    };
     SnapshotSettledHandoff {
         spawn_ready: SpawnReadyHandoff {
             prompt,
@@ -881,10 +868,10 @@ async fn prepare_snapshot_for_spawn(forked: ForkedHandoff) -> SnapshotSettledHan
             orchestration_handoff,
         },
         forked_conversation_id: forked.forked_conversation_id,
-        initial_snapshot_token,
+        initial_snapshot_token: None,
         restoration,
         derived_workspace_had_content,
-        snapshot_failed,
+        snapshot_failed: false,
         team_scope,
     }
 }

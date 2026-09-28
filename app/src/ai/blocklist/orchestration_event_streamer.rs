@@ -2,11 +2,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
+use ai::harness::Harness;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::channel::mpsc;
 use uuid::Uuid;
-use warp_cli::agent::Harness;
 use warp_multi_agent_api as api;
 use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::{
@@ -200,9 +200,8 @@ struct ConversationStreamState {
     /// triggered when the recipient streams a `MessagesReceivedFromAgents`
     /// chunk through `BlocklistAIHistoryEvent::UpdatedStreamingExchange`.
     pending_message_ids: Vec<String>,
-    /// Local consumers (terminal pane id for an open agent view, driver
-    /// model id for `agent_sdk`) that need events delivered to this
-    /// conversation.
+    /// Local consumers (terminal pane ids of open agent views) that need
+    /// events delivered to this conversation.
     consumers: HashSet<EntityId>,
     /// Execution harness from the task row, when available. Local harness
     /// child conversations are created before they have server conversation
@@ -274,8 +273,7 @@ struct OrchestratorStreamState {
 ///
 /// Holds at most one long-lived SSE connection per conversation. The
 /// streamer opens a connection only when a conversation has both an
-/// active local consumer (an open agent view, or an `agent_sdk` driver
-/// in CLI / cloud worker processes) and at least one orchestration role
+/// active local consumer (an open agent view) and at least one orchestration role
 /// in this process — being a child, or having registered child run_ids.
 /// Without a local consumer the events would have nowhere to go, so the
 /// connection stays closed and the cursor is used to backfill once a
@@ -301,10 +299,6 @@ pub struct OrchestrationEventStreamer {
 
 #[allow(private_interfaces)]
 pub enum OrchestrationEventStreamerEvent {
-    DormantClaudeWakeReady {
-        conversation_id: AIConversationId,
-        wake_message: AgentMessageEventMetadata,
-    },
     /// First time the streamer has seen a particular `run_id` under
     /// `parent_task_id`. Emitted exactly once per child.
     ChildSpawned {
@@ -942,15 +936,6 @@ impl OrchestrationEventStreamer {
         }
     }
 
-    #[cfg(not(target_family = "wasm"))]
-    pub(crate) fn persist_dormant_claude_wake_cursor(
-        &mut self,
-        conversation_id: AIConversationId,
-        wake_message: &AgentMessageEventMetadata,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.persist_event_cursor(conversation_id, wake_message.sequence, ctx);
-    }
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         let provider = ServerApiProvider::as_ref(ctx);
         let ai_client = provider.get_ai_client();
@@ -2102,7 +2087,7 @@ impl OrchestrationEventStreamer {
 
     /// True iff this conversation should currently hold an SSE connection.
     /// A subscription is needed only when there is an active consumer in
-    /// this process (an open agent view or an agent_sdk driver) AND the
+    /// this process (an open agent view) AND the
     /// conversation has a real role to consume events for. Passive views
     /// of agent runs hosted elsewhere are excluded regardless of state.
     fn is_eligible(&self, conversation_id: AIConversationId, ctx: &warpui::AppContext) -> bool {
@@ -2312,14 +2297,6 @@ impl OrchestrationEventStreamer {
                     wake_message.sequence,
                     wake_message.message_id
                 );
-                // Leave the durable cursor untouched here. The controller only
-                // persists the wake sequence after Claude wake preparation
-                // successfully stages/surfaces the message into the parent
-                // bridge, so failed prepares can still replay the event.
-                ctx.emit(OrchestrationEventStreamerEvent::DormantClaudeWakeReady {
-                    conversation_id,
-                    wake_message,
-                });
             }
             Ok(None) => {
                 log::warn!(
@@ -2830,14 +2807,11 @@ fn build_pending_events(
 // ---- Free-function consumer registration helpers ---------------------
 //
 // Wrap the singleton handle update so call sites in `ActiveAgentViewsModel`
-// and the agent_sdk driver don't have to repeat the boilerplate.
-// The generic bound covers both
+// don't have to repeat the boilerplate. The generic bound covers both
 // `&mut AppContext` and `&mut ModelContext<T>` / `&mut ViewContext<T>`.
 //
 // Consumers are identified by an `EntityId` — the terminal pane's id
-// for an agent view, the driver model's id for `agent_sdk`. The
-// streamer never branches on consumer kind, so a single pair of helpers
-// covers both call sites.
+// for an agent view.
 
 /// Registers a consumer of orchestration agent events for `conversation_id`.
 pub fn register_agent_event_consumer<C>(

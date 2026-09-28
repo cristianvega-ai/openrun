@@ -32,7 +32,7 @@ use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::{ClientId, SyncId};
 use crate::settings::{AISettings, AISettingsChangedEvent, AgentModeCommandExecutionPredicate};
 use crate::workspaces::user_workspaces::UserWorkspaces;
-use crate::{CloudModel, LaunchMode, TelemetryEvent, send_telemetry_from_ctx};
+use crate::{CloudModel, TelemetryEvent, send_telemetry_from_ctx};
 
 #[derive(Clone, Debug)]
 pub struct AIExecutionProfileInfo {
@@ -59,15 +59,8 @@ impl AIExecutionProfileInfo {
 }
 
 /// Enables file-backed profiles for flagged GUI builds.
-///
-/// CLI mode retains its dedicated in-memory behavior.
-fn file_backed_execution_profiles_enabled(launch_mode: &LaunchMode) -> bool {
-    match launch_mode {
-        LaunchMode::App { .. } | LaunchMode::Test { .. } => {
-            FeatureFlag::FileBackedExecutionProfiles.is_enabled()
-        }
-        LaunchMode::CommandLine { .. } => false,
-    }
+fn file_backed_execution_profiles_enabled() -> bool {
+    FeatureFlag::FileBackedExecutionProfiles.is_enabled()
 }
 
 /// Selects the authoritative persistence backend for execution profiles.
@@ -84,16 +77,13 @@ enum ProfileSource {
 
 impl ProfileSource {
     /// Resolves the persistence backend for this launch.
-    fn for_launch_mode(launch_mode: &LaunchMode) -> Self {
-        if !file_backed_execution_profiles_enabled(launch_mode) {
+    fn for_launch() -> Self {
+        if !file_backed_execution_profiles_enabled() {
             return Self::LegacyCloudObjects;
         }
 
         Self::SettingsCollection {
-            migrates_legacy_cloud_profiles: matches!(
-                launch_mode,
-                LaunchMode::App { .. } | LaunchMode::Test { .. }
-            ),
+            migrates_legacy_cloud_profiles: true,
         }
     }
 
@@ -184,13 +174,6 @@ pub enum DefaultProfileState {
     Synced {
         id: ExecutionProfileId,
     },
-    /// Currently, the behavior of the CLI default is that it
-    /// cannot be updated and will never be synced.
-    #[allow(dead_code)]
-    Cli {
-        id: ExecutionProfileId,
-        profile: AIExecutionProfile,
-    },
 }
 
 impl std::fmt::Display for DefaultProfileState {
@@ -198,7 +181,6 @@ impl std::fmt::Display for DefaultProfileState {
         match self {
             DefaultProfileState::Unsynced { .. } => write!(f, "Unsynced"),
             DefaultProfileState::Synced { .. } => write!(f, "Synced"),
-            DefaultProfileState::Cli { .. } => write!(f, "CLI"),
         }
     }
 }
@@ -208,7 +190,6 @@ impl DefaultProfileState {
         match self {
             DefaultProfileState::Unsynced { id, .. } => id.clone(),
             DefaultProfileState::Synced { id } => id.clone(),
-            DefaultProfileState::Cli { id, .. } => id.clone(),
         }
     }
 }
@@ -222,10 +203,9 @@ pub struct AIExecutionProfilesModel {
     preserve_profile_onboarding_overrides: bool,
     /// Previous settings snapshot used only to classify collection change events.
     last_settings_profiles: ExecutionProfilesConfig,
-    /// The default profile can be in one of three states:
+    /// The default profile can be in one of two states:
     /// - Unsynced: No cloud object backing the profile. It's purely local read-only data.
     /// - Synced: A cloud object backs the profile, created either when edited locally or received from cloud.
-    /// - CLI: When running in CLI mode, a more permissive default profile that doesn't sync to cloud.
     ///
     /// Note that the default_profile_state becomes synced either (1) when an edit happens on
     /// this client or (2) when a default profile is received from the cloud model (say, it was
@@ -239,10 +219,9 @@ pub struct AIExecutionProfilesModel {
 }
 
 impl AIExecutionProfilesModel {
-    #[allow(unused_variables)]
-    pub(crate) fn new(launch_mode: &LaunchMode, ctx: &mut ModelContext<Self>) -> Self {
+    pub(crate) fn new(ctx: &mut ModelContext<Self>) -> Self {
         // Resolve the persistence backend before constructing any source-specific state.
-        let source = ProfileSource::for_launch_mode(launch_mode);
+        let source = ProfileSource::for_launch();
         let uses_file_backed_profiles = source.is_settings_collection();
         let imports_legacy_profiles = source.imports_legacy_profiles();
 
@@ -305,31 +284,18 @@ impl AIExecutionProfilesModel {
                         profile_id_to_sync_id.insert(profile_id, cloud_profile.id);
                     }
 
-                    let default_profile_state = match launch_mode {
-                        LaunchMode::App { .. }
-                        | LaunchMode::Test { .. } => {
-                            match default_profile_from_cloud {
-                                Some(p) => {
-                                    let execution_profile_id =
-                                        source.legacy_profile_id(p.id, true);
-                                    profile_id_to_sync_id.insert(execution_profile_id.clone(), p.id);
-                                    DefaultProfileState::Synced {
-                                        id: execution_profile_id,
-                                    }
-                                }
-                                None => DefaultProfileState::Unsynced {
-                                    id: source.default_profile_id(),
-                                    profile: super::create_default_from_legacy_settings(ctx),
-                                },
+                    let default_profile_state = match default_profile_from_cloud {
+                        Some(p) => {
+                            let execution_profile_id = source.legacy_profile_id(p.id, true);
+                            profile_id_to_sync_id.insert(execution_profile_id.clone(), p.id);
+                            DefaultProfileState::Synced {
+                                id: execution_profile_id,
                             }
                         }
-                        // When running as a CLI, we ignore the GUI default and use a more permissive default.
-                        LaunchMode::CommandLine { is_sandboxed, .. } => {
-                            DefaultProfileState::Cli {
-                                profile: AIExecutionProfile::create_default_cli_profile(*is_sandboxed),
-                                id: ExecutionProfileId::new(),
-                            }
-                        }
+                        None => DefaultProfileState::Unsynced {
+                            id: source.default_profile_id(),
+                            profile: super::create_default_from_legacy_settings(ctx),
+                        },
                     };
                     (
                         default_profile_state,
@@ -939,11 +905,6 @@ impl AIExecutionProfilesModel {
                     data,
                 }
             }
-            DefaultProfileState::Cli { id, profile } => AIExecutionProfileInfo {
-                id: id.clone(),
-                sync_id: None,
-                data: profile.clone(),
-            },
         }
     }
 
@@ -978,10 +939,9 @@ impl AIExecutionProfilesModel {
                     data,
                 });
         }
-        // Handle an unsynced default profile (including CLI)
+        // Handle an unsynced default profile
         match &self.default_profile_state {
-            DefaultProfileState::Unsynced { id, profile }
-            | DefaultProfileState::Cli { id, profile } => {
+            DefaultProfileState::Unsynced { id, profile } => {
                 if profile_id == id {
                     return Some(AIExecutionProfileInfo {
                         id: id.clone(),
@@ -1808,14 +1768,6 @@ impl AIExecutionProfilesModel {
             }
             return true;
         }
-        // We don't yet support editing the default profile for the CLI.
-        if let DefaultProfileState::Cli { id, .. } = &self.default_profile_state
-            && id == profile_id
-        {
-            log::warn!("Attempted to edit CLI default profile, which is not yet supported.");
-            return false;
-        }
-
         // Case: this might be an edit to a not-yet-created default profile object. If so, we need to create
         // a cloud object to back the default profile.
         if let DefaultProfileState::Unsynced { id, profile } = &self.default_profile_state
@@ -2054,12 +2006,6 @@ impl AIExecutionProfilesModel {
 
         // Check if this is the default profile
         if object.model().string_model.is_default_profile {
-            // Don't add the cloud default profile if we're in CLI mode
-            if matches!(self.default_profile_state, DefaultProfileState::Cli { .. }) {
-                log::info!("Ignoring cloud default profile in CLI mode: {sync_id:?}");
-                return;
-            }
-
             // If we're in an unsynced state, transition to synced
             if let DefaultProfileState::Unsynced { id, .. } = &self.default_profile_state {
                 let id = id.clone();
@@ -2220,39 +2166,15 @@ impl AIExecutionProfilesModel {
                 }
             }
             match &mut self.default_profile_state {
-                DefaultProfileState::Unsynced { id, .. }
-                | DefaultProfileState::Synced { id }
-                | DefaultProfileState::Cli { id, .. }
+                DefaultProfileState::Unsynced { id, .. } | DefaultProfileState::Synced { id }
                     if *id == profile_id =>
                 {
                     id.clone_from(&migrated_profile_id);
                 }
-                DefaultProfileState::Unsynced { .. }
-                | DefaultProfileState::Synced { .. }
-                | DefaultProfileState::Cli { .. } => {}
+                DefaultProfileState::Unsynced { .. } | DefaultProfileState::Synced { .. } => {}
             }
         }
         log::info!("Updated profile id mapping after creating a new execution profile");
-    }
-
-    /// Replaces the given profile's data with CLI defaults for the given sandboxed state.
-    /// Use in tests to simulate the profile configuration used by the sandboxed CLI agent.
-    #[cfg(test)]
-    pub fn apply_cli_profile_defaults_for_test(
-        &mut self,
-        profile_id: &ExecutionProfileId,
-        is_sandboxed: bool,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let cli_profile = AIExecutionProfile::create_default_cli_profile(is_sandboxed);
-        self.edit_profile_internal(
-            profile_id,
-            move |profile| {
-                *profile = cli_profile;
-                true
-            },
-            ctx,
-        );
     }
 }
 

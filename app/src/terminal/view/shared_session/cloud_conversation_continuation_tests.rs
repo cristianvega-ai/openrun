@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use ai::harness::Harness;
 use chrono::Utc;
 use persistence::model::ConversationUsageMetadata;
-use warp_cli::agent::Harness;
 use warp_graphql::object_permissions::AccessLevel;
 use warpui::{App, EntityId, SingletonEntity};
 

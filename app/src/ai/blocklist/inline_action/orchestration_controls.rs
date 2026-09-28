@@ -7,9 +7,9 @@
 //! from field-change events to their own action enum.
 
 use ai::agent::action::RunAgentsExecutionMode;
+use ai::harness::Harness;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
-use warp_cli::agent::Harness;
 use warp_core::ui::theme::Fill;
 use warpui::elements::{
     Border, ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Empty,

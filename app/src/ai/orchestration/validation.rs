@@ -1,7 +1,7 @@
 //! Frontend-neutral validation predicates for orchestration edit flows.
 
 use ai::agent::action::RunAgentsExecutionMode;
-use warp_cli::agent::Harness;
+use ai::harness::Harness;
 use warpui::AppContext;
 
 use super::config_state::{AuthSecretSelection, OrchestrationConfigState};

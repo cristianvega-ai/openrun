@@ -10,8 +10,6 @@ use warp_core::channel::{Channel, ChannelState};
 #[cfg(not(target_family = "wasm"))]
 mod docker;
 #[cfg(not(target_family = "wasm"))]
-mod docker_sandbox;
-#[cfg(not(target_family = "wasm"))]
 mod kubernetes;
 #[cfg(not(target_family = "wasm"))]
 mod namespace;
@@ -32,13 +30,9 @@ const WARP_WORKLOAD_TOKEN_ENV: &str = "WARP_WORKLOAD_TOKEN";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IsolationPlatformType {
-    /// Warp is running within a Docker container. Note that this does *not* mean this is a Warp-hosted
-    /// Docker Sandboxes environment. Instead, it's likely a self-hosted agent.
+    /// Warp is running within a Docker container, likely as a self-hosted agent.
     #[cfg(not(target_family = "wasm"))]
     Docker,
-    /// Warp is running within a Docker Sandbox, likely as a Warp-hosted agent.
-    #[cfg(not(target_family = "wasm"))]
-    DockerSandbox,
     /// Warp is running within a Kubernetes pod, likely as a self-hosted agent.
     #[cfg(not(target_family = "wasm"))]
     Kubernetes,
@@ -119,10 +113,6 @@ pub async fn issue_workload_token(
 ) -> Result<WorkloadToken, IsolationPlatformError> {
     match detect() {
         #[cfg(not(target_family = "wasm"))]
-        Some(IsolationPlatformType::DockerSandbox) => {
-            docker_sandbox::issue_workload_token(duration).await
-        }
-        #[cfg(not(target_family = "wasm"))]
         Some(IsolationPlatformType::Namespace) => namespace::issue_workload_token(duration).await,
         #[cfg(not(target_family = "wasm"))]
         // Check for a platform-agnostic workload token if there's no
@@ -152,7 +142,7 @@ pub fn workload_token_available() -> bool {
 fn is_workload_token_available_for(platform: Option<IsolationPlatformType>) -> bool {
     match platform {
         #[cfg(not(target_family = "wasm"))]
-        Some(IsolationPlatformType::DockerSandbox) | Some(IsolationPlatformType::Namespace) => true,
+        Some(IsolationPlatformType::Namespace) => true,
         #[cfg(not(target_family = "wasm"))]
         _ => read_generic_workload_token().is_ok(),
         #[cfg(target_family = "wasm")]
@@ -181,7 +171,6 @@ fn platform_from_env() -> Option<IsolationPlatformType> {
     let value = std::env::var(WARP_ISOLATION_PLATFORM_ENV).ok()?;
     match value.as_str() {
         "docker" => Some(IsolationPlatformType::Docker),
-        "docker_sandbox" => Some(IsolationPlatformType::DockerSandbox),
         "kubernetes" => Some(IsolationPlatformType::Kubernetes),
         "namespace" => Some(IsolationPlatformType::Namespace),
         other => {

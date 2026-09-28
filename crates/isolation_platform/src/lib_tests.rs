@@ -5,9 +5,6 @@ use super::*;
 #[test]
 fn workload_token_available_for_platforms_with_their_own_issuance() {
     assert!(is_workload_token_available_for(Some(
-        IsolationPlatformType::DockerSandbox
-    )));
-    assert!(is_workload_token_available_for(Some(
         IsolationPlatformType::Namespace
     )));
 }

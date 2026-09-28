@@ -5,10 +5,10 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use ai::harness::Harness;
 use chrono::{Local, Utc};
 use parking_lot::FairMutex;
 use session_sharing_protocol::common::CLIAgentSessionState;
-use warp_cli::agent::Harness;
 use warp_terminal::model::escape_sequences::{BRACKETED_PASTE_END, BRACKETED_PASTE_START, C0};
 use warpui::notification::UserNotification;
 use warpui::platform::WindowStyle;

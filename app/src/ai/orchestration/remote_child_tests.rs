@@ -38,13 +38,10 @@ fn config(harness_type: &str) -> RemoteChildLaunchConfig {
 
 #[test]
 fn orchestration_harness_defaults_to_oz_and_parses_known_harnesses() {
-    assert_eq!(
-        config("").orchestration_harness(),
-        warp_cli::agent::Harness::Oz
-    );
+    assert_eq!(config("").orchestration_harness(), ai::harness::Harness::Oz);
     assert_eq!(
         config("claude").orchestration_harness(),
-        warp_cli::agent::Harness::Claude
+        ai::harness::Harness::Claude
     );
 }
 

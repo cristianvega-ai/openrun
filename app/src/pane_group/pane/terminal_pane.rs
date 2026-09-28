@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::sync::mpsc::SyncSender;
 
 #[cfg(not(target_family = "wasm"))]
-use url::Url;
+use ai::harness::Harness;
 #[cfg(not(target_family = "wasm"))]
-use warp_cli::agent::Harness;
+use url::Url;
 use warp_core::execution_mode::AppExecutionMode;
 use warp_errors::report_error;
 use warpui::{

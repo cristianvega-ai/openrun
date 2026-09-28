@@ -4760,9 +4760,6 @@ impl TerminalView {
         if let BlocklistAIControllerEvent::SentRequest { model_id, .. } = event {
             self.maybe_insert_aws_bedrock_login_banner(model_id, ctx);
         }
-        if let BlocklistAIControllerEvent::ExecuteLocalHarnessCommand { command } = event {
-            self.execute_command_or_set_pending(command, ctx);
-        }
         if let BlocklistAIControllerEvent::FinishedReceivingOutput {
             conversation_id, ..
         } = event
@@ -7632,9 +7629,6 @@ impl TerminalView {
         &self.ai_input_model
     }
 
-    /// Used by [`crate::ai::agent_sdk::driver::checkpoint_coordinator`] to check whether the
-    /// terminal's conversation has any pending or running actions before starting a periodic
-    /// checkpoint attempt.
     pub fn ai_action_model(&self) -> &ModelHandle<BlocklistAIActionModel> {
         &self.ai_action_model
     }
@@ -17943,33 +17937,6 @@ impl TerminalView {
 
     fn edit_prompt(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.emit(Event::OpenPromptEditor);
-    }
-
-    /// Sets the input mode to AI and locks it. If `query` is `Some`, pre-fills the input box with
-    /// the given query and focuses the input box.
-    pub fn set_ai_input_mode_with_query(
-        &mut self,
-        query: Option<&str>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.ai_input_model.update(ctx, |ai_input, ctx| {
-            ai_input.set_input_config(
-                InputConfig {
-                    input_type: InputType::AI,
-                    is_locked: true,
-                },
-                query.is_none(),
-                ctx,
-            );
-        });
-
-        self.input().update(ctx, |input, ctx| {
-            if let Some(query) = query {
-                input.replace_buffer_content(query, ctx);
-            }
-
-            input.focus_input_box(ctx);
-        });
     }
 
     fn show_find_bar(&mut self, ctx: &mut ViewContext<Self>) {

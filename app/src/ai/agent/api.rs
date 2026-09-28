@@ -19,7 +19,6 @@ pub use r#impl::generate_multi_agent_output;
 use mcp::TemplatableMCPServerInfo;
 use serde::Serialize;
 use warp_core::channel::{Channel, ChannelState};
-use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_core::user_preferences::GetUserPreferences;
 use warpui::{AppContext, EntityId, SingletonEntity as _};
@@ -351,18 +350,8 @@ impl RequestParams {
         });
         let allow_use_of_warp_credits = *AISettings::as_ref(app).can_use_warp_credits_for_fallback;
 
-        let app_execution_mode = AppExecutionMode::as_ref(app);
-        let autonomy_level = if app_execution_mode.is_autonomous() {
-            warp_multi_agent_api::AutonomyLevel::Unsupervised
-        } else {
-            warp_multi_agent_api::AutonomyLevel::Supervised
-        };
-
-        let isolation_level = if app_execution_mode.is_sandboxed() {
-            warp_multi_agent_api::IsolationLevel::Sandbox
-        } else {
-            warp_multi_agent_api::IsolationLevel::None
-        };
+        let autonomy_level = warp_multi_agent_api::AutonomyLevel::Supervised;
+        let isolation_level = warp_multi_agent_api::IsolationLevel::None;
 
         let web_search_enabled =
             BlocklistAIPermissions::as_ref(app).get_web_search_enabled(app, terminal_view_id);

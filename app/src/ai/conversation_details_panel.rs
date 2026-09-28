@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use ai::harness::Harness;
+use ai::skills::SkillSpec;
 use chrono::{DateTime, Duration, Local};
 use instant::Instant;
 use parking_lot::RwLock;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
-use warp_cli::agent::Harness;
-use warp_cli::skill::SkillSpec;
 use warp_core::channel::ChannelState;
 use warp_core::ui::color::coloru_with_opacity;
 use warp_graphql::queries::get_runners::Runner;
@@ -32,8 +32,6 @@ use warpui::{
 };
 
 use crate::ai::agent::api::ServerConversationToken;
-#[cfg(not(target_family = "wasm"))]
-use crate::ai::agent::conversation::AIAgentHarness;
 use crate::ai::agent::conversation::{
     AIConversation, AIConversationId, ConversationStatus, StatusColorStyle,
 };
@@ -676,16 +674,6 @@ pub enum ConversationDetailsPanelAction {
     OpenInOz,
 }
 
-#[cfg(not(target_family = "wasm"))]
-#[derive(Debug)]
-enum DetailsPanelLocalContinuationInfo {
-    Conversation(AIConversationId),
-    ThirdPartyTask {
-        task_id: AmbientAgentTaskId,
-        harness: AIAgentHarness,
-    },
-}
-
 pub fn init(app: &mut AppContext) {
     use warpui::keymap::macros::*;
 
@@ -880,10 +868,7 @@ impl ConversationDetailsPanel {
     }
 
     #[cfg(not(target_family = "wasm"))]
-    fn local_continuation_info(
-        &self,
-        app: &AppContext,
-    ) -> Option<DetailsPanelLocalContinuationInfo> {
+    fn local_continuation_info(&self, app: &AppContext) -> Option<AIConversationId> {
         if !AISettings::as_ref(app).is_any_ai_enabled(app) {
             return None;
         }
@@ -898,12 +883,9 @@ impl ConversationDetailsPanel {
                 if status.is_in_progress() {
                     return None;
                 }
-                Some(DetailsPanelLocalContinuationInfo::Conversation(
-                    *ai_conversation_id.as_ref()?,
-                ))
+                Some(*ai_conversation_id.as_ref()?)
             }
             PanelMode::Task {
-                task_id,
                 display_status,
                 conversation_id,
                 ..
@@ -914,26 +896,19 @@ impl ConversationDetailsPanel {
                 }
 
                 match self.data.harness {
-                    Some(Harness::Claude) => {
-                        Some(DetailsPanelLocalContinuationInfo::ThirdPartyTask {
-                            task_id: *task_id.as_ref()?,
-                            harness: AIAgentHarness::ClaudeCode,
-                        })
-                    }
-                    Some(Harness::Codex) => {
-                        Some(DetailsPanelLocalContinuationInfo::ThirdPartyTask {
-                            task_id: *task_id.as_ref()?,
-                            harness: AIAgentHarness::Codex,
-                        })
-                    }
                     Some(Harness::Oz) | None => {
                         let server_token =
                             ServerConversationToken::new(conversation_id.as_ref()?.clone());
                         BlocklistAIHistoryModel::as_ref(app)
                             .find_conversation_id_by_server_token(&server_token)
-                            .map(DetailsPanelLocalContinuationInfo::Conversation)
                     }
-                    Some(Harness::Gemini | Harness::OpenCode | Harness::Unknown) => None,
+                    Some(
+                        Harness::Claude
+                        | Harness::Codex
+                        | Harness::Gemini
+                        | Harness::OpenCode
+                        | Harness::Unknown,
+                    ) => None,
                 }
             }
         }
@@ -2554,26 +2529,14 @@ impl TypedActionView for ConversationDetailsPanel {
             }
             #[cfg(not(target_family = "wasm"))]
             ConversationDetailsPanelAction::ContinueLocally => {
-                if let Some(continuation_info) = self.local_continuation_info(ctx) {
+                if let Some(conversation_id) = self.local_continuation_info(ctx) {
                     send_telemetry_from_ctx!(
                         AgentManagementTelemetryEvent::DetailsPanelContinueLocally,
                         ctx
                     );
-                    match continuation_info {
-                        DetailsPanelLocalContinuationInfo::Conversation(conversation_id) => {
-                            ctx.dispatch_typed_action(
-                                &WorkspaceAction::ContinueConversationLocally { conversation_id },
-                            );
-                        }
-                        DetailsPanelLocalContinuationInfo::ThirdPartyTask { task_id, harness } => {
-                            ctx.dispatch_typed_action(
-                                &WorkspaceAction::ContinueThirdPartyConversationLocally {
-                                    task_id,
-                                    harness,
-                                },
-                            );
-                        }
-                    }
+                    ctx.dispatch_typed_action(&WorkspaceAction::ContinueConversationLocally {
+                        conversation_id,
+                    });
                 }
             }
             ConversationDetailsPanelAction::OpenInOz => {

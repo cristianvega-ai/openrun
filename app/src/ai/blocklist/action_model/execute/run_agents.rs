@@ -11,11 +11,10 @@ use ai::agent::action_result::{
     RunAgentsResult,
 };
 use ai::agent::orchestration_config::OrchestrationConfig;
+use ai::harness::Harness;
 use ai::skills::SkillReference;
 use futures::FutureExt;
 use futures::future::BoxFuture;
-use warp_cli::agent::Harness;
-use warp_core::execution_mode::AppExecutionMode;
 use warp_core::{send_telemetry_from_app_ctx, send_telemetry_from_ctx};
 use warpui::{Entity, EntityId, ModelContext, ModelHandle, SingletonEntity};
 
@@ -456,9 +455,6 @@ impl RunAgentsExecutor {
         let AIAgentActionType::RunAgents(request) = &input.action.action else {
             return false;
         };
-        if AppExecutionMode::as_ref(ctx).is_autonomous() {
-            return true;
-        }
         // Child conversations live in hidden panes where a confirmation card
         // would be invisible and hang the run. Always auto-execute — even
         // with `MultiLevelOrchestration` disabled — so the policy checks in
@@ -555,10 +551,6 @@ fn prepare_request_for_execution(
         duplicate_launched_agents_reason(request, parent_conversation_id, launched_agents, ctx)
     {
         return Some(reason);
-    }
-
-    if AppExecutionMode::as_ref(ctx).is_autonomous() {
-        return None;
     }
 
     // A child conversation cannot present a confirmation card (hidden pane),

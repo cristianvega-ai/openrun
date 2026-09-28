@@ -326,32 +326,3 @@ fn test_lifecycle_event_type_from_proto_includes_cancelled_and_blocked() {
         api::LifecycleEventType::Blocked
     );
 }
-
-#[test]
-fn test_has_pending_events_tracks_any_event_kind() {
-    let conversation_id = crate::ai::agent::conversation::AIConversationId::new();
-    let mut service = OrchestrationEventService::new_without_subscriptions();
-    assert!(!service.has_pending_events(conversation_id));
-    service.pending_events.insert(
-        conversation_id,
-        vec![
-            lifecycle_pending_event(
-                "lifecycle-1",
-                "child-a",
-                api::LifecycleEventType::InProgress,
-                0,
-            ),
-            message_pending_event("message-event-1"),
-            lifecycle_pending_event(
-                "lifecycle-2",
-                "child-b",
-                api::LifecycleEventType::Succeeded,
-                0,
-            ),
-            message_pending_event("message-event-2"),
-        ],
-    );
-    assert!(service.has_pending_events(conversation_id));
-    service.pending_events.remove(&conversation_id);
-    assert!(!service.has_pending_events(conversation_id));
-}

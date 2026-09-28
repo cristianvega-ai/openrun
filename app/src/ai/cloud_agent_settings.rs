@@ -5,9 +5,9 @@
 
 use std::collections::HashMap;
 
+use ai::harness::Harness;
 use settings::macros::define_settings_group;
 use settings::{Setting as _, SupportedPlatforms, SyncToCloud};
-use warp_cli::agent::Harness;
 use warp_errors::report_if_error;
 
 use crate::server::ids::SyncId;

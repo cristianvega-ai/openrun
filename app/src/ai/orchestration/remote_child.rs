@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_family = "wasm"))]
 use std::str::FromStr;
 
+use ai::harness::Harness;
+#[cfg(not(target_family = "wasm"))]
+use ai::skills::SkillSpec;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use prost::Message as _;
-use warp_cli::agent::Harness;
-#[cfg(not(target_family = "wasm"))]
-use warp_cli::skill::SkillSpec;
 use warp_multi_agent_api as multi_agent_api;
 #[cfg(not(target_family = "wasm"))]
 use warp_util::local_or_remote_path::LocalOrRemotePath;
@@ -216,9 +216,9 @@ pub fn prepare_remote_child_launch(
     let harness_override = if harness_type.is_empty() {
         None
     } else {
-        match <Harness as clap::ValueEnum>::from_str(&harness_type, true) {
-            Ok(harness) => Some(HarnessConfig::from_harness_type(harness)),
-            Err(_) => {
+        match Harness::from_name(&harness_type) {
+            Some(harness) => Some(HarnessConfig::from_harness_type(harness)),
+            None => {
                 log::warn!(
                     "Unknown child-agent harness type: {harness_type:?}; omitting harness override so the server picks its default"
                 );

@@ -4,9 +4,8 @@
 //!   compose/auto-submit request from the input into the handoff pipeline.
 //! - `pipeline`: prepares a handoff from shared conversation state, preserves
 //!   the prompt and attachments needed for failure restoration, and executes
-//!   the server fork, frontend materialization, snapshot upload, and cloud run
-//!   spawn in a fixed order.
-//! - `snapshot`: gives the pipeline one local/remote snapshot-upload interface.
+//!   the server fork, frontend materialization, and cloud run spawn in a fixed
+//!   order.
 //! - `touched_repos`: walks the conversation's action history to collect every
 //!   filesystem path the local agent has touched, groups those paths into git
 //!   roots and orphan files, and exposes the env-overlap pick used by the
@@ -16,8 +15,7 @@
 //! obtain a `PendingHandoff`. It may update the pending environment or model
 //! selection before passing ownership to `execute_handoff`. The execution
 //! pipeline invokes the frontend's materialization callback after selecting or
-//! creating the server conversation fork, then prepares the workspace snapshot
-//! and spawns the cloud run. The resulting outcome contains the state each
+//! creating the server conversation fork, then spawns the cloud run. The resulting outcome contains the state each
 //! frontend needs to monitor the created run or restore failed input.
 
 use super::PendingAttachment;
@@ -25,8 +23,6 @@ use crate::server::server_api::ai::AttachmentInput;
 
 #[cfg(feature = "local_fs")]
 mod pipeline;
-#[cfg(feature = "local_fs")]
-pub(crate) mod snapshot;
 #[cfg(feature = "local_fs")]
 pub(crate) mod touched_repos;
 

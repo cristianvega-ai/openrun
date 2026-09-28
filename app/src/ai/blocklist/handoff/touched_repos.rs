@@ -43,26 +43,22 @@ use crate::server::ids::SyncId;
 /// [`MAX_TOOL_CALLS_TO_SCAN`].
 pub(crate) const MAX_TOOL_CALLS_TO_SCAN: usize = 500;
 
-/// Soft cap on each git invocation we dispatch. Mirrors the cap used by the cloud-side
-/// snapshot pipeline so individual filesystem hiccups don't stall the modal indefinitely.
+/// Soft cap on each git invocation we dispatch, so individual filesystem hiccups don't
+/// stall the modal indefinitely.
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The collection of git repos and orphan files the local agent has touched in the
-/// active conversation. Drives both the snapshot upload plan and the modal's env-
-/// overlap status row.
+/// active conversation. Drives the modal's env-overlap status row.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TouchedWorkspace {
     pub repos: Vec<TouchedRepo>,
     /// Files touched outside any `.git` directory.
-    /// They're captured as raw file contents in the snapshot manifest.
     pub orphan_files: Vec<PathBuf>,
 }
 
 /// A single git repo touched by the local agent.
 #[derive(Clone, Debug)]
 pub(crate) struct TouchedRepo {
-    /// Absolute path to the working tree root (the directory containing `.git`).
-    pub git_root: PathBuf,
     /// `<owner>/<repo>` parsed from the `origin` remote URL, when discoverable.
     /// Drives env-overlap matching against `CloudAmbientAgentEnvironment.github_repos`
     /// and the modal's per-repo status row label.
@@ -110,7 +106,7 @@ pub(crate) async fn derive_touched_workspace(paths: Vec<PathBuf>) -> TouchedWork
             .await
             .as_deref()
             .and_then(parse_github_repo);
-        TouchedRepo { git_root, repo_id }
+        TouchedRepo { repo_id }
     });
     let repos: Vec<TouchedRepo> = join_all(metadata_futures).await;
 
@@ -201,7 +197,7 @@ pub(crate) async fn resolve_repo_for_path(path: &Path) -> Option<TouchedRepo> {
         .await
         .as_deref()
         .and_then(parse_github_repo);
-    Some(TouchedRepo { git_root, repo_id })
+    Some(TouchedRepo { repo_id })
 }
 
 /// Suggests the available environment whose configured repositories overlap

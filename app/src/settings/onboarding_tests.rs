@@ -5,7 +5,6 @@ use onboarding::{SelectedSettings, UICustomizationSettings};
 use warp_core::features::FeatureFlag;
 use warpui::{App, SingletonEntity};
 
-use crate::LaunchMode;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::execution_profiles::{
     AIExecutionProfile, ActionPermission, CloudAIExecutionProfileModel,
@@ -79,9 +78,7 @@ fn apply_onboarding_settings_preserves_existing_cloud_profile_on_existing_user_l
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
         app.add_singleton_model(PrivacySettings::mock);
         app.add_singleton_model(UserWorkspaces::default_mock);
-        let profile_model = app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        let profile_model = app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
 
         // The existing user's stored cloud default profile. Values are
         // deliberately chosen to differ from both `AIExecutionProfile`'s
@@ -196,9 +193,7 @@ fn account_first_settings_enable_agent_for_authenticated_users_and_apply_ui_choi
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
         app.add_singleton_model(PrivacySettings::mock);
         app.add_singleton_model(UserWorkspaces::default_mock);
-        app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
 
         let selected_settings = SelectedSettings::AgentDrivenDevelopment {
             agent_settings: AgentDevelopmentSettings {
@@ -260,9 +255,7 @@ fn apply_account_first_onboarding_settings_sets_dollars_for_new_accounts_only() 
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
         app.add_singleton_model(PrivacySettings::mock);
         app.add_singleton_model(UserWorkspaces::default_mock);
-        app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
 
         let selected_settings = SelectedSettings::Terminal {
             ui_customization: None,
@@ -339,9 +332,7 @@ fn apply_onboarding_settings_gates_third_party_ai_on_account() {
         app.add_singleton_model(|_| TemplatableMCPServerManager::default());
         app.add_singleton_model(PrivacySettings::mock);
         app.add_singleton_model(UserWorkspaces::default_mock);
-        app.add_singleton_model(|ctx| {
-            AIExecutionProfilesModel::new(&LaunchMode::new_for_unit_test(), ctx)
-        });
+        app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
 
         let onboarding_settings = SelectedSettings::AgentDrivenDevelopment {
             agent_settings: AgentDevelopmentSettings {

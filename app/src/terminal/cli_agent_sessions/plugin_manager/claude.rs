@@ -14,7 +14,6 @@ use crate::terminal::model::session::LocalCommandExecutor;
 use crate::terminal::shell::ShellType;
 
 const PLUGIN_KEY: &str = "warp@claude-code-warp";
-const PLATFORM_PLUGIN_KEY: &str = "oz-harness-support@claude-code-warp";
 
 const MARKETPLACE_REPO: &str = "warpdotdev/claude-code-warp";
 const MARKETPLACE_NAME: &str = "claude-code-warp";
@@ -22,8 +21,6 @@ const MARKETPLACE_NAME: &str = "claude-code-warp";
 // Keep in sync with the plugin version in warpdotdev/claude-code-warp.
 // (See the Versioning section of that repo's README.)
 const MINIMUM_PLUGIN_VERSION: &str = "2.1.0";
-// Keep in sync with the oz-harness-support plugin version in warpdotdev/claude-code-warp.
-const MINIMUM_PLATFORM_PLUGIN_VERSION: &str = "1.1.2";
 
 pub(super) struct ClaudeCodePluginManager {
     executor: LocalCommandExecutor,
@@ -67,24 +64,6 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
             return false;
         };
         check_installed(&claude_dir)
-    }
-
-    fn is_platform_plugin_installed(&self) -> bool {
-        let Ok(claude_dir) = claude_home_dir() else {
-            return false;
-        };
-        check_platform_plugin_installed(&claude_dir)
-    }
-
-    fn platform_plugin_needs_update(&self) -> bool {
-        let Ok(claude_dir) = claude_home_dir() else {
-            return false;
-        };
-        match installed_platform_plugin_version(&claude_dir) {
-            Some(v) => compare_versions(&v, MINIMUM_PLATFORM_PLUGIN_VERSION).is_lt(),
-            // No version field means very old plugin.
-            None => check_platform_plugin_installed(&claude_dir),
-        }
     }
 
     /// Runs `claude plugin` CLI commands via the session shell.
@@ -163,43 +142,6 @@ impl CliAgentPluginManager for ClaudeCodePluginManager {
             None => check_installed(&claude_dir),
         }
     }
-
-    async fn install_platform_plugin(&self) -> Result<(), PluginInstallError> {
-        let mut log = String::new();
-        self.run_logged(
-            &["plugin", "marketplace", "add", MARKETPLACE_REPO],
-            &mut log,
-        )
-        .await?;
-        self.run_logged(&["plugin", "install", PLATFORM_PLUGIN_KEY], &mut log)
-            .await?;
-        Ok(())
-    }
-
-    async fn update_platform_plugin(&self) -> Result<(), PluginInstallError> {
-        let mut log = String::new();
-        self.run_logged(
-            &["plugin", "marketplace", "add", MARKETPLACE_REPO],
-            &mut log,
-        )
-        .await?;
-        self.run_logged(&["plugin", "install", PLATFORM_PLUGIN_KEY], &mut log)
-            .await?;
-
-        let still_outdated = claude_home_dir()
-            .ok()
-            .and_then(|dir| installed_platform_plugin_version(&dir))
-            .map(|v| compare_versions(&v, MINIMUM_PLATFORM_PLUGIN_VERSION).is_lt())
-            .unwrap_or(true);
-        if still_outdated {
-            log.push_str("Post-update version check: platform plugin is still outdated\n");
-            return Err(PluginInstallError {
-                message: "Platform plugin update did not take effect".to_owned(),
-                log,
-            });
-        }
-        Ok(())
-    }
 }
 
 static INSTALL_INSTRUCTIONS: LazyLock<PluginInstructions> = LazyLock::new(|| PluginInstructions {
@@ -256,10 +198,6 @@ fn check_installed(claude_dir: &Path) -> bool {
     check_plugin_installed(claude_dir, PLUGIN_KEY)
 }
 
-fn check_platform_plugin_installed(claude_dir: &Path) -> bool {
-    check_plugin_installed(claude_dir, PLATFORM_PLUGIN_KEY)
-}
-
 fn check_plugin_installed(claude_dir: &Path, plugin_key: &str) -> bool {
     let plugins_path = claude_dir.join("plugins").join("installed_plugins.json");
     let Ok(contents) = fs::read_to_string(plugins_path) else {
@@ -279,11 +217,6 @@ fn check_plugin_installed(claude_dir: &Path, plugin_key: &str) -> bool {
 /// Reads the installed version string for the Warp plugin, if present.
 fn installed_version(claude_dir: &Path) -> Option<String> {
     installed_plugin_version(claude_dir, PLUGIN_KEY)
-}
-
-/// Reads the installed version string for the Oz platform plugin, if present.
-fn installed_platform_plugin_version(claude_dir: &Path) -> Option<String> {
-    installed_plugin_version(claude_dir, PLATFORM_PLUGIN_KEY)
 }
 
 fn installed_plugin_version(claude_dir: &Path, plugin_key: &str) -> Option<String> {

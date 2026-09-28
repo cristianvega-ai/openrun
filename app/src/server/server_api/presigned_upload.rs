@@ -1,6 +1,5 @@
+use std::collections::HashMap;
 use std::future::Future;
-#[cfg(feature = "local_fs")]
-use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow};
 #[cfg(not(target_family = "wasm"))]
@@ -11,13 +10,50 @@ pub use warp_server_client::HttpStatusError;
 
 #[cfg(feature = "local_fs")]
 use super::ai::FileArtifactUploadTargetInfo;
-use super::harness_support::{UploadFieldValue, UploadTarget};
+
+/// A presigned upload target returned by the server.
+#[serde_with::serde_as]
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct UploadTarget {
+    pub url: String,
+    pub method: String,
+    #[serde(default)]
+    #[serde_as(deserialize_as = "serde_with::DefaultOnNull")]
+    pub headers: HashMap<String, String>,
+    /// Ordered multipart form fields for POST uploads.
+    #[serde(default)]
+    #[serde_as(deserialize_as = "serde_with::DefaultOnNull")]
+    pub fields: Vec<UploadField>,
+}
+
+/// A single multipart form field on a POST upload target.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct UploadField {
+    pub name: String,
+    pub value: UploadFieldValue,
+}
+
+/// Descriptor for a field value when uploading to an [`UploadTarget`].
+/// This is currently only used for `POST` requests, but may be supported
+/// for HTTP headers in the future.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UploadFieldValue {
+    /// Literal string value known at URL-generation time.
+    Static { value: String },
+    /// Client should compute CRC32C of the upload, base64-encode the 4-byte
+    /// big-endian result, and send it as this field's value.
+    // `snake_case` would derive `content_crc32_c`, which does not match the
+    // `ContentCRC32CFieldValue` discriminator in warp-server's OpenAPI schema.
+    #[serde(rename = "content_crc32c")]
+    ContentCrc32C,
+    /// Client should use the raw upload bytes as this field's value.
+    ContentData,
+}
 
 #[cfg(not(target_family = "wasm"))]
 pub(crate) static CRC32C: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 const CONTENT_LENGTH_HEADER_NAME: &str = "content-length";
-#[cfg(feature = "local_fs")]
-const FILE_UPLOAD_CHUNK_SIZE: usize = 64 * 1024;
 
 struct NormalizedUploadTarget<'a> {
     url: &'a str,
@@ -134,68 +170,6 @@ impl UploadBody for Vec<u8> {
 
     async fn into_reqwest_body(self) -> Result<reqwest::Body> {
         Ok(reqwest::Body::from(self))
-    }
-}
-
-/// `UploadBody` implementation backed by a file on disk. Used for streaming
-/// artifact uploads without buffering the file content in memory.
-#[cfg(feature = "local_fs")]
-#[derive(Debug, Clone)]
-pub struct FileUploadBody {
-    path: PathBuf,
-}
-
-#[cfg(feature = "local_fs")]
-impl FileUploadBody {
-    pub fn new(path: PathBuf) -> Self {
-        Self { path }
-    }
-}
-
-#[cfg(feature = "local_fs")]
-impl UploadBody for FileUploadBody {
-    fn length(&self) -> u64 {
-        // Read metadata on demand so callers don't have to keep a pre-computed
-        // size in sync with the file on disk. Returning 0 on a stat failure is
-        // safe: reqwest will still stream the actual bytes, and any PUT paths
-        // that use this for `Content-Length` already tolerate unknown lengths.
-        std::fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0)
-    }
-
-    async fn compute_crc32c_base64(&self) -> Result<String> {
-        use std::io::Read as _;
-        let path = self.path.clone();
-
-        // Compute the checksum as a blocking task for 2 reasons:
-        // - Filesystem operations generally aren't natively async to begin with
-        // - Checksum calculation is CPU-bound, and shouldn't tie up an async worker thread
-        tokio::task::spawn_blocking(move || -> Result<String> {
-            let mut file = std::fs::File::open(&path)
-                .with_context(|| format!("Failed to open artifact file '{}'", path.display()))?;
-            let mut digest = CRC32C.digest();
-            let mut buf = vec![0u8; FILE_UPLOAD_CHUNK_SIZE];
-            loop {
-                let n = file.read(&mut buf).with_context(|| {
-                    format!("Failed to read artifact file '{}'", path.display())
-                })?;
-                if n == 0 {
-                    break;
-                }
-                digest.update(&buf[..n]);
-            }
-            Ok(encode_crc32c_base64(digest.finalize()))
-        })
-        .await
-        .context("CRC32C computation task failed to join")?
-    }
-
-    async fn into_reqwest_body(self) -> Result<reqwest::Body> {
-        let file = tokio::fs::File::open(&self.path)
-            .await
-            .with_context(|| format!("Failed to open artifact file '{}'", self.path.display()))?;
-        Ok(reqwest::Body::wrap_stream(
-            tokio_util::io::ReaderStream::new(file),
-        ))
     }
 }
 
@@ -393,35 +367,6 @@ fn encode_crc32c_base64(crc32c: u32) -> String {
     // Storage providers expect the checksum as base64 of the raw big-endian CRC32C bytes,
     // not the more human-readable hex string we typically log.
     STANDARD.encode(crc32c.to_be_bytes())
-}
-
-/// Upload a file artifact. Always computes the base64 CRC32C so callers can
-/// pass it to `confirmFileArtifactUpload`.
-#[cfg(feature = "local_fs")]
-pub(crate) async fn upload_file_to_target(
-    http_client: &http_client::Client,
-    target: &FileArtifactUploadTargetInfo,
-    body: impl UploadBody,
-) -> Result<String> {
-    let normalized = NormalizedUploadTarget::from(target);
-    let error_context = UploadErrorContext {
-        transport: "Failed to upload artifact bytes",
-        failure: "Artifact upload",
-    };
-
-    // `confirmFileArtifactUpload` always needs the CRC32C, so we always compute
-    // it up front and then hand it to the dispatcher so the multipart path
-    // doesn't recompute it.
-    let crc32c_base64 = body.compute_crc32c_base64().await?;
-    send_upload(
-        http_client,
-        &normalized,
-        body,
-        Some(crc32c_base64.clone()),
-        error_context,
-    )
-    .await?;
-    Ok(crc32c_base64)
 }
 
 #[cfg(test)]

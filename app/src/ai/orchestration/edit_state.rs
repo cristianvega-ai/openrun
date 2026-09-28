@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use ai::agent::action::RunAgentsExecutionMode;
-use warp_cli::agent::Harness;
+use ai::harness::Harness;
 use warpui::{AppContext, SingletonEntity};
 
 use super::config_state::{AuthSecretSelection, OrchestrationConfigState};

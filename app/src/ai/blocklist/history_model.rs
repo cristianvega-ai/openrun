@@ -4,6 +4,7 @@ use std::sync::Arc;
 #[cfg(feature = "local_fs")]
 use std::sync::Mutex;
 
+use ai::harness::Harness;
 use ai::skills::SkillPathOrigin;
 use anyhow::anyhow;
 use chrono::{DateTime, Local, NaiveDateTime};
@@ -12,7 +13,6 @@ use diesel::SqliteConnection;
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use warp_cli::agent::Harness;
 use warp_core::features::FeatureFlag;
 use warp_multi_agent_api::RequestCharges;
 use warp_multi_agent_api::client_action::{Action, StartNewConversation};
@@ -1104,25 +1104,6 @@ impl BlocklistAIHistoryModel {
         self.conversations_by_id
             .get(&conversation_id)
             .is_some_and(|c| c.is_exchange_hidden(exchange_id))
-    }
-
-    /// Test-only, crate-visible wrapper around [`Self::update_conversation_for_new_request_input`]
-    /// so tests outside this module (e.g. `agent_sdk::driver_tests`) can attach an in-flight
-    /// request to a conversation without widening that method's production visibility.
-    #[cfg(test)]
-    pub(crate) fn update_conversation_for_new_request_input_for_test(
-        &mut self,
-        request_input: RequestInput,
-        stream_id: ResponseStreamId,
-        terminal_surface_id: EntityId,
-        ctx: &mut ModelContext<Self>,
-    ) -> Result<(), UpdateHistoryError> {
-        self.update_conversation_for_new_request_input(
-            request_input,
-            stream_id,
-            terminal_surface_id,
-            ctx,
-        )
     }
 
     /// Add a new [`AIAgentExchange`] to the [`AIConversation`] with the given [`AIConversationId`].

@@ -500,12 +500,6 @@ impl OrchestrationChildTracker {
             .map(conversation_status_from_lifecycle_event_type)
     }
 
-    /// Test-only: number of metadata-fetch dispatches issued so far.
-    #[cfg(test)]
-    pub(crate) fn metadata_fetch_dispatch_count(&self) -> usize {
-        self.metadata_fetch_dispatch_count
-    }
-
     /// Test-only: whether metadata has been requested but not yet applied for
     /// `run_id`.
     #[cfg(test)]

@@ -1,5 +1,5 @@
+use ai::harness::Harness;
 use anyhow::{Result, anyhow};
-use warp_cli::agent::Harness;
 use warp_graphql::managed_secrets::ManagedSecretType;
 use warp_managed_secrets::ManagedSecretValue;
 

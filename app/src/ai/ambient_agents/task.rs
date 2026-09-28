@@ -1,14 +1,12 @@
 //! Ambient agent task types and utilities.
 
+use ai::harness::Harness;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-#[cfg(not(target_family = "wasm"))]
-pub use cloud_object_models::HarnessModelConfig;
 pub use cloud_object_models::{AgentConfigSnapshot, HarnessAuthSecretsConfig, HarnessConfig};
 use iso8601_duration::Duration as Iso8601Duration;
 use serde::{Deserialize, Serialize};
 use session_sharing_protocol::common::SessionId;
 use url::Url;
-use warp_cli::agent::Harness;
 use warp_core::ui::theme::WarpTheme;
 use warp_errors::report_error;
 use warpui::color::ColorU;
@@ -312,14 +310,6 @@ pub struct AttachmentInput {
     pub file_name: String,
     pub mime_type: String,
     pub data: String, // base64-encoded data
-}
-
-/// Information about a task attachment retrieved from the server
-#[derive(Clone, Debug)]
-pub struct TaskAttachment {
-    pub file_id: String,
-    pub filename: String,
-    pub download_url: String,
 }
 
 /// Returns the trimmed orchestrator agent name, or `None` when empty / whitespace-only.
