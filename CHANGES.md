@@ -65,6 +65,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp Drive: 1Password and LastPass secrets](#warp-drive-1password-and-lastpass-secrets) — removed the external secret manager integration, whose only entry point was environment-variable collections
 - [Session sharing: viewer, joins and shared-session model state](#session-sharing-viewer-joins-and-shared-session-model-state) — removed joining and viewing another user's shared session (the viewer network, presence, tombstones, join links and the viewer paths through the terminal model, input, panes and workspace) and the shared-session state and replication in the terminal model and input editor
 - [Session-sharing protocol dependency](#session-sharing-protocol-dependency) — dropped the `session-sharing-protocol` crate and its patch entry, so no crate can build the relay wire types
+- [Warp-distributed CLI-agent plugins](#warp-distributed-cli-agent-plugins) — removed the install/update flows, the "Enable notifications" chips, the manual-instructions pane and the OpenCode debug actions for the `claude-code-warp`, `codex-warp`, `gemini-cli-warp` and `opencode-warp` plugins; the OSC 777/9 listener stays
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1714,3 +1715,29 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 **User-visible impact:** None.
 
 **Notes:** `cargo tree --workspace -i session-sharing-protocol` finds nothing. The build-time git dependencies on other `warpdotdev/*` forks are unchanged.
+
+## Warp-distributed CLI-agent plugins
+**Why:** The notification plugins for Claude Code, Codex, Gemini CLI and OpenCode are installed from Warp-owned sources (`warpdotdev/claude-code-warp`, the Codex marketplace, `github.com/warpdotdev/gemini-cli-warp`, the `opencode-warp` npm package). The chips that ran those installs made the app reach GitHub, npm and the agents' marketplaces on the user's behalf, which conflicts with the offline goal.
+
+**Removed:**
+- `terminal/cli_agent_sessions/plugin_manager/` (the per-agent install/update/version-check managers, the manual instruction texts, `PluginModalKind`, `MINIMUM_PLUGIN_VERSION` and its tests).
+- `terminal/view/cli_agent_footer/plugin_chip.rs`: the "Enable notifications" / "Update Warp plugin" chips, their dismiss button and per-agent themes, the debounce timer, the install log written to the temp directory and the progress/success/error toasts.
+- `terminal/view/plugin_instructions_block.rs`, `RichContentType::PluginInstructionsBlock` and `RichContentMetadata::PluginInstructionsBlock`, `WorkspaceView::open_plugin_instructions_pane`, and the `Event::OpenPluginInstructionsPane` / `InputEvent::{RegisterPluginListener, OpenPluginInstructionsPane}` / `CLIAgentFooterEvent::{PluginInstalled, OpenPluginInstructionsPane}` plumbing through `Input`, `TerminalView`, `TerminalPane` and `PaneGroup`.
+- The plugin `CLIAgentFooterAction` variants (install, update, the two instruction panes, dismiss).
+- The `[Debug] Install OpenCode Warp plugin` and `[Debug] Use local OpenCode Warp plugin` actions and bindings, and the helper that edited `~/.config/opencode/opencode.json`.
+- The chip-dismissal settings `PluginInstallChipDismissedMap` and `PluginUpdateChipDismissedForVersionMap` (private, never in the settings file).
+- Session state that only served the flows above: `CLIAgentSession::{plugin_version, remote_host, custom_command_prefix, is_remote}`, `CLIAgentSessionsModel::{record_plugin_auto_failure, has_plugin_auto_failed}`, the `plugin_version` field of the event payload and of the `CLIAgentNotification` wire struct, `TerminalView::active_session_remote_host`, and `TerminalModel::active_shell_launch_data` (added for plugin auto-install).
+- Telemetry: `CLIAgentPlugin{ChipClicked, ChipDismissed, OperationSucceeded, OperationFailed, Detected}` and `PluginChipTelemetry{Kind, Action}`.
+- Tests: the plugin manager tests, the failure-tracking and `plugin_version` session tests.
+
+**Modified:**
+- `CLIAgentFooter` no longer renders a plugin chip; the agent icon is followed directly by the configured toolbar items.
+- `register_cli_agent_listener_without_session_start_event` (Codex and Grok proactive registration) sends a `SessionStart` event with an empty payload.
+- The tooltip on "Auto show/hide Rich Input based on agent status" says "Requires a notification plugin for your coding agent".
+
+**User-visible impact:** No install or update chip appears under Claude Code, Codex, Gemini CLI or OpenCode, and Warp no longer installs, updates or version-checks any plugin. A plugin the user installs by hand (for example from an enterprise mirror) still lights up rich status, notifications, vertical-tab status and Rich Input auto-toggle, because the OSC 777 / OSC 9 listener and the CLI-agent session model are unchanged. Agents without a plugin keep the plain toolbar, Rich Input and command detection.
+
+**Notes:**
+- Left for FLAGS-1: `FeatureFlag::{OpenCodeNotifications, CodexNotifications, GeminiNotifications}` now gate nothing (their doc comments still describe the chips), and `CodexPlugin` still gates Codex structured events in the listener.
+- The `CLIAgentPlugin*` telemetry variants are deleted here with their callers; TEL-4 still deletes the rest of `events.rs`.
+- Left for SWP-10: the `docs.warp.dev/terminal/integrations-and-plugins` link in `resource_center/sections.rs`.

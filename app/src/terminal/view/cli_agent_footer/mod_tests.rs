@@ -17,10 +17,7 @@ fn claude_session() -> CLIAgentSession {
         input_state: CLIAgentInputState::Closed,
         should_auto_toggle_input: false,
         listener: None,
-        plugin_version: None,
-        remote_host: None,
         draft_text: None,
-        custom_command_prefix: None,
         received_rich_notification: false,
     }
 }

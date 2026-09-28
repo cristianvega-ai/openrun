@@ -238,8 +238,6 @@ use crate::suggestions::ignored_suggestions_model::{
 };
 use crate::terminal::CLIAgent;
 use crate::terminal::buy_credits_banner::{BuyCreditsBanner, BuyCreditsBannerEvent};
-#[cfg(not(target_family = "wasm"))]
-use crate::terminal::cli_agent_sessions::plugin_manager::PluginModalKind;
 use crate::terminal::cli_agent_sessions::{
     CLIAgentInputState, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
 };
@@ -951,9 +949,6 @@ pub enum Event {
     TriggerEnvironmentSetup {
         repos: Vec<String>,
     },
-    RegisterPluginListener(CLIAgent),
-    #[cfg(not(target_family = "wasm"))]
-    OpenPluginInstructionsPane(CLIAgent, PluginModalKind),
     OpenHandoffEnvironmentCreationModal,
     OpenCloudModeV2EnvironmentCreationModal,
 }
@@ -2534,13 +2529,6 @@ impl Input {
                 }
                 CLIAgentFooterEvent::ShowContextMenu { position } => {
                     me.show_prompt_context_menu(*position, ctx);
-                }
-                CLIAgentFooterEvent::PluginInstalled(agent) => {
-                    ctx.emit(Event::RegisterPluginListener(*agent));
-                }
-                #[cfg(not(target_family = "wasm"))]
-                CLIAgentFooterEvent::OpenPluginInstructionsPane(agent, kind) => {
-                    ctx.emit(Event::OpenPluginInstructionsPane(*agent, *kind));
                 }
             }
         });

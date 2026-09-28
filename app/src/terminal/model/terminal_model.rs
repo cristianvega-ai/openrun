@@ -407,12 +407,6 @@ pub struct TerminalModel {
     /// After bootstrapping, this is set to None.
     pending_shell_launch_data: Option<ShellLaunchData>,
 
-    /// The resolved shell launch data for the login shell.
-    /// Unlike `pending_shell_launch_data`, this persists after bootstrap
-    /// so that subsystems (e.g. plugin auto-install) can read the actual
-    /// shell rather than the user preference.
-    active_shell_launch_data: Option<ShellLaunchData>,
-
     /// Partially populated `SessionInfo` from the `InitShell` DCS payload.
     ///
     /// This is used to construct a final, populated `SessionInfo` after the session is
@@ -1054,7 +1048,6 @@ impl TerminalModel {
             event_proxy,
             pending_ssh_wrapper_session: None,
             pending_shell_launch_data: None,
-            active_shell_launch_data: None,
             pending_session_info: None,
             ignore_bootstrapping_messages: false,
             session_startup_path,
@@ -1672,12 +1665,7 @@ impl TerminalModel {
     }
 
     pub fn set_pending_shell_launch_data(&mut self, shell_launch_data: ShellLaunchData) {
-        self.active_shell_launch_data = Some(shell_launch_data.clone());
         self.pending_shell_launch_data = Some(shell_launch_data);
-    }
-
-    pub fn active_shell_launch_data(&self) -> Option<&ShellLaunchData> {
-        self.active_shell_launch_data.as_ref()
     }
 
     /// The shell process backing this terminal, or `None` before it has spawned

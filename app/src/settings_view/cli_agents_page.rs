@@ -633,7 +633,7 @@ impl SettingsWidget for CLIAgentAutoToggleRichInputWidget {
                 on_click_action: None,
                 secondary_text: None,
                 tooltip_override_text: Some(
-                    "Requires the Warp plugin for your coding agent".to_owned(),
+                    "Requires a notification plugin for your coding agent".to_owned(),
                 ),
             }),
             ToggleState::Enabled,
