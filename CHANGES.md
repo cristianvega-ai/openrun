@@ -67,6 +67,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Session sharing: viewer, joins and shared-session model state](#session-sharing-viewer-joins-and-shared-session-model-state) — removed joining and viewing another user's shared session (the viewer network, presence, tombstones, join links and the viewer paths through the terminal model, input, panes and workspace) and the shared-session state and replication in the terminal model and input editor
 - [Session-sharing protocol dependency](#session-sharing-protocol-dependency) — dropped the `session-sharing-protocol` crate and its patch entry, so no crate can build the relay wire types
 - [Warp-distributed CLI-agent plugins](#warp-distributed-cli-agent-plugins) — removed the install/update flows, the "Enable notifications" chips, the manual-instructions pane and the OpenCode debug actions for the `claude-code-warp`, `codex-warp`, `gemini-cli-warp` and `opencode-warp` plugins; the OSC 777/9 listener stays
+- [Agent tips](#agent-tips) — removed the rotating "Tip:" line under the agent warping indicator and the cloud-mode loading screen, the Show agent tips setting and its toggle
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1558,7 +1559,7 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 **User-visible impact:** First launch shows four slides and then the terminal. There is no AI choice, no tutorial in the terminal, no Get Started tab and no open/create/clone buttons on an empty window. A stale `get_started` tab in a saved session fails to restore until DB-1 deletes its rows.
 
 **Notes:**
-- `ai/agent_tips.rs` is not deleted here: its remaining callers are in code other tasks own (see the report to the orchestrator).
+- `ai/agent_tips.rs` went in the separate "Agent tips" section below.
 - `terminal/view/block_onboarding/onboarding_prompt_block.rs` has no AI content (it is the prompt-style chooser used by settings import), so it stays.
 - `crates/onboarding/src/bin/main.rs` still builds as a demo of the four slides.
 - `FeatureFlag::AgentOnboarding` still gates showing the slides at startup. `GetStartedTab`, `HOAOnboardingFlow` and `AccountFirstOnboarding` are no longer read. FLAGS-1 removes all four.
@@ -1770,3 +1771,19 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for AI-16: `AiCreditsUsageBucket::Voice` and its handling in `settings_view/billing_and_usage/`.
 - `ai/agent/api/impl.rs` still sets the protobuf `warp_drive_context_enabled` field, to `false`; AI-29 deletes the request builder.
 - The GraphQL schema file keeps its voice fields; the client no longer selects them.
+
+## Agent tips
+**Why:** The tips advertised Warp Agent, Oz and cloud-agent features, most with `docs.warp.dev` and `oz.warp.dev` links. They only ever rendered inside agent and cloud-mode UI.
+
+**Removed:**
+- `ai/agent_tips.rs`: the `AITip` trait, `AITipModel`, the `AgentTip` list and its keybinding, feature and AI-setting applicability rules.
+- `terminal/view/ambient_agent/tips.rs` (the cloud-mode tip list) and the tip line on the cloud-mode loading screen.
+- The tip line in `BlocklistAIStatusBar` (the "Tip:" text under the warping indicator, its refresh and click telemetry).
+- The `ShowAgentTips` setting (`agents.warp_agent.input.show_agent_tips`), its toggle and binding on the Warp Agent settings page, and the `SHOW_AGENT_TIPS_FLAG` context flag.
+- The `AITipModel` singleton and its revalidation subscriptions in `lib.rs`, and its registration in the test setup helpers.
+
+**User-visible impact:** No tips appear under the agent status line or on the cloud-mode loading screen.
+
+**Notes:**
+- `TelemetryEvent::{AgentTipShown, AgentTipClicked, ToggleShowAgentTips}` stay in `server/telemetry/events.rs` for TEL-4.
+- `FeatureFlag::AgentTips` and its Cargo feature stay for FLAGS-1. The `resource_center` tips (`TipsCompleted`) are the unrelated "Welcome tips" checklist and are unchanged.

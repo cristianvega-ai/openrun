@@ -238,7 +238,7 @@ pub use crate::server::telemetry::{
 use crate::server::telemetry::{CloseTarget, PaletteSource};
 use crate::session_management::{RunningSessionSummary, SessionNavigationData};
 use crate::settings::manager::SettingsManager;
-use crate::settings::{AISettings, AccessibilitySettings, ScrollSettings, SelectionSettings};
+use crate::settings::{AccessibilitySettings, ScrollSettings, SelectionSettings};
 use crate::settings_view::DisplayCount;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
@@ -1339,38 +1339,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(LLMPreferences::new);
     ctx.add_singleton_model(HarnessAvailabilityModel::new);
     ctx.add_singleton_model(ConnectedSelfHostedWorkersModel::new);
-
-    let tip_model_handle = ctx.add_singleton_model(|ctx| {
-        ai::agent_tips::AITipModel::<ai::AgentTip>::new_for_agent_tips(ctx)
-    });
-    {
-        // Rebuild the tip pool when AI settings change so tips whose applicability
-        // depends on AI settings appear/disappear without waiting for the next cooldown cycle.
-        let tip_model_handle_for_ai = tip_model_handle.clone();
-        ctx.subscribe_to_model(&AISettings::handle(ctx), move |_, _, ctx| {
-            tip_model_handle_for_ai.update(ctx, |model, ctx| {
-                model.revalidate_tips(ctx);
-            });
-        });
-        // Also revalidate when workspace/team data changes, since workspace policies
-        // gate some tips.
-        let tip_model_handle_for_teams = tip_model_handle.clone();
-        ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), move |_, event, ctx| {
-            if matches!(event, UserWorkspacesEvent::TeamsChanged) {
-                tip_model_handle_for_teams.update(ctx, |model, ctx| {
-                    model.revalidate_tips(ctx);
-                });
-            }
-        });
-        // Revalidate when any keybinding changes so tips with `<keybinding>`
-        // placeholders are hidden/shown when the referenced binding is cleared
-        // or reassigned.
-        ctx.subscribe_to_model(&KeybindingChangedNotifier::handle(ctx), move |_, _, ctx| {
-            tip_model_handle.update(ctx, |model, ctx| {
-                model.revalidate_tips(ctx);
-            });
-        });
-    }
 
     timer.mark_interval_end("SINGLETON_MODELS_REGISTERED");
 
