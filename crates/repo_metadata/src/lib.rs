@@ -35,10 +35,8 @@ pub enum RepoMetadataError {
 // Re-export the modules
 pub mod entry;
 pub mod file_tree_store;
-pub mod file_tree_update;
 mod gitignore_cache;
 pub mod local_model;
-pub mod remote_model;
 pub mod repositories;
 pub mod repository;
 pub mod repository_identifier;
@@ -72,10 +70,8 @@ pub fn is_in_repo(_path: &str, _app: &warpui_core::AppContext) -> bool {
     false
 }
 pub use file_tree_store::FileTreeEntry;
-pub use file_tree_update::{MetadataUpdateType, RepoMetadataUpdate};
 pub use local_model::{LocalRepoMetadataModel, RepoContent, RepoContents};
-pub use remote_model::RemoteRepoMetadataModel;
-pub use repository_identifier::{RemoteRepositoryIdentifier, RepositoryIdentifier};
+pub use repository_identifier::RepositoryIdentifier;
 pub use standing_queries::{
     StandingQueryContent, StandingQueryDefinitions, StandingQueryResults, StandingQueryResultsDelta,
 };

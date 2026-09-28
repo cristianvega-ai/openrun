@@ -69,7 +69,7 @@ use crate::terminal::cli_agent::{
 use crate::terminal::view::CliAgentRouting;
 use crate::ui_components::blended_colors;
 use crate::ui_components::buttons::icon_button;
-use crate::util::path::{display_name_with_host, display_path_with_host};
+use crate::util::path::display_location_path;
 use crate::view_components::{DismissibleToast, MarkdownToggleEvent, MarkdownToggleView};
 use crate::workspace::util::get_context_target_terminal_view;
 use crate::workspace::{ActiveSession, TabBarDropTargetData, ToastStack, WorkspaceAction};
@@ -366,20 +366,16 @@ impl CodeView {
         }
     }
 
-    /// Construct an editor backed by the global shared buffer for the given location.
-    ///
-    /// For local files, additional features are wired up (selection-as-context,
-    /// find-references, footer). Remote files skip these because LSP and
-    /// related tooling run on the local machine.
-    fn construct_editor_for_location(
+    /// Construct an editor backed by the global shared buffer for the given file,
+    /// wired up with selection-as-context, find-references and the footer.
+    fn construct_editor_for_path(
         &mut self,
-        location: LocalOrRemotePath,
+        path: PathBuf,
         ctx: &mut ViewContext<Self>,
     ) -> ViewHandle<LocalCodeEditorView> {
-        let is_local = matches!(location, LocalOrRemotePath::Local(_));
         ctx.add_typed_action_view(|ctx| {
             let mut editor = LocalCodeEditorView::new_with_global_buffer(
-                location,
+                path,
                 |buffer_state, ctx| {
                     ctx.add_typed_action_view(|ctx| {
                         CodeEditorView::new(
@@ -400,23 +396,19 @@ impl CodeView {
                 None,
                 ctx,
             );
-            if is_local {
-                if FeatureFlag::HoaCodeReview.is_enabled() {
-                    editor = editor
-                        .with_selection_as_context(Box::new(get_context_target_terminal_view));
-                }
-                let mut editor = editor.with_find_references_provider(
-                    ShowFindReferencesCard {
-                        editor_window_id: ctx.window_id(),
-                        parent_scrollable_position_id: None,
-                    },
-                    ctx,
-                );
-                editor.add_footer(ctx);
-                editor
-            } else {
-                editor
+            if FeatureFlag::HoaCodeReview.is_enabled() {
+                editor =
+                    editor.with_selection_as_context(Box::new(get_context_target_terminal_view));
             }
+            let mut editor = editor.with_find_references_provider(
+                ShowFindReferencesCard {
+                    editor_window_id: ctx.window_id(),
+                    parent_scrollable_position_id: None,
+                },
+                ctx,
+            );
+            editor.add_footer(ctx);
+            editor
         })
     }
 
@@ -463,11 +455,13 @@ impl CodeView {
         ctx: &mut ViewContext<Self>,
     ) -> TabData {
         let (code_editor, tab_location) = match location {
-            Some(loc) => {
-                let editor = self.construct_editor_for_location(loc.clone(), ctx);
-                (editor, Some(loc))
+            Some(LocalOrRemotePath::Local(path)) => {
+                let editor = self.construct_editor_for_path(path.clone(), ctx);
+                (editor, Some(LocalOrRemotePath::Local(path)))
             }
-            None => (self.construct_new_file_editor(ctx), None),
+            Some(LocalOrRemotePath::Remote(_)) | None => {
+                (self.construct_new_file_editor(ctx), None)
+            }
         };
 
         let editor = code_editor.as_ref(ctx).editor().clone();
@@ -845,7 +839,7 @@ impl CodeView {
             .is_some_and(|t| t.editor_view.as_ref(ctx).is_new_file());
 
         let title = match &file_location {
-            Some(location) => display_path_with_host(location, false, ctx),
+            Some(location) => display_location_path(location, false),
             None => "Untitled".to_string(),
         };
 
@@ -886,14 +880,6 @@ impl CodeView {
             Err(ImmediateSaveError::NoFileId) => {
                 // If there's no file ID, this is a new file - trigger Save As
                 self.save_as(index, callback, ctx)
-            }
-            Err(ImmediateSaveError::RemoteDisconnected) => {
-                log::warn!("Cannot save: remote session disconnected");
-                CodeView::display_remote_disconnected_save_failure(ctx.window_id(), ctx);
-                if let Some(callback) = callback {
-                    callback(SaveOutcome::Failed, self, ctx);
-                }
-                SaveStatus::Failed(ImmediateSaveError::RemoteDisconnected)
             }
             Err(err) => {
                 log::warn!("Failed to save file. {err:?}");
@@ -959,15 +945,6 @@ impl CodeView {
         });
     }
 
-    fn display_remote_disconnected_save_failure(window_id: WindowId, ctx: &mut ViewContext<Self>) {
-        ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-            let toast =
-                DismissibleToast::error(String::from("Cannot save — remote session disconnected."))
-                    .with_object_id("failed_to_save_file_remote_disconnected".to_string());
-            toast_stack.add_ephemeral_toast(toast, window_id, ctx);
-        });
-    }
-
     fn display_save_success(window_id: WindowId, ctx: &mut ViewContext<Self>) {
         ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
             let toast = DismissibleToast::success(String::from("File saved."))
@@ -1021,14 +998,13 @@ impl CodeView {
     /// When auto-save is enabled, edits are persisted automatically (debounced
     /// while typing and on focus loss), so showing the dot would just make it
     /// flicker on and off as the user types. It is only hidden for changes
-    /// auto-save can actually persist, though: untitled buffers and
-    /// disconnected remotes keep the indicator so unsaveable changes stay
-    /// visible.
+    /// auto-save can actually persist, though: untitled buffers keep the
+    /// indicator so unsaveable changes stay visible.
     fn show_unsaved_indicator(tab: &TabData, app: &AppContext) -> bool {
         if !Self::has_unsaved_changes(tab, app) {
             return false;
         }
-        !*CodeSettings::as_ref(app).auto_save || !tab.editor_view.as_ref(app).can_auto_save(app)
+        !*CodeSettings::as_ref(app).auto_save || !tab.editor_view.as_ref(app).can_auto_save()
     }
 
     /// Flush-saves every unsaved tab that has a backing file, marking each save
@@ -1038,14 +1014,10 @@ impl CodeView {
     pub fn auto_save_all_unsaved_tabs(&mut self, ctx: &mut ViewContext<Self>) -> bool {
         let mut unsaveable_changes_remain = false;
         for index in self.unsaved_indices(ctx) {
-            // A tab can only be auto-saved if it has a backing file *and*, for
-            // remote files, its host is still connected. A disconnected remote
-            // buffer has a `file_id` but `save_local` would fail silently, so
-            // treat it as unsaveable and let the caller warn before discarding
-            // the edits.
+            // A tab can only be auto-saved if it has a backing file.
             let can_auto_save = self
                 .tab_at(index)
-                .is_some_and(|tab| tab.editor_view.as_ref(ctx).can_auto_save(ctx));
+                .is_some_and(|tab| tab.editor_view.as_ref(ctx).can_auto_save());
             if can_auto_save {
                 if let Some(tab) = self.tab_at(index) {
                     tab.editor_view
@@ -1213,7 +1185,7 @@ impl CodeView {
             let file_name = tab
                 .location
                 .as_ref()
-                .map(|loc| display_name_with_host(loc, ctx))
+                .map(|loc| loc.display_name().to_string())
                 .filter(|n| !n.is_empty());
             let summary = UnsavedStateSummary::for_editor_tab(
                 file_name,
@@ -1597,7 +1569,6 @@ impl CodeView {
         is_hovered: bool,
         has_unsaved_changes: bool,
         appearance: &Appearance,
-        app: &AppContext,
     ) -> Box<dyn Element> {
         let theme = appearance.theme();
         let text_color = if is_active {
@@ -1613,7 +1584,7 @@ impl CodeView {
         let file_name = tab_data
             .location
             .as_ref()
-            .map(|loc| display_name_with_host(loc, app))
+            .map(|loc| loc.display_name().to_string())
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| "Untitled".to_string());
         let language_icon =
@@ -1830,7 +1801,6 @@ impl CodeView {
                             tab_handle.is_hovered(),
                             Self::show_unsaved_indicator(tab_data, app),
                             appearance,
-                            app,
                         ))
                         .with_horizontal_margin(TAB_HORIZONTAL_MARGIN)
                         .with_padding(Padding::uniform(TAB_PADDING))
@@ -1991,7 +1961,7 @@ impl CodeView {
             .and_then(|tab| {
                 tab.location
                     .as_ref()
-                    .map(|loc| display_name_with_host(loc, app))
+                    .map(|loc| loc.display_name().to_string())
                     .filter(|n| !n.is_empty())
             })
             .unwrap_or_else(|| "Untitled".to_string());

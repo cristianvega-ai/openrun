@@ -43,8 +43,7 @@ pub use action_model::{
 };
 #[cfg_attr(target_family = "wasm", allow(unused_imports))]
 pub(crate) use action_model::{
-    FileReadResult, ReadFileContextResult, RequestFileEditsFormatKind, apply_edits,
-    read_local_file_context,
+    FileReadResult, RequestFileEditsFormatKind, apply_edits, read_local_file_context,
 };
 #[cfg_attr(target_family = "wasm", allow(unused_imports))]
 pub use action_model::{

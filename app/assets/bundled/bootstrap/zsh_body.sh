@@ -91,45 +91,6 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
       fi
   }
 
-  # Emit the ExitShell hook right before the remote shell exits so the Warp
-  # client can drop per-session resources (specifically the
-  # `ssh … remote-server-proxy` child that holds a multiplexed channel on
-  # the foreground ssh ControlMaster). This avoids a hang where the master
-  # waits on orphaned slave channels when the user ends their interactive
-  # session.
-  #
-  # Only relevant for remote SSH shells. WARP_IS_SSH is exported to "1"
-  # by `warp_ssh_helper` on the remote side of a Warp-managed SSH session
-  # and is unset everywhere else (local shells, subshells, docker
-  # sandboxes, etc.), so the hook only fires where a remote-server-proxy
-  # actually needs tearing down.
-  #
-  # Installed after warp_send_json_message is defined so the handler is
-  # callable the moment the hook is registered.
-  if [[ "$WARP_IS_SSH" == "1" ]]; then
-      __warp_emit_exit_shell() {
-          if [[ -n "$WARP_SESSION_ID" ]]; then
-              warp_send_json_message \
-                  "{\"hook\": \"ExitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID}}"
-          fi
-      }
-      # zshexit_functions is zsh's idiomatic exit-hook mechanism. We prefer
-      # it over `trap ... EXIT` for a few reasons:
-      #   1. It is additive: appending to the array composes with the
-      #      existing `trap __warp_generator_pid_file_cleanup EXIT` above.
-      #      Using `trap ... EXIT` here would replace that handler (zsh, like
-      #      bash, only allows one trap per signal) and we would have to
-      #      manually re-invoke the generator cleanup.
-      #   2. It runs in the main shell's context, unlike `trap ... EXIT`
-      #      which can execute in a subshell under some zsh versions --
-      #      problematic here because we need to write to the parent shell's
-      #      controlling PTY to emit the ExitShell hook.
-      #   3. It also fires on SIGHUP-triggered exits, so a single
-      #      registration covers both normal exit (exit, logout, Ctrl-D) and
-      #      connection-drop cases.
-      zshexit_functions+=(__warp_emit_exit_shell)
-  fi
-
   warp_maybe_send_reset_grid_osc() {
       if [ "$WARP_USING_WINDOWS_CON_PTY" = true ]; then
           printf $OSC_RESET_GRID
@@ -1115,10 +1076,6 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
           -t "${@:1}" \
 "
 export TERM_PROGRAM='WarpTerminal'
-# Mark the remote side of a Warp-managed SSH session so the bootstrap
-# body can distinguish it from local shells. Used to gate the ExitShell
-# hook which tears down the remote-server-proxy subprocess.
-export WARP_IS_SSH='1'
 test -n '$WARP_CLIENT_VERSION' && export WARP_CLIENT_VERSION='$WARP_CLIENT_VERSION'
 # Only forward the protocol version if it was set locally (i.e. the HOANotifications feature flag is on).
 test -n '$WARP_CLI_AGENT_PROTOCOL_VERSION' && export WARP_CLI_AGENT_PROTOCOL_VERSION='$WARP_CLI_AGENT_PROTOCOL_VERSION'

@@ -162,7 +162,7 @@ fn test_handle_repository_update_single_skill_added() {
 }
 
 #[test]
-fn test_removing_remote_project_repo_deletes_shared_cached_skill_paths() {
+fn test_removing_project_repo_deletes_shared_cached_skill_paths() {
     let (tx, rx) = async_channel::unbounded();
 
     App::test((), |mut app| async move {
@@ -171,13 +171,14 @@ fn test_removing_remote_project_repo_deletes_shared_cached_skill_paths() {
         app.add_singleton_model(RepoMetadataModel::new);
         let skill_watcher_handle = app.add_model(|ctx| SkillWatcher::new_for_testing(ctx, tx));
 
-        let host = HostId::new("test-host".to_string());
-        let repo_id = RepositoryIdentifier::Remote(RemotePath::new(
-            host.clone(),
-            StandardizedPath::try_new("/repo").unwrap(),
-        ));
-        let first_path = remote_skill_path(&host, "first");
-        let second_path = remote_skill_path(&host, "second");
+        let repo_id = RepositoryIdentifier::Local(StandardizedPath::try_new("/repo").unwrap());
+        let local_skill_path = |name: &str| {
+            LocalOrRemotePath::Local(PathBuf::from(format!(
+                "/repo/.agents/skills/{name}/SKILL.md"
+            )))
+        };
+        let first_path = local_skill_path("first");
+        let second_path = local_skill_path("second");
 
         skill_watcher_handle.update(&mut app, |watcher, _| {
             watcher.project_skill_files_by_repo.insert(

@@ -152,7 +152,7 @@ impl TextFileAccumulator {
         // it. This ensures round-tripping file content through the
         // accumulator doesn't silently drop a trailing newline (which
         // would otherwise cause data loss when the content is written
-        // back to disk, e.g. during remote diff application).
+        // back to disk, e.g. during diff application).
         //
         // We skip this for truncated reads (the content is incomplete, so
         // appending a newline would be misleading) and for ranged reads

@@ -183,7 +183,6 @@ fn every_hook_tag_dispatches_to_the_matching_variant() {
             "SourcedRcFileForWarp",
             serde_json::json!({"shell": "zsh", "uname": "Darwin"}),
         ),
-        ("ExitShell", serde_json::json!({"session_id": 1})),
     ];
     let covered_variants = cases.each_ref().map(|(name, _)| *name);
     assert_eq!(covered_variants.as_slice(), DPROTO_HOOK_VARIANTS);

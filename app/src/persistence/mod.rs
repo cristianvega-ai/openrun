@@ -69,9 +69,6 @@ use crate::workspaces::workspace::{Workspace as WorkspaceMetadata, WorkspaceUid}
 pub enum PersistenceScope {
     /// The GUI app (and other launch modes that share its database).
     App,
-    RemoteServerDaemon {
-        identity_key: String,
-    },
 }
 
 /// The [`PersistenceScope`] this process's persistence was initialized with.
@@ -102,8 +99,6 @@ pub enum PersistedDataScope {
     /// The GUI app: everything, including window/tab/block session
     /// restoration and command history.
     Full,
-    /// The remote server daemon: only codebase index metadata.
-    CodebaseIndicesOnly,
 }
 
 impl PersistedDataScope {
@@ -115,11 +110,6 @@ impl PersistedDataScope {
     /// Shell-command history.
     fn command_history(self) -> bool {
         matches!(self, PersistedDataScope::Full)
-    }
-
-    /// User profiles used to identify cloud-object creators.
-    fn user_profiles(self) -> bool {
-        self != PersistedDataScope::CodebaseIndicesOnly
     }
 
     /// Pending object actions, which only the GUI consumes.

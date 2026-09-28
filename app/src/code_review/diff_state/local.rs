@@ -1287,7 +1287,7 @@ impl LocalDiffStateModel {
             return;
         };
         // AI title/body generation runs only for the create-PR stage when the
-        // caller asked for it (mirrors the daemon's gating).
+        // caller asked for it.
         let ai_client = (matches!(mode, CommitChainMode::CommitAndCreatePr)
             && autogenerate_pr_content)
             .then(|| ServerApiProvider::handle(ctx).as_ref(ctx).get_ai_client());
@@ -1425,7 +1425,7 @@ impl LocalDiffStateModel {
 
     /// Future resolving to the user's interactive-shell `PATH` (or `None`),
     /// forwarded to git/gh so hooks and tooling resolve like an interactive
-    /// shell. Mirrors the daemon's helper.
+    /// shell.
     fn interactive_path_future(
         ctx: &mut ModelContext<Self>,
     ) -> futures::future::BoxFuture<'static, Option<String>> {
@@ -1590,19 +1590,6 @@ impl LocalDiffStateModel {
     ) -> Option<GitDiffData> {
         let diffs = Self::load_diffs_for_repo(repo_path, mode, false).await;
         diffs.changes.ok().map(|diff| diff.into())
-    }
-
-    /// Load diff data with `content_at_head` for a given mode without
-    /// requiring an existing model instance. Used by the remote server to
-    /// serve late-joining subscribers that need `content_at_head` for editor
-    /// rendering, without disturbing the model's state.
-    #[cfg(feature = "local_fs")]
-    pub async fn load_diffs_with_content_for_mode(
-        mode: DiffMode,
-        repo_path: PathBuf,
-    ) -> Option<GitDiffWithBaseContent> {
-        let diffs = Self::load_diffs_for_repo(repo_path, mode, false).await;
-        diffs.changes.ok()
     }
 
     async fn load_diffs_for_repo(

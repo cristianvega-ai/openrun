@@ -302,7 +302,6 @@ pub enum TerminalAction {
     GenerateCodebaseIndex,
     /// This is for debugging, dev only for now
     LoadAgentModeConversation,
-    ShowWarpifySettings,
     /// Removes a pending attachment (image or file) by index in the unified list.
     DeleteAttachment {
         index: usize,
@@ -633,7 +632,6 @@ impl fmt::Debug for TerminalAction {
             ShowInitializationBlock => write!(f, "ShowInitializationBlock"),
             GenerateCodebaseIndex => write!(f, "GenerateIndexForRepo"),
             LoadAgentModeConversation => write!(f, "LoadAgentModeConversation"),
-            ShowWarpifySettings => write!(f, "ShowWarpifySettings"),
             DeleteAttachment { index } => write!(f, "DeleteAttachment({index:?})"),
             OpenAttachmentLightbox { index } => {
                 write!(f, "OpenAttachmentLightbox({index:?})")

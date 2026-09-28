@@ -19,7 +19,7 @@ use vec1::Vec1;
 use warp_core::channel::{Channel, ChannelState};
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::color::internal_colors;
-use warp_core::{SessionId, safe_error, safe_info};
+use warp_core::{safe_error, safe_info};
 use warp_editor::content::buffer::{AutoScrollBehavior, InitialBufferState, SelectionOffsets};
 use warp_editor::model::CoreEditorModel;
 use warp_editor::render::element::VerticalExpansionBehavior;
@@ -699,15 +699,6 @@ impl CodeReviewView {
         &self.diff_state_model
     }
 
-    /// The session this review is being shown in, when available. Supplied
-    /// per-call as the preferred dispatch session for remote `GetDiffState`
-    /// RPCs so the request rides the connection that's actually showing the
-    /// review; `None` falls back to any connected session for the host.
-    fn preferred_review_session(&self, ctx: &ViewContext<Self>) -> Option<SessionId> {
-        self.focused_terminal(ctx)
-            .and_then(|tv| tv.as_ref(ctx).active_block_session_id())
-    }
-
     /// Called when the code review view is opened/attached to a pane group.
     /// Subscribes to the diff state model and enables metadata refresh.
     pub fn on_open(&mut self, ctx: &mut ViewContext<Self>) {
@@ -758,15 +749,12 @@ impl CodeReviewView {
             }
         }
 
-        // Always reload diffs on open. For local, this re-reads the
-        // filesystem. For remote, this re-emits the model's current state
-        // (and will make an RPC once that path is wired). We pass
+        // Always reload diffs on open, re-reading the filesystem. We pass
         // should_fetch_base: false because re-opening the panel doesn't
         // need to fetch the base branch from origin.
-        let preferred_session = self.preferred_review_session(ctx);
         self.diff_state_model.update(ctx, |model, ctx| {
             model.set_code_review_metadata_refresh_enabled(true, ctx);
-            model.load_diffs_for_current_repo(false, true, preferred_session, ctx);
+            model.load_diffs_for_current_repo(false, true, ctx);
         });
     }
 
@@ -1591,9 +1579,8 @@ impl CodeReviewView {
             ctx
         );
 
-        let preferred_session = self.preferred_review_session(ctx);
         self.diff_state_model.update(ctx, |model, ctx| {
-            model.set_diff_mode(mode, false, true, preferred_session, ctx);
+            model.set_diff_mode(mode, false, true, ctx);
         });
         self.update_diff_selector_selection(ctx);
         self.invalidate_all(None, None, ctx);
@@ -2349,11 +2336,6 @@ impl CodeReviewView {
                 }
                 ctx.notify();
             }
-            DiffStateModelEvent::ConnectionLost => {
-                // Don't clear loaded state — keep stale diffs visible
-                // so the user can still see what they were looking at.
-                ctx.notify();
-            }
             DiffStateModelEvent::BranchesReceived(branches) => {
                 if let Some(repo) = self.active_repo.as_mut() {
                     let branch_count = branches.len();
@@ -2506,12 +2488,6 @@ impl CodeReviewView {
                 ctx.notify();
                 return;
             }
-            DiffState::Disconnected => {
-                // Disconnected state is handled via the ConnectionLost event
-                // path, which preserves stale diffs. If invalidate_all is
-                // called while disconnected (e.g. from a stale push), ignore.
-                return;
-            }
             DiffState::Loaded => (),
         };
 
@@ -2598,11 +2574,7 @@ impl CodeReviewView {
         let mut file_states = vec![];
         for file in files {
             let editor_state = {
-                // `LocalCodeEditorView::new_with_global_buffer` natively
-                // supports both `LocalOrRemotePath::Local` and `Remote`
-                // (it sets language by extension and skips local-only
-                // wiring like LSP for remote files), so we always go
-                // through the global-buffer path when we have a repo.
+                // Go through the global-buffer path whenever we have a repo.
                 #[cfg(not(target_family = "wasm"))]
                 {
                     if self.repo_path().is_some() {
@@ -2884,9 +2856,7 @@ impl CodeReviewView {
             let is_wsl = session.as_ref().map(|s| s.is_wsl()).unwrap_or(false);
 
             let enablement = if is_remote {
-                CodingPanelEnablementState::RemoteSession {
-                    has_remote_server: false,
-                }
+                CodingPanelEnablementState::RemoteSession
             } else if is_wsl {
                 CodingPanelEnablementState::UnsupportedSession
             } else {
@@ -2915,7 +2885,7 @@ impl CodeReviewView {
         let open_repo_button = || Some(ChildView::new(&self.open_repository_button).finish());
         match self.session_env(app) {
             Some(GitSessionState {
-                enablement: CodingPanelEnablementState::RemoteSession { .. },
+                enablement: CodingPanelEnablementState::RemoteSession,
             }) => {
                 // No "Open repository" CTA when the session is remote — the
                 // button navigates to a local folder, which is not meaningful
@@ -2999,7 +2969,7 @@ impl CodeReviewView {
         file: &FileDiffAndContent,
         ctx: &mut ViewContext<Self>,
     ) -> Option<CodeReviewEditorState> {
-        let repo_path = self.repo_path()?.clone();
+        let repo_path = self.repo_path()?.to_local_path()?.to_path_buf();
         // Skip editor creation for binary files or files without content (e.g., pure renames)
         if file.file_diff.is_binary || file.content_at_head.is_none() {
             None
@@ -3010,9 +2980,6 @@ impl CodeReviewView {
             self.create_code_review_model(file, ctx)
         } else {
             let self_handle = ctx.handle();
-            // Join host-aware: for local repos this yields a local absolute
-            // PathBuf; for remote repos this yields a `RemotePath` with the
-            // same host id as `repo_path`.
             let full_file_location = repo_path.join(&file.file_diff.file_path);
 
             let local_code_view = ctx.add_typed_action_view(|ctx| {
@@ -3080,12 +3047,15 @@ impl CodeReviewView {
                 &local_code_view,
                 file,
                 true,
-                &self.comment_line_numbers_for_file(&full_file_location, ctx),
+                &self.comment_line_numbers_for_file(
+                    &LocalOrRemotePath::Local(full_file_location.clone()),
+                    ctx,
+                ),
                 ctx,
             );
 
             ctx.subscribe_to_view(&local_code_view, {
-                let file_location = full_file_location.clone();
+                let file_location = LocalOrRemotePath::Local(full_file_location.clone());
                 move |me, editor, event, ctx| {
                     me.handle_local_code_editor_events(editor, event, &file_location, ctx);
                 }
@@ -3233,12 +3203,6 @@ impl CodeReviewView {
                 });
             }
             LocalCodeEditorEvent::CommentSaved { comment } => {
-                // Use `file_location()` to preserve host identity for
-                // remote editors. The comment batch is already host-scoped
-                // (keyed by the repo `LocalOrRemotePath` in
-                // `WorkingDirectoriesModel.comment_models`), but encoding
-                // the host on the comment target keeps later helpers
-                // honest.
                 let Some(file_location) = editor.as_ref(ctx).file_location().cloned() else {
                     report_error!(
                         "Attempted to attach code review comment to a LocalCodeEditorView without a file path"
@@ -4958,14 +4922,13 @@ impl CodeReviewView {
 
         // When auto-save is enabled, edits are persisted automatically, so the
         // per-file unsaved dot would just flicker on and off as the user
-        // types. Changes auto-save can't persist (e.g. a disconnected remote
-        // repo) still show the dot.
+        // types. Changes auto-save can't persist still show the dot.
         let auto_save_enabled = *CodeSettings::as_ref(app).auto_save;
         left_section.add_child(match file.editor_state.as_ref() {
             Some(editor_state)
                 if editor_state.has_unsaved_changes(app)
                     && (!auto_save_enabled
-                        || !editor_state.editor().as_ref(app).can_auto_save(app)) =>
+                        || !editor_state.editor().as_ref(app).can_auto_save()) =>
             {
                 let save_keystroke = Keystroke::parse("cmdorctrl-s").unwrap_or_default();
                 let save_shortcut = save_keystroke.displayed();
@@ -6011,9 +5974,8 @@ impl CodeReviewView {
     }
 
     pub(crate) fn set_diff_base(&mut self, diff_mode: DiffMode, ctx: &mut ViewContext<Self>) {
-        let preferred_session = self.preferred_review_session(ctx);
         self.diff_state_model.update(ctx, |diff_state_model, ctx| {
-            diff_state_model.set_diff_mode_and_fetch_base(diff_mode, preferred_session, ctx);
+            diff_state_model.set_diff_mode_and_fetch_base(diff_mode, ctx);
         });
         self.update_diff_selector_selection(ctx);
         self.invalidate_all(None, None, ctx);
@@ -7183,16 +7145,8 @@ impl TypedActionView for CodeReviewView {
                     return;
                 };
                 let full_path = repo_path.join(path);
-                match full_path {
-                    LocalOrRemotePath::Local(path) => {
-                        self.open_code_review_file(path, *line_and_column, ctx);
-                    }
-                    remote @ LocalOrRemotePath::Remote(_) => {
-                        ctx.emit(CodeReviewViewEvent::OpenFileInNewTab {
-                            path: remote,
-                            line_and_column: *line_and_column,
-                        });
-                    }
+                if let LocalOrRemotePath::Local(path) = full_path {
+                    self.open_code_review_file(path, *line_and_column, ctx);
                 }
             }
             CodeReviewAction::ToggleFileExpanded(path) => {
@@ -7327,9 +7281,8 @@ impl TypedActionView for CodeReviewView {
                 self.save_files(unsaved_files.as_slice(), ctx);
             }
             CodeReviewAction::RefreshGitState => {
-                let preferred_session = self.preferred_review_session(ctx);
                 self.diff_state_model.update(ctx, |model, ctx| {
-                    model.load_diffs_for_current_repo(false, true, preferred_session, ctx);
+                    model.load_diffs_for_current_repo(false, true, ctx);
                     model.refresh_metadata_after_git_operation(ctx);
                 });
                 self.refresh_pr_info(ctx);

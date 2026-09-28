@@ -30,6 +30,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Client and server-side experiments](#client-and-server-side-experiments) — removed the local A/B bucketing framework and the server-driven experiment state; every experiment keeps the arm new OSS users already got
 - [App-installation detection and the local HTTP server](#app-installation-detection-and-the-local-http-server) — the GUI no longer listens on `127.0.0.1:9277+n`; the jemalloc heap profile is written to a local file instead of served over HTTP
 - [Legacy Warp AI assistant and AI command search](#legacy-warp-ai-assistant-and-ai-command-search) — deleted the Warp AI side panel, every "Ask Warp AI" entry point, AI command search (`#`) and its server endpoints
+- [SSH remote server](#ssh-remote-server) — removed the SSH extension daemon (downloaded from Warp's CDN, authenticated with Warp credentials) and every remote file, diff, git, search, indexing and agent-context backend it powered; plain SSH, SSH Warpify and blocks and completions over SSH stay
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -678,3 +679,35 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left for TEL-4: telemetry variants whose callers are gone (`OpenedWarpAI`, `ToggleWarpAI`, `InputAskWarpAI`, `InputAICommandSearch`, `AICommandSearchOpened`, `CommandSearchResultType::{OpenWarpAI, TranslateUsingWarpAI, AIQuery}`, `OpenedWarpAISource`, `AICommandSearchEntrypoint`).
 - Left for AI-15: the AI-gated `AgentModeWorkflows` (saved prompts) filter in command search. Left for AI-25: `CustomAction::NewAgentModePane`, which no binding provides any more. Left for AI-11: `resources/bundled/skills/change-keybinding/SKILL.md` still names `workspace:toggle_ai_assistant`. Left for DRV-1: a comment in `drive/workflows/modal.rs` that cites Warp AI command search.
 - `set_ai_input_mode_with_query` and `InputTypeAutoDetectionSource::AskAi` stay because `ai/agent_sdk` still uses them.
+
+## SSH remote server
+**Why:** The "SSH extension" installed the `oz` binary onto the remote host by curling `app.warp.dev/download/cli` (or copying it over SCP), ran it as a daemon, and authenticated it with the user's Warp credentials. An offline build can't download it, and bundling cross-built daemons for every remote OS and architecture is out of scope. Plain SSH never needed it: blocks and completions over SSH run through the ControlMaster-based `RemoteCommandExecutor`.
+
+**Removed:**
+- `crates/remote_server` (client, manager, SSH transport, installer and `install_remote_server.sh`/`preinstall_check.sh`, protocol, the `remote_server.proto`/`diff_state.proto` definitions and their conversions) and `app/src/remote_server/` (daemon `ServerModel`, Unix proxy, SSH/SCP install transport, `auth_context`, `auth_provider`, `codebase_index_model`, `codebase_index_status`, `handoff_snapshot`, buffer/diff-state trackers, ripgrep search).
+- Worker subcommands `remote-server-proxy` and `remote-server-daemon` (`WorkerCommand::{RemoteServerProxy, RemoteServerDaemon}`, `RemoteServerIdentityArgs`), `LaunchMode::{RemoteServerProxy, RemoteServerDaemon}`, `ExecutionMode::RemoteServerDaemon`, `PersistenceScope::RemoteServerDaemon` and `PersistedDataScope::CodebaseIndicesOnly` (the daemon's own database is no longer opened; the schema is untouched), the daemon-only "unavailable" secure-storage provider, and the `RemoteServerManager` and `RemoteCodebaseIndexModel` singletons.
+- SSH session wiring: `RemoteServerController`, the SSH extension install choice block and install-failed banner, the remote-server loading footer and setup-state prompt text, `RemoteServerCommandExecutor`, `SessionType::WarpifiedRemote`'s `host_id`, and the `SshInitShell`/`RemoteServerBlockRequested`/`RemoteServerReady`/`RemoteServerFailed` events. SSH sessions always use the ControlMaster executor again.
+- The `ExitShell` shell hook (`DProtoHook::ExitShell`, handler and events) and the matching `WARP_IS_SSH` export and exit traps in the bash and zsh bootstrap scripts. It existed only to tear down the proxy subprocess.
+- Remote backends: `RemoteDiffStateModel`, `RemoteGitRepoStatusModel` and `RemoteGitHubRepoModel` in code review; remote, server-local and synced buffers in `GlobalBufferModel` (with `SyncClock` and the remote conflict and disconnect banners); `FileModel` remote files; remote file-tree roots and lazy directory loading; remote global search; remote markdown files; remote `@`-menu file listing; host-scoped repo detection.
+- In `crates/repo_metadata`: `RemoteRepoMetadataModel`, `RepositoryIdentifier::Remote`, the proto-mirror update types in `file_tree_update.rs`, the daemon's incremental-update emission and symlink-target watches. In `crates/warp_util`: `RemoteNavigationResult` and `FileSaveError::RemoteError`. In `warp_server_auth`: the daemon auth helpers (`apply_remote_server_auth_context`, `set_remote_server_bearer_token`).
+- Remote parts of AI code as minimal compile fixes: `remote_agent_context`, `remote_context_files`, `skills/remote`, remote codebase search and indexing context, remote file reads and diff application for agents, the remote handoff-snapshot upload target, and the remote codebase rows in Settings > Code > Indexing.
+- The Warpify setting `warpify.ssh.ssh_extension_install_mode` and its dropdown, the remote-server telemetry events, `SetSshExtensionInstallMode`, and the remote fields of `SSHControlMasterError` and `GlobalSearchQueryCompleted`.
+- `crates/integration/src/test/remote_server.rs`, `app/src/integration_testing/remote_server.rs` and the remote-server SSH test host helpers.
+
+**Modified:**
+- `app/src/util/repo_detection.rs` — repo detection runs only for local sessions; remote sessions resolve to no repository.
+- `warp_files::FileModel`, `GlobalBufferModel`, `DiffStateModel`, `GitRepoStatusModel`, `GitHubRepoModel`, `RepoMetadataModel` — now wrap only their local backend. `GlobalBufferModel::open` and `LocalCodeEditorView::new_with_global_buffer` take a `PathBuf`.
+- `DiffStateModel` methods and `WorkingDirectoriesModel::get_or_create_diff_state_model` lost their `preferred_session` argument, which only routed remote requests.
+- `CodingPanelEnablementState::RemoteSession` lost `has_remote_server`: the file tree, global search and code review show their "not supported in remote sessions" state for every SSH session.
+- The tmux-deprecation banner and the ControlMaster-error banner no longer point to the SSH extension.
+- `util::path::display_path_with_host`/`display_name_with_host` became `display_location_path` and `LocalOrRemotePath::display_name`, since there are no host labels.
+- Tests that exercised remote behavior were deleted; the global search submatch tests now run on local matches.
+
+**User-visible impact:** Warp never offers to install the SSH extension and never downloads, copies or runs anything on remote hosts. SSH sessions, SSH Warpify, blocks, completions and command corrections over SSH work as before (through the ControlMaster connection). The remote file tree, remote editor, remote code review, remote global search and remote agent file access over SSH are gone; those panels show their remote-session placeholder.
+
+**Notes:**
+- `LocalOrRemotePath::Remote`, `RemotePath` and `HostId` stay in `warp_util`. Nothing constructs a remote path now, but about 130 files still name the type, many of them AI skills and project-rules code. Collapsing it to `PathBuf` (and folding the single-variant `RepositoryIdentifier`, `DiffSessionType`, `GetRelevantFilesRequestTarget` and `SnapshotUploadTarget`) is left for after the AI removal.
+- Remote-host skills plumbing in AI code (`SkillPathOrigin::Remote`, `BundledSkills::remote_by_host`, `SkillManager::remote_home_directories`) is now unreachable; its setters are test-only. The AI skills removal deletes it. `CodebaseIndexManager::new_with_snapshot_storage`, `defer_persisted_index_restore` and `SnapshotStorage::from_dir` in `crates/ai` were only used by the daemon; the codebase-indexing removal deletes them.
+- `FeatureFlag::{SshRemoteServer, RemoteCodebaseIndexing, RemoteCodeReview}` stay for FLAGS-1; all code they gated is deleted.
+- `SessionType` and `BootstrapSessionType` are now identical enums.
+- The only protos were in `crates/remote_server`, which is deleted whole, so no `reserved` field numbers were needed.

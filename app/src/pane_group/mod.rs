@@ -32,7 +32,6 @@ use warp_terminal::shell::{ShellName, ShellType};
 #[cfg(feature = "local_fs")]
 use warp_util::path::LineAndColumnArg;
 use warp_util::path::convert_wsl_to_windows_host_path;
-use warp_util::remote_path::RemotePath;
 use warpui::r#async::SpawnedFutureHandle;
 use warpui::elements::{
     ChildView, CrossAxisAlignment, DispatchEventResult, Element, EventHandler, Flex, MainAxisSize,
@@ -573,10 +572,6 @@ pub enum Event {
     },
     /// Dirty the workspace so the tab indicator shows.
     MaximizePaneToggled,
-    /// A remote server resolved the repo root for a session in this pane group.
-    RemoteRepoNavigated {
-        remote_path: RemotePath,
-    },
     /// Refresh the workspace-level active session state.
     ActiveSessionChanged,
     FocusPaneGroup,
@@ -5167,11 +5162,6 @@ impl PaneGroup {
             }
             PaneEvent::RepoChanged => {
                 ctx.emit(Event::RepoChanged);
-            }
-            PaneEvent::RemoteRepoNavigated { remote_path } => {
-                ctx.emit(Event::RemoteRepoNavigated {
-                    remote_path: remote_path.clone(),
-                });
             }
         }
     }

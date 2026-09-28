@@ -59,7 +59,7 @@ use crate::terminal::terminal_manager::BlockSpacing;
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::terminal::writeable_pty::pty_controller::{EventLoopSendError, EventLoopSender};
 use crate::terminal::writeable_pty::terminal_manager_util::{
-    init_pty_controller_model, init_remote_server_controller, wire_up_pty_controller_with_surface,
+    init_pty_controller_model, wire_up_pty_controller_with_surface,
 };
 use crate::terminal::writeable_pty::{self, Message, PtyIntentEvent, TerminalSurface};
 use crate::terminal::{
@@ -68,8 +68,6 @@ use crate::terminal::{
 };
 
 type PtyController = writeable_pty::PtyController<mio_channel::Sender<Message>>;
-type RemoteServerController =
-    writeable_pty::remote_server_controller::RemoteServerController<mio_channel::Sender<Message>>;
 
 struct AppPtySpawnHooks;
 
@@ -106,9 +104,6 @@ pub struct TerminalManager<S> {
     /// The manager is responsible for managing the lifetime
     /// of the PTY controller.
     pty_controller: ModelHandle<PtyController>,
-
-    /// The manager is responsible for managing the lifetime of the remote server controller.
-    remote_server_controller: ModelHandle<RemoteServerController>,
 
     /// The process ID of the PTY. Purely used for integration tests. None if the PTY has not yet
     /// been started.
@@ -327,9 +322,6 @@ impl<S> TerminalManager<S> {
             ctx,
         );
 
-        // Initialize the RemoteServerController.
-        let remote_server_controller =
-            init_remote_server_controller(&pty_controller, &model_events, ctx);
         let size_info = model.lock().block_list().size().to_owned();
         let TerminalSurfaceResult { surface, post_wire } = create_surface(
             TerminalSurfaceInit {
@@ -359,7 +351,6 @@ impl<S> TerminalManager<S> {
             #[cfg(unix)]
             terminal_attributes_poller: None,
             pty_controller,
-            remote_server_controller,
             #[cfg(feature = "integration_tests")]
             pid: None,
             inactive_pty_reads_rx,
@@ -421,11 +412,6 @@ impl<S> TerminalManager<S> {
     /// Returns the terminal model owned by this manager.
     pub(crate) fn model(&self) -> Arc<FairMutex<TerminalModel>> {
         self.model.clone()
-    }
-
-    /// Returns the remote server controller owned by this manager.
-    pub(super) fn remote_server_controller(&self) -> ModelHandle<RemoteServerController> {
-        self.remote_server_controller.clone()
     }
 
     /// Sends a shutdown message to the PTY event loop and waits for it to

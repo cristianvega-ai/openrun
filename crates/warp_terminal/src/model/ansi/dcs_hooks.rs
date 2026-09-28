@@ -81,9 +81,6 @@ pub(super) enum DProtoHook {
     SourcedRcFileForWarp {
         value: SourcedRcFileForWarpValue,
     },
-    ExitShell {
-        value: ExitShellValue,
-    },
 }
 
 /// The variant names of [`DProtoHook`], used for unknown-variant errors.
@@ -100,7 +97,6 @@ const DPROTO_HOOK_VARIANTS: &[&str] = &[
     "Clear",
     "InitSubshell",
     "SourcedRcFileForWarp",
-    "ExitShell",
 ];
 
 /// The envelope shape of a serialized hook: the `hook` tag plus the `value`
@@ -161,9 +157,6 @@ impl<'de> Deserialize<'de> for DProtoHook {
             "SourcedRcFileForWarp" => DProtoHook::SourcedRcFileForWarp {
                 value: parse_hook_value::<_, D::Error>(raw.value)?,
             },
-            "ExitShell" => DProtoHook::ExitShell {
-                value: parse_hook_value::<_, D::Error>(raw.value)?,
-            },
             unknown => {
                 return Err(serde::de::Error::unknown_variant(
                     unknown,
@@ -189,7 +182,6 @@ impl DProtoHook {
             DProtoHook::Clear { .. } => "Clear",
             DProtoHook::InitSubshell { .. } => "InitSubshell",
             DProtoHook::SourcedRcFileForWarp { .. } => "SourcedRcFileForWarp",
-            DProtoHook::ExitShell { .. } => "ExitShell",
         }
     }
 
@@ -199,7 +191,6 @@ impl DProtoHook {
         match self {
             DProtoHook::InitShell { value } => Some(value.session_id),
             DProtoHook::Precmd { value } => value.session_id().map(SessionId::from),
-            DProtoHook::ExitShell { value } => Some(value.session_id),
             DProtoHook::Preexec { value } => value.session_id.map(SessionId::from),
             DProtoHook::CommandFinished { value } => value.session_id.map(SessionId::from),
             DProtoHook::Bootstrapped { value } => value.session_id.map(SessionId::from),
@@ -229,8 +220,7 @@ impl DProtoHook {
             | DProtoHook::InputBuffer { .. }
             | DProtoHook::ExternalShellWidgetSelection { .. }
             | DProtoHook::Clear { .. }
-            | DProtoHook::InitSubshell { .. }
-            | DProtoHook::ExitShell { .. } => true,
+            | DProtoHook::InitSubshell { .. } => true,
             DProtoHook::SourcedRcFileForWarp { .. } => false,
         }
     }
@@ -267,9 +257,6 @@ impl DProtoHook {
                 value: Default::default(),
             }),
             "SourcedRcFileForWarp" => Some(DProtoHook::SourcedRcFileForWarp {
-                value: Default::default(),
-            }),
-            "ExitShell" => Some(DProtoHook::ExitShell {
                 value: Default::default(),
             }),
             _ => {
@@ -442,14 +429,6 @@ impl DProtoHook {
                 "session_id" => value.session_id = v.parse::<u64>().ok(),
                 _ => {
                     log::warn!("Tried to add unknown field {key} to InitSubshell hook");
-                }
-            },
-            DProtoHook::ExitShell { value } => match key.as_ref() {
-                "session_id" => {
-                    value.session_id = v.parse::<u64>().ok().map(Into::into).unwrap_or_default()
-                }
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to ExitShell hook");
                 }
             },
             _ => {
@@ -999,17 +978,6 @@ impl std::fmt::Debug for ExternalShellWidgetSelectionValue {
 pub struct ClearValue {
     #[serde(default)]
     pub session_id: HookSessionId,
-}
-
-/// Received from the pty right before the remote shell exits (via `exit`,
-/// `logout`, Ctrl-D on an empty prompt, etc.). Lets the Warp client drop
-/// per-session resources — in particular the `ssh … remote-server-proxy`
-/// child process that holds a multiplexed channel on the foreground ssh
-/// ControlMaster — before the user's outer ssh tunnel tries to close, so
-/// the master can exit cleanly instead of hanging on orphaned slaves.
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-pub struct ExitShellValue {
-    pub session_id: SessionId,
 }
 
 /// Custom serde deserializer that trims trailing null bytes.

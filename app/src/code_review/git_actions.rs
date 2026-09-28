@@ -3,15 +3,12 @@
 //!
 //! These compose the single-command primitives in [`crate::util::git`] (plus
 //! AI title/body generation) into the end-to-end actions a button triggers.
-//! They are intentionally backend-agnostic: the local code-review dialog and
-//! the remote-server daemon both call them, so local and remote behave
-//! identically. Git ops are host-scoped and not tied to a diff-state model, so
-//! this logic lives here rather than on a model.
+//! Git ops are host-scoped and not tied to a diff-state model, so this logic
+//! lives here rather than on a model.
 //!
 //! Callers own everything *around* the action: UI (toasts, telemetry, dialog
-//! lifecycle), transport/model (applying the returned delta to a
-//! `DiffStateModel`, building wire responses), and any execution-time guards
-//! (e.g. the daemon's `git_operation_in_progress` backstop).
+//! lifecycle), the model (applying the returned delta to a `DiffStateModel`),
+//! and any execution-time guards.
 
 use std::path::Path;
 

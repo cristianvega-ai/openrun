@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
-use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::Fill;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::elements::{
@@ -1682,19 +1681,11 @@ impl DisplayChip {
             appearance,
         );
 
-        // Code review is only supported on local sessions and
-        // on remote sessions with a connected host ID.
+        // Code review is only supported on local sessions.
         let supports_code_review = self
             .session_context
             .as_ref()
-            .map(|ctx| match ctx.session.session_type() {
-                SessionType::Local => true,
-                SessionType::WarpifiedRemote { host_id: Some(_) } => {
-                    FeatureFlag::RemoteCodeReview.is_enabled()
-                }
-                SessionType::WarpifiedRemote { host_id: None } => false,
-            })
-            .unwrap_or(false);
+            .is_some_and(|ctx| matches!(ctx.session.session_type(), SessionType::Local));
 
         let diff_stats_display = if supports_code_review {
             // Get the keybinding for the tooltip

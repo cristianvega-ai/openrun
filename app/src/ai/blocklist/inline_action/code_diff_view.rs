@@ -28,7 +28,6 @@ use warp_editor::diff::{DiffDelta, DiffType};
 use warp_editor::render::element::VerticalExpansionBehavior;
 use warp_errors::report_error;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
-use warp_util::remote_path::RemotePath;
 use warp_util::standardized_path::StandardizedPath;
 use warpui::elements::new_scrollable::{ScrollableAppearance, SingleAxisConfig};
 use warpui::elements::{
@@ -915,10 +914,7 @@ impl CodeDiffView {
 
                 // On non-WASM, register the file with FileModel for save support.
                 #[cfg(not(target_family = "wasm"))]
-                {
-                    let session_type = &self.diff_session_type;
-                    diff_viewer.update(ctx, |view, ctx| view.register_file(session_type, ctx));
-                }
+                diff_viewer.update(ctx, |view, ctx| view.register_file(ctx));
 
                 self.setup_diff_view_subscriptions(&diff_viewer, file_path, ctx);
 
@@ -2415,13 +2411,8 @@ impl CodeDiffView {
     }
 
     fn location_for_standardized_path(&self, path: &StandardizedPath) -> Option<LocalOrRemotePath> {
-        match &self.diff_session_type {
-            DiffSessionType::Local => path.to_local_path().map(LocalOrRemotePath::Local),
-            DiffSessionType::Remote(host_id) => Some(LocalOrRemotePath::Remote(RemotePath {
-                host_id: host_id.clone(),
-                path: path.clone(),
-            })),
-        }
+        let DiffSessionType::Local = self.diff_session_type;
+        path.to_local_path().map(LocalOrRemotePath::Local)
     }
 }
 

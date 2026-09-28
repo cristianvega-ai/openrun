@@ -430,9 +430,6 @@ fn ssh_bootstraps_if_blocklist_empty_and_reconciles_parent_return() {
     assert!(terminal.is_active_block_bootstrapped());
 
     let nested_prompt_block_id = terminal.active_block_id().clone();
-    terminal.exit_shell(ExitShellValue {
-        session_id: 0.into(),
-    });
     let parent_next_block_id = BlockId::new();
     let completion_metadata = CompletionMetadata {
         exit_code: ExitCode::from(255),

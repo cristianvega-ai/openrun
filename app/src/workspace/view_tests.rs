@@ -53,8 +53,6 @@ use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::notebooks::notebook::NotebookView;
 use crate::pane_group::{Direction, PaneGroupAction, PaneId};
 use crate::pricing::PricingInfoModel;
-#[cfg(not(target_family = "wasm"))]
-use crate::remote_server::codebase_index_model::RemoteCodebaseIndexModel;
 use crate::resource_center::Tip;
 use crate::server::cloud_objects::listener::Listener;
 use crate::server::cloud_objects::update_manager::UpdateManager;
@@ -214,9 +212,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     app.add_singleton_model(DefaultTerminal::new);
     app.add_singleton_model(|_| IgnoredSuggestionsModel::new(vec![]));
     app.add_singleton_model(|_| crate::code_review::git_repo_model::GitRepoModels::new());
-    app.add_singleton_model(remote_server::manager::RemoteServerManager::new);
-    #[cfg(not(target_family = "wasm"))]
-    app.add_singleton_model(RemoteCodebaseIndexModel::new);
 
     #[cfg(feature = "local_fs")]
     app.add_singleton_model(RepoMetadataModel::new);
@@ -665,13 +660,11 @@ fn test_tools_panel_preferences_activate_after_signup_and_ai_enablement() {
         // Signing up makes account-backed features available. AuthComplete
         // must refresh the existing workspace even though no setting changed.
         app.update(|ctx| {
-            AuthStateProvider::as_ref(ctx)
-                .get()
-                .apply_remote_server_auth_context(
-                    "test-token".to_string(),
-                    "test-user".to_string(),
-                    "test@warp.dev".to_string(),
-                );
+            let auth_state = AuthStateProvider::as_ref(ctx).get();
+            auth_state.set_credentials(Some(crate::auth::credentials::Credentials::Bearer(
+                "test-token".to_string(),
+            )));
+            auth_state.set_user(Some(crate::auth::user::User::test()));
         });
         workspace.update(&mut app, |workspace, ctx| {
             workspace.handle_auth_manager_event(

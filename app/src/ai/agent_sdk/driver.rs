@@ -1881,10 +1881,8 @@ impl AgentDriver {
                     let repo_metadata = RepoMetadataModel::handle(ctx);
                     repo_index_targets
                         .into_iter()
-                        .filter_map(|(repo_path, id)| {
-                            let RepositoryIdentifier::Local(repo_id_path) = &id else {
-                                return None;
-                            };
+                        .map(|(repo_path, id)| {
+                            let RepositoryIdentifier::Local(repo_id_path) = &id;
                             let error = match repo_metadata.as_ref(ctx).repository_state(&id, ctx) {
                                 Some(IndexedRepoState::Indexed(_)) => None,
                                 Some(IndexedRepoState::Pending(_)) => Some(format!(
@@ -1895,7 +1893,7 @@ impl AgentDriver {
                                 }
                                 None => Some(format!("Repository not found: {repo_id_path}")),
                             };
-                            Some((repo_path, error))
+                            (repo_path, error)
                         })
                         .collect::<Vec<_>>()
                 })

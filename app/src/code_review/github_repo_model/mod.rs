@@ -5,9 +5,6 @@ mod local;
 #[cfg(feature = "local_fs")]
 pub use local::LocalGitHubRepoModel;
 
-mod remote;
-pub use remote::RemoteGitHubRepoModel;
-
 #[cfg(all(test, feature = "local_fs"))]
 use crate::code_review::git_repo_model::GitRepoStatusModel;
 use crate::util::git::{PrInfo, RepositoryInfo};
@@ -22,25 +19,24 @@ pub enum GitHubRepoEvent {
     RepositoryInfoChanged,
 }
 
-// ── Unified GitHubRepoModel (local or remote backend) ───────────────────────
+// ── GitHubRepoModel ─────────────────────────────────────────────────────────
 
-/// Unified per-repo GitHub-info model that dispatches to a local or remote
-/// backend, mirroring [`crate::code_review::git_repo_model::GitRepoStatusModel`].
+/// Per-repo GitHub-info model, mirroring
+/// [`crate::code_review::git_repo_model::GitRepoStatusModel`].
 ///
 /// Consumers (prompt chips, code review, agent context) hold a
-/// `ModelHandle<GitHubRepoModel>` and subscribe to its [`GitHubRepoEvent`]s
-/// without caring whether the repository is local or on an SSH host.
+/// `ModelHandle<GitHubRepoModel>` and subscribe to its [`GitHubRepoEvent`]s.
+/// The model is only constructible where a local filesystem is available.
 pub enum GitHubRepoModel {
     #[cfg(feature = "local_fs")]
     Local(ModelHandle<LocalGitHubRepoModel>),
-    Remote(ModelHandle<RemoteGitHubRepoModel>),
 }
 impl Entity for GitHubRepoModel {
     type Event = GitHubRepoEvent;
 }
 impl GitHubRepoModel {
-    /// Re-emit a sub-model event so subscribers of the unified model observe
-    /// the same `GitHubRepoEvent`s regardless of backend.
+    /// Re-emit a sub-model event so subscribers of this model observe the
+    /// backend's `GitHubRepoEvent`s.
     pub(crate) fn forward_event(&mut self, event: &GitHubRepoEvent, ctx: &mut ModelContext<Self>) {
         match event {
             GitHubRepoEvent::PrInfoChanged => ctx.emit(GitHubRepoEvent::PrInfoChanged),
@@ -52,46 +48,41 @@ impl GitHubRepoModel {
 
     /// PR info for the current branch.
     pub fn pr_info<'a>(&self, ctx: &'a AppContext) -> Option<&'a PrInfo> {
-        match self {
+        match *self {
             #[cfg(feature = "local_fs")]
-            Self::Local(m) => m.as_ref(ctx).pr_info(),
-            Self::Remote(m) => m.as_ref(ctx).pr_info(),
+            Self::Local(ref m) => m.as_ref(ctx).pr_info(),
         }
     }
 
     /// Repository info (name/owner) returned by `gh repo view`.
     pub fn repository_info<'a>(&self, ctx: &'a AppContext) -> Option<&'a RepositoryInfo> {
-        match self {
+        match *self {
             #[cfg(feature = "local_fs")]
-            Self::Local(m) => m.as_ref(ctx).repository_info(),
-            Self::Remote(m) => m.as_ref(ctx).repository_info(),
+            Self::Local(ref m) => m.as_ref(ctx).repository_info(),
         }
     }
 
     /// Whether a `gh pr view` fetch is currently in flight.
     pub fn is_refreshing_pr_info(&self, ctx: &AppContext) -> bool {
-        match self {
+        match *self {
             #[cfg(feature = "local_fs")]
-            Self::Local(m) => m.as_ref(ctx).is_refreshing_pr_info(),
-            Self::Remote(m) => m.as_ref(ctx).is_refreshing_pr_info(),
+            Self::Local(ref m) => m.as_ref(ctx).is_refreshing_pr_info(),
         }
     }
 
     /// Force a PR info refresh (e.g. after a `gh`/`gt` command completes).
     pub fn refresh_pr_info(&self, ctx: &mut ModelContext<Self>) {
-        match self {
+        match *self {
             #[cfg(feature = "local_fs")]
-            Self::Local(m) => m.update(ctx, |m, ctx| m.refresh_pr_info(ctx)),
-            Self::Remote(m) => m.update(ctx, |m, ctx| m.refresh_pr_info(ctx)),
+            Self::Local(ref m) => m.update(ctx, |m, ctx| m.refresh_pr_info(ctx)),
         }
     }
 
     /// Force a repository-info refresh.
     pub fn refresh_repository_info(&self, ctx: &mut ModelContext<Self>) {
-        match self {
+        match *self {
             #[cfg(feature = "local_fs")]
-            Self::Local(m) => m.update(ctx, |m, ctx| m.refresh_repository_info(ctx)),
-            Self::Remote(m) => m.update(ctx, |m, ctx| m.refresh_repository_info(ctx)),
+            Self::Local(ref m) => m.update(ctx, |m, ctx| m.refresh_repository_info(ctx)),
         }
     }
 }
@@ -113,11 +104,8 @@ impl GitHubRepoModel {
         pr_info: Option<PrInfo>,
         ctx: &mut ModelContext<Self>,
     ) {
-        match self {
-            #[cfg(feature = "local_fs")]
-            Self::Local(m) => m.update(ctx, |m, ctx| m.set_pr_info_for_test(pr_info, ctx)),
-            Self::Remote(_) => unreachable!("remote test models are not used"),
-        }
+        let Self::Local(m) = self;
+        m.update(ctx, |m, ctx| m.set_pr_info_for_test(pr_info, ctx));
     }
 
     pub(crate) fn set_repository_info_for_test(
@@ -125,12 +113,9 @@ impl GitHubRepoModel {
         repository_info: Option<RepositoryInfo>,
         ctx: &mut ModelContext<Self>,
     ) {
-        match self {
-            #[cfg(feature = "local_fs")]
-            Self::Local(m) => m.update(ctx, |m, ctx| {
-                m.set_repository_info_for_test(repository_info, ctx)
-            }),
-            Self::Remote(_) => unreachable!("remote test models are not used"),
-        }
+        let Self::Local(m) = self;
+        m.update(ctx, |m, ctx| {
+            m.set_repository_info_for_test(repository_info, ctx)
+        });
     }
 }

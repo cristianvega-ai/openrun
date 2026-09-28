@@ -208,88 +208,12 @@ impl SearchCodebaseExecutor {
 
         let session_context = SessionContext::from_session(self.active_session.as_ref(ctx), ctx);
         if session_context.is_remote() {
-            let requested_codebase_path = codebase_path
-                .as_deref()
-                .filter(|path| !path.is_empty() && *path != ".")
-                .map(ToOwned::to_owned);
-            let server_output_id = get_server_output_id(conversation_id, ctx);
-            send_telemetry_from_ctx!(
-                TelemetryEvent::SearchCodebaseRequested {
-                    action_id: id.clone(),
-                    server_output_id,
-                    is_cross_repo: requested_codebase_path.is_some(),
+            ActionExecution::Sync(AIAgentActionResultType::SearchCodebase(
+                SearchCodebaseResult::Failed {
+                    reason: SearchCodebaseFailureReason::CodebaseNotIndexed,
+                    message: "The search failed because the codebase is not available. Try another way to locate the relevant files.".to_owned(),
                 },
-                ctx
-            );
-
-            let root_dir_for_search = self.root_repo_paths.get(id).cloned().or_else(|| {
-                self.get_relevant_files_controller
-                    .as_ref(ctx)
-                    .root_directory_for_remote_search(
-                        &session_context,
-                        requested_codebase_path.as_deref(),
-                        ctx,
-                    )
-            });
-            let Some(root_dir_for_search) = root_dir_for_search else {
-                return ActionExecution::Sync(AIAgentActionResultType::SearchCodebase(
-                    SearchCodebaseResult::Failed {
-                        reason: SearchCodebaseFailureReason::CodebaseNotIndexed,
-                        message: "The search failed because the codebase is not available. Try another way to locate the relevant files.".to_owned(),
-                    },
-                ));
-            };
-
-            // Add the repo root as a temporary permission; if the user gave us permission to
-            // search the repo, we can certainly search files within it for the rest of the convo.
-            BlocklistAIPermissions::handle(ctx).update(ctx, |model, _ctx| {
-                model.add_temporary_file_read_permissions(
-                    conversation_id,
-                    vec![root_dir_for_search.to_owned()],
-                );
-            });
-
-            let (result_tx, result_rx) = oneshot::channel();
-            self.active_searches.insert(id.clone(), result_tx);
-
-            match self
-                .get_relevant_files_controller
-                .update(ctx, |controller, ctx| {
-                    controller.send_request(
-                        GetRelevantFilesRequestTarget::Remote {
-                            session_context,
-                            requested_codebase_path,
-                        },
-                        query.clone(),
-                        partial_paths.as_ref(),
-                        id.clone(),
-                        team_scope,
-                        ctx,
-                    )
-                }) {
-                Ok(_) => ActionExecution::Async {
-                    execute_future: Box::pin(result_rx),
-                    on_complete: Box::new(
-                        |res: Result<SearchCodebaseResult, oneshot::Canceled>, _ctx| {
-                            let action_result =
-                                res.unwrap_or_else(|e| SearchCodebaseResult::Failed {
-                                    message: e.to_string(),
-                                    reason: SearchCodebaseFailureReason::ClientError,
-                                });
-                            AIAgentActionResultType::SearchCodebase(action_result)
-                        },
-                    ),
-                },
-                Err(e) => {
-                    log::warn!("Failed to send remote get_relevant_files request: {e:?}");
-                    ActionExecution::Sync(AIAgentActionResultType::SearchCodebase(
-                        SearchCodebaseResult::Failed {
-                            reason: SearchCodebaseFailureReason::CodebaseNotIndexed,
-                            message: "Remote codebase search is unavailable.".to_owned(),
-                        },
-                    ))
-                }
-            }
+            ))
         } else {
             let codebase_path = codebase_path.as_ref().map(PathBuf::from);
 
@@ -443,13 +367,7 @@ impl SearchCodebaseExecutor {
         let SearchCodebaseRequest { codebase_path, .. } = request;
         let session_context = SessionContext::from_session(self.active_session.as_ref(app), app);
         if session_context.is_remote() {
-            let requested_codebase_path = codebase_path
-                .as_deref()
-                .filter(|path| !path.is_empty() && *path != ".");
-            return self
-                .get_relevant_files_controller
-                .as_ref(app)
-                .root_directory_for_remote_search(&session_context, requested_codebase_path, app);
+            return None;
         }
 
         let codebase_path = codebase_path.as_deref().map(PathBuf::from);

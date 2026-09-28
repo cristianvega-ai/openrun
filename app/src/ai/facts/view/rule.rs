@@ -39,7 +39,7 @@ use crate::server::ids::{ClientId, SyncId};
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::{AISettings, AISettingsChangedEvent};
 use crate::ui_components::icons::Icon;
-use crate::util::path::display_path_with_host;
+use crate::util::path::display_location_path;
 use crate::view_components::DismissibleToast;
 use crate::view_components::action_button::{ActionButton, NakedTheme};
 use crate::workspace::ToastStack;
@@ -708,9 +708,8 @@ impl RuleView {
         &self,
         project_row: FileBackedRow,
         appearance: &Appearance,
-        app: &AppContext,
     ) -> Option<Box<dyn Element>> {
-        let row_name = display_path_with_host(&project_row.file_path, false, app);
+        let row_name = display_location_path(&project_row.file_path, false);
         let mut row = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
             .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
@@ -873,9 +872,7 @@ impl RuleView {
                 RuleRow::Global(global_row) => {
                     Some(self.render_global_rule_row(*global_row, appearance, app))
                 }
-                RuleRow::FileBacked(file_row) => {
-                    self.render_file_backed_row(file_row, appearance, app)
-                }
+                RuleRow::FileBacked(file_row) => self.render_file_backed_row(file_row, appearance),
             };
 
             if let Some(row) = row {

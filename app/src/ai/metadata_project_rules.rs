@@ -3,14 +3,12 @@ use futures::future::{BoxFuture, FutureExt as _};
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::AppContext;
 
-use super::remote_context_files::read_remote_text_file_contents;
-
 pub(crate) fn read_project_rule_contents(
     rule_paths: Vec<LocalOrRemotePath>,
-    ctx: &AppContext,
+    _ctx: &AppContext,
 ) -> BoxFuture<'static, anyhow::Result<ProjectRuleContents>> {
     match rule_paths.first() {
-        None => futures::future::ready(Ok(Vec::new())).boxed(),
+        None | Some(LocalOrRemotePath::Remote(_)) => futures::future::ready(Ok(Vec::new())).boxed(),
         Some(LocalOrRemotePath::Local(_)) => async move {
             let mut contents = Vec::new();
             for path in rule_paths {
@@ -29,8 +27,5 @@ pub(crate) fn read_project_rule_contents(
             Ok(contents)
         }
         .boxed(),
-        Some(LocalOrRemotePath::Remote(_)) => {
-            read_remote_text_file_contents(rule_paths, None, None, ctx)
-        }
     }
 }

@@ -90,13 +90,14 @@ impl BundledSkills {
         self.for_path_origin(path_origin)?.active_skill(id, ctx)
     }
 
-    /// Installs the catalog for a connected remote host, replacing any
-    /// previous catalog from an earlier connection.
+    /// Installs the catalog for a remote host, replacing any previous catalog.
+    #[cfg(test)]
     pub fn insert_remote(&mut self, host_id: HostId, bundled_skill: BundledSkill) {
         self.remote_by_host.insert(host_id, bundled_skill);
     }
 
-    /// Removes all catalog state for a disconnected remote host.
+    /// Removes all catalog state for a remote host.
+    #[cfg(test)]
     pub fn remove_remote(&mut self, host_id: &HostId) {
         self.remote_by_host.remove(host_id);
     }
@@ -147,20 +148,6 @@ impl BundledSkills {
     ) {
         self.local.insert_for_testing(id, skill, activation);
     }
-
-    #[cfg(test)]
-    pub fn insert_remote_for_testing(
-        &mut self,
-        host_id: HostId,
-        id: impl Into<String>,
-        skill: ParsedSkill,
-        activation: BundledSkillActivation,
-    ) {
-        self.remote_by_host
-            .entry(host_id)
-            .or_default()
-            .insert_for_testing(id, skill, activation);
-    }
 }
 
 /// One bundled skill definition with its activation condition and icon.
@@ -188,11 +175,7 @@ impl BundledSkill {
 
     /// Detect all skill definitions under the given resources root on the
     /// local filesystem, rendering skill content against this host.
-    ///
-    /// Called directly by the remote-server daemon, whose resources live at
-    /// the global install location rather than inside an app bundle (which
-    /// is what [`warp_core::paths::bundled_resources_dir`] resolves).
-    pub(crate) async fn detect_in_resources_dir(resources_dir: PathBuf) -> Self {
+    async fn detect_in_resources_dir(resources_dir: PathBuf) -> Self {
         let (mut definitions, figma_definitions) = futures::join!(
             load_bundled_skill_definitions(&resources_dir),
             load_figma_skill_definitions(&resources_dir)
@@ -277,9 +260,8 @@ impl BundledSkill {
             .map(|definition| &definition.skill)
     }
 
-    /// Builds a catalog from pre-parsed definitions. Used for catalogs
-    /// received from a remote host's daemon, which parses and renders the
-    /// skills against its own filesystem.
+    /// Builds a catalog from pre-parsed definitions.
+    #[cfg(test)]
     pub(crate) fn from_definitions(
         definitions: impl IntoIterator<Item = (String, ParsedSkill, BundledSkillActivation)>,
     ) -> Self {
@@ -305,17 +287,6 @@ impl BundledSkill {
             })
             .collect();
         Self { definitions }
-    }
-
-    /// Iterates the catalog's definitions as `(id, skill, activation)`.
-    /// Used by the daemon to serialize its catalog for the
-    /// aggregate remote Agent Mode context snapshot.
-    pub(crate) fn iter_definitions(
-        &self,
-    ) -> impl Iterator<Item = (&str, &ParsedSkill, &BundledSkillActivation)> {
-        self.definitions
-            .iter()
-            .map(|(id, definition)| (id.as_str(), &definition.skill, &definition.activation))
     }
 
     #[cfg(test)]
