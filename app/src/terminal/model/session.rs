@@ -1456,9 +1456,9 @@ impl Session {
                 Ok(result) => return Ok(result),
                 Err(e) => e,
             };
-        // Log the detailed error locally as a breadcrumb only; the failure is reported once at the
-        // sink via the registered `ReadHistoryContentsError`, whose static message keeps Sentry
-        // grouping stable and omits the (potentially sensitive/lengthy) PowerShell stderr.
+        // Log the detailed error locally; the failure is reported once at the sink via the
+        // registered `ReadHistoryContentsError`, whose static message omits the (potentially
+        // sensitive/lengthy) PowerShell stderr.
         log::error!("{powershell_error:?}");
 
         // If Kaspersky is running, early return since we can't use [`async_fs`] to read the history

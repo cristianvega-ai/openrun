@@ -26269,7 +26269,6 @@ impl TerminalView {
                     {
                         *request_outcome = Some(outcome.clone());
                     }
-                    // Log to sentry if unknown error
                     if let RequestPermissionsOutcome::OtherError { error_message } = &outcome {
                         report_error!(
                             anyhow::anyhow!("{error_message}")

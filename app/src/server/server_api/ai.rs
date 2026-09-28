@@ -3141,7 +3141,7 @@ impl AIClient for ServerApi {
     ) -> anyhow::Result<Bytes, anyhow::Error> {
         // The endpoint redirects to a short-lived signed URL, which the HTTP
         // client follows transparently. Strip that URL from body-read errors so
-        // it cannot leak into logs or Sentry breadcrumbs.
+        // it cannot leak into logs.
         let response = self
             .get_public_api_response(&format!(
                 "agent/conversations/{}/screenshots/{}/download",

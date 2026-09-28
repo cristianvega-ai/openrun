@@ -400,8 +400,8 @@ elif [[ $RELEASE_CHANNEL = "dev" ]]; then
     WARP_APP_NAME="WarpDev"
     WARP_SCHEME_NAME="warpdev"
     FEATURES="$FEATURES,agent_mode_debug"
-    # Enable heap usage tracking & profiling using jemalloc through pprof.
-    FEATURES="$FEATURES,jemalloc_pprof,heap_usage_tracking"
+    # Enable heap profiling using jemalloc through pprof.
+    FEATURES="$FEATURES,jemalloc_pprof"
     # Enable the Warp Control CLI wrapper for local scripting/automation.
     FEATURES="$FEATURES,warp_control_cli"
     export HANDLE_MARKDOWN=1
@@ -411,15 +411,15 @@ elif [[ $RELEASE_CHANNEL = "preview" ]]; then
     WARP_APP_NAME="WarpPreview"
     WARP_SCHEME_NAME="warppreview"
     FEATURES="$FEATURES,preview_channel"
-    # Enable heap usage tracking & profiling using jemalloc through pprof.
-    FEATURES="$FEATURES,jemalloc_pprof,heap_usage_tracking"
+    # Enable heap profiling using jemalloc through pprof.
+    FEATURES="$FEATURES,jemalloc_pprof"
 elif [[ $RELEASE_CHANNEL = "stable" ]]; then
     WARP_BIN="stable"
     BUNDLE_ID="dev.warp.Warp-Stable"
     WARP_APP_NAME="Warp"
     WARP_SCHEME_NAME="warp"
-    # Enable heap usage tracking & profiling using jemalloc through pprof.
-    FEATURES="$FEATURES,jemalloc_pprof,heap_usage_tracking"
+    # Enable heap profiling using jemalloc through pprof.
+    FEATURES="$FEATURES,jemalloc_pprof"
 elif [[ $RELEASE_CHANNEL = "oss" ]]; then
     WARP_BIN="warp-oss"
     BUNDLE_ID="dev.warp.WarpOss"
@@ -671,12 +671,6 @@ if [[ "$ARTIFACT" == "app" ]]; then
   "$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "$BUNDLED_RESOURCES_DIR" "$RELEASE_CHANNEL"
 
   "$WORKSPACE_ROOT_DIR/script/compile_icon" "$RELEASE_CHANNEL" "$BUNDLE_DIR/$WARP_APP_NAME.app"
-
-  HELPERS_DIR="$BUNDLE_DIR/$WARP_APP_NAME.app/Contents/Helpers"
-  if [[ ",$FEATURES," =~ ",heap_usage_tracking," ]]; then
-    echo "Bundling pprof..."
-    "$WORKSPACE_ROOT_DIR/script/prepare_bundled_pprof" "$HELPERS_DIR"
-  fi
 
   # Determine CLI wrapper script path based on release channel (e.g. "warp-oss").
   CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/warp-$RELEASE_CHANNEL"

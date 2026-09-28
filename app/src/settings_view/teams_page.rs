@@ -1358,7 +1358,7 @@ impl TeamsPageView {
                 ctx.notify();
             }
             UserWorkspacesEvent::FetchDiscoveryOptionsRejected(e) => {
-                // Don't show toast, only log to sentry
+                // Don't show toast, only log.
                 report_error!(e);
             }
             UserWorkspacesEvent::TransferTeamOwnershipSuccess => {
@@ -1939,7 +1939,6 @@ impl TeamsPageView {
         let message = error_msg.into();
         self.show_toast(message.clone(), ToastFlavor::Error, ctx);
 
-        // Log error to sentry
         if let Some(error) = error {
             report_error!(error);
         } else {

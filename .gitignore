@@ -1,7 +1,3 @@
-app/Carthage
-app/frameworks/default/Carthage
-app/frameworks/dev/Carthage
-app/frameworks/**/*.xcframework
 /target
 /app/target
 /warp.xcworkspace

@@ -20,7 +20,7 @@ use crate::task::{MessageCommand, TaskCommand};
 
 #[test]
 fn identifies_worker_subcommands() {
-    assert!(is_worker_invocation("minidump-server"));
+    assert!(is_worker_invocation("ripgrep-search"));
     #[cfg(unix)]
     assert!(is_worker_invocation(&terminal_server_subcommand()));
     assert!(!is_worker_invocation("--prompt"));

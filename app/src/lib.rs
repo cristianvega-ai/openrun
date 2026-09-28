@@ -23,8 +23,6 @@ mod completer;
 mod context_chips;
 #[cfg(enable_crash_recovery)]
 mod crash_recovery;
-#[cfg(feature = "crash_reporting")]
-mod crash_reporting;
 mod debug_dump;
 mod default_terminal;
 mod drive;
@@ -550,7 +548,7 @@ impl LaunchMode {
             LaunchMode::Tui { .. } => ExecutionMode::Tui,
             // RemoteServerProxy is a thin byte bridge; Sdk is the closest match.
             LaunchMode::RemoteServerProxy => ExecutionMode::Sdk,
-            // RemoteServerDaemon gets its own mode for distinct Sentry tagging.
+            // RemoteServerDaemon gets its own mode so it is distinguishable from other clients.
             LaunchMode::RemoteServerDaemon { .. } => ExecutionMode::RemoteServerDaemon,
         }
     }
@@ -631,19 +629,6 @@ impl LaunchMode {
             | LaunchMode::RemoteServerProxy
             | LaunchMode::RemoteServerDaemon { .. }
             | LaunchMode::Tui { .. } => false,
-        }
-    }
-
-    /// Whether Sentry / crash reporting should be initialized.
-    #[cfg_attr(not(feature = "crash_reporting"), allow(dead_code))]
-    pub(crate) fn needs_crash_reporting(&self) -> bool {
-        match self {
-            LaunchMode::App { .. }
-            | LaunchMode::CommandLine { .. }
-            | LaunchMode::Test { .. }
-            | LaunchMode::RemoteServerDaemon { .. }
-            | LaunchMode::RemoteServerProxy
-            | LaunchMode::Tui { .. } => true,
         }
     }
 
@@ -857,17 +842,6 @@ fn run_worker_command(worker: &warp_cli::WorkerCommand) -> Result<()> {
             crate::terminal::local_tty::run_terminal_server(args);
             Ok(())
         }
-        #[cfg(feature = "local_tty")]
-        warp_cli::WorkerCommand::MinidumpServer { socket_name } => {
-            cfg_if::cfg_if! {
-                if #[cfg(all(linux_or_windows, feature = "crash_reporting"))] {
-                    crate::crash_reporting::run_minidump_server(socket_name)
-                } else {
-                    let _ = socket_name;
-                    panic!("The minidump server is not supported on this platform");
-                }
-            }
-        }
         #[cfg(not(target_family = "wasm"))]
         warp_cli::WorkerCommand::RemoteServerProxy(args) => {
             // Proxy is a thin byte bridge (stdin/stdout ↔ Unix socket).
@@ -995,15 +969,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // for other entrypoints.
     features::init_feature_flags();
 
-    #[cfg(feature = "crash_reporting")]
-    if launch_mode.needs_crash_reporting() {
-        // Ensure that the main/root Sentry hub is initialized on the main
-        // thread.  PtySpawner creates a background thread to receive logs from
-        // the terminal server process, and we don't want it to be the host of
-        // the primary sentry::Hub.
-        sentry::Hub::main();
-    }
-
     let mut tracing_initialization = launch_mode
         .needs_profiling()
         .then(tracing::init)
@@ -1073,17 +1038,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         web_intent_parser::set_context_flags_from_current_url();
     }
 
-    // Collect errors that occur in run_internal() before the Sentry client is initialized,
-    // so they can be replayed to Sentry once it's ready.
-    #[cfg_attr(
-        not(all(
-            feature = "release_bundle",
-            any(windows, any(target_os = "linux", target_os = "freebsd"))
-        )),
-        expect(unused_mut)
-    )]
-    let mut pre_sentry_errors: Vec<anyhow::Error> = Vec::new();
-
     #[cfg(all(
         feature = "release_bundle",
         any(target_os = "linux", target_os = "freebsd")
@@ -1101,9 +1055,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
             // it's better to run a second instance than potentially end up in a
             // state where Warp refuses to run even a first instance.
             Err(err) => {
-                let err = anyhow::Error::from(err).context("Failed to forward startup args");
-                report_error!(&err);
-                pre_sentry_errors.push(err);
+                report_error!(anyhow::Error::from(err).context("Failed to forward startup args"));
             }
         }
     }
@@ -1122,9 +1074,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
             // it's better to run a second instance than potentially end up in a
             // state where Warp refuses to run even a first instance.
             Err(err) => {
-                let err = anyhow::Error::from(err).context("Failed to forward startup args");
-                report_error!(&err);
-                pre_sentry_errors.push(err);
+                report_error!(anyhow::Error::from(err).context("Failed to forward startup args"));
             }
         }
     }
@@ -1190,9 +1140,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
                 if let Some(initialization) = tracing_initialization.as_mut() {
                     initialization.shutdown();
                 }
-
-                #[cfg(feature = "crash_reporting")]
-                crash_reporting::uninit_sentry();
             })),
             ..Default::default()
         }
@@ -1308,8 +1255,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
                 ctx,
             )
         });
-        #[cfg(feature = "crash_reporting")]
-        crate::crash_reporting::set_client_type_tag(launch_mode.execution_mode().client_id());
 
         // Add the terminal server singleton to the application.
         #[cfg(feature = "local_tty")]
@@ -1325,13 +1270,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         #[cfg(enable_crash_recovery)]
         ctx.add_singleton_model(move |_ctx| crash_recovery);
 
-        let app_state = initialize_app(
-            &launch_mode,
-            timer,
-            startup_toml_parse_error,
-            ctx,
-            pre_sentry_errors,
-        );
+        let app_state = initialize_app(&launch_mode, timer, startup_toml_parse_error, ctx);
 
         if ImprovedPaletteSearch::improved_search_enabled(ctx) {
             FeatureFlag::UseTantivySearch.set_enabled(true);
@@ -1452,11 +1391,7 @@ pub(crate) fn initialize_app(
     mut timer: IntervalTimer,
     startup_toml_parse_error: Option<warpui_extras::user_preferences::Error>,
     ctx: &mut warpui::AppContext,
-    _pre_sentry_errors: impl IntoIterator<Item = anyhow::Error>,
 ) -> Option<AppState> {
-    // WARNING: Errors that happen here before crash_reporting::init will not be collected in
-    // Sentry. Only the dependencies of crash_reporting should be initialized here. Avoid adding
-    // any other stuff here, as failures will be silent. Push them to pre_sentry_errors instead.
     let data_domain = ChannelState::data_domain();
     let secure_storage_service_name = launch_mode.secure_storage_service_name(&data_domain);
 
@@ -1544,12 +1479,6 @@ pub(crate) fn initialize_app(
                 None
             }
         });
-    #[cfg(all(not(target_family = "wasm"), feature = "crash_reporting"))]
-    if matches!(launch_mode, LaunchMode::CommandLine { .. })
-        && let Some(task_id) = ambient_agent_task_id
-    {
-        crash_reporting::set_task_id_tag(&task_id.to_string());
-    }
     #[cfg(not(target_family = "wasm"))]
     server_api.set_ambient_agent_task_id(ambient_agent_task_id);
     let ai_client = server_api_provider.as_ref(ctx).get_ai_client();
@@ -1794,20 +1723,6 @@ pub(crate) fn initialize_app(
 
     ctx.add_singleton_model(AntivirusInfo::new);
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "crash_reporting")] {
-            let is_crash_reporting_enabled = crash_reporting::init(ctx);
-        } else {
-            let is_crash_reporting_enabled = false;
-        }
-    }
-    // Send buffered pre-init errors to Sentry now that the client is ready.
-    #[cfg(feature = "crash_reporting")]
-    for err in _pre_sentry_errors {
-        sentry::integrations::anyhow::capture_anyhow(&err);
-    }
-    timer.mark_interval_end("INIT_CRASH_REPORTING");
-
     ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
 
     ctx.set_default_binding_validator(is_binding_cross_platform);
@@ -1907,7 +1822,6 @@ pub(crate) fn initialize_app(
             let event = TelemetryEvent::AppStartup(AppStartupInfo {
                 is_session_restoration_on: user_defaults_on_startup.should_restore_session,
                 is_screen_reader_enabled,
-                is_crash_reporting_enabled,
                 timing_data,
             });
 
@@ -1929,9 +1843,7 @@ pub(crate) fn initialize_app(
 
         #[cfg(enable_crash_recovery)]
         ctx.on_frame_drawn(|ctx, window_id| {
-            crash_recovery::CrashRecovery::handle(ctx).update(ctx, |crash_recovery, ctx| {
-                crash_recovery.on_frame_drawn(window_id, ctx);
-            });
+            crash_recovery::CrashRecovery::as_ref(ctx).on_frame_drawn(window_id);
         })
     } else {
         // If the app was opened while logged out, record an event for measuring new users.
@@ -2701,11 +2613,6 @@ pub(crate) fn app_callbacks(
             if let Some(initialization) = tracing_initialization.as_mut() {
                 initialization.shutdown();
             }
-
-            // Tear down crash reporting as the last thing we do before the application
-            // terminates.
-            #[cfg(feature = "crash_reporting")]
-            crash_reporting::uninit_sentry();
         })),
         on_should_close_window: Some(Box::new(move |window_id, ctx| {
             let general_settings = GeneralSettings::as_ref(ctx);

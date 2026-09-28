@@ -337,7 +337,7 @@ pub trait ReadView: ViewAsRef {
 ///
 /// [`UpdateView::update_view`] panics in both of these cases. [`ViewHandle::try_update`] reports
 /// them instead, so callers can tell an expected teardown race apart from a genuine reentrancy
-/// bug — and so that only the latter reaches Sentry.
+/// bug — and so that only the latter is reported as an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum ViewUpdateError {
     /// The view's window has been closed, so the view is no longer registered. Expected whenever

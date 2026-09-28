@@ -1,9 +1,6 @@
 # Don't include the git repository.
 .git
 
-app/Carthage
-app/frameworks/default/Carthage
-app/frameworks/dev/Carthage
 /target
 /app/target
 /warp.xcworkspace
