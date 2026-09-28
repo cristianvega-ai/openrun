@@ -74,8 +74,6 @@ impl Input {
     }
 
     /// Renders the input when there is an active `AgentView`.
-    ///
-    /// Only used when `FeatureFlag::AgentView` is enabled.
     pub(super) fn render_agent_input(&self, app: &AppContext) -> Box<dyn Element> {
         if self.is_cloud_mode_input_v2_composing(app) {
             return self.render_cloud_mode_v2_composing_input(app);
@@ -144,7 +142,7 @@ impl Input {
         let terminal_spacing = TerminalSettings::as_ref(app)
             .terminal_input_spacing(appearance.line_height_ratio(), app);
         column.add_child(
-            Container::new(self.render_input_box(/*show_vim_status=*/ false, appearance, app))
+            Container::new(self.render_input_box(appearance, app))
                 .with_margin_top(
                     terminal_spacing.prompt_to_editor_padding
                         * spacing::UDI_PROMPT_BOTTOM_PADDING_FACTOR,
@@ -624,10 +622,9 @@ impl Input {
         let background = internal_colors::fg_overlay_1(theme);
         let border_color = internal_colors::neutral_2(theme);
 
-        let editor_with_min_height =
-            ConstrainedBox::new(self.render_input_box(/*show_vim_status=*/ false, appearance, app))
-                .with_min_height(CLOUD_MODE_V2_INPUT_MIN_EDITOR_HEIGHT)
-                .finish();
+        let editor_with_min_height = ConstrainedBox::new(self.render_input_box(appearance, app))
+            .with_min_height(CLOUD_MODE_V2_INPUT_MIN_EDITOR_HEIGHT)
+            .finish();
 
         let mut editor_column = Flex::column()
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)

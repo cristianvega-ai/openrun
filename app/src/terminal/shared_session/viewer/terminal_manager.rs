@@ -32,10 +32,7 @@ use crate::ai::agent_conversations_model::AgentConversationsModel;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::agent_view::{AgentViewController, AgentViewControllerEvent};
 use crate::ai::blocklist::orchestration_event_streamer::OrchestrationEventStreamer;
-use crate::ai::blocklist::{
-    BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIHistoryEvent,
-    BlocklistAIHistoryModel,
-};
+use crate::ai::blocklist::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::context_chips::prompt_snapshot::PromptSnapshot;
 use crate::context_chips::prompt_type::PromptType;
@@ -129,12 +126,9 @@ impl TerminalManager {
         model: &Arc<FairMutex<TerminalModel>>,
         current_network: &Arc<FairMutex<Option<ModelHandle<Network>>>>,
         agent_view_controller: &ModelHandle<AgentViewController>,
-        ai_context_model: &ModelHandle<BlocklistAIContextModel>,
         ctx: &mut AppContext,
     ) {
-        let Some(update) =
-            build_selected_conversation_update(agent_view_controller, ai_context_model, ctx)
-        else {
+        let Some(update) = build_selected_conversation_update(agent_view_controller, ctx) else {
             return;
         };
 
@@ -624,7 +618,7 @@ impl TerminalManager {
             });
 
             // Send input mode updates during session sharing (if viewer has Editor role).
-            // When AgentView is enabled, we only send updates when in an active agent view.
+            // We only send updates when in an active agent view.
             // For ambient agent sessions, input mode is controlled locally, so we skip sending updates.
             let current_network_for_input_mode = self.current_network.clone();
             let model_clone_for_input = self.model.clone();
@@ -640,15 +634,13 @@ impl TerminalManager {
                     return;
                 }
 
-                // When AgentView is enabled, only send input mode updates when in an active agent view.
-                if FeatureFlag::AgentView.is_enabled() {
-                    let Some(view) = weak_view_for_input_mode.upgrade(ctx) else {
-                        return;
-                    };
-                    let agent_view_controller = view.as_ref(ctx).agent_view_controller().clone();
-                    if !agent_view_controller.as_ref(ctx).is_active() {
-                        return;
-                    }
+                // Only send input mode updates when in an active agent view.
+                let Some(view) = weak_view_for_input_mode.upgrade(ctx) else {
+                    return;
+                };
+                let agent_view_controller = view.as_ref(ctx).agent_view_controller().clone();
+                if !agent_view_controller.as_ref(ctx).is_active() {
+                    return;
                 }
 
                 let config = event.updated_config();
@@ -666,54 +658,28 @@ impl TerminalManager {
             });
 
             let agent_view_controller = self.view.as_ref(ctx).agent_view_controller().clone();
-            let ai_context_model = self.view.as_ref(ctx).ai_context_model().clone();
-            // Send selected conversation updates during session sharing (if viewer has Editor role)
-            if FeatureFlag::AgentView.is_enabled() {
-                // When agent view is enabled, we listen to the agent view controller
-                // as the authoritative source for which conversation is selected.
-                let current_network_for_conversation = self.current_network.clone();
-                let model_for_conversation = self.model.clone();
-                let ai_context_model_for_conversation = ai_context_model.clone();
-                let conversation_remote_update_guard = self.viewer_remote_update_guard.clone();
-                ctx.subscribe_to_model(
-                    &agent_view_controller,
-                    move |agent_view_controller, event, ctx| match event {
-                        AgentViewControllerEvent::EnteredAgentView { .. }
-                        | AgentViewControllerEvent::ExitedAgentView { .. } => {
-                            Self::send_selected_conversation_update_for_viewer_to_current_network(
-                                &conversation_remote_update_guard,
-                                &model_for_conversation,
-                                &current_network_for_conversation,
-                                &agent_view_controller,
-                                &ai_context_model_for_conversation,
-                                ctx,
-                            );
-                        }
-                        AgentViewControllerEvent::ExitConfirmed { .. } => {}
-                    },
-                );
-            } else {
-                // When agent view is disabled, we fallback to the legacy behavior
-                // of listening for pending query state changes to know which conversation is selected.
-                let current_network_for_conversation = self.current_network.clone();
-                let model_for_conversation = self.model.clone();
-                let agent_view_controller_for_conversation = agent_view_controller.clone();
-                let conversation_remote_update_guard = self.viewer_remote_update_guard.clone();
-                ctx.subscribe_to_model(&ai_context_model, move |ai_context_model, event, ctx| {
-                    if !matches!(event, BlocklistAIContextEvent::PendingQueryStateUpdated) {
-                        return;
+            // Send selected conversation updates during session sharing (if viewer has Editor
+            // role). We listen to the agent view controller as the authoritative source for which
+            // conversation is selected.
+            let current_network_for_conversation = self.current_network.clone();
+            let model_for_conversation = self.model.clone();
+            let conversation_remote_update_guard = self.viewer_remote_update_guard.clone();
+            ctx.subscribe_to_model(
+                &agent_view_controller,
+                move |agent_view_controller, event, ctx| match event {
+                    AgentViewControllerEvent::EnteredAgentView { .. }
+                    | AgentViewControllerEvent::ExitedAgentView { .. } => {
+                        Self::send_selected_conversation_update_for_viewer_to_current_network(
+                            &conversation_remote_update_guard,
+                            &model_for_conversation,
+                            &current_network_for_conversation,
+                            &agent_view_controller,
+                            ctx,
+                        );
                     }
-
-                    Self::send_selected_conversation_update_for_viewer_to_current_network(
-                        &conversation_remote_update_guard,
-                        &model_for_conversation,
-                        &current_network_for_conversation,
-                        &agent_view_controller_for_conversation,
-                        &ai_context_model,
-                        ctx,
-                    );
-                });
-            }
+                    AgentViewControllerEvent::ExitConfirmed { .. } => {}
+                },
+            );
 
             // Send auto-approve updates during session sharing (if viewer has Editor role)
             let current_network_for_auto = self.current_network.clone();

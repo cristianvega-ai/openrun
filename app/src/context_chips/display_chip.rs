@@ -1505,7 +1505,7 @@ impl DisplayChip {
         } else {
             theme.ansi_fg_green()
         };
-        let font_family = if self.is_in_agent_view || !FeatureFlag::AgentView.is_enabled() {
+        let font_family = if self.is_in_agent_view {
             appearance.ui_font_family()
         } else {
             appearance.monospace_font_family()
@@ -1670,10 +1670,8 @@ impl DisplayChip {
         let font_size = udi_font_size(appearance);
         let font_family = if self.is_in_agent_view {
             appearance.ui_font_family()
-        } else if FeatureFlag::AgentView.is_enabled() {
-            appearance.monospace_font_family()
         } else {
-            appearance.ui_font_family()
+            appearance.monospace_font_family()
         };
 
         let git_diff_stats_content = render_git_diff_stats_content(
@@ -2008,7 +2006,7 @@ impl DisplayChip {
 
     fn render_chip(&self, app: &AppContext) -> Option<Box<dyn Element>> {
         let appearance = Appearance::as_ref(app);
-        let font_family = if self.is_in_agent_view || !FeatureFlag::AgentView.is_enabled() {
+        let font_family = if self.is_in_agent_view {
             appearance.ui_font_family()
         } else {
             appearance.monospace_font_family()
@@ -2377,7 +2375,7 @@ pub(crate) fn render_udi_chip(config: UdiChipConfig, appearance: &Appearance) ->
         config.text.clone()
     };
 
-    let font_family = if config.is_in_agent_view || !FeatureFlag::AgentView.is_enabled() {
+    let font_family = if config.is_in_agent_view {
         appearance.ui_font_family()
     } else {
         appearance.monospace_font_family()

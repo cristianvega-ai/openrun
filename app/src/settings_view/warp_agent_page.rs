@@ -167,11 +167,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
         vec![
             ToggleSettingActionPair::new(
-                if FeatureFlag::AgentView.is_enabled() {
-                    "terminal command autodetection in agent input"
-                } else {
-                    "natural language detection"
-                },
+                "terminal command autodetection in agent input",
                 builder(SettingsAction::WarpAgent(
                     WarpAgentPageAction::ToggleAIInputAutoDetection,
                 )),
@@ -193,8 +189,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 &(context.clone() & id!(flags::IS_ANY_AI_ENABLED)),
                 flags::NLD_IN_TERMINAL_FLAG,
             )
-            .with_group(bindings::BindingGroup::WarpAi)
-            .with_enabled(|| FeatureFlag::AgentView.is_enabled()),
+            .with_group(bindings::BindingGroup::WarpAi),
         ],
         app,
     );
@@ -298,8 +293,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 ),
                 None,
             )
-            .with_group(bindings::BindingGroup::WarpAi)
-            .with_enabled(|| FeatureFlag::AgentView.is_enabled()),
+            .with_group(bindings::BindingGroup::WarpAi),
         ],
         app,
     );
@@ -3722,70 +3716,10 @@ impl NaturalLanguageDetectionWidget {
 
         let mut section = Flex::column();
 
-        if FeatureFlag::AgentView.is_enabled() {
-            static AUTODETECTION_DESCRIPTION_FRAGMENTS: LazyLock<Vec<FormattedTextFragment>> =
-                LazyLock::new(|| {
-                    vec![
-                        FormattedTextFragment::plain_text("Encountered an incorrect detection? "),
-                        FormattedTextFragment::hyperlink(
-                            "Let us know",
-                            "https://warpdotdev.typeform.com/to/offrTIpq",
-                        ),
-                    ]
-                });
-
-            section.add_children([
-                render_ai_setting_toggle::<NLDInTerminalEnabled>(
-                    "Autodetect agent prompts in terminal input",
-                    WarpAgentPageAction::ToggleNLDInTerminal,
-                    ai_settings.is_nld_in_terminal_enabled(app),
-                    is_toggleable,
-                    nld_in_terminal_toggle,
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-                render_ai_setting_toggle::<AIAutoDetectionEnabled>(
-                    "Autodetect terminal commands in agent input",
-                    WarpAgentPageAction::ToggleAIInputAutoDetection,
-                    is_nld_enabled,
-                    is_toggleable,
-                    autodetection_toggle,
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-                Container::new(
-                    FormattedTextElement::new(
-                        FormattedText::new([FormattedTextLine::Line(
-                            (*AUTODETECTION_DESCRIPTION_FRAGMENTS).clone(),
-                        )]),
-                        CONTENT_FONT_SIZE,
-                        appearance.ui_font_family(),
-                        appearance.ui_font_family(),
-                        styles::description_font_color(is_toggleable, app).into(),
-                        incorrect_autodetection_highlight_index,
-                    )
-                    .with_hyperlink_font_color(appearance.theme().accent().into_solid())
-                    .register_default_click_handlers(|url, ctx, _| {
-                        ctx.dispatch_typed_action(WarpAgentPageAction::HyperlinkClick(url));
-                    })
-                    .finish(),
-                )
-                .with_margin_top(styles::DESCRIPTION_NEGATIVE_MARGIN_OFFSET)
-                .with_margin_bottom(styles::DESCRIPTION_MARGIN_BOTTOM)
-                .with_margin_right(styles::TOGGLE_WIDTH_MARGIN)
-                .finish(),
-            ])
-        } else {
-            static NATURAL_LANGUAGE_DETECTION_DESCRIPTION_FRAGMENTS: LazyLock<
-                Vec<FormattedTextFragment>,
-            > = LazyLock::new(|| {
+        static AUTODETECTION_DESCRIPTION_FRAGMENTS: LazyLock<Vec<FormattedTextFragment>> =
+            LazyLock::new(|| {
                 vec![
-                    FormattedTextFragment::plain_text(
-                        "Enabling natural language detection will detect when natural language is written in the terminal input, and then automatically switch to Agent Mode for AI queries.",
-                    ),
-                    FormattedTextFragment::plain_text(
-                        " Encountered an incorrect input detection? ",
-                    ),
+                    FormattedTextFragment::plain_text("Encountered an incorrect detection? "),
                     FormattedTextFragment::hyperlink(
                         "Let us know",
                         "https://warpdotdev.typeform.com/to/offrTIpq",
@@ -3793,39 +3727,47 @@ impl NaturalLanguageDetectionWidget {
                 ]
             });
 
-            section.add_children([
-                render_ai_setting_toggle::<AIAutoDetectionEnabled>(
-                    "Natural language detection",
-                    WarpAgentPageAction::ToggleAIInputAutoDetection,
-                    is_nld_enabled,
-                    is_toggleable,
-                    autodetection_toggle,
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-                Container::new(
-                    FormattedTextElement::new(
-                        FormattedText::new([FormattedTextLine::Line(
-                            (*NATURAL_LANGUAGE_DETECTION_DESCRIPTION_FRAGMENTS).clone(),
-                        )]),
-                        CONTENT_FONT_SIZE,
-                        appearance.ui_font_family(),
-                        appearance.ui_font_family(),
-                        styles::description_font_color(is_toggleable, app).into(),
-                        incorrect_autodetection_highlight_index,
-                    )
-                    .with_hyperlink_font_color(appearance.theme().accent().into_solid())
-                    .register_default_click_handlers(|url, ctx, _| {
-                        ctx.dispatch_typed_action(WarpAgentPageAction::HyperlinkClick(url));
-                    })
-                    .finish(),
+        section.add_children([
+            render_ai_setting_toggle::<NLDInTerminalEnabled>(
+                "Autodetect agent prompts in terminal input",
+                WarpAgentPageAction::ToggleNLDInTerminal,
+                ai_settings.is_nld_in_terminal_enabled(app),
+                is_toggleable,
+                nld_in_terminal_toggle,
+                &view.local_only_icon_tooltip_states,
+                app,
+            ),
+            render_ai_setting_toggle::<AIAutoDetectionEnabled>(
+                "Autodetect terminal commands in agent input",
+                WarpAgentPageAction::ToggleAIInputAutoDetection,
+                is_nld_enabled,
+                is_toggleable,
+                autodetection_toggle,
+                &view.local_only_icon_tooltip_states,
+                app,
+            ),
+            Container::new(
+                FormattedTextElement::new(
+                    FormattedText::new([FormattedTextLine::Line(
+                        (*AUTODETECTION_DESCRIPTION_FRAGMENTS).clone(),
+                    )]),
+                    CONTENT_FONT_SIZE,
+                    appearance.ui_font_family(),
+                    appearance.ui_font_family(),
+                    styles::description_font_color(is_toggleable, app).into(),
+                    incorrect_autodetection_highlight_index,
                 )
-                .with_margin_top(styles::DESCRIPTION_NEGATIVE_MARGIN_OFFSET)
-                .with_margin_bottom(styles::DESCRIPTION_MARGIN_BOTTOM)
-                .with_margin_right(styles::TOGGLE_WIDTH_MARGIN)
+                .with_hyperlink_font_color(appearance.theme().accent().into_solid())
+                .register_default_click_handlers(|url, ctx, _| {
+                    ctx.dispatch_typed_action(WarpAgentPageAction::HyperlinkClick(url));
+                })
                 .finish(),
-            ]);
-        }
+            )
+            .with_margin_top(styles::DESCRIPTION_NEGATIVE_MARGIN_OFFSET)
+            .with_margin_bottom(styles::DESCRIPTION_MARGIN_BOTTOM)
+            .with_margin_right(styles::TOGGLE_WIDTH_MARGIN)
+            .finish(),
+        ]);
 
         section
             .with_child(render_ai_setting_label::<AICommandDenylist>(
@@ -4064,10 +4006,6 @@ impl SettingsWidget for ShowOzUpdatesInZeroStateWidget {
         "other oz updates zero state empty changelog new conversation agent what's new"
     }
 
-    fn should_render(&self, _app: &AppContext) -> bool {
-        FeatureFlag::AgentView.is_enabled()
-    }
-
     fn render(
         &self,
         view: &Self::View,
@@ -4098,10 +4036,6 @@ impl SettingsWidget for UseAgentFooterWidget {
 
     fn search_terms(&self) -> &str {
         "other use agent footer full terminal use long running commands"
-    }
-
-    fn should_render(&self, _app: &AppContext) -> bool {
-        FeatureFlag::AgentView.is_enabled()
     }
 
     fn render(
@@ -4145,9 +4079,7 @@ impl SettingsWidget for AgentToolbarLayoutEditorWidget {
     }
 
     fn should_render(&self, app: &AppContext) -> bool {
-        FeatureFlag::AgentView.is_enabled()
-            && FeatureFlag::AgentToolbarEditor.is_enabled()
-            && AISettings::as_ref(app).is_any_ai_enabled(app)
+        AISettings::as_ref(app).is_any_ai_enabled(app)
     }
 
     fn render(

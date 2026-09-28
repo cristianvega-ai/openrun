@@ -1494,8 +1494,6 @@ fn failed_viewer_child_session_stays_unavailable_without_retrying_same_session()
 /// layer.
 #[test]
 fn test_pane_group_restore_loop_keeps_orchestration_topology_and_materializes_child_pane() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2046,7 +2044,6 @@ fn test_create_missing_child_agent_panes_restores_remote_child_from_history_mode
 
 #[test]
 fn test_ambient_transcript_restore_creates_cloud_mode_pane_when_handoff_enabled() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
     let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
     let _setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
     let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(true);
@@ -2285,8 +2282,6 @@ fn create_shared_session_viewer_without_cloud_mode_does_not_populate_ambient_age
 
 #[test]
 fn test_entering_parent_agent_view_lazily_restores_hidden_child_pane() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2331,8 +2326,6 @@ fn test_entering_parent_agent_view_lazily_restores_hidden_child_pane() {
 
 #[test]
 fn test_entering_remote_parent_agent_view_lazily_restores_local_hidden_child_pane() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2413,8 +2406,6 @@ fn test_entering_remote_parent_agent_view_lazily_restores_local_hidden_child_pan
 
 #[test]
 fn test_entering_remote_parent_agent_view_lazily_restores_remote_hidden_child_pane() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2500,8 +2491,6 @@ fn test_entering_remote_parent_agent_view_lazily_restores_remote_hidden_child_pa
 
 #[test]
 fn test_add_pane_restores_hidden_child_when_parent_is_already_fullscreen() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2536,8 +2525,6 @@ fn test_add_pane_restores_hidden_child_when_parent_is_already_fullscreen() {
 
 #[test]
 fn test_reattach_panes_restores_hidden_child_when_parent_is_already_fullscreen() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2578,7 +2565,6 @@ fn test_reattach_panes_restores_hidden_child_when_parent_is_already_fullscreen()
 
 #[test]
 fn test_restore_closed_pane_restores_hidden_child_when_parent_is_already_fullscreen() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
     let _undo_closed_panes = FeatureFlag::UndoClosedPanes.override_enabled(true);
 
     App::test((), |mut app| async move {
@@ -2631,8 +2617,6 @@ fn test_restore_closed_pane_restores_hidden_child_when_parent_is_already_fullscr
 
 #[test]
 fn test_replace_pane_restores_hidden_child_when_replacement_is_already_fullscreen() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2671,8 +2655,6 @@ fn test_replace_pane_restores_hidden_child_when_replacement_is_already_fullscree
 
 #[test]
 fn test_ensure_hidden_child_agent_pane_materializes_missing_child_pane() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2704,8 +2686,6 @@ fn test_ensure_hidden_child_agent_pane_materializes_missing_child_pane() {
 
 #[test]
 fn test_entering_parent_agent_view_skips_child_owned_by_another_pane() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let pane_group = mock_pane_group(&mut app, Default::default());
@@ -2749,8 +2729,6 @@ fn test_entering_parent_agent_view_skips_child_owned_by_another_pane() {
 
 #[test]
 fn test_ensure_hidden_child_agent_pane_skips_child_owned_by_another_pane_group() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let parent_pane_group = mock_pane_group(&mut app, Default::default());
@@ -2794,8 +2772,6 @@ fn test_ensure_hidden_child_agent_pane_skips_child_owned_by_another_pane_group()
 
 #[test]
 fn test_ensure_hidden_child_agent_pane_restores_child_from_detached_group() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let closed_pane_group = mock_pane_group(&mut app, Default::default());
@@ -2890,8 +2866,6 @@ fn test_ensure_hidden_child_agent_pane_restores_child_from_detached_group() {
 
 #[test]
 fn test_entering_parent_agent_view_skips_child_owned_by_another_pane_group() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let parent_pane_group = mock_pane_group(&mut app, Default::default());

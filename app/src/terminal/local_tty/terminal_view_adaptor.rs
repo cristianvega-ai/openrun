@@ -37,8 +37,8 @@ use crate::ai::blocklist::pending_cli_harness_prompt_queue::{
     PendingCliHarnessPromptQueue, QueuedCliHarnessPrompt,
 };
 use crate::ai::blocklist::{
-    BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIControllerEvent,
-    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, InputConfig, SerializedBlockListItem,
+    BlocklistAIControllerEvent, BlocklistAIHistoryEvent, BlocklistAIHistoryModel, InputConfig,
+    SerializedBlockListItem,
 };
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::context_chips::current_prompt::CurrentPrompt;
@@ -480,7 +480,7 @@ fn wire_up_terminal_view_session_sharing(
     });
 
     // Send input mode updates during session sharing.
-    // When AgentView is enabled, we only send updates when in an active agent view.
+    // We only send updates when in an active agent view.
     // For ambient agent sessions, input mode is controlled locally, so we skip sending updates.
     let session_sharer_for_input_mode = session_sharer.clone();
     let ai_input_model = view.as_ref(ctx).ai_input_model().clone();
@@ -500,10 +500,8 @@ fn wire_up_terminal_view_session_sharing(
             return;
         }
 
-        // When AgentView is enabled, only send input mode updates when in an active agent view.
-        if FeatureFlag::AgentView.is_enabled()
-            && !agent_view_controller_for_input_mode.as_ref(ctx).is_active()
-        {
+        // Only send input mode updates when in an active agent view.
+        if !agent_view_controller_for_input_mode.as_ref(ctx).is_active() {
             return;
         }
 
@@ -532,86 +530,55 @@ fn wire_up_terminal_view_session_sharing(
         );
     });
 
-    let ai_context_model = view.as_ref(ctx).ai_context_model().clone();
-
-    // Send selected conversation updates during session sharing.
-    if FeatureFlag::AgentView.is_enabled() {
-        // When agent view is enabled, we listen to the agent view controller
-        // as the authoritative source for which conversation is selected.
-        let session_sharer_for_conversation = session_sharer.clone();
-        let ai_context_model_for_conversation = ai_context_model.clone();
-        let conversation_remote_update_guard = sharer_remote_update_guard.clone();
-        ctx.subscribe_to_model(
-            &agent_view_controller,
-            move |agent_view_controller, event, ctx| match event {
-                AgentViewControllerEvent::EnteredAgentView { .. } => {
-                    if conversation_remote_update_guard.should_broadcast() {
-                        TerminalManager::<TerminalView>::send_selected_conversation_update_for_sharer(
-                            &session_sharer_for_conversation,
-                            &agent_view_controller,
-                            &ai_context_model_for_conversation,
-                            ctx,
-                        );
-                    }
-                }
-                AgentViewControllerEvent::ExitedAgentView {
-                    origin,
-                    final_exchange_count,
-                    ..
-                } => {
-                    if conversation_remote_update_guard.should_broadcast() {
-                        TerminalManager::<TerminalView>::send_selected_conversation_update_for_sharer(
-                            &session_sharer_for_conversation,
-                            &agent_view_controller,
-                            &ai_context_model_for_conversation,
-                            ctx,
-                        );
-                    }
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::AgentViewExited {
-                            origin: TelemetryAgentViewEntryOrigin::from(origin.clone()),
-                            was_empty: *final_exchange_count == 0,
-                        },
-                        ctx
+    // Send selected conversation updates during session sharing. We listen to the agent view
+    // controller as the authoritative source for which conversation is selected.
+    let session_sharer_for_conversation = session_sharer.clone();
+    let conversation_remote_update_guard = sharer_remote_update_guard.clone();
+    ctx.subscribe_to_model(
+        &agent_view_controller,
+        move |agent_view_controller, event, ctx| match event {
+            AgentViewControllerEvent::EnteredAgentView { .. } => {
+                if conversation_remote_update_guard.should_broadcast() {
+                    TerminalManager::<TerminalView>::send_selected_conversation_update_for_sharer(
+                        &session_sharer_for_conversation,
+                        &agent_view_controller,
+                        ctx,
                     );
                 }
-                AgentViewControllerEvent::ExitConfirmed { .. } => {}
-            },
-        );
-    } else {
-        // When agent view is disabled, we fallback to the legacy behavior
-        // of listening for pending query state changes to know which conversation is selected.
-        let session_sharer_for_conversation = session_sharer.clone();
-        let agent_view_controller_for_conversation = agent_view_controller.clone();
-        let conversation_remote_update_guard = sharer_remote_update_guard.clone();
-        ctx.subscribe_to_model(&ai_context_model, move |ai_context_model, event, ctx| {
-            if !matches!(event, BlocklistAIContextEvent::PendingQueryStateUpdated) {
-                return;
             }
-
-            if !conversation_remote_update_guard.should_broadcast() {
-                return;
+            AgentViewControllerEvent::ExitedAgentView {
+                origin,
+                final_exchange_count,
+                ..
+            } => {
+                if conversation_remote_update_guard.should_broadcast() {
+                    TerminalManager::<TerminalView>::send_selected_conversation_update_for_sharer(
+                        &session_sharer_for_conversation,
+                        &agent_view_controller,
+                        ctx,
+                    );
+                }
+                send_telemetry_from_ctx!(
+                    TelemetryEvent::AgentViewExited {
+                        origin: TelemetryAgentViewEntryOrigin::from(origin.clone()),
+                        was_empty: *final_exchange_count == 0,
+                    },
+                    ctx
+                );
             }
+            AgentViewControllerEvent::ExitConfirmed { .. } => {}
+        },
+    );
 
-            TerminalManager::<TerminalView>::send_selected_conversation_update_for_sharer(
-                &session_sharer_for_conversation,
-                &agent_view_controller_for_conversation,
-                &ai_context_model,
-                ctx,
-            );
-        });
-    }
     // Also send after a request is submitted so viewers stay pinned to the intended conversation
     let session_sharer_for_sent_request = session_sharer.clone();
     let agent_view_controller_for_sent_request = agent_view_controller.clone();
-    let ai_context_model_for_sent_request = ai_context_model.clone();
     let ai_controller_for_sent_request = view.as_ref(ctx).ai_controller().clone();
     ctx.subscribe_to_model(&ai_controller_for_sent_request, move |_, event, ctx| {
         if let BlocklistAIControllerEvent::SentRequest { .. } = event {
             TerminalManager::<TerminalView>::send_selected_conversation_update_for_sharer(
                 &session_sharer_for_sent_request,
                 &agent_view_controller_for_sent_request,
-                &ai_context_model_for_sent_request,
                 ctx,
             );
         }
@@ -664,7 +631,6 @@ fn wire_up_terminal_view_session_sharing(
                     TerminalManager::<TerminalView>::send_selected_conversation_update_for_sharer(
                         &session_sharer_for_stream_init,
                         &agent_view_controller,
-                        &ai_context_model,
                         ctx,
                     );
                 }
@@ -816,12 +782,10 @@ impl TerminalManager<TerminalView> {
     fn send_selected_conversation_update_for_sharer(
         session_sharer: &Rc<RefCell<Option<ModelHandle<Network>>>>,
         agent_view_controller: &ModelHandle<AgentViewController>,
-        ai_context_model: &ModelHandle<BlocklistAIContextModel>,
         ctx: &mut AppContext,
     ) {
         if let Some(network) = session_sharer.borrow().as_ref()
-            && let Some(update) =
-                build_selected_conversation_update(agent_view_controller, ai_context_model, ctx)
+            && let Some(update) = build_selected_conversation_update(agent_view_controller, ctx)
         {
             network.update(ctx, |network, _| {
                 network.send_universal_developer_input_context_update(update)
@@ -935,13 +899,8 @@ impl TerminalManager<TerminalView> {
                 // Get selected conversation token to send in initial context
                 let agent_view_controller =
                     terminal_view.as_ref(ctx).agent_view_controller().clone();
-                let context_model = terminal_view.as_ref(ctx).ai_context_model().clone();
                 let selected_conversation: Option<SelectedConversation> =
-                    build_selected_conversation_update(
-                        &agent_view_controller,
-                        &context_model,
-                        ctx,
-                    )
+                    build_selected_conversation_update(&agent_view_controller, ctx)
                     .and_then(|update| update.selected_conversation);
 
                 let (

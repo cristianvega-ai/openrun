@@ -684,7 +684,6 @@ fn test_cli_agent_footer_chips_require_a_visible_supported_footer() {
 
 #[test]
 fn test_ps1_without_active_agent_surface_runs_no_footer_generators() {
-    let _flag_guard = FeatureFlag::AgentView.override_enabled(true);
     App::test((), |mut app| async move {
         let session_id = SessionId::from(321);
         app.add_singleton_model(|_| Prompt::mock());

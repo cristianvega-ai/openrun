@@ -4,7 +4,7 @@ use settings::Setting as _;
 use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::subshell::util::ssh_command;
 use warp::integration_testing::subshell::{
-    assert_subshell_banner_is_showing, assert_subshell_is_bootstrapped,
+    assert_subshell_is_bootstrapped, assert_warpify_footer_is_showing,
     enter_local_subshell_command, enter_remote_subshell_command, enter_ssh_password,
     setup_gcloud_sdk, trigger_subshell_bootstrap, wait_for_password_prompt,
 };
@@ -37,7 +37,7 @@ macro_rules! generate_can_bootstrap_local_subshell_for_shell {
                 .set_should_run_test(skip_if_powershell_core_2303)
                 .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
                 .with_step(enter_local_subshell_command($shell))
-                .with_step(assert_subshell_banner_is_showing())
+                .with_step(assert_warpify_footer_is_showing())
                 .with_step(trigger_subshell_bootstrap())
                 .with_step(assert_subshell_is_bootstrapped(0, 0))
         }

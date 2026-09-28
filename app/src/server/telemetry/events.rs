@@ -5231,7 +5231,7 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             | Self::AgentViewExited
             | Self::InlineConversationMenuOpened
             | Self::InlineConversationMenuItemSelected
-            | Self::AgentShortcutsViewToggled => EnablementState::Flag(FeatureFlag::AgentView),
+            | Self::AgentShortcutsViewToggled => EnablementState::Always,
             Self::CreateProjectPromptSubmitted => EnablementState::Flag(FeatureFlag::GetStartedTab),
             Self::CreateProjectPromptSubmittedContent => {
                 EnablementState::Flag(FeatureFlag::GetStartedTab)
@@ -5669,9 +5669,7 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::CLIAgentRichInputOpened { .. }
             | Self::CLIAgentRichInputClosed { .. }
-            | Self::CLIAgentRichInputSubmitted { .. } => {
-                EnablementState::Flag(FeatureFlag::CLIAgentRichInput)
-            }
+            | Self::CLIAgentRichInputSubmitted { .. } => EnablementState::Always,
             Self::ToggleCLIAgentToolbarSetting { .. } => EnablementState::Always,
             Self::ToggleUseAgentToolbarSetting { .. } => EnablementState::Always,
             Self::CodexModalOpened | Self::CodexModalUseCodexClicked => EnablementState::Always,

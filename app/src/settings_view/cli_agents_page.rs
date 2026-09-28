@@ -373,8 +373,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 &(context.clone() & id!(flags::CLI_AGENT_FOOTER_ENABLED)),
                 flags::AUTO_TOGGLE_RICH_INPUT_FLAG,
             )
-            .with_group(bindings::BindingGroup::WarpAi)
-            .with_enabled(|| FeatureFlag::CLIAgentRichInput.is_enabled()),
+            .with_group(bindings::BindingGroup::WarpAi),
             ToggleSettingActionPair::new(
                 "auto open Rich Input when a coding agent session starts",
                 builder(SettingsAction::CLIAgents(
@@ -383,8 +382,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 &(context.clone() & id!(flags::CLI_AGENT_FOOTER_ENABLED)),
                 flags::AUTO_OPEN_RICH_INPUT_ON_CLI_AGENT_START_FLAG,
             )
-            .with_group(bindings::BindingGroup::WarpAi)
-            .with_enabled(|| FeatureFlag::CLIAgentRichInput.is_enabled()),
+            .with_group(bindings::BindingGroup::WarpAi),
             ToggleSettingActionPair::new(
                 "auto dismiss Rich Input after prompt submission",
                 builder(SettingsAction::CLIAgents(
@@ -393,8 +391,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 &(context.clone() & id!(flags::CLI_AGENT_FOOTER_ENABLED)),
                 flags::AUTO_DISMISS_RICH_INPUT_AFTER_SUBMIT_FLAG,
             )
-            .with_group(bindings::BindingGroup::WarpAi)
-            .with_enabled(|| FeatureFlag::CLIAgentRichInput.is_enabled()),
+            .with_group(bindings::BindingGroup::WarpAi),
         ],
         app,
     );
@@ -477,7 +474,7 @@ fn should_render_cli_agent_detail(app: &AppContext) -> bool {
 }
 
 fn should_render_cli_agent_rich_input(app: &AppContext) -> bool {
-    should_render_cli_agent_detail(app) && FeatureFlag::CLIAgentRichInput.is_enabled()
+    should_render_cli_agent_detail(app)
 }
 
 #[derive(Default)]
@@ -799,7 +796,7 @@ impl SettingsWidget for CLIAgentToolbarLayoutWidget {
     }
 
     fn should_render(&self, app: &AppContext) -> bool {
-        should_render_cli_agent_detail(app) && FeatureFlag::AgentToolbarEditor.is_enabled()
+        should_render_cli_agent_detail(app)
     }
 
     fn render(

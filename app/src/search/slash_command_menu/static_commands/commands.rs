@@ -264,21 +264,17 @@ pub static INVOKE_SKILL: LazyLock<StaticCommand> = LazyLock::new(|| StaticComman
     argument: None,
 });
 
-pub static ADD_PROMPT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
+pub const ADD_PROMPT: StaticCommand = StaticCommand {
     name: "/add-prompt",
     description: "Add new Agent prompt",
     kind: SlashCommandKind::AddPrompt,
     supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: if FeatureFlag::AgentView.is_enabled() {
-            "bundled/svg/prompt.svg"
-        } else {
-            "bundled/svg/agentmode.svg"
-        },
+        icon_path: "bundled/svg/prompt.svg",
     },
     availability: Availability::AI_ENABLED,
     auto_enter_ai_mode: false,
     argument: None,
-});
+};
 
 pub const ADD_RULE: StaticCommand = StaticCommand {
     name: "/add-rule",
@@ -973,7 +969,7 @@ fn all_commands(settings_mode: settings::SettingsMode) -> Vec<StaticCommand> {
 fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
     let mut commands = vec![
         ADD_MCP,
-        ADD_PROMPT.clone(),
+        ADD_PROMPT,
         ADD_RULE,
         AUTO_APPROVE,
         COST,
@@ -1027,9 +1023,7 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         commands.push(CHANGELOG);
     }
 
-    if FeatureFlag::AgentView.is_enabled() {
-        commands.push(PROMPTS.clone());
-    }
+    commands.push(PROMPTS.clone());
 
     commands.push(OPEN_CODE_REVIEW);
 
@@ -1091,7 +1085,7 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         commands.push(REWIND);
     }
 
-    if FeatureFlag::InlineRepoMenu.is_enabled() && !cfg!(target_family = "wasm") {
+    if !cfg!(target_family = "wasm") {
         commands.push(OPEN_REPO);
     }
 

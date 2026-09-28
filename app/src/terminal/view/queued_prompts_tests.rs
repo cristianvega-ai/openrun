@@ -214,7 +214,6 @@ fn complete_drain_pops_head_and_returns_submit_action() {
 fn dispatched_cloud_prompt_uses_locked_queue_row_when_v2_is_enabled() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -249,7 +248,6 @@ fn dispatched_cloud_prompt_uses_locked_queue_row_when_v2_is_enabled() {
 fn dispatched_cloud_followup_uses_locked_queue_row_when_v2_is_enabled() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
@@ -285,7 +283,6 @@ fn cloud_setup_cleanup_events_remove_the_locked_queue_row() {
     // V2-on, and now do the same for the V2 queue row.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -327,7 +324,6 @@ fn failed_event_keeps_locked_queue_row_under_cloud_mode_setup_v2() {
     // condition, so the locked initial row stays so the user can review or retry.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -357,7 +353,6 @@ fn failed_event_removes_locked_queue_row_without_cloud_mode_setup_v2() {
     // The V2 queue-row removal follows the same gate.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(false);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -386,7 +381,6 @@ fn failed_event_removes_locked_queue_row_without_cloud_mode_setup_v2() {
 fn cloud_setup_enter_queues_followup_input_when_v2_is_enabled() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -425,7 +419,6 @@ fn cloud_setup_enter_does_not_queue_followup_for_third_party_harness() {
     // typed text in the buffer (same observable outcome as the V2-disabled path).
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -467,7 +460,6 @@ fn cloud_setup_enter_queues_followup_while_setup_commands_run() {
     // follow-up, not send it as a live prompt the sharer would drop.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -507,7 +499,6 @@ fn cloud_setup_enter_queues_followup_while_setup_commands_run() {
 fn cloud_setup_enter_remains_blocked_when_v2_is_disabled() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(false);
@@ -544,7 +535,6 @@ fn cloud_setup_enter_remains_blocked_when_v2_is_disabled() {
 fn terminal_cloud_status_transition_drains_once_through_cloud_followup_input_event() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -633,7 +623,6 @@ fn promptless_setup_complete_auto_sends_queued_prompt_to_viewer() {
     // the live shared session (viewer path -> `Event::SendAgentPrompt`).
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -698,7 +687,6 @@ fn promptless_setup_complete_with_initial_prompt_does_not_drain_queue() {
     // marker must NOT drain it early.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -798,7 +786,6 @@ fn complete_drain_of_edited_command_restores_text_in_shell_mode() {
     // shell mode, so the restored text stays a command rather than being submitted as a prompt.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
         // Entering agent view puts the input in agent (AI) mode, so the drain must actively
@@ -845,7 +832,6 @@ fn error_drain_of_command_restores_text_in_shell_mode() {
     // restored command stays a command.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
         // The cancel restore path only fires for the conversation the user is viewing; entering
@@ -1081,7 +1067,6 @@ fn lrc_finish_commits_edited_lrc_row_before_sending() {
 fn lrc_finish_queued_compact_and_sends_followup_after_summary() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _queue_flag = FeatureFlag::QueueSlashCommand.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
         let _summarization = FeatureFlag::SummarizationConversationCommand.override_enabled(true);
@@ -1205,7 +1190,6 @@ fn enqueue_followup_prompt_appends_compact_and_row_when_v2_is_enabled() {
     // /compact-and follow-ups land in the queue with the CompactAndSlashCommand origin under V2.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -1238,7 +1222,6 @@ fn enqueue_followup_prompt_appends_fork_and_compact_row_when_v2_is_enabled() {
     // /fork-and-compact follow-ups land in the queue with the ForkAndCompactSlashCommand origin.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -1271,7 +1254,6 @@ fn enqueue_followup_prompt_uses_supplied_conversation_id_when_v2_is_enabled() {
     // the currently selected conversation. The helper must respect that explicit id.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(true);
@@ -1308,7 +1290,6 @@ fn enqueue_followup_prompt_falls_back_to_pending_block_when_v2_is_disabled() {
     // pending-user-query block lifecycle continues to handle the follow-up exactly as today.
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _cloud_mode_setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _queued_prompts_v2 = FeatureFlag::QueuedPromptsV2.override_enabled(false);

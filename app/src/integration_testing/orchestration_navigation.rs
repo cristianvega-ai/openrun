@@ -7,7 +7,6 @@ use warpui::{SingletonEntity, TypedActionView, async_assert_eq};
 
 use crate::ai::agent::conversation::{AIConversation, AIConversationId};
 use crate::ai::blocklist::BlocklistAIHistoryModel;
-use crate::features::FeatureFlag;
 use crate::integration_testing::terminal::wait_until_bootstrapped_single_pane_for_tab;
 use crate::integration_testing::view_getters::{single_terminal_view_for_tab, workspace_view};
 use crate::integration_testing::workspace::{
@@ -82,8 +81,6 @@ fn assert_visible_conversation(tab_index: usize, conversation_id: AIConversation
 }
 
 pub fn child_pill_after_reopening_closed_parent_tab() -> Vec<TestStep> {
-    FeatureFlag::AgentView.set_enabled(true);
-
     let parent = restored_conversation("orchestrator-task", "Ask the architect for details.");
     let parent_id = parent.id();
     let mut child = restored_conversation("architect-task", "The architecture has three layers.");

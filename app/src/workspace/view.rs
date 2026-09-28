@@ -6384,9 +6384,6 @@ impl Workspace {
         position: Vector2F,
         ctx: &mut ViewContext<Self>,
     ) {
-        if !FeatureFlag::ConfigurableToolbar.is_enabled() {
-            return;
-        }
         let items = vec![
             MenuItemFields::new("Re-arrange toolbar items")
                 .with_on_select_action(WorkspaceAction::OpenHeaderToolbarEditor)
@@ -6400,9 +6397,6 @@ impl Workspace {
     }
 
     fn open_header_toolbar_editor(&mut self, ctx: &mut ViewContext<Self>) {
-        if !FeatureFlag::ConfigurableToolbar.is_enabled() {
-            return;
-        }
         self.header_toolbar_editor_modal
             .update(ctx, |modal, ctx| modal.open(ctx));
         self.close_all_overlays(ctx);
@@ -6961,10 +6955,7 @@ impl Workspace {
         }
 
         // 3. Cloud Agent (if flags enabled)
-        if is_any_ai_enabled
-            && FeatureFlag::AgentView.is_enabled()
-            && FeatureFlag::CloudMode.is_enabled()
-        {
+        if is_any_ai_enabled && FeatureFlag::CloudMode.is_enabled() {
             let mut cloud_item = MenuItemFields::new("Cloud Agent")
                 .with_on_select_action(WorkspaceAction::AddAmbientAgentTab)
                 .with_icon(icons::Icon::LayoutAlt01);
@@ -8319,13 +8310,9 @@ impl Workspace {
         report_error!(
             "Triggering agent onboarding callout flow but not during initial login. This should not normally happen."
         );
-        let version = if FeatureFlag::AgentView.is_enabled() {
-            AgentOnboardingVersion::AgentModality {
-                has_project: false,
-                intention: OnboardingIntention::AgentDrivenDevelopment,
-            }
-        } else {
-            AgentOnboardingVersion::UniversalInput { has_project: false }
+        let version = AgentOnboardingVersion::AgentModality {
+            has_project: false,
+            intention: OnboardingIntention::AgentDrivenDevelopment,
         };
         self.dispatch_onboarding(
             TerminalAction::OnboardingFlow(OnboardingVersion::Agent(version)),
@@ -12629,7 +12616,7 @@ impl Workspace {
     }
 
     fn add_ambient_agent_tab(&mut self, ctx: &mut ViewContext<Self>) {
-        if !FeatureFlag::AgentView.is_enabled() || !FeatureFlag::CloudMode.is_enabled() {
+        if !FeatureFlag::CloudMode.is_enabled() {
             return;
         }
 
@@ -13293,7 +13280,6 @@ impl Workspace {
         let terminal_view_for_active_pane = self.active_session_view(ctx).filter(|_| {
             self.get_active_session_terminal_model(ctx)
                 .is_some_and(|model| !model.lock().shared_session_status().is_viewer())
-                && FeatureFlag::AgentView.is_enabled()
         });
 
         // If we can't restore in the active pane, fall back to restoring in new tab.
@@ -13384,7 +13370,7 @@ impl Workspace {
                     .set_conversation_transcript_viewer_status(None);
                 terminal_view.restore_conversation_and_directory_context(
                     conversation,
-                    FeatureFlag::AgentView.is_enabled(),
+                    true,
                     RestoreConversationEntryBehavior::PreserveAgentViewState,
                     is_local_conversation,
                     move |terminal_view, ctx| {
@@ -17873,7 +17859,7 @@ impl Workspace {
             terminal_view.input().update(ctx, |input, ctx| {
                 input.clear_buffer_and_reset_undo_stack(ctx);
                 input.set_input_mode_agent(true, ctx);
-                input.ensure_agent_mode_for_ai_features(true, None, ctx);
+                input.ensure_agent_mode_for_ai_features(None, ctx);
                 input.replace_buffer_content(&prompt, ctx);
                 input.focus_input_box(ctx);
             });
@@ -17946,7 +17932,7 @@ impl Workspace {
                 }
 
                 if ensure_agent_mode {
-                    input.ensure_agent_mode_for_ai_features(true, None, ctx);
+                    input.ensure_agent_mode_for_ai_features(None, ctx);
                 }
 
                 if should_submit {
@@ -19552,9 +19538,6 @@ impl Workspace {
         mode: AgentToolbarEditorMode,
         ctx: &mut ViewContext<Self>,
     ) {
-        if !FeatureFlag::AgentToolbarEditor.is_enabled() {
-            return;
-        }
         self.agent_toolbar_editor_modal
             .update(ctx, |modal, ctx| modal.open(mode, ctx));
         self.close_all_overlays(ctx);
@@ -26247,16 +26230,14 @@ impl View for Workspace {
                 context.set.insert("LongRunningCommand");
             }
 
-            if FeatureFlag::AgentView.is_enabled() {
-                let agent_view_state = terminal_view
-                    .agent_view_controller()
-                    .as_ref(app)
-                    .agent_view_state();
-                if agent_view_state.is_fullscreen() {
-                    context.set.insert(flags::ACTIVE_AGENT_VIEW);
-                } else if agent_view_state.is_inline() {
-                    context.set.insert(flags::ACTIVE_INLINE_AGENT_VIEW);
-                }
+            let agent_view_state = terminal_view
+                .agent_view_controller()
+                .as_ref(app)
+                .agent_view_state();
+            if agent_view_state.is_fullscreen() {
+                context.set.insert(flags::ACTIVE_AGENT_VIEW);
+            } else if agent_view_state.is_inline() {
+                context.set.insert(flags::ACTIVE_INLINE_AGENT_VIEW);
             }
         }
 
@@ -26990,9 +26971,7 @@ impl View for Workspace {
             stack.add_child(ChildView::new(&self.prompt_editor_modal).finish());
         }
 
-        if FeatureFlag::AgentToolbarEditor.is_enabled()
-            && self.current_workspace_state.is_agent_toolbar_editor_open
-        {
+        if self.current_workspace_state.is_agent_toolbar_editor_open {
             stack.add_child(ChildView::new(&self.agent_toolbar_editor_modal).finish());
         }
 

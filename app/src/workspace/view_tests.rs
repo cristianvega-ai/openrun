@@ -1488,8 +1488,6 @@ fn active_session_state(
 
 #[test]
 fn restore_conversation_in_active_pane_enters_existing_live_conversation_without_loading() {
-    let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -5500,7 +5498,6 @@ mod simplified_wasm_tab_bar {
 
     #[test]
     fn simplified_wasm_tab_bar_is_none_after_owned_handoff_restore_without_deep_link() {
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(true);
@@ -5525,7 +5522,6 @@ mod simplified_wasm_tab_bar {
 
     #[test]
     fn simplified_wasm_tab_bar_stays_some_after_owned_handoff_cloud_cloud_restore() {
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
         let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
         let _setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
         let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(true);
