@@ -74,8 +74,8 @@ use crate::ai::blocklist::orchestration_event_streamer::{
 use crate::ai::blocklist::orchestration_events::OrchestrationEventService;
 use crate::ai::blocklist::pending_cli_harness_prompt_queue::PendingCliHarnessPromptQueue;
 use crate::ai::blocklist::{
-    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate, FinalizeReason,
-    QueuedQueryEvent, QueuedQueryModel, finalize_recording_for_conversation,
+    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate, QueuedQueryEvent,
+    QueuedQueryModel,
 };
 use crate::ai::cloud_environments::{
     AmbientAgentEnvironment, CloudAmbientAgentEnvironment, GithubRepo, SourceRepo,
@@ -1411,7 +1411,7 @@ impl AgentDriver {
         // Docker Sandbox and Namespace. The sandbox deadline is set to
         // MaxInstanceRuntime + SandboxShutdownWarningWindow (5 min); this timer
         // fires SandboxShutdownWarningWindow before that hard kill, giving the
-        // normal AgentDriver teardown path — snapshot then recording — time to
+        // normal AgentDriver teardown path (the snapshot upload) time to
         // complete while the agent is still running.
         //
         // Secondary: SIGTERM / SIGINT detection (Unix only).
@@ -1526,7 +1526,7 @@ impl AgentDriver {
                         tracing::info!(tags.cloud_agent = true, "sandbox deadline approaching");
                         log::info!(
                             "Sandbox deadline approaching (WARP_SANDBOX_DEADLINE); aborting \
-                             run_internal to allow recording finalization"
+                             run_internal to allow snapshot upload"
                         );
                     }
                     RunEndCause::Signal(Interrupt::Terminate) => {
@@ -1561,7 +1561,7 @@ impl AgentDriver {
                     RunEndCause::Signal(signal) => {
                         eprintln!("Received {signal}; shutting down...");
                         // Keep handlers registered so a second SIGINT/SIGTERM can still
-                        // emulate default terminate if snapshot/recording gets stuck.
+                        // emulate default terminate if the snapshot upload gets stuck.
                         Self::save_run_artifacts(&foreground, snapshot_allowed).await;
                         interrupt_watch.terminate(signal);
                     }
@@ -4491,33 +4491,8 @@ impl AgentDriver {
     }
 
     async fn save_run_artifacts(foreground: &ModelSpawner<Self>, snapshot_allowed: bool) {
-        let snapshot_upload = async {
-            if snapshot_allowed {
-                Self::run_snapshot_upload(foreground).await;
-            }
-        };
-        futures::join!(snapshot_upload, Self::finalize_run_recording(foreground));
-    }
-
-    async fn finalize_run_recording(foreground: &ModelSpawner<Self>) {
-        if let Ok(Some(finalization)) = foreground
-            .spawn(|me, ctx| {
-                me.run_conversation_id.and_then(|conversation_id| {
-                    finalize_recording_for_conversation(
-                        conversation_id,
-                        FinalizeReason::RunEnded,
-                        true,
-                        ctx,
-                    )
-                })
-            })
-            .await
-        {
-            let (finalization_result, actual_reason) = finalization.resolve().await;
-            log::info!(
-                "Recording finalization completed before agent driver exit \
-                 (reason={actual_reason:?}): {finalization_result:?}"
-            );
+        if snapshot_allowed {
+            Self::run_snapshot_upload(foreground).await;
         }
     }
 

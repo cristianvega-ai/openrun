@@ -220,9 +220,6 @@ impl TuiGenericToolCallView {
             AIAgentActionType::ReadMCPResource { .. } => {
                 "Is it OK if I read this MCP resource?".to_owned()
             }
-            AIAgentActionType::RequestComputerUse(_) => {
-                "Is it OK if I use the computer?".to_owned()
-            }
             AIAgentActionType::WriteToLongRunningShellCommand { .. } => {
                 "Is it OK if I write this input to the running command?".to_owned()
             }
@@ -287,7 +284,6 @@ impl TuiGenericToolCallView {
             AIAgentActionType::ReadMCPResource { name, uri, .. } => {
                 uri.clone().unwrap_or_else(|| name.clone())
             }
-            AIAgentActionType::RequestComputerUse(request) => request.task_summary.clone(),
             AIAgentActionType::WriteToLongRunningShellCommand { input, .. } => {
                 String::from_utf8_lossy(input).into_owned()
             }

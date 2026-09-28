@@ -58,7 +58,6 @@ fn exchange_with_working_directory(
         request_cost: None,
         coding_model_id: LLMId::from("test-coding-model"),
         cli_agent_model_id: LLMId::from("test-cli-model"),
-        computer_use_model_id: LLMId::from("test-computer-use-model"),
         response_initiator: None,
     }
 }
@@ -272,7 +271,6 @@ fn pending(
         model_is_cloud_runnable: true,
         config: AgentConfigSnapshot {
             model_id: Some("auto".to_owned()),
-            computer_use_enabled: Some(true),
             ..Default::default()
         },
         snapshot_target: SnapshotUploadTarget::Local {
@@ -615,7 +613,6 @@ fn prepare_orders_guards_cancellation_token_check_and_attachment_transfer() {
                             model_id: LLMId::from("test-model"),
                             coding_model_id: LLMId::from("test-coding-model"),
                             cli_agent_model_id: LLMId::from("test-cli-model"),
-                            computer_use_model_id: LLMId::from("test-computer-use-model"),
                             shared_session_response_initiator: None,
                             request_start_ts: Local::now(),
                             supported_tools_override: None,

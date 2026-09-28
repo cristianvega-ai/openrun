@@ -262,7 +262,6 @@ fn models_with_agent_model(id: &str) -> ModelsByFeature {
         agent_mode: available(id, vec![server_llm(id)]),
         coding: available("coding", vec![server_llm("coding")]),
         cli_agent: None,
-        computer_use: None,
     }
 }
 
@@ -405,7 +404,6 @@ fn update_feature_model_choices_clears_unavailable_flag_after_failed_fetch() {
                 "cli-agent-auto",
                 vec![server_llm("cli-agent-auto")],
             )),
-            computer_use: None,
         };
         llm_preferences.update(&mut app, |preferences, ctx| {
             preferences.update_feature_model_choices(Ok(models), ctx);

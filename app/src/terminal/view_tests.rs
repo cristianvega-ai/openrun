@@ -1449,7 +1449,6 @@ fn exchange_with_inputs(inputs: Vec<AIAgentInput>) -> AIAgentExchange {
         request_cost: None,
         coding_model_id: LLMId::from("test-coding-model"),
         cli_agent_model_id: LLMId::from("test-cli-agent-model"),
-        computer_use_model_id: LLMId::from("test-computer-use-model"),
         response_initiator: None,
     }
 }
@@ -10101,8 +10100,7 @@ fn copy_selected_text_from_ai_block() {
         // #12079 regression broke. We assert on the model record rather than the
         // clipboard string because reading the selected text cross-view requires
         // an active window, which the headless test harness does not provide (the
-        // end-to-end clipboard behavior is covered by manual/computer-use
-        // verification).
+        // end-to-end clipboard behavior is covered by manual verification).
         terminal.read(&app, |view, ctx| {
             let semantic_selection = SemanticSelection::as_ref(ctx);
             let model = view.model.lock();

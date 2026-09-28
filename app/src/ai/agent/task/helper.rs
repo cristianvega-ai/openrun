@@ -34,7 +34,6 @@ pub trait ToolExt {
 pub trait SubagentExt {
     fn is_cli(&self) -> bool;
     fn is_advice(&self) -> bool;
-    fn is_computer_use(&self) -> bool;
     fn is_summarization(&self) -> bool;
     fn is_conversation_search(&self) -> bool;
     fn is_warp_documentation_search(&self) -> bool;
@@ -119,8 +118,6 @@ impl ToolExt for api::message::tool_call::Tool {
             Tool::EditDocuments(_) => "edit_documents",
             Tool::CreateDocuments(_) => "create_documents",
             Tool::ReadShellCommandOutput(_) => "read_shell_command_output",
-            Tool::UseComputer(_) => "use_computer",
-            Tool::RequestComputerUse(_) => "request_computer_use",
             Tool::FetchConversation(_) => "fetch_conversation",
             Tool::InsertReviewComments(_) => "insert_review_comments",
             Tool::ReadSkill(_) => "read_skill",
@@ -136,11 +133,10 @@ impl ToolExt for api::message::tool_call::Tool {
             Tool::SendMessageToAgent(_) => "send_message_to_agent",
             Tool::TransferShellCommandControlToUser(_) => "transfer_shell_command_control",
             Tool::RunAgents(_) => "orchestrate",
-            Tool::StartRecording(_) => "start_recording",
-            Tool::StopRecording(_) => "stop_recording",
             // Matches the legacy server-handled name so analytics don't
             // double-count the rollout.
             Tool::WaitForEvents(_) => "wait_for_events",
+            _ => "unsupported",
         }
     }
 }
@@ -160,15 +156,6 @@ impl SubagentExt for api::message::tool_call::Subagent {
             matches!(
                 metadata,
                 api::message::tool_call::subagent::Metadata::Advice(_)
-            )
-        })
-    }
-
-    fn is_computer_use(&self) -> bool {
-        self.metadata.as_ref().is_some_and(|metadata| {
-            matches!(
-                metadata,
-                api::message::tool_call::subagent::Metadata::ComputerUse(_)
             )
         })
     }
@@ -206,11 +193,10 @@ impl SubagentExt for api::message::tool_call::Subagent {
             Some(Metadata::Cli(_)) => "cli",
             Some(Metadata::Research(_)) => "research",
             Some(Metadata::Advice(_)) => "advice",
-            Some(Metadata::ComputerUse(_)) => "computer_use",
             Some(Metadata::Summarization(_)) => "summarization",
             Some(Metadata::ConversationSearch(_)) => "conversation_search",
             Some(Metadata::WarpDocumentationSearch(_)) => "warp_documentation_search",
-            None => "unknown",
+            _ => "unknown",
         }
     }
 }

@@ -256,7 +256,6 @@ fn snapshot_execution_mode(is_local: bool) -> RunAgentsExecutionMode {
         RunAgentsExecutionMode::Remote {
             environment_id: String::new(),
             worker_host: String::new(),
-            computer_use_enabled: false,
             runner_id: String::new(),
         }
     }
@@ -441,7 +440,6 @@ pub fn populate_environment_picker<A: OrchestrationControlAction, V: View>(
         &RunAgentsExecutionMode::Remote {
             environment_id: initial_env_id.to_string(),
             worker_host: String::new(),
-            computer_use_enabled: false,
             runner_id: String::new(),
         },
     );
@@ -584,7 +582,6 @@ pub fn populate_host_picker<V: View>(
         &RunAgentsExecutionMode::Remote {
             environment_id: String::new(),
             worker_host: initial_host.to_string(),
-            computer_use_enabled: false,
             runner_id: String::new(),
         },
     );

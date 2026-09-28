@@ -26,8 +26,6 @@ use warp_graphql::workspace::{
     BooleanSettingInfo as GqlBooleanSettingInfo,
     CloudConversationStorageSettings as GqlCloudConversationStorageSettings,
     CodebaseContextSettings as GqlCodebaseContextSettings,
-    ComputerUseAutonomyValue as GqlComputerUseAutonomyValue,
-    ComputerUseSettingInfo as GqlComputerUseSettingInfo,
     FeatureModelChoice as GqlFeatureModelChoice, LinkSharingSettings as GqlLinkSharingSettings,
     LinkSharingSettingsInfo as GqlLinkSharingSettingsInfo, LlmContextWindow as GqlLlmContextWindow,
     LlmInfo as GqlLlmInfo, LlmPricing as GqlLlmPricing, LlmProvider as GqlLlmProvider,
@@ -4217,7 +4215,6 @@ fn gql_workspace(
                 execute_commands_allowlist: None,
                 execute_commands_denylist: None,
                 write_to_pty_setting: None,
-                computer_use_setting: None,
             },
             usage_based_pricing_settings: GqlUsageBasedPricingSettings {
                 enabled: false,
@@ -4243,8 +4240,7 @@ fn gql_workspace(
             agent_mode: empty_llms.clone(),
             planning: empty_llms.clone(),
             coding: empty_llms.clone(),
-            cli_agent: empty_llms.clone(),
-            computer_use_agent: empty_llms,
+            cli_agent: empty_llms,
         },
         total_requests_used_since_last_refresh: 0,
     }
@@ -4310,10 +4306,6 @@ fn gql_team_settings() -> GqlTeamSettings {
                 value: GqlWriteToPtyAutonomyValue::RespectUserSetting,
                 is_enforced_by_workspace: false,
             },
-            computer_use: GqlComputerUseSettingInfo {
-                value: GqlComputerUseAutonomyValue::RespectUserSetting,
-                is_enforced_by_workspace: false,
-            },
             read_files_allowlist: str_list(),
             execute_commands_allowlist: str_list(),
             execute_commands_denylist: str_list(),
@@ -4373,8 +4365,7 @@ fn gql_team(uid: &str, name: &str, member_uids: &[&str]) -> GqlTeam {
             agent_mode: empty_llms.clone(),
             planning: empty_llms.clone(),
             coding: empty_llms.clone(),
-            cli_agent: empty_llms.clone(),
-            computer_use_agent: empty_llms,
+            cli_agent: empty_llms,
         },
     }
 }
@@ -4858,8 +4849,7 @@ fn gql_feature_model_choice(model_id: &str) -> GqlFeatureModelChoice {
         agent_mode: llms.clone(),
         planning: llms.clone(),
         coding: llms.clone(),
-        cli_agent: llms.clone(),
-        computer_use_agent: llms,
+        cli_agent: llms,
     }
 }
 

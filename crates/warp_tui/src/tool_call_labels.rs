@@ -8,7 +8,7 @@ use warp::tui_export::{
     AIActionStatus, AIAgentAction, AIAgentActionResultType, AIAgentActionType,
     AskUserQuestionResult, FileGlobV2Result, GrepResult, RequestCommandOutputResult,
     RunAgentsAgentOutcomeKind, RunAgentsResult, SearchCodebaseFailureReason, SearchCodebaseResult,
-    StopRecordingResult, SuggestNewConversationResult, mcp_server_name_for_id,
+    SuggestNewConversationResult, mcp_server_name_for_id,
 };
 use warp_core::command::ExitCode;
 use warpui_core::AppContext;
@@ -481,7 +481,6 @@ fn label_for_action(
             State::Failed => "Failed to read command output".to_owned(),
             State::Cancelled => "Read command output cancelled".to_owned(),
         },
-        AIAgentActionType::UseComputer(request) => summary_label(&request.action_summary, state),
         AIAgentActionType::InsertCodeReviewComments { comments, .. } => {
             let comments = count_label(comments.len(), "review comment", "review comments");
             match state {
@@ -493,28 +492,6 @@ fn label_for_action(
                 State::Cancelled => "Insert review comments cancelled".to_owned(),
             }
         }
-        AIAgentActionType::RequestComputerUse(request) => {
-            summary_label(&request.task_summary, state)
-        }
-        AIAgentActionType::StartRecording { .. } => match state {
-            State::Pending | State::Blocked => "Start recording".to_owned(),
-            State::Constructing | State::Running => "Starting recording…".to_owned(),
-            State::Succeeded => "Started screen recording".to_owned(),
-            State::Failed => "Recording failed to start".to_owned(),
-            State::Cancelled => "Start recording cancelled".to_owned(),
-        },
-        AIAgentActionType::StopRecording { .. } => match state {
-            State::Pending | State::Blocked => "Stop recording".to_owned(),
-            State::Constructing | State::Running => "Stopping recording…".to_owned(),
-            State::Succeeded => match result {
-                Some(AIAgentActionResultType::StopRecording(StopRecordingResult::Discarded)) => {
-                    "Discarded screen recording".to_owned()
-                }
-                _ => "Saved screen recording".to_owned(),
-            },
-            State::Failed => "Failed to save recording".to_owned(),
-            State::Cancelled => "Stop recording cancelled".to_owned(),
-        },
         AIAgentActionType::ReadSkill(request) => {
             let skill = single_line(&request.skill.display_label());
             match state {
@@ -673,19 +650,6 @@ fn file_glob_label(
         },
         State::Failed => format!("File search for {patterns} failed"),
         State::Cancelled => format!("File search for {patterns} cancelled"),
-    }
-}
-
-/// Labels computer-use calls with their agent-supplied summary, marking only
-/// terminal non-success states (matching the GUI, which shows the summary
-/// verbatim).
-fn summary_label(summary: &str, state: State) -> String {
-    let summary = single_line(summary);
-    match state {
-        State::Constructing => "Preparing computer use…".to_owned(),
-        State::Pending | State::Blocked | State::Running | State::Succeeded => summary,
-        State::Failed => format!("{summary} — failed"),
-        State::Cancelled => format!("{summary} — cancelled"),
     }
 }
 

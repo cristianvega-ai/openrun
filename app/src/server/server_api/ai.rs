@@ -1591,14 +1591,6 @@ pub trait AIClient: 'static + Send + Sync {
         artifact_uid: &str,
     ) -> anyhow::Result<ArtifactDownloadResponse, anyhow::Error>;
 
-    /// Downloads the bytes of a computer-use screenshot stored in Warp-managed
-    /// object storage. Requires view access to the conversation.
-    async fn download_stored_screenshot(
-        &self,
-        conversation_id: &str,
-        screenshot_uid: &str,
-    ) -> anyhow::Result<Bytes, anyhow::Error>;
-
     async fn prepare_attachments_for_upload(
         &self,
         task_id: &AmbientAgentTaskId,
@@ -3134,27 +3126,6 @@ impl AIClient for ServerApi {
         Ok(response)
     }
 
-    async fn download_stored_screenshot(
-        &self,
-        conversation_id: &str,
-        screenshot_uid: &str,
-    ) -> anyhow::Result<Bytes, anyhow::Error> {
-        // The endpoint redirects to a short-lived signed URL, which the HTTP
-        // client follows transparently. Strip that URL from body-read errors so
-        // it cannot leak into logs.
-        let response = self
-            .get_public_api_response(&format!(
-                "agent/conversations/{}/screenshots/{}/download",
-                urlencoding::encode(conversation_id),
-                urlencoding::encode(screenshot_uid)
-            ))
-            .await?;
-        response
-            .bytes()
-            .await
-            .map_err(|error| anyhow::Error::new(error.without_url()))
-    }
-
     async fn prepare_attachments_for_upload(
         &self,
         task_id: &AmbientAgentTaskId,
@@ -3412,7 +3383,6 @@ impl TryFrom<warp_graphql::queries::get_feature_model_choices::FeatureModelChoic
             agent_mode: value.agent_mode.try_into()?,
             coding: value.coding.try_into()?,
             cli_agent: Some(value.cli_agent.try_into()?),
-            computer_use: Some(value.computer_use_agent.try_into()?),
         })
     }
 }
@@ -3425,7 +3395,6 @@ impl TryFrom<warp_graphql::workspace::FeatureModelChoice> for ModelsByFeature {
             agent_mode: value.agent_mode.try_into()?,
             coding: value.coding.try_into()?,
             cli_agent: Some(value.cli_agent.try_into()?),
-            computer_use: Some(value.computer_use_agent.try_into()?),
         })
     }
 }

@@ -1332,7 +1332,6 @@ fn profile_sources_preserve_state_across_migration_and_rollout() {
                         global_options: warp_cli::GlobalOptions::default(),
                         debug: false,
                         is_sandboxed: true,
-                        computer_use_override: None,
                     },
                     ctx,
                 )

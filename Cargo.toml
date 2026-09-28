@@ -42,7 +42,6 @@ cloud_object_client = { path = "crates/cloud_object_client" }
 cloud_object_persistence = { path = "crates/cloud_object_persistence" }
 cloud_object_models = { path = "crates/cloud_object_models" }
 code_outline = { path = "crates/code_outline" }
-computer_use = { path = "crates/computer_use" }
 field_mask = { path = "crates/field_mask" }
 firebase = { path = "crates/firebase" }
 fuzzy_match = { path = "crates/fuzzy_match" }
@@ -116,7 +115,6 @@ anyhow = "1.0"
 arboard = { version = "3.6.1", default-features = false }
 arrayvec = "0.7.4"
 async-broadcast = "0.7.2"
-ashpd = { version = "0.11", default-features = false, features = ["async-std"] }
 async-channel = "2.3.1"
 async-compat = "0.2.5"
 async-io = "2.4.0"
@@ -228,7 +226,6 @@ objc2 = "0.6.3"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSScreen", "objc2-core-foundation"] }
 objc2-av-foundation = { version = "0.3.2", default-features = false }
 objc2-core-foundation = "0.3.2"
-objc2-core-graphics = "0.3.2"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std"] }
 objc2-metal = { version = "0.3.2", default-features = false }
 objc2-quartz-core = { version = "0.3.2", default-features = false }

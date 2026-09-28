@@ -31,11 +31,10 @@ use super::task::{
 };
 use super::task_store::TaskStore;
 use super::{
-    AIAgentAction, AIAgentActionId, AIAgentActionResultType, AIAgentActionType, AIAgentContext,
-    AIAgentExchange, AIAgentExchangeId, AIAgentInput, AIAgentOutput, AIAgentOutputStatus,
-    AIAgentTodo, AIAgentTodoId, FinishedAIAgentOutput, MessageId, OutputModelInfo,
-    RenderableAIError, RequestCost, ServerOutputId, Shared, StartRecordingResult,
-    StopRecordingResult, SuggestedLoggingId, Suggestions,
+    AIAgentAction, AIAgentActionId, AIAgentContext, AIAgentExchange, AIAgentExchangeId,
+    AIAgentInput, AIAgentOutput, AIAgentOutputStatus, AIAgentTodo, AIAgentTodoId,
+    FinishedAIAgentOutput, MessageId, OutputModelInfo, RenderableAIError, RequestCost,
+    ServerOutputId, Shared, SuggestedLoggingId, Suggestions,
 };
 use crate::ai::agent::api::convert_conversation::{
     ConvertToExchanges, compute_time_to_first_token_ms_from_messages,
@@ -114,18 +113,6 @@ impl TodoStatus {
     pub fn is_cancelled(&self) -> bool {
         matches!(self, TodoStatus::Cancelled)
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecordingSpanInfo {
-    pub recording_id: String,
-    pub status: RecordingSpanStatus,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RecordingSpanStatus {
-    Active,
-    Captured,
 }
 
 /// The wire counters are `uint64` while the persisted and displayed usage rows
@@ -1896,172 +1883,6 @@ impl AIConversation {
         })
     }
 
-    /// Returns an iterator over the IDs of all UseComputer actions across all exchanges
-    /// in this conversation.
-    pub fn use_computer_action_ids(&self) -> impl Iterator<Item = AIAgentActionId> + '_ {
-        self.all_exchanges().into_iter().flat_map(|exchange| {
-            exchange
-                .output_status
-                .output()
-                .into_iter()
-                .flat_map(|output| {
-                    output
-                        .get()
-                        .actions()
-                        .filter(|a| matches!(a.action, super::AIAgentActionType::UseComputer(_)))
-                        .map(|a| a.id.clone())
-                        .collect::<Vec<_>>()
-                })
-        })
-    }
-
-    #[cfg(test)]
-    pub fn recording_span_for_action(
-        &self,
-        action_id: &AIAgentActionId,
-        action_model: Option<&crate::ai::blocklist::BlocklistAIActionModel>,
-    ) -> Option<RecordingSpanInfo> {
-        self.recording_spans_by_action_id(action_model)
-            .get(action_id)
-            .cloned()
-    }
-
-    /// Maps action IDs to the recording span containing them, derived from the
-    /// conversation transcript so restored/cloud conversations render the same
-    /// as live ones.
-    ///
-    /// Walks all exchanges in order: a successful `StartRecording` result opens
-    /// a span; the start action and any `UseComputer` actions inside an open
-    /// span are buffered; a matching successful `StopRecording` result marks
-    /// the span as captured and flushes the buffer into the map; a failed or
-    /// cancelled stop drops the buffer, since no recording was saved; a span
-    /// still open at the end of the scan is flushed as active so in-progress
-    /// recordings decorate their rows. Exchanges that finished in an error
-    /// expose no output and are skipped.
-    pub fn recording_spans_by_action_id(
-        &self,
-        action_model: Option<&crate::ai::blocklist::BlocklistAIActionModel>,
-    ) -> HashMap<AIAgentActionId, RecordingSpanInfo> {
-        // Transcript-held action results, collected once up front. These are
-        // conversation-scoped, covering restored/cloud transcripts. The action
-        // model is only a fallback for live results not yet drained into a
-        // follow-up request's inputs: its maps are keyed globally by action ID
-        // across conversations, so it must not take precedence.
-        let mut results_by_action_id: HashMap<&AIAgentActionId, &AIAgentActionResultType> =
-            HashMap::new();
-        for exchange in self.all_exchanges() {
-            for input in &exchange.input {
-                if let AIAgentInput::ActionResult { result, .. } = input {
-                    results_by_action_id.insert(&result.id, &result.result);
-                }
-            }
-        }
-        let result_for_action = |action_id: &AIAgentActionId| {
-            results_by_action_id.get(action_id).copied().or_else(|| {
-                action_model
-                    .and_then(|model| model.get_action_result(action_id))
-                    .map(|result| &result.result)
-            })
-        };
-
-        let mut active_span: Option<RecordingSpanInfo> = None;
-        let mut buffered_action_ids: Vec<AIAgentActionId> = Vec::new();
-        let mut spans_by_action_id = HashMap::new();
-        let flush_buffer =
-            |span: RecordingSpanInfo,
-             buffered: &mut Vec<AIAgentActionId>,
-             map: &mut HashMap<AIAgentActionId, RecordingSpanInfo>| {
-                for action_id in buffered.drain(..) {
-                    map.insert(action_id, span.clone());
-                }
-            };
-
-        for exchange in self.all_exchanges() {
-            let Some(output) = exchange.output_status.output() else {
-                continue;
-            };
-            for output_message in &output.get().messages {
-                let AIAgentOutputMessageType::Action(action) = &output_message.message else {
-                    continue;
-                };
-
-                match &action.action {
-                    AIAgentActionType::StartRecording { .. } => {
-                        if let Some(AIAgentActionResultType::StartRecording(
-                            StartRecordingResult::Success(started),
-                        )) = result_for_action(&action.id)
-                        {
-                            // A new successful start while another span is open
-                            // can't happen live (the runtime enforces a single
-                            // recording), but flush defensively so the prior
-                            // span's rows keep their open attribution.
-                            if let Some(prior_span) = active_span.take() {
-                                flush_buffer(
-                                    prior_span,
-                                    &mut buffered_action_ids,
-                                    &mut spans_by_action_id,
-                                );
-                            }
-                            active_span = Some(RecordingSpanInfo {
-                                recording_id: started.recording_id.clone(),
-                                status: RecordingSpanStatus::Active,
-                            });
-                            buffered_action_ids = vec![action.id.clone()];
-                        }
-                    }
-                    AIAgentActionType::UseComputer(_) => {
-                        if active_span.is_some() {
-                            buffered_action_ids.push(action.id.clone());
-                        }
-                    }
-                    AIAgentActionType::StopRecording { recording_id, .. } => {
-                        let Some(span) = active_span.as_ref() else {
-                            continue;
-                        };
-                        if span.recording_id != *recording_id {
-                            continue;
-                        }
-
-                        match result_for_action(&action.id) {
-                            Some(AIAgentActionResultType::StopRecording(
-                                StopRecordingResult::Success(_),
-                            )) => {
-                                let mut stopped_span = span.clone();
-                                stopped_span.status = RecordingSpanStatus::Captured;
-                                buffered_action_ids.push(action.id.clone());
-                                flush_buffer(
-                                    stopped_span,
-                                    &mut buffered_action_ids,
-                                    &mut spans_by_action_id,
-                                );
-                                active_span = None;
-                            }
-                            Some(AIAgentActionResultType::StopRecording(
-                                StopRecordingResult::Error(_)
-                                | StopRecordingResult::Cancelled
-                                | StopRecordingResult::Discarded,
-                            )) => {
-                                // The stop saved no recording, so the buffered
-                                // rows must not be labeled as captured.
-                                buffered_action_ids.clear();
-                                active_span = None;
-                            }
-                            _ => {}
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        // A span that never closed is still recording: flush it as open.
-        if let Some(span) = active_span {
-            flush_buffer(span, &mut buffered_action_ids, &mut spans_by_action_id);
-        }
-
-        spans_by_action_id
-    }
-
     pub fn contains_action(&self, action_id: &AIAgentActionId) -> bool {
         self.task_store.tasks().any(|task| {
             task.exchanges()
@@ -2123,7 +1944,6 @@ impl AIConversation {
             model_id,
             coding_model_id,
             cli_agent_model_id,
-            computer_use_model_id,
             shared_session_response_initiator,
             request_start_ts,
             ..
@@ -2147,7 +1967,6 @@ impl AIConversation {
                 model_id: model_id.clone(),
                 coding_model_id: coding_model_id.clone(),
                 cli_agent_model_id: cli_agent_model_id.clone(),
-                computer_use_model_id: computer_use_model_id.clone(),
                 request_cost: None,
                 // This will be None for non-shared sessions
                 response_initiator: shared_session_response_initiator.clone(),
@@ -2922,8 +2741,7 @@ impl AIConversation {
                         );
 
                         // Subtasks can come pre-populated with messages (for example: an advice subagent
-                        // or computer use subagent task created with an initial tool call already present
-                        // in its task messages).
+                        // task created with an initial tool call already present in its task messages).
                         //
                         // In those cases, we need to ensure an AI block is created for the subtask's
                         // initial exchange; otherwise the first tool call/result can be "lost" from the
@@ -2932,7 +2750,6 @@ impl AIConversation {
                         // TODO(QUALITY-276): We should check if we can generally add exchanges from any
                         // subtask, or if that breaks things (e.g. in the CLI subagent).
                         let initial_exchange_ids: Vec<_> = if subtask.is_advice_subagent()
-                            || subtask.is_computer_use_subagent()
                             || subtask.is_conversation_search_subagent()
                         {
                             subtask.exchanges().map(|e| e.id).collect()
@@ -3160,15 +2977,6 @@ impl AIConversation {
                                     &task_id,
                                     &self.task_store,
                                 );
-                                // A computer-use subagent finishing normally ends its background
-                                // session; restore the user's keyboard focus so it no longer
-                                // targets the driven window. Scoped to this conversation so a
-                                // concurrent background session in another conversation is left
-                                // intact. Idempotent and a no-op when this conversation has no
-                                // active background session (e.g. other subagent types). The
-                                // ctrl-c / cancel path, where no SubagentResult is produced, is
-                                // handled in `BlocklistAIController::cancel_conversation_progress`.
-                                computer_use::end_background_session(&self.id.to_string());
                             }
                         }
                         Some(api::message::Message::ModelUsed(model_used)) => {
@@ -3326,8 +3134,7 @@ impl AIConversation {
 
                 let task_id = TaskId::new(task_id);
                 // Updates may target messages from exchanges added by earlier response
-                // streams (e.g. the server swapping computer-use screenshot bytes for a
-                // stored ref), so the current stream is not required to have added an
+                // streams, so the current stream is not required to have added an
                 // exchange for this task. `Task::upsert_message` resolves the exchange
                 // that owns the message and only needs this one for new messages.
                 let current_stream_exchange_id = self

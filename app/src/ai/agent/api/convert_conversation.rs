@@ -6,12 +6,10 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
 
 use ai::agent::action_result::{
     AskUserQuestionAnswerItem, AskUserQuestionResult, FetchConversationResult, ReadSkillResult,
-    RecordingStarted, RecordingStopped, RequestComputerUseResult, ScreenshotSource,
-    SendMessageToAgentResult, StartRecordingResult, StopRecordingResult, UseComputerResult,
+    SendMessageToAgentResult,
 };
 use ai::skills::{ParsedSkill, SkillPathOrigin};
 use chrono::{DateTime, Local, TimeZone};
@@ -1370,133 +1368,6 @@ pub(crate) fn convert_tool_call_result_to_input(
                 context,
             })
         }
-        Some(ToolCallResultType::UseComputer(result)) => {
-            let use_computer_result =
-                match &result.result {
-                    Some(api::use_computer_result::Result::Success(success)) => {
-                        let screenshot = success.screenshot.as_ref().map(|s| {
-                            // The original dimensions are not preserved through the API, so
-                            // we use the current dimensions for both.
-                            let inline = |data| {
-                                ScreenshotSource::Inline(computer_use::Screenshot {
-                                    width: s.width as usize,
-                                    height: s.height as usize,
-                                    original_width: s.width as usize,
-                                    original_height: s.height as usize,
-                                    data,
-                                    mime_type: s.mime_type.clone().into(),
-                                })
-                            };
-                            match &s.source {
-                                Some(api::raw_image::Source::Data(data)) => inline(data.clone()),
-                                // A screenshot whose bytes were offloaded to object storage
-                                // arrives with the `StoredRef` source variant; the ref is
-                                // carried for on-demand fetching.
-                                Some(api::raw_image::Source::StoredRef(stored_ref)) => {
-                                    ScreenshotSource::Stored {
-                                        stored_ref: stored_ref.clone(),
-                                        mime_type: s.mime_type.clone(),
-                                        width: s.width,
-                                        height: s.height,
-                                    }
-                                }
-                                None => inline(Vec::new()),
-                            }
-                        });
-                        let cursor_position = success
-                            .cursor_position
-                            .as_ref()
-                            .map(|c| computer_use::Vector2I::new(c.x, c.y));
-                        let windows = success
-                            .windows
-                            .iter()
-                            .map(convert_api_window_info)
-                            .collect();
-                        // A present captured-window message indicates a window screenshot was taken.
-                        // The window id is an opaque string on the wire; on macOS it is a CGWindowID,
-                        // so parse it back to a u32, defaulting to 0 when it is not parseable.
-                        let captured_window = success.captured_window.as_ref().map(|c| {
-                            computer_use::CapturedWindow {
-                                window_id: c.window_id.parse().unwrap_or(0),
-                                width_px: c.width_px,
-                                height_px: c.height_px,
-                            }
-                        });
-                        UseComputerResult::Success {
-                            screenshot,
-                            cursor_position,
-                            windows,
-                            captured_window,
-                        }
-                    }
-                    Some(api::use_computer_result::Result::Error(error)) => {
-                        UseComputerResult::Error(error.message.clone())
-                    }
-                    None => UseComputerResult::Cancelled,
-                };
-
-            Some(AIAgentInput::ActionResult {
-                result: AIAgentActionResult {
-                    id: tool_call_id.into(),
-                    task_id: task_id.clone(),
-                    result: AIAgentActionResultType::UseComputer(use_computer_result),
-                },
-                context,
-            })
-        }
-        Some(ToolCallResultType::RequestComputerUseResult(result)) => {
-            let request_result = match &result.result {
-                Some(api::request_computer_use_result::Result::Approved(approved)) => {
-                    match (approved, convert_api_platform(approved.platform)) {
-                        (
-                            api::request_computer_use_result::Approved {
-                                screen_dimensions: Some(screen_dimensions),
-                                initial_screenshot: Some(initial_screenshot),
-                                windows,
-                                ..
-                            },
-                            Some(platform),
-                        ) => RequestComputerUseResult::Approved {
-                            screenshot: computer_use::Screenshot {
-                                width: initial_screenshot.width as usize,
-                                height: initial_screenshot.height as usize,
-                                original_width: screen_dimensions.width_px as usize,
-                                original_height: screen_dimensions.height_px as usize,
-                                // Initial screenshots are never offloaded, so any non-inline
-                                // source defensively converts to an empty image.
-                                data: match &initial_screenshot.source {
-                                    Some(api::raw_image::Source::Data(data)) => data.clone(),
-                                    Some(api::raw_image::Source::StoredRef(_)) | None => Vec::new(),
-                                },
-                                mime_type: initial_screenshot.mime_type.clone().into(),
-                            },
-                            platform,
-                            windows: windows.iter().map(convert_api_window_info).collect(),
-                        },
-                        _ => RequestComputerUseResult::Error(
-                            "Missing screen dimensions, initial screenshot, or valid platform"
-                                .to_string(),
-                        ),
-                    }
-                }
-                Some(api::request_computer_use_result::Result::Rejected(_)) => {
-                    RequestComputerUseResult::Cancelled
-                }
-                Some(api::request_computer_use_result::Result::Error(error)) => {
-                    RequestComputerUseResult::Error(error.message.clone())
-                }
-                None => RequestComputerUseResult::Cancelled,
-            };
-
-            Some(AIAgentInput::ActionResult {
-                result: AIAgentActionResult {
-                    id: tool_call_id.into(),
-                    task_id: task_id.clone(),
-                    result: AIAgentActionResultType::RequestComputerUse(request_result),
-                },
-                context,
-            })
-        }
         Some(ToolCallResultType::FetchConversation(result)) => {
             let fetch_result = match &result.result {
                 Some(api::fetch_conversation_result::Result::Success(success)) => {
@@ -1604,7 +1475,6 @@ pub(crate) fn convert_tool_call_result_to_input(
                         )) => RunAgentsLaunchedExecutionMode::Remote {
                             environment_id: remote.environment_id.clone(),
                             worker_host: remote.worker_host.clone(),
-                            computer_use_enabled: remote.computer_use_enabled,
                             runner_id: remote.runner_id.clone(),
                         },
                         Some(api::run_agents_result::launched::ResolvedExecutionMode::Local(_))
@@ -1668,78 +1538,6 @@ pub(crate) fn convert_tool_call_result_to_input(
                 context,
             })
         }
-        Some(ToolCallResultType::StartRecording(result)) => {
-            let start_result = match &result.result {
-                Some(api::start_recording_result::Result::Success(success)) => {
-                    StartRecordingResult::Success(RecordingStarted {
-                        recording_id: success.recording_id.clone(),
-                        started_at: success
-                            .started_at
-                            .as_ref()
-                            .map(proto_timestamp_to_system_time)
-                            .unwrap_or_else(SystemTime::now),
-                        width_px: success
-                            .settings
-                            .as_ref()
-                            .map(|s| s.width_px)
-                            .unwrap_or_default(),
-                        height_px: success
-                            .settings
-                            .as_ref()
-                            .map(|s| s.height_px)
-                            .unwrap_or_default(),
-                    })
-                }
-                Some(api::start_recording_result::Result::Error(error)) => {
-                    StartRecordingResult::Error(error.message.clone())
-                }
-                None => StartRecordingResult::Cancelled,
-            };
-            Some(AIAgentInput::ActionResult {
-                result: AIAgentActionResult {
-                    id: tool_call_id.into(),
-                    task_id: task_id.clone(),
-                    result: AIAgentActionResultType::StartRecording(start_result),
-                },
-                context,
-            })
-        }
-        Some(ToolCallResultType::StopRecording(result)) => {
-            let stop_result = match &result.result {
-                Some(api::stop_recording_result::Result::Success(success)) => {
-                    StopRecordingResult::Success(RecordingStopped {
-                        artifact_uid: success.artifact_uid.clone(),
-                        duration: success
-                            .duration
-                            .as_ref()
-                            .map(proto_duration_to_duration)
-                            .unwrap_or_default(),
-                        width_px: success.width_px,
-                        height_px: success.height_px,
-                        size_bytes: success.size_bytes,
-                        completion_status: convert_recording_completion_status(
-                            success.completion_status,
-                        ),
-                        termination_reason: success.termination_reason.clone(),
-                    })
-                }
-                Some(api::stop_recording_result::Result::Error(error)) => {
-                    StopRecordingResult::Error(error.message.clone())
-                }
-                Some(api::stop_recording_result::Result::Discarded(_)) => {
-                    StopRecordingResult::Discarded
-                }
-                None => StopRecordingResult::Cancelled,
-            };
-            Some(AIAgentInput::ActionResult {
-                result: AIAgentActionResult {
-                    id: tool_call_id.into(),
-                    task_id: task_id.clone(),
-                    result: AIAgentActionResultType::StopRecording(stop_result),
-                },
-                context,
-            })
-        }
         // Deprecated/unused result types or absent result.
         Some(ToolCallResultType::SuggestCreatePlan(..))
         | Some(ToolCallResultType::SuggestPlan(..))
@@ -1748,23 +1546,8 @@ pub(crate) fn convert_tool_call_result_to_input(
             None
         }
         Some(ToolCallResultType::WaitForEvents(_)) => None,
-    }
-}
-
-fn proto_timestamp_to_system_time(ts: &prost_types::Timestamp) -> SystemTime {
-    SystemTime::UNIX_EPOCH + Duration::new(ts.seconds.max(0) as u64, ts.nanos.max(0) as u32)
-}
-
-fn proto_duration_to_duration(duration: &prost_types::Duration) -> Duration {
-    Duration::new(duration.seconds.max(0) as u64, duration.nanos.max(0) as u32)
-}
-
-fn convert_recording_completion_status(status: i32) -> computer_use::RecordingCompletionStatus {
-    match api::stop_recording_result::CompletionStatus::try_from(status) {
-        Ok(api::stop_recording_result::CompletionStatus::Complete) => {
-            computer_use::RecordingCompletionStatus::Completed
-        }
-        _ => computer_use::RecordingCompletionStatus::StoppedEarly,
+        // Results for tools this client does not support.
+        Some(_) => None,
     }
 }
 
@@ -1863,12 +1646,6 @@ fn create_cancelled_result_for_tool_call(
                 TransferShellCommandControlToUserResult::Cancelled,
             )
         }
-        ToolType::UseComputer(_) => {
-            AIAgentActionResultType::UseComputer(UseComputerResult::Cancelled)
-        }
-        ToolType::RequestComputerUse(_) => {
-            AIAgentActionResultType::RequestComputerUse(RequestComputerUseResult::Cancelled)
-        }
         ToolType::FetchConversation(_) => {
             AIAgentActionResultType::FetchConversation(FetchConversationResult::Cancelled)
         }
@@ -1885,17 +1662,13 @@ fn create_cancelled_result_for_tool_call(
         ToolType::RunAgents(_) => {
             AIAgentActionResultType::RunAgents(ai::agent::action_result::RunAgentsResult::Cancelled)
         }
-        ToolType::StartRecording(_) => {
-            AIAgentActionResultType::StartRecording(StartRecordingResult::Cancelled)
-        }
-        ToolType::StopRecording(_) => {
-            AIAgentActionResultType::StopRecording(StopRecordingResult::Cancelled)
-        }
         // These tools are deprecated.
         ToolType::SuggestCreatePlan(_) | ToolType::SuggestPlan(_) => return None,
         ToolType::WaitForEvents(_) => {
             return None;
         }
+        // Tools this client does not support.
+        _ => return None,
     };
 
     Some(AIAgentInput::ActionResult {
@@ -2062,8 +1835,7 @@ fn create_exchange_from_messages(
         model_id: default_model_id.clone(),
         request_cost: None,
         coding_model_id: default_model_id.clone(),
-        cli_agent_model_id: default_model_id.clone(),
-        computer_use_model_id: default_model_id,
+        cli_agent_model_id: default_model_id,
         response_initiator: None,
         added_message_ids: message_ids.iter().map(|s| s.clone().into()).collect(),
     })
@@ -2222,33 +1994,6 @@ pub(crate) fn proto_timestamp_to_local_datetime(seconds: i64, nanos: i32) -> Dat
 impl From<String> for crate::ai::agent::MessageId {
     fn from(s: String) -> Self {
         crate::ai::agent::MessageId(s)
-    }
-}
-
-fn convert_api_platform(platform: i32) -> Option<computer_use::Platform> {
-    use api::request_computer_use_result::approved::Platform;
-    match Platform::try_from(platform) {
-        Ok(Platform::Macos) => Some(computer_use::Platform::Mac),
-        Ok(Platform::Windows) => Some(computer_use::Platform::Windows),
-        Ok(Platform::LinuxX11) => Some(computer_use::Platform::LinuxX11),
-        Ok(Platform::LinuxWayland) => Some(computer_use::Platform::LinuxWayland),
-        Err(_) => {
-            log::warn!("Unknown platform value: {platform}");
-            None
-        }
-    }
-}
-
-/// Reconstructs the internal computer_use window record from the API `WindowInfo` message.
-fn convert_api_window_info(window: &api::WindowInfo) -> computer_use::WindowInfo {
-    computer_use::WindowInfo {
-        // The window id arrives as an opaque string; on macOS it is a CGWindowID (u32). Default to
-        // 0 when it is not parseable.
-        window_id: window.window_id.parse().unwrap_or(0),
-        pid: window.pid,
-        app_name: window.app_name.clone(),
-        title: window.title.clone(),
-        layer: window.layer,
     }
 }
 

@@ -43,7 +43,6 @@ use rustc_hash::FxHashSet;
 use serde::Serialize;
 use settings::Setting as _;
 use string_offset::StringRange;
-use warp_core::channel::ChannelState;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::Fill;
 use warp_core::ui::theme::color::internal_colors;
@@ -54,7 +53,7 @@ use warp_editor::render::element::VerticalExpansionBehavior;
 use warp_errors::{report_error, report_if_error};
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warp_util::path::ShellFamily;
-use warpui::assets::asset_cache::{AssetCache, AssetSource};
+use warpui::assets::asset_cache::AssetCache;
 use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::clipboard::ClipboardContent;
 use warpui::elements::{
@@ -98,9 +97,9 @@ use crate::ai::agent::{
     AIAgentOutputMessage, AIAgentOutputMessageType, AIAgentTextSection, AIIdentifiers,
     CancellationReason, CreateDocumentsRequest, CreateDocumentsResult, DocumentToCreate,
     EditDocumentsResult, MessageId, PassiveSuggestionTrigger, ProgrammingLanguage,
-    RenderableAIError, RequestCommandOutputResult, RequestFileEditsResult, ScreenshotSource,
-    SearchCodebaseResult, ServerOutputId, SubagentCall, SubagentType, SuggestPromptRequest,
-    SuggestPromptResult, SuggestedLoggingId, SummarizationType, TodoOperation,
+    RenderableAIError, RequestCommandOutputResult, RequestFileEditsResult, SearchCodebaseResult,
+    ServerOutputId, SubagentCall, SubagentType, SuggestPromptRequest, SuggestPromptResult,
+    SuggestedLoggingId, SummarizationType, TodoOperation,
 };
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
@@ -154,7 +153,6 @@ use crate::ai::get_relevant_files::controller::{
 #[cfg(feature = "local_fs")]
 use crate::ai::skills::SkillOpenOrigin;
 use crate::ai::skills::{SkillManager, SkillTelemetryEvent};
-use crate::ai::stored_screenshots::stored_screenshot_asset_source;
 use crate::ai::{AIRequestUsageModel, AIRequestUsageModelEvent};
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
@@ -173,7 +171,6 @@ use crate::editor::InteractionState;
 use crate::notebooks::editor::model::FileLinkResolutionContext;
 use crate::notebooks::editor::view::{EditorViewEvent, RichTextEditorView};
 use crate::server::ids::SyncId;
-use crate::server::server_api::ServerApiProvider;
 use crate::server::telemetry::{
     AgentModeRewindEntrypoint, AutonomySettingToggleSource, InteractionSource, TelemetryEvent,
 };
@@ -1063,18 +1060,6 @@ pub struct AIBlock {
     /// Rewind button to revert to before this block.
     rewind_button: ViewHandle<ActionButton>,
 
-    /// Per-action button components for "View screenshot" buttons on UseComputer actions.
-    view_screenshot_buttons: HashMap<AIAgentActionId, ui_components::button::Button>,
-
-    /// Per-action button components for "Open recording" buttons on StopRecording actions.
-    open_recording_buttons: HashMap<AIAgentActionId, ui_components::button::Button>,
-
-    /// Whether this block's output contains recording-related actions
-    /// (StartRecording/StopRecording/UseComputer). Computed on output updates so
-    /// rendering can skip the conversation-wide recording span derivation for
-    /// unrelated blocks.
-    has_recording_related_actions: bool,
-
     /// Stores the last command that was right-clicked by a child component.
     /// When set, CopyCommand will copy this specific command instead of all commands.
     last_right_clicked_command: Option<String>,
@@ -1126,24 +1111,6 @@ struct EmbeddedCodeEditorView {
     language: Option<ProgrammingLanguage>,
     length: usize,
 }
-/// Builds the authenticated Oz run-page URL for a recording artifact.
-///
-/// The task ID is assigned to the conversation by the server when the run
-/// starts, while the artifact UID comes directly from the StopRecording action.
-/// When either value is unavailable, callers should fall back to the signed
-/// artifact download URL.
-fn recording_artifact_view_url(
-    task_id: Option<AmbientAgentTaskId>,
-    artifact_uid: &str,
-) -> Option<String> {
-    let task_id = task_id?;
-    Some(format!(
-        "{}/runs/{task_id}?artifact={}",
-        ChannelState::oz_root_url(),
-        urlencoding::encode(artifact_uid),
-    ))
-}
-
 impl AIBlock {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -1547,9 +1514,6 @@ impl AIBlock {
             dismiss_suggestion_button,
             disable_rule_suggestions_button,
             rewind_button,
-            view_screenshot_buttons: Default::default(),
-            open_recording_buttons: Default::default(),
-            has_recording_related_actions: false,
             last_right_clicked_command: None,
             is_usage_footer_expanded: false,
             is_turn_panel_expanded: false,
@@ -1913,7 +1877,6 @@ impl AIBlock {
         match status {
             AIBlockOutputStatus::Pending => {
                 self.requested_action_ids.clear();
-                self.has_recording_related_actions = false;
                 self.secret_redaction_state.reset();
             }
             AIBlockOutputStatus::PartiallyReceived { output } => {
@@ -2002,22 +1965,6 @@ impl AIBlock {
             }
         }
 
-        let has_recording_related_actions = output.actions().any(|action| {
-            matches!(
-                &action.action,
-                AIAgentActionType::StartRecording { .. }
-                    | AIAgentActionType::StopRecording { .. }
-                    | AIAgentActionType::UseComputer(_)
-            )
-        });
-        if self.has_recording_related_actions || has_recording_related_actions {
-            let conversation_id = self.client_ids.conversation_id;
-            self.action_model.update(ctx, |action_model, _ctx| {
-                action_model.invalidate_recording_spans(conversation_id);
-            });
-        }
-        self.has_recording_related_actions = has_recording_related_actions;
-
         if FeatureFlag::WebSearchUI.is_enabled() {
             // Handle WebSearch messages
             self.handle_web_search_messages(&output.messages, ctx);
@@ -2098,19 +2045,6 @@ impl AIBlock {
 
             if let AIAgentActionType::RunAgents(req) = &action.action {
                 self.ensure_run_agents_card_view(&action.id, req, ctx);
-            }
-
-            // Ensure a button component exists for UseComputer actions.
-            if matches!(&action.action, AIAgentActionType::UseComputer(_)) {
-                self.view_screenshot_buttons
-                    .entry(action.id.clone())
-                    .or_default();
-            }
-
-            if matches!(&action.action, AIAgentActionType::StopRecording { .. }) {
-                self.open_recording_buttons
-                    .entry(action.id.clone())
-                    .or_default();
             }
 
             match action {
@@ -6430,10 +6364,6 @@ pub enum AIBlockAction {
     RunAwsLoginCommand,
     /// Open settings to configure the AWS auth refresh command
     ConfigureAwsLoginCommand,
-    /// Open the screenshot lightbox for a UseComputer action.
-    ViewScreenshot {
-        action_id: AIAgentActionId,
-    },
     /// Open the lightbox for an image attached to an already-submitted user query
     /// rendered inside this AI block.
     OpenSubmittedAttachmentLightbox {
@@ -6450,9 +6380,6 @@ pub enum AIBlockAction {
     OpenAllImportedCommentsInCodeReview,
     OpenCommentInGitHub {
         url: String,
-    },
-    OpenRecordingArtifact {
-        artifact_uid: String,
     },
 }
 
@@ -6474,30 +6401,6 @@ fn open_code_action_event(
             layout,
         },
     }
-}
-
-/// The raw-asset cache ID under which a UseComputer action's screenshot bytes are stored.
-fn screenshot_asset_id(action_id: &AIAgentActionId) -> String {
-    format!("screenshot-{action_id}")
-}
-
-/// Opens the lightbox over the given screenshot asset sources.
-fn open_screenshot_lightbox(
-    sources: Vec<AssetSource>,
-    initial_index: usize,
-    ctx: &mut ViewContext<AIBlock>,
-) {
-    let images = sources
-        .into_iter()
-        .map(|asset_source| ui_components::lightbox::LightboxImage {
-            source: ui_components::lightbox::LightboxImageSource::Resolved { asset_source },
-            description: None,
-        })
-        .collect();
-    ctx.dispatch_typed_action(&WorkspaceAction::OpenLightbox {
-        images,
-        initial_index,
-    });
 }
 
 impl TypedActionView for AIBlock {
@@ -7100,115 +7003,6 @@ impl TypedActionView for AIBlock {
             }
             AIBlockAction::OpenCommentInGitHub { url } => {
                 ctx.open_url(url);
-            }
-            AIBlockAction::OpenRecordingArtifact { artifact_uid } => {
-                let conversation_id = self.client_ids.conversation_id;
-                let task_id = BlocklistAIHistoryModel::as_ref(ctx)
-                    .conversation(&conversation_id)
-                    .and_then(|conversation| conversation.task_id());
-                if let Some(url) = recording_artifact_view_url(task_id, artifact_uid) {
-                    ctx.open_url(&url);
-                    return;
-                }
-                let ai_client = ServerApiProvider::handle(ctx).as_ref(ctx).get_ai_client();
-                let artifact_uid = artifact_uid.clone();
-                let artifact_uid_for_error = artifact_uid.clone();
-                ctx.spawn(
-                    async move { ai_client.get_artifact_download(&artifact_uid).await },
-                    move |_, result, ctx| match result {
-                        Ok(artifact) => {
-                            ctx.open_url(artifact.download_url());
-                        }
-                        Err(error) => {
-                            log::warn!(
-                                "Failed to prepare recording artifact {artifact_uid_for_error}: {error:#}"
-                            );
-                            let window_id = ctx.window_id();
-                            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                                toast_stack.add_ephemeral_toast(
-                                    DismissibleToast::error(
-                                        "Failed to open recording.".to_string(),
-                                    ),
-                                    window_id,
-                                    ctx,
-                                );
-                            });
-                        }
-                    },
-                );
-            }
-            AIBlockAction::ViewScreenshot { action_id } => {
-                // Collect all UseComputer action IDs across the entire conversation
-                // so the lightbox can navigate between their screenshots.
-                let conversation_id = self.client_ids.conversation_id;
-
-                let use_computer_action_ids: Vec<AIAgentActionId> =
-                    BlocklistAIHistoryModel::as_ref(ctx)
-                        .conversation(&conversation_id)
-                        .into_iter()
-                        .flat_map(|c| c.use_computer_action_ids())
-                        .collect();
-
-                let ai_client = ServerApiProvider::handle(ctx).as_ref(ctx).get_ai_client();
-
-                // We Arc::clone the result each iteration to release the immutable
-                // borrow on ctx, allowing the mutable AssetCache update in the same
-                // loop body. Arc::clone is just a refcount bump (no data copied).
-                let mut screenshot_sources: Vec<(AIAgentActionId, AssetSource)> = Vec::new();
-                for action_id in &use_computer_action_ids {
-                    let Some(result) = self
-                        .action_model
-                        .as_ref(ctx)
-                        .get_action_result(action_id)
-                        .map(Arc::clone)
-                    else {
-                        continue;
-                    };
-                    let AIAgentActionResultType::UseComputer(
-                        crate::ai::agent::UseComputerResult::Success { screenshot, .. },
-                    ) = &result.result
-                    else {
-                        continue;
-                    };
-                    match screenshot {
-                        Some(ScreenshotSource::Inline(screenshot)) => {
-                            let asset_id = screenshot_asset_id(action_id);
-                            AssetCache::handle(ctx).update(ctx, |asset_cache, ctx| {
-                                asset_cache.insert_raw_asset_bytes::<ImageType>(
-                                    asset_id.clone(),
-                                    &screenshot.data,
-                                    ctx,
-                                );
-                            });
-                            screenshot_sources
-                                .push((action_id.clone(), AssetSource::Raw { id: asset_id }));
-                        }
-                        Some(ScreenshotSource::Stored { stored_ref, .. }) => {
-                            screenshot_sources.push((
-                                action_id.clone(),
-                                stored_screenshot_asset_source(
-                                    stored_ref.clone(),
-                                    ai_client.clone(),
-                                ),
-                            ));
-                        }
-                        None => {}
-                    }
-                }
-
-                if screenshot_sources.is_empty() {
-                    return;
-                }
-
-                let initial_index = screenshot_sources
-                    .iter()
-                    .position(|(id, _)| id == action_id)
-                    .unwrap_or(0);
-                let sources = screenshot_sources
-                    .into_iter()
-                    .map(|(_, source)| source)
-                    .collect();
-                open_screenshot_lightbox(sources, initial_index, ctx);
             }
             AIBlockAction::OpenSubmittedAttachmentLightbox { image_index } => {
                 let decoded_images = self

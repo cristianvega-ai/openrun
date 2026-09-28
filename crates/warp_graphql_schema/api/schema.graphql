@@ -388,7 +388,6 @@ type AiAutonomyPolicy {
 
 type AiAutonomySettings {
   applyCodeDiffsSetting: AiAutonomyValue
-  computerUseSetting: ComputerUseAutonomyValue
   createPlansSetting: AiAutonomyValue
   executeCommandsAllowlist: [String!]
   executeCommandsDenylist: [String!]
@@ -400,7 +399,6 @@ type AiAutonomySettings {
 
 input AiAutonomySettingsInput {
   applyCodeDiffsSetting: AiAutonomyValue
-  computerUseSetting: ComputerUseAutonomyValue
   createPlansSetting: AiAutonomyValue
   executeCommandsAllowlist: [String!]
   executeCommandsDenylist: [String!]
@@ -803,13 +801,6 @@ type CodebaseContextSettings {
 
 input CodebaseContextSettingsInput {
   enabled: AdminEnablementSetting
-}
-
-enum ComputerUseAutonomyValue {
-  ALWAYS_ALLOW
-  ALWAYS_ASK
-  NEVER
-  RESPECT_USER_SETTING
 }
 
 input ConfirmFileArtifactUploadInput {
@@ -1439,7 +1430,6 @@ type FeatureModelChoice {
   agentMode: AvailableLlms!
   cliAgent: AvailableLlms!
   coding: AvailableLlms!
-  computerUseAgent: AvailableLlms!
   planning: AvailableLlms!
 }
 
@@ -2098,7 +2088,6 @@ type ListedHarnessConfig {
 
 type ListedSimpleIntegrationConfig {
   basePrompt: String!
-  computerUseEnabled: Boolean!
   environmentUid: String!
   harness: ListedHarnessConfig
   harnessAuthSecrets: ListedHarnessAuthSecretsConfig
@@ -3635,7 +3624,6 @@ type SimpleIntegration {
 
 input SimpleIntegrationConfig {
   basePrompt: String
-  computerUseEnabled: Boolean
   environmentUid: String
   harness: HarnessInput
   harnessAuthSecrets: HarnessAuthSecretsInput
@@ -3990,11 +3978,6 @@ type WriteToPtySettingInfo {
   isEnforcedByWorkspace: Boolean!
 }
 
-type ComputerUseSettingInfo {
-  value: ComputerUseAutonomyValue!
-  isEnforcedByWorkspace: Boolean!
-}
-
 type StringListSettingInfo {
   values: [String!]!
   workspaceEntries: [String!]!
@@ -4023,7 +4006,6 @@ type AiAutonomySettingsInfo {
   createPlans: AiAutonomySettingInfo!
   executeCommands: AiAutonomySettingInfo!
   writeToPty: WriteToPtySettingInfo!
-  computerUse: ComputerUseSettingInfo!
   readFilesAllowlist: StringListSettingInfo!
   executeCommandsAllowlist: StringListSettingInfo!
   executeCommandsDenylist: StringListSettingInfo!

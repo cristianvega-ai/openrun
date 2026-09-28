@@ -83,7 +83,6 @@ fn remote(environment_id: &str, worker_host: &str) -> RunAgentsExecutionMode {
     RunAgentsExecutionMode::Remote {
         environment_id: environment_id.to_string(),
         worker_host: worker_host.to_string(),
-        computer_use_enabled: true,
         runner_id: String::new(),
     }
 }
@@ -350,8 +349,7 @@ fn build_request_carries_card_fields_and_edited_run_wide_state() {
     assert_eq!(built.base_prompt, original.base_prompt);
     assert_eq!(built.agent_run_configs, original.agent_run_configs);
     assert_eq!(built.plan_id, original.plan_id);
-    // Run-wide fields come from the edited state; the per-call
-    // computer-use flag is preserved through the round trip.
+    // Run-wide fields come from the edited state.
     assert_eq!(built.model_id, "gpt-5");
     assert_eq!(built.harness_type, "codex");
     assert_eq!(
@@ -359,7 +357,6 @@ fn build_request_carries_card_fields_and_edited_run_wide_state() {
         RunAgentsExecutionMode::Remote {
             environment_id: "env-9".to_string(),
             worker_host: "self-hosted".to_string(),
-            computer_use_enabled: true,
             runner_id: String::new(),
         },
     );

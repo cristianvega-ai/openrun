@@ -189,54 +189,6 @@ impl PromptArg {
     }
 }
 
-/// Shared CLI args for controlling computer use capabilities.
-#[derive(Debug, Clone, Args, Default)]
-pub struct ComputerUseArgs {
-    /// Enable computer use capabilities for this agent run.
-    #[arg(long = "computer-use", conflicts_with = "no_computer_use")]
-    pub computer_use: bool,
-
-    /// Disable computer use capabilities for this agent run.
-    #[arg(long = "no-computer-use", conflicts_with = "computer_use")]
-    pub no_computer_use: bool,
-}
-
-impl ComputerUseArgs {
-    /// Returns the computer use override based on CLI flags.
-    /// - `Some(true)` if `--computer-use` was specified
-    /// - `Some(false)` if `--no-computer-use` was specified
-    /// - `None` if neither was specified (use default behavior)
-    pub fn computer_use_override(&self) -> Option<bool> {
-        match (self.computer_use, self.no_computer_use) {
-            (true, false) => Some(true),
-            (false, true) => Some(false),
-            _ => None,
-        }
-    }
-}
-
-/// Hidden variant of [`ComputerUseArgs`] for commands where computer use flags
-/// should be accepted but not shown in help output.
-#[derive(Debug, Clone, Args, Default)]
-pub struct HiddenComputerUseArgs {
-    /// Enable computer use capabilities for this agent run.
-    #[arg(long = "computer-use", conflicts_with = "no_computer_use", hide = true)]
-    pub computer_use: bool,
-
-    /// Disable computer use capabilities for this agent run.
-    #[arg(long = "no-computer-use", conflicts_with = "computer_use", hide = true)]
-    pub no_computer_use: bool,
-}
-
-impl HiddenComputerUseArgs {
-    pub fn computer_use_override(&self) -> Option<bool> {
-        match (self.computer_use, self.no_computer_use) {
-            (true, false) => Some(true),
-            (false, true) => Some(false),
-            _ => None,
-        }
-    }
-}
 const HARNESS_VALUE_VARIANTS: [Harness; 5] = [
     Harness::Oz,
     Harness::Claude,
@@ -571,9 +523,6 @@ pub struct RunAgentArgs {
     )]
     pub bedrock_role_region: Option<String>,
 
-    #[command(flatten)]
-    pub computer_use: HiddenComputerUseArgs,
-
     /// Continue an existing cloud conversation by ID.
     #[arg(long = "conversation", value_name = "ID")]
     pub conversation: Option<String>,
@@ -761,8 +710,6 @@ pub struct RunCloudArgs {
     )]
     pub attachment_paths: Vec<PathBuf>,
 
-    #[command(flatten)]
-    pub computer_use: ComputerUseArgs,
     #[command(flatten)]
     pub snapshot: SnapshotArgs,
 

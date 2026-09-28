@@ -669,7 +669,6 @@ fn active_models_fall_back_to_usable_choice_or_custom_endpoint_when_default_disa
                     Some(DisableReason::AdminDisabled),
                 )],
             )),
-            computer_use: None,
         };
         llm_preferences.update(&mut app, |preferences, ctx| {
             preferences.update_feature_model_choices(Ok(models), ctx);
@@ -767,7 +766,6 @@ fn active_models_use_default_when_usable() {
                 "cli-agent-auto",
                 vec![server_llm("cli-agent-auto", None)],
             )),
-            computer_use: None,
         };
         llm_preferences.update(&mut app, |preferences, ctx| {
             preferences.update_feature_model_choices(Ok(models), ctx);

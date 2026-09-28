@@ -28,7 +28,6 @@ pub struct FeatureModelChoice {
     pub planning: AvailableLlms,
     pub coding: AvailableLlms,
     pub cli_agent: AvailableLlms,
-    pub computer_use_agent: AvailableLlms,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
@@ -268,16 +267,6 @@ pub enum WriteToPtyAutonomyValue {
     Other(String),
 }
 
-#[derive(cynic::Enum, Clone, Debug)]
-pub enum ComputerUseAutonomyValue {
-    Never,
-    AlwaysAsk,
-    AlwaysAllow,
-    RespectUserSetting,
-    #[cynic(fallback)]
-    Other(String),
-}
-
 #[derive(cynic::QueryFragment, Debug, Clone)]
 pub struct AiAutonomySettings {
     pub apply_code_diffs_setting: Option<AiAutonomyValue>,
@@ -288,7 +277,6 @@ pub struct AiAutonomySettings {
     pub execute_commands_allowlist: Option<Vec<String>>,
     pub execute_commands_denylist: Option<Vec<String>>,
     pub write_to_pty_setting: Option<WriteToPtyAutonomyValue>,
-    pub computer_use_setting: Option<ComputerUseAutonomyValue>,
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
@@ -372,12 +360,6 @@ pub struct WriteToPtySettingInfo {
 }
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
-pub struct ComputerUseSettingInfo {
-    pub value: ComputerUseAutonomyValue,
-    pub is_enforced_by_workspace: bool,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone)]
 pub struct StringListSettingInfo {
     pub values: Vec<String>,
     pub workspace_entries: Vec<String>,
@@ -410,7 +392,6 @@ pub struct AiAutonomySettingsInfo {
     pub create_plans: AiAutonomySettingInfo,
     pub execute_commands: AiAutonomySettingInfo,
     pub write_to_pty: WriteToPtySettingInfo,
-    pub computer_use: ComputerUseSettingInfo,
     pub read_files_allowlist: StringListSettingInfo,
     pub execute_commands_allowlist: StringListSettingInfo,
     pub execute_commands_denylist: StringListSettingInfo,

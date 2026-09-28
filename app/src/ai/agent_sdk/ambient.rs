@@ -509,7 +509,6 @@ impl AmbientAgentRunner {
                     profile_id: None,
                     worker_host: args.worker_host.clone(),
                     skill_spec: None,
-                    computer_use_enabled: args.computer_use.computer_use_override(),
                     harness: harness_override,
                     harness_auth_secrets,
                     additional_source_repos: None,

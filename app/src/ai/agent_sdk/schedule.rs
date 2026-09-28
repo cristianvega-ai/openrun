@@ -127,8 +127,6 @@ fn create(ctx: &mut AppContext, args: CreateScheduleArgs) -> anyhow::Result<()> 
                     profile_id: None,
                     worker_host: args.worker_host,
                     skill_spec: args.skill.map(|s| s.to_string()),
-                    // TODO(QUALITY-294): Support computer use flag in scheduled agents.
-                    computer_use_enabled: None,
                     // TODO(REMOTE-1134): Support harness flag for scheduled agents.
                     harness: None,
                     harness_auth_secrets: None,

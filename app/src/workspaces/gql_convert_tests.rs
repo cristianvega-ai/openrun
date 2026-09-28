@@ -197,9 +197,7 @@ mod pending_email_invites_conversion {
 mod team_settings_conversion {
     use warp_graphql::workspace as gqlws;
 
-    use crate::ai::execution_profiles::{
-        ActionPermission, ComputerUsePermission, WriteToPtyPermission,
-    };
+    use crate::ai::execution_profiles::{ActionPermission, WriteToPtyPermission};
     use crate::workspaces::gql_convert::team_settings_from_gql;
     use crate::workspaces::workspace::{
         AdminEnablementSetting, TeamSettings, UgcCollectionEnablementSetting,
@@ -281,10 +279,6 @@ mod team_settings_conversion {
                 execute_commands: autonomy_info(gqlws::AiAutonomyValue::AlwaysAsk, false),
                 write_to_pty: gqlws::WriteToPtySettingInfo {
                     value: gqlws::WriteToPtyAutonomyValue::AlwaysAsk,
-                    is_enforced_by_workspace: false,
-                },
-                computer_use: gqlws::ComputerUseSettingInfo {
-                    value: gqlws::ComputerUseAutonomyValue::Never,
                     is_enforced_by_workspace: false,
                 },
                 read_files_allowlist: str_list(&["/allowed"], &[], &[]),
@@ -391,10 +385,6 @@ mod team_settings_conversion {
         assert_eq!(
             settings.ai_autonomy.write_to_pty.value,
             Some(WriteToPtyPermission::AlwaysAsk)
-        );
-        assert_eq!(
-            settings.ai_autonomy.computer_use.value,
-            Some(ComputerUsePermission::Never)
         );
         assert_eq!(
             settings.ai_autonomy.read_files_allowlist.values,

@@ -358,7 +358,6 @@ fn retry_request(prompt: impl Into<String>) -> SpawnAgentRequest {
             environment_id: Some("env-123".to_string()),
             model_id: Some("model-123".to_string()),
             worker_host: Some("worker-123".to_string()),
-            computer_use_enabled: Some(false),
             ..Default::default()
         }),
         title: Some("Retry title".to_string()),
@@ -474,7 +473,6 @@ fn github_auth_completed_retries_stored_initial_run_request() {
             assert_eq!(config.environment_id.as_deref(), Some("env-123"));
             assert_eq!(config.model_id.as_deref(), Some("model-123"));
             assert_eq!(config.worker_host.as_deref(), Some("worker-123"));
-            assert_eq!(config.computer_use_enabled, Some(false));
         });
     });
 }

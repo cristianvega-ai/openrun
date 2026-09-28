@@ -638,7 +638,7 @@ impl BlocklistAIStatusBar {
                 .is_some_and(|c| c.status().is_in_progress())
             {
                 // No streaming request or pending action, but conversation is still in progress.
-                // This happens when a subagent (e.g., computer use or advice) is running.
+                // This happens when a subagent (e.g., advice) is running.
                 // Cancel the entire conversation's progress.
                 self.controller.update(ctx, |controller, ctx| {
                     controller.cancel_conversation_progress(

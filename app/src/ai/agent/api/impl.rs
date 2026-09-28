@@ -8,7 +8,6 @@ use warp_multi_agent_api as api;
 use super::convert_to::convert_input;
 use super::{ConvertToAPITypeError, RequestParams, ResponseStream};
 use crate::ai::agent::redaction;
-use crate::ai::blocklist::video_recording_enabled;
 use crate::server::server_api::{AIApiError, ServerApi};
 use crate::server::team_scope::RequestTeamScope;
 use crate::terminal::model::session::SessionType;
@@ -70,7 +69,6 @@ pub async fn generate_multi_agent_output(
             model_config: Some(api::request::settings::ModelConfig {
                 base: params.model.into(),
                 cli_agent: params.cli_agent_model.into(),
-                computer_use_agent: params.computer_use_model.into(),
                 base_model_context_window_limit: params.context_window_limit.unwrap_or(0),
                 ..Default::default()
             }),
@@ -107,12 +105,10 @@ pub async fn generate_multi_agent_output(
             supports_orchestration_v2: supports_orchestration_v2(params.orchestration_enabled),
             supports_orchestration_runners: params.orchestration_enabled
                 && FeatureFlag::CloudAgentRunners.is_enabled(),
-            supports_background_computer_use: FeatureFlag::BackgroundComputerUse.is_enabled()
-                && computer_use::background_supported(),
-            supports_stored_screenshots: FeatureFlag::StoredScreenshots.is_enabled(),
             supports_chatgpt_subscription_error: false,
             custom_model_providers: params.custom_model_providers,
             custom_model_routers: params.custom_model_routers,
+            ..Default::default()
         }),
         metadata: Some(api::request::Metadata {
             logging: logging_metadata,
@@ -260,15 +256,6 @@ fn get_supported_tools(params: &RequestParams) -> Vec<api::ToolType> {
         }
         Some(SessionType::WarpifiedRemote { host_id: None }) => {
             // Feature flag off or not yet connected — no remote tools.
-        }
-    }
-
-    if FeatureFlag::AgentModeComputerUse.is_enabled() && params.computer_use_enabled {
-        supported_tools.extend(&[api::ToolType::UseComputer]);
-        supported_tools.extend(&[api::ToolType::RequestComputerUse]);
-
-        if video_recording_enabled() {
-            supported_tools.extend(&[api::ToolType::StartRecording, api::ToolType::StopRecording]);
         }
     }
 

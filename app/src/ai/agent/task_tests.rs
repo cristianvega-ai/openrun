@@ -1,14 +1,11 @@
-use std::sync::Arc;
-
 use ai::skills::SkillPathOrigin;
 use prost_types::FieldMask;
 use warp_multi_agent_api as api;
 
 use super::{ExtractMessagesError, Task, TaskMessageContext, UpdateTaskError};
 use crate::ai::agent::{
-    AIAgentActionResult, AIAgentActionResultType, AIAgentExchange, AIAgentExchangeId, AIAgentInput,
-    AIAgentOutput, AIAgentOutputStatus, FinishedAIAgentOutput, MessageId, ScreenshotSource, Shared,
-    TaskId, UseComputerResult,
+    AIAgentExchange, AIAgentExchangeId, AIAgentOutput, AIAgentOutputStatus, FinishedAIAgentOutput,
+    MessageId, Shared,
 };
 use crate::ai::llms::LLMId;
 use crate::test_util::ai_agent_tasks::{
@@ -482,8 +479,7 @@ fn create_exchange(
         model_id: model_id.clone(),
         request_cost: None,
         coding_model_id: model_id.clone(),
-        cli_agent_model_id: model_id.clone(),
-        computer_use_model_id: model_id,
+        cli_agent_model_id: model_id,
         response_initiator: None,
     }
 }
@@ -518,59 +514,6 @@ fn agent_output_message(id: &str, task_id: &str, text: &str) -> api::Message {
             },
         )),
         ..create_message(id, task_id)
-    }
-}
-
-fn use_computer_result_message(
-    id: &str,
-    task_id: &str,
-    tool_call_id: &str,
-    screenshot: api::RawImage,
-) -> api::Message {
-    api::Message {
-        message: Some(api::message::Message::ToolCallResult(
-            api::message::ToolCallResult {
-                tool_call_id: tool_call_id.to_string(),
-                context: None,
-                result: Some(api::message::tool_call_result::Result::UseComputer(
-                    api::UseComputerResult {
-                        result: Some(api::use_computer_result::Result::Success(
-                            api::use_computer_result::Success {
-                                screenshot: Some(screenshot),
-                                cursor_position: None,
-                                windows: vec![],
-                                captured_window: None,
-                            },
-                        )),
-                    },
-                )),
-            },
-        )),
-        ..create_message(id, task_id)
-    }
-}
-
-fn inline_raw_image() -> api::RawImage {
-    api::RawImage {
-        source: Some(api::raw_image::Source::Data(vec![1, 2, 3])),
-        mime_type: "image/png".to_string(),
-        width: 2,
-        height: 2,
-    }
-}
-
-fn stored_ref_raw_image() -> api::RawImage {
-    api::RawImage {
-        source: Some(api::raw_image::Source::StoredRef(
-            api::StoredScreenshotRef {
-                screenshot_uid: "shot-1".to_string(),
-                conversation_id: "conv-1".to_string(),
-                size_bytes: 3,
-            },
-        )),
-        mime_type: "image/png".to_string(),
-        width: 2,
-        height: 2,
     }
 }
 
@@ -609,103 +552,6 @@ fn test_upsert_message_same_stream_updates_current_exchange() {
     let messages = &output.get().messages;
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].id, MessageId::new("m1".to_string()));
-}
-
-#[test]
-fn test_upsert_message_cross_exchange_swaps_screenshot_bytes_for_stored_ref() {
-    let task_id = "task1";
-    let api_task = create_api_task(
-        task_id,
-        vec![use_computer_result_message(
-            "m-shot",
-            task_id,
-            "tool-1",
-            inline_raw_image(),
-        )],
-    );
-
-    // The earlier exchange owns the screenshot message and already finished, and holds the
-    // corresponding action-result input as reconstructed by shared-session viewers.
-    let mut earlier_exchange = create_exchange(
-        &["m-shot"],
-        finished_output_status(),
-        chrono::Local::now() - chrono::Duration::minutes(1),
-    );
-    earlier_exchange.input.push(AIAgentInput::ActionResult {
-        result: AIAgentActionResult {
-            id: "tool-1".to_string().into(),
-            task_id: TaskId::new(task_id.to_string()),
-            result: AIAgentActionResultType::UseComputer(UseComputerResult::success(
-                computer_use::ActionResult::legacy(
-                    Some(computer_use::Screenshot {
-                        width: 2,
-                        height: 2,
-                        original_width: 2,
-                        original_height: 2,
-                        data: vec![1, 2, 3],
-                        mime_type: "image/png".into(),
-                    }),
-                    None,
-                ),
-            )),
-        },
-        context: Arc::from(Vec::new()),
-    });
-    let earlier_exchange_id = earlier_exchange.id;
-    let current_exchange = create_exchange(&[], streaming_output_status(), chrono::Local::now());
-    let current_exchange_id = current_exchange.id;
-    let mut task =
-        Task::new_restored_root(api_task, [earlier_exchange, current_exchange].into_iter());
-
-    let (updated_exchange_id, updated_message) = task
-        .upsert_message(
-            use_computer_result_message("m-shot", task_id, "tool-1", stored_ref_raw_image()),
-            Some(current_exchange_id),
-            message_context(),
-            FieldMask {
-                paths: vec!["tool_call_result".to_string()],
-            },
-            true,
-        )
-        .expect("cross-exchange upsert should succeed");
-
-    // The update lands on the exchange that owns the message, not the current stream's.
-    assert_eq!(updated_exchange_id, earlier_exchange_id);
-
-    // The task source (echoed back to the server) retains the stored ref in place of the
-    // inline bytes.
-    let Some(api::message::Message::ToolCallResult(result)) = &updated_message.message else {
-        panic!("expected a tool call result message");
-    };
-    let Some(api::message::tool_call_result::Result::UseComputer(use_computer)) = &result.result
-    else {
-        panic!("expected a use computer result");
-    };
-    let Some(api::use_computer_result::Result::Success(success)) = &use_computer.result else {
-        panic!("expected a success result");
-    };
-    let screenshot = success.screenshot.as_ref().expect("screenshot present");
-    let Some(api::raw_image::Source::StoredRef(stored_ref)) = &screenshot.source else {
-        panic!("expected a stored ref screenshot source");
-    };
-    assert_eq!(stored_ref.screenshot_uid, "shot-1");
-
-    // The owning exchange's action-result input was swapped to the ref-only form.
-    let earlier_exchange = task
-        .exchange(earlier_exchange_id)
-        .expect("earlier exchange exists");
-    let AIAgentInput::ActionResult { result, .. } = &earlier_exchange.input[0] else {
-        panic!("expected an action result input");
-    };
-    let AIAgentActionResultType::UseComputer(UseComputerResult::Success { screenshot, .. }) =
-        &result.result
-    else {
-        panic!("expected a use computer success result");
-    };
-    let Some(ScreenshotSource::Stored { stored_ref, .. }) = screenshot else {
-        panic!("expected a stored-ref screenshot source");
-    };
-    assert_eq!(stored_ref.screenshot_uid, "shot-1");
 }
 
 #[test]
