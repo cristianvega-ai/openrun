@@ -214,8 +214,7 @@ impl ModelSelector {
             ambient_agent_model: None,
         };
 
-        // Route ambient wiring through the setter so construction and the lazy
-        // shared-session viewer path share one implementation.
+        // Route ambient wiring through the setter.
         if let Some(ambient_agent_model) = ambient_agent_model {
             me.set_ambient_agent_view_model(ambient_agent_model, ctx);
         } else {
@@ -225,11 +224,9 @@ impl ModelSelector {
         me
     }
 
-    /// Attaches an ambient agent view model after construction. Shared by [`Self::new`] and the
-    /// lazy shared-session viewer path (the footer rebuilds this selector via the ambient setter
-    /// when a raw `shared_session` link turns out to be a cloud run) so both wire the ambient
-    /// subscription, restore the saved harness model, and refresh identically. Idempotent: a
-    /// no-op when a model is already set.
+    /// Attaches an ambient agent view model after construction: wires the ambient subscription,
+    /// restores the saved harness model, and refreshes. Idempotent: a no-op when a model is
+    /// already set.
     pub fn set_ambient_agent_view_model(
         &mut self,
         ambient_agent_model: ModelHandle<AmbientAgentViewModel>,

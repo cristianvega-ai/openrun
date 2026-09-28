@@ -17,14 +17,13 @@ use crate::terminal::color;
 use crate::terminal::event_listener::ChannelEventListener;
 use crate::terminal::model::ObfuscateSecrets;
 use crate::terminal::model::ansi::{CompletionMetadata, Handler};
-use crate::terminal::model::block::BlockId;
+use crate::terminal::model::block::{BlockId, SerializedBlock};
 use crate::terminal::model::bootstrap::BootstrapStage;
 use crate::terminal::model::grid::Dimensions as _;
 use crate::terminal::model::image_map::StoredImageMetadata;
 use crate::terminal::model::index::Side;
 use crate::terminal::model::selection::ExpandedSelectionRange;
 use crate::terminal::model::test_utils::block_size;
-use crate::terminal::shared_session::SharedSessionStatus;
 
 /// Helper function to create a SerializedBlock with default values,
 /// including the new is_local field.
@@ -109,8 +108,8 @@ fn take_typeahead_for_input_is_none_when_typeahead_is_empty() {
     assert_eq!(model.take_typeahead_for_input(), None);
 }
 #[test]
-fn cloud_mode_deferred_terminal_model_starts_view_pending() {
-    let mut model = TerminalModel::new_for_cloud_mode_shared_session_viewer(
+fn cloud_mode_terminal_model_is_dummy_session() {
+    let mut model = TerminalModel::new_for_cloud_mode(
         block_size(),
         color::List::from(&color::Colors::default()),
         ChannelEventListener::new_for_test(),
@@ -121,11 +120,6 @@ fn cloud_mode_deferred_terminal_model_starts_view_pending() {
         ObfuscateSecrets::No,
     );
 
-    assert!(matches!(
-        model.shared_session_status(),
-        SharedSessionStatus::ViewPending
-    ));
-    assert!(model.shared_session_status().is_viewer());
     assert!(model.is_dummy_cloud_mode_session());
     assert!(
         !model
@@ -157,59 +151,16 @@ fn cloud_mode_deferred_terminal_model_starts_view_pending() {
 }
 
 #[test]
-fn generic_shared_session_viewer_model_starts_view_pending() {
-    let model = TerminalModel::new_for_shared_session_viewer(
-        block_size(),
-        color::List::from(&color::Colors::default()),
-        ChannelEventListener::new_for_test(),
-        Arc::new(Background::default()),
-        false,
-        false,
-        false,
-        ObfuscateSecrets::No,
-    );
-
-    assert!(matches!(
-        model.shared_session_status(),
-        SharedSessionStatus::ViewPending
-    ));
-    assert!(model.shared_session_status().is_viewer());
-}
-
-#[test]
-fn is_cloud_agent_conversation_only_true_for_genuine_ambient_sessions() {
+fn is_cloud_agent_conversation_only_true_for_ambient_transcripts() {
     use std::str::FromStr;
 
-    let make_model = || {
-        TerminalModel::new_for_shared_session_viewer(
-            block_size(),
-            color::List::from(&color::Colors::default()),
-            ChannelEventListener::new_for_test(),
-            Arc::new(Background::default()),
-            false,
-            false,
-            false,
-            ObfuscateSecrets::No,
-        )
-    };
     let task_id = "123e4567-e89b-12d3-a456-426614174000";
 
-    // Baseline: no shared session source and not viewing a transcript.
-    let mut model = make_model();
+    // Baseline: not viewing a transcript.
+    let mut model = TerminalModel::mock(None, None);
     assert!(!model.is_cloud_agent_conversation());
-
-    // A manually shared *local* (`User`) session carries an orchestrator task id on its
-    // `source_task_id` sidecar (QUALITY-726) but is NOT a cloud agent conversation. This is the
-    // regression: before the fix, this task id leaked into the cloud agent icon check.
-    model.set_shared_session_source(SharedSessionSource::user(Some(task_id.to_owned())));
-    assert!(!model.is_cloud_agent_conversation());
-
-    // A shared *ambient* (cloud) session is a cloud agent conversation.
-    model.set_shared_session_source(SharedSessionSource::ambient_agent(Some(task_id.to_owned())));
-    assert!(model.is_cloud_agent_conversation());
 
     // Viewing an ambient conversation transcript is a cloud agent conversation.
-    let mut model = make_model();
     model.set_conversation_transcript_viewer_status(Some(
         ConversationTranscriptViewerStatus::ViewingAmbientConversation(
             AmbientAgentTaskId::from_str(task_id).expect("valid task id"),
@@ -242,13 +193,6 @@ fn multipart_iterm_file_osc(name: &str, inline: bool, payload: &[u8]) -> Vec<Str
         format!("\x1b]1337;FilePart={}\x07", &encoded_payload[midpoint..]),
         "\x1b]1337;FileEnd\x07".to_owned(),
     ]
-}
-
-fn hex_encoded_json_dcs(payload: &str) -> Vec<u8> {
-    let mut bytes = b"\x1bP$d".to_vec();
-    bytes.extend(hex::encode(payload).bytes());
-    bytes.push(0x9c);
-    bytes
 }
 
 fn command_finished_and_precmd(terminal: &mut TerminalModel) {
@@ -1588,7 +1532,6 @@ fn empty_and_syntax_error_commands_without_preexec_complete_as_execution() {
 fn command_finished_recovers_unknown_started_block_with_real_exit_code() {
     let _recovery_enabled = FeatureFlag::TerminalLifecycleRecovery.override_enabled(true);
     let mut terminal = TerminalModel::mock(None, None);
-    terminal.lifecycle_coordinator.reset_unknown();
     terminal.block_list_mut().active_block_for_test().start();
     for c in "unknown-command".chars() {
         terminal.block_list_mut().active_block_for_test().input(c);
@@ -1628,7 +1571,6 @@ fn recovery_advances_finished_active_block_without_republishing_completion() {
         .active_block_for_test()
         .finish(ExitCode::from(31));
     while event_rx.try_recv().is_ok() {}
-    terminal.lifecycle_coordinator.reset_unknown();
 
     let next_block_id = BlockId::new();
     let completion_metadata = CompletionMetadata {
@@ -2120,39 +2062,5 @@ fn test_rect_selection_in_alt_screen() {
                 (Point { row: 4, col: 2 }, Point { row: 4, col: 4 }),
             ],
         })
-    );
-}
-
-#[test]
-fn viewer_processes_dcs_hook_with_unregistered_session_id() {
-    let mut terminal = TerminalModel::mock(None, None);
-    terminal.set_shared_session_status(SharedSessionStatus::reader());
-    terminal.start_command_execution();
-    terminal.command_finished(CommandFinishedValue {
-        completion_metadata: CompletionMetadata {
-            exit_code: ExitCode::from(0),
-            next_block_id: BlockId::new(),
-        },
-        session_id: None,
-    });
-
-    let bytes = hex_encoded_json_dcs(
-        r#"{
-                "hook": "Precmd",
-                "value": {
-                    "pwd": "/viewer",
-                    "session_id": 999
-                }
-            }"#,
-    );
-    terminal.process_bytes(bytes.as_slice());
-
-    assert_eq!(
-        terminal
-            .block_list()
-            .active_block()
-            .pwd()
-            .map(String::as_str),
-        Some("/viewer")
     );
 }

@@ -123,7 +123,6 @@ impl TryFrom<PersistedAIInputType> for AIAgentInput {
 pub fn maybe_build_ai_query_upsert_event(
     event: &BlocklistAIHistoryEvent,
     terminal_surface_id: EntityId,
-    is_shared_ambient_agent_session: bool,
     app: &AppContext,
 ) -> Option<ModelEvent> {
     if event
@@ -159,7 +158,7 @@ pub fn maybe_build_ai_query_upsert_event(
         return None;
     };
 
-    if is_hidden || conversation.is_entirely_passive() || is_shared_ambient_agent_session {
+    if is_hidden || conversation.is_entirely_passive() {
         return None;
     }
 

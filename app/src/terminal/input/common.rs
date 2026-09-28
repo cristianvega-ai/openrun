@@ -27,14 +27,10 @@ use crate::workspaces::user_workspaces::{TeamScope, UserWorkspaces};
 ///
 /// The message bar is hidden when AI is disabled, the user has turned it off in settings,
 /// or the session is a shared ambient agent session.
-pub(super) fn should_show_terminal_input_message_bar(
-    model: &TerminalModel,
-    app: &AppContext,
-) -> bool {
+pub(super) fn should_show_terminal_input_message_bar(app: &AppContext) -> bool {
     !FeatureFlag::AgentViewPromptChip.is_enabled()
         && InputSettings::as_ref(app).is_terminal_input_message_bar_enabled()
         && AISettings::as_ref(app).is_any_ai_enabled(app)
-        && !model.is_shared_ambient_agent_session()
 }
 
 /// Wraps the given column, assumed to represent the full input content, with appropriate
@@ -406,9 +402,7 @@ pub(super) fn maybe_add_buy_credits_banner(
     model: &TerminalModel,
     app: &AppContext,
 ) {
-    if cfg!(target_family = "wasm")
-        && (model.is_conversation_transcript_viewer() || model.shared_session_status().is_viewer())
-    {
+    if cfg!(target_family = "wasm") && model.is_conversation_transcript_viewer() {
         return;
     }
 

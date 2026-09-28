@@ -223,9 +223,8 @@ impl ModelSelectorDataSource {
 
     /// Attaches an ambient agent view model after construction so the picker treats this pane as a
     /// cloud pane, which changes the listed models (custom-endpoint models are suppressed; see
-    /// [`Self::include_model_in_picker`]). Used on the shared-session viewer path where the model
-    /// is created lazily at `SessionJoined`. Idempotent: a no-op when a model is already set. The
-    /// next `run_query` (menu open / typing) picks up the new value.
+    /// [`Self::include_model_in_picker`]). Idempotent: a no-op when a model is already set. The next
+    /// `run_query` (menu open / typing) picks up the new value.
     pub fn set_ambient_agent_view_model(
         &mut self,
         ambient_agent_view_model: ModelHandle<AmbientAgentViewModel>,

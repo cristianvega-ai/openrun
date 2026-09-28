@@ -38,8 +38,6 @@ use crate::launch_configs::launch_config::LaunchConfig;
 use crate::menu::{MenuAction, MenuItem, MenuItemFields};
 use crate::pane_group::{PaneGroup, PaneId};
 use crate::shell_indicator::ShellIndicatorType;
-use crate::terminal::shared_session::SharedSessionStatus;
-use crate::terminal::shared_session::manager::Manager;
 use crate::terminal::view::TerminalViewState;
 use crate::themes::theme::{AnsiColorIdentifier, Fill as ThemeFill, VerticalGradient};
 use crate::ui_components::agent_status::{STATUS_ELEMENT_PADDING, render_status_element};
@@ -455,7 +453,6 @@ impl TabData {
         for section_items in [
             self.pin_menu_items(index),
             self.tab_group_menu_items(index, tab_groups, is_only_member_of_group),
-            self.session_sharing_menu_items(index, ctx),
             self.copy_metadata_menu_items(pane_name_target, ctx),
             self.modify_tab_menu_items(index, can_move_left, can_move_right, pane_name_target, ctx),
             self.close_tab_menu_items(index, tabs_len, ctx),
@@ -475,48 +472,6 @@ impl TabData {
             }
             menu_items.extend(section_items);
         }
-        menu_items
-    }
-
-    fn session_sharing_menu_items(
-        &self,
-        index: usize,
-        ctx: &AppContext,
-    ) -> Vec<MenuItem<WorkspaceAction>> {
-        let mut menu_items = vec![];
-
-        // Add "Copy link" option if the focused session in this tab is being viewed.
-        // Disable the item (rather than silently no-op) when the Manager does not yet have a
-        // session id (e.g. during ViewPending while the session is still setting up).
-        let focused_session_view = self.pane_group.as_ref(ctx).focused_session_view(ctx);
-        let focused_session_status = focused_session_view.as_ref().map(|view| {
-            view.as_ref(ctx)
-                .model
-                .lock()
-                .shared_session_status()
-                .clone()
-        });
-
-        if focused_session_status
-            .as_ref()
-            .is_some_and(SharedSessionStatus::is_viewer)
-        {
-            let has_session_link = focused_session_view
-                .as_ref()
-                .zip(focused_session_status.as_ref())
-                .is_some_and(|(view, status)| {
-                    Manager::as_ref(ctx).has_session_link(&view.id(), status)
-                });
-            menu_items.push(
-                MenuItemFields::new("Copy link")
-                    .with_on_select_action(WorkspaceAction::CopySharedSessionLinkFromTab {
-                        tab_index: index,
-                    })
-                    .with_disabled(!has_session_link)
-                    .into_item(),
-            );
-        }
-
         menu_items
     }
 

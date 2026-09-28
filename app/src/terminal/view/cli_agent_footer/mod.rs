@@ -63,7 +63,6 @@ use crate::terminal::cli_agent_sessions::{
 use crate::terminal::session_settings::{
     SessionSettings, SessionSettingsChangedEvent, ToolbarChipSelection,
 };
-use crate::terminal::shared_session::SharedSessionStatus;
 use crate::terminal::view::init::{ATTACH_FILE_KEYBINDING, OPEN_CLI_AGENT_RICH_INPUT_KEYBINDING};
 use crate::terminal::{CLIAgent, TerminalModel};
 use crate::ui_components::icons::Icon;
@@ -494,13 +493,8 @@ impl CLIAgentFooter {
     fn render_toolbar_item(
         &self,
         item: &CLIAgentToolbarItemKind,
-        shared_status: &SharedSessionStatus,
         app: &AppContext,
     ) -> Option<Box<dyn Element>> {
-        if !item.available_to_session_viewer(shared_status) {
-            return None;
-        }
-
         match item {
             CLIAgentToolbarItemKind::ContextChip(chip_kind) => self.display_chip(chip_kind, app),
             CLIAgentToolbarItemKind::FileExplorer => item
@@ -539,7 +533,7 @@ impl View for CLIAgentFooter {
         // the lock before calling into helpers like `should_use_manual_mode`
         // and `render_toolbar_item`, which may re-lock the same model and
         // would deadlock since the lock is non-reentrant.
-        let (background_color, shared_status) = {
+        let background_color = {
             let terminal_model = self.terminal_model.lock();
             let background_color = if terminal_model.is_alt_screen_active() {
                 terminal_model
@@ -549,10 +543,7 @@ impl View for CLIAgentFooter {
             } else {
                 appearance.theme().surface_1().into_solid()
             };
-            (
-                background_color,
-                terminal_model.shared_session_status().clone(),
-            )
+            background_color
         };
 
         let session_settings = SessionSettings::as_ref(app);
@@ -615,7 +606,7 @@ impl View for CLIAgentFooter {
         }
 
         for item in &left_items {
-            if let Some(element) = self.render_toolbar_item(item, &shared_status, app) {
+            if let Some(element) = self.render_toolbar_item(item, app) {
                 left_buttons.add_child(element);
             }
         }
@@ -626,7 +617,7 @@ impl View for CLIAgentFooter {
             .with_spacing(4.);
 
         for item in &right_items {
-            if let Some(element) = self.render_toolbar_item(item, &shared_status, app) {
+            if let Some(element) = self.render_toolbar_item(item, app) {
                 right_buttons.add_child(element);
             }
         }

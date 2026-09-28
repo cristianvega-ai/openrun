@@ -661,7 +661,6 @@ pub trait AIClient: 'static + Send + Sync {
         &self,
         task_id: AmbientAgentTaskId,
         task_state: Option<AgentTaskState>,
-        session_id: Option<session_sharing_protocol::common::SessionId>,
         conversation_id: Option<String>,
         status_message: Option<TaskStatusUpdate>,
         session_debug_until: Option<DateTime<Utc>>,
@@ -1202,7 +1201,6 @@ impl AIClient for ServerApi {
         &self,
         task_id: AmbientAgentTaskId,
         task_state: Option<AgentTaskState>,
-        session_id: Option<session_sharing_protocol::common::SessionId>,
         conversation_id: Option<String>,
         status_message: Option<TaskStatusUpdate>,
         session_debug_until: Option<DateTime<Utc>>,
@@ -1212,7 +1210,6 @@ impl AIClient for ServerApi {
             input: UpdateAgentTaskInput {
                 task_id: task_id.to_string().into(),
                 task_state,
-                session_id: session_id.map(|id| id.to_string().into()),
                 conversation_id: conversation_id.map(|id| id.into()),
                 status_message: status_message.map(agent_task_status_message_input),
                 session_debug_until: session_debug_until.map(Into::into),

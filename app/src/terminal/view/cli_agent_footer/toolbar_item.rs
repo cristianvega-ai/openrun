@@ -8,7 +8,6 @@ use warpui::SingletonEntity;
 use crate::chip_configurator::ConfigurableToolbarItem;
 use crate::context_chips::{ContextChipKind, available_chips};
 use crate::settings::CodeSettings;
-use crate::terminal::shared_session::SharedSessionStatus;
 use crate::ui_components::icons::Icon;
 
 /// A configurable item in the CLI agent footer.
@@ -44,16 +43,6 @@ pub enum CLIAgentToolbarItemKind {
 }
 
 impl CLIAgentToolbarItemKind {
-    /// Whether this item should be visible to session viewers.
-    /// Items that control host settings or initiate actions on the host's
-    /// behalf are hidden from viewers.
-    pub fn available_to_session_viewer(&self, status: &SharedSessionStatus) -> bool {
-        match self {
-            Self::Settings | Self::FileAttach | Self::FileExplorer => !status.is_viewer(),
-            Self::ContextChip(_) | Self::RichInput | Self::VoiceInput => true,
-        }
-    }
-
     pub fn display_label(&self) -> &'static str {
         match self {
             Self::ContextChip(_) => "Context Chip",

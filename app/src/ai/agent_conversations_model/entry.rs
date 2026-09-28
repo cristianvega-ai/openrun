@@ -1,6 +1,6 @@
 use ai::harness::Harness;
 use chrono::{DateTime, Utc};
-use session_sharing_protocol::common::SessionId;
+use uuid::Uuid;
 use warp_core::features::FeatureFlag;
 use warpui::{AppContext, SingletonEntity};
 
@@ -87,7 +87,7 @@ pub struct AgentConversationIdentity {
     pub local_conversation_id: Option<AIConversationId>,
     pub ambient_agent_task_id: Option<AmbientAgentTaskId>,
     pub server_conversation_token: Option<ServerConversationToken>,
-    pub session_id: Option<SessionId>,
+    pub session_id: Option<Uuid>,
 }
 
 /// Display-only fields for rendering a conversation entry without consulting source models.
@@ -339,7 +339,7 @@ fn current_user_uid(app: &AppContext) -> Option<String> {
         .map(|uid| uid.to_string())
 }
 
-fn task_session_id(task: &AmbientAgentTask) -> Option<SessionId> {
+fn task_session_id(task: &AmbientAgentTask) -> Option<Uuid> {
     task.session_id.as_deref().and_then(parse_session_id)
 }
 
@@ -717,8 +717,8 @@ fn server_conversation_token_for_conversation(
         .or_else(|| nav_data.and_then(|nav_data| nav_data.server_conversation_token.clone()))
 }
 
-pub(super) fn parse_session_id(session_id: &str) -> Option<SessionId> {
-    match session_id.parse::<SessionId>() {
+pub(super) fn parse_session_id(session_id: &str) -> Option<Uuid> {
+    match session_id.parse::<Uuid>() {
         Ok(session_id) => Some(session_id),
         Err(e) => {
             log::warn!("Failed to parse shared session ID: {e}");

@@ -57,7 +57,6 @@ fn exchange_with_working_directory(
         request_cost: None,
         coding_model_id: LLMId::from("test-coding-model"),
         cli_agent_model_id: LLMId::from("test-cli-model"),
-        response_initiator: None,
     }
 }
 
@@ -511,7 +510,6 @@ fn prepare_orders_guards_cancellation_token_check_and_attachment_transfer() {
                             model_id: LLMId::from("test-model"),
                             coding_model_id: LLMId::from("test-coding-model"),
                             cli_agent_model_id: LLMId::from("test-cli-model"),
-                            shared_session_response_initiator: None,
                             request_start_ts: Local::now(),
                             supported_tools_override: None,
                         },

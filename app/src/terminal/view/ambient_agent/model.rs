@@ -4,7 +4,7 @@ use ai::harness::Harness;
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use futures::channel::oneshot;
 use instant::Instant;
-use session_sharing_protocol::common::SessionId;
+use uuid::Uuid;
 use warp_core::features::FeatureFlag;
 use warp_core::send_telemetry_from_ctx;
 use warp_errors::report_error;
@@ -39,8 +39,7 @@ use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::{ServerId, SyncId};
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::ai::{
-    AgentConfigSnapshot, AmbientAgentTaskState, AttachmentInput, RunFollowupRequest,
-    SpawnAgentRequest,
+    AgentConfigSnapshot, AmbientAgentTaskState, AttachmentInput, SpawnAgentRequest,
 };
 use crate::server::team_scope::RequestTeamScope;
 use crate::terminal::view::ambient_agent::{SetupCommandGroupId, SetupCommandState};
@@ -182,11 +181,11 @@ pub struct AmbientAgentViewModel {
 
     /// Session ID for the currently running ambient execution, if the run has attached to a live
     /// shared session.
-    active_execution_session_id: Option<SessionId>,
+    active_execution_session_id: Option<Uuid>,
     /// Session ID for the most recently finished ambient execution.
     /// Used as the previous session ID when submitting a follow-up so polling can wait for a
     /// different fresh session after the prior execution has ended.
-    last_ended_execution_session_id: Option<SessionId>,
+    last_ended_execution_session_id: Option<Uuid>,
 
     /// Prompt text for a follow-up that has been submitted but not yet attached to a new session.
     pending_followup_prompt: Option<String>,
@@ -338,16 +337,6 @@ impl AmbientAgentViewModel {
     ) {
         let group_id = self.setup_commands_state.current_group_id();
         self.set_setup_command_group_visibility(group_id, is_visible, ctx);
-    }
-
-    /// Tear down the active "Running setup commands…" chip in response to the
-    /// `CloudModeSetupPhaseEnded` shared-session marker. Idempotent: the inner
-    /// `finish_setup_command_group` no-ops when the group is not running, and
-    /// `set_setup_command_group_visibility(false)` no-ops when already collapsed.
-    pub(crate) fn tear_down_active_setup_command_group(&mut self, ctx: &mut ModelContext<Self>) {
-        let group_id = self.setup_commands_state.current_group_id();
-        self.finish_setup_command_group(group_id, ctx);
-        self.set_setup_command_group_visibility(group_id, false, ctx);
     }
 
     /// Handles CloudModel events to keep environment_id in sync.
@@ -703,12 +692,6 @@ impl AmbientAgentViewModel {
         self.task_id
     }
 
-    pub(in crate::terminal::view) fn blocks_cloud_followups(&self) -> bool {
-        self.source
-            .as_ref()
-            .is_some_and(AgentSource::blocks_cloud_followups)
-    }
-
     /// Whether or not this terminal session is in the setup state (first-time environment creation).
     pub fn is_in_setup(&self) -> bool {
         matches!(self.status, Status::Setup)
@@ -846,7 +829,7 @@ impl AmbientAgentViewModel {
     /// not trigger a session swap. Setting `active_execution_session_id` keeps
     /// `is_ready_for_cloud_followup_prompt` false while the session is live; the end path
     /// clears it via [`Self::record_ambient_execution_ended`] so follow-ups become available.
-    pub fn set_live_execution_session(&mut self, session_id: SessionId) {
+    pub fn set_live_execution_session(&mut self, session_id: Uuid) {
         self.active_execution_session_id = Some(session_id);
         self.last_ended_execution_session_id = None;
     }
@@ -905,7 +888,7 @@ impl AmbientAgentViewModel {
 
     pub fn record_ambient_execution_ended(
         &mut self,
-        session_id: SessionId,
+        session_id: Uuid,
         ctx: &mut ModelContext<Self>,
     ) {
         if self.active_execution_session_id.as_ref() == Some(&session_id) {
@@ -919,11 +902,7 @@ impl AmbientAgentViewModel {
     /// owner reopens a cloud conversation whose orchestrator has spun up a follow-up
     /// session). The emitted `ExecutionSessionReady` event drives the view-side
     /// `TerminalManager::attach_execution_session` swap to the new shared session.
-    pub fn attach_execution_session(
-        &mut self,
-        session_id: SessionId,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    pub fn attach_execution_session(&mut self, session_id: Uuid, ctx: &mut ModelContext<Self>) {
         self.stop_progress_timer();
         self.active_execution_session_id = Some(session_id);
         self.last_ended_execution_session_id = None;
@@ -938,51 +917,6 @@ impl AmbientAgentViewModel {
             return;
         }
         self.submit_run_followup_unchecked(prompt, ctx);
-    }
-
-    /// Submits a follow-up into a retained environment-setup-failure debug session
-    /// (REMOTE-2661), via the same authenticated `submit_run_followup` service call as
-    /// [`Self::submit_cloud_followup`] but not gated on `HandoffCloudCloud`, and not routed
-    /// through [`Self::submit_run_followup_unchecked`]'s task-state polling: a retained run's
-    /// task is supposed to stay failure-like for the whole debug conversation, so that polling
-    /// would eventually misreport it. Treat this as sent once the server accepts the request.
-    pub fn submit_setup_failure_debug_followup(
-        &mut self,
-        prompt: String,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let Some(task_id) = self.task_id else {
-            log::warn!(
-                "Attempted to submit a setup-failure debug follow-up without an ambient task ID"
-            );
-            return;
-        };
-
-        let ai_client = ServerApiProvider::as_ref(ctx).get_ai_client();
-        let request = RunFollowupRequest {
-            message: prompt.clone(),
-        };
-        if self.pending_followup_prompt.is_some() {
-            log::warn!(
-                "event=viewer_followup_slot_replaced task_id={task_id} route=setup_failure_debug",
-            );
-        }
-        self.pending_followup_prompt = Some(prompt);
-        ctx.emit(AmbientAgentViewModelEvent::FollowupDispatched);
-
-        ctx.spawn(
-            async move { ai_client.submit_run_followup(&task_id, request).await },
-            |me, result, ctx| {
-                me.pending_followup_prompt = None;
-                if let Err(err) = result {
-                    log::warn!("Failed to submit setup-failure debug follow-up: {err}");
-                    ctx.emit(AmbientAgentViewModelEvent::FollowupSubmissionFailed {
-                        error_message: err.to_string(),
-                    });
-                }
-                ctx.notify();
-            },
-        );
     }
 
     fn submit_run_followup_unchecked(&mut self, prompt: String, ctx: &mut ModelContext<Self>) {
@@ -1625,11 +1559,11 @@ pub enum AmbientAgentViewModelEvent {
     ProgressUpdated,
     /// The ambient agent has started sharing its session.
     SessionReady {
-        session_id: SessionId,
+        session_id: Uuid,
     },
     /// An execution has started sharing a session for an already-canonical ambient pane.
     ExecutionSessionReady {
-        session_id: SessionId,
+        session_id: Uuid,
     },
     /// An environment was selected.
     EnvironmentSelected,

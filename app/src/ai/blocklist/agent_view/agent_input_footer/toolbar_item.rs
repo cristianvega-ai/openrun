@@ -5,7 +5,6 @@ use crate::chip_configurator::ConfigurableToolbarItem;
 use crate::context_chips::{ContextChipKind, available_chips};
 use crate::features::FeatureFlag;
 use crate::settings::{AISettings, CodeSettings};
-use crate::terminal::shared_session::SharedSessionStatus;
 use crate::ui_components::icons::Icon;
 
 /// A configurable item in the agent view footer.
@@ -56,29 +55,6 @@ pub enum AgentToolbarItemKind {
 }
 
 impl AgentToolbarItemKind {
-    /// Whether this item should be visible to session viewers.
-    /// Items that control host settings or initiate actions on the host's
-    /// behalf are hidden from viewers.
-    pub fn available_to_session_viewer(
-        &self,
-        status: &SharedSessionStatus,
-        is_cloud_mode: bool,
-    ) -> bool {
-        match self {
-            Self::ShareSession | Self::FileExplorer => !status.is_viewer(),
-            Self::FileAttach => !status.is_viewer() || is_cloud_mode,
-            Self::FastForwardToggle => !status.is_viewer() || status.is_executor(),
-            // Handoff is host-initiated; viewers cannot hand off another user's conversation.
-            Self::HandoffToCloud => !status.is_viewer(),
-            Self::ContextChip(_)
-            | Self::ModelSelector
-            | Self::NLDToggle
-            | Self::ContextWindowUsage
-            | Self::UsageSummary
-            | Self::VoiceInput => true,
-        }
-    }
-
     pub fn display_label(&self) -> &'static str {
         match self {
             Self::ContextChip(_) => "Context Chip",

@@ -196,7 +196,6 @@ where
 pub enum NotExecutedReason {
     NotReady,
     NeedsConfirmation,
-    WaitingOnSharer,
 }
 
 impl NotExecutedReason {
@@ -259,8 +258,6 @@ pub struct BlocklistAIActionExecutor {
     /// parallel phase can complete independently.
     async_executing_actions: std::collections::HashMap<AIAgentActionId, AsyncExecutingAction>,
 
-    /// Reference to the terminal model for checking session sharing state.
-    terminal_model: Arc<FairMutex<TerminalModel>>,
     team_context_resolver: TeamContextResolver,
 }
 
@@ -337,7 +334,6 @@ impl BlocklistAIActionExecutor {
             edit_documents_executor,
             create_documents_executor,
             async_executing_actions: Default::default(),
-            terminal_model,
             team_context_resolver,
             fetch_conversation_executor,
             start_agent_executor,
@@ -449,11 +445,6 @@ impl BlocklistAIActionExecutor {
         conversation_id: AIConversationId,
         ctx: &mut ModelContext<Self>,
     ) -> BoxFuture<'static, ()> {
-        // In view-only mode, we do not need to perform any preprocessing work.
-        if self.is_shared_session_viewer() {
-            return futures::future::ready(()).boxed();
-        }
-
         let input = PreprocessActionInput {
             action,
             conversation_id,
@@ -534,14 +525,6 @@ impl BlocklistAIActionExecutor {
         is_user_initiated: bool,
         ctx: &mut ModelContext<Self>,
     ) -> TryExecuteResult {
-        // We should never actually execute actions in view-only mode.
-        if self.is_shared_session_viewer() {
-            return TryExecuteResult::NotExecuted {
-                reason: NotExecutedReason::WaitingOnSharer,
-                action: Box::new(action),
-            };
-        }
-
         let input = ExecuteActionInput {
             action: &action,
             conversation_id,
@@ -744,10 +727,6 @@ impl BlocklistAIActionExecutor {
         reason: Option<CancellationReason>,
         ctx: &mut ModelContext<Self>,
     ) {
-        // A viewer should not be able to cancel an action.
-        if self.is_shared_session_viewer() {
-            return;
-        }
         if let Some(running) = self.async_executing_actions.remove(action_id) {
             let action_kind = AIAgentActionTypeDiscriminants::from(&running.action.action);
             log::info!(
@@ -909,10 +888,6 @@ impl BlocklistAIActionExecutor {
                 .wait_for_events_executor
                 .update(ctx, |executor, ctx| executor.should_autoexecute(input, ctx)),
         }
-    }
-
-    fn is_shared_session_viewer(&self) -> bool {
-        self.terminal_model.lock().is_shared_session_viewer()
     }
 }
 impl Entity for BlocklistAIActionExecutor {

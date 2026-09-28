@@ -1938,7 +1938,6 @@ impl AIConversation {
             model_id,
             coding_model_id,
             cli_agent_model_id,
-            shared_session_response_initiator,
             request_start_ts,
             ..
         } = request_input;
@@ -1958,8 +1957,6 @@ impl AIConversation {
                 coding_model_id: coding_model_id.clone(),
                 cli_agent_model_id: cli_agent_model_id.clone(),
                 request_cost: None,
-                // This will be None for non-shared sessions
-                response_initiator: shared_session_response_initiator.clone(),
             };
 
             let new_exchange_id = new_exchange.id;
@@ -4810,7 +4807,6 @@ impl From<&CLIAgentSessionStatus> for ConversationStatus {
             CLIAgentSessionStatus::Blocked { message } => ConversationStatus::Blocked {
                 blocked_action: message.clone().unwrap_or_default(),
             },
-            CLIAgentSessionStatus::Cancelled => ConversationStatus::Cancelled,
         }
     }
 }

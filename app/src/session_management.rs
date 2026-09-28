@@ -6,7 +6,6 @@ use warpui::{AppContext, Entity, EntityId, WindowId};
 use crate::context_chips::prompt_snapshot::PromptSnapshot;
 use crate::pane_group::PaneId;
 use crate::terminal::model::blockgrid::BlockGrid;
-use crate::terminal::shared_session::SharedSessionStatus;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::{PaneViewLocator, Workspace};
 
@@ -27,8 +26,6 @@ pub struct SessionNavigationData {
     last_focus_ts: Option<NaiveDateTime>,
     /// Whether or not the session is in a read-only state.
     is_read_only: bool,
-    /// The sharing status of the session.
-    shared_session_status: SharedSessionStatus,
 }
 
 impl SessionNavigationData {
@@ -100,7 +97,6 @@ impl SessionNavigationData {
         last_focus_ts: Option<NaiveDateTime>,
         is_read_only: bool,
         window_id: WindowId,
-        shared_session_status: SharedSessionStatus,
     ) -> Self {
         SessionNavigationData {
             prompt,
@@ -110,7 +106,6 @@ impl SessionNavigationData {
             last_focus_ts,
             is_read_only,
             window_id,
-            shared_session_status,
         }
     }
 
@@ -142,10 +137,6 @@ impl SessionNavigationData {
         self.is_read_only
     }
 
-    pub fn shared_session_status(&self) -> SharedSessionStatus {
-        self.shared_session_status.clone()
-    }
-
     /// Fetches all sessions currently open in the app.
     pub fn all_sessions(app: &AppContext) -> impl Iterator<Item = SessionNavigationData> + '_ {
         app.window_ids()
@@ -161,7 +152,6 @@ impl SessionNavigationData {
 }
 
 pub struct RunningSessionSummary<'a> {
-    /// Does not include long running blocks for viewer of a shared session.
     pub long_running_cmds: Vec<&'a SessionNavigationData>,
 }
 
@@ -173,8 +163,7 @@ impl<'a> RunningSessionSummary<'a> {
                 matches!(
                     session.command_context(),
                     CommandContext::RunningCommand { .. } | CommandContext::RunningAIBlock { .. }
-                ) && !session.shared_session_status().is_viewer()
-                    && !session.is_read_only()
+                ) && !session.is_read_only()
             })
             .collect();
         Self { long_running_cmds }

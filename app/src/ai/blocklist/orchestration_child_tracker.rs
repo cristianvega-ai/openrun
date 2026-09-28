@@ -28,7 +28,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use session_sharing_protocol::common::SessionId;
+use uuid::Uuid;
 use warp_multi_agent_api as api;
 use warpui::ModelContext;
 #[cfg(not(test))]
@@ -71,7 +71,7 @@ pub enum ChildSignal {
 /// Per-child orchestration state, keyed by [`AmbientAgentTaskId`].
 pub struct TrackedChild {
     /// `None` until execution is claimed and a session is linked.
-    pub session_id: Option<SessionId>,
+    pub session_id: Option<Uuid>,
     /// Last observed task state, when known (seeded/refetched rows).
     pub last_state: Option<AmbientAgentTaskState>,
     /// `true` for every placeholder the tracker materializes on behalf of a
@@ -104,7 +104,7 @@ pub struct OrchestrationChildTracker {
     children_awaiting_metadata: HashSet<String>,
     /// Session ids delivered by `run_session_linked` before the child's
     /// placeholder exists; applied when the child is created.
-    pending_session_ids: HashMap<AmbientAgentTaskId, SessionId>,
+    pending_session_ids: HashMap<AmbientAgentTaskId, Uuid>,
     /// Test-only: counts stubbed metadata-fetch dispatches so fetch dedup can
     /// be asserted without any network plumbing.
     #[cfg(test)]
@@ -328,7 +328,7 @@ impl OrchestrationChildTracker {
         let seed_session_id = task
             .session_id
             .as_deref()
-            .and_then(|s| s.parse::<SessionId>().ok());
+            .and_then(|s| s.parse::<Uuid>().ok());
         let state = task.state.clone();
 
         self.children_awaiting_metadata.remove(&run_id);
@@ -362,7 +362,7 @@ impl OrchestrationChildTracker {
     /// placeholder does not exist yet, the session id is stashed and applied
     /// when the child is created.
     fn apply_session_linked(&mut self, task_id: AmbientAgentTaskId, session_uuid: &str) {
-        let Ok(session_id) = session_uuid.parse::<SessionId>() else {
+        let Ok(session_id) = session_uuid.parse::<Uuid>() else {
             log::warn!(
                 "[orch-tracker] run_session_linked with malformed session_uuid={session_uuid:?} \
                  for task_id={task_id} (parent_task_id={}); dropping",

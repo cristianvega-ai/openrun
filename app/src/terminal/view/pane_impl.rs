@@ -33,9 +33,6 @@ use crate::pane_group::pane::view::header::{PANE_HEADER_HEIGHT, render_pane_head
 use crate::pane_group::pane::{PaneStack, view};
 use crate::pane_group::{BackingView, SplitPaneState, TOGGLE_MAXIMIZE_PANE_BINDING_NAME};
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
-use crate::terminal::shared_session::SharedSessionActionSource;
-use crate::terminal::shared_session::manager::Manager;
-use crate::terminal::shared_session::render_util::shared_session_indicator_color;
 use crate::terminal::{TerminalManager, TerminalView};
 use crate::ui_components::agent_icon::terminal_view_agent_icon_variant;
 use crate::ui_components::buttons::icon_button_with_color;
@@ -232,20 +229,9 @@ impl TerminalView {
             )
         };
         let pane_indicator = if should_render_ambient_agent_indicator {
-            // Shared/viewed ambient session: route through the shared helper so the pane header
-            // renders the same brand-color circle + cloud lobe + status as the vertical tab.
+            // Ambient session: route through the shared helper so the pane header renders the
+            // same brand-color circle + cloud lobe + status as the vertical tab.
             terminal_view_agent_icon_variant(self, app).map(render_agent_circle)
-        } else if self.shared_session.is_some() {
-            Some(
-                ConstrainedBox::new(
-                    icons::Icon::Sharing
-                        .to_warpui_icon(shared_session_indicator_color(appearance).into())
-                        .finish(),
-                )
-                .with_height(appearance.ui_font_size())
-                .with_width(appearance.ui_font_size())
-                .finish(),
-            )
         } else if self.is_using_conversation_for_pane_header_title
             || (self.is_long_running()
                 && self
@@ -515,32 +501,10 @@ impl BackingView for TerminalView {
         &self,
         ctx: &AppContext,
     ) -> Vec<MenuItem<Self::PaneHeaderOverflowMenuAction>> {
-        let model = self.model.lock();
         let mut items = vec![];
-        let source = SharedSessionActionSource::PaneHeader;
-
-        // Shared-session related items.
-        let shared_session_status = model.shared_session_status();
-        let is_ambient_agent = self.is_ambient_agent_session(ctx);
-        if shared_session_status.is_viewer() && !is_ambient_agent {
-            // Disable the item (rather than silently no-op) when the Manager does not yet
-            // have a session id (e.g. during ViewPending while the session is still setting up).
-            let has_session_link =
-                Manager::as_ref(ctx).has_session_link(&self.view_id, shared_session_status);
-            items.push(
-                MenuItemFields::new("Copy link")
-                    .with_on_select_action(TerminalAction::CopySharedSessionLink { source })
-                    .with_disabled(!has_session_link)
-                    .into_item(),
-            );
-        }
 
         // Split-pane related items.
         if self.split_pane_state(ctx).is_in_split_pane() {
-            if !items.is_empty() {
-                items.push(MenuItem::Separator);
-            }
-
             let is_maximized = self.split_pane_state(ctx).is_maximized();
             items.push(
                 MenuItemFields::toggle_pane_action(is_maximized)
@@ -557,10 +521,8 @@ impl BackingView for TerminalView {
     }
 
     fn should_render_header(&self, app: &AppContext) -> bool {
-        let is_shared = self.model.lock().shared_session_status().is_viewer();
         let is_fullscreen_agent_view = self.agent_view_controller.as_ref(app).is_fullscreen();
-        is_shared
-            || is_fullscreen_agent_view
+        is_fullscreen_agent_view
             || FeatureFlag::ContextWindowUsageV2.is_enabled()
                 && self.split_pane_state(app).is_in_split_pane()
     }

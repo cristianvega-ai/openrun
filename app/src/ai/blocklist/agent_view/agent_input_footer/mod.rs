@@ -59,13 +59,12 @@ use crate::terminal::profile_model_selector::{ProfileModelSelector, ProfileModel
 use crate::terminal::session_settings::{
     SessionSettings, SessionSettingsChangedEvent, ToolbarChipSelection,
 };
-use crate::terminal::shared_session::SharedSessionStatus;
+use crate::terminal::view::TerminalAction;
 use crate::terminal::view::ambient_agent::{
     AmbientAgentViewModel, ModelSelector, ModelSelectorEvent,
 };
 use crate::terminal::view::cli_agent_footer::{ActiveMicButtonTheme, AgentInputButtonTheme};
 use crate::terminal::view::init::ATTACH_FILE_KEYBINDING;
-use crate::terminal::view::{CloudRoutingIndicator, TerminalAction, resolve_ai_query_routing};
 use crate::ui_components::icons::Icon;
 use crate::view_components::action_button::{
     ActionButton, ActionButtonTheme, ButtonSize, KeystrokeSource, TooltipAlignment,
@@ -77,9 +76,6 @@ const FAST_FORWARD_ON_TOOLTIP: &str = "Turn off auto-approve all agent actions";
 const FAST_FORWARD_OFF_TOOLTIP: &str = "Auto-approve all agent actions for this task";
 const FAST_FORWARD_LOCKED_TOOLTIP: &str =
     "Fast forward is always enabled for cloud agent conversations";
-
-const LIVE_REMOTE_VM_INDICATOR_TOOLTIP: &str = "Connected to a live cloud agent session. Your next prompt continues on the running remote machine.";
-const NEW_CLOUD_VM_INDICATOR_TOOLTIP: &str = "Not connected to cloud agent. Your next prompt starts a new cloud machine to continue this conversation.";
 
 const CLOUD_MODE_V2_FOOTER_GAP: f32 = 4.;
 
@@ -97,8 +93,6 @@ pub struct AgentInputFooter {
     /// Non-interactive indicators for a cloud follow-up pane: one shown when attached to a live
     /// remote VM, one when the next follow-up will start a new cloud VM. See
     /// [`AIQueryRouting`].
-    live_session_indicator: ViewHandle<ActionButton>,
-    new_cloud_vm_indicator: ViewHandle<ActionButton>,
     model_selector: ViewHandle<ProfileModelSelector>,
     environment_selector: Option<ViewHandle<EnvironmentSelector>>,
     handoff_environment_selector: ViewHandle<EnvironmentSelector>,
@@ -141,11 +135,9 @@ pub struct AgentInputFooter {
 }
 
 impl AgentInputFooter {
-    /// Attaches an ambient agent view model to an already-constructed footer. Used when a
-    /// shared-session viewer only learns at `SessionJoined` that the session is an ambient
-    /// run (e.g. a raw `shared_session` link): the footer was built with `None` at
-    /// construction, so it must be given the model now to render the cloud environment
-    /// selector and re-render on model events. Mirrors the ambient wiring in [`Self::new`].
+    /// Attaches an ambient agent view model to an already-constructed footer so it can render the
+    /// cloud environment selector and re-render on model events. Mirrors the ambient wiring in
+    /// [`Self::new`].
     /// `menu_positioning_provider` is passed in because the footer does not retain it.
     /// Idempotent: a no-op when a model is already present.
     pub fn set_ambient_agent_view_model(
@@ -339,27 +331,9 @@ impl AgentInputFooter {
             }
         });
 
-        // Non-interactive cloud follow-up indicators. Only one is rendered at a time, chosen by
-        // `AIQueryRouting` at render time.
-        let live_session_indicator = ctx.add_typed_action_view(|_ctx| {
-            ActionButton::new("", AgentInputButtonTheme)
-                .with_icon(Icon::CloudFilled)
-                .with_tooltip(LIVE_REMOTE_VM_INDICATOR_TOOLTIP)
-                .with_size(button_size)
-                .with_tooltip_alignment(TooltipAlignment::Left)
-        });
-        let new_cloud_vm_indicator = ctx.add_typed_action_view(|_ctx| {
-            ActionButton::new("", AgentInputButtonTheme)
-                .with_icon(Icon::CloudOffline)
-                .with_icon_ansi_color(AnsiColorIdentifier::Yellow)
-                .with_tooltip(NEW_CLOUD_VM_INDICATOR_TOOLTIP)
-                .with_size(button_size)
-                .with_tooltip_alignment(TooltipAlignment::Left)
-        });
-
         let profile_model_selector_full = ctx.add_typed_action_view(|ctx| {
-            // Built without the ambient model; the footer's ambient setter attaches it (for both
-            // construction and the lazy viewer path) via `ProfileModelSelector::set_ambient_agent_view_model`.
+            // Built without the ambient model; the footer's ambient setter attaches it via
+            // `ProfileModelSelector::set_ambient_agent_view_model`.
             let mut selector = ProfileModelSelector::new(
                 menu_positioning_provider.clone(),
                 terminal_view_id,
@@ -377,7 +351,7 @@ impl AgentInputFooter {
             me.handle_profile_model_selector_event(event, ctx);
         });
 
-        // Built by the ambient setter (construction + lazy viewer path share that single point).
+        // Built by the ambient setter.
         let environment_selector: Option<ViewHandle<EnvironmentSelector>> = None;
 
         let handoff_environment_selector = ctx.add_typed_action_view(|ctx| {
@@ -547,7 +521,7 @@ impl AgentInputFooter {
         let v2_model_selector = if FeatureFlag::CloudModeInputV2.is_enabled() {
             let view = ctx.add_typed_action_view(|ctx| {
                 // Built without the ambient model; the footer's ambient setter attaches it via the
-                // `ModelSelector` setter so construction and the lazy viewer path share one path.
+                // `ModelSelector` setter.
                 ModelSelector::new(
                     menu_positioning_provider.clone(),
                     terminal_view_id,
@@ -577,8 +551,6 @@ impl AgentInputFooter {
             file_explorer_button,
             context_window_button,
             usage_button,
-            live_session_indicator,
-            new_cloud_vm_indicator,
             model_selector: profile_model_selector_full,
             environment_selector,
             handoff_environment_selector,
@@ -601,8 +573,7 @@ impl AgentInputFooter {
         me.update_context_window_button(ctx);
         me.update_usage_button(ctx);
         me.update_display_chips(&prompt, ctx);
-        // Route ambient wiring through the setter so construction and the lazy shared-session
-        // viewer path share one implementation.
+        // Route ambient wiring through the setter.
         if let Some(ambient_agent_view_model) = ambient_agent_view_model {
             me.set_ambient_agent_view_model(
                 ambient_agent_view_model,
@@ -740,29 +711,6 @@ impl AgentInputFooter {
 
     pub(crate) fn select_file(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.emit(AgentInputFooterEvent::SelectFile);
-    }
-
-    fn cloud_routing_indicator_view(
-        &self,
-        terminal_model: &TerminalModel,
-        app: &AppContext,
-    ) -> Option<Box<dyn Element>> {
-        match resolve_ai_query_routing(
-            self.terminal_view_id,
-            self.ambient_agent_view_model.as_ref(),
-            terminal_model,
-            app,
-        )
-        .cloud_routing_indicator()
-        {
-            Some(CloudRoutingIndicator::LiveSession) => {
-                Some(ChildView::new(&self.live_session_indicator).finish())
-            }
-            Some(CloudRoutingIndicator::NewCloudVm) => {
-                Some(ChildView::new(&self.new_cloud_vm_indicator).finish())
-            }
-            None => None,
-        }
     }
 
     pub fn has_open_chip_menu(&self, app: &AppContext) -> bool {
@@ -967,21 +915,9 @@ impl AgentInputFooter {
     fn render_toolbar_item(
         &self,
         item: &AgentToolbarItemKind,
-        shared_status: &SharedSessionStatus,
         is_cloud_context: bool,
         app: &AppContext,
     ) -> Option<Box<dyn Element>> {
-        let is_cloud_mode = FeatureFlag::CloudModeImageContext.is_enabled()
-            && self
-                .ambient_agent_view_model
-                .as_ref()
-                .is_some_and(|ambient_agent_model| {
-                    ambient_agent_model.as_ref(app).is_ambient_agent()
-                });
-        if !item.available_to_session_viewer(shared_status, is_cloud_mode) {
-            return None;
-        }
-
         if self.handoff_compose_state.as_ref(app).is_active()
             && !item.is_available_during_handoff_compose()
         {
@@ -1193,23 +1129,10 @@ impl View for AgentInputFooter {
 
         // The lock is released before rendering toolbar items: the usage popover's menu
         // positioning provider re-locks the same non-reentrant model.
-        let (shared_status, is_cloud_context, cloud_routing_indicator) = {
-            let terminal_model = self.terminal_model.lock();
-            (
-                terminal_model.shared_session_status().clone(),
-                super::is_in_cloud_context(&terminal_model),
-                self.cloud_routing_indicator_view(&terminal_model, app),
-            )
-        };
-
-        if let Some(indicator) = cloud_routing_indicator {
-            left_buttons.add_child(indicator);
-        }
+        let is_cloud_context = super::is_in_cloud_context(&self.terminal_model.lock());
 
         for item in &left_items {
-            if let Some(element) =
-                self.render_toolbar_item(item, &shared_status, is_cloud_context, app)
-            {
+            if let Some(element) = self.render_toolbar_item(item, is_cloud_context, app) {
                 left_buttons.add_child(element);
             }
         }
@@ -1230,9 +1153,7 @@ impl View for AgentInputFooter {
             );
         } else {
             for item in &right_items {
-                if let Some(element) =
-                    self.render_toolbar_item(item, &shared_status, is_cloud_context, app)
-                {
+                if let Some(element) = self.render_toolbar_item(item, is_cloud_context, app) {
                     right_buttons.add_child(element);
                 }
             }

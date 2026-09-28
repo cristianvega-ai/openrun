@@ -371,7 +371,7 @@ pub fn run() -> Result<()> {
     let args = warp_cli::Args::from_env();
 
     // Server URL overrides are only honored on internal dev channels. Release channels silently
-    // ignore `--server-root-url` / `--ws-server-url` / `--session-sharing-server-url` (and their
+    // ignore `--server-root-url` / `--ws-server-url` (and their
     // `WARP_*` env-var equivalents) so shipped builds can't be redirected away from their
     // baked-in server URLs. See `Channel::allows_server_url_overrides`.
     if ChannelState::channel().allows_server_url_overrides() {
@@ -385,12 +385,6 @@ pub fn run() -> Result<()> {
             && let Err(e) = ChannelState::override_ws_server_url(url.to_owned())
         {
             eprintln!("Error: Invalid websocket server URL: {e:#}");
-        }
-
-        if let Some(url) = args.session_sharing_server_url()
-            && let Err(e) = ChannelState::override_session_sharing_server_url(url.to_owned())
-        {
-            eprintln!("Error: Invalid session sharing server URL: {e:#}");
         }
     }
 
@@ -1347,9 +1341,6 @@ pub(crate) fn initialize_app(
 
     // Add a singleton model for resizable modals whose size should be persisted through restarts.
     ctx.add_singleton_model(|_| ResizableData::default());
-
-    // Add a singleton model to maintain state of shared session across all windows.
-    ctx.add_singleton_model(terminal::shared_session::manager::Manager::new);
 
     ctx.add_singleton_model(WorkflowManager::new);
 

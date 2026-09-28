@@ -85,14 +85,6 @@ pub fn get_cloud_mode_tips() -> Vec<CloudModeTip> {
             Some("https://docs.warp.dev/platform/environments/"),
         ),
         CloudModeTip::new(
-            "Share agent session links with your team for collaborative debugging.",
-            Some("https://docs.warp.dev/platform/viewing-cloud-agent-runs"),
-        ),
-        CloudModeTip::new(
-            "Use the `--share` flag with the Oz CLI to enable session sharing from anywhere.",
-            Some("https://docs.warp.dev/platform/overview/"),
-        ),
-        CloudModeTip::new(
             "Fork a completed Oz cloud agent session into Warp to continue the work locally.",
             Some("https://docs.warp.dev/platform/viewing-cloud-agent-runs"),
         ),

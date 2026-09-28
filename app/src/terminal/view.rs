@@ -27,7 +27,6 @@ mod pending_user_query;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod plugin_instructions_block;
 pub mod rich_content;
-mod shared_session;
 mod shell_terminated_banner;
 pub mod ssh_file_upload;
 pub(crate) mod ssh_tmux_deprecation_banner;
@@ -58,7 +57,7 @@ use ai::api_keys::{ApiKeyManager, AwsCredentialsState};
 use async_channel::{Receiver, Sender};
 use base64::Engine as _;
 use bookmarks::render_floating_block_snapshot;
-use chrono::{DateTime, Local, NaiveDateTime};
+use chrono::{Local, NaiveDateTime};
 use command_corrections::rules::generic::history::History as CommandCorrectionsHistoryRule;
 use command_corrections::rules::{Rule, RuleId as CommandCorrectionsRuleId};
 use command_corrections::{Command, Correction, HistoryItem, SessionMetadata, correct_command};
@@ -74,8 +73,7 @@ use inline_banner::{
     ByoLlmAuthBannerSessionState, OpenInWarpBannerState, VimModeBannerAction,
     render_alias_expansion_banner, render_aws_bedrock_login_banner,
     render_aws_cli_not_installed_banner, render_inline_notifications_discovery_banner,
-    render_inline_notifications_error_banner, render_inline_shared_session_ended_banner,
-    render_inline_shared_session_started_banner, render_open_in_warp_banner,
+    render_inline_notifications_error_banner, render_open_in_warp_banner,
     render_shell_process_terminated_banner, render_vim_mode_banner,
 };
 pub use inline_banner::{NotificationsDiscoveryBannerAction, NotificationsErrorBannerAction};
@@ -92,20 +90,7 @@ use repo_metadata::repositories::RepoDetectionSource;
 use secret_redaction::redact_secrets;
 use serde::Serialize;
 use serde_json::json;
-use session_sharing_protocol::common::{
-    AgentAttachment, LongRunningCommandAgentInteraction, LongRunningCommandAgentInteractionState,
-    Role, ServerConversationToken as SessionSharingServerConversationToken,
-    WindowSize as SessionSharingWindowSize,
-};
 use settings::{Setting, ToggleableSetting};
-use shared_session::cloud_conversation_continuation::CloudConversationContinuationUiState;
-pub(crate) use shared_session::cloud_conversation_continuation::{
-    AIQueryRouting, CloudRoutingIndicator, CompletedChildPresentation, ConversationAccess,
-    completed_child_conversation_access, completed_child_presentation,
-    is_retained_setup_failure_debug_editable_for_task, resolve_ai_query_routing,
-    resolve_ambient_agent_task_id,
-};
-use shared_session::{SharedSessionAdapter, Viewer};
 use ssh_file_upload::{FileUpload, FileUploadEvent};
 use sum_tree::SeekBias;
 use use_agent_footer::UseAgentToolbar;
@@ -128,8 +113,7 @@ use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::clipboard::ClipboardContent;
 use warpui::clipboard_utils::get_image_filepaths_from_paths;
 use warpui::elements::new_scrollable::{
-    AxisConfiguration, ClippedAxisConfiguration, DualAxisConfig, NewScrollableElement,
-    ScrollableAppearance, SingleAxisConfig,
+    NewScrollableElement, ScrollableAppearance, SingleAxisConfig,
 };
 use warpui::elements::{
     Align, Border, ChildAnchor, ChildView, Clipped, ClippedScrollStateHandle, ConstrainedBox,
@@ -189,10 +173,8 @@ use crate::ai::agent::{
 };
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::{
-    AmbientAgentTask, AmbientAgentTaskId, AmbientConversationStatus,
-    conversation_output_status_from_conversation,
+    AmbientAgentTaskId, AmbientConversationStatus, conversation_output_status_from_conversation,
 };
-use crate::ai::blocklist::agent_view::agent_input_footer::toolbar_item::AgentToolbarItemKind;
 use crate::ai::blocklist::agent_view::orchestration_conversation_links::pane_group_id_containing_terminal_view;
 use crate::ai::blocklist::agent_view::{
     AgentViewController, AgentViewControllerEvent, AgentViewConversationSelection,
@@ -241,8 +223,8 @@ use crate::ai::get_relevant_files::controller::GetRelevantFilesController;
 use crate::ai::llms::{LLMId, LLMModelHost, LLMPreferences};
 use crate::antivirus::AntivirusInfo;
 use crate::appearance::{Appearance, AppearanceEvent};
+use crate::auth::AuthStateProvider;
 use crate::auth::auth_state::AuthState;
-use crate::auth::{AuthStateProvider, UserUid};
 use crate::banner::{
     Banner, BannerAction, BannerEvent, BannerState, BannerTextButton, BannerTextContent,
     DismissalType,
@@ -275,7 +257,7 @@ use crate::context_chips::ContextChipKind;
 use crate::context_chips::prompt::{Prompt, PromptSelection};
 use crate::context_chips::prompt_type::PromptType;
 use crate::drive::CloudObjectTypeAndId;
-use crate::editor::{CrdtOperation, EditorAction};
+use crate::editor::EditorAction;
 use crate::features::FeatureFlag;
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
 use crate::pane_group::focus_state::PaneFocusHandle;
@@ -398,7 +380,6 @@ use crate::terminal::session_settings::{
     SessionSettings, SessionSettingsChangedEvent, ToolbarChipSelection,
 };
 use crate::terminal::settings::{TerminalSettings, TerminalSettingsChangedEvent};
-use crate::terminal::shared_session::SharedSessionStatus;
 use crate::terminal::view::block_onboarding::onboarding_prompt_block::OnboardingPromptBlock;
 use crate::terminal::view::init_environment::mode_selector::{
     EnvironmentSetupMode, EnvironmentSetupModeSelector, EnvironmentSetupModeSelectorEvent,
@@ -909,8 +890,6 @@ pub enum InlineBannerType {
     NotificationsDiscovery,
     NotificationsError,
     AliasExpansion,
-    SharedSessionStart,
-    SharedSessionEnd,
     ShellProcessTerminated,
     OpenInWarp,
     VimMode,
@@ -929,8 +908,6 @@ impl InlineBannerType {
             Self::NotificationsDiscovery
             | Self::NotificationsError
             | Self::AliasExpansion
-            | Self::SharedSessionStart
-            | Self::SharedSessionEnd
             | Self::ShellProcessTerminated
             | Self::OpenInWarp
             | Self::VimMode => false,
@@ -965,8 +942,6 @@ struct InlineBannersState {
 
     alias_expansion_banner: AliasExpansionBanner,
 
-    shared_session_banner_state: SharedSessionBanners,
-
     /// Information for a banner which notifies the user that the
     /// shell process has terminated, or None if there is no
     /// banner to display.
@@ -997,33 +972,6 @@ impl InlineBannersState {
     }
 }
 
-/// Banners that we include in the blocklist to delimit
-/// the start and endpoints of the shared session status, if any.
-#[derive(Copy, Clone, Default)]
-pub enum SharedSessionBanners {
-    /// There aren't any shared session banners.
-    #[default]
-    None,
-
-    /// This session is currently being shared, so
-    /// we only have a started banner.
-    ActiveShare {
-        started_banner_id: InlineBannerId,
-        started_at: DateTime<Local>,
-    },
-
-    /// This session is not actively being shared, but
-    /// it was shared at some point, so we have start and
-    /// end banners.
-    LastShared {
-        started_banner_id: InlineBannerId,
-        started_at: DateTime<Local>,
-
-        ended_banner_id: InlineBannerId,
-        ended_at: DateTime<Local>,
-    },
-}
-
 /// Helper struct for creating SizeUpdates.
 #[derive(Debug)]
 struct SizeUpdateBuilder {
@@ -1042,15 +990,6 @@ impl SizeUpdateBuilder {
         // Refreshing doesn't actually change pane size or content element size.
         Self {
             update_reason: SizeUpdateReason::Refresh,
-            last_size,
-            new_pane_size_px: last_size.pane_size_px(),
-        }
-    }
-
-    fn for_shared_session_update(last_size: SizeInfo, num_rows: usize, num_cols: usize) -> Self {
-        // Shared session updates don't change the actual pane / content sizes.
-        Self {
-            update_reason: SizeUpdateReason::SharerSizeChanged { num_rows, num_cols },
             last_size,
             new_pane_size_px: last_size.pane_size_px(),
         }
@@ -1079,47 +1018,6 @@ impl SizeUpdateBuilder {
             appearance.line_height_ratio(),
             ctx,
         );
-
-        // Capture the pane-computed natural size before shared session adjustments.
-        let natural_rows = new_size.rows;
-        let natural_cols = new_size.columns;
-
-        let new_size = match self.update_reason {
-            SizeUpdateReason::SharerSizeChanged { num_rows, num_cols } => {
-                // For a shared session viewer, we want to use the larger
-                // of our own size and the sharer's size. So we adjust
-                // the number of rows and columns to be the greater
-                // of our own and the sharer's.
-                let rows = num_rows.max(new_size.rows);
-                let cols = num_cols.max(new_size.columns);
-                new_size.with_rows_and_columns(rows, cols)
-            }
-            _ => {
-                // For a shared session viewer, we want to use the larger
-                // of our own size and the sharer's size.
-                // However, if the viewer is actively reporting its size to the sharer
-                // (viewer-driven sizing), skip the MAX — the PTY is already at our size.
-                if let Some(Viewer {
-                    sharer_size,
-                    last_reported_natural_size,
-                    ..
-                }) = view.shared_session_viewer()
-                {
-                    if last_reported_natural_size.is_some() {
-                        // Viewer-driven sizing is active; use our own natural size.
-                        new_size
-                    } else if let Some(size) = sharer_size {
-                        let rows = size.num_rows.max(new_size.rows);
-                        let cols = size.num_cols.max(new_size.columns);
-                        new_size.with_rows_and_columns(rows, cols)
-                    } else {
-                        new_size
-                    }
-                } else {
-                    new_size
-                }
-            }
-        };
 
         // Adjust the gap size to maintain the model invariant that the height of the
         // gap + all block_heights after the gap equals the height of the current
@@ -1181,8 +1079,6 @@ impl SizeUpdateBuilder {
             last_size: self.last_size,
             new_size,
             new_gap_height,
-            natural_rows,
-            natural_cols,
         }
     }
 }
@@ -1563,62 +1459,9 @@ pub enum Event {
         comments: Vec<AttachedReviewComment>,
         diff_mode: DiffMode,
     },
-    RejoinCurrentSession,
     CloseRequested,
     /// Used to focus and bring this session to the foreground.
     FocusSession,
-    SelectedBlocksChanged,
-    SelectedTextChanged,
-    UpdateSessionLinkPermissions {
-        role: Option<Role>,
-    },
-    UpdateSessionTeamPermissions {
-        role: Option<Role>,
-        team_uid: String,
-    },
-    UpdateUserRole {
-        user_uid: UserUid,
-        role: Role,
-    },
-    UpdatePendingUserRole {
-        email: String,
-        role: Role,
-    },
-    AddGuests {
-        emails: Vec<String>,
-        role: Role,
-    },
-    RemoveGuest {
-        user_uid: UserUid,
-    },
-    RemovePendingGuest {
-        email: String,
-    },
-    RequestSharedSessionRole(Role),
-    /// A viewer in a shared session is requesting to send an agent prompt.
-    SendAgentPrompt {
-        server_conversation_token: Option<SessionSharingServerConversationToken>,
-        prompt: String,
-        attachments: Vec<AgentAttachment>,
-    },
-    /// A viewer in a shared session is requesting to cancel the active agent conversation.
-    CancelSharedSessionConversation {
-        server_conversation_token: SessionSharingServerConversationToken,
-    },
-    /// The viewer is reporting its terminal size for viewer-driven PTY sizing.
-    ReportViewerTerminalSize {
-        window_size: SessionSharingWindowSize,
-    },
-    /// The input editor was locally edited and
-    /// peers should be notified, if applicable.
-    InputEditorUpdated {
-        /// The block ID associated to the buffer that
-        /// these operations were made in.
-        block_id: BlockId,
-
-        /// The CRDT-compliant operations.
-        operations: Rc<Vec<CrdtOperation>>,
-    },
     /// Emitted when a pending command (e.g. tab config setup commands) has
     /// been submitted and its block has completed.
     PendingCommandCompleted,
@@ -1693,11 +1536,6 @@ pub enum Event {
         message: String,
         flavor: ToastFlavor,
     },
-    /// Emitted when the agent's interaction state with a long-running command changes.
-    LongRunningCommandAgentInteractionStateChanged {
-        state: LongRunningCommandAgentInteractionState,
-        block_id: Option<BlockId>,
-    },
     /// A pluggable notification triggered via OSC 9 or OSC 777 escape sequences.
     /// Used to show an in-app toast notification.
     PluggableNotification {
@@ -1725,19 +1563,6 @@ pub enum Event {
     SwapPaneToConversation {
         conversation_id: AIConversationId,
     },
-    /// Carries the fetched task snapshot so pane construction uses the same
-    /// current-state materialization decision as pill-click restoration.
-    EnsureUnifiedViewerChildPane {
-        conversation_id: AIConversationId,
-        task: Box<AmbientAgentTask>,
-    },
-    /// A unified-stack child viewer could not join its dedicated live
-    /// execution session. The pane group keeps the child passive and
-    /// re-drives it from current task metadata.
-    OrchestrationChildSharedSessionJoinFailed {
-        conversation_id: AIConversationId,
-        session_id: session_sharing_protocol::common::SessionId,
-    },
     /// Emitted when "Open in new tab" is picked from a child pill's 3-dot menu.
     /// Bubbles up to the workspace to create the new tab.
     OpenChildAgentInNewTab {
@@ -1756,14 +1581,6 @@ pub enum Event {
     KillAgentConversation {
         conversation_id: AIConversationId,
     },
-    /// Emitted when this pane's [`ambient_agent::AmbientAgentViewModel`] is lazily
-    /// created — e.g. a raw `shared_session` link-join viewer that only discovers the
-    /// joined session is an ambient (cloud) run at `SessionJoined`. Lets
-    /// `PaneGroup::create_shared_session_viewer` wire the viewer `TerminalManager` to the
-    /// model's session lifecycle events (via
-    /// [`ambient_agent::wire_ambient_agent_session_events`]) so follow-up runs after the
-    /// previous VM ends re-attach the viewer to the new execution session.
-    AmbientAgentViewModelCreated,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2024,8 +1841,6 @@ pub struct TerminalViewRenderContext {
     pub obfuscate_secrets: ObfuscateSecrets,
     pub hovered_secret: Option<SecretHandle>,
 
-    pub horizontal_clipped_scroll_state: ClippedScrollStateHandle,
-
     /// Context for struct containing information about blocks and AI blocks used to render
     /// AI-specific decoration in the blocklist element.
     pub ai_render_context: Rc<RefCell<BlocklistAIRenderContext>>,
@@ -2201,16 +2016,6 @@ pub struct TerminalView {
 
     /// Scroll state for scrolling vertically in the blocklist.
     blocklist_vertical_scroll_state: ScrollStateHandle,
-
-    /// Scroll state for scrolling vertically in the alt screen.
-    /// This only happens if we're a shared session viewer and
-    /// our window is smaller than the sharer's.
-    alt_screen_vertical_scroll_state: ScrollStateHandle,
-    /// Lines from the top of the content we are scrolled in the alt screen.
-    alt_screen_scroll_top: Lines,
-
-    /// Scroll state for scrolling horizontally.
-    horizontal_clipped_scroll_state: ClippedScrollStateHandle,
 
     /// Whether there is an active text selection.
     is_selecting: bool,
@@ -2430,11 +2235,6 @@ pub struct TerminalView {
 
     ai_render_context: Rc<RefCell<BlocklistAIRenderContext>>,
 
-    shared_session: Option<SharedSessionAdapter>,
-
-    /// The inserted conversation-ended tombstone, if this view currently has one.
-    conversation_ended_tombstone_view_id: Option<EntityId>,
-
     /// The ID of the containing window.
     window_id: WindowId,
 
@@ -2450,15 +2250,6 @@ pub struct TerminalView {
     /// internally relies on reading the last-frame position of `Input`, which would otherwise
     /// require reading the position ID directly from `Input` and cause a circular ref panic.
     input_position_id: String,
-
-    /// A handle for the [`Hoverable`] that we render the [`Input`] view in.
-    ///
-    /// While the [`Input`] itself might internally render with a [`Hoverable`]
-    /// around it, we use a dedicated [`Hoverable`] at the [`TerminalView`] level because
-    /// 1. the [`Input`] implementation might change, and
-    /// 2. we have specific hover behaviour at the [`TerminalView`] level
-    ///    (e.g. a hover-out delay)
-    input_hoverable_handle: MouseStateHandle,
 
     find_model: ModelHandle<TerminalFindModel>,
 
@@ -2648,17 +2439,6 @@ enum BlockMetadataUpdateSource {
     Osc7,
 }
 
-pub(crate) fn file_attach_allowed_for_shared_session(
-    shared_session_status: &SharedSessionStatus,
-    ambient_agent_view_model: Option<&ModelHandle<ambient_agent::AmbientAgentViewModel>>,
-    ctx: &AppContext,
-) -> bool {
-    let is_cloud_mode = FeatureFlag::CloudModeImageContext.is_enabled()
-        && ambient_agent_view_model.is_some_and(|model| model.as_ref(ctx).is_ambient_agent());
-    AgentToolbarItemKind::FileAttach
-        .available_to_session_viewer(shared_session_status, is_cloud_mode)
-}
-
 impl TerminalView {
     /// Returns the path to the current repository, if any.
     pub fn current_repo_path(&self) -> Option<&LocalOrRemotePath> {
@@ -2782,20 +2562,6 @@ impl TerminalView {
             SyncInputType::StartSyncing => (),
             SyncInputType::StopSyncing => {}
         }
-    }
-
-    /// Returns whether local input-editor CRDT edits should be published to the shared-session
-    /// sharer. Viewer-local editor events can still fire from ended/setup-only cloud agent surfaces,
-    /// where sending them upstream would be rejected and surfaced back as edit failures.
-    pub(crate) fn should_publish_shared_session_input_editor_update(
-        &self,
-        model: &TerminalModel,
-        app: &AppContext,
-    ) -> bool {
-        let input_is_visible = self.is_input_box_visible(model, app);
-        // If there is a conversation tombstone and the input is hidden, should not broadcast input updates as
-        // the cloud agent session is over.
-        self.conversation_ended_tombstone_view_id.is_none() || input_is_visible
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3307,14 +3073,6 @@ impl TerminalView {
         ctx.subscribe_to_model(
             &AgentConversationsModel::handle(ctx),
             |me, _, event, ctx| {
-                let is_task_update = matches!(
-                    event,
-                    AgentConversationsModelEvent::TasksUpdated
-                        | AgentConversationsModelEvent::NewTasksReceived
-                );
-                if is_task_update {
-                    me.maybe_insert_tombstone_for_non_running_shared_ambient_task(ctx);
-                }
                 let should_refresh_details_panel = matches!(
                     event,
                     AgentConversationsModelEvent::TasksUpdated
@@ -3391,7 +3149,7 @@ impl TerminalView {
                 model_events_handle.clone(),
                 agent_view_controller.clone(),
                 // Pass the model in so `Input::new` self-wires internally through
-                // `attach_ambient_agent_view_model` (the same setter the lazy viewer path uses).
+                // `attach_ambient_agent_view_model`.
                 ambient_agent_view_model.clone(),
                 active_session.clone(),
                 ephemeral_message_model.clone(),
@@ -3865,9 +3623,6 @@ impl TerminalView {
             scroll_position: ScrollState::new(ScrollPosition::FollowsBottomOfMostRecentBlock),
             scroll_position_before_entering_agent_view: None,
             blocklist_vertical_scroll_state: Default::default(),
-            alt_screen_vertical_scroll_state: Default::default(),
-            alt_screen_scroll_top: Lines::zero(),
-            horizontal_clipped_scroll_state: Default::default(),
             is_selecting: false,
             context_menu_state: None,
             context_menu,
@@ -3947,14 +3702,11 @@ impl TerminalView {
             ai_action_model,
             ai_render_context,
             get_relevant_files_controller,
-            shared_session: None,
-            conversation_ended_tombstone_view_id: None,
             ai_input_model,
             ai_context_model,
             window_id,
             content_element_position_id: terminal_content_element_position_id,
             input_position_id,
-            input_hoverable_handle: Default::default(),
             find_model,
             warpify_state: Default::default(),
             cancel_command_keystroke: keybinding_name_to_keystroke(CANCEL_COMMAND_KEYBINDING, ctx),
@@ -4008,11 +3760,8 @@ impl TerminalView {
             pty_recorder: ctx
                 .add_model(|ctx| PtyRecorder::new(inactive_pty_reads_rx, window_id, ctx)),
         };
-        // Wire the ambient view model through the same helper the lazy `SessionJoined` viewer
-        // path uses, so the field, event subscription, and input attach stay in one place and
-        // cannot drift. `Input::new` already self-wired its own subtree from the model passed
-        // above, so the `input.attach` reached here is an idempotent no-op on this path; it does
-        // the real work only on the lazy viewer path, where the input was built without a model.
+        // `Input::new` already self-wired its own subtree from the model passed above, so the
+        // `input.attach` reached here is an idempotent no-op.
         if let Some(ambient_agent_view_model) = ambient_agent_view_model {
             terminal_view.wire_ambient_agent_view_model(ambient_agent_view_model, ctx);
         }
@@ -4225,27 +3974,6 @@ impl TerminalView {
             model.clear_command_in_flight(conversation_id);
         });
         self.drain_queued_prompts(conversation_id, FinishReason::Complete, ctx);
-    }
-
-    /// Clears queued-command state for this terminal view if dispatch fails.
-    pub(crate) fn clear_queued_command_in_flight(&mut self, ctx: &mut ViewContext<Self>) {
-        let Some(conversation_id) = QueuedQueryModel::as_ref(ctx)
-            .command_in_flight_for_terminal_view(
-                self.view_id,
-                BlocklistAIHistoryModel::as_ref(ctx),
-            )
-        else {
-            return;
-        };
-        QueuedQueryModel::handle(ctx).update(ctx, |model, _ctx| {
-            model.clear_command_in_flight(conversation_id);
-        });
-    }
-
-    pub(crate) fn has_queued_command_in_flight(&self, ctx: &AppContext) -> bool {
-        QueuedQueryModel::as_ref(ctx)
-            .command_in_flight_for_terminal_view(self.view_id, BlocklistAIHistoryModel::as_ref(ctx))
-            .is_some()
     }
 
     fn handle_git_repo_status_event(&mut self, ctx: &mut ViewContext<Self>) {
@@ -4712,27 +4440,6 @@ impl TerminalView {
                 let action = QueuedQueryModel::as_ref(ctx).peek_autofire(conversation_id);
                 match action {
                     Some(AutofireAction::Submit { query_id, text }) => {
-                        if QueuedQueryModel::as_ref(ctx)
-                            .queue(conversation_id)
-                            .iter()
-                            .any(|row| {
-                                row.id() == query_id && row.shared_session_prompt().is_some()
-                            })
-                        {
-                            // Shared-session injections are normally dispatched via `Steering`'s
-                            // piggyback-on-next-request mechanism, or immediately when queued
-                            // while idle; reaching one here means neither applied (e.g. a prior
-                            // dispatch was deferred because a CLI subagent was active), so try
-                            // dispatching the head row now that this turn finished.
-                            self.ai_controller.update(ctx, |controller, ctx| {
-                                controller.dispatch_queued_warp_agent_prompt(
-                                    conversation_id,
-                                    None,
-                                    ctx,
-                                );
-                            });
-                            return;
-                        }
                         self.input.update(ctx, |input, ctx| {
                             input.submit_queued_prompt_for_active_pane(
                                 text,
@@ -4898,33 +4605,6 @@ impl TerminalView {
                 model.remove_fired_row(conversation_id, query_id, ctx);
             });
         }
-    }
-
-    /// Drains one queued prompt when the cloud setup phase completes for a promptless handoff run
-    /// (a prompt will not be auto-sent by the worker so there's no normal event to initiate a queued prompt sending).
-    pub(crate) fn maybe_drain_queue_after_promptless_setup(&mut self, ctx: &mut ViewContext<Self>) {
-        let is_promptless_run = self
-            .ambient_agent_view_model()
-            .and_then(|model| {
-                model
-                    .as_ref(ctx)
-                    .request()
-                    .map(|request| request.prompt.is_none())
-            })
-            .unwrap_or(false);
-        if !is_promptless_run {
-            return;
-        }
-
-        let Some(conversation_id) = self
-            .ai_context_model
-            .as_ref(ctx)
-            .selected_conversation_id(ctx)
-        else {
-            return;
-        };
-
-        self.drain_queued_prompts(conversation_id, FinishReason::Complete, ctx);
     }
 
     pub fn attach_path_as_context(&mut self, path: &Path, ctx: &mut ViewContext<Self>) {
@@ -5285,8 +4965,7 @@ impl TerminalView {
             | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. }
             | BlocklistAIHistoryEvent::ConversationTransferredBetweenTerminalSurfaces { .. }
             | BlocklistAIHistoryEvent::NewConversationRequestComplete { .. }
-            | BlocklistAIHistoryEvent::OrchestrationConfigUpdated { .. }
-            | BlocklistAIHistoryEvent::LocalSharedSessionEstablished { .. } => Vec::new(),
+            | BlocklistAIHistoryEvent::OrchestrationConfigUpdated { .. } => Vec::new(),
         }
     }
 
@@ -5352,8 +5031,7 @@ impl TerminalView {
             | BlocklistAIHistoryEvent::ConversationTransferredBetweenTerminalSurfaces { .. }
             | BlocklistAIHistoryEvent::NewConversationRequestComplete { .. }
             | BlocklistAIHistoryEvent::OrchestrationConfigUpdated { .. }
-            | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. }
-            | BlocklistAIHistoryEvent::LocalSharedSessionEstablished { .. } => None,
+            | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. } => None,
         }
     }
 
@@ -5390,13 +5068,6 @@ impl TerminalView {
             )
         {
             self.fetch_and_update_conversation_details_panel(ctx);
-        }
-        if matches!(
-            event,
-            BlocklistAIHistoryEvent::UpdatedConversationMetadata { .. }
-                | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. }
-        ) {
-            self.maybe_insert_tombstone_for_non_running_shared_ambient_task(ctx);
         }
         match event {
             BlocklistAIHistoryEvent::AppendedExchange {
@@ -5722,8 +5393,7 @@ impl TerminalView {
                         ConversationStatusUpdate::Restored => None,
                     });
 
-                // Don't send notifications or insert ambient agent session ended tombstone
-                // if we're restoring this conversation on startup.
+                // Don't send notifications if we're restoring this conversation on startup.
                 if matches!(update, ConversationStatusUpdate::Restored) {
                     return;
                 }
@@ -5756,7 +5426,6 @@ impl TerminalView {
                 // Show AI credits modal for cloud-mode out-of-credits failures.
                 if FeatureFlag::CloudMode.is_enabled()
                     && self.is_ambient_agent_session(ctx)
-                    && !self.model.lock().is_shared_ambient_agent_session()
                     && let Some(conversation) =
                         BlocklistAIHistoryModel::as_ref(ctx).conversation(conversation_id)
                     && matches!(
@@ -5767,43 +5436,6 @@ impl TerminalView {
                     )
                 {
                     self.show_out_of_credits_modal(ctx);
-                }
-
-                // For conversation transcript viewers (on WASM) and shared ambient sessions on
-                // non-CloudModeSetupV2 paths, insert a conversation-ended tombstone when the
-                // conversation completes.
-                // We only insert the tombstone once per session (when the conversation finishes).
-                // Skip during historical replay to avoid premature tombstone insertion.
-                let should_insert_tombstone = if self.conversation_ended_tombstone_view_id.is_none()
-                    && !self.model.lock().is_receiving_agent_conversation_replay()
-                {
-                    #[cfg(target_family = "wasm")]
-                    {
-                        let model = self.model.lock();
-                        // On WASM, keep transcript viewers on the conversation-driven path.
-                        // Shared ambient sessions under CloudModeSetupV2 are handled via
-                        // AgentConversationsModel task liveness updates instead.
-                        model.is_conversation_transcript_viewer()
-                            || (!FeatureFlag::CloudModeSetupV2.is_enabled()
-                                && model.is_shared_ambient_agent_session())
-                    }
-                    #[cfg(not(target_family = "wasm"))]
-                    {
-                        // Show tombstone for shared ambient agent sessions
-                        self.model.lock().is_shared_ambient_agent_session()
-                            && !FeatureFlag::CloudModeSetupV2.is_enabled()
-                    }
-                } else {
-                    false
-                };
-
-                if should_insert_tombstone
-                    && let Some(conversation) =
-                        BlocklistAIHistoryModel::as_ref(ctx).conversation(conversation_id)
-                    && !conversation.status().is_in_progress()
-                    && conversation_output_status_from_conversation(conversation).is_some()
-                {
-                    self.insert_conversation_ended_tombstone_with_cta(None, ctx);
                 }
             }
             BlocklistAIHistoryEvent::UpdatedConversationTitle { .. } => {
@@ -5898,8 +5530,7 @@ impl TerminalView {
             | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. }
             | BlocklistAIHistoryEvent::NewConversationRequestComplete { .. }
             | BlocklistAIHistoryEvent::OrchestrationConfigUpdated { .. }
-            | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. }
-            | BlocklistAIHistoryEvent::LocalSharedSessionEstablished { .. } => {}
+            | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. } => {}
         }
         ctx.notify();
     }
@@ -6033,17 +5664,8 @@ impl TerminalView {
                     }
                 }
             }
-            CLISubagentEvent::UpdatedControl {
-                block_id,
-                agent_has_control,
-                ..
-            } => {
+            CLISubagentEvent::UpdatedControl { .. } => {
                 self.redetermine_terminal_focus(ctx);
-                self.emit_long_running_command_agent_interaction_state_changed(
-                    *agent_has_control,
-                    block_id.clone(),
-                    ctx,
-                );
             }
             CLISubagentEvent::FinishedSubagent {
                 block_id,
@@ -7121,14 +6743,10 @@ impl TerminalView {
         })
     }
 
-    /// Returns whether a specific session is local, treating shared-session
-    /// viewers and conversation transcript viewers as non-local even when
-    /// their session hasn't been joined yet.
+    /// Returns whether a specific session is local, treating conversation
+    /// transcript viewers as non-local.
     pub fn session_is_local<C: ModelAsRef>(&self, session_id: SessionId, ctx: &C) -> bool {
-        let forced_non_local = {
-            let model = self.model.lock();
-            model.is_shared_session_viewer() || model.is_conversation_transcript_viewer()
-        };
+        let forced_non_local = self.model.lock().is_conversation_transcript_viewer();
         !forced_non_local
             && self
                 .sessions
@@ -7238,18 +6856,6 @@ impl TerminalView {
         self.ai_input_model.as_ref(app).input_config()
     }
 
-    /// Applies an input mode update from an external source (e.g., session sharing).
-    /// This bypasses normal event emission to prevent update loops.
-    pub fn apply_external_input_mode_update(
-        &mut self,
-        config: InputConfig,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.input.update(ctx, |input, ctx| {
-            input.apply_external_input_config_update(config, ctx);
-        });
-    }
-
     pub fn ai_controller(&self) -> &ModelHandle<BlocklistAIController> {
         &self.ai_controller
     }
@@ -7303,45 +6909,11 @@ impl TerminalView {
     }
 
     fn can_attach_file(&self, app: &AppContext) -> bool {
-        self.is_in_agent_or_cli_attach_context(app) && {
-            let status = self.model.lock().shared_session_status().clone();
-            file_attach_allowed_for_shared_session(
-                &status,
-                self.ambient_agent_view_model.as_ref(),
-                app,
-            )
-        }
-    }
-
-    /// Ensures this pane has an [`ambient_agent::AmbientAgentViewModel`], creating and wiring
-    /// it into the input if absent. Idempotent: returns the existing model when already
-    /// present (the upfront cloud-mode construction path). Used by both the upfront and
-    /// `SessionJoined` paths so a shared-session viewer that only discovers it is viewing an
-    /// ambient run at join time (e.g. a raw `shared_session` link) still gets a fully wired
-    /// model.
-    fn ensure_ambient_agent_view_model(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-    ) -> ModelHandle<ambient_agent::AmbientAgentViewModel> {
-        if let Some(existing) = self.ambient_agent_view_model.clone() {
-            return existing;
-        }
-        let terminal_view_id = self.view_id;
-        let terminal_view = ctx.handle();
-        let model = ctx.add_model(|ctx| {
-            ambient_agent::AmbientAgentViewModel::new(terminal_view_id, terminal_view, ctx)
-        });
-        self.wire_ambient_agent_view_model(model.clone(), ctx);
-        // Notify observers (e.g. `PaneGroup::create_shared_session_viewer`) that the model
-        // now exists so they can wire the viewer `TerminalManager` to its session events.
-        ctx.emit(Event::AmbientAgentViewModelCreated);
-        model
+        self.is_in_agent_or_cli_attach_context(app)
     }
 
     /// Wires an ambient agent view model into this terminal view: stores it, routes its events to
-    /// [`Self::handle_ambient_agent_event`], and attaches it to the input. The single wiring point
-    /// shared by the upfront construction path (`TerminalView::new`) and the lazy `SessionJoined`
-    /// path (`ensure_ambient_agent_view_model`) so the two cannot drift.
+    /// [`Self::handle_ambient_agent_event`], and attaches it to the input.
     fn wire_ambient_agent_view_model(
         &mut self,
         model: ModelHandle<ambient_agent::AmbientAgentViewModel>,
@@ -7356,48 +6928,15 @@ impl TerminalView {
         });
     }
 
-    /// Begins viewing an existing ambient (cloud) run in this shared-session viewer pane.
-    /// Shared entry point for the upfront and `SessionJoined` paths: ensures the
-    /// [`ambient_agent::AmbientAgentViewModel`] exists, initializes it for viewing `task_id`,
-    /// and records the live `session_id` so `is_ready_for_cloud_followup_prompt` stays false
-    /// while the session is live and flips to the resumable follow-up state when it ends.
-    pub fn begin_viewing_ambient_session(
-        &mut self,
-        task_id: AmbientAgentTaskId,
-        session_id: session_sharing_protocol::common::SessionId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let model = self.ensure_ambient_agent_view_model(ctx);
-        model.update(ctx, |model, ctx| {
-            model.enter_viewing_existing_session(task_id, ctx);
-            model.set_live_execution_session(session_id);
-        });
-    }
-
-    /// Tear down the Cloud Mode Setup V2 UI in response to a
-    /// setup-phase-ended signal: clear the BlockList
-    /// executing-startup-commands flag AND finish/collapse the active
-    /// ambient setup command group. Owns both pieces of state so callers
-    /// (the shared-session viewer arm, legacy fallbacks) don't have to
-    /// orchestrate two unrelated mutations. Idempotent across both.
-    pub(crate) fn tear_down_cloud_mode_setup_phase(&mut self, ctx: &mut ViewContext<Self>) {
-        self.model
-            .lock()
-            .block_list_mut()
-            .set_is_executing_oz_environment_startup_commands(false);
-        if let Some(ambient_model) = self.ambient_agent_view_model.clone() {
-            ambient_model.update(ctx, |model, ctx| {
-                model.tear_down_active_setup_command_group(ctx);
-            });
-        }
-    }
-
     fn ambient_agent_task_id_for_details_panel_from_model(
         &self,
         model: &TerminalModel,
         app: &AppContext,
     ) -> Option<AmbientAgentTaskId> {
-        resolve_ambient_agent_task_id(self.ambient_agent_view_model.as_ref(), model, app)
+        self.ambient_agent_view_model
+            .as_ref()
+            .and_then(|view_model| view_model.as_ref(app).task_id())
+            .or_else(|| model.ambient_agent_task_id())
     }
     pub fn ambient_agent_task_id_for_details_panel(
         &self,
@@ -7452,10 +6991,6 @@ impl TerminalView {
     }
 
     #[cfg(test)]
-    pub(crate) fn is_orchestration_child_live_unavailable_for_test(&self) -> bool {
-        self.orchestration_child_live_unavailable
-    }
-    #[cfg(test)]
     pub(crate) fn has_agent_view_zero_state_for_test(&self) -> bool {
         self.rich_content_views
             .iter()
@@ -7470,74 +7005,6 @@ impl TerminalView {
             self.conversation_details_panel_auto_open_policy,
             ConversationDetailsPanelAutoOpenPolicy::DefaultClosed
         )
-    }
-
-    fn maybe_insert_tombstone_for_non_running_shared_ambient_task(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !FeatureFlag::CloudModeSetupV2.is_enabled() {
-            return;
-        }
-
-        let (task_id, is_active_shared_session, is_finished_viewer) = {
-            let model = self.model.lock();
-            if model.is_receiving_agent_conversation_replay() {
-                return;
-            }
-
-            let status = model.shared_session_status();
-            // This method also handles restored cloud-mode panes that rendered
-            // a conservative tombstone before task data arrived. When the task
-            // cache updates, either the existing tombstone or FinishedViewer
-            // status tells us to re-resolve the CTA/input state.
-            let should_update = model.is_shared_ambient_agent_session()
-                || self.conversation_ended_tombstone_view_id.is_some()
-                || status.is_finished_viewer();
-            if !should_update {
-                return;
-            }
-
-            (
-                self.ambient_agent_task_id_for_details_panel_from_model(&model, ctx),
-                status.is_active_viewer(),
-                status.is_finished_viewer(),
-            )
-        };
-
-        let Some(task_id) = task_id else {
-            return;
-        };
-        let Some(task) = AgentConversationsModel::as_ref(ctx).get_task_data(&task_id) else {
-            return;
-        };
-
-        if !task.is_no_longer_running() || self.pending_cloud_followup_task_id.is_some() {
-            return;
-        }
-
-        if FeatureFlag::HandoffCloudCloud.is_enabled() {
-            if is_active_shared_session {
-                return;
-            }
-            let Some(state) = self.cloud_conversation_continuation_ui_state(ctx) else {
-                return;
-            };
-            match state {
-                CloudConversationContinuationUiState::Tombstone { cta } => {
-                    self.insert_conversation_ended_tombstone_with_cta(cta, ctx);
-                }
-                CloudConversationContinuationUiState::FollowupInput => {
-                    if self.conversation_ended_tombstone_view_id.is_some() || is_finished_viewer {
-                        self.insert_conversation_ended_tombstone_with_resolved_cta(ctx);
-                    } else {
-                        self.enable_cloud_followup_input(task_id, ctx);
-                    }
-                }
-            }
-        } else {
-            self.insert_conversation_ended_tombstone_with_cta(None, ctx);
-        }
     }
 
     pub fn active_session(&self) -> &ModelHandle<ActiveSession> {
@@ -7575,38 +7042,6 @@ impl TerminalView {
 
     pub fn set_is_ssh_uploader(&mut self, is_uploader: bool) {
         self.is_ssh_file_uploader = is_uploader;
-    }
-
-    pub fn is_shared_ambient_agent_session(&self) -> bool {
-        self.model.lock().is_shared_ambient_agent_session()
-    }
-
-    pub fn is_shared_session_viewer(&self) -> bool {
-        self.model.lock().is_shared_session_viewer()
-    }
-
-    pub(crate) fn apply_viewer_shared_session_input_update(
-        &mut self,
-        block_id: &BlockId,
-        operations: Vec<CrdtOperation>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if self.should_suppress_ambient_setup_input_sync(ctx) {
-            return;
-        }
-
-        self.input().update(ctx, |input, ctx| {
-            input.process_remote_edits(block_id, operations, ctx);
-        });
-    }
-
-    fn should_suppress_ambient_setup_input_sync(&self, app: &AppContext) -> bool {
-        FeatureFlag::CloudModeSetupV2.is_enabled()
-            && self.ambient_agent_view_model.as_ref().is_some_and(|model| {
-                let model = model.as_ref(app);
-                let setup_state = model.setup_command_state();
-                setup_state.should_suppress_input_sync_for_current_group()
-            })
     }
 
     pub fn ssh_file_upload(&self) -> &ViewHandle<FileUpload> {
@@ -7686,12 +7121,6 @@ impl TerminalView {
         if model.is_read_only() {
             return false;
         }
-        if self.conversation_ended_tombstone_view_id.is_some() {
-            return false;
-        }
-        if self.blocks_cloud_followups_for_ambient_agent_session_from_model(model, app) {
-            return false;
-        }
         if self.has_active_cli_agent_input_session(app) {
             return true;
         }
@@ -7702,11 +7131,7 @@ impl TerminalView {
             return false;
         }
 
-        if model.shared_session_status().is_view_pending() && !self.is_ambient_agent_session(app) {
-            return false;
-        }
-
-        // In cloud agent conversations, once the shared session is ready but before the first
+        // In cloud agent conversations, once the session is ready but before the first
         // agent exchange arrives, we hide the interactive input view. A non-interactive footer is
         // rendered instead (see `TerminalView::render`).
         if !FeatureFlag::CloudModeSetupV2.is_enabled()
@@ -7776,172 +7201,6 @@ impl TerminalView {
                 model,
                 app,
             )
-    }
-
-    /// Give the agent control of the active long running command
-    /// (which was started outside of a conversation).
-    fn tag_agent_in(&mut self, ctx: &mut ViewContext<Self>) {
-        self.model
-            .lock()
-            .block_list_mut()
-            .active_block_mut()
-            .set_is_agent_tagged_in(true);
-
-        if !self.model.lock().is_alt_screen_active() {
-            self.hide_use_agent_footer_in_blocklist(ctx);
-        }
-
-        self.input.update(ctx, |input, ctx| {
-            input.set_input_mode_agent(true, ctx);
-            input.clear_buffer_and_reset_undo_stack(ctx);
-        });
-        ctx.notify();
-    }
-
-    // Take control back from the agent for the active long running command
-    // (which was started outside of a conversation).
-    fn tag_agent_out(&mut self, ctx: &mut ViewContext<Self>) {
-        if !self
-            .model
-            .lock()
-            .block_list()
-            .active_block()
-            .is_agent_tagged_in()
-        {
-            return;
-        }
-
-        self.model
-            .lock()
-            .block_list_mut()
-            .active_block_mut()
-            .set_is_agent_tagged_in(false);
-
-        if !self.model.lock().is_alt_screen_active() {
-            self.maybe_show_use_agent_footer_in_blocklist(ctx);
-        }
-
-        self.input.update(ctx, |input, ctx| {
-            input.set_input_mode_terminal(false, ctx);
-        });
-        self.redetermine_terminal_focus(ctx);
-
-        ctx.notify();
-    }
-
-    fn current_long_running_command_agent_interaction_state(
-        &self,
-    ) -> LongRunningCommandAgentInteractionState {
-        let model = self.model.lock();
-        let active_block = model.block_list().active_block();
-        if active_block.is_agent_in_control() {
-            LongRunningCommandAgentInteractionState::InControl
-        } else if active_block.is_agent_tagged_in() {
-            LongRunningCommandAgentInteractionState::TaggedIn
-        } else {
-            LongRunningCommandAgentInteractionState::NotInteracting
-        }
-    }
-
-    fn emit_long_running_command_agent_interaction_state_changed(
-        &self,
-        agent_has_control: bool,
-        block_id: BlockId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let state = if agent_has_control {
-            LongRunningCommandAgentInteractionState::InControl
-        } else if self
-            .model
-            .lock()
-            .block_list()
-            .block_with_id(&block_id)
-            .is_some_and(|block| block.is_agent_tagged_in())
-        {
-            LongRunningCommandAgentInteractionState::TaggedIn
-        } else {
-            LongRunningCommandAgentInteractionState::NotInteracting
-        };
-        ctx.emit(Event::LongRunningCommandAgentInteractionStateChanged {
-            state,
-            block_id: Some(block_id),
-        });
-    }
-
-    /// Applies a long-running command agent interaction state received from a shared session participant.
-    pub fn apply_long_running_command_agent_interaction_state(
-        &mut self,
-        state: LongRunningCommandAgentInteractionState,
-        block_id: Option<&BlockId>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if let Some(block_id) = block_id {
-            let (is_active_block_long_running, active_block_id) = {
-                let model = self.model.lock();
-                let active_block = model.block_list().active_block();
-                (
-                    active_block.is_active_and_long_running(),
-                    active_block.id().clone(),
-                )
-            };
-            let should_apply = is_active_block_long_running && active_block_id == *block_id;
-            if !should_apply {
-                log::info!(
-                    "Ignoring stale shared-session LRC interaction_state={state:?} for block_id={block_id:?}. Currently active block id={} is_active_and_long_running={}",
-                    active_block_id,
-                    is_active_block_long_running,
-                );
-                return;
-            }
-        }
-        if self.current_long_running_command_agent_interaction_state() == state {
-            return;
-        }
-        log::info!(
-            "Applying shared-session LRC interaction_state={state:?} to block_id={block_id:?}"
-        );
-        match state {
-            LongRunningCommandAgentInteractionState::InControl => {
-                self.cli_subagent_controller.update(ctx, |controller, ctx| {
-                    controller.handoff_active_command_control_to_agent(ctx);
-                });
-            }
-            LongRunningCommandAgentInteractionState::TaggedIn => {
-                self.cli_subagent_controller.update(ctx, |controller, ctx| {
-                    controller.switch_control_to_user(UserTakeOverReason::Manual, ctx);
-                });
-                self.tag_agent_in(ctx);
-            }
-            LongRunningCommandAgentInteractionState::NotInteracting => {
-                self.cli_subagent_controller.update(ctx, |controller, ctx| {
-                    controller.switch_control_to_user(UserTakeOverReason::Manual, ctx);
-                });
-                self.tag_agent_out(ctx);
-            }
-        }
-    }
-
-    /// Applies a block-scoped long-running command agent interaction state received from a shared
-    /// session participant.
-    pub fn apply_long_running_command_agent_interaction(
-        &mut self,
-        interaction: LongRunningCommandAgentInteraction,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let block_id = BlockId::from(interaction.block_id);
-        self.apply_long_running_command_agent_interaction_state(
-            interaction.state,
-            Some(&block_id),
-            ctx,
-        );
-    }
-    /// Shows or hides the CLI agent footer from a shared session update.
-    pub fn apply_cli_agent_footer_visibility(&mut self, show: bool, ctx: &mut ViewContext<Self>) {
-        if show {
-            self.maybe_show_use_agent_footer_in_blocklist(ctx);
-        } else {
-            self.hide_use_agent_footer_in_blocklist(ctx);
-        }
     }
 
     /// Shuts down the pty and event loop, terminating the shell process.
@@ -8266,16 +7525,7 @@ impl TerminalView {
     }
 
     /// Cancels the active agent conversation via the status bar's Ctrl+C handler.
-    /// Includes shared session notification if applicable.
     fn cancel_active_conversation_via_status_bar(&mut self, ctx: &mut ViewContext<Self>) {
-        if FeatureFlag::AgentSharedSessions.is_enabled()
-            && self.model.lock().shared_session_status().is_viewer()
-        {
-            self.input.update(ctx, |input, ctx| {
-                input.cancel_active_agent_conversation_for_shared_session(ctx);
-            });
-        }
-
         let status_bar = self.input.as_ref(ctx).agent_status_bar().clone();
         status_bar.update(ctx, |status_bar, ctx| {
             status_bar.handle_ctrl_c(ctx);
@@ -8490,12 +7740,6 @@ impl TerminalView {
             .unwrap_or(self.size_info.pane_height_px().as_f32())
     }
 
-    pub fn content_element_width_px(&self, app: &AppContext) -> f32 {
-        element_size_at_last_frame(&self.content_element_position_id, self.window_id, app)
-            .map(|size| size.x())
-            .unwrap_or(self.size_info.pane_height_px().as_f32())
-    }
-
     fn user_input_sequence(&mut self, code: &[u8], ctx: &mut ViewContext<Self>) {
         let sequence = EscCodes::build_escape_sequence(self.model.lock().deref(), code);
         self.control_sequence_on_terminal(&sequence, ctx);
@@ -8516,20 +7760,15 @@ impl TerminalView {
     /// long-running and received keyboard input.
     /// Emits if at least one terminal inputs is synced, so receivers of this
     /// event must determine how to process this event.
-    /// Also emits an event for shared session viewers to notify the sharer of a write to pty request.
     fn emit_non_editor_typed_event(&self, chars: Vec<u8>, ctx: &mut ViewContext<Self>) {
         if SyncedInputState::as_ref(ctx).is_syncing_any_inputs(ctx.window_id()) {
             ctx.emit(Event::SyncInput(SyncEvent {
                 source_view_id: self.view_id,
                 data: SyncInputType::NonEditorTyped {
-                    chars: Arc::new(chars.clone()),
+                    chars: Arc::new(chars),
                 },
             }));
         }
-
-        self.model
-            .lock()
-            .send_write_to_pty_events_for_shared_session(chars);
     }
 
     fn update_scroll_position_locking(
@@ -8602,13 +7841,9 @@ impl TerminalView {
         // Make sure we don't write any text to the pty until we've echoed out
         // the bootstrap script, otherwise the user could accidentally interfere
         // with bootstrap script execution.
-        let was_bootstrap_script_echoed = self
-            .sessions
+        self.sessions
             .as_ref(ctx)
-            .has_pending_or_bootstrapped_session();
-        let is_shared_session_executor = model.shared_session_status().is_executor();
-
-        was_bootstrap_script_echoed || is_shared_session_executor
+            .has_pending_or_bootstrapped_session()
     }
     /// Receiving a warpui::Event::TypedCharacters event from a child element.
     /// We can assume `characters` consists of all printable characters, and therefore,
@@ -8684,27 +7919,6 @@ impl TerminalView {
             bytes: data.into(),
             mode: *mode,
         });
-    }
-
-    /// Writes a shared session viewer's bytes to the pty.
-    ///
-    /// A lone Ctrl-C byte that is actually forwarded to the PTY is
-    /// additionally observed by `CLIAgentSessionsModel` so that an interrupt
-    /// which silently kills a third-party harness turn (no plugin hook fires
-    /// on user interrupt) can still resolve the session, and its task, to
-    /// Cancelled. See `CLIAgentSessionsModel::observe_ctrl_c_write`.
-    /// Observation never delays or drops the write itself, and never arms a
-    /// window for a byte that `write_user_bytes_to_pty` rejected (e.g. the
-    /// active block is under agent control).
-    pub fn write_viewer_bytes_to_pty(&mut self, bytes: Vec<u8>, ctx: &mut ViewContext<Self>) {
-        let is_ctrl_c = bytes == [0x03];
-        let forwarded = self.write_user_bytes_to_pty(bytes, ctx);
-        if forwarded && is_ctrl_c && FeatureFlag::CtrlCCancelsThirdPartyHarness.is_enabled() {
-            let terminal_view_id = self.view_id;
-            CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
-                sessions.observe_ctrl_c_write(terminal_view_id, ctx);
-            });
-        }
     }
 
     /// Ends the current line before writing the given bytes to the PTY.
@@ -8858,7 +8072,6 @@ impl TerminalView {
             *self.size_info,
             self.scroll_position.position(),
             None,
-            self.horizontal_clipped_scroll_state.clone(),
             content_element_size,
             self.input_size_at_last_frame(app).unwrap_or_default(),
             if BlocklistAIHistoryModel::as_ref(app)
@@ -11429,9 +10642,6 @@ impl TerminalView {
                     });
                 }
             }
-            ModelEvent::SelectedTextChanged => {
-                ctx.emit(Event::SelectedTextChanged);
-            }
             ModelEvent::ShellSpawned(shell_type) => {
                 ctx.emit(Event::ShellSpawned(*shell_type));
                 ctx.notify();
@@ -11453,20 +10663,6 @@ impl TerminalView {
             }
             ModelEvent::BootstrapPrecmdDone => {
                 self.execute_pending_command((), ctx);
-            }
-            ModelEvent::AgentTaggedInChanged {
-                block_id,
-                is_tagged_in,
-            } => {
-                let state = if *is_tagged_in {
-                    LongRunningCommandAgentInteractionState::TaggedIn
-                } else {
-                    LongRunningCommandAgentInteractionState::NotInteracting
-                };
-                ctx.emit(Event::LongRunningCommandAgentInteractionStateChanged {
-                    state,
-                    block_id: Some(block_id.clone()),
-                });
             }
             ModelEvent::PluggableNotification { title, body } => {
                 // Intercept structured CLI agent notifications (e.g. from Claude Code plugin).
@@ -11866,8 +11062,7 @@ impl TerminalView {
                     }
                     CLIAgentSessionStatus::InProgress
                     | CLIAgentSessionStatus::Success
-                    | CLIAgentSessionStatus::Failed { .. }
-                    | CLIAgentSessionStatus::Cancelled => {
+                    | CLIAgentSessionStatus::Failed { .. } => {
                         // Auto-open rich input when the agent resumes or completes.
                         if !self.has_active_cli_agent_input_session(ctx) {
                             self.open_cli_agent_rich_input(CLIAgentInputEntrypoint::AutoShow, ctx);
@@ -13237,12 +12432,6 @@ impl TerminalView {
     }
 
     fn resize_internal(&mut self, size_update: SizeUpdate, ctx: &mut ViewContext<Self>) {
-        // Viewer-driven sizing: report the viewer's natural size to the sharer.
-        // This runs before the early-return so the initial report on viewer join
-        // fires even when the pane size hasn't changed yet.
-        // The resize-reason check prevents loops (SharerSizeChanged is never re-reported).
-        self.maybe_report_viewer_terminal_size(&size_update, ctx);
-
         // If this isn't an actionable resize, there's nothing to do.
         if !(size_update.anything_changed() || size_update.is_refresh()) {
             return;
@@ -13282,44 +12471,8 @@ impl TerminalView {
         ctx.emit(Event::Resize { size_update });
     }
 
-    /// If we're a viewer eligible for viewer-driven sizing, report our natural
-    /// terminal size to the sharer — but only when the resize was NOT caused by
-    /// the sharer (which would create a loop).
-    fn maybe_report_viewer_terminal_size(
-        &mut self,
-        size_update: &SizeUpdate,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if size_update.is_sharer_size_change() {
-            return;
-        }
-        if !self.model.lock().shared_session_status().is_active_viewer() {
-            return;
-        }
-        let eligible = self.is_viewer_driven_sizing_eligible(ctx);
-        if eligible {
-            let new_natural = (size_update.natural_rows(), size_update.natural_cols());
-            let last_reported = self
-                .shared_session_viewer()
-                .and_then(|v| v.last_reported_natural_size);
-            if last_reported != Some(new_natural) {
-                if let Some(viewer) = self.shared_session_viewer_mut() {
-                    viewer.last_reported_natural_size = Some(new_natural);
-                }
-                ctx.emit(Event::ReportViewerTerminalSize {
-                    window_size: SessionSharingWindowSize {
-                        num_rows: new_natural.0,
-                        num_cols: new_natural.1,
-                    },
-                });
-            }
-        } else if let Some(viewer) = self.shared_session_viewer_mut() {
-            viewer.last_reported_natural_size = None;
-        }
-    }
-
     /// This handler is called after *every* terminal view layout with the
-    /// size of the entire terminal (block_list + input OR alt-grid OR shared session viewer loading) as its
+    /// size of the entire terminal (block_list + input OR alt-grid OR cloud conversation loading) as its
     /// argument.
     fn after_terminal_view_layout(&mut self, size: Vector2F, ctx: &mut ViewContext<Self>) {
         // A pending `jump_to_latest_agent_message` enters the agent view, which
@@ -13412,20 +12565,6 @@ impl TerminalView {
         ctx.emit(Event::ToggleLeftPanel {
             target_view: LeftPanelTargetView::FileTree,
             force_open,
-        });
-    }
-
-    /// Adds persistent toast to toast stack.
-    pub fn show_persistent_toast(
-        &mut self,
-        text: String,
-        flavor: ToastFlavor,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let window_id = ctx.window_id();
-        ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-            let toast = DismissibleToast::new(text, flavor);
-            toast_stack.add_persistent_toast(toast, window_id, ctx);
         });
     }
 
@@ -14392,7 +13531,6 @@ impl TerminalView {
         } else {
             MenuItemFields::new("Edit prompt")
                 .with_on_select_action(TerminalAction::ContextMenu(ContextMenuAction::EditPrompt))
-                .with_disabled(self.model.lock().shared_session_status().is_active_viewer())
                 .into_item()
         };
 
@@ -14442,10 +13580,6 @@ impl TerminalView {
         let model = self.model.lock();
         let mut items = Vec::new();
 
-        // Input editor is not available for read-only viewers in a shared session,
-        // so certain menu items are disabled/removed
-        let is_editor_disabled = model.shared_session_status().is_reader();
-
         // Section 1: Cut, Copy, Copy All, Paste
         let (all_current_input_text, selected_input_text) = self.input.read(ctx, |input, ctx| {
             input.editor().read(ctx, |editor, ctx| {
@@ -14482,7 +13616,6 @@ impl TerminalView {
                         "editor_view:select_all",
                         ctx,
                     ))
-                    .with_disabled(is_editor_disabled)
                     .into_item(),
             );
         }
@@ -14493,7 +13626,6 @@ impl TerminalView {
                     InputContextMenuAction::Paste,
                 ))
                 .with_key_shortcut_label(keybinding_name_to_display_string("terminal:paste", ctx))
-                .with_disabled(is_editor_disabled)
                 .into_item(),
         );
 
@@ -14508,27 +13640,24 @@ impl TerminalView {
                     "workspace:show_command_search",
                     ctx,
                 ))
-                .with_disabled(is_editor_disabled)
                 .into_item(),
         ]);
 
         // Section 3: input hint text toggle
-        if !is_editor_disabled {
-            let input_settings = InputSettings::as_ref(ctx);
-            let inverse_action = if *input_settings.show_hint_text {
-                "Hide"
-            } else {
-                "Show"
-            };
-            items.push(MenuItem::Separator);
-            items.push(
-                MenuItemFields::new(format!("{inverse_action} input hint text"))
-                    .with_on_select_action(TerminalAction::InputContextMenuItem(
-                        InputContextMenuAction::ToggleInputHintText,
-                    ))
-                    .into_item(),
-            );
-        }
+        let input_settings = InputSettings::as_ref(ctx);
+        let inverse_action = if *input_settings.show_hint_text {
+            "Hide"
+        } else {
+            "Show"
+        };
+        items.push(MenuItem::Separator);
+        items.push(
+            MenuItemFields::new(format!("{inverse_action} input hint text"))
+                .with_on_select_action(TerminalAction::InputContextMenuItem(
+                    InputContextMenuAction::ToggleInputHintText,
+                ))
+                .into_item(),
+        );
         // Section 5: All Pane related
         let current_shell = model.shell_launch_state().available_shell();
         let pane_context_menu_items = self.pane_context_menu_items(current_shell, ctx);
@@ -14986,7 +14115,6 @@ impl TerminalView {
         // In AI mode, selected blocks also serve as context. When we change the block
         // selections, we must also update the context
         self.sync_pending_context_block_ids(ctx);
-        ctx.emit(Event::SelectedBlocksChanged);
     }
 
     // Additionally handles side effects of changing block selections (i.e. CMD + F results, etc.),
@@ -15002,8 +14130,6 @@ impl TerminalView {
     {
         change_selection(&mut self.selected_blocks);
         self.update_find_selection(ctx);
-
-        ctx.emit(Event::SelectedBlocksChanged);
     }
 
     pub fn integration_test_change_block_selection_to_single(
@@ -17935,18 +17061,7 @@ impl TerminalView {
         if !FeatureFlag::HandoffCloudCloud.is_enabled() {
             return false;
         }
-        let blocks_cloud_followups = {
-            let model = self.model.lock();
-            self.blocks_cloud_followups_for_ambient_agent_session_from_model(&model, ctx)
-        };
-        if blocks_cloud_followups {
-            self.pending_cloud_followup_task_id = None;
-            return false;
-        }
-        let Some(task_id) = self
-            .pending_cloud_followup_task_id
-            .or_else(|| self.owned_ambient_agent_task_id(ctx))
-        else {
+        let Some(task_id) = self.pending_cloud_followup_task_id else {
             return false;
         };
 
@@ -17975,50 +17090,6 @@ impl TerminalView {
 
         ambient_agent_view_model.update(ctx, |model, ctx| {
             model.submit_cloud_followup(prompt, ctx);
-        });
-
-        self.input.update(ctx, |input, ctx| {
-            input.reset_after_cloud_followup_submission(ctx);
-            input.set_input_mode_agent(true, ctx);
-        });
-        self.update_pane_configuration(ctx);
-        ctx.notify();
-        true
-    }
-
-    /// Submits a follow-up through the run follow-up service for the REMOTE-2661 retained
-    /// setup-failure debug route. Unlike [`Self::try_submit_pending_cloud_followup`], not gated
-    /// by `HandoffCloudCloud`: the server alone decides whether it bootstraps a debug
-    /// conversation or starts a new VM.
-    ///
-    /// Returns `false` when the follow-up couldn't be routed (no bound ambient view model, or
-    /// one bound to a different task); the caller then shows an error toast.
-    fn try_submit_setup_failure_debug_followup(
-        &mut self,
-        task_id: crate::ai::ambient_agents::AmbientAgentTaskId,
-        prompt: String,
-        ctx: &mut ViewContext<Self>,
-    ) -> bool {
-        if prompt.trim().is_empty() {
-            self.input.update(ctx, |input, ctx| {
-                input.reset_after_cloud_followup_submission(ctx);
-                input.set_input_mode_agent(true, ctx);
-            });
-            self.update_pane_configuration(ctx);
-            self.focus_input_box(ctx);
-            ctx.notify();
-            return true;
-        }
-
-        let Some(ambient_agent_view_model) = self.ambient_agent_view_model.clone() else {
-            return false;
-        };
-        if ambient_agent_view_model.as_ref(ctx).task_id() != Some(task_id) {
-            return false;
-        }
-
-        ambient_agent_view_model.update(ctx, |model, ctx| {
-            model.submit_setup_failure_debug_followup(prompt, ctx);
         });
 
         self.input.update(ctx, |input, ctx| {
@@ -18077,17 +17148,6 @@ impl TerminalView {
                     ctx,
                 );
             }
-            InputEvent::SendAgentPrompt {
-                server_conversation_token,
-                prompt,
-                attachments,
-            } => {
-                ctx.emit(Event::SendAgentPrompt {
-                    server_conversation_token: *server_conversation_token,
-                    prompt: prompt.clone(),
-                    attachments: attachments.clone(),
-                });
-            }
             InputEvent::SubmitCloudFollowup { prompt } => {
                 if FeatureFlag::HandoffCloudCloud.is_enabled()
                     && self.try_submit_pending_cloud_followup(prompt.clone(), ctx)
@@ -18095,21 +17155,6 @@ impl TerminalView {
                     return;
                 }
                 self.show_error_toast("Couldn't continue this cloud task.".to_string(), ctx);
-            }
-            InputEvent::SubmitSetupFailureDebugFollowup { task_id, prompt } => {
-                if !self.try_submit_setup_failure_debug_followup(*task_id, prompt.clone(), ctx) {
-                    self.show_error_toast(
-                        "Couldn't reach the retained session to debug it.".to_string(),
-                        ctx,
-                    );
-                }
-            }
-            InputEvent::CancelSharedSessionConversation {
-                server_conversation_token,
-            } => {
-                ctx.emit(Event::CancelSharedSessionConversation {
-                    server_conversation_token: *server_conversation_token,
-                });
             }
             InputEvent::ClearSelectedBlock => self.clear_selected_blocks(ctx),
             InputEvent::SelectRecentBlocks { count } => {
@@ -18311,15 +17356,6 @@ impl TerminalView {
                     self.show_emacs_bindings_banner(ctx);
                 }
             }
-            InputEvent::EditorUpdated {
-                block_id,
-                operations,
-            } => {
-                ctx.emit(Event::InputEditorUpdated {
-                    block_id: block_id.clone(),
-                    operations: operations.clone(),
-                });
-            }
             InputEvent::InputFocusedFromMiddleClick => {
                 self.focus_input_box(ctx);
             }
@@ -18449,10 +17485,9 @@ impl TerminalView {
         initial_prompt: Option<String>,
         ctx: &mut ViewContext<Self>,
     ) {
-        if !FeatureFlag::CloudMode.is_enabled()
-            || !self.model.lock().shared_session_status().is_view_pending()
+        if !FeatureFlag::CloudMode.is_enabled() || !self.model.lock().is_dummy_cloud_mode_session()
         {
-            // Ambient agent setup can only be done inside a shared session viewer; otherwise the backing terminal manager is incorrect.
+            // Ambient agent setup can only be done inside a cloud mode pane; otherwise the backing terminal manager is incorrect.
             return;
         }
 
@@ -20000,7 +19035,6 @@ impl TerminalView {
                 .spawning_command_for_subshell_sessions(app),
             obfuscate_secrets: get_secret_obfuscation_mode(app),
             hovered_secret: self.hovered_secret,
-            horizontal_clipped_scroll_state: self.horizontal_clipped_scroll_state.clone(),
             ai_render_context: self.ai_render_context.clone(),
         }
     }
@@ -20340,19 +19374,13 @@ impl TerminalView {
     }
 
     fn render_input(&self) -> Box<dyn Element> {
-        let input = ChildView::new(&self.input).finish();
-        Hoverable::new(self.input_hoverable_handle.clone(), |_| input)
-            // We rely on the hover-out delay for the "Request edit access"
-            // button UX for shared sessions.
-            .with_hover_out_delay(Duration::from_millis(500))
-            .finish()
+        ChildView::new(&self.input).finish()
     }
 
     fn render_inline_banners(
         &self,
         appearance: &Appearance,
         app: &AppContext,
-        model: &TerminalModel,
     ) -> HashMap<usize, Box<dyn Element>> {
         let mut inline_banners = HashMap::new();
 
@@ -20417,51 +19445,6 @@ impl TerminalView {
             );
         }
 
-        if FeatureFlag::ViewingSharedSessions.is_enabled() {
-            let is_shared_ambient_agent_session = model.is_shared_ambient_agent_session();
-            match &self.inline_banners_state.shared_session_banner_state {
-                SharedSessionBanners::ActiveShare {
-                    started_banner_id,
-                    started_at,
-                } => {
-                    inline_banners.insert(
-                        *started_banner_id,
-                        render_inline_shared_session_started_banner(
-                            true,
-                            is_shared_ambient_agent_session,
-                            *started_at,
-                            appearance,
-                        ),
-                    );
-                }
-                SharedSessionBanners::LastShared {
-                    started_at,
-                    ended_at,
-                    started_banner_id,
-                    ended_banner_id,
-                } => {
-                    inline_banners.insert(
-                        *started_banner_id,
-                        render_inline_shared_session_started_banner(
-                            false,
-                            is_shared_ambient_agent_session,
-                            *started_at,
-                            appearance,
-                        ),
-                    );
-                    inline_banners.insert(
-                        *ended_banner_id,
-                        render_inline_shared_session_ended_banner(
-                            is_shared_ambient_agent_session,
-                            *ended_at,
-                            appearance,
-                        ),
-                    );
-                }
-                SharedSessionBanners::None => {}
-            }
-        }
-
         if let Some(open_in_warp_banner) = &self.inline_banners_state.open_in_warp_banner {
             inline_banners.insert(
                 open_in_warp_banner.id,
@@ -20511,19 +19494,6 @@ impl TerminalView {
     ) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
 
-        // For the alt-screen in a shared session viewer, we need to use
-        // the sharer's size exactly. We don't want to render an alt-screen
-        // larger than the sharer's since that would look janky.
-        // TODO: we should have more ergonomic ways of getting Viewer / Sharer from the session.
-        let (rows, columns) = if let Some(Viewer { sharer_size, .. }) = self.shared_session_viewer()
-        {
-            sharer_size
-                .map(|s| (s.num_rows, s.num_cols))
-                .unwrap_or((self.size_info.rows(), self.size_info.columns()))
-        } else {
-            (self.size_info.rows(), self.size_info.columns())
-        };
-
         // Note: The Alt screen relies on the accuracy of the `padding` elements of SizeInfo
         // for things like hit detection and selection. Since we are taking into account the
         // padding separately (using `Align` and `ConstrainedBox`), we need to create a new
@@ -20547,7 +19517,6 @@ impl TerminalView {
                 ExpandedSelectionRange::Regular { start, end, .. } => vec1![start..end],
             }),
             appearance,
-            self.alt_screen_scroll_top,
             // TODO(zachbai): Remove this.
             None,
             active_cli_subagent_view.map(|view| ChildView::new(view).finish()),
@@ -20558,8 +19527,6 @@ impl TerminalView {
         if self.should_hide_cli_agent_cursor_cell(app) {
             alt_screen_element = alt_screen_element.with_hide_cursor_cell();
         }
-        alt_screen_element =
-            alt_screen_element.with_shared_session_presence(self.shared_session_presence_manager());
 
         // Pass voice input toggle key if the CLI agent footer should be rendered
         #[cfg(feature = "voice_input")]
@@ -20573,35 +19540,7 @@ impl TerminalView {
             alt_screen_element = alt_screen_element.with_voice_input_toggle_key(voice_key);
         }
 
-        let required_terminal_height = self.size_info.cell_height_px.as_f32() * (rows as f32)
-            + 2. * self.size_info.padding_y_px().as_f32();
-        let pane_height = self.content_element_height_px(app);
-
-        let required_terminal_width = self.size_info.cell_width_px.as_f32() * (columns as f32)
-            + 2. * self.size_info.padding_x_px().as_f32();
-        let pane_width = self.content_element_width_px(app);
-
-        // If this is a shared session viewer and the height required to display the entire
-        // terminal is larger than the height of the pane, we should make it vertically scrollable.
-        let should_be_vertical_scrollable = model.shared_session_status().is_active_viewer()
-            && required_terminal_height > pane_height;
-
-        // If this is a shared session viewer and the width required to display the entire
-        // terminal is larger than the width of the pane, we should make it horizontally scrollable.
-        let should_be_horizontal_scrollable = FeatureFlag::ViewingSharedSessions.is_enabled()
-            && model.shared_session_status().is_active_viewer()
-            && required_terminal_width > pane_width;
-
-        let theme = appearance.theme();
-        let element = maybe_wrap_terminal_element_in_scrollable(
-            should_be_vertical_scrollable,
-            should_be_horizontal_scrollable,
-            self.alt_screen_vertical_scroll_state.clone(),
-            self.horizontal_clipped_scroll_state.clone(),
-            required_terminal_width,
-            theme,
-            alt_screen_element,
-        );
+        let element = alt_screen_element.finish();
 
         SavePosition::new(
             Container::new(
@@ -20675,7 +19614,7 @@ impl TerminalView {
         let padding_x = self.size_info.padding_x_px;
         let sessions = self.sessions.clone();
 
-        let inline_banners = self.render_inline_banners(appearance, app, model);
+        let inline_banners = self.render_inline_banners(appearance, app);
 
         let mut subshell_separators = HashMap::new();
 
@@ -20801,7 +19740,6 @@ impl TerminalView {
                     .map(|(id, view)| (id.clone(), ChildView::new(view).finish())),
             ),
             selection_range,
-            self.inline_banners_state.shared_session_banner_state,
             self.input_size_at_last_frame(app).unwrap_or_default(),
             self.inline_menu_positioner.clone(),
             None,
@@ -20845,55 +19783,15 @@ impl TerminalView {
             element = element.with_hovered_index(hovered_block_index);
         }
 
-        if let Some(shared_session) = &self.shared_session {
-            let presence_avatars = shared_session.presence_avatars(app);
-            let presence_manager = shared_session.presence_manager().clone();
-            element = element.with_shared_session_presence(presence_avatars, presence_manager);
-        }
-
         let total_height: Lines = model.block_list().block_heights().summary().height;
         let visible_rows = self.content_element_height_lines(app);
-
-        // Since blocks in a blocklist can have different sizes, we want
-        // to make sure we're rendering with enough columns to support them all.
-        let agent_view_state = model.block_list().transcript_scope();
-        let columns_needed = model
-            .block_list()
-            .blocks()
-            .iter()
-            .filter(|b| b.is_visible(agent_view_state))
-            .map(|b| b.size().columns)
-            .max()
-            .unwrap_or(self.size_info.columns);
-
-        let required_terminal_width = self.size_info.cell_width_px.as_f32()
-            * (columns_needed as f32)
-            + 2. * self.size_info.padding_x_px().as_f32();
-        let pane_width = self.content_element_width_px(app);
 
         let should_be_vertical_scrollable =
             heights_approx_gt(total_height, visible_rows) && is_scrollable;
 
-        // If this is a shared session viewer and the width required to display the entire
-        // terminal is larger than the width of the pane, we should make it horizontally scrollable.
-        // If there aren't any visible blocks, we should not show a horizontally-scrollable view.
-        let should_be_horizontal_scrollable = FeatureFlag::ViewingSharedSessions.is_enabled()
-            && model.shared_session_status().is_active_viewer()
-            && model
-                .block_list()
-                .blocks()
-                .iter()
-                .filter(|b| b.is_visible(agent_view_state))
-                .count()
-                > 0
-            && required_terminal_width > pane_width;
-
         let block_list = maybe_wrap_terminal_element_in_scrollable(
             should_be_vertical_scrollable,
-            should_be_horizontal_scrollable,
             self.blocklist_vertical_scroll_state.clone(),
-            self.horizontal_clipped_scroll_state.clone(),
-            required_terminal_width,
             theme,
             element,
         );
@@ -22123,11 +21021,8 @@ impl TerminalView {
     fn show_warpify_footer(&mut self, ctx: &mut ViewContext<Self>) {
         let model = self.model.lock();
 
-        // Shared session viewers can't initiate warpification currently.
-        // Don't show the warpify footer when an agent is monitoring the command either.
-        if model.shared_session_status().is_viewer()
-            || model.block_list().active_block().is_agent_monitoring()
-        {
+        // Don't show the warpify footer when an agent is monitoring the command.
+        if model.block_list().active_block().is_agent_monitoring() {
             return;
         }
         drop(model);
@@ -22220,11 +21115,9 @@ impl PtyIntentEvent for Event {
 impl TerminalSurface for TerminalView {
     #[cfg(feature = "local_tty")]
     fn on_shell_determined(&mut self, ctx: &mut ViewContext<Self>) {
-        if !self.model.lock().shared_session_status().is_viewer() {
-            // Start a timer for the initial session bootstrapping, so that we can log and show a
-            // banner to the user if the bootstrapping takes too long
-            self.start_bootstrap_timer(BOOTSTRAP_FAILED_DURATION, ctx);
-        }
+        // Start a timer for the initial session bootstrapping, so that we can log and show a
+        // banner to the user if the bootstrapping takes too long
+        self.start_bootstrap_timer(BOOTSTRAP_FAILED_DURATION, ctx);
     }
 
     fn on_active_shell_launch_data_updated(
@@ -22546,7 +21439,6 @@ impl TypedActionView for TerminalView {
             | AliasExpansionBanner(_)
             | VimModeBanner(_)
             | InsertMostRecentCommandCorrection
-            | RequestSharedSessionRole(_)
             | ImportSettings
             | DragAndDropFiles(_)
             | ToggleBlockFilterOnSelectedOrLastBlock(_)
@@ -22589,7 +21481,6 @@ impl TypedActionView for TerminalView {
             // debug version shouldn't be announced.
             Scroll { .. }
             | AltScroll { .. }
-            | SharedSessionViewerAltScroll { .. }
             | ClickOnGrid { .. }
             | MaybeDismissToolTip { .. }
             | MaybeClearAltSelect
@@ -22606,7 +21497,6 @@ impl TypedActionView for TerminalView {
             | OpenWorkflowModalForAIWorkflow(_)
             | OpenWorkflowModalForBlock(_)
             | OpenWorkflowModalWithCloudWorkflow(_)
-            | CopySharedSessionLink { .. }
             | ToggleSnackbarInActivePane
             | SetInputModeAgent
             | SetInputModeTerminal
@@ -22666,10 +21556,6 @@ impl TypedActionView for TerminalView {
         match action {
             Scroll { delta } => self.scroll(*delta, ctx),
             AltScroll { delta, point } => self.alt_scroll(*delta, *point, ctx),
-            SharedSessionViewerAltScroll { new_scroll_top } => {
-                self.alt_screen_scroll_top = *new_scroll_top;
-                ctx.notify()
-            }
             ScrollToTopOfBlock { topmost_block } => {
                 self.jump_to_previous_command(*topmost_block, ctx)
             }
@@ -23006,9 +21892,7 @@ impl TypedActionView for TerminalView {
             ToggleBlockFilterOnSelectedOrLastBlock(source) => {
                 self.toggle_block_filter_on_selected_or_last_block(*source, ctx);
             }
-            CopySharedSessionLink { source } => self.copy_shared_session_link(*source, ctx),
             ToggleSnackbarInActivePane => self.toggle_snackbar_in_active_pane(ctx),
-            RequestSharedSessionRole(role) => self.request_shared_session_role(*role, ctx),
             MiddleClickOnGrid { position } => self.middle_click_on_grid(position, ctx),
             MiddleClickOnInput => self.middle_click_on_input(ctx),
             SelectAIAttachedBlock(block_index) => {
@@ -23618,10 +22502,7 @@ impl View for TerminalView {
                         .with_constrain_absolute_children()
                         .with_child(column.finish())
                 } else {
-                    let is_view_pending_clause = model.shared_session_status().is_view_pending()
-                        && !self.is_ambient_agent_session(app);
-                    let is_loading_transcript = model.is_loading_conversation_transcript();
-                    let should_show_loading = is_view_pending_clause || is_loading_transcript;
+                    let should_show_loading = model.is_loading_conversation_transcript();
                     let output_area = if self.orchestration_child_live_unavailable {
                         self.render_orchestration_child_live_unavailable(app)
                     } else if should_show_loading {
@@ -23678,56 +22559,6 @@ impl View for TerminalView {
             model.agent_progress().is_some() && !FeatureFlag::CloudModeSetupV2.is_enabled()
         }) {
             stack.add_child(self.render_ambient_agent_progress(appearance, app));
-        }
-
-        // For shared session viewers, we want to show a "Request edit access"
-        // button near the input if the input (or the button) are being hovered.
-        // This is disabled when the viewer is offline.
-        if let Some(Viewer {
-            input_request_edit_access_button_handle,
-            pending_role_request,
-            is_reconnecting,
-            ..
-        }) = self.shared_session_viewer()
-            && model.shared_session_status().is_reader()
-            && !*is_reconnecting
-            && !pending_role_request
-            && self.context_menu_state.is_none()
-            && self.is_input_box_visible(&model, app)
-            && (self
-                .input_hoverable_handle
-                .lock()
-                .is_ok_and(|handle| handle.is_hovered())
-                || input_request_edit_access_button_handle
-                    .lock()
-                    .is_ok_and(|handle| handle.is_hovered()))
-        {
-            // Position the button above / below the input depending
-            // on the input model.
-            let input_anchor = match input_mode {
-                InputMode::PinnedToBottom => PositionedElementAnchor::TopMiddle,
-                InputMode::PinnedToTop => PositionedElementAnchor::BottomMiddle,
-                InputMode::Waterfall => {
-                    if model.block_list().active_gap().is_some() {
-                        PositionedElementAnchor::BottomMiddle
-                    } else {
-                        PositionedElementAnchor::TopMiddle
-                    }
-                }
-            };
-            stack.add_positioned_overlay_child(
-                self.render_input_request_edit_access_button(
-                    input_request_edit_access_button_handle.clone(),
-                    appearance,
-                ),
-                OffsetPositioning::offset_from_save_position_element(
-                    self.input.as_ref(app).status_free_input_save_position_id(),
-                    Vector2F::zero(),
-                    PositionedElementOffsetBounds::WindowByPosition,
-                    input_anchor,
-                    ChildAnchor::Center,
-                ),
-            );
         }
 
         match &self.context_menu_state.map(|c| c.menu_type) {
@@ -23879,30 +22710,20 @@ impl View for TerminalView {
             );
         }
 
-        if let Some(reconnecting_banner) = self
-            .shared_session
-            .as_ref()
-            .and_then(|s| s.reconnecting_banner())
+        // Only show one of these banners at a time, to avoid them visually
+        // stacking on top of each other.
+        if self.is_slow_bootstrap_banner_open
+            && ContextFlag::ShowSlowShellStartupBanner.is_enabled()
         {
-            stack.add_child(ChildView::new(reconnecting_banner).finish());
-        } else if !model.shared_session_status().is_viewer() {
-            // We don't care about these banners for shared session viewers.
-
-            // Only show one of these banners at a time, to avoid them visually
-            // stacking on top of each other.
-            if self.is_slow_bootstrap_banner_open
-                && ContextFlag::ShowSlowShellStartupBanner.is_enabled()
-            {
-                stack.add_child(ChildView::new(&self.slow_bootstrap_banner).finish());
-            } else if self.control_master_error_banner_state.is_open {
-                stack.add_child(ChildView::new(&self.control_master_error_banner).finish());
-            } else if self.is_incompatible_configuration_banner_open {
-                stack.add_child(ChildView::new(&self.incompatible_configuration_banner).finish());
-            } else if self.is_emacs_bindings_banner_open {
-                stack.add_child(ChildView::new(&self.emacs_bindings_banner).finish());
-            } else if self.osc52_clipboard_blocked_type.is_some() {
-                stack.add_child(ChildView::new(&self.osc52_clipboard_blocked_banner).finish());
-            }
+            stack.add_child(ChildView::new(&self.slow_bootstrap_banner).finish());
+        } else if self.control_master_error_banner_state.is_open {
+            stack.add_child(ChildView::new(&self.control_master_error_banner).finish());
+        } else if self.is_incompatible_configuration_banner_open {
+            stack.add_child(ChildView::new(&self.incompatible_configuration_banner).finish());
+        } else if self.is_emacs_bindings_banner_open {
+            stack.add_child(ChildView::new(&self.emacs_bindings_banner).finish());
+        } else if self.osc52_clipboard_blocked_type.is_some() {
+            stack.add_child(ChildView::new(&self.osc52_clipboard_blocked_banner).finish());
         }
 
         let block_list_settings = BlockListSettings::handle(app);
@@ -24175,13 +22996,7 @@ impl View for TerminalView {
             context.set.insert(flags::ACTIVE_INLINE_AGENT_VIEW);
         }
 
-        if file_attach_allowed_for_shared_session(
-            model_lock.shared_session_status(),
-            self.ambient_agent_view_model.as_ref(),
-            app,
-        ) {
-            context.set.insert(init::CAN_ATTACH_FILE_KEY);
-        }
+        context.set.insert(init::CAN_ATTACH_FILE_KEY);
 
         if self.is_ambient_agent_session(app) && !self.is_nested_cloud_mode(app) {
             context.set.insert(init::ROOT_CLOUD_MODE_PANE_KEY);
@@ -24234,10 +23049,6 @@ impl View for TerminalView {
                 .set
                 .insert(init::CAN_FORK_FROM_LAST_KNOWN_GOOD_STATE_KEY);
         }
-
-        context
-            .set
-            .insert(model_lock.shared_session_status().as_keymap_context());
 
         #[cfg(feature = "local_fs")]
         {
@@ -24542,76 +23353,33 @@ fn command_first_word_and_suffix(command: &str) -> Option<(&str, &str)> {
     Some((first_word, rest))
 }
 
-/// Conditionally wrap a terminal element (altscreen / blocklist element) in a scrollable element.
+/// Conditionally wrap the blocklist element in a vertically scrollable element.
 /// TODO: We should not conditionally composite the scrollable element.
-#[allow(clippy::too_many_arguments)]
 fn maybe_wrap_terminal_element_in_scrollable(
     is_scrollable_vertical: bool,
-    is_scrollable_horizontal: bool,
     vertical_scroll_handle: ScrollStateHandle,
-    horizontal_scroll_handle: ClippedScrollStateHandle,
-    required_terminal_width: f32,
     theme: &WarpTheme,
     element: impl NewScrollableElement + 'static,
 ) -> Box<dyn Element> {
+    if !is_scrollable_vertical {
+        return element.finish();
+    }
     let nonactive_thumb_background = theme.disabled_text_color(theme.background()).into();
     let active_thumb_background = theme.main_text_color(theme.background()).into();
     let track_background = Fill::None;
     let scrollbar_appearance = ScrollableAppearance::new(SCROLLBAR_WIDTH, true);
-    match (is_scrollable_vertical, is_scrollable_horizontal) {
-        (true, true) => {
-            let config = DualAxisConfig::Manual {
-                horizontal: AxisConfiguration::Clipped(ClippedAxisConfiguration {
-                    handle: horizontal_scroll_handle,
-                    max_size: Some(required_terminal_width),
-                    stretch_child: false,
-                }),
-                vertical: AxisConfiguration::Manual(vertical_scroll_handle),
-                child: NewScrollableElement::finish_scrollable(element),
-            };
-
-            NewScrollable::horizontal_and_vertical(
-                config,
-                nonactive_thumb_background,
-                active_thumb_background,
-                track_background,
-            )
-            .with_horizontal_scrollbar(scrollbar_appearance)
-            .with_vertical_scrollbar(scrollbar_appearance)
-            .finish()
-        }
-        (true, false) => {
-            let config = SingleAxisConfig::Manual {
-                handle: vertical_scroll_handle,
-                child: NewScrollableElement::finish_scrollable(element),
-            };
-            NewScrollable::vertical(
-                config,
-                nonactive_thumb_background,
-                active_thumb_background,
-                track_background,
-            )
-            .with_vertical_scrollbar(scrollbar_appearance)
-            .finish()
-        }
-        (false, true) => {
-            let config = SingleAxisConfig::Clipped {
-                handle: horizontal_scroll_handle,
-                child: ConstrainedBox::new(element.finish())
-                    .with_max_width(required_terminal_width)
-                    .finish(),
-            };
-            NewScrollable::horizontal(
-                config,
-                nonactive_thumb_background,
-                active_thumb_background,
-                track_background,
-            )
-            .with_horizontal_scrollbar(scrollbar_appearance)
-            .finish()
-        }
-        (false, false) => element.finish(),
-    }
+    let config = SingleAxisConfig::Manual {
+        handle: vertical_scroll_handle,
+        child: NewScrollableElement::finish_scrollable(element),
+    };
+    NewScrollable::vertical(
+        config,
+        nonactive_thumb_background,
+        active_thumb_background,
+        track_background,
+    )
+    .with_vertical_scrollbar(scrollbar_appearance)
+    .finish()
 }
 
 /// Returns `true` when the Rich Input chip is present in the user's CLI agent

@@ -90,9 +90,8 @@ pub(crate) use queued_query::{
 pub use queued_query::{QueuedQueryEvent, QueuedQueryModel};
 pub use view_util::error_color;
 pub(crate) use view_util::{
-    ai_brand_color, ai_indicator_height, format_credits,
-    get_ai_block_overflow_menu_element_position_id, get_attached_blocks_chip_element_position_id,
-    render_ai_agent_mode_icon,
+    ai_brand_color, ai_indicator_height, get_ai_block_overflow_menu_element_position_id,
+    get_attached_blocks_chip_element_position_id, render_ai_agent_mode_icon,
 };
 
 pub use crate::ai::blocklist::block::{AIBlockResponseRating, TextLocation, secret_redaction};

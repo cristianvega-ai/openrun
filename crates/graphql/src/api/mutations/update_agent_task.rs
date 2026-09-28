@@ -22,8 +22,6 @@ pub struct UpdateAgentTaskInput {
     #[cynic(skip_serializing_if = "Option::is_none")]
     pub task_state: Option<AgentTaskState>,
     #[cynic(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<cynic::Id>,
-    #[cynic(skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<cynic::Id>,
     #[cynic(skip_serializing_if = "Option::is_none")]
     pub status_message: Option<AgentTaskStatusMessageInput>,

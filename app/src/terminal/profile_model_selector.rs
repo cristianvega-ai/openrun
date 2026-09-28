@@ -550,8 +550,7 @@ impl ProfileModelSelector {
             terminal_model,
             all_model_choices: Vec::new(),
         };
-        // Route ambient wiring through the setter so construction and the lazy shared-session
-        // viewer path share one implementation.
+        // Route ambient wiring through the setter.
         if let Some(ambient_agent_view_model) = ambient_agent_view_model {
             me.set_ambient_agent_view_model(ambient_agent_view_model, ctx);
         } else {
@@ -560,11 +559,9 @@ impl ProfileModelSelector {
         me
     }
 
-    /// Attaches an ambient agent view model to an already-constructed selector. Used on the
-    /// shared-session viewer path where the model is created lazily at `SessionJoined`, after the
-    /// selector was built with `None`. Without this, the model / harness chip reflects the local
-    /// default instead of the viewed cloud run. Mirrors the ambient subscription in [`Self::new`].
-    /// Idempotent: a no-op when a model is already set.
+    /// Attaches an ambient agent view model to an already-constructed selector. Without this, the
+    /// model / harness chip reflects the local default instead of the cloud run. Mirrors the
+    /// ambient subscription in [`Self::new`]. Idempotent: a no-op when a model is already set.
     pub fn set_ambient_agent_view_model(
         &mut self,
         ambient_agent_view_model: ModelHandle<AmbientAgentViewModel>,
@@ -1664,20 +1661,7 @@ impl ProfileModelSelector {
         let theme = appearance.theme();
         let llm_preferences = LLMPreferences::as_ref(app);
 
-        // Allow editing if composing an ambient agent query, or if the user has edit access
-        // in a shared session (i.e., not a viewer, or is an executor).
-        let is_composing_ambient_agent =
-            self.ambient_agent_view_model
-                .as_ref()
-                .is_some_and(|ambient_agent_model| {
-                    ambient_agent_model
-                        .as_ref(app)
-                        .is_configuring_ambient_agent()
-                });
         let terminal_model = self.terminal_model.lock();
-        let has_edit_access = is_composing_ambient_agent
-            || !terminal_model.shared_session_status().is_viewer()
-            || terminal_model.shared_session_status().is_executor();
         let is_lrc = terminal_model
             .block_list()
             .active_block()
@@ -1748,7 +1732,7 @@ impl ProfileModelSelector {
         let is_locked_for_followup = self.is_locked_for_cloud_followup(app);
         let is_locked_for_non_oz = self.is_locked_for_non_oz_run(app);
         let is_locked = is_locked_for_followup || is_locked_for_non_oz;
-        let can_interact = has_edit_access && !is_locked;
+        let can_interact = !is_locked;
 
         let hoverable = Hoverable::new(self.model_mouse_state.clone(), move |state| {
             if state.is_hovered() && can_interact {
@@ -2218,19 +2202,11 @@ impl View for ProfileModelSelector {
         let profiles_model = AIExecutionProfilesModel::as_ref(app);
         let has_multiple_profiles = profiles_model.has_multiple_profiles();
 
-        // Check if user is a viewer in a shared session
-        let is_viewer = self
-            .terminal_model
-            .lock()
-            .shared_session_status()
-            .is_viewer();
-
         let mut compact_row = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
 
-        // Only add profile button to compact layout if there are multiple profiles
-        // and the user is not a viewer (we currently don't support profiles in shared sessions).
+        // Only add profile button to compact layout if there are multiple profiles.
         let is_ambient_agent = self.ambient_agent_view_model.is_some();
-        let should_show_profile_section = has_multiple_profiles && !is_viewer && !is_ambient_agent;
+        let should_show_profile_section = has_multiple_profiles && !is_ambient_agent;
         if should_show_profile_section {
             let profile_button_with_save_position = SavePosition::new(
                 ChildView::new(&self.profile_compact_button).finish(),

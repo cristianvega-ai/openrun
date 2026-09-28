@@ -214,8 +214,7 @@ impl<P: BackingView> PaneView<P> {
         match event {
             PaneConfigurationEvent::ShowAccentBorderUpdated
             | PaneConfigurationEvent::DimEvenIfFocusedUpdated => ctx.notify(),
-            PaneConfigurationEvent::RefreshPaneHeaderOverflowMenuItems
-            | PaneConfigurationEvent::SharedSessionLinkChanged => {
+            PaneConfigurationEvent::RefreshPaneHeaderOverflowMenuItems => {
                 let child = self.child(ctx);
                 let items = child.read(ctx, |view, ctx| view.pane_header_overflow_menu_items(ctx));
                 self.header.update(ctx, |header, ctx| {

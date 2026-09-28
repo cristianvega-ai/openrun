@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use futures::{FutureExt, Stream, StreamExt, select};
-use session_sharing_protocol::common::SessionId;
+use uuid::Uuid;
 
 use super::{AmbientAgentTask, AmbientAgentTaskId, AmbientAgentTaskState};
 use crate::server::retry_strategies::with_bounded_retry;
@@ -15,7 +15,6 @@ use crate::server::server_api::ai::{
     AIClient, RunFollowupRequest, SpawnAgentRequest, TaskStatusMessage,
 };
 use crate::server::team_scope::RequestTeamScope;
-use crate::terminal::shared_session;
 
 #[cfg(not(test))]
 const TASK_STATUS_POLL_INTERVAL: Duration = Duration::from_secs(3);
@@ -33,7 +32,7 @@ const MAX_STALE_POLLS_BEFORE_FAILURE: usize = 10;
 /// Information about a session join link for an ambient agent task.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionJoinInfo {
-    pub session_id: Option<SessionId>,
+    pub session_id: Option<Uuid>,
     pub session_link: String,
 }
 
@@ -43,14 +42,10 @@ impl SessionJoinInfo {
         // The cloud-mode pane joins on `session_id`; a standalone `session_link` isn't
         // actionable without it.
         let session_id_str = run_execution.session_id?;
-        let session_id = SessionId::from_str(session_id_str).ok()?;
+        let session_id = Uuid::from_str(session_id_str).ok()?;
 
-        // Prefer the server-provided `session_link`; fall back to constructing one from
-        // `session_id`. `active_run_execution()` already filters out empty links.
-        let session_link = run_execution
-            .session_link
-            .map(String::from)
-            .unwrap_or_else(|| shared_session::join_link(&session_id));
+        // `active_run_execution()` already filters out empty links.
+        let session_link = run_execution.session_link.map(String::from)?;
         Some(Self {
             session_id: Some(session_id),
             session_link,
@@ -82,9 +77,7 @@ pub enum AmbientAgentEvent {
 
 enum RunPollMode {
     InitialRun,
-    Followup {
-        previous_session_id: Option<SessionId>,
-    },
+    Followup { previous_session_id: Option<Uuid> },
 }
 
 /// Spawns an ambient agent task and monitors its state.
@@ -161,7 +154,7 @@ pub fn monitor_spawned_task(
 pub fn submit_run_followup(
     message: String,
     run_id: AmbientAgentTaskId,
-    previous_session_id: Option<SessionId>,
+    previous_session_id: Option<Uuid>,
     ai_client: Arc<dyn AIClient>,
     timeout: Option<Duration>,
 ) -> impl Stream<Item = Result<AmbientAgentEvent, anyhow::Error>> {

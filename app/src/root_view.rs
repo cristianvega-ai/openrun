@@ -10,7 +10,6 @@ use parking_lot::Mutex;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
 use serde::{Deserialize, Serialize};
-use session_sharing_protocol::common::SessionId;
 use settings::Setting as _;
 use url::Url;
 use warp_core::channel::Channel;
@@ -268,17 +267,6 @@ pub fn init(app: &mut AppContext) {
         RootView::toggle_maximize_window,
     );
     app.add_action("root_view:toggle_fullscreen", RootView::toggle_fullscreen);
-
-    if FeatureFlag::ViewingSharedSessions.is_enabled() {
-        app.add_global_action(
-            "root_view:join_shared_session",
-            open_shared_session_as_viewer,
-        );
-        app.add_action(
-            "root_view:join_shared_session_in_existing_window",
-            RootView::join_shared_session_in_existing_window,
-        );
-    }
 
     app.add_global_action(
         "root_view:open_conversation_viewer",
@@ -781,16 +769,6 @@ pub(crate) fn open_new_from_path(
         },
         ctx,
     )
-}
-
-/// Opens a new window and tries to join session identified by the session ID.
-fn open_shared_session_as_viewer(session_id: &SessionId, ctx: &mut AppContext) {
-    open_new_with_workspace_source(
-        NewWorkspaceSource::SharedSessionAsViewer {
-            session_id: *session_id,
-        },
-        ctx,
-    );
 }
 
 /// Opens a new window to view a persisted view-only cloud conversation.
@@ -1356,9 +1334,6 @@ pub enum NewWorkspaceSource {
         options: Box<NewTerminalOptions>,
         initial_team_uid: Option<ServerId>,
     },
-    SharedSessionAsViewer {
-        session_id: SessionId,
-    },
     FromCloudConversationId {
         conversation_id: ServerConversationToken,
     },
@@ -1436,7 +1411,6 @@ impl NewWorkspaceSource {
             } => Some(*source_window_id),
             Self::FromTemplate { .. }
             | Self::Session { .. }
-            | Self::SharedSessionAsViewer { .. }
             | Self::FromCloudConversationId { .. }
             | Self::NotebookFromFilePath { .. }
             | Self::AgentSession { .. }
@@ -1455,15 +1429,10 @@ impl NewWorkspaceSource {
         UserWorkspaces::as_ref(ctx).inherited_or_default_team_uid(source_window_id)
     }
 
-    /// Whether this source points at specific content (e.g. a shared session or a cloud
-    /// conversation) that a new window should reach directly, rather than being deferred
-    /// behind product onboarding.
+    /// Whether this source points at specific content (e.g. a cloud conversation) that a new
+    /// window should reach directly, rather than being deferred behind product onboarding.
     pub(crate) fn is_content_deep_link(&self) -> bool {
-        matches!(
-            self,
-            NewWorkspaceSource::SharedSessionAsViewer { .. }
-                | NewWorkspaceSource::FromCloudConversationId { .. }
-        )
+        matches!(self, NewWorkspaceSource::FromCloudConversationId { .. })
     }
 }
 
@@ -1799,29 +1768,6 @@ impl RootView {
             log::warn!("Auth not complete before trying to open settings pane");
         }
         false
-    }
-
-    pub fn join_shared_session_in_existing_window(
-        &mut self,
-        session_id: &SessionId,
-        ctx: &mut ViewContext<Self>,
-    ) -> bool {
-        if let AuthOnboardingState::Terminal(handle) = &self.auth_onboarding_state {
-            handle.update(ctx, |workspace, ctx| {
-                // Generic session link: ambient-ness (if any) is discovered at SessionJoined.
-                workspace.add_tab_for_joining_shared_session(*session_id, false, ctx);
-            });
-        } else if !self
-            .auth_onboarding_state
-            .retarget_pending_workspace_for_shared_session(*session_id)
-        {
-            log::warn!("Auth not complete before trying to join shared session");
-            return false;
-        }
-        let window_id = ctx.window_id();
-        ctx.windows().show_window_and_focus_app(window_id);
-        ctx.notify();
-        true
     }
 
     /// Opens a cloud conversation in an existing window.
@@ -2287,19 +2233,6 @@ impl AuthOnboardingState {
             onboarding_view,
             target,
         };
-    }
-
-    /// Redirects a workspace that has not yet been created to join `session_id`.
-    fn retarget_pending_workspace_for_shared_session(&mut self, session_id: SessionId) -> bool {
-        let AuthOnboardingState::Onboarding {
-            target: AuthOnboardingTarget::Workspace(workspace_args),
-            ..
-        } = self
-        else {
-            return false;
-        };
-        workspace_args.workspace_setting = NewWorkspaceSource::SharedSessionAsViewer { session_id };
-        true
     }
 }
 

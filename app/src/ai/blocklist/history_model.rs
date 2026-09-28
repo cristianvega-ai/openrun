@@ -2347,14 +2347,6 @@ impl BlocklistAIHistoryModel {
             .any(|conversation_ids| conversation_ids.contains(&conversation_id))
     }
 
-    pub fn mark_terminal_surface_as_ambient_agent_session_view(
-        &mut self,
-        terminal_surface_id: EntityId,
-    ) {
-        self.ambient_agent_terminal_surface_ids
-            .insert(terminal_surface_id);
-    }
-
     pub fn mark_terminal_surface_as_conversation_transcript_viewer(
         &mut self,
         terminal_surface_id: EntityId,
@@ -3157,13 +3149,6 @@ pub enum BlocklistAIHistoryEvent {
     ConversationUsageMetadataUpdated {
         conversation_id: AIConversationId,
     },
-
-    /// Emitted when a sharer-owned conversation establishes a local
-    /// shared session.
-    LocalSharedSessionEstablished {
-        conversation_id: AIConversationId,
-        session_id: session_sharing_protocol::common::SessionId,
-    },
 }
 
 impl BlocklistAIHistoryEvent {
@@ -3267,8 +3252,6 @@ impl BlocklistAIHistoryEvent {
             // orchestrator footer reading descendant credits) can't be
             // disambiguated by a single terminal surface pane.
             BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. } => None,
-            // Conversation-scoped; subscribers resolve the owning view via conversation_id.
-            BlocklistAIHistoryEvent::LocalSharedSessionEstablished { .. } => None,
         }
     }
 }

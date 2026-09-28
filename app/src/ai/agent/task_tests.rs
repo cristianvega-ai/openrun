@@ -479,7 +479,6 @@ fn create_exchange(
         request_cost: None,
         coding_model_id: model_id.clone(),
         cli_agent_model_id: model_id,
-        response_initiator: None,
     }
 }
 

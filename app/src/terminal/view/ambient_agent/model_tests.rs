@@ -35,7 +35,7 @@ fn record_ambient_execution_ended_clears_active_session_and_enables_followup() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         let model = add_model(&mut app);
-        let session_id = SessionId::new();
+        let session_id = Uuid::new_v4();
         let task = "11111111-1111-1111-1111-111111111111"
             .parse::<AmbientAgentTaskId>()
             .expect("hardcoded task id parses");
@@ -287,8 +287,8 @@ fn record_ambient_execution_ended_keeps_active_session_when_id_differs() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         let model = add_model(&mut app);
-        let live_session_id = SessionId::new();
-        let other_session_id = SessionId::new();
+        let live_session_id = Uuid::new_v4();
+        let other_session_id = Uuid::new_v4();
 
         model.update(&mut app, |model, ctx| {
             model.active_execution_session_id = Some(live_session_id);
@@ -314,7 +314,7 @@ fn set_live_execution_session_marks_session_live_until_it_ends() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         let model = add_model(&mut app);
-        let session_id = SessionId::new();
+        let session_id = Uuid::new_v4();
         let task = "22222222-2222-2222-2222-222222222222"
             .parse::<AmbientAgentTaskId>()
             .expect("hardcoded task id parses");

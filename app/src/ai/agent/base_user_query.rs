@@ -1,116 +1,26 @@
-//! The `Request.Input.UserQuery` a shared-session agent prompt starts from.
+//! The `Request.Input.UserQuery` an `AIAgentInput::UserQuery` starts from.
 //!
-//! warp-server injects follow-ups (Slack replies, GitHub comments, automations, ...) into a
-//! shared session as an `AgentPromptRequest` whose `user_query_b64` carries the serialized
-//! `warp.multi_agent.v1.Request.Input.UserQuery`. That proto is the authoritative query; the
-//! request's `prompt` and `attachments` only duplicate its text and files for older sharers.
-//!
-//! The sharer decodes it here and keeps it as the *base* of the `AIAgentInput::UserQuery` it
-//! builds: the fields this client models (text, mode, intended agent) are seeded from it by
-//! [`BaseUserQuery::seed_input_fields`], and `api::convert_to` writes them back over the base
-//! when the request is sent. Every other field, including ones this client does not model
-//! (origin, author, source message, ...), travels through untouched.
-//!
-//! Viewer-typed prompts and older relays leave `user_query_b64` unset; their attribution comes
-//! from the viewer's presence profile. Invalid payloads get explicit unavailable attribution.
-//! Both fall back to the request's `prompt` and `attachments` for content.
+//! The base carries the fields this client does not model (origin, author, source message,
+//! ...) so they travel through untouched. The fields this client does model (text, mode,
+//! intended agent) are seeded from it by [`BaseUserQuery::seed_input_fields`], and
+//! `api::convert_to` writes them back over the base when the request is sent.
 
 use std::fmt;
 
-#[cfg(any(test, feature = "local_tty"))]
-use base64::Engine as _;
-#[cfg(any(test, feature = "local_tty"))]
-use prost::Message as _;
-#[cfg(any(test, feature = "local_tty"))]
-use session_sharing_protocol::common::ProfileData;
-#[cfg(any(test, feature = "local_tty"))]
-use warp_errors::report_error;
 use warp_multi_agent_api as api;
 use warp_multi_agent_api::AgentType;
 
 use super::api::convert_user_query_mode;
 use super::{UserQueryMode, extract_user_query_mode};
 
-/// Boxed for size only: the proto is ~1 KiB inline, which would bloat every `AIAgentInput` and
-/// `QueuedQueryKind` variant (clippy `large_enum_variant`). Nothing shares it across threads.
+/// Boxed for size only: the proto is ~1 KiB inline, which would bloat every `AIAgentInput`
+/// variant (clippy `large_enum_variant`). Nothing shares it across threads.
 #[derive(Clone, PartialEq)]
 pub struct BaseUserQuery(Box<api::request::input::UserQuery>);
 
 impl BaseUserQuery {
-    /// Decodes the standard-Base64 protobuf carried on `AgentPromptRequest::user_query_b64`.
-    ///
-    /// Returns `None` (after reporting the failure) when the payload is not valid Base64 or not
-    /// a valid `Request.Input.UserQuery`; a partially decoded query is never returned. A payload
-    /// that does not decode means warp-server and this client disagree on the encoding, which
-    /// is a bug on one side, so it is reported rather than only logged.
-    #[cfg(any(test, feature = "local_tty"))]
-    pub(crate) fn decode_b64(encoded: &str) -> Option<Self> {
-        let bytes = match base64::engine::general_purpose::STANDARD.decode(encoded) {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                report_error!(
-                    anyhow::Error::new(err)
-                        .context("Ignoring shared-session user query: payload is not base64")
-                );
-                return None;
-            }
-        };
-        match api::request::input::UserQuery::decode(bytes.as_slice()) {
-            Ok(query) => Some(Self::from_proto(query)),
-            Err(err) => {
-                report_error!(
-                    anyhow::Error::new(err)
-                        .context("Ignoring shared-session user query: payload is not a UserQuery")
-                );
-                None
-            }
-        }
-    }
-
     pub(crate) fn from_proto(query: api::request::input::UserQuery) -> Self {
         Self(Box::new(query))
-    }
-
-    /// The query to send for a prompt a shared-session viewer typed themselves. The relay
-    /// leaves `user_query_b64` unset for those, so the sharer records the viewer from presence:
-    /// a `WarpClient` origin and the viewer as author. The relay authenticated the viewer and
-    /// the sharer only observes them, so the resolution is `CLIENT_SESSION` and no team is
-    /// claimed. A viewer whose profile is unknown gets an explicit `ServerSynthesized` origin,
-    /// so the query is never attributed to the sharer as if they had typed it.
-    #[cfg(any(test, feature = "local_tty"))]
-    pub(crate) fn for_viewer(profile: Option<&ProfileData>) -> Self {
-        let Some(profile) = profile.filter(|profile| !profile.firebase_uid.is_empty()) else {
-            return Self::unattributed("shared_session_author_unavailable");
-        };
-        Self::from_proto(api::request::input::UserQuery {
-            origin: Some(warp_client_origin()),
-            author: Some(api::QueryAuthor {
-                principal: Some(api::query_author::Principal::User(api::WarpUser {
-                    uid: profile.firebase_uid.clone(),
-                    email: profile.email.clone().unwrap_or_default(),
-                    team_uid: String::new(),
-                })),
-                resolution: api::IdentityResolution::ClientSession.into(),
-            }),
-            ..Default::default()
-        })
-    }
-
-    /// A query whose author cannot be established, marked with a `ServerSynthesized` origin
-    /// naming `reason` so warp-server neither treats it as fresh local input nor leaves it
-    /// looking like the sharer's own.
-    #[cfg(any(test, feature = "local_tty"))]
-    pub(crate) fn unattributed(reason: &str) -> Self {
-        Self::from_proto(api::request::input::UserQuery {
-            origin: Some(api::UserQueryOrigin {
-                variant: Some(api::user_query_origin::Variant::ServerSynthesized(
-                    api::user_query_origin::ServerSynthesized {
-                        reason: reason.to_string(),
-                    },
-                )),
-            }),
-            ..Default::default()
-        })
     }
 
     /// Lifts a persisted or streamed `Message.UserQuery`'s attribution (origin, author, source

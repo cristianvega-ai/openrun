@@ -171,7 +171,6 @@ impl TerminalPane {
             view.last_focus_ts(),
             view.is_read_only(),
             window_id,
-            view.model.lock().shared_session_status().clone(),
         )
     }
 
@@ -234,22 +233,11 @@ impl PaneContent for TerminalPane {
                         return;
                     };
 
-                    let is_shared_ambient_agent_session = group
-                        .terminal_view_from_pane_id(terminal_pane_id, ctx)
-                        .map(|view| {
-                            view.as_ref(ctx)
-                                .model
-                                .lock()
-                                .is_shared_ambient_agent_session()
-                        })
-                        .unwrap_or(false);
-
                     handle_ai_history_event(
                         event,
                         terminal_view_id,
                         terminal_pane_id,
                         model_event_sender,
-                        is_shared_ambient_agent_session,
                         ctx,
                     );
                 },
@@ -378,9 +366,8 @@ impl PaneContent for TerminalPane {
         // Capture the current input_config from the AI input model
         let current_input_config = view.input_config(app.as_ref());
 
-        if view.model.lock().shared_session_status().is_viewer() {
-            // We save and restore ambient agent sessions
-            // (restoring the shared session if it's still open and the conversation transcript otherwise).
+        if view.model.lock().is_dummy_cloud_mode_session() {
+            // We save and restore ambient agent sessions via their conversation transcript.
             if let Some(ambient_model) = view.ambient_agent_view_model() {
                 let ambient_model = ambient_model.as_ref(app);
                 let task_id = ambient_model.task_id();
@@ -1096,27 +1083,6 @@ fn handle_terminal_view_event(
                     force_open: *force_open,
                 });
             }
-            Event::EnsureUnifiedViewerChildPane {
-                conversation_id,
-                task,
-            } => {
-                group.materialize_viewer_child_pane_from_task(
-                    *conversation_id,
-                    task.as_ref().clone(),
-                    ctx,
-                );
-            }
-            Event::OrchestrationChildSharedSessionJoinFailed {
-                conversation_id,
-                session_id,
-            } => {
-                group.recover_viewer_child_join_failure(
-                    pane_id,
-                    *conversation_id,
-                    *session_id,
-                    ctx,
-                );
-            }
             Event::OpenAgentProfileEditor { profile_id } => {
                 ctx.emit(pane_group::Event::OpenAgentProfileEditor {
                     profile_id: profile_id.clone(),
@@ -1546,7 +1512,6 @@ fn handle_ai_history_event(
     terminal_view_id: EntityId,
     terminal_pane_id: TerminalPaneId,
     model_event_sender: SyncSender<ModelEvent>,
-    is_shared_ambient_agent_session: bool,
     ctx: &mut ViewContext<PaneGroup>,
 ) {
     use crate::ai::blocklist::maybe_build_ai_query_upsert_event;
@@ -1567,12 +1532,9 @@ fn handle_ai_history_event(
             {
                 return;
             }
-            let Some(upsert_ai_query_event) = maybe_build_ai_query_upsert_event(
-                event,
-                terminal_view_id,
-                is_shared_ambient_agent_session,
-                ctx,
-            ) else {
+            let Some(upsert_ai_query_event) =
+                maybe_build_ai_query_upsert_event(event, terminal_view_id, ctx)
+            else {
                 return;
             };
             let _ = ctx.spawn(
@@ -1636,7 +1598,6 @@ fn handle_ai_history_event(
         | BlocklistAIHistoryEvent::ConversationTransferredBetweenTerminalSurfaces { .. }
         | BlocklistAIHistoryEvent::NewConversationRequestComplete { .. }
         | BlocklistAIHistoryEvent::OrchestrationConfigUpdated { .. }
-        | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. }
-        | BlocklistAIHistoryEvent::LocalSharedSessionEstablished { .. } => (),
+        | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. } => (),
     }
 }

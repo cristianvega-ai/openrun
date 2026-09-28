@@ -375,21 +375,18 @@ impl BlocklistAIStatusBar {
             ephemeral_message_model,
             agent_message_bar,
         };
-        // Route ambient wiring through the setter so construction and the lazy shared-session
-        // viewer path share one implementation.
+        // Route ambient wiring through the setter.
         if let Some(ambient_agent_view_model) = ambient_agent_view_model {
             me.set_ambient_agent_view_model(ambient_agent_view_model, ctx);
         }
         me
     }
 
-    /// Attaches an ambient agent view model to an already-constructed status bar. Used on the
-    /// shared-session viewer path where the model is created lazily at `SessionJoined` (a raw
-    /// `shared_session` link that turns out to be a cloud run), after the status bar was built
-    /// with `None`. Without this, `render_cloud_mode_setup_status` has no model and the
-    /// "connecting to host / creating environment" progress never renders for the viewer's
-    /// follow-up. Wires the same subscription as [`Self::new`] so the status bar re-renders as
-    /// setup progress updates. Idempotent: a no-op when a model is already set.
+    /// Attaches an ambient agent view model to an already-constructed status bar. Without this,
+    /// `render_cloud_mode_setup_status` has no model and the "connecting to host / creating
+    /// environment" progress never renders. Wires the same subscription as [`Self::new`] so the
+    /// status bar re-renders as setup progress updates. Idempotent: a no-op when a model is
+    /// already set.
     pub fn set_ambient_agent_view_model(
         &mut self,
         view_model: ModelHandle<AmbientAgentViewModel>,

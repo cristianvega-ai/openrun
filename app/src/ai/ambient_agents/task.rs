@@ -5,8 +5,8 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 pub use cloud_object_models::{AgentConfigSnapshot, HarnessAuthSecretsConfig, HarnessConfig};
 use iso8601_duration::Duration as Iso8601Duration;
 use serde::{Deserialize, Serialize};
-use session_sharing_protocol::common::SessionId;
 use url::Url;
+use uuid::Uuid;
 use warp_core::ui::theme::WarpTheme;
 use warp_errors::report_error;
 use warpui::color::ColorU;
@@ -19,7 +19,7 @@ use crate::ui_components::icons::Icon;
 use crate::view_components::DismissibleToast;
 use crate::workspace::ToastStack;
 
-fn parse_session_id_from_link(session_link: &str) -> Option<SessionId> {
+fn parse_session_id_from_link(session_link: &str) -> Option<Uuid> {
     Url::parse(session_link).ok().and_then(|url| {
         url.path_segments()
             .into_iter()
@@ -29,7 +29,7 @@ fn parse_session_id_from_link(session_link: &str) -> Option<SessionId> {
     })
 }
 
-fn parse_execution_session_id(execution: RunExecution<'_>) -> Option<SessionId> {
+fn parse_execution_session_id(execution: RunExecution<'_>) -> Option<Uuid> {
     execution
         .session_id
         .and_then(|id| id.parse().ok())
@@ -291,7 +291,7 @@ pub enum AmbientAgentLiveSessionState {
     /// shared-session id it can attach to.
     ActiveUnattachable,
     /// The task has a running execution and this client can attach to its shared session.
-    Attachable { session_id: SessionId },
+    Attachable { session_id: Uuid },
 }
 
 impl RunExecution<'_> {
@@ -345,20 +345,6 @@ impl AmbientAgentTask {
 
     pub fn conversation_id(&self) -> Option<&str> {
         self.conversation_id.as_deref()
-    }
-
-    /// Whether this run is a retained environment-setup-failure session whose debug window is
-    /// still usable, so a debug prompt may be routed into it (REMOTE-2661). The server is the
-    /// sole authority here and re-verifies eligibility before accepting a follow-up; this only
-    /// decides what the client presents and where a submission goes.
-    pub fn is_setup_failure_debug_session_open(&self) -> bool {
-        self.debug_agent_available
-    }
-
-    /// Whether a debug conversation may still be *bootstrapped* into this session, i.e. none
-    /// exists yet. A later prompt reuses the persisted conversation instead.
-    pub fn is_open_for_setup_failure_debug_bootstrap(&self) -> bool {
-        self.is_setup_failure_debug_session_open() && self.conversation_id().is_none()
     }
 
     /// The third-party CLI harness this task is configured to run, if any. `None` means the
@@ -479,11 +465,6 @@ impl AmbientAgentTask {
     /// Principal the run executed as, formatted for user-facing surfaces.
     pub fn executor_display_name(&self) -> Option<String> {
         self.executor.as_ref().and_then(|e| e.display_name.clone())
-    }
-
-    /// Returns true if the underlying session for the ambient agent is no longer running.
-    pub fn is_no_longer_running(&self) -> bool {
-        !self.active_run_execution().is_sandbox_running && !self.state.is_working()
     }
 
     fn supports_live_session(&self) -> bool {

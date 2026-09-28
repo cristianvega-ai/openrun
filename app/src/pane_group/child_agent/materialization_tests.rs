@@ -6,12 +6,7 @@ use crate::ai::ambient_agents::{AmbientAgentTask, AmbientAgentTaskState};
 
 /// Builds a minimal [`AmbientAgentTask`] for materialization tests.
 ///
-/// `state`, `is_sandbox_running`, and `session_id` combine to determine the
-/// task's live-session state (see
-/// [`AmbientAgentTask::active_live_session_state`]): an `InProgress` task
-/// with a running sandbox and a parseable UUID-shaped `session_id` is
-/// `Attachable`. `conversation_id` populates the token used by the
-/// `LoadTranscript` branch.
+/// `conversation_id` populates the token used by the `LoadTranscript` branch.
 fn task(
     state: AmbientAgentTaskState,
     is_sandbox_running: bool,
@@ -62,26 +57,21 @@ fn terminal_task_with_stale_session_id_loads_transcript() {
         ChildPaneMaterialization::LoadTranscript {
             server_token: ServerConversationToken::new("completed-child-token".to_string()),
         },
-        "a terminal child must never join its stale execution session",
     );
 }
 
 #[test]
-fn attachable_task_attaches_live_with_session_id() {
+fn running_task_with_live_session_is_pending() {
     let task = task(
         AmbientAgentTaskState::InProgress,
         true,
         Some("22222222-2222-2222-2222-222222222222"),
-        // A conversation_id is present but must be ignored in favor of the
-        // live session.
-        Some("server-token-irrelevant-for-attach"),
+        Some("server-token"),
     );
 
     assert_eq!(
         decide_child_pane_materialization(&task),
-        ChildPaneMaterialization::AttachLive {
-            session_id: "22222222-2222-2222-2222-222222222222".parse().unwrap(),
-        },
+        ChildPaneMaterialization::Pending,
     );
 }
 

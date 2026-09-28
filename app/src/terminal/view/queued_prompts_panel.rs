@@ -61,7 +61,6 @@ const SEND_NOW_DURING_CLOUD_SETUP_TOOLTIP: &str =
 const SEND_NOW_PENDING_LRC_TOOLTIP: &str =
     "Prompts cannot be sent until the full terminal use agent is initialized.";
 const SEND_NOW_TO_FULL_TERMINAL_USE_AGENT_TOOLTIP: &str = "Send to full terminal use agent";
-const SEND_NOW_AS_READ_ONLY_VIEWER_TOOLTIP: &str = "Read-only viewers cannot send prompts.";
 /// Suffix on rows auto-queued during an agent-requested long-running command, which fire
 /// when that command completes rather than at the end of the full response.
 const LRC_AUTO_QUEUE_ROW_SUFFIX: &str = "(queued until the command finishes)";
@@ -130,7 +129,7 @@ fn build_row_state(
         })
     });
 
-    if is_initial_cloud_mode_prompt || origin == QueuedQueryOrigin::SharedSessionInjection {
+    if is_initial_cloud_mode_prompt {
         edit_button.update(ctx, |button, ctx| button.set_disabled(true, ctx));
     }
 
@@ -182,9 +181,6 @@ pub struct QueuedPromptsPanelView {
     /// because no other view reads this. Reset whenever the active conversation changes or the
     /// queue is cleared.
     collapsed: bool,
-    /// Host-pushed: whether this terminal can send prompts at all (false for read-only
-    /// shared-session viewers). Gates the send-now buttons, empty-Enter sends, and the hint.
-    can_send_prompt: bool,
     /// Host input's editor. An empty input is what makes Enter send the top queued row, so
     /// Enter-send and hint decisions read its emptiness live.
     host_editor: ViewHandle<EditorView>,
@@ -291,7 +287,6 @@ impl QueuedPromptsPanelView {
             edit_editor_is_single_logical_line: true,
             edit_editor_scroll_state: Default::default(),
             collapsed: false,
-            can_send_prompt: true,
             host_editor,
             host_editor_was_empty,
             header_mouse_state: MouseStateHandle::default(),
@@ -311,24 +306,12 @@ impl QueuedPromptsPanelView {
         self.drag_start_index = None;
     }
 
-    /// Updates whether this terminal can send prompts (false for read-only shared-session
-    /// viewers). Pushed by the host on construction and when the shared-session role changes.
-    pub fn set_can_send_prompt(&mut self, can_send_prompt: bool, ctx: &mut ViewContext<Self>) {
-        if self.can_send_prompt == can_send_prompt {
-            return;
-        }
-        self.can_send_prompt = can_send_prompt;
-        self.update_send_now_availability(ctx);
-        ctx.notify();
-    }
-
     /// True when pressing Enter in the host input should send the top queued row instead of
-    /// performing its usual action: the panel is showing, prompts can be sent, the input is
+    /// performing its usual action: the panel is showing, the input is
     /// empty (read live from the host editor, so the decision cannot trail same-update buffer
     /// changes), and the CLI-agent rich input is closed (Enter submits to the CLI agent there).
     pub fn enter_sends_queued_prompt(&self, ctx: &AppContext) -> bool {
         self.should_render(ctx)
-            && self.can_send_prompt
             && self.host_editor.as_ref(ctx).is_empty(ctx)
             && !CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
     }
@@ -346,7 +329,7 @@ impl QueuedPromptsPanelView {
             && queue_model
                 .queue(conv_id)
                 .first()
-                .is_some_and(|row| !row.is_locked() && row.is_ready())
+                .is_some_and(|row| !row.is_locked())
     }
 
     /// Returns whether the reusable inline edit editor is currently holding focus for an active
@@ -415,20 +398,20 @@ impl QueuedPromptsPanelView {
             return;
         };
 
-        let rows: Vec<(QueuedQueryId, QueuedQueryOrigin, bool)> = QueuedQueryModel::as_ref(ctx)
+        let rows: Vec<(QueuedQueryId, QueuedQueryOrigin)> = QueuedQueryModel::as_ref(ctx)
             .queue(conv_id)
             .iter()
-            .map(|query| (query.id(), query.origin(), query.is_ready()))
+            .map(|query| (query.id(), query.origin()))
             .collect();
         let cloud_setup_in_progress = QueuedQueryModel::as_ref(ctx).is_dispatch_blocked(conv_id)
             || rows
                 .first()
-                .is_some_and(|(_, origin, _)| *origin == QueuedQueryOrigin::InitialCloudMode);
+                .is_some_and(|(_, origin)| *origin == QueuedQueryOrigin::InitialCloudMode);
         let lrc_subagent_in_progress = self
             .cli_subagent_controller
             .as_ref(ctx)
             .is_agent_in_control();
-        for (query_id, origin, ready) in &rows {
+        for (query_id, origin) in &rows {
             let Some(send_now_button) = self
                 .row_states
                 .get(query_id)
@@ -439,18 +422,11 @@ impl QueuedPromptsPanelView {
             let disabled_for_pending_lrc = *origin == QueuedQueryOrigin::PendingLrcAutoQueue;
             let disabled_for_cloud_setup =
                 *origin == QueuedQueryOrigin::InitialCloudMode || cloud_setup_in_progress;
-            let disabled = disabled_for_pending_lrc
-                || disabled_for_cloud_setup
-                || !self.can_send_prompt
-                || !ready;
+            let disabled = disabled_for_pending_lrc || disabled_for_cloud_setup;
             let tooltip = if disabled_for_pending_lrc {
                 SEND_NOW_PENDING_LRC_TOOLTIP
             } else if disabled_for_cloud_setup {
                 SEND_NOW_DURING_CLOUD_SETUP_TOOLTIP
-            } else if !self.can_send_prompt {
-                SEND_NOW_AS_READ_ONLY_VIEWER_TOOLTIP
-            } else if !ready {
-                "Downloading attachments"
             } else if lrc_subagent_in_progress {
                 SEND_NOW_TO_FULL_TERMINAL_USE_AGENT_TOOLTIP
             } else {
@@ -516,9 +492,6 @@ impl QueuedPromptsPanelView {
                 conversation_id, ..
             }
             | QueuedQueryEvent::Removed {
-                conversation_id, ..
-            }
-            | QueuedQueryEvent::PromptReady {
                 conversation_id, ..
             }
             | QueuedQueryEvent::RowUnlocked { conversation_id }
@@ -612,7 +585,6 @@ impl QueuedPromptsPanelView {
                 self.update_send_now_availability(ctx);
             }
             QueuedQueryEvent::RowUnlocked { .. }
-            | QueuedQueryEvent::PromptReady { .. }
             | QueuedQueryEvent::DispatchStateChanged { .. } => {
                 self.update_send_now_availability(ctx);
             }

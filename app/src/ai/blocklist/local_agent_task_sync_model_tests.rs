@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use session_sharing_protocol::common::SessionId;
 use warp_graphql::ai::{AgentTaskState, PlatformErrorCode};
 use warpui::App;
 
@@ -11,9 +10,7 @@ use super::{
     LocalAgentTaskSyncModel, classify_renderable_error, map_cli_session_status,
     map_conversation_status,
 };
-use crate::ai::agent::conversation::{
-    AIConversation, AIConversationId, ConversationStatus, TaskSyncMode,
-};
+use crate::ai::agent::conversation::{AIConversation, ConversationStatus, TaskSyncMode};
 use crate::ai::agent::{
     AIAgentExchange, AIAgentExchangeId, AIAgentOutputStatus, FinishedAIAgentOutput,
     RenderableAIError, TransientNetworkErrorKind,
@@ -291,7 +288,6 @@ fn error_exchange(error: RenderableAIError) -> AIAgentExchange {
         request_cost: None,
         coding_model_id: LLMId::from("test-model"),
         cli_agent_model_id: LLMId::from("test-model"),
-        response_initiator: None,
     }
 }
 
@@ -472,14 +468,6 @@ fn cli_blocked_without_message() {
     assert!(update.is_none());
 }
 
-#[test]
-fn cli_cancelled_maps_to_cancelled_by_user() {
-    let (state, update) = map_cli_session_status(&CLIAgentSessionStatus::Cancelled);
-    assert_eq!(state, AgentTaskState::Cancelled);
-    let update = update.expect("should have status update");
-    assert_eq!(update.message, "Cancelled by user");
-}
-
 // --- Model-level tests ---
 
 /// Parses a fixed UUID into an `AmbientAgentTaskId`. Using a constant uuid
@@ -488,12 +476,6 @@ fn fixed_task_id() -> AmbientAgentTaskId {
     "550e8400-e29b-41d4-a716-446655440a00"
         .parse()
         .expect("valid task id")
-}
-
-fn fixed_session_id() -> SessionId {
-    "550e8400-e29b-41d4-a716-446655440a01"
-        .parse()
-        .expect("valid session id")
 }
 
 /// Yields back to the executor a few times so any `ctx.spawn`-scheduled
@@ -517,7 +499,7 @@ fn install_model_with_call_counter(
     let counter_for_mock = counter.clone();
     let mut mock = MockAIClient::new();
     mock.expect_update_agent_task()
-        .returning(move |_, _, _, _, _, _, _| {
+        .returning(move |_, _, _, _, _, _| {
             counter_for_mock.fetch_add(1, Ordering::SeqCst);
             Ok(())
         });
@@ -533,217 +515,6 @@ fn install_model_with_call_counter(
 /// that instantiate the model must register it first.
 fn register_cli_agent_sessions_model(app: &mut App) {
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
-}
-
-#[test]
-fn shared_session_link_fires_update_agent_task_with_session_id() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        // A local orchestrator conversation owned by this client: not a
-        // viewer, not a remote-child placeholder, and has a `task_id`.
-        let mut conversation = AIConversation::new(false, false);
-        let task_id = fixed_task_id();
-        conversation.set_run_id(task_id.to_string());
-        let conversation_id = conversation.id();
-        let terminal_view_id = warpui::EntityId::new();
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(terminal_view_id, vec![conversation], ctx);
-        });
-
-        let (_model, counter) = install_model_with_call_counter(&mut app);
-        let session_id = fixed_session_id();
-
-        history_model.update(&mut app, |_, ctx| {
-            ctx.emit(BlocklistAIHistoryEvent::LocalSharedSessionEstablished {
-                conversation_id,
-                session_id,
-            });
-        });
-
-        pump_spawned_tasks().await;
-
-        assert_eq!(
-            counter.load(Ordering::SeqCst),
-            1,
-            "update_agent_task must be invoked exactly once for the new (task_id, session_id) pair"
-        );
-    });
-}
-
-#[test]
-fn shared_session_link_uses_correct_argument_order() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let mut conversation = AIConversation::new(false, false);
-        let task_id = fixed_task_id();
-        conversation.set_run_id(task_id.to_string());
-        let conversation_id = conversation.id();
-        let terminal_view_id = warpui::EntityId::new();
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(terminal_view_id, vec![conversation], ctx);
-        });
-
-        register_cli_agent_sessions_model(&mut app);
-        // Verify the exact argument shape we send to the server:
-        //   update_agent_task(task_id, None, Some(session_id), None, None)
-        let session_id = fixed_session_id();
-        let mut mock = MockAIClient::new();
-        mock.expect_update_agent_task()
-            .withf(
-                move |arg_task_id, task_state, arg_session_id, conv_id, status_msg, _, _| {
-                    *arg_task_id == task_id
-                        && task_state.is_none()
-                        && *arg_session_id == Some(session_id)
-                        && conv_id.is_none()
-                        && status_msg.is_none()
-                },
-            )
-            .times(1)
-            .returning(|_, _, _, _, _, _, _| Ok(()));
-        let ai_client: Arc<dyn AIClient> = Arc::new(mock);
-        let _model = app.add_singleton_model(|ctx| {
-            LocalAgentTaskSyncModel::new_with_ai_client_for_test(ai_client, ctx)
-        });
-
-        history_model.update(&mut app, |_, ctx| {
-            ctx.emit(BlocklistAIHistoryEvent::LocalSharedSessionEstablished {
-                conversation_id,
-                session_id,
-            });
-        });
-
-        pump_spawned_tasks().await;
-        // Mock drop verifies `.times(1)` and `.withf` predicate.
-    });
-}
-
-#[test]
-fn shared_session_link_skips_viewer_conversations() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        // A viewer-side conversation: even if it carries a task_id, this
-        // client does not own the task and must not link.
-        let mut conversation =
-            AIConversation::new(/* is_viewing_shared_session */ true, false);
-        conversation.set_run_id(fixed_task_id().to_string());
-        let conversation_id = conversation.id();
-        let terminal_view_id = warpui::EntityId::new();
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(terminal_view_id, vec![conversation], ctx);
-        });
-
-        let (_model, counter) = install_model_with_call_counter(&mut app);
-
-        history_model.update(&mut app, |_, ctx| {
-            ctx.emit(BlocklistAIHistoryEvent::LocalSharedSessionEstablished {
-                conversation_id,
-                session_id: fixed_session_id(),
-            });
-        });
-
-        pump_spawned_tasks().await;
-
-        assert_eq!(
-            counter.load(Ordering::SeqCst),
-            0,
-            "viewer guard must skip the RPC"
-        );
-    });
-}
-
-#[test]
-fn shared_session_link_skips_remote_child_conversations() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let mut conversation = AIConversation::new(false, false);
-        conversation.set_run_id(fixed_task_id().to_string());
-        conversation.mark_as_remote_child();
-        let conversation_id = conversation.id();
-        let terminal_view_id = warpui::EntityId::new();
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(terminal_view_id, vec![conversation], ctx);
-        });
-
-        let (_model, counter) = install_model_with_call_counter(&mut app);
-
-        history_model.update(&mut app, |_, ctx| {
-            ctx.emit(BlocklistAIHistoryEvent::LocalSharedSessionEstablished {
-                conversation_id,
-                session_id: fixed_session_id(),
-            });
-        });
-
-        pump_spawned_tasks().await;
-
-        assert_eq!(
-            counter.load(Ordering::SeqCst),
-            0,
-            "remote-child guard must skip the RPC"
-        );
-    });
-}
-
-#[test]
-fn shared_session_link_skips_when_task_id_missing() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        // No set_run_id call: the conversation has no task_id yet.
-        let conversation = AIConversation::new(false, false);
-        let conversation_id = conversation.id();
-        let terminal_view_id = warpui::EntityId::new();
-        history_model.update(&mut app, |model, ctx| {
-            model.restore_conversations(terminal_view_id, vec![conversation], ctx);
-        });
-
-        let (_model, counter) = install_model_with_call_counter(&mut app);
-
-        history_model.update(&mut app, |_, ctx| {
-            ctx.emit(BlocklistAIHistoryEvent::LocalSharedSessionEstablished {
-                conversation_id,
-                session_id: fixed_session_id(),
-            });
-        });
-
-        pump_spawned_tasks().await;
-
-        assert_eq!(
-            counter.load(Ordering::SeqCst),
-            0,
-            "missing task_id must skip the RPC"
-        );
-    });
-}
-
-#[test]
-fn shared_session_link_skips_unknown_conversation() {
-    App::test((), |mut app| async move {
-        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
-
-        let (_model, counter) = install_model_with_call_counter(&mut app);
-
-        // Emit for a conversation that was never registered: the subscriber
-        // must early-return without firing an RPC.
-        let bogus_conversation_id = AIConversationId::new();
-        history_model.update(&mut app, |_, ctx| {
-            ctx.emit(BlocklistAIHistoryEvent::LocalSharedSessionEstablished {
-                conversation_id: bogus_conversation_id,
-                session_id: fixed_session_id(),
-            });
-        });
-
-        pump_spawned_tasks().await;
-
-        assert_eq!(
-            counter.load(Ordering::SeqCst),
-            0,
-            "unknown conversation must skip the RPC"
-        );
-    });
 }
 
 #[test]
@@ -766,17 +537,14 @@ fn conversation_server_token_assigned_fires_update_with_conversation_id() {
         //   update_agent_task(task_id, Some(state), None, Some(token), None)
         let mut mock = MockAIClient::new();
         mock.expect_update_agent_task()
-            .withf(
-                move |arg_task_id, task_state, arg_session_id, conv_id, status_msg, _, _| {
-                    *arg_task_id == task_id
-                        && task_state.is_some()
-                        && arg_session_id.is_none()
-                        && conv_id.as_deref() == Some("server-conversation-id")
-                        && status_msg.is_none()
-                },
-            )
+            .withf(move |arg_task_id, task_state, conv_id, status_msg, _, _| {
+                *arg_task_id == task_id
+                    && task_state.is_some()
+                    && conv_id.as_deref() == Some("server-conversation-id")
+                    && status_msg.is_none()
+            })
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Ok(()));
+            .returning(|_, _, _, _, _, _| Ok(()));
         let ai_client: Arc<dyn AIClient> = Arc::new(mock);
         let _model = app.add_singleton_model(|ctx| {
             LocalAgentTaskSyncModel::new_with_ai_client_for_test(ai_client, ctx)
@@ -886,16 +654,14 @@ fn preserve_terminal_setup_failure_conversation_reports_token_without_task_state
         register_cli_agent_sessions_model(&mut app);
         let mut mock = MockAIClient::new();
         mock.expect_update_agent_task()
-            .withf(
-                move |arg_task_id, task_state, _, conv_id, status_msg, _, _| {
-                    *arg_task_id == task_id
-                        && task_state.is_none()
-                        && conv_id.is_some()
-                        && status_msg.is_none()
-                },
-            )
+            .withf(move |arg_task_id, task_state, conv_id, status_msg, _, _| {
+                *arg_task_id == task_id
+                    && task_state.is_none()
+                    && conv_id.is_some()
+                    && status_msg.is_none()
+            })
             .times(1)
-            .returning(|_, _, _, _, _, _, _| Ok(()));
+            .returning(|_, _, _, _, _, _| Ok(()));
         let ai_client: Arc<dyn AIClient> = Arc::new(mock);
         let _model = app.add_singleton_model(|ctx| {
             LocalAgentTaskSyncModel::new_with_ai_client_for_test(ai_client, ctx)

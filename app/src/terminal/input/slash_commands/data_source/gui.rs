@@ -30,7 +30,6 @@ use crate::settings::{
 use crate::terminal::input::slash_commands::AcceptSlashMenuItem;
 use crate::terminal::model::session::active_session::ActiveSession;
 use crate::terminal::view::ambient_agent::AmbientAgentViewModel;
-use crate::terminal::view::is_retained_setup_failure_debug_editable_for_task;
 use crate::workspaces::user_workspaces::TeamContextResolver;
 
 pub struct GuiDataSourceArgs {
@@ -117,8 +116,7 @@ impl GuiSlashCommandDataSource {
             ambient_agent_view_model: None,
             is_cloud_mode_v2,
         };
-        // Route ambient wiring through the setter so construction and the lazy shared-session
-        // viewer path share one implementation.
+        // Route ambient wiring through the setter.
         if let Some(ambient_agent_view_model) = ambient_agent_view_model {
             me.set_ambient_agent_view_model(ambient_agent_view_model, ctx);
         } else {
@@ -127,10 +125,8 @@ impl GuiSlashCommandDataSource {
         me
     }
 
-    /// Attaches an ambient agent view model after construction. Used on the shared-session viewer
-    /// path where the model is created lazily at `SessionJoined`, after the data source was built
-    /// with `None`. Keeps cloud-mode command gating correct for a link-join viewer.
-    /// Idempotent: a no-op when a model is already set.
+    /// Attaches an ambient agent view model after construction, keeping cloud-mode command
+    /// gating correct. Idempotent: a no-op when a model is already set.
     pub fn set_ambient_agent_view_model(
         &mut self,
         ambient_agent_view_model: ModelHandle<AmbientAgentViewModel>,
@@ -210,18 +206,7 @@ impl GuiSlashCommandDataSource {
             availability |= Availability::CLOUD_MODE_V2_COMPOSER;
         }
 
-        // REMOTE-2661: a retained setup-failure session has no conversation to continue, so it
-        // gates like the ordinary "no active conversation" case; `execute_slash_command` routes
-        // `/agent`/`/new` through the authenticated follow-up service for this pane.
-        let is_retained_setup_failure_debug_pane = self
-            .ambient_agent_view_model
-            .as_ref()
-            .and_then(|model| model.as_ref(ctx).task_id())
-            .is_some_and(|task_id| is_retained_setup_failure_debug_editable_for_task(task_id, ctx));
-
-        if is_retained_setup_failure_debug_pane {
-            availability |= Availability::NOT_CLOUD_AGENT;
-        } else if self.is_cloud_mode(ctx) {
+        if self.is_cloud_mode(ctx) {
             availability |= Availability::CLOUD_AGENT;
         } else {
             availability |= Availability::NOT_CLOUD_AGENT;

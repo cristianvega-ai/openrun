@@ -17,7 +17,6 @@ use super::{
 use crate::ai::blocklist::AIBlock;
 use crate::ai::blocklist::block::PendingUserQueryBlock;
 use crate::terminal::GridType;
-use crate::terminal::event::Event as TerminalEvent;
 use crate::terminal::model::block::BlockSection;
 use crate::terminal::model::index::{Direction, Point, Side};
 use crate::terminal::model::selection::{ExpandedSelectionRange, Selection, SelectionDirection};
@@ -343,22 +342,6 @@ impl BlockList {
     /// This selection either has a renderable range OR it is empty.
     pub fn selection(&self) -> Option<&BlockListSelection> {
         self.selection.as_ref()
-    }
-
-    /// Returns the start and end points of the current text selection in the block list, if any,
-    /// and whether the selection was reversed.
-    /// Note that the `start` is always before `end`.
-    pub fn text_selection_range(
-        &self,
-        semantic_selection: &SemanticSelection,
-        inverted_blocklist: bool,
-    ) -> Option<(WithinBlock<Point>, WithinBlock<Point>, bool)> {
-        let selection_range = self.expand_selection(semantic_selection, inverted_blocklist)?;
-        Some((
-            selection_range.start().within_grid_point,
-            selection_range.end().within_grid_point,
-            selection_range.is_reversed(),
-        ))
     }
 
     /// Returns the range of cells that the selection spans, which represent what is rendered
@@ -864,8 +847,6 @@ impl BlockList {
     pub fn clear_selection(&mut self) {
         self.selection = None;
         self.rich_content_selections.clear();
-        self.event_proxy
-            .send_app_event(TerminalEvent::TextSelectionChanged);
     }
 
     /// Records that the given rich content (AI) block view currently has an
@@ -890,8 +871,6 @@ impl BlockList {
             self.selection = None;
         }
         self.rich_content_selections = vec![view_id];
-        self.event_proxy
-            .send_app_event(TerminalEvent::TextSelectionChanged);
     }
 
     /// Clears the tracked text selection for the given rich content (AI) block
@@ -903,8 +882,6 @@ impl BlockList {
             .position(|id| *id == view_id)
         {
             self.rich_content_selections.remove(position);
-            self.event_proxy
-                .send_app_event(TerminalEvent::TextSelectionChanged);
         }
     }
 
@@ -1235,8 +1212,6 @@ impl BlockList {
 
     fn set_selection(&mut self, value: BlockListSelection) {
         self.selection = Some(value);
-        self.event_proxy
-            .send_app_event(TerminalEvent::TextSelectionChanged);
     }
 
     /// Return the list of corresponding rich content block view ids contained in the active

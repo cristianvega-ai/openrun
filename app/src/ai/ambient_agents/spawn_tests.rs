@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::Utc;
-use session_sharing_protocol::common::SessionId;
+use uuid::Uuid;
 
 use super::{
     AmbientAgentEvent, MAX_STALE_POLLS_BEFORE_FAILURE, SessionJoinInfo, monitor_spawned_task,
@@ -12,7 +12,6 @@ use crate::ai::agent::UserQueryMode;
 use crate::ai::ambient_agents::{AmbientAgentTask, AmbientAgentTaskState};
 use crate::server::server_api::ai::{MockAIClient, SpawnAgentResponse, TaskStatusMessage};
 use crate::server::team_scope::RequestTeamScope;
-use crate::terminal::shared_session;
 use crate::workspaces::user_workspaces::TeamContextForOperation;
 
 fn task_with(
@@ -84,8 +83,8 @@ async fn monitor_spawned_task_does_not_spawn_again() {
 async fn followup_submits_before_polling_and_ignores_previous_session_id() {
     use futures::StreamExt;
 
-    let previous_session_id = SessionId::new();
-    let new_session_id = SessionId::new();
+    let previous_session_id = Uuid::new_v4();
+    let new_session_id = Uuid::new_v4();
     let submitted = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let call_count = Arc::new(AtomicUsize::new(0));
     let mut mock = MockAIClient::new();
@@ -175,7 +174,7 @@ async fn followup_api_error_does_not_poll() {
     let mut stream = Box::pin(submit_run_followup(
         "continue".to_string(),
         run_id(),
-        Some(SessionId::new()),
+        Some(Uuid::new_v4()),
         ai_client,
         None,
     ));
@@ -225,7 +224,7 @@ async fn followup_terminal_failure_surfaces_status_message() {
     let mut stream = Box::pin(submit_run_followup(
         "continue".to_string(),
         run_id(),
-        Some(SessionId::new()),
+        Some(Uuid::new_v4()),
         ai_client,
         None,
     ));
@@ -269,7 +268,7 @@ async fn followup_terminal_failure_surfaces_status_message() {
 async fn followup_without_previous_session_id_accepts_joinable_session() {
     use futures::StreamExt;
 
-    let session_id = SessionId::new();
+    let session_id = Uuid::new_v4();
     let expected_session_id = session_id;
     let mut mock = MockAIClient::new();
 
@@ -404,8 +403,8 @@ async fn followup_skips_prior_terminal_state_until_working_then_attaches() {
     // its prior `Blocked` state on the first poll, but does so before the next. The poll
     // loop must silently skip the prior-terminal observation, then surface the new run's
     // state transitions and attach to the joinable session.
-    let previous_session_id = SessionId::new();
-    let new_session_id = SessionId::new();
+    let previous_session_id = Uuid::new_v4();
+    let new_session_id = Uuid::new_v4();
     let call_count = Arc::new(AtomicUsize::new(0));
     let mut mock = MockAIClient::new();
     mock.expect_submit_run_followup()
@@ -534,7 +533,7 @@ async fn followup_skips_prior_terminal_then_surfaces_real_failure() {
     let mut stream = Box::pin(submit_run_followup(
         "continue".to_string(),
         run_id(),
-        Some(SessionId::new()),
+        Some(Uuid::new_v4()),
         ai_client,
         None,
     ));
@@ -600,7 +599,7 @@ async fn followup_cancelled_state_breaks_skip_loop() {
     let mut stream = Box::pin(submit_run_followup(
         "continue".to_string(),
         run_id(),
-        Some(SessionId::new()),
+        Some(Uuid::new_v4()),
         ai_client,
         None,
     ));
@@ -653,7 +652,7 @@ async fn followup_bounded_skip_for_server_stall() {
     let mut stream = Box::pin(submit_run_followup(
         "continue".to_string(),
         run_id(),
-        Some(SessionId::new()),
+        Some(Uuid::new_v4()),
         ai_client,
         None,
     ));
@@ -1067,37 +1066,6 @@ fn session_join_info_prefers_server_session_link_when_session_id_is_present() {
     let join_info = SessionJoinInfo::from_task(&task).expect("expected join info");
     assert_eq!(join_info.session_link, "https://example.com/session/abc");
     assert!(join_info.session_id.is_some());
-}
-
-#[test]
-fn session_join_info_constructs_link_from_session_id_when_link_missing() {
-    let task = task_with(
-        AmbientAgentTaskState::InProgress,
-        Some("550e8400-e29b-41d4-a716-446655440000".to_string()),
-        None,
-    );
-
-    let join_info = SessionJoinInfo::from_task(&task).expect("expected join info");
-    assert!(!join_info.session_link.is_empty());
-    assert!(join_info.session_id.is_some());
-}
-
-#[test]
-fn session_join_info_falls_back_to_session_id() {
-    let session_id = SessionId::new();
-    let task = task_with(
-        AmbientAgentTaskState::InProgress,
-        Some(session_id.to_string()),
-        None,
-    );
-
-    let join_info = SessionJoinInfo::from_task(&task).expect("expected join info");
-
-    assert_eq!(join_info.session_id, Some(session_id));
-    assert_eq!(
-        join_info.session_link,
-        shared_session::join_link(&session_id)
-    );
 }
 
 #[test]
