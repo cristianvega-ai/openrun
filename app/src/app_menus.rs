@@ -511,16 +511,13 @@ fn make_new_tab_menu(ctx: &AppContext) -> Menu {
 }
 
 fn make_new_ai_menu(ctx: &AppContext) -> Menu {
-    let mut items = vec![updateable_custom_item_without_checkmark(
-        CustomAction::NewAgentModePane,
-        ctx,
-    )];
+    let mut items = vec![];
 
     if FeatureFlag::AIRules.is_enabled() {
-        items.extend([
-            MenuItem::Separator,
-            updateable_custom_item_without_checkmark(CustomAction::OpenAIFactCollection, ctx),
-        ]);
+        items.push(updateable_custom_item_without_checkmark(
+            CustomAction::OpenAIFactCollection,
+            ctx,
+        ));
     }
 
     if FeatureFlag::McpServer.is_enabled() && ContextFlag::ShowMCPServers.is_enabled() {
