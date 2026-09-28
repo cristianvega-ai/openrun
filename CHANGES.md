@@ -49,6 +49,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp Drive: sharing, export and cloud-object dialogs](#warp-drive-sharing-export-and-cloud-object-dialogs) — removed the sharing/guest/link-sharing dialog and pane-header share button, Drive export, the grab-edit-access modal, cloud-object activity toasts and the shared-object limit banner settings
 - [Language server downloads are opt-in](#language-server-downloads-are-opt-in) — the LSP crates can only download with a permit built from the new `allow_language_server_downloads` setting (default off); missing servers show a manual install hint instead of an install button
 - [AI command prediction and passive suggestions](#ai-command-prediction-and-passive-suggestions) — deleted Agent Predict (AI next-command and prompt ghost text), prompt suggestions, suggested code-diff banners, their settings and server endpoints; history-based autosuggestions and command corrections are unchanged
+- [AI-generated commit messages, pull request text and block titles](#ai-generated-commit-messages-pull-request-text-and-block-titles) — the code-review commit and create-PR dialogs no longer ask Warp's AI for text; removed the two text-generation settings and the now-empty Active AI settings category
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1281,3 +1282,28 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for TEL-4: telemetry variants whose callers are gone (`PromptSuggestionShown`, `SuggestedCodeDiffBannerShown`, `SuggestedCodeDiffFailed`, `PromptSuggestionAccepted`, `StaticPromptSuggestionsBannerShown`, `StaticPromptSuggestionAccepted`, `Toggle{IntelligentAutosuggestions, PromptSuggestions, CodeSuggestions, NaturalLanguageAutosuggestions}Setting`) and their payload enums (`PromptSuggestionViewType`, `PromptSuggestionFallbackReason`, `ToggleCodeSuggestionsSettingSource`).
 - Left for FLAGS-1: `FeatureFlag::{CycleNextCommandSuggestion, PartialNextCommandSuggestions, PromptSuggestionsViaMAA, PredictAMQueries}` and their Cargo features. `ValidateAutosuggestions` still gates `is_command_valid`.
 - Left for AI-16: `FreeAiRemovalModalVariant` now has only its `Notice` variant.
+
+## AI-generated commit messages, pull request text and block titles
+**Why:** The code-review commit dialog sent the working-tree diff and branch name to Warp's `/ai/generate_code_review_content` endpoint to draft a commit message when it opened, and "Create PR" sent the branch diff and commit subjects to the same endpoint for a PR title and description. Both are built-in AI text generation, which the offline fork removes. The shared-block title-generation setting was left over from the block-sharing removal.
+
+**Removed:**
+- `app/src/ai/generate_code_review_content/` (request/response types) and `AIClient::generate_code_review_content` with its `ServerApi` implementation.
+- `code_review/git_actions.rs` — `generate_commit_message` and `create_pr_with_ai_content`; the commit chain and create-PR no longer take an `AIClient`.
+- `DiffStateModel::generate_commit_message`, the local model's implementation and `DiffStateModelEvent::CommitMessageGenerated`, and the `autogenerate_pr_content` / `autogenerate_content` arguments of the commit-chain and create-PR operations.
+- Git dialog: `should_send_git_ops_ai_request`, the open-time commit-message request and `apply_generated_commit_message`, and the "Generating commit message…" placeholder.
+- `util/git.rs` — `get_diff_for_commit_message`, `get_diff_for_pr`, `get_branch_commit_messages`, `sanitize_pr_title` and their size caps, which only prepared input for the AI request; `create_pr` lost its title/body arguments.
+- Settings `GitOperationsAutogenEnabled` (`agents.warp_agent.active_ai.git_operations_autogen_enabled`) and `SharedBlockTitleGenerationEnabled` (`agents.warp_agent.active_ai.shared_block_title_generation_enabled`), their getters, widgets, toggle bindings ("commit and pull request generation", "shared block title generation") and the `Git_Operations_Autogen` / `Shared_Block_Title_Generation` keymap flags.
+- The "Active AI" category of the Warp Agent settings page (with its master switch in the header), which had no settings left.
+- `UserWorkspaces::is_git_operations_ai_enabled`, which only gated the removed generation.
+
+**Modified:**
+- `code_review/git_dialog/{commit, pr}.rs` — the commit dialog always opens with the "Type a commit message" placeholder and Confirm stays disabled until the user types a message; Create PR always runs `gh pr create --fill` against the detected default branch.
+- `code_review/code_review_view.rs` — no longer lists the removed event.
+
+**User-visible impact:** The code-review commit dialog no longer pre-fills a generated commit message; the user types it. Commit, commit-and-push, commit-and-create-PR, push and create-PR work as before, and pull requests get their title and body from `gh pr create --fill`. The Warp Agent settings page no longer has an Active AI section. Stored values of the two settings are ignored.
+
+**Notes:**
+- Left for AI-22: `WarpAgentPageAction::ToggleActiveAI` and its "Active AI" toggle binding; the `IsActiveAIEnabled` setting still gates rule suggestions (AI-15).
+- Left for TEL-4: `TelemetryEvent::{ToggleSharedBlockTitleGenerationSetting, ToggleGitOperationsAutogenSetting}`, which nothing emits now.
+- Left for FLAGS-1: `FeatureFlag::SharedBlockTitleGeneration` and its Cargo feature. `FeatureFlag::GitOperationsInCodeReview` still gates the git dialogs.
+- Left for AI-29: the `is_git_operations_ai_enabled` team-policy field in `workspaces/` and `crates/graphql`.
