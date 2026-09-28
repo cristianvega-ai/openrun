@@ -12,12 +12,6 @@ pub mod word_boundaries;
 pub mod words;
 
 pub use header::BlockHeaderSize;
-/// A row/column position in rendered character-cell content.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct TuiGridPoint {
-    pub row: usize,
-    pub col: u16,
-}
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SelectionType {
@@ -358,14 +352,6 @@ pub fn char_slice(s: &str, start: usize, end: usize) -> Option<&str> {
     s.get(start_index..end_index)
 }
 
-pub fn byte_offset_for_char_offset(text: &str, char_offset: CharOffset) -> Option<ByteOffset> {
-    if char_offset.as_usize() == text.chars().count() {
-        return Some(ByteOffset::from(text.len()));
-    }
-    text.char_indices()
-        .nth(char_offset.as_usize())
-        .map(|(byte_offset, _)| ByteOffset::from(byte_offset))
-}
 pub fn count_chars_up_to_byte(text: &str, byte_offset: ByteOffset) -> Option<CharOffset> {
     if byte_offset.as_usize() == text.len() {
         return Some(CharOffset::from(text.chars().count()));

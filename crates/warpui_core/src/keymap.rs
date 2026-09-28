@@ -1044,29 +1044,6 @@ impl Keystroke {
         }
     }
 
-    /// Returns a platform-independent keybinding label with expanded modifier
-    /// names, such as `Ctrl + Shift + P`.
-    pub fn displayed_expanded(&self) -> String {
-        let mut parts = Vec::new();
-        if self.ctrl {
-            parts.push("Ctrl".to_owned());
-        }
-        if self.alt {
-            parts.push("Alt".to_owned());
-        }
-        if self.shift {
-            parts.push("Shift".to_owned());
-        }
-        if self.cmd {
-            parts.push("Cmd".to_owned());
-        }
-        if self.meta {
-            parts.push("Meta".to_owned());
-        }
-        parts.push(self.displayed_key());
-        parts.join(" + ")
-    }
-
     fn displayed_key(&self) -> String {
         // Always treat the key as uppercase--this matches how operating systems and most
         // applications display keybindings.

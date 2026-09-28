@@ -62,7 +62,7 @@ fn theme_command_inserts_input_for_its_required_argument() {
     assert_eq!(argument.hint_text, Some("<auto|light|dark>"));
 }
 #[test]
-fn tui_commands_have_typed_identities_and_explicit_surface_support() {
+fn commands_have_typed_identities() {
     for (command, expected) in [
         (&*commands::AGENT, SlashCommandKind::Agent),
         (&*commands::NEW, SlashCommandKind::New),
@@ -93,17 +93,15 @@ fn tui_commands_have_typed_identities_and_explicit_surface_support() {
             "{} should have its typed command identity",
             command.name
         );
-        assert!(command.supports_surface(settings::SettingsMode::Tui));
     }
 
     let command = &*commands::ORCHESTRATE;
     assert_eq!(command.kind, SlashCommandKind::Orchestrate);
-    assert!(command.supports_surface(settings::SettingsMode::Tui));
     assert!(command.supports_surface(settings::SettingsMode::Gui));
 }
 
 #[test]
-fn model_command_is_supported_in_tui_without_becoming_a_prompt_command() {
+fn model_command_is_not_submitted_as_a_prompt() {
     assert_eq!(commands::MODEL.kind, SlashCommandKind::Model);
     assert!(!slash_command_is_submitted_as_prompt(&commands::MODEL));
     assert!(commands::MODEL.argument.is_none());

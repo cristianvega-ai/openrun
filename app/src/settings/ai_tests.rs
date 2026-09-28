@@ -34,7 +34,7 @@ fn create_test_request_limit_info(
 }
 
 #[test]
-fn auto_approve_denylist_bypass_defaults_on_and_is_available_in_gui_and_tui_settings() {
+fn auto_approve_denylist_bypass_defaults_on_and_is_available_in_gui_settings() {
     let setting = AutoApproveBypassesCommandDenylist::new(None);
     assert!(*setting.value());
     assert_eq!(
@@ -51,7 +51,6 @@ fn auto_approve_denylist_bypass_defaults_on_and_is_available_in_gui_and_tui_sett
         .expect("expected auto-approve denylist bypass schema entry");
     let surfaces: SettingSurfaces = (entry.surfaces_fn)();
     assert!(surfaces.includes(SettingsMode::Gui));
-    assert!(surfaces.includes(SettingsMode::Tui));
 }
 
 fn add_ai_enablement_dependencies_for_test(app: &mut App) {

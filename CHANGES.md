@@ -36,6 +36,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Settings cloud sync](#settings-cloud-sync) — removed the Warp Drive settings syncer, the "Settings sync" switch, the "not synced" icons and the cloud-sync APIs of the settings crate; settings are local only
 - [Workspace LSP metadata moved out of the AI module](#workspace-lsp-metadata-moved-out-of-the-ai-module) — `PersistedWorkspace` (known repos and per-repo language-server enablement) now lives in `app/src/workspace_metadata/`
 - [Codebase indexing and project rules](#codebase-indexing-and-project-rules) — removed codebase indexing (embeddings synced to Warp's servers), project rules (`AGENTS.md`/`WARP.md` as agent context), `/init`, `/index` and `/open-project-rules`; Settings > Code > Projects now lists each repo's language servers
+- [TUI rendering layer and TUI modes in the core crates](#tui-rendering-layer-and-tui-modes-in-the-core-crates) — deleted the ratatui-backed TUI element library, presenter and runtime from `warpui_core`, the char-cell editor layout, and the TUI settings, logging and execution modes
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -887,3 +888,43 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left for AI-23: the onboarding callout's "Initialize" end state still submits `/init` as an agent query, and two onboarding TODO comments mention `/init`. Left for AI-28/AI-29: the agent's `InitProject` tool completes without doing anything; `AIAgentContext::ProjectRules` conversions; `EntrypointType::InitProjectRules` in `ai_types` (serialized). Left for AI-15: the Rules pane, which now lists only Drive rules.
 - `repo_metadata::BudgetExceededBehavior::FailFast` is only exercised by its own tests now. `InputSuggestionsMode::IndexedReposMenu` / `InlineMenuType::IndexedReposMenu` keep their identifiers to avoid churn in `terminal/input.rs`.
 - A restored code pane that was opened on a project-rules file reopens its tabs without its old source (the saved `CodeSource` no longer parses and falls back to `None`).
+
+## TUI rendering layer and TUI modes in the core crates
+**Why:** The Warp TUI front-end (`crates/warp_tui`) was removed earlier (see [Warp TUI front-end](#warp-tui-front-end)). What it left behind in the shared crates was a second rendering backend and a set of "TUI surface" switches that nothing selects any more. Keeping them means carrying a terminal-UI toolkit, a second layout engine in the editor and dead mode branches in the settings, logging and MCP code.
+
+**Removed:**
+- `crates/warpui_core`:
+  - the `tui` Cargo feature and the `ratatui` dependency (with `libc` and `unicode-segmentation`, which only the TUI code used);
+  - `src/elements/tui/` (the `TuiElement` library: text, flex, stack, scrollable, selectable, viewported list, shimmering text, buffers and events), `src/presenter/tui.rs`, `src/runtime/` (the crossterm-driven TUI event loop, renderer and terminal color probe), `src/core/app/tui.rs`, `src/core/view/tui.rs`, `src/core/view/context/tui.rs` and their tests;
+  - the `tui_integration` test and the `tui_file_viewer` example;
+  - `StoredView`, the enum that let GUI and TUI views share a window's view registry; windows store `Box<dyn AnyView>` directly again;
+  - TUI-only helpers: `elements::animation` (`AnimationClock`, `KeyframeTimeline`), `text::TuiGridPoint`, `text::byte_offset_for_char_offset`, `Keystroke::displayed_expanded`, `MouseState::set_click_count`, and the TUI keymap-validation regression tests in `keymap/matcher_tests.rs`.
+- `crates/warp_terminal`: the `tui` feature, `KeystrokeWithDetails::to_pty_bytes` (single-event key encoding for the crossterm front-end) and `tmux_passthrough` (used to emit OSC 777 from the TUI).
+- `crates/warpui`: `platform::create_system_clipboard`, the windowless clipboard constructor the TUI used.
+- `crates/editor` (`warp_editor`): the char-cell layout mode. That covers `RenderState::new_tui` and `char_cell()`, `LayoutMode`, `CharCellState`, `CharCellTextIndex`, `CharCellTemporaryBlock`, `render/model/char_cell_display.rs` (`DisplayLattice`, `DisplayRow`, `DisplayRowKind`), the `char_cell_*` wrapping helpers, `SelectionModel::has_pending_selection`, the `char_cell_bench` benchmark and their tests. `ColumnUnit` is gone as well: `SoftWrapPoint` columns and `SelectionModel::goal_xs` are plain `Pixels` again. The `unicode-linebreak`, `unicode-segmentation` and `unicode-width` dependencies went with it, and `unicode-linebreak` left `[workspace.dependencies]`.
+- `crates/settings`: `SettingsMode::Tui`, the process-wide settings mode (`set_settings_mode`, `settings_mode()`) and `SettingsMode::should_migrate_native_settings`.
+- `crates/warp_logging`: `LogFrontend::Tui` and its `warp-cli` log subdirectory.
+- `crates/warp_core`: `ExecutionMode::Tui` (client id `warp-tui`), `AppExecutionMode::is_tui`, and the TUI paths `tui_config_local_dir`, `tui_mcp_config_file_path` and `tui_state_dir`.
+- App branches that only ran for the TUI surface:
+  - `settings/mod.rs::user_preferences_toml_file_path` always uses the GUI config directory;
+  - `settings/init.rs` no longer asks the settings mode before the one-time native-store migration;
+  - `warp_managed_paths_watcher.rs` no longer creates or watches the TUI config directory, and `active_mcp_config_file_path` is gone (the GUI MCP file is watched directly);
+  - `ai/mcp/file_based_manager.rs` loses the deferred global-server autostart (`defer_global_warp_autostart`, `global_warp_servers_activated`, `activate_global_warp_servers`) and its two tests;
+  - `ai/mcp/templatable_manager/native.rs` loses the loopback OAuth callback (`use_tui_loopback`), so MCP OAuth always uses the `warposs://mcp/oauth2callback` scheme;
+  - `ai/mcp/file_mcp_watcher.rs::should_watch_repository` no longer takes a settings mode.
+
+**Modified:**
+- `settings/schema_generation.rs` — `x-warp-surfaces` lists only `gui`.
+- `app/examples/generate_default_settings.rs` — dropped the required `--surface gui|tui` argument; it always writes the GUI settings file.
+- Slash-command tests (`search/slash_command_menu/static_commands/commands_tests.rs`, `terminal/input/slash_commands/mod_tests.rs`) — dropped the assertions and tests that listed TUI-mode commands; the GUI assertions stay.
+- `crates/warp_logging` tests — the frontend-directory, bundle and crash-recovery tests use the CLI frontend instead of the TUI one.
+- Doc comments in `warpui_core` (`core/app.rs`, `core/view/context.rs`, `elements/shimmer_math.rs`, `elements/gui/hoverable.rs`) and `warpui` (`platform/app.rs`) no longer describe a TUI backend.
+
+**User-visible impact:** None in the GUI. MCP servers that need OAuth always use the app's URL-scheme callback, which is what the GUI already did.
+
+**Notes:**
+- `SettingsMode` keeps a single `Gui` variant. It is still the parameter type of `SettingSurfaces::includes` and `SlashCommandSurfaces::includes`. AI-33 removes `SettingSurfaces` (with `SettingSurfaces::TUI` and the `surface:` annotation) and can drop `SettingsMode` with it. AI-24 removes the TUI-only static slash commands (now unreachable, since no surface selects them) and `SlashCommandSurfaces::{TuiOnly, GuiAndTui}`.
+- `OAuthCallbackMode::Loopback` in `crates/mcp` has no production caller now; AI-14 deletes the MCP crate.
+- Left in place: `CLIAgentNotification::new` in `warp_core::cli_agent_protocol` (only the removed TUI built notifications; the GUI only parses them), the `warp`/`warp-tui` note in `crates/input_classifier/src/util.rs` (AI plan) and the TUI comments in `crates/ai` (AI plan). The `tui_version`/`tui_updates` fields in `crates/channel_versions` are for SRV-1.
+- The GUI-facing generalizations the TUI work introduced in `warpui_core` (for example `T: Entity` bounds on view APIs and `AppContext::weak_app`, which a `warpui` test uses) are kept.
+- Existing `warp-cli` log directories, `.warp_cli*` config directories and `tui/` state directories on users' machines are left untouched.

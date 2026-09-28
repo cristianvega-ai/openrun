@@ -4,7 +4,7 @@ use settings::{Setting, SettingSurfaces, SettingsMode};
 use super::IsCloudConversationStorageEnabled;
 
 #[test]
-fn privacy_settings_apply_to_gui_and_tui() {
+fn privacy_settings_apply_to_all_surfaces() {
     for storage_key in [IsCloudConversationStorageEnabled::toml_key()] {
         let entry = inventory::iter::<SettingSchemaEntry>
             .into_iter()
@@ -14,6 +14,5 @@ fn privacy_settings_apply_to_gui_and_tui() {
 
         assert_eq!(surfaces, SettingSurfaces::ALL, "{storage_key}");
         assert!(surfaces.includes(SettingsMode::Gui), "{storage_key}");
-        assert!(surfaces.includes(SettingsMode::Tui), "{storage_key}");
     }
 }

@@ -48,7 +48,7 @@ use warp_editor::editor::TextDecoration;
 use warp_editor::model::{CoreEditorModel, PlainTextEditorModel};
 use warp_editor::multiline::{AnyMultilineString, LF, MultilineString};
 use warp_editor::render::model::{
-    AutoScrollMode, BlockItem, ColumnUnit, Decoration, LineCount, LineDecoration, RenderEvent,
+    AutoScrollMode, BlockItem, Decoration, LineCount, LineDecoration, RenderEvent,
     RenderLineLocation, RenderState, RichTextStyles, StyleUpdateAction,
     UpdateDecorationAfterLayout, WidthSetting,
 };
@@ -2524,7 +2524,7 @@ impl CodeEditorModel {
             if let Some(existing) = self.selection().as_ref(ctx).goal_xs.as_ref() {
                 existing
                     .iter()
-                    .map(|col| col.as_pixels().as_f32().round() as u32)
+                    .map(|px| px.as_f32().round() as u32)
                     .collect()
             } else {
                 current_selections
@@ -2565,11 +2565,10 @@ impl CodeEditorModel {
         if let Ok(new_selections) = Vec1::try_from_vec(new_selections_vec) {
             self.vim_set_selections(new_selections, AutoScrollBehavior::Selection, ctx);
 
-            // Update goal_xs to the desired columns (stored as ColumnUnit::Pixels for
-            // consistency with the GUI SelectionModel pixel path)
+            // Update goal_xs to the desired columns (stored as pixels for consistency with SelectionModel)
             let goal_pixels: Vec<_> = goal_cols
                 .into_iter()
-                .map(|c| ColumnUnit::Pixels((c as usize).into_pixels()))
+                .map(|c| (c as usize).into_pixels())
                 .collect();
             self.selection().update(ctx, |selection, _| {
                 selection.goal_xs = Vec1::try_from_vec(goal_pixels).ok();
@@ -3887,14 +3886,6 @@ impl CoreEditorModel for CodeEditorModel {
         self.hidden_lines.update(ctx, |hidden_lines_model, ctx| {
             hidden_lines_model.materialize_hidden_range_offsets(buffer_version, ctx);
         });
-        // In TUI char-cell mode the async font-shaping pipeline is bypassed entirely (the
-        // LayoutAction::BufferEdit arm is a no-op for CharCell). We must therefore refresh the
-        // char-cell line index synchronously here so that offset_to_softwrap_point, max_line,
-        // and all cursor-positioning queries see up-to-date data in the same frame.
-        if let Some(char_cell) = self.render_state.as_ref(ctx).char_cell() {
-            let text = self.content.as_ref(ctx).text().into_string();
-            char_cell.update_text(&text);
-        }
     }
 
     fn content(&self) -> &ModelHandle<Buffer> {

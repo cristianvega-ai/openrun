@@ -143,7 +143,6 @@ impl SlashCommandSurfaces {
     pub fn includes(self, settings_mode: SettingsMode) -> bool {
         match settings_mode {
             SettingsMode::Gui => self.supports_gui(),
-            SettingsMode::Tui => self.supports_tui(),
         }
     }
 }
