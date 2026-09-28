@@ -11,6 +11,7 @@ use crate::ai::blocklist::agent_view::agent_input_footer::{
     AgentInputFooter, AgentInputFooterEvent,
 };
 use crate::terminal::cli_agent_sessions::{CLIAgentInputEntrypoint, CLIAgentSessionsModel};
+use crate::terminal::view::cli_agent_footer::{CLIAgentFooter, CLIAgentFooterEvent};
 use crate::util::image::{
     ImageContext, MAX_IMAGE_SIZE_BYTES_FOR_CLI_AGENT, MIME_SNIFF_BYTES, infer_mime_type,
 };
@@ -46,8 +47,6 @@ use warpui::{
 use super::{RichContentInsertionPosition, TerminalAction, TerminalView};
 use crate::ai::blocklist::block::cli_controller::CLISubagentEvent;
 use crate::cmd_or_ctrl_shift;
-use crate::code_review::diff_state::GitDeltaPreference;
-use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
 use crate::server::telemetry::{
     CLIAgentType, CLISubagentControlState, FileTreeSource, TelemetryEvent,
 };
@@ -236,15 +235,6 @@ impl TerminalView {
                 self.input.update(ctx, |input, ctx| {
                     input.insert_into_cli_agent_rich_input(text, ctx);
                 });
-            }
-            UseAgentToolbarEvent::ToggleCodeReviewPane(cli_agent) => {
-                self.toggle_code_review_pane(
-                    GitDeltaPreference::Always,
-                    CodeReviewPaneEntrypoint::CLIAgentView,
-                    Some(*cli_agent),
-                    true, // focus_new_pane
-                    ctx,
-                );
             }
             UseAgentToolbarEvent::ToggleFileExplorer(cli_agent) => {
                 let source = match cli_agent {
@@ -1042,8 +1032,11 @@ pub struct UseAgentToolbar {
     dismiss_button: ViewHandle<ActionButton>,
     dont_show_again_button: ViewHandle<ActionButton>,
 
-    // Shared agent input footer (renders CLI agent mode when a CLI session is active).
+    // Shared agent view footer.
     agent_input_footer: ViewHandle<AgentInputFooter>,
+
+    // Shared CLI agent footer (rendered when a CLI session is active).
+    cli_agent_footer: ViewHandle<CLIAgentFooter>,
 
     // Warpify footer UI (shown when a subshell/SSH command is detected).
     warpify_footer_view: ViewHandle<WarpifyFooterView>,
@@ -1061,6 +1054,7 @@ impl UseAgentToolbar {
         terminal_model: Arc<FairMutex<TerminalModel>>,
         model_event_dispatcher: &ModelHandle<ModelEventDispatcher>,
         agent_input_footer: ViewHandle<AgentInputFooter>,
+        cli_agent_footer: ViewHandle<CLIAgentFooter>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let button_size = ButtonSize::XSmall;
@@ -1114,9 +1108,12 @@ impl UseAgentToolbar {
             .with_size(button_size)
         });
 
-        // Subscribe to agent input footer events to forward CLI-relevant ones.
+        // Subscribe to footer events to forward the ones the terminal view handles.
         ctx.subscribe_to_view(&agent_input_footer, |me, _, event, ctx| {
             me.handle_agent_input_footer_event(event, ctx);
+        });
+        ctx.subscribe_to_view(&cli_agent_footer, |me, _, event, ctx| {
+            me.handle_cli_agent_footer_event(event, ctx);
         });
 
         let warpify_footer_view =
@@ -1149,6 +1146,7 @@ impl UseAgentToolbar {
             dismiss_button,
             dont_show_again_button,
             agent_input_footer,
+            cli_agent_footer,
             warpify_footer_view,
             terminal_model,
             did_user_dismiss: false,
@@ -1160,30 +1158,37 @@ impl UseAgentToolbar {
         event: &AgentInputFooterEvent,
         ctx: &mut ViewContext<Self>,
     ) {
-        // Forward CLI-relevant events from the shared agent input footer.
+        // Other events are handled by Input's subscription, not here.
+        if let AgentInputFooterEvent::ToggleFileExplorer = event {
+            ctx.emit(UseAgentToolbarEvent::ToggleFileExplorer(None));
+        }
+    }
+
+    fn handle_cli_agent_footer_event(
+        &mut self,
+        event: &CLIAgentFooterEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
         match event {
-            AgentInputFooterEvent::WriteToPty(text) => {
+            CLIAgentFooterEvent::WriteToPty(text) => {
                 ctx.emit(UseAgentToolbarEvent::WriteToPty(text.clone()));
             }
-            AgentInputFooterEvent::InsertIntoCLIPty(text) => {
+            CLIAgentFooterEvent::InsertIntoCLIPty(text) => {
                 ctx.emit(UseAgentToolbarEvent::InsertIntoCLIPty(text.clone()));
             }
-            AgentInputFooterEvent::InsertIntoCLIRichInput(text) => {
+            CLIAgentFooterEvent::InsertIntoCLIRichInput(text) => {
                 ctx.emit(UseAgentToolbarEvent::InsertIntoRichInput(text.clone()));
             }
-            AgentInputFooterEvent::ToggleCodeReviewPane(agent) => {
-                ctx.emit(UseAgentToolbarEvent::ToggleCodeReviewPane(*agent));
-            }
-            AgentInputFooterEvent::ToggleFileExplorer(agent) => {
+            CLIAgentFooterEvent::ToggleFileExplorer(agent) => {
                 ctx.emit(UseAgentToolbarEvent::ToggleFileExplorer(*agent));
             }
-            AgentInputFooterEvent::OpenRichInput => {
+            CLIAgentFooterEvent::OpenRichInput => {
                 ctx.emit(UseAgentToolbarEvent::OpenRichInput);
             }
-            AgentInputFooterEvent::HideRichInput => {
+            CLIAgentFooterEvent::HideRichInput => {
                 ctx.emit(UseAgentToolbarEvent::HideRichInput);
             }
-            // Non-CLI events are handled by Input's subscription, not here.
+            // Other events are handled by Input's subscription, not here.
             _ => {}
         }
     }
@@ -1209,6 +1214,7 @@ impl UseAgentToolbar {
     pub(in crate::terminal) fn notify_and_notify_children(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.notify();
         self.agent_input_footer.update(ctx, |_, ctx| ctx.notify());
+        self.cli_agent_footer.update(ctx, |_, ctx| ctx.notify());
         self.warpify_footer_view.update(ctx, |_, ctx| ctx.notify());
         self.button.update(ctx, |_, ctx| ctx.notify());
         self.give_control_back_button
@@ -1268,8 +1274,6 @@ pub enum UseAgentToolbarEvent {
     InsertIntoCLIPty(String),
     /// Insert text into CLI agent rich input.
     InsertIntoRichInput(String),
-    /// Toggle the code review pane (from CLI agent view).
-    ToggleCodeReviewPane(CLIAgent),
     /// Toggle the file explorer. `None` when no CLI agent session is attached
     /// to this pane.
     ToggleFileExplorer(Option<CLIAgent>),
@@ -1308,7 +1312,7 @@ impl View for UseAgentToolbar {
         // Wrap with horizontal padding matching the terminal view padding so the footer
         // aligns consistently with the input context (which inherits terminal padding).
         if self.cli_agent(app).is_some() {
-            let mut container = Container::new(ChildView::new(&self.agent_input_footer).finish())
+            let mut container = Container::new(ChildView::new(&self.cli_agent_footer).finish())
                 .with_horizontal_padding(*super::PADDING_LEFT);
 
             // Apply the alt screen background on this outer container so it covers

@@ -158,7 +158,6 @@ use crate::ai::ambient_agents::telemetry::{CloudAgentTelemetryEvent, CloudModeEn
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use crate::ai::ambient_agents::telemetry::{HandoffEntryPoint, HandoffSurface};
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::agent_view::agent_input_footer::editor::AgentToolbarEditorMode;
 use crate::ai::blocklist::agent_view::editor::{AgentToolbarEditorEvent, AgentToolbarEditorModal};
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use crate::ai::blocklist::handoff::{
@@ -346,6 +345,9 @@ use crate::terminal::shell::ShellType;
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use crate::terminal::view::ambient_agent::AmbientAgentViewModel as HandoffAmbientAgentViewModel;
 use crate::terminal::view::ambient_agent::{AuthSecretFtuxView, AuthSecretFtuxViewEvent};
+use crate::terminal::view::cli_agent_footer::editor::{
+    CLIAgentToolbarEditorEvent, CLIAgentToolbarEditorModal,
+};
 use crate::terminal::view::load_ai_conversation::{
     RestorationDirState, RestoreConversationEntryBehavior, RestoredAIConversation,
 };
@@ -961,6 +963,7 @@ pub struct Workspace {
     workflow_modal: ViewHandle<WorkflowModal>,
     prompt_editor_modal: ViewHandle<PromptEditorModal>,
     agent_toolbar_editor_modal: ViewHandle<AgentToolbarEditorModal>,
+    cli_agent_toolbar_editor_modal: ViewHandle<CLIAgentToolbarEditorModal>,
     header_toolbar_editor_modal: ViewHandle<HeaderToolbarEditorModal>,
     header_toolbar_context_menu: ViewHandle<Menu<WorkspaceAction>>,
     show_header_toolbar_context_menu: Option<Vector2F>,
@@ -1462,6 +1465,16 @@ impl Workspace {
         let modal = ctx.add_typed_action_view(AgentToolbarEditorModal::new);
         ctx.subscribe_to_view(&modal, |me, _, event, ctx| {
             me.handle_agent_toolbar_editor_modal_event(event, ctx);
+        });
+        modal
+    }
+
+    fn build_cli_agent_toolbar_editor_modal(
+        ctx: &mut ViewContext<Self>,
+    ) -> ViewHandle<CLIAgentToolbarEditorModal> {
+        let modal = ctx.add_typed_action_view(CLIAgentToolbarEditorModal::new);
+        ctx.subscribe_to_view(&modal, |me, _, event, ctx| {
+            me.handle_cli_agent_toolbar_editor_modal_event(event, ctx);
         });
         modal
     }
@@ -2763,6 +2776,7 @@ impl Workspace {
 
         let prompt_editor_modal = Self::build_prompt_editor_modal(ctx);
         let agent_toolbar_editor_modal = Self::build_agent_toolbar_editor_modal(ctx);
+        let cli_agent_toolbar_editor_modal = Self::build_cli_agent_toolbar_editor_modal(ctx);
 
         Self::observe_server_api(ctx);
 
@@ -2914,6 +2928,7 @@ impl Workspace {
             cached_keybindings,
             prompt_editor_modal,
             agent_toolbar_editor_modal,
+            cli_agent_toolbar_editor_modal,
             header_toolbar_editor_modal: Self::build_header_toolbar_editor_modal(ctx),
             header_toolbar_context_menu: Self::build_header_toolbar_context_menu(ctx),
             show_header_toolbar_context_menu: None,
@@ -5134,6 +5149,21 @@ impl Workspace {
         match event {
             AgentToolbarEditorEvent::Close => {
                 self.current_workspace_state.is_agent_toolbar_editor_open = false;
+                self.focus_active_tab(ctx);
+                ctx.notify();
+            }
+        }
+    }
+
+    fn handle_cli_agent_toolbar_editor_modal_event(
+        &mut self,
+        event: &CLIAgentToolbarEditorEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        match event {
+            CLIAgentToolbarEditorEvent::Close => {
+                self.current_workspace_state
+                    .is_cli_agent_toolbar_editor_open = false;
                 self.focus_active_tab(ctx);
                 ctx.notify();
             }
@@ -13870,10 +13900,10 @@ impl Workspace {
                 self.open_prompt_editor(PromptEditorOpenSource::InputContextMenu, ctx);
             }
             pane_group::Event::OpenAgentToolbarEditor => {
-                self.open_agent_toolbar_editor(AgentToolbarEditorMode::AgentView, ctx);
+                self.open_agent_toolbar_editor(ctx);
             }
             pane_group::Event::OpenCLIAgentToolbarEditor => {
-                self.open_agent_toolbar_editor(AgentToolbarEditorMode::CLIAgent, ctx);
+                self.open_cli_agent_toolbar_editor(ctx);
             }
             pane_group::Event::OpenMCPSettingsPage { page } => {
                 // Open the MCP servers settings page to the list page
@@ -16406,16 +16436,21 @@ impl Workspace {
         );
     }
 
-    fn open_agent_toolbar_editor(
-        &mut self,
-        mode: AgentToolbarEditorMode,
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn open_agent_toolbar_editor(&mut self, ctx: &mut ViewContext<Self>) {
         self.agent_toolbar_editor_modal
-            .update(ctx, |modal, ctx| modal.open(mode, ctx));
+            .update(ctx, |modal, ctx| modal.open(ctx));
         self.close_all_overlays(ctx);
         self.current_workspace_state.is_agent_toolbar_editor_open = true;
         ctx.focus(&self.agent_toolbar_editor_modal);
+    }
+
+    fn open_cli_agent_toolbar_editor(&mut self, ctx: &mut ViewContext<Self>) {
+        self.cli_agent_toolbar_editor_modal
+            .update(ctx, |modal, ctx| modal.open(ctx));
+        self.close_all_overlays(ctx);
+        self.current_workspace_state
+            .is_cli_agent_toolbar_editor_open = true;
+        ctx.focus(&self.cli_agent_toolbar_editor_modal);
     }
 
     fn open_theme_creator_modal(&mut self, ctx: &mut ViewContext<Self>) {
@@ -20894,10 +20929,10 @@ impl TypedActionView for Workspace {
                 self.open_prompt_editor(*open_source, ctx);
             }
             OpenAgentToolbarEditor => {
-                self.open_agent_toolbar_editor(AgentToolbarEditorMode::AgentView, ctx);
+                self.open_agent_toolbar_editor(ctx);
             }
             OpenCLIAgentToolbarEditor => {
-                self.open_agent_toolbar_editor(AgentToolbarEditorMode::CLIAgent, ctx);
+                self.open_cli_agent_toolbar_editor(ctx);
             }
             OpenHeaderToolbarEditor => {
                 self.open_header_toolbar_editor(ctx);
@@ -22728,6 +22763,13 @@ impl View for Workspace {
 
         if self.current_workspace_state.is_agent_toolbar_editor_open {
             stack.add_child(ChildView::new(&self.agent_toolbar_editor_modal).finish());
+        }
+
+        if self
+            .current_workspace_state
+            .is_cli_agent_toolbar_editor_open
+        {
+            stack.add_child(ChildView::new(&self.cli_agent_toolbar_editor_modal).finish());
         }
 
         if self.current_workspace_state.is_header_toolbar_editor_open {

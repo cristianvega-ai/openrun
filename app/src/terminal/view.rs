@@ -4,6 +4,7 @@ pub mod ambient_agent;
 pub mod block_onboarding;
 pub(crate) mod blocklist_filter;
 mod bookmarks;
+pub mod cli_agent_footer;
 mod context_menu;
 pub mod init;
 pub mod inline_banner;
@@ -160,6 +161,7 @@ use warpui::{
     end_trace_after_next, record_trace_event, windowing,
 };
 
+use self::cli_agent_footer::toolbar_item::CLIAgentToolbarItemKind;
 use self::link_detection::HighlightedLinkOption;
 pub use self::link_detection::{GridHighlightedLink, RichContentLink, RichContentLinkTooltipInfo};
 use super::available_shells::AvailableShell;
@@ -3844,12 +3846,14 @@ impl TerminalView {
 
         let terminal_view_id = ctx.view_id();
         let agent_input_footer = input.as_ref(ctx).agent_input_footer().clone();
+        let cli_agent_footer = input.as_ref(ctx).cli_agent_footer().clone();
         let use_agent_button_bar = ctx.add_typed_action_view(|ctx| {
             UseAgentToolbar::new(
                 terminal_view_id,
                 model.clone(),
                 &model_events_handle,
                 agent_input_footer.clone(),
+                cli_agent_footer.clone(),
                 ctx,
             )
         });
@@ -24019,7 +24023,7 @@ impl TypedActionView for TerminalView {
                 // the regular editor, fall back to the editor-based flow.
                 let has_cli_agent = self.use_agent_footer.as_ref(ctx).has_cli_agent(ctx);
                 if has_cli_agent {
-                    let footer = self.input.as_ref(ctx).agent_input_footer().clone();
+                    let footer = self.input.as_ref(ctx).cli_agent_footer().clone();
                     footer.update(ctx, |footer, ctx| {
                         footer.toggle_cli_voice_input(source, ctx);
                     });
@@ -25654,7 +25658,7 @@ fn is_rich_input_chip_in_cli_toolbar(app: &AppContext) -> bool {
     sel.left_items()
         .iter()
         .chain(sel.right_items().iter())
-        .any(|item| matches!(item, AgentToolbarItemKind::RichInput))
+        .any(|item| matches!(item, CLIAgentToolbarItemKind::RichInput))
 }
 
 /// Maximum pixel width of the back-button label before it ellipsizes

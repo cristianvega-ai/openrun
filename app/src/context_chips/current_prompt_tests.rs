@@ -47,6 +47,7 @@ use crate::terminal::session_settings::{
 };
 use crate::terminal::shell::Shell;
 use crate::terminal::view::PromptPosition;
+use crate::terminal::view::cli_agent_footer::toolbar_item::CLIAgentToolbarItemKind;
 use crate::terminal::{CLIAgent, History};
 #[cfg(feature = "local_fs")]
 use crate::util::git::PrInfo;
@@ -540,10 +541,11 @@ fn test_chips_to_run_only_includes_active_surface_configurations() {
                     .cli_agent_footer_chip_selection
                     .set_value(
                         CLIAgentToolbarChipSelection::Custom {
-                            left: vec![AgentToolbarItemKind::ContextChip(
+                            left: vec![CLIAgentToolbarItemKind::ContextChip(
                                 ContextChipKind::ShellGitBranch,
-                            )],
-                            right: vec![],
+                            )]
+                            .into(),
+                            right: vec![].into(),
                         },
                         ctx,
                     )

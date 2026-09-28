@@ -14,6 +14,9 @@ pub use working_directory_config::*;
 use crate::ai::blocklist::agent_view::toolbar_item::AgentToolbarItemKind;
 use crate::context_chips::ContextChipKind;
 use crate::context_chips::prompt::PromptSelection;
+use crate::terminal::view::cli_agent_footer::toolbar_item::{
+    CLIAgentToolbarItemKind, CLIAgentToolbarItems,
+};
 
 lazy_static! {
     pub static ref DEFAULT_THRESHOLD_FOR_LONG_RUNNING_NOTIFICATION: Duration =
@@ -142,31 +145,44 @@ fn without_retired_items(items: &[AgentToolbarItemKind]) -> Vec<AgentToolbarItem
         .collect()
 }
 
+/// A toolbar item that may be a context chip.
+pub trait ToolbarItem: Clone {
+    fn context_chip_kind(&self) -> Option<&ContextChipKind>;
+}
+
+impl ToolbarItem for AgentToolbarItemKind {
+    fn context_chip_kind(&self) -> Option<&ContextChipKind> {
+        AgentToolbarItemKind::context_chip_kind(self)
+    }
+}
+
+impl ToolbarItem for CLIAgentToolbarItemKind {
+    fn context_chip_kind(&self) -> Option<&ContextChipKind> {
+        CLIAgentToolbarItemKind::context_chip_kind(self)
+    }
+}
+
 /// Shared behavior for toolbar chip selection types.
 /// Each variant stores either a `Default` (resolved via type-specific defaults) or `Custom` left/right item lists.
 pub trait ToolbarChipSelection {
-    fn default_left_items() -> Vec<AgentToolbarItemKind>;
-    fn default_right_items() -> Vec<AgentToolbarItemKind>;
-    fn left_items(&self) -> Vec<AgentToolbarItemKind>;
-    fn right_items(&self) -> Vec<AgentToolbarItemKind>;
+    type Item: ToolbarItem;
+
+    fn default_left_items() -> Vec<Self::Item>;
+    fn default_right_items() -> Vec<Self::Item>;
+    fn left_items(&self) -> Vec<Self::Item>;
+    fn right_items(&self) -> Vec<Self::Item>;
 
     fn left_chips(&self) -> Vec<ContextChipKind> {
         self.left_items()
-            .into_iter()
-            .filter_map(|item| match item {
-                AgentToolbarItemKind::ContextChip(kind) => Some(kind),
-                _ => None,
-            })
+            .iter()
+            .filter_map(|item| item.context_chip_kind().cloned())
             .collect()
     }
 
     fn right_chips(&self) -> Vec<ContextChipKind> {
         self.right_items()
-            .into_iter()
-            .filter_map(|item| match item {
-                AgentToolbarItemKind::ContextChip(kind) => Some(kind),
-                _ => None,
-            })
+            .iter()
+            .filter_map(|item| item.context_chip_kind().cloned())
             .collect()
     }
 
@@ -176,7 +192,7 @@ pub trait ToolbarChipSelection {
         chips
     }
 
-    fn all_items(&self) -> Vec<AgentToolbarItemKind> {
+    fn all_items(&self) -> Vec<Self::Item> {
         let mut items = self.left_items();
         items.extend(self.right_items());
         items
@@ -210,6 +226,8 @@ pub enum AgentToolbarChipSelection {
 }
 
 impl ToolbarChipSelection for AgentToolbarChipSelection {
+    type Item = AgentToolbarItemKind;
+
     fn default_left_items() -> Vec<AgentToolbarItemKind> {
         AgentToolbarItemKind::default_left()
     }
@@ -254,31 +272,33 @@ pub enum CLIAgentToolbarChipSelection {
     Default,
     #[schemars(description = "Use a custom arrangement of toolbar items.")]
     Custom {
-        left: Vec<AgentToolbarItemKind>,
-        right: Vec<AgentToolbarItemKind>,
+        left: CLIAgentToolbarItems,
+        right: CLIAgentToolbarItems,
     },
 }
 
 impl ToolbarChipSelection for CLIAgentToolbarChipSelection {
-    fn default_left_items() -> Vec<AgentToolbarItemKind> {
-        AgentToolbarItemKind::cli_default_left()
+    type Item = CLIAgentToolbarItemKind;
+
+    fn default_left_items() -> Vec<CLIAgentToolbarItemKind> {
+        CLIAgentToolbarItemKind::default_left()
     }
 
-    fn default_right_items() -> Vec<AgentToolbarItemKind> {
-        AgentToolbarItemKind::cli_default_right()
+    fn default_right_items() -> Vec<CLIAgentToolbarItemKind> {
+        CLIAgentToolbarItemKind::default_right()
     }
 
-    fn left_items(&self) -> Vec<AgentToolbarItemKind> {
+    fn left_items(&self) -> Vec<CLIAgentToolbarItemKind> {
         match self {
             Self::Default => Self::default_left_items(),
-            Self::Custom { left, .. } => without_retired_items(left),
+            Self::Custom { left, .. } => left.to_vec(),
         }
     }
 
-    fn right_items(&self) -> Vec<AgentToolbarItemKind> {
+    fn right_items(&self) -> Vec<CLIAgentToolbarItemKind> {
         match self {
             Self::Default => Self::default_right_items(),
-            Self::Custom { right, .. } => without_retired_items(right),
+            Self::Custom { right, .. } => right.to_vec(),
         }
     }
 }

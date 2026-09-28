@@ -14,7 +14,7 @@ use warpui::{
     ViewHandle,
 };
 
-use super::{AgentInputButtonTheme, AmbientAgentViewModel};
+use super::AmbientAgentViewModel;
 use crate::ai::ambient_agents::telemetry::CloudAgentTelemetryEvent;
 use crate::ai::cloud_environments::{
     CloudAmbientAgentEnvironment, CloudEnvironmentCatalog, environment_matches_scope,
@@ -29,6 +29,7 @@ use crate::terminal::input::{
     HandoffComposeState, HandoffComposeStateEvent, MenuPositioning, MenuPositioningProvider,
 };
 use crate::terminal::view::ambient_agent::AmbientAgentViewModelEvent;
+use crate::terminal::view::cli_agent_footer::AgentInputButtonTheme;
 use crate::ui_components::icons::Icon;
 use crate::view_components::action_button::{ActionButton, ActionButtonTheme, ButtonSize};
 use crate::workspaces::user_workspaces::{UserWorkspaces, UserWorkspacesEvent};

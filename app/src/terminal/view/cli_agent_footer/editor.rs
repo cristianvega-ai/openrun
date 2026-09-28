@@ -1,4 +1,4 @@
-//! Modal for customizing the agent input footer chip layout.
+//! Modal for customizing the CLI agent footer chip layout.
 //!
 //! Uses the shared [`ChipConfigurator`] with `LeftRightZones` layout to let users
 //! drag/drop chips between left, right, and unused banks.
@@ -8,7 +8,7 @@ use warp_errors::report_if_error;
 use warpui::keymap::FixedBinding;
 use warpui::{AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext};
 
-use super::toolbar_item::AgentToolbarItemKind;
+use super::toolbar_item::{CLIAgentToolbarItemKind, CLIAgentToolbarItems};
 use crate::Appearance;
 use crate::appearance::AppearanceEvent;
 use crate::chip_configurator::{
@@ -17,28 +17,29 @@ use crate::chip_configurator::{
     render_chip_editor_sections,
 };
 use crate::terminal::session_settings::{
-    AgentToolbarChipSelection, SessionSettings, SessionSettingsChangedEvent, ToolbarChipSelection,
+    CLIAgentToolbarChipSelection, SessionSettings, SessionSettingsChangedEvent,
+    ToolbarChipSelection,
 };
 
-const MODAL_TITLE: &str = "Edit agent toolbelt";
+const MODAL_TITLE: &str = "Edit CLI agent toolbelt";
 
-pub enum AgentToolbarEditorEvent {
+pub enum CLIAgentToolbarEditorEvent {
     Close,
 }
 
-pub struct AgentToolbarEditorModal {
+pub struct CLIAgentToolbarEditorModal {
     mouse_handles: ChipEditorMouseHandles,
     chip_configurator: ChipConfigurator,
     is_dirty: bool,
 }
 
-pub struct AgentToolbarInlineEditor {
+pub struct CLIAgentToolbarInlineEditor {
     mouse_handles: ChipEditorMouseHandles,
     chip_configurator: ChipConfigurator,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum AgentToolbarEditorAction {
+pub enum CLIAgentToolbarEditorAction {
     Cancel,
     Save,
     Chip(ChipConfiguratorAction),
@@ -48,7 +49,7 @@ pub enum AgentToolbarEditorAction {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum AgentToolbarInlineEditorAction {
+pub enum CLIAgentToolbarInlineEditorAction {
     Chip(ChipConfiguratorAction),
     ResetDefault,
     /// Dummy action used as on_click for chip bank clicks (no-op).
@@ -61,19 +62,18 @@ fn open_toolbar_items_from_settings<V: View>(
 ) {
     let appearance = Appearance::as_ref(ctx);
     let selection = SessionSettings::as_ref(ctx)
-        .agent_footer_chip_selection
+        .cli_agent_footer_chip_selection
         .clone();
 
     // Filter out items that are unavailable due to runtime state (user settings,
-    // workspace config, etc.) on top of the feature-flag checks in all_available().
-    let available: Vec<AgentToolbarItemKind> = AgentToolbarItemKind::all_available()
+    // workspace config, etc.).
+    let available: Vec<CLIAgentToolbarItemKind> = CLIAgentToolbarItemKind::all_available()
         .into_iter()
         .filter(|item| item.is_available(ctx))
         .collect();
 
-    // Drop saved items that are no longer available (e.g. their feature flag was disabled
-    // or a setting was turned off).
-    let filter_unavailable = |items: Vec<AgentToolbarItemKind>| -> Vec<AgentToolbarItemKind> {
+    // Drop saved items that are no longer available (e.g. a setting was turned off).
+    let filter_unavailable = |items: Vec<CLIAgentToolbarItemKind>| -> Vec<CLIAgentToolbarItemKind> {
         items
             .into_iter()
             .filter(|item| available.contains(item))
@@ -95,33 +95,55 @@ fn open_default_toolbar_items<V: View>(
     ctx: &mut ViewContext<V>,
 ) {
     let appearance = Appearance::as_ref(ctx);
-    let filter_runtime = |items: Vec<AgentToolbarItemKind>| -> Vec<AgentToolbarItemKind> {
+    let filter_runtime = |items: Vec<CLIAgentToolbarItemKind>| -> Vec<CLIAgentToolbarItemKind> {
         items
             .into_iter()
             .filter(|item| item.is_available(ctx))
             .collect()
     };
-    let left = filter_runtime(AgentToolbarItemKind::default_left());
-    let right = filter_runtime(AgentToolbarItemKind::default_right());
-    let available = filter_runtime(AgentToolbarItemKind::all_available());
+    let left = filter_runtime(CLIAgentToolbarItemKind::default_left());
+    let right = filter_runtime(CLIAgentToolbarItemKind::default_right());
+    let available = filter_runtime(CLIAgentToolbarItemKind::all_available());
     chip_configurator.open_left_right_zones_with_items(left, right, available, appearance);
 }
 
 fn is_toolbar_editor_at_defaults(chip_configurator: &ChipConfigurator) -> bool {
-    let left: Vec<AgentToolbarItemKind> = chip_configurator.left_item_kinds();
-    let right: Vec<AgentToolbarItemKind> = chip_configurator.right_item_kinds();
+    let left: Vec<CLIAgentToolbarItemKind> = chip_configurator.left_item_kinds();
+    let right: Vec<CLIAgentToolbarItemKind> = chip_configurator.right_item_kinds();
     toolbar_items_match_defaults(&left, &right)
 }
 
 fn toolbar_items_match_defaults(
-    left: &[AgentToolbarItemKind],
-    right: &[AgentToolbarItemKind],
+    left: &[CLIAgentToolbarItemKind],
+    right: &[CLIAgentToolbarItemKind],
 ) -> bool {
-    AgentToolbarItemKind::default_left().as_slice() == left
-        && AgentToolbarItemKind::default_right().as_slice() == right
+    CLIAgentToolbarItemKind::default_left().as_slice() == left
+        && CLIAgentToolbarItemKind::default_right().as_slice() == right
 }
 
-impl AgentToolbarInlineEditor {
+fn save_toolbar_selection<V: View>(
+    left: Vec<CLIAgentToolbarItemKind>,
+    right: Vec<CLIAgentToolbarItemKind>,
+    ctx: &mut ViewContext<V>,
+) {
+    let selection = if toolbar_items_match_defaults(&left, &right) {
+        CLIAgentToolbarChipSelection::Default
+    } else {
+        CLIAgentToolbarChipSelection::Custom {
+            left: CLIAgentToolbarItems::from(left),
+            right: CLIAgentToolbarItems::from(right),
+        }
+    };
+    SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
+        report_if_error!(
+            settings
+                .cli_agent_footer_chip_selection
+                .set_value(selection, ctx)
+        );
+    });
+}
+
+impl CLIAgentToolbarInlineEditor {
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
         let mut editor = Self {
             mouse_handles: Default::default(),
@@ -130,12 +152,11 @@ impl AgentToolbarInlineEditor {
         editor.reset_from_settings(ctx);
 
         ctx.subscribe_to_model(&SessionSettings::handle(ctx), |me, _, event, ctx| {
-            let should_refresh = matches!(
+            if matches!(
                 event,
-                SessionSettingsChangedEvent::AgentToolbarChipSelectionSetting { .. }
-            );
-
-            if should_refresh && me.chip_configurator.current_dragging_state.is_none() {
+                SessionSettingsChangedEvent::CLIAgentToolbarChipSelectionSetting { .. }
+            ) && me.chip_configurator.current_dragging_state.is_none()
+            {
                 me.reset_from_settings(ctx);
                 ctx.notify();
             }
@@ -172,12 +193,12 @@ impl AgentToolbarInlineEditor {
     }
 }
 
-impl Entity for AgentToolbarInlineEditor {
+impl Entity for CLIAgentToolbarInlineEditor {
     type Event = ();
 }
 
-impl TypedActionView for AgentToolbarInlineEditor {
-    type Action = AgentToolbarInlineEditorAction;
+impl TypedActionView for CLIAgentToolbarInlineEditor {
+    type Action = CLIAgentToolbarInlineEditorAction;
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
@@ -200,9 +221,9 @@ impl TypedActionView for AgentToolbarInlineEditor {
     }
 }
 
-impl View for AgentToolbarInlineEditor {
+impl View for CLIAgentToolbarInlineEditor {
     fn ui_name() -> &'static str {
-        "AgentToolbarInlineEditor"
+        "CLIAgentToolbarInlineEditor"
     }
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
@@ -212,9 +233,9 @@ impl View for AgentToolbarInlineEditor {
             ChipEditorSectionsConfig {
                 available_section_label: "Available chips",
                 is_at_defaults: self.is_at_defaults(),
-                reset_action: AgentToolbarInlineEditorAction::ResetDefault,
-                activate_action: AgentToolbarInlineEditorAction::Activate,
-                chip_action_wrapper: AgentToolbarInlineEditorAction::Chip,
+                reset_action: CLIAgentToolbarInlineEditorAction::ResetDefault,
+                activate_action: CLIAgentToolbarInlineEditorAction::Activate,
+                chip_action_wrapper: CLIAgentToolbarInlineEditorAction::Chip,
                 mouse_handles: &self.mouse_handles,
             },
             appearance,
@@ -227,31 +248,12 @@ pub fn init(app: &mut AppContext) {
 
     app.register_fixed_bindings([FixedBinding::new(
         "escape",
-        AgentToolbarEditorAction::Cancel,
-        id!(AgentToolbarEditorModal::ui_name()),
+        CLIAgentToolbarEditorAction::Cancel,
+        id!(CLIAgentToolbarEditorModal::ui_name()),
     )]);
 }
 
-fn save_toolbar_selection<V: View>(
-    left: Vec<AgentToolbarItemKind>,
-    right: Vec<AgentToolbarItemKind>,
-    ctx: &mut ViewContext<V>,
-) {
-    let selection = if toolbar_items_match_defaults(&left, &right) {
-        AgentToolbarChipSelection::Default
-    } else {
-        AgentToolbarChipSelection::Custom { left, right }
-    };
-    SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
-        report_if_error!(
-            settings
-                .agent_footer_chip_selection
-                .set_value(selection, ctx)
-        );
-    });
-}
-
-impl AgentToolbarEditorModal {
+impl CLIAgentToolbarEditorModal {
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
         // Chip colors are derived from the theme, so rebuild the chips when the
         // theme changes to keep an open editor readable after a theme switch.
@@ -293,24 +295,28 @@ impl AgentToolbarEditorModal {
         self.chip_configurator.reset();
         self.is_dirty = false;
     }
+
+    fn is_at_defaults(&self) -> bool {
+        is_toolbar_editor_at_defaults(&self.chip_configurator)
+    }
 }
 
-impl Entity for AgentToolbarEditorModal {
-    type Event = AgentToolbarEditorEvent;
+impl Entity for CLIAgentToolbarEditorModal {
+    type Event = CLIAgentToolbarEditorEvent;
 }
 
-impl TypedActionView for AgentToolbarEditorModal {
-    type Action = AgentToolbarEditorAction;
+impl TypedActionView for CLIAgentToolbarEditorModal {
+    type Action = CLIAgentToolbarEditorAction;
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
             Self::Action::Cancel => {
                 self.reset();
-                ctx.emit(AgentToolbarEditorEvent::Close);
+                ctx.emit(CLIAgentToolbarEditorEvent::Close);
             }
             Self::Action::Save => {
                 self.save_to_settings(ctx);
-                ctx.emit(AgentToolbarEditorEvent::Close);
+                ctx.emit(CLIAgentToolbarEditorEvent::Close);
             }
             Self::Action::Chip(chip_action) => {
                 let mutated = self.chip_configurator.handle_action(chip_action, ctx);
@@ -331,15 +337,9 @@ impl TypedActionView for AgentToolbarEditorModal {
     }
 }
 
-impl AgentToolbarEditorModal {
-    fn is_at_defaults(&self) -> bool {
-        is_toolbar_editor_at_defaults(&self.chip_configurator)
-    }
-}
-
-impl View for AgentToolbarEditorModal {
+impl View for CLIAgentToolbarEditorModal {
     fn ui_name() -> &'static str {
-        "AgentToolbarEditorModal"
+        "CLIAgentToolbarEditorModal"
     }
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
@@ -351,11 +351,11 @@ impl View for AgentToolbarEditorModal {
                 available_section_label: "Available chips",
                 is_at_defaults: self.is_at_defaults(),
                 is_dirty: self.is_dirty,
-                cancel_action: AgentToolbarEditorAction::Cancel,
-                save_action: AgentToolbarEditorAction::Save,
-                reset_action: AgentToolbarEditorAction::ResetDefault,
-                activate_action: AgentToolbarEditorAction::Activate,
-                chip_action_wrapper: AgentToolbarEditorAction::Chip,
+                cancel_action: CLIAgentToolbarEditorAction::Cancel,
+                save_action: CLIAgentToolbarEditorAction::Save,
+                reset_action: CLIAgentToolbarEditorAction::ResetDefault,
+                activate_action: CLIAgentToolbarEditorAction::Activate,
+                chip_action_wrapper: CLIAgentToolbarEditorAction::Chip,
                 mouse_handles: &self.mouse_handles,
             },
             appearance,

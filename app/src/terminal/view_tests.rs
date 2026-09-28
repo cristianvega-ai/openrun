@@ -2354,9 +2354,8 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
 fn unregister_cli_agent_session_restores_unlocked_input_config() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        // The CLI agent toolbar and input mode policy in `app/src/ai` still read these flags.
+        // The AI input model in `app/src/ai` still reads this flag.
         let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-        let _cli_agent_rich_input = FeatureFlag::CLIAgentRichInput.override_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
 
@@ -8472,9 +8471,6 @@ fn submit_with_plugin_but_auto_toggle_off_respects_auto_dismiss() {
 fn status_blocked_auto_closes_rich_input() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        // The CLI agent toolbar and input mode policy in `app/src/ai` still read these flags.
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-        let _cli_rich = FeatureFlag::CLIAgentRichInput.override_enabled(true);
         // auto_toggle_rich_input defaults to true.
 
         let terminal = add_window_with_terminal(&mut app, None);
@@ -8551,9 +8547,6 @@ fn status_blocked_auto_closes_rich_input() {
 fn status_in_progress_auto_opens_rich_input_after_blocked() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        // The CLI agent toolbar and input mode policy in `app/src/ai` still read these flags.
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
-        let _cli_rich = FeatureFlag::CLIAgentRichInput.override_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
 

@@ -8,9 +8,10 @@ use enum_iterator::all;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use regex::Regex;
 use settings::{Setting, ToggleableSetting};
+use warp_core::ui::theme::color::internal_colors;
 use warp_errors::report_if_error;
 use warpui::elements::{
-    ChildView, Container, CornerRadius, CrossAxisAlignment, Element, Empty, Flex,
+    ChildView, Container, CornerRadius, CrossAxisAlignment, Element, Empty, Fill, Flex,
     FormattedTextElement, HighlightedHyperlink, MainAxisAlignment, MainAxisSize, MouseStateHandle,
     ParentElement, Radius, Shrinkable,
 };
@@ -21,23 +22,18 @@ use warpui::{
     Action, AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle, id,
 };
 
-use super::ai_shared::{
-    render_ai_feature_switch, render_ai_setting_toggle, render_toolbar_layout_editor, styles,
-    update_editor_interaction_state,
-};
 use super::settings_page::{
     AdditionalInfo, CONTENT_FONT_SIZE, MatchData, PageTitle, PageType, SettingsPageMeta,
     SettingsPageViewHandle, SettingsWidget, ToggleState, build_toggle_element,
     render_body_item_label,
 };
 use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, flags};
-use crate::ai::blocklist::agent_view::agent_input_footer::editor::{
-    AgentToolbarEditorMode, AgentToolbarInlineEditor,
-};
 use crate::appearance::Appearance;
+use crate::editor::{EditorView, InteractionState};
 use crate::menu::{MenuItem, MenuItemFields};
 use crate::settings::{CLIAgentSettings, CLIAgentSettingsChangedEvent};
 use crate::terminal::CLIAgent;
+use crate::terminal::view::cli_agent_footer::editor::CLIAgentToolbarInlineEditor;
 use crate::util::bindings;
 use crate::view_components::dropdown::DropdownAction;
 use crate::view_components::{Dropdown, SubmittableTextInput, SubmittableTextInputEvent};
@@ -45,12 +41,149 @@ use crate::{TelemetryEvent, send_telemetry_from_ctx};
 
 const PAGE_TITLE: &str = "Third party CLI agents";
 
+fn update_editor_interaction_state<V: View>(
+    editor: ViewHandle<EditorView>,
+    is_enabled: bool,
+    ctx: &mut ViewContext<V>,
+) {
+    editor.update(ctx, |editor, ctx| {
+        let interaction_state = if is_enabled {
+            InteractionState::Editable
+        } else {
+            InteractionState::Disabled
+        };
+        editor.set_interaction_state(interaction_state, ctx);
+        ctx.notify();
+    })
+}
+
+/// The "Toolbar layout" chip editor.
+fn render_toolbar_layout_editor(
+    editor: &ViewHandle<CLIAgentToolbarInlineEditor>,
+    appearance: &Appearance,
+) -> Box<dyn Element> {
+    let label = Container::new(
+        appearance
+            .ui_builder()
+            .span("Toolbar layout".to_string())
+            .with_style(UiComponentStyles {
+                font_size: Some(CONTENT_FONT_SIZE),
+                ..Default::default()
+            })
+            .build()
+            .finish(),
+    )
+    .with_margin_bottom(4.)
+    .finish();
+    let editor = Container::new(ChildView::new(editor).finish())
+        .with_margin_bottom(16.)
+        .finish();
+
+    Flex::column().with_child(label).with_child(editor).finish()
+}
+
+/// A settings row: label on the left, switch on the right.
+fn render_ai_setting_toggle(
+    label: impl Into<String>,
+    action: impl Action + Clone,
+    is_setting_enabled: bool,
+    is_setting_toggleable: bool,
+    switch_state: SwitchStateHandle,
+    app: &AppContext,
+) -> Box<dyn Element> {
+    let appearance = Appearance::as_ref(app);
+    build_toggle_element(
+        render_body_item_label::<SettingsAction>(
+            label.into(),
+            Some(styles::header_font_color(is_setting_toggleable, app)),
+            None,
+            ToggleState::Enabled,
+            appearance,
+        ),
+        render_ai_feature_switch(
+            switch_state,
+            is_setting_enabled,
+            is_setting_toggleable,
+            action,
+            app,
+        ),
+        appearance,
+        None,
+    )
+}
+
+fn render_ai_feature_switch(
+    state_handle: SwitchStateHandle,
+    is_setting_enabled: bool,
+    is_setting_toggleable: bool,
+    toggle_action: impl Action + Clone,
+    app: &AppContext,
+) -> Box<dyn Element> {
+    let appearance = Appearance::as_ref(app);
+    let ui_builder = appearance.ui_builder();
+    ui_builder
+        .switch(state_handle)
+        .check(is_setting_enabled)
+        .with_disabled(!is_setting_toggleable)
+        .with_disabled_styles(UiComponentStyles {
+            background: Some(Fill::Solid(internal_colors::neutral_4(appearance.theme()))),
+            foreground: Some(Fill::Solid(internal_colors::neutral_5(appearance.theme()))),
+            ..Default::default()
+        })
+        .build()
+        .on_click(move |ctx, _, _| {
+            if !is_setting_toggleable {
+                return;
+            }
+            ctx.dispatch_typed_action(toggle_action.clone());
+        })
+        .finish()
+}
+
+mod styles {
+    use warp_core::ui::appearance::Appearance;
+    use warp_core::ui::theme::Fill;
+    use warpui::{AppContext, SingletonEntity};
+
+    /// Negative margin applied to description text so it appears closer to the main settings option
+    /// text.
+    pub const DESCRIPTION_NEGATIVE_MARGIN_OFFSET: f32 = -12.;
+
+    /// The space between a description and the next toggle.
+    pub const DESCRIPTION_MARGIN_BOTTOM: f32 = 12.;
+
+    /// Margin to leave for switch toggle to the right of the description subtext.
+    pub const TOGGLE_WIDTH_MARGIN: f32 = 48.;
+
+    pub fn header_font_color(is_enabled_setting: bool, app: &AppContext) -> Fill {
+        let appearance = Appearance::as_ref(app);
+        if is_enabled_setting {
+            appearance
+                .theme()
+                .main_text_color(appearance.theme().surface_2())
+        } else {
+            appearance.theme().disabled_ui_text_color()
+        }
+    }
+
+    pub fn description_font_color(is_enabled_setting: bool, app: &AppContext) -> Fill {
+        let appearance = Appearance::as_ref(app);
+        if is_enabled_setting {
+            appearance
+                .theme()
+                .sub_text_color(appearance.theme().surface_1())
+        } else {
+            appearance.theme().disabled_ui_text_color()
+        }
+    }
+}
+
 pub struct CLIAgentsPageView {
     page: PageType<Self>,
     cli_agent_footer_command_editor: ViewHandle<SubmittableTextInput>,
     cli_agent_footer_command_mouse_state_handles: Vec<MouseStateHandle>,
     cli_agent_footer_command_agent_dropdowns: Vec<ViewHandle<Dropdown<CLIAgentsPageAction>>>,
-    cli_agent_toolbar_inline_editor: ViewHandle<AgentToolbarInlineEditor>,
+    cli_agent_toolbar_inline_editor: ViewHandle<CLIAgentToolbarInlineEditor>,
 }
 
 impl CLIAgentsPageView {
@@ -85,9 +218,8 @@ impl CLIAgentsPageView {
             .map(|_| Default::default())
             .collect();
 
-        let cli_agent_toolbar_inline_editor = ctx.add_typed_action_view(|ctx| {
-            AgentToolbarInlineEditor::new(AgentToolbarEditorMode::CLIAgent, ctx)
-        });
+        let cli_agent_toolbar_inline_editor =
+            ctx.add_typed_action_view(CLIAgentToolbarInlineEditor::new);
 
         ctx.subscribe_to_model(&CLIAgentSettings::handle(ctx), |me, _, event, ctx| {
             // Adding or removing a command changes the length of the command

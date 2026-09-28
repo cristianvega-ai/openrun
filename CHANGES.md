@@ -54,6 +54,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [AI gates removed from CLI-agent support](#ai-gates-removed-from-cli-agent-support) — the CLI agents settings page, Rich Input auto-open/auto-toggle and Rich Input image paste no longer depend on AI being enabled
 - [Accounts: login, sign-up and SSO](#accounts-login-sign-up-and-sso) — removed every login, sign-up, SSO, web-handoff, paste-token and reauth flow and the Account page; the app is permanently in the no-account state and deletes the previously stored credential once
 - [Rules, facts, memory and saved prompts](#rules-facts-memory-and-saved-prompts) — removed the AI Rules (Knowledge) pane and settings page, agent memory and rule suggestions, saved prompts (Agent Mode workflows) and their slash commands, menus, panes and modals
+- [CLI-agent footer split out of the agent footer](#cli-agent-footer-split-out-of-the-agent-footer) — the third-party CLI agent toolbar is now its own `CLIAgentFooter` view in `terminal/view/cli_agent_footer/`, with its own item type, layout editor and lenient stored-layout parsing
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1439,3 +1440,31 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for AI-13/AI-22: the `WarpDriveContextEnabled` setting (`agents.knowledge.warp_drive_context_enabled`) and the `warp_drive_context_enabled` request field; its page went with Knowledge.
 - Left for TEL-4: telemetry variants whose callers are gone (`KnowledgePaneOpened`/`KnowledgePaneEntrypoint`, `AISuggestedRule*`, `*SuggestedAgentModeWorkflow*`, `ExecutedWarpDrivePrompt`, `SlashCommandAccepted` details).
 - Left for AI-12: `Prompt::SavedPrompt` and `--saved-prompt` in `crates/warp_cli` and `ai/agent_sdk`. Left for AI-29: `Suggestions`, `SuggestedRule`, `SuggestedAgentModeWorkflow` in `ai/agent`, and `Conversation::dismiss_current_suggestions`. Left for FLAGS-1: `FeatureFlag::{AIRules, SuggestedRules, SuggestedAgentModeWorkflows, AgentModeWorkflows, KnowledgeSidebar}`.
+
+## CLI-agent footer split out of the agent footer
+**Why:** The toolbar shown under a running third-party CLI agent (Claude Code, Codex, Gemini CLI, OpenCode) was the CLI mode of `AgentInputFooter`, which is Warp's own agent-view footer and is deleted with the agent view. The CLI toolbar had to stand on its own first so the later AI tasks can delete the agent footer and the voice, credits and plugin code around it.
+
+**Removed:**
+- The CLI mode of `AgentInputFooter` (`ai/blocklist/agent_view/agent_input_footer/`): the CLI buttons and plugin chips, the CLI display chips, the CLI voice flow, `render_cli_mode_footer`, and the CLI actions and events. The footer is agent-view only now; AI-27 deletes it.
+- `AgentToolbarItemKind::{RichInput, Settings}`, `ToolbarAvailability`, `available_in`, `cli_default_left`/`cli_default_right`, `all_available_for_cli_input` and `defaults_for_mode`, and `AgentToolbarEditorMode`.
+- The cloud-routing indicators (live cloud session, new cloud VM) that the CLI footer showed for a third-party agent running in a cloud session, and their four tests. Cloud agents are removed by AI-17 and AI-19.
+- The `ToggleCodeReview` footer action and `UseAgentToolbarEvent::ToggleCodeReviewPane`. No control dispatched them.
+- The `FeatureFlag::AgentView` and `CLIAgentRichInput` overrides in `status_blocked_auto_closes_rich_input` and `status_in_progress_auto_opens_rich_input_after_blocked`, and the `CLIAgentRichInput` override in `unregister_cli_agent_session_restores_unlocked_input_config`. Nothing on the CLI path reads `CLIAgentRichInput` any more.
+
+**Modified:**
+- New `terminal/view/cli_agent_footer/` with the `CLIAgentFooter` view: the agent icon, context chips, Rich Input toggle, attach file (and the picked-path insertion), file explorer, settings, the plugin install/update chips (`plugin_chip.rs`), and the CLI voice flow (`voice.rs`, behind the `voice_input` feature). `Input` owns one shared `CLIAgentFooter` beside the agent footer and renders it under the Rich Input composer; `UseAgentToolbar` renders it under the running command and forwards its events. `Input::attach_file`, chip-menu focus routing and the session-context and repo-path updates reach both footers.
+- `CLIAgentToolbarItemKind` (`cli_agent_footer/toolbar_item.rs`) replaces `AgentToolbarItemKind` in the CLI layout. Serde names are unchanged and the `ImageAttach` alias stays. `CLIAgentToolbarChipSelection::Custom` holds `CLIAgentToolbarItems`, which skips entries that no longer parse instead of rejecting the whole saved layout (both the serde path and the settings-file path). Layouts saved with `ModelSelector`, `NLDToggle`, `ShareSession` or any other removed item now load with those items dropped. The `agents.third_party.cli_agent_toolbar_chip_selection_setting` key and the `CLIAgentToolbarChipSelectionSetting` type name are unchanged.
+- `ToolbarChipSelection` gained an associated `Item` type; `chip_configurator` no longer knows any item type. Editors implement `ConfigurableToolbarItem` (label, icon, context chip) and controls round-trip through their serialized form.
+- The CLI layout editors moved to `cli_agent_footer/editor.rs` (`CLIAgentToolbarEditorModal`, `CLIAgentToolbarInlineEditor`). The workspace has a second modal and an `is_cli_agent_toolbar_editor_open` state for it. The agent-view editor keeps only its own mode.
+- `AgentInputButtonTheme` and `ActiveMicButtonTheme` moved to the CLI footer module. The cloud-agent selectors and the agent footer import them from there.
+- `settings_view/cli_agents_page.rs` no longer depends on `ai_shared.rs`: it carries its own toggle, switch, description-style and toolbar-editor helpers.
+- `terminal/view.rs`: `is_rich_input_chip_in_cli_toolbar` reads `CLIAgentToolbarItemKind`.
+
+**User-visible impact:** None for the CLI toolbar, Rich Input and the plugin chips. Stored CLI toolbar layouts that mention removed items keep working. The "third-party agent running in a cloud session" indicator no longer appears (cloud agents are removed).
+
+**Notes:**
+- `AgentToolbarItemKind::{NLDToggle, ShareSession}` and the `without_retired_items` shim stay for the agent-view layout only; they go with `AgentToolbarItemKind` in AI-27.
+- Voice input stays in the CLI footer (`voice.rs`, `VoiceInput` item, `ToggleCLIAgentVoiceInput`); AI-13 deletes it.
+- The plugin install/update chips and `write_install_log` are unchanged apart from moving; SWP-09 removes them.
+- The `AgentView` overrides in `unregister_cli_agent_session_restores_unlocked_input_config` and `input_tests.rs::test_shell_lock_respected_when_slash_command_typed` stay: both exercise `ai/blocklist/input_model.rs`, which AI-26 owns.
+- The CLI footer's chips take their `DisplayChipConfig` from `Input` without the ambient-agent model, since cloud sessions are going away.

@@ -81,7 +81,7 @@ impl Input {
         column.add_child(editor_element);
         column.add_child(
             SavePosition::new(
-                Container::new(ChildView::new(&self.agent_input_footer).finish())
+                Container::new(ChildView::new(&self.cli_agent_footer).finish())
                     .with_padding_right(*TERMINAL_VIEW_PADDING_LEFT)
                     .finish(),
                 &self.prompt_save_position_id(),
@@ -155,7 +155,7 @@ impl Input {
     ///
     /// This mirrors the contrast-adjustment pattern used for the use-agent
     /// toolbar button text (see `AgentFooterButtonTheme::text_color`) and the
-    /// CLI agent brand icon in `AgentInputFooter::render_cli_mode_footer`.
+    /// CLI agent brand icon in `CLIAgentFooter`.
     pub(super) fn update_cli_agent_editor_text_colors(&mut self, ctx: &mut ViewContext<Self>) {
         let appearance = Appearance::as_ref(ctx);
         let default_colors = TextColors::from_appearance(appearance);

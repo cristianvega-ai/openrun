@@ -11,6 +11,8 @@ pub(crate) use modal_shell::{
 };
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::vec2f;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use warp_core::ui::theme::Fill;
 use warpui::elements::{
     Border, ConstrainedBox, Container, CrossAxisAlignment, Dash, DispatchEventResult, Draggable,
@@ -22,7 +24,6 @@ use warpui::platform::Cursor;
 use warpui::ui_components::components::UiComponent;
 use warpui::{Action, View, ViewContext};
 
-use crate::ai::blocklist::agent_view::toolbar_item::AgentToolbarItemKind;
 use crate::appearance::Appearance;
 use crate::context_chips::display_chip::{chip_container, udi_font_size};
 use crate::context_chips::renderer::{ChipDragState, Renderer as ContextChipRenderer};
@@ -41,27 +42,46 @@ pub enum ConfigurableItem {
     Control(ControlItemRenderer),
 }
 
+/// A toolbar item that can be arranged in a `LeftRightZones` configurator.
+///
+/// Context chips are rendered as real chips; every other variant is rendered
+/// as a labeled control and round-trips through its serialized form.
+pub trait ConfigurableToolbarItem: Clone + PartialEq + Serialize + DeserializeOwned {
+    fn from_context_chip(kind: ContextChipKind) -> Self;
+    fn context_chip_kind(&self) -> Option<&ContextChipKind>;
+    fn display_label(&self) -> &'static str;
+    fn icon(&self) -> Option<icons::Icon>;
+}
+
 impl ConfigurableItem {
-    pub fn from_toolbar_item(kind: AgentToolbarItemKind, appearance: &Appearance) -> Option<Self> {
-        match kind {
-            AgentToolbarItemKind::ContextChip(chip_kind) => {
-                ContextChipRenderer::default_from_kind_with_agent_view(
-                    chip_kind,
-                    ChipAvailability::Enabled,
-                    true,
-                    appearance,
-                )
-                .map(Box::new)
-                .map(Self::ContextChip)
-            }
-            control => Some(Self::Control(ControlItemRenderer::new(control))),
+    fn from_toolbar_item<K: ConfigurableToolbarItem>(
+        kind: K,
+        appearance: &Appearance,
+    ) -> Option<Self> {
+        if let Some(chip_kind) = kind.context_chip_kind() {
+            return ContextChipRenderer::default_from_kind_with_agent_view(
+                chip_kind.clone(),
+                ChipAvailability::Enabled,
+                true,
+                appearance,
+            )
+            .map(Box::new)
+            .map(Self::ContextChip);
         }
+        let id = serde_json::to_string(&kind).expect("toolbar item kinds are serializable");
+        Some(Self::Control(
+            ControlItemRenderer::new_with_label_and_icon(
+                kind.display_label().to_string(),
+                kind.icon(),
+            )
+            .with_identifier(id),
+        ))
     }
 
-    pub fn item_kind(&self) -> Option<AgentToolbarItemKind> {
+    fn toolbar_item<K: ConfigurableToolbarItem>(&self) -> Option<K> {
         match self {
-            Self::ContextChip(r) => Some(AgentToolbarItemKind::ContextChip(r.chip_kind().clone())),
-            Self::Control(r) => r.kind.clone(),
+            Self::ContextChip(r) => Some(K::from_context_chip(r.chip_kind().clone())),
+            Self::Control(r) => serde_json::from_str(r.identifier()?).ok(),
         }
     }
 
@@ -121,11 +141,10 @@ impl ConfigurableItem {
 /// voice input, image attach, file explorer, view changes, compose, etc.)
 /// inside the configurator.
 pub struct ControlItemRenderer {
-    kind: Option<AgentToolbarItemKind>,
-    custom_label: Option<String>,
-    custom_icon: Option<crate::ui_components::icons::Icon>,
+    label: String,
+    icon: Option<crate::ui_components::icons::Icon>,
     /// An opaque string identifier for round-tripping items through the configurator.
-    /// Used by the header toolbar editor to recover the `HeaderToolbarItemKind`.
+    /// Used by the toolbar editors to recover their item kind.
     identifier: Option<String>,
     removable: bool,
     draggable_state: DraggableState,
@@ -134,24 +153,13 @@ pub struct ControlItemRenderer {
 }
 
 impl ControlItemRenderer {
-    pub fn new(kind: AgentToolbarItemKind) -> Self {
+    pub fn new_with_label_and_icon(
+        label: String,
+        icon: Option<crate::ui_components::icons::Icon>,
+    ) -> Self {
         Self {
-            kind: Some(kind),
-            custom_label: None,
-            custom_icon: None,
-            identifier: None,
-            removable: true,
-            draggable_state: Default::default(),
-            tooltip_state_handle: Default::default(),
-            remove_button_state_handle: Default::default(),
-        }
-    }
-
-    pub fn new_with_label_and_icon(label: String, icon: crate::ui_components::icons::Icon) -> Self {
-        Self {
-            kind: None,
-            custom_label: Some(label),
-            custom_icon: Some(icon),
+            label,
+            icon,
             identifier: None,
             removable: true,
             draggable_state: Default::default(),
@@ -197,21 +205,11 @@ impl ControlItemRenderer {
     }
 
     pub(crate) fn display_label(&self) -> &str {
-        if let Some(label) = &self.custom_label {
-            label
-        } else if let Some(kind) = &self.kind {
-            kind.display_label()
-        } else {
-            "Unknown"
-        }
+        &self.label
     }
 
     fn display_icon(&self) -> Option<crate::ui_components::icons::Icon> {
-        if let Some(icon) = self.custom_icon {
-            Some(icon)
-        } else {
-            self.kind.as_ref().and_then(|k| k.icon())
-        }
+        self.icon
     }
 
     fn render_internal(
@@ -381,12 +379,12 @@ impl ChipConfigurator {
             .collect();
     }
 
-    /// Initialize for `LeftRightZones` layout with `AgentToolbarItemKind` lists.
-    pub fn open_left_right_zones_with_items(
+    /// Initialize for `LeftRightZones` layout with toolbar item lists.
+    pub fn open_left_right_zones_with_items<K: ConfigurableToolbarItem>(
         &mut self,
-        left_items: Vec<AgentToolbarItemKind>,
-        right_items: Vec<AgentToolbarItemKind>,
-        available: Vec<AgentToolbarItemKind>,
+        left_items: Vec<K>,
+        right_items: Vec<K>,
+        available: Vec<K>,
         appearance: &Appearance,
     ) {
         self.reset();
@@ -430,17 +428,17 @@ impl ChipConfigurator {
             || !self.unused_chips.is_empty()
     }
 
-    pub fn left_item_kinds(&self) -> Vec<AgentToolbarItemKind> {
+    pub fn left_item_kinds<K: ConfigurableToolbarItem>(&self) -> Vec<K> {
         self.left_chips
             .iter()
-            .filter_map(|r| r.item_kind())
+            .filter_map(ConfigurableItem::toolbar_item)
             .collect()
     }
 
-    pub fn right_item_kinds(&self) -> Vec<AgentToolbarItemKind> {
+    pub fn right_item_kinds<K: ConfigurableToolbarItem>(&self) -> Vec<K> {
         self.right_chips
             .iter()
-            .filter_map(|r| r.item_kind())
+            .filter_map(ConfigurableItem::toolbar_item)
             .collect()
     }
 

@@ -299,6 +299,7 @@ use crate::terminal::view::ambient_agent::{
     HarnessSelector, HarnessSelectorEvent, HostSelector, HostSelectorEvent, NakedHeaderButtonTheme,
     cloud_agent_team_required_toast_message,
 };
+use crate::terminal::view::cli_agent_footer::{CLIAgentFooter, CLIAgentFooterEvent};
 use crate::terminal::view::init::{CAN_ATTACH_FILE_KEY, CLI_AGENT_SESSION_ACTIVE_KEY};
 use crate::terminal::view::{
     AIQueryRouting, file_attach_allowed_for_shared_session, resolve_ai_query_routing,
@@ -1707,6 +1708,7 @@ pub struct Input {
     terminal_input_message_bar: ViewHandle<TerminalInputMessageBar>,
 
     agent_input_footer: ViewHandle<AgentInputFooter>,
+    cli_agent_footer: ViewHandle<CLIAgentFooter>,
     handoff_compose_state: ModelHandle<HandoffComposeState>,
 
     inline_slash_commands_view: ViewHandle<InlineSlashCommandView>,
@@ -2766,6 +2768,16 @@ impl Input {
             )
         });
 
+        let cli_agent_footer = ctx.add_typed_action_view(|ctx| {
+            CLIAgentFooter::new(
+                terminal_view_id,
+                model.clone(),
+                current_prompt.clone(),
+                footer_display_chip_config.clone(),
+                ctx,
+            )
+        });
+
         // Ambient view state (harness / host / auth selectors) is built in
         // `attach_ambient_agent_view_model`, the single wiring point shared by this constructor
         // and the lazy shared-session viewer path.
@@ -2779,16 +2791,8 @@ impl Input {
                 AgentInputFooterEvent::SelectFile => {
                     me.select_image(ctx);
                 }
-                // These events are handled by UseAgentToolbar's subscription.
-                // The UseAgentToolbar shares this same AgentInputFooter instance,
-                // so its subscriber always fires alongside ours for every chip click.
-                AgentInputFooterEvent::WriteToPty(_)
-                | AgentInputFooterEvent::InsertIntoCLIPty(_)
-                | AgentInputFooterEvent::InsertIntoCLIRichInput(_)
-                | AgentInputFooterEvent::ToggleCodeReviewPane(_)
-                | AgentInputFooterEvent::ToggleFileExplorer(_)
-                | AgentInputFooterEvent::OpenRichInput
-                | AgentInputFooterEvent::HideRichInput => {}
+                // Handled by UseAgentToolbar's subscription, which shares this footer.
+                AgentInputFooterEvent::ToggleFileExplorer => {}
                 AgentInputFooterEvent::ToggledChipMenu { open } => {
                     me.handle_prompt_event(&PromptDisplayEvent::ToggleMenu { open: *open }, ctx);
                 }
@@ -2827,26 +2831,10 @@ impl Input {
                     });
                 }
                 AgentInputFooterEvent::ShowContextMenu { position } => {
-                    let position_id = format!("prompt_area_{}", me.view_id);
-                    let offset = if let Some(prompt_rect) = ctx.element_position_by_id(&position_id)
-                    {
-                        *position - prompt_rect.origin()
-                    } else {
-                        *position
-                    };
-                    ctx.dispatch_typed_action(&TerminalAction::PromptContextMenu {
-                        position_offset_from_prompt: offset,
-                    });
+                    me.show_prompt_context_menu(*position, ctx);
                 }
                 AgentInputFooterEvent::OpenEnvironmentManagementPane => {
                     ctx.emit(Event::OpenEnvironmentManagementPane);
-                }
-                AgentInputFooterEvent::PluginInstalled(agent) => {
-                    ctx.emit(Event::RegisterPluginListener(*agent));
-                }
-                #[cfg(not(target_family = "wasm"))]
-                AgentInputFooterEvent::OpenPluginInstructionsPane(agent, kind) => {
-                    ctx.emit(Event::OpenPluginInstructionsPane(*agent, *kind));
                 }
                 AgentInputFooterEvent::HandoffChipClicked => {
                     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
@@ -2876,6 +2864,40 @@ impl Input {
                     } else {
                         me.activate_cloud_handoff_compose(HandoffEntryPoint::FooterChip, ctx);
                     }
+                }
+            }
+        });
+        ctx.subscribe_to_view(&cli_agent_footer, |me, _, event, ctx| {
+            match event {
+                // These events are handled by UseAgentToolbar's subscription,
+                // which shares this footer.
+                CLIAgentFooterEvent::WriteToPty(_)
+                | CLIAgentFooterEvent::InsertIntoCLIPty(_)
+                | CLIAgentFooterEvent::InsertIntoCLIRichInput(_)
+                | CLIAgentFooterEvent::ToggleFileExplorer(_)
+                | CLIAgentFooterEvent::OpenRichInput
+                | CLIAgentFooterEvent::HideRichInput => {}
+                CLIAgentFooterEvent::ToggledChipMenu { open } => {
+                    me.handle_prompt_event(&PromptDisplayEvent::ToggleMenu { open: *open }, ctx);
+                }
+                CLIAgentFooterEvent::TryExecuteChipCommand(cmd) => {
+                    me.handle_prompt_event(
+                        &PromptDisplayEvent::TryExecuteCommand(cmd.clone()),
+                        ctx,
+                    );
+                }
+                CLIAgentFooterEvent::OpenCodeReview => {
+                    ctx.emit(Event::OpenCodeReviewPane);
+                }
+                CLIAgentFooterEvent::ShowContextMenu { position } => {
+                    me.show_prompt_context_menu(*position, ctx);
+                }
+                CLIAgentFooterEvent::PluginInstalled(agent) => {
+                    ctx.emit(Event::RegisterPluginListener(*agent));
+                }
+                #[cfg(not(target_family = "wasm"))]
+                CLIAgentFooterEvent::OpenPluginInstructionsPane(agent, kind) => {
+                    ctx.emit(Event::OpenPluginInstructionsPane(*agent, *kind));
                 }
             }
         });
@@ -3890,6 +3912,7 @@ impl Input {
             queued_prompts_panel,
             agent_view_controller,
             agent_input_footer,
+            cli_agent_footer,
             agent_shortcut_view_model,
             ambient_agent_view_state,
             slash_command_data_source,
@@ -4066,8 +4089,24 @@ impl Input {
             .is_some()
     }
 
+    fn show_prompt_context_menu(&mut self, position: Vector2F, ctx: &mut ViewContext<Self>) {
+        let position_id = format!("prompt_area_{}", self.view_id);
+        let offset = if let Some(prompt_rect) = ctx.element_position_by_id(&position_id) {
+            position - prompt_rect.origin()
+        } else {
+            position
+        };
+        ctx.dispatch_typed_action(&TerminalAction::PromptContextMenu {
+            position_offset_from_prompt: offset,
+        });
+    }
+
     pub fn agent_input_footer(&self) -> &ViewHandle<AgentInputFooter> {
         &self.agent_input_footer
+    }
+
+    pub fn cli_agent_footer(&self) -> &ViewHandle<CLIAgentFooter> {
+        &self.cli_agent_footer
     }
 
     fn ambient_agent_view_model(&self) -> Option<&ModelHandle<AmbientAgentViewModel>> {
@@ -5820,6 +5859,7 @@ impl Input {
         if self.prompt_render_helper.has_open_chip_menu(ctx)
             || agent_footer.has_open_chip_menu(ctx)
             || agent_footer.is_model_selector_open(ctx)
+            || self.cli_agent_footer.as_ref(ctx).has_open_chip_menu(ctx)
         {
             return;
         }
@@ -6527,9 +6567,18 @@ impl Input {
     }
 
     pub(crate) fn attach_file(&mut self, ctx: &mut ViewContext<Self>) {
-        self.agent_input_footer.update(ctx, |footer, ctx| {
-            footer.select_file(ctx);
-        });
+        if CLIAgentSessionsModel::as_ref(ctx)
+            .session(self.terminal_view_id)
+            .is_some()
+        {
+            self.cli_agent_footer.update(ctx, |footer, ctx| {
+                footer.select_file(ctx);
+            });
+        } else {
+            self.agent_input_footer.update(ctx, |footer, ctx| {
+                footer.select_file(ctx);
+            });
+        }
     }
 
     fn select_image(&mut self, ctx: &mut ViewContext<Self>) {
@@ -14534,6 +14583,9 @@ impl Input {
             });
 
         self.agent_input_footer.update(ctx, |footer, footer_ctx| {
+            footer.update_session_context(session_context.clone(), footer_ctx);
+        });
+        self.cli_agent_footer.update(ctx, |footer, footer_ctx| {
             footer.update_session_context(session_context, footer_ctx);
         });
     }
@@ -14546,6 +14598,9 @@ impl Input {
             });
 
         self.agent_input_footer.update(ctx, |footer, footer_ctx| {
+            footer.set_current_repo_path(repo_path.clone(), footer_ctx);
+        });
+        self.cli_agent_footer.update(ctx, |footer, footer_ctx| {
             footer.set_current_repo_path(repo_path.clone(), footer_ctx);
         });
 
@@ -15018,6 +15073,9 @@ impl View for Input {
             } else if self.agent_input_footer.as_ref(ctx).has_open_chip_menu(ctx) {
                 // Focus the AgentInputFooter, which will in turn focus any open chip menu
                 ctx.focus(&self.agent_input_footer);
+            } else if self.cli_agent_footer.as_ref(ctx).has_open_chip_menu(ctx) {
+                // Focus the CLIAgentFooter, which will in turn focus any open chip menu
+                ctx.focus(&self.cli_agent_footer);
             } else {
                 self.close_voltron(ctx);
                 ctx.focus(&self.editor);
@@ -15125,6 +15183,7 @@ impl View for Input {
 
         if self.prompt_render_helper.has_open_chip_menu(app)
             || self.agent_input_footer.as_ref(app).has_open_chip_menu(app)
+            || self.cli_agent_footer.as_ref(app).has_open_chip_menu(app)
         {
             ctx.set.insert("PromptChipMenuOpen");
         }
@@ -15354,9 +15413,7 @@ impl Input {
         &self,
         app: &AppContext,
     ) -> Vec<crate::context_chips::ContextChipKind> {
-        self.agent_input_footer
-            .as_ref(app)
-            .cli_display_chip_kinds(app)
+        self.cli_agent_footer.as_ref(app).display_chip_kinds(app)
     }
 }
 

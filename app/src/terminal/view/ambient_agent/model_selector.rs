@@ -16,7 +16,6 @@ use warpui::{
     ViewContext, ViewHandle,
 };
 
-use crate::ai::blocklist::agent_view::agent_input_footer::AgentInputButtonTheme;
 use crate::ai::cloud_agent_settings::CloudAgentSettings;
 use crate::ai::custom_model_routers::is_custom_router_id;
 use crate::ai::execution_profiles::model_menu_items::is_auto;
@@ -30,6 +29,7 @@ use crate::editor::{
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields, MenuVariant};
 use crate::terminal::input::{MenuPositioning, MenuPositioningProvider};
 use crate::terminal::view::ambient_agent::{AmbientAgentViewModel, AmbientAgentViewModelEvent};
+use crate::terminal::view::cli_agent_footer::AgentInputButtonTheme;
 use crate::ui_components::icons::Icon;
 use crate::view_components::action_button::{ActionButton, ButtonSize};
 use crate::workspaces::user_workspaces::{ResolvedTeamScope, UserWorkspaces};
