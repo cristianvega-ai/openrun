@@ -7,6 +7,7 @@ use super::*;
 fn saved_layout_skips_items_the_cli_footer_no_longer_offers() {
     let layout = json!([
         "FileAttach",
+        "VoiceInput",
         "ModelSelector",
         { "ContextChip": "GitDiffStats" },
         "NLDToggle",

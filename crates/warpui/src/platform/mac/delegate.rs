@@ -6,7 +6,6 @@ use anyhow::Result;
 use cocoa::base::{BOOL, NO, YES, id, nil};
 use objc2::{MainThreadMarker, msg_send};
 use objc2_app_kit::{NSApplication, NSCursor, NSRequestUserAttentionType};
-use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
 use objc2_foundation::NSUInteger;
 use warpui_core::accessibility::AccessibilityContent;
 use warpui_core::clipboard::InMemoryClipboard;
@@ -16,8 +15,8 @@ use warpui_core::notification::{
     NotificationSendError, RequestPermissionsOutcome, UserNotification,
 };
 use warpui_core::platform::{
-    Cursor, FilePickerCallback, FilePickerConfiguration, MicrophoneAccessState,
-    SendNotificationErrorCallback, TerminationMode,
+    Cursor, FilePickerCallback, FilePickerConfiguration, SendNotificationErrorCallback,
+    TerminationMode,
 };
 use warpui_core::{ApplicationBundleInfo, WindowId, platform};
 
@@ -172,10 +171,6 @@ impl platform::Delegate for IntegrationTestDelegate {
 
     fn is_screen_reader_enabled(&self) -> Option<bool> {
         self.app_delegate.is_screen_reader_enabled()
-    }
-
-    fn microphone_access_state(&self) -> MicrophoneAccessState {
-        self.app_delegate.microphone_access_state()
     }
 
     fn show_native_platform_modal(&self, _id: ModalId, _modal: AlertDialog) {
@@ -435,24 +430,6 @@ impl platform::Delegate for AppDelegate {
 
     fn is_screen_reader_enabled(&self) -> Option<bool> {
         unsafe { Some(isVoiceOverEnabled() == YES) }
-    }
-
-    fn microphone_access_state(&self) -> MicrophoneAccessState {
-        // SAFETY: this is a global static variable, but simply reading it should be safe.
-        let media_type = unsafe { AVMediaTypeAudio };
-        let Some(media_type) = media_type else {
-            return MicrophoneAccessState::NotDetermined;
-        };
-
-        // SAFETY: this can raise an exception if you pass an invalid media type, but we're only
-        // ever passing AVMediaTypeAudio here.
-        let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(media_type) };
-        match status {
-            AVAuthorizationStatus::Restricted => MicrophoneAccessState::Restricted,
-            AVAuthorizationStatus::Denied => MicrophoneAccessState::Denied,
-            AVAuthorizationStatus::Authorized => MicrophoneAccessState::Authorized,
-            _ => MicrophoneAccessState::NotDetermined, // fallback
-        }
     }
 }
 

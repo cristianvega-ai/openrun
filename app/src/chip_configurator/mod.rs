@@ -138,7 +138,7 @@ impl ConfigurableItem {
 }
 
 /// Lightweight renderer for non-chip control items (model selector,
-/// voice input, image attach, file explorer, view changes, compose, etc.)
+/// image attach, file explorer, view changes, compose, etc.)
 /// inside the configurator.
 pub struct ControlItemRenderer {
     label: String,

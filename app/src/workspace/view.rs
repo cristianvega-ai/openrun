@@ -18276,9 +18276,6 @@ impl Workspace {
                 .insert(flags::AUTO_APPROVE_BYPASSES_COMMAND_DENYLIST_FLAG);
         }
 
-        if *ai_settings.warp_drive_context_enabled.value() {
-            context.set.insert(flags::WARP_DRIVE_CONTEXT_FLAG);
-        }
         if *ai_settings.can_use_warp_credits_for_fallback.value() {
             context.set.insert(flags::WARP_CREDIT_FALLBACK_FLAG);
         }
@@ -20400,11 +20397,6 @@ impl View for Workspace {
 
         if AISettings::as_ref(app).is_active_ai_enabled(app) {
             context.set.insert(flags::IS_ACTIVE_AI_ENABLED);
-        }
-        if AISettings::as_ref(app).is_voice_input_enabled(app)
-            && UserWorkspaces::as_ref(app).is_voice_enabled()
-        {
-            context.set.insert(flags::IS_VOICE_INPUT_ENABLED);
         }
 
         if self

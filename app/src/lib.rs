@@ -72,7 +72,6 @@ mod user_config;
 pub mod util;
 mod view_components;
 mod vim_registers;
-mod voice;
 mod voltron;
 mod warp_managed_paths_watcher;
 mod window_settings;
@@ -129,7 +128,6 @@ use repo_metadata::{
     RepoMetadataModel, repositories::DetectedRepositories, watcher::DirectoryWatcher,
 };
 use server::network_log_pane_manager::NetworkLogPaneManager;
-use server::voice_transcriber::ServerVoiceTranscriber;
 #[cfg(feature = "local_fs")]
 use settings::import::model::ImportedConfigModel;
 use settings::initializer::SettingsInitializer;
@@ -139,7 +137,6 @@ use terminal::keys_settings::KeysSettings;
 #[cfg(all(not(target_family = "wasm"), feature = "local_tty"))]
 use terminal::local_shell::LocalShellState;
 pub use util::bindings::cmd_or_ctrl_shift;
-use voice::transcriber::VoiceTranscriber;
 #[cfg(feature = "local_fs")]
 use watcher::HomeDirectoryWatcher;
 use workspace_metadata::PersistedWorkspace;
@@ -774,7 +771,6 @@ pub(crate) fn initialize_app(
         move |ctx| ServerApiProvider::new(auth_state, iap_state, ctx)
     });
 
-    let server_api = server_api_provider.as_ref(ctx).get();
     let ai_client = server_api_provider.as_ref(ctx).get_ai_client();
 
     ctx.add_singleton_model(|_ctx| AuthStateProvider::new(auth_state.clone()));
@@ -1119,12 +1115,6 @@ pub(crate) fn initialize_app(
     #[cfg(feature = "local_fs")]
     ctx.add_singleton_model(|_| LanguageServerShutdownManager::new());
 
-    #[cfg(feature = "voice_input")]
-    ctx.add_singleton_model(voice_input::VoiceInput::new);
-    ctx.add_singleton_model(|_| {
-        VoiceTranscriber::new(Arc::new(ServerVoiceTranscriber::new(server_api.clone())))
-    });
-
     let notebooks = cloud_objects
         .iter()
         .filter_map(|object| {
@@ -1362,9 +1352,8 @@ pub(crate) fn initialize_app(
                 model.revalidate_tips(ctx);
             });
         });
-        // Also revalidate when workspace/team data changes (e.g. voice toggled at
-        // the org level). Billing metadata — including `warp_ai_policy.is_voice_enabled`
-        // — lives inside the team data, so `TeamsChanged` covers all policy updates.
+        // Also revalidate when workspace/team data changes, since workspace policies
+        // gate some tips.
         let tip_model_handle_for_teams = tip_model_handle.clone();
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), move |_, event, ctx| {
             if matches!(event, UserWorkspacesEvent::TeamsChanged) {
@@ -1455,21 +1444,6 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
             let active_window_id = ctx.windows().active_window();
             let update_quake_mode_arg = UpdateQuakeModeEventArg { active_window_id };
 
-            #[cfg(feature = "voice_input")]
-            {
-                if let voice_input::VoiceInputState::Listening { enabled_from, .. } =
-                    voice_input::VoiceInput::as_ref(ctx).state()
-                {
-                    // Abort the voice input if it's toggled from a key press, as we cannot listen to key events
-                    // if the user is focused on a different app - we could miss the release of the key.
-                    if matches!(
-                        *enabled_from,
-                        voice_input::VoiceInputToggledFrom::Key { .. }
-                    ) {
-                        ctx.dispatch_global_action("root_view:abort_voice_input", &());
-                    }
-                }
-            }
             ctx.dispatch_global_action("root_view:update_quake_mode_state", &update_quake_mode_arg);
         })),
         on_will_terminate: Some(Box::new(move |ctx| {

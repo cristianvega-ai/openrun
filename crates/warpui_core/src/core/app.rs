@@ -48,8 +48,8 @@ use crate::platform::app::TerminationResult;
 use crate::platform::file_picker::{FilePickerConfiguration, FilePickerError};
 use crate::platform::keyboard::KeyCode;
 use crate::platform::{
-    self, Cursor, FullscreenState, MicrophoneAccessState, SaveFilePickerConfiguration, SystemTheme,
-    TerminationMode, WindowBounds, WindowContext, WindowOptions, WindowStyle,
+    self, Cursor, FullscreenState, SaveFilePickerConfiguration, SystemTheme, TerminationMode,
+    WindowBounds, WindowContext, WindowOptions, WindowStyle,
 };
 use crate::presenter::{CursorUpdate, DispatchedActionKind};
 use crate::util::post_inc;
@@ -4775,10 +4775,6 @@ impl AppContext {
 
     pub fn is_gui(&self) -> bool {
         self.platform_delegate.is_gui()
-    }
-
-    pub fn microphone_access_state(&self) -> MicrophoneAccessState {
-        self.platform_delegate.microphone_access_state()
     }
 
     pub fn windows(&self) -> &WindowManager {

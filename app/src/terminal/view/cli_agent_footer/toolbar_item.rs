@@ -34,7 +34,6 @@ pub enum CLIAgentToolbarItemKind {
     ContextChip(ContextChipKind),
     RichInput,
     FileExplorer,
-    VoiceInput,
     // Renamed from ImageAttach; alias preserves existing user toolbar configs.
     #[serde(alias = "ImageAttach")]
     FileAttach,
@@ -46,7 +45,6 @@ impl CLIAgentToolbarItemKind {
     pub fn display_label(&self) -> &'static str {
         match self {
             Self::ContextChip(_) => "Context Chip",
-            Self::VoiceInput => "Voice Input",
             Self::FileAttach => "Attach File",
             Self::FileExplorer => "File Explorer",
             Self::RichInput => "Rich Input",
@@ -57,7 +55,6 @@ impl CLIAgentToolbarItemKind {
     pub fn icon(&self) -> Option<Icon> {
         match self {
             Self::ContextChip(kind) => kind.udi_icon(),
-            Self::VoiceInput => Some(Icon::Microphone),
             Self::FileAttach => Some(Icon::Plus),
             Self::FileExplorer => Some(Icon::FileCopy),
             Self::RichInput => Some(Icon::TextInput),
@@ -89,7 +86,6 @@ impl CLIAgentToolbarItemKind {
     pub fn default_left() -> Vec<Self> {
         vec![
             Self::FileAttach,
-            Self::VoiceInput,
             Self::ContextChip(ContextChipKind::GitDiffStats),
             Self::FileExplorer,
             Self::RichInput,
@@ -114,7 +110,6 @@ impl CLIAgentToolbarItemKind {
             Self::FileExplorer,
             Self::RichInput,
             Self::FileAttach,
-            Self::VoiceInput,
             Self::Settings,
         ]);
         items

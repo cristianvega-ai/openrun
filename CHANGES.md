@@ -60,6 +60,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Onboarding: AI slides, callout tutorial and Get Started](#onboarding-ai-slides-callout-tutorial-and-get-started) — onboarding is now four slides (welcome, customize, CLI agents, theme); removed the agent-intention flow, the AI-access and offer slides, the in-terminal callout tutorial that started an agent, the Get Started pane and coding entrypoints
 - [Skills](#skills) — deleted the skills feature (`SKILL.md` discovery, the `/skills` and `/open-skill` commands, the `@`-menu skills category, the `read_skill` tool, bundled and channel-gated skill files) and the "Fix with Warp Agent" and tab-config-editor agent buttons that invoked bundled skills
 - [AI plan documents and to-do popup](#ai-plan-documents-and-to-do-popup) — removed the plan (AI document) pane, the plan menu and plan/to-do chips, the to-do popup and the plan-related shortcuts and attachments
+- [Voice input](#voice-input) — deleted voice input end to end (microphone capture, Wispr Flow transcription through Warp's server, the mic buttons, the toggle-key shortcut, the `/voice` command and the voice settings), plus the unused `WarpDriveContextEnabled` setting
 
 - [Warp Drive: environment-variable collections](#warp-drive-environment-variable-collections) — removed the environment-variable collection objects, editor pane, invocation blocks, subshell invocation, workflow env-var selectors and the search filter
 - [Warp Drive: 1Password and LastPass secrets](#warp-drive-1password-and-lastpass-secrets) — removed the external secret manager integration, whose only entry point was environment-variable collections
@@ -1741,3 +1742,31 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for FLAGS-1: `FeatureFlag::{OpenCodeNotifications, CodexNotifications, GeminiNotifications}` now gate nothing (their doc comments still describe the chips), and `CodexPlugin` still gates Codex structured events in the listener.
 - The `CLIAgentPlugin*` telemetry variants are deleted here with their callers; TEL-4 still deletes the rest of `events.rs`.
 - Left for SWP-10: the `docs.warp.dev/terminal/integrations-and-plugins` link in `resource_center/sections.rs`.
+
+## Voice input
+**Why:** Voice input recorded audio from the microphone and sent it to Warp's `/ai/transcribe` endpoint (Wispr Flow behind Warp's server), billed against Warp's voice quota. It is an AI feature that depends on a Warp-hosted service, so it goes with the rest of Warp's AI. `WarpDriveContextEnabled` only controlled whether Warp Drive objects were attached to Warp AI requests; Warp Drive and Warp AI are both removed.
+
+**Removed:**
+- `crates/voice_input` (`cpal` capture, resampling, WAV/base64 encoding) and, with it, the `cpal`, `hound`, `rubato` and `objc2-av-foundation` dependencies.
+- `app/src/voice/` (`Transcriber`/`VoiceTranscriber` singleton), `app/src/ai/voice/` (transcribe request/response types), `app/src/server/voice_transcriber.rs`, `ServerApi::transcribe` and `TranscribeError`.
+- `editor/view/voice.rs`: the editor's voice state machine, the mic button and cursor icon, the "Try Voice Input" new-feature popup, `EditorAction::ToggleVoiceInput`, `EditorEvent::VoiceStateUpdated`, `VoiceTranscriptionOptions`, `EditorView::render_controls` (it could only ever return the voice button) and the modifier-key handling that started voice from a held key.
+- `terminal/view/cli_agent_footer/voice.rs`, the footer's mic button, `ActiveMicButtonTheme`, `CLIAgentToolbarItemKind::VoiceInput`, `CLIAgentFooterEvent::InsertIntoCLIPty`, `UseAgentToolbarEvent::InsertIntoCLIPty` and `insert_text_into_cli_agent_pty` (only voice used them), `TerminalAction::ToggleCLIAgentVoiceInput`, and the toggle-key plumbing in the alt-screen and block-list elements.
+- The mic button and voice events of `AgentInputFooter` and of the universal developer input button bar.
+- Settings: `VoiceInputEnabled` (`agents.voice.voice_input_enabled`), `VoiceInputToggleKey` (`agents.voice.voice_input_toggle_key`), `VoiceInputLanguage` (`agents.voice.voice_input_language`, and the `VOICE_INPUT_LANGUAGES` catalog), `DismissedVoiceInputNewFeaturePopup`, `ExplicitlyInteractedWithVoice`, `EnteredAgentModeNumTimes` (only counted for the popup) and `WarpDriveContextEnabled` (`agents.knowledge.warp_drive_context_enabled`) with its `warp_drive_context_enabled` request field and keymap flag. The "Voice" category and the "voice input" toggle binding on the Warp Agent settings page go too.
+- `/voice`, the voice agent tip, the `IS_VOICE_INPUT_ENABLED` keymap flag, `render_filterable_dropdown_item` (only the language picker used it), and `Icon::Microphone` with its SVG.
+- Server-side voice fields: `warp_ai_policy.is_voice_enabled` (`UserWorkspaces::is_voice_enabled`, the gql fragment field and the two queries that selected it) and the `is_unlimited_voice`, `voice_request_limit` and `voice_requests_used_since_last_refresh` request-limit fields with `can_request_voice`.
+- The macOS microphone entitlement (`com.apple.security.device.audio-input`) and `NSMicrophoneUsageDescription`, the AVFoundation link in `crates/warpui/build.rs`, `MicrophoneAccessState` and `microphone_access_state` from the platform delegates, `App::enable_windowless_microphone_access_query`, and the ALSA build dependency (`libasound2-dev`, `alsa-lib`) in `script/linux/install_build_deps`, `flake.nix` and CI.
+- The tests that exercised voice: `test_voice_input_toggle_preserves_lock_state` (a known flaky test), `test_input_config_transitions` (the other one; it drove the voice toggle), the `VOICE_INPUT_LANGUAGES` catalog tests and the Hermes voice-paste test.
+
+**Modified:**
+- `AgentToolbarItemKind::VoiceInput` stays as an inert shim next to `NLDToggle`/`ShareSession` so a saved agent-view toolbar layout that lists it still loads; it renders nothing, is never offered, and `without_retired_items` drops it. AI-27 deletes it with `AgentToolbarItemKind`. Saved CLI-footer layouts need no shim: `CLIAgentToolbarItems` already skips unknown entries (a test now includes `VoiceInput`).
+- `get_agent_tips` is gone; the tip pool is the fixed default list.
+- The `gui` and `voice_input` Cargo features of `app` are kept but empty: `gui = []` and `voice_input = []`. Scripts and gates still pass `--features gui`. FLAGS-1 (AI-32) removes both.
+
+**User-visible impact:** No microphone button, `/voice` command, voice settings or voice tip, and the app no longer asks for microphone access. Existing `agents.voice.*` keys in `settings.toml` are ignored.
+
+**Notes:**
+- Left for TEL-4: telemetry variants `ToggleVoiceInputSetting`, `VoiceInputUsed` and `CLIAgentToolbarVoiceInputUsed` in `server/telemetry/events.rs`.
+- Left for AI-16: `AiCreditsUsageBucket::Voice` and its handling in `settings_view/billing_and_usage/`.
+- `ai/agent/api/impl.rs` still sets the protobuf `warp_drive_context_enabled` field, to `false`; AI-29 deletes the request builder.
+- The GraphQL schema file keeps its voice fields; the client no longer selects them.

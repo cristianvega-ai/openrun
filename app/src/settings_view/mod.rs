@@ -565,14 +565,12 @@ pub mod flags {
     pub const INCLUDE_AGENT_COMMANDS_IN_HISTORY_FLAG: &str = "Include_Agent_Commands_In_History";
     pub const AUTO_APPROVE_BYPASSES_COMMAND_DENYLIST_FLAG: &str =
         "Auto_Approve_Bypasses_Command_Denylist";
-    pub const WARP_DRIVE_CONTEXT_FLAG: &str = "Warp_Drive_Context";
     pub const WARP_CREDIT_FALLBACK_FLAG: &str = "Warp_Credit_Fallback";
     pub const SHOW_BASE_MODEL_PICKER_IN_PROMPT_FLAG: &str = "Show_Base_Model_Picker_In_Prompt";
     pub const DEBUG_SHOW_MEMORY_STATS_FLAG: &str = "Debug_Memory_Statistics";
     pub const ALLOW_NATIVE_WAYLAND: &str = "Allow_Native_Wayland";
     pub const IS_ANY_AI_ENABLED: &str = "IsAnyAIEnabled";
     pub const IS_ACTIVE_AI_ENABLED: &str = "IsActiveAIEnabled";
-    pub const IS_VOICE_INPUT_ENABLED: &str = "IsVoiceInputEnabled";
     pub const IS_BLOCK_AI_SUMMARIES_ENABLED: &str = "IsBlockAISummariesEnabled";
     pub const LIGATURE_RENDERING_CONTEXT_FLAG: &str = "Ligature_Rendering_Enabled";
     pub const HAS_SETTINGS_TO_IMPORT_FLAG: &str = "HasSettingsToImport";

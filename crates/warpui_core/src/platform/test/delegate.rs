@@ -17,9 +17,8 @@ use crate::modals::{AlertDialog, ModalId};
 use crate::notification::UserNotification;
 use crate::platform::file_picker::{FilePickerCallback, FilePickerConfiguration};
 use crate::platform::{
-    self, Cursor, MicrophoneAccessState, RequestNotificationPermissionsCallback,
-    SendNotificationErrorCallback, TerminationMode, TextLayoutSystem, WindowFocusBehavior,
-    WindowOptions,
+    self, Cursor, RequestNotificationPermissionsCallback, SendNotificationErrorCallback,
+    TerminationMode, TextLayoutSystem, WindowFocusBehavior, WindowOptions,
 };
 use crate::text_layout::TextAlignment;
 use crate::windowing::WindowCallbacks;
@@ -285,10 +284,6 @@ impl platform::Delegate for AppDelegate {
         None
     }
 
-    fn microphone_access_state(&self) -> MicrophoneAccessState {
-        MicrophoneAccessState::NotDetermined
-    }
-
     fn show_native_platform_modal(&self, _id: ModalId, _modal: AlertDialog) {
         // no-op
     }
@@ -398,10 +393,6 @@ impl platform::Delegate for IntegrationTestDelegate {
 
     fn is_screen_reader_enabled(&self) -> Option<bool> {
         None
-    }
-
-    fn microphone_access_state(&self) -> MicrophoneAccessState {
-        MicrophoneAccessState::NotDetermined
     }
 
     fn show_native_platform_modal(&self, _id: ModalId, _modal: AlertDialog) {

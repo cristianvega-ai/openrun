@@ -2431,10 +2431,6 @@ impl Input {
         let ambient_agent_view_state: Option<AmbientAgentViewState> = None;
         ctx.subscribe_to_view(&agent_input_footer, |me, _, event, ctx| {
             match event {
-                #[cfg(feature = "voice_input")]
-                AgentInputFooterEvent::ToggleVoiceInput(from) => {
-                    me.toggle_voice_input(from, ctx);
-                }
                 AgentInputFooterEvent::SelectFile => {
                     me.select_image(ctx);
                 }
@@ -2510,7 +2506,6 @@ impl Input {
                 // These events are handled by UseAgentToolbar's subscription,
                 // which shares this footer.
                 CLIAgentFooterEvent::WriteToPty(_)
-                | CLIAgentFooterEvent::InsertIntoCLIPty(_)
                 | CLIAgentFooterEvent::InsertIntoCLIRichInput(_)
                 | CLIAgentFooterEvent::ToggleFileExplorer(_)
                 | CLIAgentFooterEvent::OpenRichInput
@@ -2604,8 +2599,6 @@ impl Input {
             let ai_input_model = ai_input_model.clone();
 
             ctx.subscribe_to_model(&ai_input_model, |me, _, _, ctx| {
-                #[cfg(feature = "voice_input")]
-                me.update_voice_transcription_options(ctx);
                 me.update_image_context_options(ctx);
                 me.update_ai_context_menu(ctx);
                 me.check_slash_menu_disabled_state(ctx);
@@ -3512,8 +3505,6 @@ impl Input {
 
         input.set_zero_state_hint_text(ctx);
 
-        #[cfg(feature = "voice_input")]
-        input.update_voice_transcription_options(ctx);
         input.update_image_context_options(ctx);
         input.update_ai_context_menu(ctx);
         // Ambient wiring goes through the single setter path (`attach_ambient_agent_view_model`).
@@ -3521,20 +3512,6 @@ impl Input {
             input.attach_ambient_agent_view_model(ambient_agent_view_model, ctx);
         }
         input
-    }
-
-    #[cfg(feature = "voice_input")]
-    fn update_voice_transcription_options(&mut self, ctx: &mut ViewContext<Self>) {
-        let voice_transcription_options = if AISettings::as_ref(ctx).is_voice_input_enabled(ctx) {
-            crate::editor::VoiceTranscriptionOptions::Enabled { show_button: false }
-        } else {
-            crate::editor::VoiceTranscriptionOptions::Disabled
-        };
-
-        self.editor.update(ctx, move |editor, ctx| {
-            editor.update_voice_transcription_options(voice_transcription_options, ctx);
-            ctx.notify();
-        });
     }
 
     fn update_ai_context_menu(&mut self, ctx: &mut ViewContext<Self>) {
@@ -5720,21 +5697,6 @@ impl Input {
         }
     }
 
-    #[cfg(feature = "voice_input")]
-    pub(super) fn toggle_voice_input(
-        &mut self,
-        from: &voice_input::VoiceInputToggledFrom,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.enter_ai_mode(ctx);
-        let did_start_listening = self
-            .editor
-            .update(ctx, |editor, ctx| editor.toggle_voice_input(from, ctx));
-        if did_start_listening {
-            self.focus_input_box(ctx);
-        }
-    }
-
     pub(crate) fn attach_file(&mut self, ctx: &mut ViewContext<Self>) {
         if CLIAgentSessionsModel::as_ref(ctx)
             .session(self.terminal_view_id)
@@ -5796,10 +5758,6 @@ impl Input {
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            #[cfg(feature = "voice_input")]
-            UniversalDeveloperInputButtonBarEvent::ToggleVoiceInput(from) => {
-                self.toggle_voice_input(from, ctx);
-            }
             UniversalDeveloperInputButtonBarEvent::InputTypeSelected(input_type) => {
                 if self.is_input_mode_toggle_disabled(ctx) {
                     return;
@@ -6069,10 +6027,6 @@ impl Input {
                 }
 
                 ctx.notify();
-            }
-            #[cfg(feature = "voice_input")]
-            AISettingsChangedEvent::VoiceInputEnabled { .. } => {
-                self.update_voice_transcription_options(ctx);
             }
             _ => {}
         }
@@ -9105,34 +9059,6 @@ impl Input {
             EditorEvent::Focused => ctx.emit(Event::EditorFocused),
             EditorEvent::ProcessingAttachedImages(is_processing) => {
                 self.set_is_processing_attached_images(*is_processing, ctx);
-            }
-            EditorEvent::VoiceStateUpdated {
-                is_listening,
-                is_transcribing,
-            } => {
-                self.universal_developer_input_button_bar
-                    .update(ctx, |button_bar, ctx| {
-                        button_bar.set_voice_is_listening(*is_listening, ctx);
-                    });
-                self.agent_input_footer.update(ctx, |footer, ctx| {
-                    footer.set_voice_is_active(*is_listening || *is_transcribing, ctx);
-                });
-
-                if *is_listening || *is_transcribing {
-                    // Show voice status as placeholder when the buffer is empty.
-                    if self.editor.as_ref(ctx).is_empty(ctx) {
-                        let placeholder = if *is_listening {
-                            "Listening..."
-                        } else {
-                            "Transcribing..."
-                        };
-                        self.editor.update(ctx, |editor, ctx| {
-                            editor.set_placeholder_text(placeholder, ctx);
-                        });
-                    }
-                } else {
-                    self.set_zero_state_hint_text(ctx);
-                }
             }
             EditorEvent::SetAIContextMenuOpen(open) => {
                 self.set_ai_context_menu_open(*open, ctx);

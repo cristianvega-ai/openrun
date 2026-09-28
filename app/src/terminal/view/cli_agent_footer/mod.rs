@@ -9,26 +9,18 @@
 mod chips;
 pub mod editor;
 pub mod toolbar_item;
-#[cfg(feature = "voice_input")]
-mod voice;
 
 use std::sync::Arc;
 
 use parking_lot::FairMutex;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::Vector2F;
-#[cfg(feature = "voice_input")]
-use settings::Setting;
 use toolbar_item::CLIAgentToolbarItemKind;
-#[cfg(feature = "voice_input")]
-use voice_input::VoiceInputLifecycle;
 use warp_core::ui::color::ContrastingColor;
 use warp_core::ui::color::blend::Blend;
 use warp_core::ui::color::contrast::MinimumAllowedContrast;
 use warp_core::ui::theme::Fill;
 use warp_core::ui::theme::color::internal_colors;
-#[cfg(feature = "voice_input")]
-use warpui::r#async::SpawnedFutureHandle;
 use warpui::elements::{
     ChildView, ConstrainedBox, Container, CrossAxisAlignment, DispatchEventResult, Element,
     EventHandler, Flex, MainAxisAlignment, MainAxisSize, ParentElement, Wrap, WrapFill,
@@ -45,8 +37,6 @@ use crate::context_chips::prompt_type::PromptType;
 use crate::context_chips::{self, ContextChipKind};
 use crate::send_telemetry_from_ctx;
 use crate::server::telemetry::TelemetryEvent;
-#[cfg(feature = "voice_input")]
-use crate::settings::{AISettings, AISettingsChangedEvent};
 use crate::settings::{CodeSettings, CodeSettingsChangedEvent};
 use crate::settings_view::SettingsSection;
 use crate::terminal::cli_agent_sessions::{
@@ -73,19 +63,10 @@ pub struct CLIAgentFooter {
     display_chips: Vec<ViewHandle<DisplayChip>>,
     display_chip_config: DisplayChipConfig,
 
-    #[cfg(feature = "voice_input")]
-    mic_button: ViewHandle<ActionButton>,
     file_button: ViewHandle<ActionButton>,
     file_explorer_button: ViewHandle<ActionButton>,
     rich_input_button: ViewHandle<ActionButton>,
     settings_button: ViewHandle<ActionButton>,
-    // CLI agent voice input state (self-contained, bypasses editor voice flow).
-    #[cfg(feature = "voice_input")]
-    cli_voice_input_lifecycle: VoiceInputLifecycle,
-    #[cfg(feature = "voice_input")]
-    cli_recording_handle: Option<SpawnedFutureHandle>,
-    #[cfg(feature = "voice_input")]
-    cli_transcription_handle: Option<SpawnedFutureHandle>,
 }
 
 impl CLIAgentFooter {
@@ -97,39 +78,6 @@ impl CLIAgentFooter {
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let button_size = ButtonSize::AgentInputButton;
-
-        #[cfg(feature = "voice_input")]
-        let mic_button = {
-            let mic_button = ctx.add_typed_action_view(|_ctx| {
-                ActionButton::new("", ActiveMicButtonTheme)
-                    .with_icon(Icon::Microphone)
-                    .with_tooltip("Voice input")
-                    .with_size(button_size)
-                    .with_tooltip_alignment(TooltipAlignment::Left)
-                    .on_click(|ctx| {
-                        ctx.dispatch_typed_action(CLIAgentFooterAction::ToggleVoiceInput);
-                    })
-            });
-            let tooltip = AISettings::as_ref(ctx)
-                .voice_input_toggle_key
-                .value()
-                .tooltip_message();
-            mic_button.update(ctx, |button, ctx| {
-                button.set_tooltip(Some(tooltip), ctx);
-            });
-            ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| {
-                if let AISettingsChangedEvent::VoiceInputToggleKey { .. } = event {
-                    let tooltip = AISettings::as_ref(ctx)
-                        .voice_input_toggle_key
-                        .value()
-                        .tooltip_message();
-                    me.mic_button.update(ctx, |button, ctx| {
-                        button.set_tooltip(Some(tooltip), ctx);
-                    });
-                }
-            });
-            mic_button
-        };
 
         let file_button = ctx.add_typed_action_view(|_ctx| {
             ActionButton::new("", AgentInputButtonTheme)
@@ -184,17 +132,11 @@ impl CLIAgentFooter {
         });
 
         // Toggle rich input button label when CLI input session opens/closes.
-        // Also reset CLI voice state if the session ends while voice is active.
         ctx.subscribe_to_model(
             &CLIAgentSessionsModel::handle(ctx),
             move |me, _, event, ctx| {
                 if event.terminal_view_id() != terminal_view_id {
                     return;
-                }
-
-                #[cfg(feature = "voice_input")]
-                if let CLIAgentSessionsModelEvent::Ended { .. } = event {
-                    me.stop_cli_voice_and_reset(ctx);
                 }
 
                 let CLIAgentSessionsModelEvent::InputSessionChanged {
@@ -253,18 +195,10 @@ impl CLIAgentFooter {
             terminal_model,
             display_chips: vec![],
             display_chip_config,
-            #[cfg(feature = "voice_input")]
-            mic_button,
             file_button,
             file_explorer_button,
             rich_input_button,
             settings_button,
-            #[cfg(feature = "voice_input")]
-            cli_voice_input_lifecycle: VoiceInputLifecycle::default(),
-            #[cfg(feature = "voice_input")]
-            cli_recording_handle: None,
-            #[cfg(feature = "voice_input")]
-            cli_transcription_handle: None,
         };
         me.update_display_chips(&prompt, ctx);
         me
@@ -374,15 +308,6 @@ impl CLIAgentFooter {
                 Some(ChildView::new(&self.rich_input_button).finish())
             }
             CLIAgentToolbarItemKind::FileAttach => Some(ChildView::new(&self.file_button).finish()),
-            CLIAgentToolbarItemKind::VoiceInput => {
-                #[cfg(feature = "voice_input")]
-                {
-                    let enabled = AISettings::as_ref(app).is_voice_input_enabled(app);
-                    enabled.then(|| ChildView::new(&self.mic_button).finish())
-                }
-                #[cfg(not(feature = "voice_input"))]
-                None
-            }
             CLIAgentToolbarItemKind::Settings => {
                 Some(ChildView::new(&self.settings_button).finish())
             }
@@ -489,16 +414,12 @@ impl View for CLIAgentFooter {
 
 #[derive(Debug, Clone)]
 pub enum CLIAgentFooterAction {
-    #[cfg(feature = "voice_input")]
-    ToggleVoiceInput,
     SelectFile,
     InsertFilePath(String),
     ToggleFileExplorer,
     ToggleRichInput,
     OpenCodingAgentSettings,
-    ShowContextMenu {
-        position: Vector2F,
-    },
+    ShowContextMenu { position: Vector2F },
 }
 
 impl TypedActionView for CLIAgentFooter {
@@ -506,10 +427,6 @@ impl TypedActionView for CLIAgentFooter {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
-            #[cfg(feature = "voice_input")]
-            CLIAgentFooterAction::ToggleVoiceInput => {
-                self.toggle_cli_voice_input(&voice_input::VoiceInputToggledFrom::Button, ctx);
-            }
             CLIAgentFooterAction::SelectFile => {
                 self.select_file(ctx);
             }
@@ -557,8 +474,6 @@ impl TypedActionView for CLIAgentFooter {
 
 pub enum CLIAgentFooterEvent {
     WriteToPty(String),
-    /// Insert text into the CLI agent's PTY input using its paste strategy.
-    InsertIntoCLIPty(String),
     /// Insert text into the CLI agent rich input.
     InsertIntoCLIRichInput(String),
     /// Toggle the file explorer side panel. `None` when no CLI agent session is
@@ -631,43 +546,6 @@ impl ActionButtonTheme for AgentInputButtonTheme {
     }
 }
 
-/// Theme for the mic button.
-/// Uses a blue icon when active (hovered, listening, or transcribing).
-pub(crate) struct ActiveMicButtonTheme;
-
-impl ActionButtonTheme for ActiveMicButtonTheme {
-    fn background(&self, hovered: bool, appearance: &Appearance) -> Option<Fill> {
-        AgentInputButtonTheme.background(hovered, appearance)
-    }
-
-    fn text_color(
-        &self,
-        hovered: bool,
-        _background: Option<Fill>,
-        appearance: &Appearance,
-    ) -> ColorU {
-        if hovered {
-            appearance.theme().ansi_fg_blue()
-        } else {
-            appearance
-                .theme()
-                .sub_text_color(appearance.theme().surface_1())
-                .into_solid()
-        }
-    }
-
-    fn border(&self, appearance: &Appearance) -> Option<ColorU> {
-        AgentInputButtonTheme.border(appearance)
-    }
-
-    fn should_opt_out_of_contrast_adjustment(&self) -> bool {
-        true
-    }
-
-    fn font_properties(&self) -> Option<warpui::fonts::Properties> {
-        AgentInputButtonTheme.font_properties()
-    }
-}
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;

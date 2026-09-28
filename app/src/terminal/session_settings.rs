@@ -140,7 +140,12 @@ impl GithubPrPromptChipDefaultValidation {
 fn without_retired_items(items: &[AgentToolbarItemKind]) -> Vec<AgentToolbarItemKind> {
     items
         .iter()
-        .filter(|item| !matches!(item, AgentToolbarItemKind::ShareSession))
+        .filter(|item| {
+            !matches!(
+                item,
+                AgentToolbarItemKind::ShareSession | AgentToolbarItemKind::VoiceInput
+            )
+        })
         .cloned()
         .collect()
 }

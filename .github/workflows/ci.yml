@@ -18,7 +18,7 @@ env:
   # script/linux/install_build_deps, minus the packaging-only tools.
   LINUX_BUILD_PACKAGES: >-
     build-essential cmake pkg-config protobuf-compiler libclang-dev
-    libssl-dev libfreetype-dev libexpat1-dev libgit2-dev libfontconfig1-dev libasound2-dev
+    libssl-dev libfreetype-dev libexpat1-dev libgit2-dev libfontconfig1-dev
   # Shells and runtime libraries that unit tests load. Mirrors script/linux/install_runtime_deps
   # and script/linux/install_test_deps.
   LINUX_TEST_PACKAGES: >-

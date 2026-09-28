@@ -83,7 +83,6 @@ fn commands_have_typed_identities() {
         (&commands::EXIT, SlashCommandKind::Exit),
         (&commands::LOGOUT, SlashCommandKind::Logout),
         (&commands::VIEW_LOGS, SlashCommandKind::ViewLogs),
-        (&commands::VOICE, SlashCommandKind::Voice),
         (&commands::THEME, SlashCommandKind::Theme),
     ] {
         assert_eq!(

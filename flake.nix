@@ -97,7 +97,6 @@
             '';
 
           linuxRuntimeLibraries = with pkgs; [
-            alsa-lib
             curl
             dbus
             expat
@@ -264,7 +263,6 @@
             rust-analyzer
           ];
           buildInputs = with pkgs; [
-            alsa-lib
             curl
             dbus
             expat

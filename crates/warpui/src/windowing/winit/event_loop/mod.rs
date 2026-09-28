@@ -1159,7 +1159,6 @@ impl EventLoop {
                     crate::event::Event::ModifierStateChanged {
                         mouse_position: window_state.last_cursor_position.to_vec2f(),
                         modifiers: from_winit_modifiers_state(state),
-                        // TODO: when we need key codes for voice input on Linux/Windows, we'll need to populate this!
                         key_code: None,
                     },
                 ))

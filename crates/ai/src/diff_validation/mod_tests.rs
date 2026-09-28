@@ -796,7 +796,7 @@ fn test_custom_lines() {
 fn test_v4a_maa_crash_d71bf84b_no_overlapping_deltas() {
     // File content where hunk A (deletion) and hunk B (delegate tweak) both
     // match, and hunk A's matched range fully contains hunk B's.
-    // The `ActiveMicButtonTheme.background` line that hunk B targets sits
+    // The `AgentInputButtonTheme.background` line that hunk B targets sits
     // inside `DefaultWeightAgentInputButtonTheme`'s impl, so hunk A's
     // deletion (which covers the whole impl) subsumes hunk B.
     let file_content = "\

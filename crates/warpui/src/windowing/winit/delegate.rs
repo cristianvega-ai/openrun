@@ -30,8 +30,7 @@ use crate::platform::file_picker::{
     SaveFilePickerConfiguration,
 };
 use crate::platform::{
-    Cursor, MicrophoneAccessState, RequestNotificationPermissionsCallback,
-    SendNotificationErrorCallback, TerminationMode,
+    Cursor, RequestNotificationPermissionsCallback, SendNotificationErrorCallback, TerminationMode,
 };
 use crate::windowing::winit::app::CustomEvent::UpdateUIApp;
 use crate::windowing::{self, WindowCallbacks, WindowManager};
@@ -568,13 +567,6 @@ impl platform::Delegate for AppDelegate {
         None
     }
 
-    fn microphone_access_state(&self) -> MicrophoneAccessState {
-        // Note that for voice input, we can actually detect microphone access state
-        // in the course of trying to start voice input, but we don't have a way to do
-        // it at arbitrary times, so we just return NotDetermined here.
-        MicrophoneAccessState::NotDetermined
-    }
-
     fn open_file_path_in_explorer(&self, path: &Path) {
         if path.is_dir() {
             self.open_file_path(path);
@@ -651,10 +643,6 @@ impl platform::Delegate for IntegrationTestDelegate {
 
     fn application_bundle_info(&self, _: &str) -> Option<ApplicationBundleInfo<'_>> {
         None
-    }
-
-    fn microphone_access_state(&self) -> MicrophoneAccessState {
-        MicrophoneAccessState::NotDetermined
     }
 
     fn request_desktop_notification_permissions(

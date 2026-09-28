@@ -7402,7 +7402,7 @@ fn submit_cli_agent_rich_input_hermes_multiline_uses_bracketed_paste() {
         let writes = pty_writes.borrow();
         // BracketedPaste: first write is ESC[200~ + both lines + ESC[201~, second is \r.
         // The embedded \n between lines must NOT split into a separate write or trigger
-        // a second submission — that was the voice-input auto-submit regression.
+        // a second submission.
         assert_eq!(
             writes.len(),
             2,

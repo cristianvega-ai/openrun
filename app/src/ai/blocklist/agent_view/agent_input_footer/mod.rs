@@ -10,8 +10,6 @@ use chrono::{DateTime, Local};
 use parking_lot::FairMutex;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
-#[cfg(feature = "voice_input")]
-use settings::Setting;
 use toolbar_item::AgentToolbarItemKind;
 use warp_core::ui::theme::{AnsiColorIdentifier, Fill};
 use warpui::r#async::{SpawnedFutureHandle, Timer};
@@ -63,7 +61,7 @@ use crate::terminal::view::TerminalAction;
 use crate::terminal::view::ambient_agent::{
     AmbientAgentViewModel, ModelSelector, ModelSelectorEvent,
 };
-use crate::terminal::view::cli_agent_footer::{ActiveMicButtonTheme, AgentInputButtonTheme};
+use crate::terminal::view::cli_agent_footer::AgentInputButtonTheme;
 use crate::terminal::view::init::ATTACH_FILE_KEYBINDING;
 use crate::ui_components::icons::Icon;
 use crate::view_components::action_button::{
@@ -85,8 +83,6 @@ const USAGE_BUTTON_SAVE_POSITION_ID: &str = "agent_input_footer::usage_button";
 /// Footer control bar at the bottom of the agent view input: model selector, chips, etc.
 pub struct AgentInputFooter {
     terminal_view_id: EntityId,
-    #[cfg_attr(not(feature = "voice_input"), allow(unused))]
-    mic_button: ViewHandle<ActionButton>,
     file_button: ViewHandle<ActionButton>,
     context_window_button: ViewHandle<ActionButton>,
     usage_button: ViewHandle<ActionButton>,
@@ -212,42 +208,6 @@ impl AgentInputFooter {
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let button_size = ButtonSize::AgentInputButton;
-
-        let mic_button = ctx.add_typed_action_view(|_ctx| {
-            let button = ActionButton::new("", ActiveMicButtonTheme)
-                .with_icon(Icon::Microphone)
-                .with_tooltip("Voice input")
-                .with_size(button_size)
-                .with_tooltip_alignment(TooltipAlignment::Left);
-            #[cfg(feature = "voice_input")]
-            let button = button.on_click(|ctx| {
-                ctx.dispatch_typed_action(AgentInputFooterAction::ToggleVoiceInput);
-            });
-            button
-        });
-
-        #[cfg(feature = "voice_input")]
-        {
-            let tooltip = AISettings::as_ref(ctx)
-                .voice_input_toggle_key
-                .value()
-                .tooltip_message();
-            mic_button.update(ctx, |button, ctx| {
-                button.set_tooltip(Some(tooltip), ctx);
-            });
-
-            ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| {
-                if let AISettingsChangedEvent::VoiceInputToggleKey { .. } = event {
-                    let tooltip = AISettings::as_ref(ctx)
-                        .voice_input_toggle_key
-                        .value()
-                        .tooltip_message();
-                    me.mic_button.update(ctx, |button, ctx| {
-                        button.set_tooltip(Some(tooltip), ctx);
-                    });
-                }
-            });
-        }
 
         let file_button = ctx.add_typed_action_view(|_ctx| {
             ActionButton::new("", AgentInputButtonTheme)
@@ -546,7 +506,6 @@ impl AgentInputFooter {
         let mut me = Self {
             terminal_view_id,
             ambient_agent_view_model: None,
-            mic_button,
             file_button,
             file_explorer_button,
             context_window_button,
@@ -633,11 +592,6 @@ impl AgentInputFooter {
     }
 
     fn render_cloud_mode_v2_footer(&self, app: &AppContext) -> Box<dyn Element> {
-        // `app` is only consumed under the `voice_input` cfg below; reference it here so the
-        // parameter doesn't trip the unused-variable lint when the feature is disabled.
-        #[cfg(not(feature = "voice_input"))]
-        let _ = app;
-
         let mut left = Flex::row()
             .with_main_axis_size(MainAxisSize::Min)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
@@ -650,13 +604,6 @@ impl AgentInputFooter {
             .with_main_axis_size(MainAxisSize::Min)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_spacing(CLOUD_MODE_V2_FOOTER_GAP);
-
-        // Only show the mic button when voice input is compiled in *and* the
-        // user has voice input enabled in settings, matching V1's behavior.
-        #[cfg(feature = "voice_input")]
-        if AISettings::as_ref(app).is_voice_input_enabled(app) {
-            right = right.with_child(ChildView::new(&self.mic_button).finish());
-        }
 
         right = right.with_child(ChildView::new(&self.file_button).finish());
 
@@ -764,12 +711,6 @@ impl AgentInputFooter {
                 ctx.emit(AgentInputFooterEvent::ToggleInlineModelSelector { initial_tab });
             }
         }
-    }
-
-    pub fn set_voice_is_active(&mut self, is_active: bool, ctx: &mut ViewContext<Self>) {
-        self.mic_button.update(ctx, |button, ctx| {
-            button.set_active(is_active, ctx);
-        });
     }
 
     fn sync_fast_forward_button(&self, ctx: &mut ViewContext<Self>) {
@@ -945,16 +886,7 @@ impl AgentInputFooter {
                 show.then(|| ChildView::new(&self.model_selector).finish())
             }
             AgentToolbarItemKind::NLDToggle => None,
-            AgentToolbarItemKind::VoiceInput => {
-                #[cfg(feature = "voice_input")]
-                {
-                    let enabled =
-                        crate::settings::AISettings::as_ref(app).is_voice_input_enabled(app);
-                    enabled.then(|| ChildView::new(&self.mic_button).finish())
-                }
-                #[cfg(not(feature = "voice_input"))]
-                None
-            }
+            AgentToolbarItemKind::VoiceInput => None,
             AgentToolbarItemKind::FileAttach => Some(ChildView::new(&self.file_button).finish()),
             AgentToolbarItemKind::ContextWindowUsage => {
                 let has_conversation = FeatureFlag::ContextWindowUsageV2.is_enabled()
@@ -1185,8 +1117,6 @@ impl View for AgentInputFooter {
 
 #[derive(Debug, Clone)]
 pub enum AgentInputFooterAction {
-    #[cfg(feature = "voice_input")]
-    ToggleVoiceInput,
     SelectFile,
     ToggleFileExplorer,
     /// User clicked the "Hand off to cloud" footer chip. The terminal `Input`
@@ -1204,12 +1134,6 @@ impl TypedActionView for AgentInputFooter {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut warpui::ViewContext<Self>) {
         match action {
-            #[cfg(feature = "voice_input")]
-            AgentInputFooterAction::ToggleVoiceInput => {
-                ctx.emit(AgentInputFooterEvent::ToggleVoiceInput(
-                    voice_input::VoiceInputToggledFrom::Button,
-                ));
-            }
             AgentInputFooterAction::SelectFile => {
                 self.select_file(ctx);
             }
@@ -1255,8 +1179,6 @@ impl TypedActionView for AgentInputFooter {
 }
 
 pub enum AgentInputFooterEvent {
-    #[cfg(feature = "voice_input")]
-    ToggleVoiceInput(voice_input::VoiceInputToggledFrom),
     SelectFile,
     ToggleFileExplorer,
     ToggledChipMenu {

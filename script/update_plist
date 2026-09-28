@@ -260,7 +260,6 @@ fi
 echo "Updating plist with permissions descriptions"
 plutil -insert NSAppleEventsUsageDescription -string "A program in Warp wants to use AppleScript." "$WARP_PLIST_PATH"
 plutil -insert NSCameraUsageDescription -string "A program in Warp wants to use the camera." "$WARP_PLIST_PATH"
-plutil -insert NSMicrophoneUsageDescription -string "A program in Warp wants to use your microphone." "$WARP_PLIST_PATH"
 plutil -insert NSContactsUsageDescription -string "A program in Warp wants to use your contacts." "$WARP_PLIST_PATH"
 plutil -insert NSCalendarsUsageDescription -string "A program in Warp wants to use your calendar." "$WARP_PLIST_PATH"
 plutil -insert NSCalendarsFullAccessUsageDescription -string "A program in Warp wants full access to your calendar." "$WARP_PLIST_PATH"

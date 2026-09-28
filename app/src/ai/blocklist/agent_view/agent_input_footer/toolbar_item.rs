@@ -39,6 +39,8 @@ pub enum AgentToolbarItemKind {
     UsageSummary,
 
     FileExplorer,
+    /// No longer rendered or offered; kept so saved toolbar layouts that
+    /// include it still deserialize.
     VoiceInput,
     // Renamed from ImageAttach; alias preserves existing user toolbar configs.
     #[serde(alias = "ImageAttach")]
@@ -76,7 +78,7 @@ impl AgentToolbarItemKind {
             Self::ContextChip(kind) => kind.udi_icon(),
             Self::ModelSelector => Some(Icon::Agent),
             Self::NLDToggle => Some(Icon::NLD),
-            Self::VoiceInput => Some(Icon::Microphone),
+            Self::VoiceInput => None,
             Self::FileAttach => Some(Icon::Plus),
             Self::ContextWindowUsage => Some(Icon::ContextRemaining100),
             Self::UsageSummary => Some(Icon::PieChart),
@@ -96,7 +98,7 @@ impl AgentToolbarItemKind {
             Self::ContextChip(
                 ContextChipKind::ShellGitBranch | ContextChipKind::GitBranchStatus,
             ) => true,
-            Self::ModelSelector | Self::VoiceInput | Self::FileAttach => true,
+            Self::ModelSelector | Self::FileAttach => true,
             Self::ContextChip(_)
             | Self::NLDToggle
             | Self::ContextWindowUsage
@@ -104,6 +106,7 @@ impl AgentToolbarItemKind {
             | Self::FastForwardToggle
             | Self::HandoffToCloud
             | Self::ShareSession
+            | Self::VoiceInput
             | Self::FileExplorer => false,
         }
     }
@@ -114,7 +117,7 @@ impl AgentToolbarItemKind {
     pub fn is_available(&self, app: &warpui::AppContext) -> bool {
         match self {
             Self::HandoffToCloud => AISettings::as_ref(app).is_cloud_handoff_enabled(app),
-            Self::NLDToggle => false,
+            Self::NLDToggle | Self::VoiceInput => false,
             // Drops the item from the toolbar editor once the flag goes off. The render
             // path does not consult this method, so it repeats the check itself.
             Self::UsageSummary => FeatureFlag::PricingTransparency.is_enabled(),
@@ -167,7 +170,6 @@ impl AgentToolbarItemKind {
         {
             items.push(Self::HandoffToCloud);
         }
-        items.push(Self::VoiceInput);
         items.push(Self::FileAttach);
         items
     }
@@ -180,7 +182,6 @@ impl AgentToolbarItemKind {
             .collect();
         items.extend([
             Self::ModelSelector,
-            Self::VoiceInput,
             Self::FileAttach,
             Self::ContextWindowUsage,
             // Opt-in only: deliberately absent from `default_left`/`default_right`.

@@ -134,8 +134,6 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
     app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
     app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
     app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
-    #[cfg(feature = "voice_input")]
-    app.add_singleton_model(voice_input::VoiceInput::new);
 
     #[cfg(not(target_family = "wasm"))]
     app.add_singleton_model(SystemInfo::new);

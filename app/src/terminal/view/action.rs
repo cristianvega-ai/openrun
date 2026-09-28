@@ -237,9 +237,6 @@ pub enum TerminalAction {
     SetInputModeAgent,
     /// Sets the input mode to Terminal Mode
     SetInputModeTerminal,
-    /// Toggle voice input for CLI agent footer (dispatched from alt screen/blocklist when footer is visible)
-    #[cfg(feature = "voice_input")]
-    ToggleCLIAgentVoiceInput(voice_input::VoiceInputToggledFrom),
 
     HyperlinkClick(HyperlinkUrl),
     StartFileDropTarget,
@@ -529,8 +526,6 @@ impl fmt::Debug for TerminalAction {
             DragAndDropFiles(_) => write!(f, "DragAndDropFiles"),
             SetInputModeAgent => write!(f, "SetInputModeAgent"),
             SetInputModeTerminal => write!(f, "SetInputModeTerminal"),
-            #[cfg(feature = "voice_input")]
-            ToggleCLIAgentVoiceInput(source) => write!(f, "ToggleCLIAgentVoiceInput({source:?})"),
             HyperlinkClick(hyperlink_url) => write!(f, "HyperlinkClick({hyperlink_url:?})"),
             StartFileDropTarget => write!(f, "StartFileDropTarget"),
             StopFileDropTarget => write!(f, "StopFileDropTarget"),

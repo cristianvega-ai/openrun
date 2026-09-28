@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use parking_lot::FairMutex;
 use serde::{Deserialize, Serialize};
-use settings::Setting as _;
 use warp_core::features::FeatureFlag;
 use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity};
 
@@ -27,11 +26,9 @@ impl InputType {
     }
 }
 
-use warp_errors::report_if_error;
-
 use super::ConversationSelectionHandle;
 use super::input_mode_policy::InputModePolicyHandle;
-use crate::settings::{AISettings, InputBoxType, InputSettings};
+use crate::settings::{InputBoxType, InputSettings};
 use crate::terminal::TerminalModel;
 use crate::terminal::cli_agent_sessions::{
     CLIAgentInputState, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
@@ -262,17 +259,6 @@ impl BlocklistAIInputModel {
         }
 
         let old_config = self.input_config;
-
-        if new_config.input_type.is_ai() {
-            AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                let new_num_times = *settings.entered_agent_mode_num_times + 1;
-                report_if_error!(
-                    settings
-                        .entered_agent_mode_num_times
-                        .set_value(new_num_times, ctx)
-                );
-            });
-        }
 
         self.input_config = new_config;
 

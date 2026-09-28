@@ -76,10 +76,8 @@ There are two mechanisms for conditionally showing a setting, and they are not i
 if FeatureFlag::AIRules.is_enabled() {
     widgets.extend(Self::knowledge_widgets());
 }
-if cfg!(feature = "voice_input")
-    && ai_settings.voice_input_enabled_internal.is_supported_on_current_platform()
-{
-    widgets.push(Box::new(VoiceWidget::default()));
+if ai_settings.some_setting.is_supported_on_current_platform() {
+    widgets.push(Box::new(SomeWidget::default()));
 }
 ```
 
