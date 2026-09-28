@@ -2,17 +2,13 @@
 
 use std::borrow::Cow;
 
-use ai::LLMId;
 use anyhow::Result;
-use onboarding::slides::OnboardingModelInfo;
 use onboarding::{
-    AgentOnboardingEvent, AgentOnboardingView, MockTelemetryContextProvider, OfferVariant,
-    SelectedSettings,
+    MockTelemetryContextProvider, OnboardingView, OnboardingViewEvent, SelectedSettings,
 };
 use pathfinder_color::ColorU;
 use rust_embed::RustEmbed;
 use warp_core::ui::appearance::Appearance;
-use warp_core::ui::icons::Icon;
 use warp_core::ui::theme::{
     AnsiColor, AnsiColors, Details, Fill, Image, TerminalColors, WarpTheme,
 };
@@ -42,22 +38,6 @@ impl AssetProvider for Assets {
     }
 }
 
-/// Env var for jumping straight to a post-auth offer slide, which is otherwise
-/// only reachable from the app after authentication. Accepts
-/// `choose_how_to_start` or `head_start`.
-const DEMO_OFFER_ENV: &str = "ONBOARDING_DEMO_OFFER";
-
-fn demo_offer_variant() -> Option<OfferVariant> {
-    match std::env::var(DEMO_OFFER_ENV).ok()?.as_str() {
-        "choose_how_to_start" => Some(OfferVariant::ChooseHowToStart),
-        "head_start" => Some(OfferVariant::HeadStart),
-        other => {
-            log::warn!("unknown {DEMO_OFFER_ENV} value: {other}");
-            None
-        }
-    }
-}
-
 fn main() -> Result<()> {
     // Initialize logging for the onboarding binary.
     warp_logging::init(warp_logging::LogConfig {
@@ -65,15 +45,9 @@ fn main() -> Result<()> {
         ..Default::default()
     })?;
 
-    // Feature flags must be marked initialized before anything reads one: the
-    // onboarding slides check flags while rendering, and in a debug build that
+    // Feature flags must be marked initialized before anything reads one: in a debug build that
     // check panics if initialization never happened. The real app does this in
-    // `init_feature_flags`, which also turns on the flags for its release
-    // channel; this demo has no channel, so it previews the flag defaults.
-    if demo_offer_variant().is_some() {
-        // Except for this one, which the offer slides live behind.
-        warp_core::features::FeatureFlag::AccountFirstOnboarding.set_enabled(true);
-    }
+    // `init_feature_flags`; this demo previews the flag defaults.
     warp_core::features::mark_initialized();
 
     let app_builder = warpui::platform::AppBuilder::new(
@@ -100,7 +74,7 @@ fn main() -> Result<()> {
 
 #[derive(Clone, Debug)]
 enum OnboardingMainState {
-    Onboarding(ViewHandle<AgentOnboardingView>),
+    Onboarding(ViewHandle<OnboardingView>),
     Finished(ViewHandle<FinishedOnboardingView>),
 }
 
@@ -111,43 +85,10 @@ struct OnboardingMainView {
 impl OnboardingMainView {
     fn new(ctx: &mut ViewContext<Self>) -> Self {
         let themes = [phenomenon(), dark_theme(), light_theme(), adeberry()];
-        let default_model_id = LLMId::from("auto");
-        let models = vec![
-            OnboardingModelInfo {
-                id: LLMId::from("auto"),
-                title: "Auto".to_string(),
-                icon: Icon::Agent,
-                is_default: true,
-            },
-            OnboardingModelInfo {
-                id: LLMId::from("claude-sonnet"),
-                title: "Claude Sonnet".to_string(),
-                icon: Icon::ClaudeLogo,
-                is_default: false,
-            },
-            OnboardingModelInfo {
-                id: LLMId::from("gpt-4o"),
-                title: "GPT-4o".to_string(),
-                icon: Icon::OpenAILogo,
-                is_default: false,
-            },
-        ];
-        let onboarding_view = ctx.add_typed_action_view(move |ctx| {
-            AgentOnboardingView::new(
-                themes.clone(),
-                true,
-                models.clone(),
-                default_model_id.clone(),
-                false,
-                onboarding::OnboardingAuthState::LoggedOut,
-                ctx,
-            )
-        });
+        let onboarding_view =
+            ctx.add_typed_action_view(move |ctx| OnboardingView::new(themes.clone(), true, ctx));
         onboarding_view.update(ctx, |view, ctx| {
             view.start_onboarding(ctx);
-            if let Some(variant) = demo_offer_variant() {
-                view.show_post_auth_offer(variant, ctx);
-            }
         });
         ctx.subscribe_to_view(&onboarding_view, |me, _view, event, ctx| {
             me.handle_onboarding_event(event, ctx);
@@ -160,11 +101,11 @@ impl OnboardingMainView {
 
     fn handle_onboarding_event(
         &mut self,
-        event: &AgentOnboardingEvent,
+        event: &OnboardingViewEvent,
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            AgentOnboardingEvent::ThemeSelected { theme_name } => {
+            OnboardingViewEvent::ThemeSelected { theme_name } => {
                 let theme = match theme_name.as_str() {
                     "Phenomenon" => phenomenon(),
                     "Dark" => dark_theme(),
@@ -177,30 +118,20 @@ impl OnboardingMainView {
                     appearance.set_theme(theme, ctx);
                 });
             }
-            AgentOnboardingEvent::OnboardingCompleted(selected_settings) => {
+            OnboardingViewEvent::OnboardingCompleted(selected_settings) => {
                 let finished_view = ctx.add_typed_action_view(|_| {
                     FinishedOnboardingView::new(Some(selected_settings.clone()))
                 });
                 self.state = OnboardingMainState::Finished(finished_view);
                 ctx.notify();
             }
-            AgentOnboardingEvent::OnboardingSkipped => {
+            OnboardingViewEvent::OnboardingSkipped => {
                 let finished_view =
                     ctx.add_typed_action_view(|_| FinishedOnboardingView::new(None));
                 self.state = OnboardingMainState::Finished(finished_view);
                 ctx.notify();
             }
-            AgentOnboardingEvent::OfferAiSellSatisfied { .. }
-            | AgentOnboardingEvent::OfferSetUpLaterSelected { .. } => {
-                let finished_view =
-                    ctx.add_typed_action_view(|_| FinishedOnboardingView::new(None));
-                self.state = OnboardingMainState::Finished(finished_view);
-                ctx.notify();
-            }
-            AgentOnboardingEvent::SyncWithOsToggled { .. }
-            | AgentOnboardingEvent::UpgradeRequested
-            | AgentOnboardingEvent::UpgradeCopyUrlRequested
-            | AgentOnboardingEvent::AppBecameActive => {
+            OnboardingViewEvent::SyncWithOsToggled { .. } => {
                 // No-op in the standalone demo binary
             }
         }

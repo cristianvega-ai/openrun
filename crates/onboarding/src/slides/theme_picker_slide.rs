@@ -1,6 +1,5 @@
 use pathfinder_color::ColorU;
 use ui_components::{Component as _, Options as _, button};
-use warp_core::features::FeatureFlag;
 use warp_core::send_telemetry_from_ctx;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::theme::WarpTheme;
@@ -20,8 +19,7 @@ use warpui_core::{
 };
 
 use super::OnboardingSlide;
-use crate::OnboardingIntention;
-use crate::model::{OnboardingStateEvent, OnboardingStateModel};
+use crate::model::OnboardingStateModel;
 use crate::slides::{bottom_nav, layout, slide_content};
 use crate::telemetry::OnboardingEvent;
 
@@ -39,8 +37,6 @@ pub enum ThemePickerSlideAction {
     NextClicked,
 }
 
-const TOS_URL: &str = "https://www.warp.dev/terms-of-service";
-
 #[derive(Debug, Clone)]
 struct ThemeOption {
     theme: WarpTheme,
@@ -53,7 +49,6 @@ pub struct ThemePickerSlide {
     selected_theme_index: usize,
     sync_with_os: bool,
     sync_with_os_mouse: MouseStateHandle,
-    tos_mouse_state: MouseStateHandle,
     back_button: button::Button,
     next_button: button::Button,
     scroll_state: ClippedScrollStateHandle,
@@ -68,12 +63,6 @@ impl ThemePickerSlide {
         let theme_options = themes.map(|theme| ThemeOption {
             theme,
             mouse_state: MouseStateHandle::default(),
-        });
-
-        ctx.subscribe_to_model(&onboarding_state, |_me, _model, event, ctx| {
-            if matches!(event, OnboardingStateEvent::IntentionChanged) {
-                ctx.notify();
-            }
         });
 
         let appearance = Appearance::as_ref(ctx);
@@ -101,7 +90,6 @@ impl ThemePickerSlide {
             selected_theme_index,
             sync_with_os: false,
             sync_with_os_mouse: MouseStateHandle::default(),
-            tos_mouse_state: MouseStateHandle::default(),
             back_button: button::Button::default(),
             next_button: button::Button::default(),
             scroll_state: ClippedScrollStateHandle::new(),
@@ -147,19 +135,11 @@ impl ThemePickerSlide {
             theme_options
         };
 
-        let mut content = vec![
+        let content = vec![
             self.render_header_text(appearance),
             theme_options_section,
             self.render_sync_with_os_section(appearance),
         ];
-
-        // Add the Terms of Service disclaimer below the theme options on the
-        // terminal-intention path.
-        let state = self.onboarding_state.as_ref(app);
-        let is_terminal = matches!(state.intention(), OnboardingIntention::Terminal);
-        if !FeatureFlag::AccountFirstOnboarding.is_enabled() && is_terminal {
-            content.push(self.render_disclaimer_section(appearance));
-        }
 
         slide_content::onboarding_slide_content(
             content,
@@ -250,14 +230,11 @@ impl ThemePickerSlide {
             },
         );
 
-        let account_first = FeatureFlag::AccountFirstOnboarding.is_enabled();
-        let next_label = if account_first { "Next" } else { "Get Warping" };
-
         let enter = Keystroke::parse("enter").unwrap_or_default();
         let next_button = self.next_button.render(
             appearance,
             button::Params {
-                content: button::Content::Label(next_label.into()),
+                content: button::Content::Label("Get Warping".into()),
                 theme: &button::themes::Primary,
                 options: button::Options {
                     keystroke: Some(enter),
@@ -269,15 +246,7 @@ impl ThemePickerSlide {
             },
         );
 
-        let (step_index, step_count) = if account_first {
-            self.onboarding_state.as_ref(app).progress()
-        } else {
-            let is_terminal = matches!(
-                self.onboarding_state.as_ref(app).intention(),
-                OnboardingIntention::Terminal
-            );
-            if is_terminal { (3, 4) } else { (4, 5) }
-        };
+        let (step_index, step_count) = self.onboarding_state.as_ref(app).progress();
 
         bottom_nav::onboarding_bottom_nav(
             appearance,
@@ -409,7 +378,6 @@ impl ThemePickerSlide {
 
     /// All onboarding image paths used by the theme picker slide visual.
     pub(crate) const VISUAL_IMAGE_PATHS: &'static [&'static str] = &[
-        // Terminal intention
         "async/png/onboarding/terminal_intention/theme/theme_phenomenon_vertical.png",
         "async/png/onboarding/terminal_intention/theme/theme_phenomenon_horizontal.png",
         "async/png/onboarding/terminal_intention/theme/theme_dark_vertical.png",
@@ -418,24 +386,11 @@ impl ThemePickerSlide {
         "async/png/onboarding/terminal_intention/theme/theme_light_horizontal.png",
         "async/png/onboarding/terminal_intention/theme/theme_adeberry_vertical.png",
         "async/png/onboarding/terminal_intention/theme/theme_adeberry_horizontal.png",
-        // Agent intention
-        "async/png/onboarding/agent_intention/theme/theme_phenomenon_vertical.png",
-        "async/png/onboarding/agent_intention/theme/theme_phenomenon_horizontal.png",
-        "async/png/onboarding/agent_intention/theme/theme_dark_vertical.png",
-        "async/png/onboarding/agent_intention/theme/theme_dark_horizontal.png",
-        "async/png/onboarding/agent_intention/theme/theme_light_vertical.png",
-        "async/png/onboarding/agent_intention/theme/theme_light_horizontal.png",
-        "async/png/onboarding/agent_intention/theme/theme_adeberry_vertical.png",
-        "async/png/onboarding/agent_intention/theme/theme_adeberry_horizontal.png",
     ];
 
     fn theme_visual_path(&self, app: &AppContext) -> &'static str {
         let state = self.onboarding_state.as_ref(app);
         let vertical = state.ui_customization().use_vertical_tabs;
-        let intention_dir = match state.intention() {
-            OnboardingIntention::AgentDrivenDevelopment => "agent_intention",
-            OnboardingIntention::Terminal => "terminal_intention",
-        };
         let theme_name = self.theme_display_name(self.selected_theme_index);
         let name_key = match theme_name.as_str() {
             "Phenomenon" => "phenomenon",
@@ -448,7 +403,7 @@ impl ThemePickerSlide {
         // Safety: all combinations are in VISUAL_IMAGE_PATHS.
         Self::VISUAL_IMAGE_PATHS
             .iter()
-            .find(|p| p.contains(intention_dir) && p.contains(name_key) && p.contains(orientation))
+            .find(|p| p.contains(name_key) && p.contains(orientation))
             .unwrap_or(&Self::VISUAL_IMAGE_PATHS[0])
     }
 
@@ -511,55 +466,6 @@ impl ThemePickerSlide {
                 .with_cross_axis_alignment(CrossAxisAlignment::Center)
                 .with_child(checkbox)
                 .with_child(Container::new(label).with_margin_left(8.).finish())
-                .finish(),
-        )
-        .with_margin_top(24.)
-        .finish()
-    }
-
-    fn render_disclaimer_section(&self, appearance: &Appearance) -> Box<dyn Element> {
-        let theme = appearance.theme();
-        let sub_text_color = internal_colors::text_sub(theme, theme.background().into_solid());
-        let ui_builder = appearance.ui_builder();
-
-        let disclaimer_styles = UiComponentStyles {
-            font_color: Some(sub_text_color),
-            font_size: Some(12.),
-            ..Default::default()
-        };
-        let link_styles = UiComponentStyles {
-            font_size: Some(12.),
-            ..Default::default()
-        };
-
-        let tos_line = Flex::row()
-            .with_child(
-                ui_builder
-                    .span("By continuing, you agree to Warp's ")
-                    .with_style(disclaimer_styles)
-                    .build()
-                    .finish(),
-            )
-            .with_child(
-                ui_builder
-                    .link(
-                        "Terms of Service".into(),
-                        Some(TOS_URL.into()),
-                        None,
-                        self.tos_mouse_state.clone(),
-                    )
-                    .soft_wrap(false)
-                    .with_style(link_styles)
-                    .build()
-                    .finish(),
-            )
-            .finish();
-
-        Container::new(
-            Flex::column()
-                .with_main_axis_size(MainAxisSize::Min)
-                .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                .with_child(tos_line)
                 .finish(),
         )
         .with_margin_top(24.)

@@ -106,18 +106,6 @@ pub fn init(app: &mut AppContext) {
         WorkspaceAction::DumpDebugInfo,
         id!("Workspace"),
     )]);
-    app.register_fixed_bindings([
-        FixedBinding::new(
-            "escape",
-            WorkspaceAction::DismissSessionConfigTabConfigChip,
-            id!("Workspace") & id!(flags::SESSION_CONFIG_TAB_CONFIG_CHIP_OPEN),
-        ),
-        FixedBinding::new(
-            "enter",
-            WorkspaceAction::DismissSessionConfigTabConfigChip,
-            id!("Workspace") & id!(flags::SESSION_CONFIG_TAB_CONFIG_CHIP_OPEN),
-        ),
-    ]);
 
     if ChannelState::enable_debug_features() {
         app.register_editable_bindings([
@@ -136,11 +124,6 @@ pub fn init(app: &mut AppContext) {
             )
             .with_context_predicate(id!("Workspace")),
         ]);
-        app.register_fixed_bindings([FixedBinding::empty(
-            "[Debug] View first-time user experience",
-            WorkspaceAction::AddGetStartedTab,
-            id!("Workspace"),
-        )]);
         #[cfg(debug_assertions)]
         {
             // Debug actions for build plan migration modal (command palette only)

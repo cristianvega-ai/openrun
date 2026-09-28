@@ -57,6 +57,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [CLI-agent footer split out of the agent footer](#cli-agent-footer-split-out-of-the-agent-footer) — the third-party CLI agent toolbar is now its own `CLIAgentFooter` view in `terminal/view/cli_agent_footer/`, with its own item type, layout editor and lenient stored-layout parsing
 - [MCP (Model Context Protocol)](#mcp-model-context-protocol) — deleted the `mcp` crate, the MCP server managers, gallery, OAuth and file-based discovery, the MCP settings page, Drive item and slash commands, the agent's MCP tool and resource actions, MCP execution-profile permissions and the Figma MCP prompt chip
 - [Launch, feature-intro and vertical-tabs intro modals](#launch-feature-intro-and-vertical-tabs-intro-modals) — deleted the Oz, OpenWarp, orchestration and Warp Agent CLI launch modals, the feature-intro popover and the vertical-tabs intro flow, with their one-time flags and debug actions
+- [Onboarding: AI slides, callout tutorial and Get Started](#onboarding-ai-slides-callout-tutorial-and-get-started) — onboarding is now four slides (welcome, customize, CLI agents, theme); removed the agent-intention flow, the AI-access and offer slides, the in-terminal callout tutorial that started an agent, the Get Started pane and coding entrypoints
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1523,3 +1524,32 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - `FeatureFlag::{OzLaunchModal, OpenWarpLaunchModal, OrchestrationLaunchModal, AgentCliLaunchModal, HOAOnboardingFlow}` and their Cargo features stay for FLAGS-1.
 - The build-plan migration, free-AI-removal and auto-handoff sleep modals are left to AI-16 and AI-17a. Nothing sets `has_completed_initial_modal_checks` any more, so the free-AI-removal notice can no longer open; AI-16 deletes it.
 - `FeatureFlag::CodeLaunchModal` gates the unrelated code-toolbelt tooltip and is untouched.
+
+## Onboarding: AI slides, callout tutorial and Get Started
+**Why:** Onboarding sold Warp AI and Oz: it asked for an "intention" (agent-driven development or terminal), sent the user through model, autonomy and AI-access slides and a post-sign-in offer, then ran a callout tutorial in the terminal that ended by submitting `/init` or a prompt to an agent. None of that exists without accounts and Warp AI.
+
+**Removed:**
+- `crates/onboarding`: `agent_slide`, `ai_access_slide`, `ai_setup_slide`, `intention_slide`, `offer_slide`, `upgrade_auth_prompt`, `two_line_button`, the whole `callout/` module (the in-terminal tutorial, including its `/init` step), `components/` (callout and opt-out dialogs) and the `callout`/`callout_flow` examples.
+- `OnboardingIntention` (and `AgentDrivenDevelopment`), `SessionDefault`, `AI_FEATURES`, `OnboardingAuthState`, `OfferVariant`, the model list, autonomy, `disable_oz`, the pricing promotion, the "Are you sure you don't want AI?" dialog, the plan-activated toast, the app-refocus refresh, and the `ai` crate dependency (`LLMId`). Also the unused `instant`, `log` and `warp_errors` dependencies.
+- The "Terms of Service" disclaimer on the theme slide (a warp.dev link); the "opt out of analytics" wording had already gone with the login removal.
+- Telemetry events for the removed slides, dialogs and callouts, and the account-first payload metadata.
+- `app/src/ai/onboarding.rs`, `app/src/workspace/view/onboarding.rs` (`OnboardingTutorial`), `WorkspaceAction::{StartAgentOnboardingTutorial, AddGetStartedTab}`, `TerminalAction::OnboardingFlow` with its debug bindings, `Event::OnboardingTutorialCompleted`, and `AgentViewEntryOrigin::{Onboarding, OnboardingCallout}`.
+- The Get Started pane (`pane_group/pane/get_started_{pane,view}.rs`, `LeafContents::GetStarted`, `IPaneType::GetStarted`, the persistence read and write), `app/src/coding_entrypoints/` (open, create-project and clone-repo buttons) and `TerminalView::{create_new_project, agent_clone_repository}`.
+- The tab-config chip that only the vertical-tabs intro flow could show ("Access your tab configs here"), its dismiss action and bindings, the `SESSION_CONFIG_TAB_CONFIG_CHIP_OPEN` context flag, and the pending-tutorial state around the session config and params modals. The session config modal itself stays (debug-only for now).
+- `view_components/callout_bubble.rs`: the bubble renderer and arrow types, which nothing uses any more; the checkbox and color helpers stay.
+- Images that only the removed slides used (`onboarding/agent_intention/`, `welcome_agent.png`, `warp-logo-neutral.svg`).
+
+**Modified:**
+- `OnboardingView` (was `AgentOnboardingView`) hosts four slides: welcome, "Customize your Warp" (tab styling, tools panel, code review), "Customize third party agents" (CLI agent toolbar and notifications) and the theme picker. The last slide finishes onboarding. `SelectedSettings` is now a struct.
+- Defaults follow the old terminal path: horizontal tabs, tools panel and code review off, CLI agent toolbar and notifications on. `show_conversation_history` is gone from the customize slide and from `apply_onboarding_settings`, which no longer touches AI settings, execution profiles or the default session mode.
+- The welcome slide's subtitle no longer advertises agents.
+- `Workspace::open_vertical_tabs_panel_if_enabled` is now called by `RootView` after onboarding completes.
+- The workspace no longer creates a Get Started tab or starts a tutorial when a new window opens.
+
+**User-visible impact:** First launch shows four slides and then the terminal. There is no AI choice, no tutorial in the terminal, no Get Started tab and no open/create/clone buttons on an empty window. A stale `get_started` tab in a saved session fails to restore until DB-1 deletes its rows.
+
+**Notes:**
+- `ai/agent_tips.rs` is not deleted here: its remaining callers are in code other tasks own (see the report to the orchestrator).
+- `terminal/view/block_onboarding/onboarding_prompt_block.rs` has no AI content (it is the prompt-style chooser used by settings import), so it stays.
+- `crates/onboarding/src/bin/main.rs` still builds as a demo of the four slides.
+- `FeatureFlag::AgentOnboarding` still gates showing the slides at startup. `GetStartedTab`, `HOAOnboardingFlow` and `AccountFirstOnboarding` are no longer read. FLAGS-1 removes all four.

@@ -8096,11 +8096,8 @@ dependencies = [
 name = "onboarding"
 version = "0.1.0"
 dependencies = [
- "ai",
  "anyhow",
  "cfg-if",
- "instant",
- "log",
  "pathfinder_color",
  "pathfinder_geometry",
  "rust-embed 8.7.2",
@@ -8111,7 +8108,6 @@ dependencies = [
  "ui_components",
  "uuid",
  "warp_core",
- "warp_errors",
  "warp_logging",
  "warpui",
  "warpui_core",

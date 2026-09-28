@@ -1,6 +1,5 @@
 use pathfinder_color::ColorU;
 use ui_components::{Component as _, Options as _, button};
-use warp_core::features::FeatureFlag;
 use warp_core::send_telemetry_from_ctx;
 use warp_core::ui::Icon;
 use warp_core::ui::appearance::Appearance;
@@ -65,17 +64,6 @@ impl View for IntroSlide {
 impl IntroSlide {
     fn get_started_clicked(&mut self, ctx: &mut ViewContext<Self>) {
         send_telemetry_from_ctx!(OnboardingEvent::GetStartedClicked, ctx);
-        if FeatureFlag::AccountFirstOnboarding.is_enabled() {
-            send_telemetry_from_ctx!(
-                OnboardingEvent::OnboardingAction {
-                    slide_name: "welcome".to_string(),
-                    action: "get_started".to_string(),
-                    account_class: None,
-                },
-                ctx
-            );
-        }
-
         self.onboarding_state.update(ctx, |model, ctx| {
             model.next(ctx);
         });
@@ -112,15 +100,12 @@ impl IntroSlide {
         .finish();
 
         let subtitle_color = internal_colors::text_sub(theme, theme.background().into_solid());
-        let subtitle = FormattedTextElement::from_str(
-            "A modern terminal with state of the art agents built in.",
-            appearance.ui_font_family(),
-            16.,
-        )
-        .with_color(subtitle_color)
-        .with_alignment(TextAlignment::Center)
-        .with_line_height_ratio(1.0)
-        .finish();
+        let subtitle =
+            FormattedTextElement::from_str("A modern terminal.", appearance.ui_font_family(), 16.)
+                .with_color(subtitle_color)
+                .with_alignment(TextAlignment::Center)
+                .with_line_height_ratio(1.0)
+                .finish();
 
         let enter = Keystroke::parse("enter").unwrap_or_default();
         let get_started_button = self.get_started_button.render(

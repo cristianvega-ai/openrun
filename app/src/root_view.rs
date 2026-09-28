@@ -5,7 +5,7 @@ use std::sync::mpsc::SyncSender;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use onboarding::{AgentOnboardingEvent, AgentOnboardingView, OnboardingIntention};
+use onboarding::{OnboardingView, OnboardingViewEvent};
 use parking_lot::Mutex;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
@@ -30,14 +30,8 @@ use warpui::{
     ViewContext, ViewHandle, WindowId, id,
 };
 
-use crate::ai::AIRequestUsageModel;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::blocklist::SerializedBlockListItem;
-use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
-use crate::ai::onboarding::{
-    build_onboarding_models, current_onboarding_auth_state, onboarding_pricing_promotion_message,
-};
-use crate::ai::request_usage_model::AIRequestUsageModelEvent;
 use crate::app_state::{AppState, PaneUuid, WindowSnapshot};
 use crate::appearance::Appearance;
 use crate::features::FeatureFlag;
@@ -46,12 +40,11 @@ use crate::launch_configs::launch_config;
 use crate::linear::LinearIssueWork;
 use crate::pane_group::{NewTerminalOptions, PanesLayout};
 use crate::persistence::ModelEvent;
-use crate::pricing::{PricingInfoModel, PricingInfoModelEvent};
 use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::ServerId;
 use crate::server::server_api::{ServerApi, ServerApiProvider};
 use crate::server::telemetry::{LaunchConfigUiLocation, TelemetryEvent};
-use crate::settings::{AISettings, QuakeModeSettings, ThemeSettings, apply_onboarding_settings};
+use crate::settings::{QuakeModeSettings, ThemeSettings, apply_onboarding_settings};
 use crate::settings_view::{OpenTeamsSettingsModalArgs, SettingsSection, flags};
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::general_settings::GeneralSettings;
@@ -64,10 +57,9 @@ use crate::uri::OpenSettingsArgs;
 use crate::util::bindings::{self, is_binding_pty_compliant};
 use crate::util::traffic_lights::{TrafficLightData, TrafficLightMouseStates, traffic_light_data};
 use crate::window_settings::WindowSettings;
-use crate::workspace::view::OnboardingTutorial;
 use crate::workspace::{PaneViewLocator, Workspace, WorkspaceAction, WorkspaceRegistry};
 use crate::workspaces::team_tester::TeamTesterStatus;
-use crate::workspaces::user_workspaces::{ResolvedTeamScope, UserWorkspaces, UserWorkspacesEvent};
+use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{
     ChannelState, GlobalResourceHandles, GlobalResourceHandlesProvider, UpdateQuakeModeEventArg,
     send_telemetry_from_app_ctx, send_telemetry_from_ctx,
@@ -78,16 +70,6 @@ const WINDOW_TITLE: &str = "Warp";
 lazy_static! {
     static ref FALLBACK_WINDOW_SIZE: Vector2F = vec2f(800.0, 600.0);
     static ref QUAKE_STATE: Arc<Mutex<Option<QuakeModeState>>> = Arc::new(Mutex::new(None));
-}
-
-/// Whether the team selected in `ctx`'s window imposes any AI autonomy policy, which is
-/// what decides whether onboarding offers the user an autonomy choice at all.
-fn team_enforces_autonomy(ctx: &ViewContext<RootView>) -> bool {
-    let user_workspaces = UserWorkspaces::as_ref(ctx);
-    let scope = user_workspaces.team_context(&ctx.handle(), ctx);
-    user_workspaces
-        .ai_autonomy_settings(&scope)
-        .has_any_overrides()
 }
 
 #[derive(Debug, Clone)]
@@ -1523,7 +1505,7 @@ fn mark_local_onboarding_completed(ctx: &AppContext) {
 /// Whether onboarding has completed and we should render the `Workspace`.
 enum AuthOnboardingState {
     Onboarding {
-        onboarding_view: ViewHandle<AgentOnboardingView>,
+        onboarding_view: ViewHandle<OnboardingView>,
         target: AuthOnboardingTarget,
     },
     Terminal(ViewHandle<Workspace>),
@@ -1567,7 +1549,7 @@ impl RootView {
             && ChannelState::channel() != Channel::Integration
         {
             let workspace_args_box: Box<WorkspaceArgs> = workspace_args.into();
-            let onboarding_view = Self::create_agent_onboarding_view(ctx);
+            let onboarding_view = Self::create_onboarding_view(ctx);
             onboarding_view.update(ctx, |view, ctx| {
                 view.start_onboarding(ctx);
             });
@@ -1627,110 +1609,14 @@ impl RootView {
         true
     }
 
-    fn create_agent_onboarding_view(
-        ctx: &mut ViewContext<Self>,
-    ) -> ViewHandle<AgentOnboardingView> {
-        let scope = ResolvedTeamScope::from_scope(
-            &UserWorkspaces::as_ref(ctx).team_context(&ctx.handle(), ctx),
-        );
-        LLMPreferences::handle(ctx).update(ctx, |prefs, ctx| {
-            prefs.refresh_available_models(&scope, ctx);
-        });
-
+    fn create_onboarding_view(ctx: &mut ViewContext<Self>) -> ViewHandle<OnboardingView> {
         let themes = onboarding_theme_picker_themes();
-        // Resolved against the root view rather than inside the closure below: the view being
-        // constructed there is not in a window yet, so it cannot resolve its own team.
-        let enforces_autonomy = team_enforces_autonomy(ctx);
         let onboarding_view = ctx.add_typed_action_view(move |ctx| {
-            let (models, default_model_id) =
-                build_onboarding_models(LLMPreferences::as_ref(ctx), ctx);
-
-            let auth_state = current_onboarding_auth_state(ctx);
-
-            let mut view = AgentOnboardingView::new(
-                themes.clone(),
-                false, // Always use unskippable onboarding.
-                models,
-                default_model_id,
-                enforces_autonomy,
-                auth_state,
-                ctx,
-            );
-            view.set_pricing_promotion_message(onboarding_pricing_promotion_message(ctx), ctx);
-            view
+            // Always use unskippable onboarding.
+            OnboardingView::new(themes.clone(), false, ctx)
         });
-        // Keep the offer slide's promotion in sync with server pricing.
-        let onboarding_view_for_pricing = onboarding_view.clone();
-        ctx.subscribe_to_model(
-            &PricingInfoModel::handle(ctx),
-            move |_, _pricing, event, ctx| {
-                let PricingInfoModelEvent::PricingInfoUpdated = event;
-                let promotion_message = onboarding_pricing_promotion_message(ctx);
-                onboarding_view_for_pricing.update(ctx, |onboarding_view, ctx| {
-                    onboarding_view.set_pricing_promotion_message(promotion_message, ctx);
-                });
-            },
-        );
-
-        let onboarding_view_clone = onboarding_view.clone();
-        ctx.subscribe_to_model(
-            &LLMPreferences::handle(ctx),
-            move |_, llm_preferences, event, ctx| match event {
-                LLMPreferencesEvent::UpdatedAvailableLLMs => {
-                    let (models, default_model_id) =
-                        build_onboarding_models(llm_preferences.as_ref(ctx), ctx);
-                    onboarding_view_clone.update(ctx, |onboarding_view, ctx| {
-                        onboarding_view.set_onboarding_models(models, default_model_id, ctx);
-                    })
-                }
-
-                LLMPreferencesEvent::UpdatedActiveAgentModeLLM
-                | LLMPreferencesEvent::UpdatedActiveCodingLLM => {}
-            },
-        );
-
-        // Subscribe to workspace changes to update autonomy enforcement state and auth/billing
-        // state (e.g. a free→paid upgrade reflected by the workspace/billing metadata poll).
-        let onboarding_view_for_workspaces = onboarding_view.clone();
-        ctx.subscribe_to_model(
-            &UserWorkspaces::handle(ctx),
-            move |_, _user_workspaces, event, ctx| {
-                if matches!(event, UserWorkspacesEvent::UpdateWorkspaceSettingsSuccess) {
-                    let workspace_enforces_autonomy = team_enforces_autonomy(ctx);
-                    onboarding_view_for_workspaces.update(ctx, |onboarding_view, ctx| {
-                        onboarding_view
-                            .set_workspace_enforces_autonomy(workspace_enforces_autonomy, ctx);
-                    });
-                }
-                let auth_state = current_onboarding_auth_state(ctx);
-                onboarding_view_for_workspaces.update(ctx, |onboarding_view, ctx| {
-                    onboarding_view.set_auth_state(auth_state, ctx);
-                });
-            },
-        );
-
-        // Browser checkout doesn't report back to the app, so the offer is only
-        // satisfied once the user can actually make an AI request.
-        let onboarding_view_for_usage = onboarding_view.clone();
-        ctx.subscribe_to_model(
-            &AIRequestUsageModel::handle(ctx),
-            move |_, _usage, event, ctx| {
-                if !matches!(event, AIRequestUsageModelEvent::CreditAvailabilityUpdated) {
-                    return;
-                }
-                let available = {
-                    let user_workspaces = UserWorkspaces::as_ref(ctx);
-                    let scope = user_workspaces.team_context_for_view(ctx);
-                    AIRequestUsageModel::as_ref(ctx).has_any_ai_remaining(&scope, ctx)
-                };
-                onboarding_view_for_usage.update(ctx, |onboarding_view, ctx| {
-                    onboarding_view.on_ai_credit_availability_observed(available, ctx);
-                });
-            },
-        );
-
         ctx.subscribe_to_view(&onboarding_view, |me, _view, event, ctx| {
-            me.handle_agent_onboarding_event(event, ctx);
+            me.handle_onboarding_event(event, ctx);
         });
         onboarding_view
     }
@@ -1762,13 +1648,13 @@ impl RootView {
             })
     }
 
-    fn handle_agent_onboarding_event(
+    fn handle_onboarding_event(
         &mut self,
-        event: &AgentOnboardingEvent,
+        event: &OnboardingViewEvent,
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            AgentOnboardingEvent::ThemeSelected { theme_name } => {
+            OnboardingViewEvent::ThemeSelected { theme_name } => {
                 let Some(theme_kind) = Self::onboarding_theme_kind(theme_name) else {
                     log::warn!("Unknown onboarding theme selected: {theme_name}");
                     return;
@@ -1780,12 +1666,12 @@ impl RootView {
                     report_if_error!(settings.theme_kind.set_value(theme_kind.clone(), ctx));
                 });
             }
-            AgentOnboardingEvent::SyncWithOsToggled { enabled } => {
+            OnboardingViewEvent::SyncWithOsToggled { enabled } => {
                 ThemeSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.use_system_theme.set_value(*enabled, ctx));
                 });
             }
-            AgentOnboardingEvent::OnboardingCompleted(selected_settings) => {
+            OnboardingViewEvent::OnboardingCompleted(selected_settings) => {
                 let AuthOnboardingState::Onboarding { target, .. } = &self.auth_onboarding_state
                 else {
                     return;
@@ -1793,16 +1679,17 @@ impl RootView {
                 let target = target.clone();
                 mark_local_onboarding_completed(ctx);
 
-                let team_context = UserWorkspaces::as_ref(ctx).team_context_for_operation(ctx);
-                apply_onboarding_settings(selected_settings, false, team_context, ctx);
+                apply_onboarding_settings(selected_settings, ctx);
 
                 let workspace = target.to_workspace(ctx);
+                workspace.update(ctx, |view, ctx| {
+                    view.open_vertical_tabs_panel_if_enabled(ctx);
+                });
                 self.auth_onboarding_state = AuthOnboardingState::Terminal(workspace);
                 ctx.emit(RootViewEvent::AuthOnboardingStateChanged);
-                self.start_tutorial(OnboardingTutorial::from(selected_settings.clone()), ctx);
                 ctx.notify();
             }
-            AgentOnboardingEvent::OnboardingSkipped => {
+            OnboardingViewEvent::OnboardingSkipped => {
                 let AuthOnboardingState::Onboarding { target, .. } = &self.auth_onboarding_state
                 else {
                     return;
@@ -1815,12 +1702,6 @@ impl RootView {
                 ctx.emit(RootViewEvent::AuthOnboardingStateChanged);
                 ctx.notify();
             }
-            // Upgrades, purchases and the post-auth offer require a Warp account.
-            AgentOnboardingEvent::UpgradeRequested
-            | AgentOnboardingEvent::UpgradeCopyUrlRequested
-            | AgentOnboardingEvent::OfferSetUpLaterSelected { .. }
-            | AgentOnboardingEvent::OfferAiSellSatisfied { .. }
-            | AgentOnboardingEvent::AppBecameActive => {}
         }
     }
 
@@ -2247,31 +2128,6 @@ impl RootView {
         true
     }
 
-    /// Starts the onboarding tutorial in the workspace.
-    fn start_tutorial(&mut self, tutorial: OnboardingTutorial, ctx: &mut ViewContext<Self>) {
-        let AuthOnboardingState::Terminal(workspace) = &self.auth_onboarding_state else {
-            return;
-        };
-
-        if FeatureFlag::TabConfigs.is_enabled() {
-            let intention = tutorial.intention();
-            if matches!(intention, OnboardingIntention::AgentDrivenDevelopment) {
-                workspace.update(ctx, |view, ctx| {
-                    view.open_vertical_tabs_panel_if_enabled(ctx);
-                    view.start_agent_onboarding_tutorial(tutorial, ctx);
-                });
-            } else {
-                workspace.update(ctx, |view, ctx| {
-                    view.open_vertical_tabs_panel_if_enabled(ctx);
-                });
-            }
-        } else if *AISettings::as_ref(ctx).is_any_ai_enabled {
-            workspace.update(ctx, |view, ctx| {
-                view.start_agent_onboarding_tutorial(tutorial, ctx);
-            });
-        }
-    }
-
     fn traffic_light_data(&self, ctx: &AppContext) -> Option<TrafficLightData> {
         // The workspace view will handle rendering of the traffic lights (so
         // that they can be hidden when the tab bar is hidden).
@@ -2423,7 +2279,7 @@ impl AuthOnboardingState {
         }
         let target = AuthOnboardingTarget::Terminal(workspace.clone());
 
-        let onboarding_view = RootView::create_agent_onboarding_view(ctx);
+        let onboarding_view = RootView::create_onboarding_view(ctx);
         onboarding_view.update(ctx, |view, ctx| {
             view.start_onboarding(ctx);
         });

@@ -173,7 +173,7 @@ fn join_shared_session_in_existing_window_retargets_pending_onboarding_workspace
 
         let target = AuthOnboardingTarget::Workspace(pending_workspace_args(&mut app));
         root_view.update(&mut app, |root_view, ctx| {
-            let onboarding_view = RootView::create_agent_onboarding_view(ctx);
+            let onboarding_view = RootView::create_onboarding_view(ctx);
             root_view.auth_onboarding_state = AuthOnboardingState::Onboarding {
                 onboarding_view,
                 target,

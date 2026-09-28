@@ -17,8 +17,7 @@ use warpui_core::{
 
 use super::OnboardingSlide;
 use super::toggle_card::{ToggleCardSpec, render_toggle_card};
-use crate::OnboardingIntention;
-use crate::model::{OnboardingStateEvent, OnboardingStateModel};
+use crate::model::OnboardingStateModel;
 use crate::slides::{bottom_nav, layout, slide_content};
 
 /// Which setting card is currently expanded.
@@ -52,16 +51,7 @@ pub struct ThirdPartySlide {
 }
 
 impl ThirdPartySlide {
-    pub(crate) fn new(
-        onboarding_state: ModelHandle<OnboardingStateModel>,
-        ctx: &mut ViewContext<Self>,
-    ) -> Self {
-        ctx.subscribe_to_model(&onboarding_state, |_me, _model, event, ctx| {
-            if matches!(event, OnboardingStateEvent::IntentionChanged) {
-                ctx.notify();
-            }
-        });
-
+    pub(crate) fn new(onboarding_state: ModelHandle<OnboardingStateModel>) -> Self {
         Self {
             onboarding_state,
             selected_setting: None,
@@ -90,19 +80,11 @@ impl ThirdPartySlide {
     fn cli_agent_toolbar_enabled(&self, app: &AppContext) -> bool {
         self.onboarding_state
             .as_ref(app)
-            .agent_settings()
-            .cli_agent_toolbar_enabled
+            .cli_agent_toolbar_enabled()
     }
 
     fn show_agent_notifications(&self, app: &AppContext) -> bool {
-        self.onboarding_state
-            .as_ref(app)
-            .agent_settings()
-            .show_agent_notifications
-    }
-
-    fn model_intention(&self, app: &AppContext) -> OnboardingIntention {
-        *self.onboarding_state.as_ref(app).intention()
+        self.onboarding_state.as_ref(app).show_agent_notifications()
     }
 
     fn render_content(
@@ -110,21 +92,15 @@ impl ThirdPartySlide {
         appearance: &Appearance,
         cli_toolbar_enabled: bool,
         show_agent_notifications: bool,
-        intention: OnboardingIntention,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let bottom_nav = Align::new(self.render_bottom_nav(appearance, app)).finish();
 
-        let mut sections = vec![
+        let sections = vec![
             self.render_header(appearance),
             self.render_toolbar_section(appearance, cli_toolbar_enabled),
+            self.render_notifications_section(appearance, show_agent_notifications),
         ];
-
-        // Only show the notifications toggle for terminal intention.
-        // For agent intention, notifications are always enabled.
-        if matches!(intention, OnboardingIntention::Terminal) {
-            sections.push(self.render_notifications_section(appearance, show_agent_notifications));
-        }
 
         slide_content::onboarding_slide_content(
             sections,
@@ -343,7 +319,6 @@ impl View for ThirdPartySlide {
         let appearance = Appearance::as_ref(app);
         let cli_toolbar_enabled = self.cli_agent_toolbar_enabled(app);
         let show_agent_notifications = self.show_agent_notifications(app);
-        let intention = self.model_intention(app);
         let vertical = self
             .onboarding_state
             .as_ref(app)
@@ -356,7 +331,6 @@ impl View for ThirdPartySlide {
                     appearance,
                     cli_toolbar_enabled,
                     show_agent_notifications,
-                    intention,
                     app,
                 )
             },
@@ -390,17 +364,11 @@ impl OnboardingSlide for ThirdPartySlide {
     }
 
     fn on_down(&mut self, ctx: &mut ViewContext<Self>) {
-        let is_terminal = matches!(self.model_intention(ctx), OnboardingIntention::Terminal);
         let new_card = match self.selected_setting {
             None => SettingCard::CliToolbar,
-            Some(SettingCard::CliToolbar) => {
-                if is_terminal {
-                    SettingCard::Notifications
-                } else {
-                    SettingCard::CliToolbar
-                }
+            Some(SettingCard::CliToolbar | SettingCard::Notifications) => {
+                SettingCard::Notifications
             }
-            Some(SettingCard::Notifications) => SettingCard::Notifications,
         };
         self.selected_setting = Some(new_card);
         ctx.notify();

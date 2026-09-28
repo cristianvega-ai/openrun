@@ -171,7 +171,7 @@ use crate::ai::blocklist::{
     BlocklistAIInputEvent, BlocklistAIInputModel, DIFF_HUNK_ATTACHMENT_REGEX,
     DRIVE_OBJECT_ATTACHMENT_REGEX, InputConfig, InputType, PendingAttachment, PendingFile,
     QueuedQuery, QueuedQueryEvent, QueuedQueryId, QueuedQueryModel, QueuedQueryOrigin,
-    SlashCommandRequest, ai_brand_color, ai_indicator_height,
+    ai_brand_color, ai_indicator_height,
 };
 use crate::ai::cloud_agent_settings::{AuthSecretPreference, CloudAgentSettings};
 use crate::ai::cloud_environments::CloudAmbientAgentEnvironment;
@@ -12508,18 +12508,6 @@ impl Input {
         }
         self.ai_controller.update(ctx, move |controller, ctx| {
             controller.send_create_new_project_request(ai_query, ctx)
-        });
-    }
-
-    pub(crate) fn initiate_clone_repository(&mut self, url: String, ctx: &mut ViewContext<Self>) {
-        if !self.agent_view_controller.as_ref(ctx).is_active() {
-            self.agent_view_controller.update(ctx, |controller, ctx| {
-                let _ =
-                    controller.try_enter_agent_view(None, AgentViewEntryOrigin::ProjectEntry, ctx);
-            });
-        }
-        self.ai_controller.update(ctx, move |controller, ctx| {
-            controller.send_slash_command_request(SlashCommandRequest::CloneRepository { url }, ctx)
         });
     }
 

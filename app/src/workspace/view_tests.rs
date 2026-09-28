@@ -2432,17 +2432,10 @@ fn set_left_panel_visibility_across_tabs(is_enabled: bool, ctx: &mut ViewContext
     });
 }
 
-fn add_get_started_tab(workspace: &mut Workspace, ctx: &mut ViewContext<Workspace>) {
-    workspace.add_tab_with_pane_layout(
-        PanesLayout::Snapshot(Box::new(PaneNodeSnapshot::Leaf(LeafSnapshot {
-            is_focused: true,
-            custom_vertical_tabs_title: None,
-            contents: LeafContents::GetStarted,
-        }))),
-        Arc::new(HashMap::<PaneUuid, Vec<SerializedBlockListItem>>::new()),
-        None,
-        ctx,
-    );
+fn add_notebook_tab(workspace: &mut Workspace, ctx: &mut ViewContext<Workspace>) {
+    let notebook_view = ctx.add_typed_action_view(NotebookView::new);
+    let pane = NotebookPane::new(notebook_view, ctx);
+    workspace.add_tab_from_existing_pane(Box::new(pane), workspace.tabs.len(), None, ctx);
 }
 
 fn find_terminal_tab_index(workspace: &Workspace, ctx: &AppContext) -> usize {
@@ -2530,7 +2523,6 @@ fn test_left_panel_window_scoped_reconciles_between_terminal_tabs_when_enabled()
 fn test_left_panel_window_scoped_non_following_tab_does_not_reconcile_but_updates_window_state() {
     let _conversation_list_guard =
         FeatureFlag::AgentViewConversationListView.override_enabled(false);
-    let _get_started_guard = FeatureFlag::GetStartedTab.override_enabled(true);
 
     App::test((), |mut app| async move {
         initialize_app(&mut app);
@@ -2544,9 +2536,9 @@ fn test_left_panel_window_scoped_non_following_tab_does_not_reconcile_but_update
             workspace.open_left_panel(ctx);
             assert!(workspace.left_panel_open);
 
-            // Create a non-following tab (e.g. Get Started), which should not auto-open even though
+            // Create a non-following tab (e.g. a notebook), which should not auto-open even though
             // the window state is open.
-            add_get_started_tab(workspace, ctx);
+            add_notebook_tab(workspace, ctx);
             let non_following_tab_index = find_non_following_tab_index(workspace, ctx);
             workspace.activate_tab(non_following_tab_index, ctx);
 

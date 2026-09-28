@@ -1,39 +1,9 @@
 // Onboarding library crate
 
-mod agent_onboarding_view;
-pub mod callout;
 mod model;
+mod onboarding_view;
 pub mod slides;
 pub mod telemetry;
-
-/// The user's intention selected during onboarding slides.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum OnboardingIntention {
-    Terminal,
-    AgentDrivenDevelopment,
-}
-
-impl std::fmt::Display for OnboardingIntention {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OnboardingIntention::AgentDrivenDevelopment => write!(f, "agent_driven"),
-            OnboardingIntention::Terminal => write!(f, "terminal"),
-        }
-    }
-}
-
-pub use callout::{OnboardingCalloutView, OnboardingKeybindings};
-
-/// User-facing descriptions of the AI features enabled when the agent intention is selected,
-/// listed on the intention slide's agent card.
-pub const AI_FEATURES: &[&str] = &[
-    "Use frontier and open-weight models with Warp Agent",
-    "Hand off agent work to cloud agents",
-    "Automatically diagnose and fix terminal errors",
-    "Agentic control of long-running commands and TUIs",
-    "Review code diffs and send comments directly to agents",
-    "Remote control for Claude Code, Codex, and other agents",
-];
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "bin")] {
@@ -42,32 +12,6 @@ cfg_if::cfg_if! {
     }
 }
 
-pub mod components;
-
-/// The default mode for new sessions, chosen during onboarding.
-/// Mapped to `DefaultSessionMode` at the application boundary.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SessionDefault {
-    #[default]
-    Agent,
-    Terminal,
-}
-
-impl std::fmt::Display for SessionDefault {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SessionDefault::Agent => write!(f, "agent"),
-            SessionDefault::Terminal => write!(f, "terminal"),
-        }
-    }
-}
-
-pub use agent_onboarding_view::{AgentOnboardingAction, AgentOnboardingEvent, AgentOnboardingView};
-pub use model::{OnboardingAuthState, SelectedSettings, UICustomizationSettings};
-pub use slides::OfferVariant;
+pub use model::{SelectedSettings, UICustomizationSettings};
+pub use onboarding_view::{OnboardingView, OnboardingViewAction, OnboardingViewEvent, init};
 pub use telemetry::OnboardingEvent;
-
-pub fn init(app: &mut warpui_core::AppContext) {
-    agent_onboarding_view::init(app);
-    callout::init(app);
-}
