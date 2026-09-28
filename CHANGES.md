@@ -22,6 +22,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Computer use and agent screen recording](#computer-use-and-agent-screen-recording) — deleted the `computer_use` crate, the agent's computer-use and screen-recording tools, stored screenshots and the related settings
 - [Current input UI made permanent](#current-input-ui-made-permanent) — legacy flag-off input paths removed outside `app/src/ai`
 - [Telemetry collection (RudderStack)](#telemetry-collection-rudderstack) — stopped collecting, persisting and sending usage telemetry; removed the RudderStack pipeline and the telemetry privacy toggle
+- [Block sharing (web permalinks)](#block-sharing-web-permalinks) — removed the "Share block" modal, block permalinks and embeds, the Shared blocks settings page, and the related menu items, keybindings and server client
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -456,3 +457,31 @@ Each section below covers one removal (a single commit or a small group of relat
   - The analytics opt-out copy in `crates/onboarding/src/slides/theme_picker_slide.rs`.
   - The AI-owned telemetry enums and the Oz OTLP trace export in `app/src/tracing`.
 - Minimal compile fixes in AI-owned files: `ai/blocklist/{block.rs, input_model.rs, action_model/execute/grep.rs, action_model/execute/run_agents.rs, block/status_bar.rs, telemetry_banner.rs}`, `ai/agent_sdk/driver.rs`, `coding_entrypoints/create_project_view.rs`, `tui/mod.rs`, and the test setups in `ai/blocklist/{history_model_tests.rs, prompt/prompt_alert_tests.rs}`.
+
+## Block sharing (web permalinks)
+**Why:** Sharing a block uploaded its command, output and prompt to Warp's server (GraphQL `ShareBlock`) and returned a `warp.dev` permalink or HTML embed. The Shared blocks settings page listed and deleted those uploads (`GetBlocksForUser`, `UnshareBlock`), and the modal could ask Warp's AI endpoint (`/ai/generate_block_title`) for a title. An offline build has no server to host blocks.
+
+**Removed:**
+- `app/src/terminal/share_block_modal.rs` (and its tests) — the "Share block" modal: permalink and embed creation, display options, secret redaction toggle, AI title generation and the "Manage permalinks" link.
+- `app/src/settings_view/show_blocks_view.rs` and `SettingsSection::SharedBlocks` — the Shared blocks settings page (list, open and unshare uploaded blocks), its nav item, page handle and slug (`"Shared blocks"`).
+- `app/src/server/server_api/block.rs` (`BlockClient`, `ServerApiProvider::get_block_client`) and `app/src/server/block.rs` (the server-side block representation, `DisplaySetting` and the embed size constants).
+- `app/src/ai/generate_block_title/` — request/response types for the block title endpoint, which only the modal used.
+- The block context-menu item "Share block..." / "Share...", `ContextMenuAction::OpenShareBlockModal`, `TerminalAction::OpenShareModal`, the `terminal:open_share_block_modal` binding ("Share selected block", Cmd-Shift-S on macOS) and `terminal::Event::ShareModalOpened`.
+- The `workspace:show_settings_shared_blocks_page` binding ("Open Settings: Shared Blocks"), the `CreateBlockPermalink` and `ViewSharedBlocks` custom actions, and their two entries in the macOS Blocks menu ("Share selected block", "View Shared Blocks...").
+- The pane group's share-block modal state (`share_block_modal`, `terminal_with_open_share_block_modal`) and its test.
+- `Block::full_content_height_with_display_options` and `Block::server_pwd` in the terminal model, and `warpui::browser::escape_html_attribute`, which only served block sharing.
+- `TelemetryEvent::{CopyBlockSharingLink, GenerateBlockSharingLink}`, whose payload types were deleted.
+
+**Modified:**
+- `terminal/view.rs` — the block context menu keeps Copy, Copy command, Copy output, Copy filtered output, the prompt copy items, Paste, Find, filter, bookmark and scroll actions. The separator that preceded "Share block..." now precedes the session-sharing items.
+- `settings_view/mod.rs` — the Scripting page (when enabled) is inserted after Warpify in the sidebar instead of before Shared blocks.
+- `resource_center/{sections, utils}.rs` — the block-actions tip no longer mentions sharing, and the keybinding reference no longer lists the share binding.
+- `util/tooltips.rs` — the secret-redaction tooltip no longer mentions shared blocks.
+
+**User-visible impact:** Blocks can no longer be shared as links or embeds. "Share block..." is gone from the block context menu along with its Cmd-Shift-S shortcut on macOS, "Share selected block" and "View Shared Blocks..." are gone from the Blocks menu, and Settings no longer has a Shared blocks page. Copying block commands and output, bookmarks, find and filters work as before. Blocks shared before this change stay on Warp's servers and can no longer be managed from the app.
+
+**Notes:**
+- The shared-block title-generation setting (`SharedBlockTitleGenerationEnabled`, `AISettings::is_shared_block_title_generation_enabled`), its widget on the Warp Agent settings page, the `SHARED_BLOCK_TITLE_GENERATION_FLAG` keybinding context flag and `TelemetryEvent::ToggleSharedBlockTitleGenerationSetting` are left for AI-09. Nothing reads the setting to generate titles any more.
+- `TelemetryEvent::ContextMenuOpenShareModal` is no longer emitted; TEL-4 deletes it. The `SharedBlockTitleGeneration` feature flag and Cargo feature are left for FLAGS-1.
+- The `ShareBlock`, `UnshareBlock` and `GetBlocksForUser` operations in `crates/graphql` have no callers now and go with the crate in SRV-1.
+- `AuthViewVariant::ShareRequirementCloseable` stays because Warp Drive sharing still uses it (AUTH-1/DRV-1).

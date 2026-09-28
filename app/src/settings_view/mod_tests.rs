@@ -135,7 +135,6 @@ const ALL_SECTIONS: &[SettingsSection] = &[
     SettingsSection::Privacy,
     SettingsSection::Referrals,
     SettingsSection::Scripting,
-    SettingsSection::SharedBlocks,
     SettingsSection::Teams,
     SettingsSection::WarpDrive,
     SettingsSection::Warpify,
@@ -169,7 +168,6 @@ fn all_sections_list_is_exhaustive() {
             | SettingsSection::Privacy
             | SettingsSection::Referrals
             | SettingsSection::Scripting
-            | SettingsSection::SharedBlocks
             | SettingsSection::Teams
             | SettingsSection::WarpDrive
             | SettingsSection::Warpify

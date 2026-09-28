@@ -1,6 +1,5 @@
 pub mod ai;
 pub mod auth;
-pub mod block;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod download;
 pub mod factory;
@@ -24,7 +23,6 @@ use ::http::header::CONTENT_LENGTH;
 use ai::AIClient;
 use anyhow::{Context, Result, anyhow};
 use auth::AuthClient;
-use block::BlockClient;
 use chrono::{DateTime, Utc};
 use factory::FactoryClient;
 use managed_mcp::ManagedMcpClient;
@@ -1321,10 +1319,6 @@ impl ServerApiProvider {
     }
 
     pub fn get_referrals_client(&self) -> Arc<dyn ReferralsClient> {
-        self.server_api.clone()
-    }
-
-    pub fn get_block_client(&self) -> Arc<dyn BlockClient> {
         self.server_api.clone()
     }
 

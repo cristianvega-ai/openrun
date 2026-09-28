@@ -31,7 +31,7 @@ pub fn sections(ctx: &mut ViewContext<ResourceCenterMainView>) -> Vec<Section> {
             ),
             FeatureItem::new(
                 "Take an action on block",
-                "Right click on a block to copy/paste, share, more.",
+                "Right click on a block to copy/paste and more.",
                 Tip::Hint(TipHint::BlockAction),
                 ctx,
             ),
