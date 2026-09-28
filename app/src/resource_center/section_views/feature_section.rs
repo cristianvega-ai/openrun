@@ -27,7 +27,6 @@ use crate::themes::theme::Fill;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FeatureSection {
-    WhatsNew,
     GettingStarted,
     MaximizeWarp,
     AdvancedSetup,
@@ -36,7 +35,6 @@ pub enum FeatureSection {
 impl FeatureSection {
     pub fn section_name_string(&self) -> &'static str {
         match self {
-            FeatureSection::WhatsNew => "What's New?",
             FeatureSection::GettingStarted => "Getting Started",
             FeatureSection::MaximizeWarp => "Maximize Warp",
             FeatureSection::AdvancedSetup => "Advanced Setup",
@@ -61,7 +59,6 @@ pub struct FeatureSectionView {
     action_target: ModelHandle<ActionTarget>,
     feature_button_mouse_states: FeatureMouseStateHandles,
     tips_completed: ModelHandle<TipsCompleted>,
-    show_tips_progress: bool,
     is_expanded: bool,
 }
 
@@ -79,7 +76,6 @@ impl FeatureSectionView {
         action_target: ModelHandle<ActionTarget>,
         ctx: &mut ViewContext<Self>,
         tips_completed: ModelHandle<TipsCompleted>,
-        show_tips_progress: bool,
         is_expanded: bool,
     ) -> Self {
         let feature_button_mouse_states = FeatureMouseStateHandles {
@@ -103,7 +99,6 @@ impl FeatureSectionView {
             action_target,
             feature_button_mouse_states,
             tips_completed,
-            show_tips_progress,
             is_expanded,
         }
     }
@@ -406,7 +401,7 @@ impl SectionView for FeatureSectionView {
             .tips_completed_count(self.tips_completed.as_ref(ctx));
 
         // Show progress when section's tips are not yet completed
-        if show_gamified && self.show_tips_progress && tips_completed_count != tip_count {
+        if show_gamified && tips_completed_count != tip_count {
             let progress = format!("{tips_completed_count}/{tip_count}");
             Some(
                 appearance

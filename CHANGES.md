@@ -37,6 +37,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Workspace LSP metadata moved out of the AI module](#workspace-lsp-metadata-moved-out-of-the-ai-module) — `PersistedWorkspace` (known repos and per-repo language-server enablement) now lives in `app/src/workspace_metadata/`
 - [Codebase indexing and project rules](#codebase-indexing-and-project-rules) — removed codebase indexing (embeddings synced to Warp's servers), project rules (`AGENTS.md`/`WARP.md` as agent context), `/init`, `/index` and `/open-project-rules`; Settings > Code > Projects now lists each repo's language servers
 - [TUI rendering layer and TUI modes in the core crates](#tui-rendering-layer-and-tui-modes-in-the-core-crates) — deleted the ratatui-backed TUI element library, presenter and runtime from `warpui_core`, the char-cell editor layout, and the TUI settings, logging and execution modes
+- [Changelog](#changelog) — removed the changelog model, the "What's New?" resource-center section, the changelog toast and its setting, `/changelog`, the "What's new" and "View latest changelog" entry points and the agent zero-state "Latest updates" section
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -928,3 +929,31 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left in place: `CLIAgentNotification::new` in `warp_core::cli_agent_protocol` (only the removed TUI built notifications; the GUI only parses them), the `warp`/`warp-tui` note in `crates/input_classifier/src/util.rs` (AI plan) and the TUI comments in `crates/ai` (AI plan). The `tui_version`/`tui_updates` fields in `crates/channel_versions` are for SRV-1.
 - The GUI-facing generalizations the TUI work introduced in `warpui_core` (for example `T: Entity` bounds on view APIs and `AppContext::weak_app`, which a `warpui` test uses) are kept.
 - Existing `warp-cli` log directories, `.warp_cli*` config directories and `tui/` state directories on users' machines are left untouched.
+
+## Changelog
+**Why:** The changelog came from Warp's release-channel feed (`channel_versions.json` on Warp's servers). The autoupdater removal already stopped fetching it (see [Autoupdater and release-channel update checks](#autoupdater-and-release-channel-update-checks)), which left `ChangelogModel` always answering "no changelog" and every changelog entry point opening an empty panel.
+
+**Removed:**
+- `app/src/changelog_model.rs` — the `ChangelogModel` singleton (and its unused `server_api` field), `check_for_changelog`, `ChangelogHeader`, `ChangelogRequestType` and its events. Its registration is gone from `lib.rs` and the test setup helpers (`test_util/terminal.rs`, `pane_group/mod_tests.rs`, `terminal/input_tests.rs`, `workspace/view_tests.rs`).
+- `app/src/resource_center/section_views/changelog_section.rs` (`ChangelogSectionView`), `Section::Changelog`, `SectionViewHandle::Changelog`, `ChangelogSectionData` and `FeatureSection::WhatsNew`.
+- `app/src/settings/changelog.rs` — `ChangelogSettings` / `ShowChangelogAfterUpdate` (`general.show_changelog_after_update`), plus `ShowChangelogWidget` and `FeaturesPageAction::ToggleShowChangelogAfterUpdate` on the Features settings page.
+- `Settings::{has_changelog_been_shown, mark_changelog_shown}` and the `ChangelogVersions` private user-preference key.
+- Workspace entry points: `WorkspaceAction::ViewLatestChangelog`, the "View latest changelog" command-palette bindings (`workspace:view_changelog`), `CustomAction::ViewChangelog` and its app-menu item and default shortcut, the "What's new" item in the user menu, the launch-time changelog check in `root_view.rs`, and `Workspace::{check_for_changelog, view_latest_changelog, handle_changelog_event}`.
+- The workspace "update toast" stack (`update_toast_stack`, the `UpdateToastVisible` keymap context and the chip positioning next to the feature-intro popover). After the autoupdater removal the changelog toast was the only thing it showed. The unused `OPENING_WARP_DRIVE_ON_START_UP` flag, read only by the changelog check, is gone too.
+- `is_changelog_modal_open` in `workspace/util.rs`, which nothing ever set.
+- The `/changelog` slash command (`SlashCommandKind::Changelog`, `CHANGELOG`) and its handler, plus `test_changelog_slash_command_clears_buffer_on_success`.
+- AI zero state (`ai/blocklist/agent_view/zero_state_block.rs`), a minimal compile fix: the "Latest updates" section that listed Warp Agent entries from `ChangelogModel` (with its "View changelog" link to `docs.warp.dev/changelog`), `AgentViewZeroStateAction::ToggleOzUpdates` and the `should_render_oz_updates_section` tests.
+
+**Modified:**
+- `resource_center/main_page.rs` — "Getting Started" and "Maximize Warp" expand based only on welcome-tip progress. Before, both stayed collapsed until the current version's changelog had been shown, which no longer happens. `FeatureSectionView` loses its `show_tips_progress` flag, which was only false for the changelog section.
+- `resource_center/sections.rs` — the section list starts empty. With `AvatarInTabBar` (on by default) it now has no sections at all.
+- `resource_center/mod.rs` — `TipAction::Changelog` stays, marked as not shown, because saved welcome-tip progress (`welcome_tips_features_used`) may contain it and must still deserialize.
+
+**User-visible impact:** There is no changelog anywhere: no "What's new" menu item, no "View latest changelog" command or shortcut, no `/changelog`, no post-update toast and no "Show changelog toast after updates" setting (`general.show_changelog_after_update` is ignored if present). The resource center's main page no longer has a "What's New?" section. With the default `AvatarInTabBar` layout it now shows only its footer and the keyboard-shortcuts button, and the keybindings page is unchanged. The agent zero state no longer shows "Latest updates".
+
+**Notes:**
+- `crates/channel_versions` is still used: `app/src/ai/block_context.rs` imports `channel_versions::overrides::TargetOS`. It also still defines `Changelog`, `oz_updates` and `tui_version`/`tui_updates`. Left for SRV-1.
+- `FeatureFlag::{Changelog, OzChangelogUpdates}` and their Cargo features stay for FLAGS-1. `TelemetryEvent::OpenChangelogLink` is no longer emitted; TEL-4 deletes it.
+- Left for the AI settings removal: `ShouldShowOzUpdatesInZeroState` / `ShouldExpandOzUpdates` in `settings/ai.rs`, the "Show Warp Agent changelog" toggle in `settings_view/warp_agent_page.rs` and the `SHOW_OZ_UPDATES_IN_ZERO_STATE_FLAG` keymap flag. They no longer control anything.
+- Left for LINKS-1: the resource center's Docs/Slack/Feedback footer and the warp.dev links in the "Advanced Setup" content section (shown only when `AvatarInTabBar` is off). With the changelog gone, the default main page has no content of its own, so LINKS-1 may reduce the resource center to the keybindings page.
+- Existing `ChangelogVersions` entries in users' preferences are left in place and never read.
