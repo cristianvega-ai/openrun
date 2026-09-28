@@ -29,7 +29,6 @@ mod drive;
 #[cfg(windows)]
 mod dynamic_libraries;
 mod env_vars;
-mod experiments;
 mod external_secrets;
 #[cfg(target_family = "wasm")]
 mod font_fallback;
@@ -254,7 +253,6 @@ use crate::default_terminal::DefaultTerminal;
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::export::ExportManager;
 use crate::env_vars::manager::EnvVarCollectionManager;
-use crate::experiments::ImprovedPaletteSearch;
 pub use crate::global_resource_handles::{GlobalResourceHandles, GlobalResourceHandlesProvider};
 use crate::gpu_state::GPUState;
 use crate::network::NetworkStatus;
@@ -271,7 +269,6 @@ use crate::root_view::{
 };
 use crate::server::cloud_objects::listener::Listener;
 use crate::server::cloud_objects::update_manager::UpdateManager;
-use crate::server::experiments::ServerExperiments;
 #[cfg(not(target_family = "wasm"))]
 use crate::server::iap_identity_minter::ManagedSecretsIapMinter;
 use crate::server::server_api::managed_secrets::AppManagedSecretManager as ManagedSecretManager;
@@ -1081,8 +1078,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         ctx.add_singleton_model(move |_ctx| pty_spawner);
 
         // Register user preferences.  This must be done before initializing
-        // feature flags or experiments, both of which check user preferences for
-        // overrides.
+        // feature flags, which check user preferences for overrides.
         ctx.add_singleton_model(move |_ctx| ::settings::PublicPreferences::new(public_preferences));
         ctx.add_singleton_model(move |_ctx| private_preferences);
         let startup_toml_parse_error = startup_toml_parse_error;
@@ -1092,9 +1088,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
 
         let app_state = initialize_app(&launch_mode, timer, startup_toml_parse_error, ctx);
 
-        if ImprovedPaletteSearch::improved_search_enabled(ctx) {
-            FeatureFlag::UseTantivySearch.set_enabled(true);
-        }
+        FeatureFlag::UseTantivySearch.set_enabled(true);
 
         launch(ctx, app_state, launch_mode);
     })
@@ -1333,7 +1327,6 @@ pub(crate) fn initialize_app(
         restored_user_profiles,
         time_of_next_force_object_refresh,
         object_actions,
-        experiments,
         ai_queries,
         nld_prompts,
         persisted_workspaces,
@@ -1355,7 +1348,6 @@ pub(crate) fn initialize_app(
                 sqlite_data.user_profiles,
                 sqlite_data.time_of_next_force_object_refresh,
                 sqlite_data.object_actions,
-                sqlite_data.experiments,
                 sqlite_data.ai_queries,
                 sqlite_data.nld_prompts,
                 sqlite_data.codebase_indices,
@@ -1388,7 +1380,6 @@ pub(crate) fn initialize_app(
                 Default::default(),
                 Default::default(),
                 Default::default(),
-                Default::default(),
             )
         });
 
@@ -1400,11 +1391,6 @@ pub(crate) fn initialize_app(
             "[Remote codebase indexing] Restored daemon codebase index metadata: metadata_count={codebase_index_count}"
         );
     }
-
-    // Initialize a global model to track server-side experiment state.
-    // This depends on the [`GlobalResourceHandlesProvider`] and so it must
-    // be initialized after it.
-    ctx.add_singleton_model(|ctx| ServerExperiments::new_from_cache(experiments, ctx));
 
     ctx.add_singleton_model(|ctx| AIRequestUsageModel::new(ai_client, ctx));
 
@@ -1477,8 +1463,6 @@ pub(crate) fn initialize_app(
     ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
 
     ctx.set_default_binding_validator(is_binding_cross_platform);
-
-    experiments::init(ctx);
 
     // Initialize timestamp for session id and last active event
     App::record_last_active_timestamp();

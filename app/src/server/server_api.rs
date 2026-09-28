@@ -31,7 +31,7 @@ use team::TeamClient;
 use warp_core::context_flag::ContextFlag;
 use warp_errors::{AnyhowErrorExt, ErrorExt, register_error, report_error};
 use warp_server_client::HttpStatusError;
-use warp_server_client::auth::{AuthClientImpl, AuthEvent, EXPERIMENT_ID_HEADER};
+use warp_server_client::auth::{AuthClientImpl, AuthEvent};
 use warp_server_client::base_client::{
     AmbientHeaderPolicy, AuthenticatedGraphqlConfig, BaseClient, GraphqlRoutingConfig,
     HeaderOverride, TEAM_UID_HEADER,
@@ -42,7 +42,7 @@ use warpui::r#async::BoxFuture;
 use warpui::{Entity, ModelContext, SingletonEntity};
 use workspace::WorkspaceClient;
 
-use super::experiments::{ServerExperiment, ServerExperiments};
+use crate::ChannelState;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::get_relevant_files::api::{GetRelevantFiles, GetRelevantFilesResponse};
 use crate::ai::predict::generate_ai_input_suggestions::GenerateAIInputSuggestionsRequest;
@@ -53,7 +53,6 @@ use crate::ai::voice::transcribe::{TranscribeRequest, TranscribeResponse};
 use crate::auth::auth_manager::AuthManager;
 use crate::auth::auth_state::AuthState;
 use crate::server::team_scope::RequestTeamScope;
-use crate::{ChannelState, settings_view};
 
 /// We use a special error code header `X-Warp-Error-Code` to allow the server to send
 /// more specific error code information, so that the client can discern between different
@@ -1006,8 +1005,7 @@ impl ServerApi {
                     // Otherwise, the server will return a 411 error. (In other cases, setting
                     // content-type is sufficient (elides the content-length requirement), but
                     // since this request has no body, it makes more sense to set content-length.
-                    .header(CONTENT_LENGTH, 0)
-                    .header(EXPERIMENT_ID_HEADER, self.anonymous_id());
+                    .header(CONTENT_LENGTH, 0);
 
                 let response = request.send().await;
                 if let Err(err) = response {
@@ -1276,19 +1274,6 @@ impl ServerApiProvider {
             server_api,
             auth_client,
         }
-    }
-
-    /// Handles fetching server-side experiments by updating the appropriate app state.
-    pub fn handle_experiments_fetched(
-        &self,
-        experiments: Vec<ServerExperiment>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        ServerExperiments::handle(ctx).update(ctx, |state, ctx| {
-            state.apply_latest_state(experiments, ctx);
-        });
-
-        settings_view::handle_experiment_change(ctx);
     }
 
     /// Constructs a new SeverApiProvider for tests.

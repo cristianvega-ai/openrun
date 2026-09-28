@@ -233,7 +233,6 @@ fn test_loading_all_spaces_after_switching_from_offline() {
                     metadata: WorkspacesMetadataResponse {
                         workspaces: vec![],
                         joinable_teams: vec![],
-                        experiments: None,
                         ai_credit_availability: None,
                         user_purchase_policy: None,
                     },
@@ -251,7 +250,6 @@ fn test_loading_all_spaces_after_switching_from_offline() {
                     metadata: WorkspacesMetadataResponse {
                         workspaces: vec![workspace.clone()],
                         joinable_teams: vec![],
-                        experiments: None,
                         ai_credit_availability: None,
                         user_purchase_policy: None,
                     },
@@ -411,7 +409,6 @@ fn test_aws_bedrock_credentials_respect_user_setting() {
             metadata: WorkspacesMetadataResponse {
                 workspaces: vec![workspace_for_poll.clone()],
                 joinable_teams: vec![],
-                experiments: None,
                 ai_credit_availability: None,
                 user_purchase_policy: None,
             },
@@ -462,7 +459,6 @@ fn test_aws_bedrock_credentials_enforced_by_admin() {
             metadata: WorkspacesMetadataResponse {
                 workspaces: vec![workspace_for_poll.clone()],
                 joinable_teams: vec![],
-                experiments: None,
                 ai_credit_availability: None,
                 user_purchase_policy: None,
             },
@@ -1879,7 +1875,6 @@ fn joining_a_workspace_team_retains_memberships_and_preserves_the_current_window
                     metadata: WorkspacesMetadataResponse {
                         workspaces: vec![joined_workspace],
                         joinable_teams: vec![],
-                        experiments: None,
                         ai_credit_availability: None,
                         user_purchase_policy: None,
                     },
@@ -3856,7 +3851,6 @@ fn test_remove_user_from_workspace_refreshes_state_only_on_success() {
                             metadata: WorkspacesMetadataResponse {
                                 workspaces: vec![updated_workspace.clone()],
                                 joinable_teams: vec![],
-                                experiments: None,
                                 ai_credit_availability: None,
                                 user_purchase_policy: None,
                             },
@@ -4035,7 +4029,6 @@ fn test_remove_user_from_team_success_emits_success_event_and_refreshes_members(
                     metadata: WorkspacesMetadataResponse {
                         workspaces: vec![updated_workspace.clone()],
                         joinable_teams: vec![],
-                        experiments: None,
                         ai_credit_availability: None,
                         user_purchase_policy: None,
                     },
@@ -4519,7 +4512,6 @@ fn gql_user(
             },
         }),
         workspaces,
-        experiments: None,
         discoverable_teams: vec![],
     }
 }
@@ -4613,7 +4605,6 @@ fn test_join_workspace_from_discovery_with_team_forwards_target_and_updates_work
                             None,
                         )],
                         joinable_teams: vec![],
-                        experiments: None,
                         ai_credit_availability: None,
                         user_purchase_policy: None,
                     },

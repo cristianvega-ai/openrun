@@ -1,6 +1,5 @@
 use crate::ai::AICreditAvailability;
 use crate::billing::{PricingInfo, PurchaseAddOnCreditsPolicy};
-use crate::experiment::Experiment;
 use crate::request_context::RequestContext;
 use crate::schema;
 use crate::user::DiscoverableTeamData;
@@ -190,7 +189,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
           stripeCustomerId
           isEligibleForDiscovery
         }
-        experiments
         discoverableTeams {
           teamUid
           numMembers
@@ -257,7 +255,6 @@ pub struct User {
     pub ai_credit_availability: AICreditAvailability,
     pub billing_metadata: Option<UserPurchasePolicyBillingMetadata>,
     pub workspaces: Vec<Workspace>,
-    pub experiments: Option<Vec<Experiment>>,
     pub discoverable_teams: Vec<DiscoverableTeamData>,
 }
 

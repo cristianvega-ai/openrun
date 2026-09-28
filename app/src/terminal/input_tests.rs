@@ -101,9 +101,7 @@ use crate::workspaces::team_tester::TeamTesterStatus;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::{TeamContextForOperation, UserWorkspaces};
 use crate::workspaces::workspace::Workspace;
-use crate::{
-    AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandlesProvider, experiments,
-};
+use crate::{AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandlesProvider};
 
 fn pending_ctrl_r_handoff() -> PendingShellWidgetHandoff {
     PendingShellWidgetHandoff {
@@ -362,7 +360,6 @@ pub fn initialize_app(app: &mut App) {
         app.add_singleton_model(SystemInfo::new);
     }
 
-    app.update(experiments::init);
     AltScreenReporting::register(app);
     app.add_singleton_model(|_| RestoredAgentConversations::new_seeded(vec![]));
     app.add_singleton_model(OneTimeModalModel::new);

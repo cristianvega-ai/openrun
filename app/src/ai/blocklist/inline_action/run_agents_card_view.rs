@@ -60,7 +60,6 @@ use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::appearance::Appearance;
 use crate::features::FeatureFlag;
 use crate::menu::{Event as MenuEvent, Menu, MenuItemFields, MenuVariant};
-use crate::server::experiments::{ServerExperiments, ServerExperimentsEvent};
 use crate::server::server_api::ServerApiProvider;
 use crate::server::team_scope::RequestTeamScope;
 use crate::ui_components::blended_colors;
@@ -445,18 +444,6 @@ impl RunAgentsCardView {
                 ctx.notify();
             }
             _ => {}
-        });
-
-        ctx.subscribe_to_model(&ServerExperiments::handle(ctx), |me, _, event, ctx| {
-            let ServerExperimentsEvent::ExperimentsUpdated = event;
-            if !oc::runner_controls_enabled(ctx) {
-                me.handles.pickers.runner_picker = None;
-                me.runners.clear();
-                me.runners_loading = false;
-            } else {
-                me.ensure_runner_picker(ctx);
-            }
-            ctx.notify();
         });
 
         // Repopulate the model picker when available Warp LLMs change.
@@ -1029,14 +1016,13 @@ impl RunAgentsCardView {
     }
 
     /// Builds the Runner picker and kicks off the `getRunners` fetch, but
-    /// only when the `CloudAgentRunners` feature is enabled and the macOS
-    /// runner experiment is active, and the card is
+    /// only when the runner controls are enabled and the card is
     /// in remote mode — otherwise the Runner control is not rendered, so
     /// there is no reason to create the picker or hit `getRunners`.
     /// Idempotent, and re-invoked on the Local→Cloud toggle so the picker
     /// appears (and loads) the first time the card enters remote mode.
     fn ensure_runner_picker(&mut self, ctx: &mut ViewContext<Self>) {
-        if !oc::runner_controls_enabled(ctx) {
+        if !oc::runner_controls_enabled() {
             return;
         }
         if !self
@@ -1827,7 +1813,7 @@ fn render_editor(
         orchestration_config_state,
         &handles.pickers,
         appearance,
-        oc::runner_controls_enabled(app),
+        oc::runner_controls_enabled(),
     ));
 
     if let Some(reason) = oc::accept_disabled_reason_with_auth(orchestration_config_state, app) {

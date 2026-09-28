@@ -1,7 +1,6 @@
 pub mod ai;
 pub mod billing;
 pub mod error;
-pub mod experiment;
 pub mod folder;
 pub mod full_source_code_embedding;
 pub mod generic_string_object;

@@ -10,7 +10,6 @@ use ai::agent::action::RunAgentsExecutionMode;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
 use warp_cli::agent::Harness;
-use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::Fill;
 use warpui::elements::{
     Border, ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Empty,
@@ -48,7 +47,6 @@ pub use crate::ai::orchestration::{
 };
 use crate::appearance::Appearance;
 use crate::menu::{MenuItem, MenuItemFields};
-use crate::server::experiments::{ServerExperiment, ServerExperiments};
 use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
 use crate::view_components::FilterableDropdown;
@@ -72,15 +70,12 @@ const ORCHESTRATION_SEGMENT_VERTICAL_PADDING: f32 = 4.;
 pub const AUTH_SECRET_COLUMN_LABEL: &str = "API key";
 const AUTH_SECRET_CREATE_NEW_LABEL: &str = "New API key…";
 
-/// Returns whether the client should expose the remote runner controls.
+/// Returns whether the client should expose the remote runner controls. They are never exposed.
 ///
-/// Both the feature flag and the server-side experiment test arm are required.
 /// Keeping this predicate here ensures the picker creation and rendering paths
 /// use the same gate.
-pub fn runner_controls_enabled(ctx: &AppContext) -> bool {
-    FeatureFlag::CloudAgentRunners.is_enabled()
-        && ServerExperiments::as_ref(ctx)
-            .is_experiment_enabled(&ServerExperiment::MacosRunnersExperiment)
+pub fn runner_controls_enabled() -> bool {
+    false
 }
 
 /// Resolves the default environment visible to the current window.
@@ -1370,7 +1365,3 @@ pub fn render_validation_error(
     .with_margin_bottom(8.)
     .finish()
 }
-
-#[cfg(test)]
-#[path = "orchestration_controls_tests.rs"]
-mod tests;

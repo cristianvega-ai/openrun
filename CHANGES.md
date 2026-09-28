@@ -27,6 +27,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp TUI front-end](#warp-tui-front-end) — deleted the login-gated "Warp Agent CLI" (`crates/warp_tui`), its app integration, settings, onboarding client and TUI skills
 - [TUI dev script](#tui-dev-script) — removed `script/run-tui` and the presubmit note about `warp_tui`
 - [Channel-config loader crate](#channel-config-loader-crate) — deleted `crates/warp_channel_config`, which only the removed channel and TUI binaries used
+- [Client and server-side experiments](#client-and-server-side-experiments) — removed the local A/B bucketing framework and the server-driven experiment state; every experiment keeps the arm new OSS users already got
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -579,3 +580,41 @@ Each section below covers one removal (a single commit or a small group of relat
 **User-visible impact:** None.
 
 **Notes:** `rg warp_channel_config` found no other users before the deletion.
+
+## Client and server-side experiments
+**Why:** Warp ran two experiment systems. The client framework hashed the per-install anonymous ID into A/B buckets and reported each assignment to telemetry (`ExperimentTriggered`). The server framework read an `experiments` list from the `GetUser` and `GetWorkspacesMetadataForUser` GraphQL responses, sent the anonymous ID as `X-Warp-Experiment-Id` so the server could bucket the client, cached the list in SQLite and flipped feature flags from it at runtime. An offline build has no server to assign experiments and must not vary behavior per install, so each experiment is fixed to the arm a new OSS user got.
+
+**Removed:**
+- `app/src/experiments/` — `Experiment`, `Layer`, bucket ranges, the `ExperimentOverrides` user-preference override, `experiments::init` and the layer validation tests. Its layers were `LoginLayer`, `BlockOnboardingLayer`, `ImprovedPaletteSearchLayer` and the empty `RenderingLayer`.
+- `app/src/server/experiments/` — the `ServerExperiment` enum, the `ServerExperiments` singleton and its `ExperimentsUpdated` event, the GraphQL/string conversions and the `convert_to_server_experiment!` macro.
+- `ServerApiProvider::handle_experiments_fetched` and its calls after a user fetch (`auth_manager.rs`) and a workspace-metadata poll (`update_manager.rs`).
+- `settings_view::handle_experiment_change` (`main_page.rs`). It re-registered the settings-sync toggle binding when experiments changed; the startup registration in `init_actions_from_parent_view` is unchanged.
+- Persistence: `ModelEvent::SaveExperiments`, `save_experiments`, the `server_experiments` read in `read_sqlite_data`, `PersistedData::experiments`, and the `ServerExperiment` / `NewServerExperiment` models in `crates/persistence/src/model.rs`.
+- The `experiments` field from the `GetUser` and `GetWorkspacesMetadataForUser` selections and the `warp_graphql::experiment::Experiment` enum; `WorkspacesMetadataResponse::experiments` and `UserProperties::server_experiments`.
+- `EXPERIMENT_ID_HEADER` (`X-Warp-Experiment-Id`) in `warp_server_client`, which was sent on `GetUser` and `/client/login`.
+- The `ServerExperiments` subscriptions in `UserWorkspaces::new`, `RunAgentsCardView` and `OrchestrationConfigBlock`, and the experiment override check in `UserWorkspaces::update_session_sharing_enablement`.
+- Test setup: `experiments::init` and the `ServerExperiments` singleton in `test_util/terminal.rs`, `pane_group/mod_tests.rs`, `terminal/input_tests.rs` and `workspace/view_tests.rs`; `orchestration_controls_tests.rs`, which only tested the runner experiment gate.
+
+**Modified (permanent arm per experiment):**
+- Client experiments, bucketed by anonymous ID:
+  - `ImprovedPaletteSearch` (100% `Experiment`): Tantivy full-text search is on for every install. `lib.rs` now calls `FeatureFlag::UseTantivySearch.set_enabled(true)` unconditionally at the same point in startup.
+  - `BlockOnboarding` (30% `VariantOne`, 70% `VariantTwo`; every install was in one of the two):
+    - `workspace/view.rs`: both arms suppressed the Warp AI warm welcome when the workspace was built, so `should_show_ai_assistant_warm_welcome` now starts `false`.
+    - `root_view.rs`: `VariantOne` skipped the onboarding survey after sign-in; `VariantTwo` did not. Kept `VariantTwo`, the majority arm and the one that changes nothing. The check only ran on `AuthComplete`, which the logged-out build never reaches.
+  - `AuthFlowInstructions` (25% `Control`, 25% `Experiment`, 50% unassigned, which behaved like `Control`): kept `Control`. The auth-token input placeholder is always "Auth Token"; the "Browser auth token" variant is gone.
+- Server experiments: a logged-out user never receives any, so the permanent arm is "not enrolled" for all of them, and no runtime flag override happens:
+  - `SessionSharingExperiment` / `SessionSharingControl`: no override. `CreatingSharedSessions` follows the team tier policy, as it already did without an experiment.
+  - `DisableAgentModeExperiment`, `AgentModeAnalyticsExperiment`, `CodebaseContextExperiment` / `Control`, `BuildPlanAutoReload{Control, BannerToggle, PostPurchaseModal}`, `PromptSuggestionsViaMaa{Control, OutOfBandExperiment}` and `OzMultiHarness{Control, Experiment}`: the flags they set (`AgentMode`, `AgentModeAnalytics`, `AIRules`, `SuggestedRules`, the codebase-context flags, `BuildPlanAutoReload*`, `PromptSuggestionsViaMAA`, `AgentHarness`) keep their build defaults.
+  - `EnvVarsEarlyAccessExperiment`, `WindowsLaunchExperiment`, `SuggestedCodeDiffs{Control, Experiment}` and `PromptSuggestionsViaMaaExperiment` were already no-ops.
+  - `MacosRunners{Control, Experiment}`: `orchestration_controls::runner_controls_enabled()` returns `false`, so the orchestration cards never show the remote Runner picker. This is a minimal compile fix in AI code; the parameter it no longer needs is gone from its six call sites.
+- `UserWorkspaces::update_session_sharing_enablement` no longer takes a context.
+
+**User-visible impact:** None for the OSS build. Command-palette search stays full-text, and the Warp AI warm welcome still starts hidden. The client no longer sends the experiment-ID header and never flips feature flags from server data.
+
+**Notes:**
+- The `server_experiments` table stays in the schema and keeps any rows written by earlier versions; DB-1 drops it.
+- `TelemetryEvent::ExperimentTriggered` is never emitted now. TEL-4 deletes it.
+- `FeatureFlag::UseTantivySearch` and its `use_tantivy_search` Cargo feature stay. FLAGS-1 can make full-text search unconditional and drop the `set_enabled` call in `lib.rs`.
+- Stale comments left in files owned by other tasks: the `CreatingSharedSessions` doc in `crates/warp_features/src/lib.rs` still links `ServerExperiment` (FLAGS-1); the `ExperimentId` storage-key comment in `crates/warp_server_auth/src/anonymous_id.rs` (AUTH-2, which deletes the anonymous ID); the "warp drive preferences experiment" comment in `settings/cloud_preferences_syncer.rs` (settings sync removal).
+- `crates/warp_graphql_schema/api/schema.graphql` still declares `experiments` on `User`; SRV-1 deletes the schema.
+- The remote-runner picker code in `run_agents_card_view.rs`, `orchestration_config_block.rs` and `orchestration_controls.rs` is now unreachable. AI-19 deletes it with orchestration.

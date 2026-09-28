@@ -337,7 +337,6 @@ fn run_list_scope_uses_team_loaded_by_workspace_refresh() {
                     metadata: WorkspacesMetadataResponse {
                         workspaces: vec![workspace],
                         joinable_teams: vec![],
-                        experiments: None,
                         ai_credit_availability: None,
                         user_purchase_policy: None,
                     },

@@ -45,9 +45,6 @@ use crate::base_client::{BaseClient, TEAM_UID_HEADER};
 use crate::graphql_helpers::{send_graphql_request, send_graphql_request_with_options};
 use crate::ids::ApiKeyUid;
 
-/// Header key used to associate unauthenticated requests with an experiment identity.
-pub const EXPERIMENT_ID_HEADER: &str = "X-Warp-Experiment-Id";
-
 /// A named agent identity from the public API.
 #[derive(Clone, Debug, serde::Deserialize)]
 pub struct AgentIdentity {
@@ -296,13 +293,9 @@ impl AuthClient for AuthClientImpl {
         let operation = GetUser::build(GetUserVariables {
             request_context: warp_graphql::client::get_request_context(),
         });
-        let mut options = self
+        let options = self
             .base_client
             .graphql_request_options_with_token(auth_token.map(ToOwned::to_owned));
-        options.headers.insert(
-            EXPERIMENT_ID_HEADER.to_string(),
-            self.base_client.anonymous_id(),
-        );
         let response = operation
             .send_request(self.base_client.owned_http_client(), options)
             .await?

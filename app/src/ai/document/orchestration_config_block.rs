@@ -45,7 +45,6 @@ use crate::ai::harness_availability::{
 };
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::appearance::Appearance;
-use crate::server::experiments::{ServerExperiments, ServerExperimentsEvent};
 use crate::server::server_api::ServerApiProvider;
 use crate::server::team_scope::RequestTeamScope;
 use crate::ui_components::blended_colors;
@@ -214,18 +213,6 @@ impl OrchestrationConfigBlockView {
                 }
             },
         );
-        ctx.subscribe_to_model(&ServerExperiments::handle(ctx), |me, _, event, ctx| {
-            let ServerExperimentsEvent::ExperimentsUpdated = event;
-            if !oc::runner_controls_enabled(ctx) {
-                me.pickers.runner_picker = None;
-                me.runners.clear();
-                me.runners_loading = false;
-            } else {
-                me.ensure_runner_picker(ctx);
-            }
-            ctx.notify();
-        });
-
         // Repopulate the model picker when available LLMs change (Oz
         // harness only — non-Oz harnesses get their catalog from
         // HarnessAvailabilityModel, not LLMPreferences).
@@ -698,13 +685,12 @@ impl OrchestrationConfigBlockView {
     }
 
     /// Builds the Runner picker and kicks off the `getRunners` fetch, but
-    /// only when the `CloudAgentRunners` feature is enabled and the macOS
-    /// runner experiment is active, and the config
+    /// only when the runner controls are enabled and the config
     /// is in remote mode — otherwise the Runner control is not rendered, so
     /// there is no reason to create the picker or hit `getRunners`.
     /// Idempotent, and re-invoked on the Local→Cloud toggle.
     fn ensure_runner_picker(&mut self, ctx: &mut ViewContext<Self>) {
-        if !oc::runner_controls_enabled(ctx) {
+        if !oc::runner_controls_enabled() {
             return;
         }
         if !self
@@ -938,7 +924,7 @@ impl View for OrchestrationConfigBlockView {
                     &self.pickers,
                     appearance,
                     true,
-                    oc::runner_controls_enabled(app),
+                    oc::runner_controls_enabled(),
                 ));
 
                 // Helper text

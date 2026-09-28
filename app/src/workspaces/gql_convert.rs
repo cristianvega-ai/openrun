@@ -75,9 +75,7 @@ use crate::ai::execution_profiles::{ActionPermission, WriteToPtyPermission};
 use crate::ai::llms::ModelsByFeature;
 use crate::ai::{BonusGrant, BonusGrantScope};
 use crate::auth::UserUid;
-use crate::convert_to_server_experiment;
 use crate::server::cloud_objects::listener::ObjectUpdateMessage;
-use crate::server::experiments::ServerExperiment;
 use crate::server::graphql::schema::object_action_history_from_gql;
 use crate::server::ids::ServerId;
 use crate::settings::AgentModeCommandExecutionPredicate;
@@ -1483,10 +1481,6 @@ pub fn workspaces_metadata_response_from_gql(
         .map(|gql_joinable_team| gql_joinable_team.into())
         .collect();
 
-    let experiments = gql_user
-        .experiments
-        .and_then(|experiments| convert_to_server_experiment!(experiments));
-
     // A teamless user's only workspace is the placeholder filtered out
     // above, so the user-level policy is the only place their add-on
     // credits purchase policy — gating and premium pricing alike —
@@ -1501,7 +1495,6 @@ pub fn workspaces_metadata_response_from_gql(
     WorkspacesMetadataResponse {
         workspaces,
         joinable_teams,
-        experiments,
         ai_credit_availability: Some(gql_user.ai_credit_availability.into()),
         user_purchase_policy,
     }
