@@ -41,6 +41,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Docker sandbox sessions and local child-agent harnesses](#docker-sandbox-sessions-and-local-child-agent-harnesses) — removed `sbx` Docker sandbox tabs, `/docker-sandbox`, the sandbox shell type and the agent-SDK launcher for local Claude Code/Codex child agents
 - [Oz CLI and agent SDK](#oz-cli-and-agent-sdk) — deleted the `oz` command-line interface (every agent, environment, schedule, secret, MCP, memory, artifact and runner subcommand plus `login`/`logout`/`whoami`/`--api-key`), the headless agent SDK driver behind it, and the harness-support/harness-usage server clients
 - [Cloud-agent OpenTelemetry trace export](#cloud-agent-opentelemetry-trace-export) — removed the OTLP span exporter that cloud-agent processes sent traces to Warp with, its dispatch-token credential refresh and the `X-Warp-Traceparent` request header
+- [Agent build cache and harness usage crates](#agent-build-cache-and-harness-usage-crates) — deleted `crates/build_cache` (persistent build caches for sandboxed cloud agents) and `crates/warp_harness_usage` (usage accounting for third-party harness histories)
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1034,3 +1035,13 @@ Each section below covers one removal (a single commit or a small group of relat
 **User-visible impact:** None. The exporter only ran in cloud-agent processes.
 
 **Notes:** `crates/build_cache` still has a `tags.cloud_agent` span and `tracing-opentelemetry` field names; the crate is deleted in [Agent build cache and harness usage crates](#agent-build-cache-and-harness-usage-crates). `ManagedSecretManager::get_task_secrets` keeps its inner async function until AI-18 deletes `managed_secrets`.
+
+## Agent build cache and harness usage crates
+**Why:** Both crates served only the agent SDK removed in [Oz CLI and agent SDK](#oz-cli-and-agent-sdk). `build_cache` set up persistent build and dependency caches inside sandboxed cloud-agent VMs through Namespace's `spacectl`. `warp_harness_usage` parsed captured Claude Code and Codex histories into usage snapshots that the SDK reported to Oz (ai.md decision D15, master decision 9).
+
+**Removed:**
+- `crates/build_cache` (repository and tech-stack discovery, cache planning, `spacectl` cache mounts and the `validate_spacectl` example).
+- `crates/warp_harness_usage` (JSONL capture parsing, Claude Code and Codex usage extraction, counters, tool attribution and the usage API types).
+- Their `[workspace.dependencies]` entries and `app/Cargo.toml` dependencies.
+
+**User-visible impact:** None.

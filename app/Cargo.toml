@@ -111,7 +111,6 @@ log.workspace = true
 log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 lsp.workspace = true
 warp_logging.workspace = true
-warp_harness_usage.workspace = true
 lz4_flex = "0.11"
 markdown_parser.workspace = true
 mcp.workspace = true
@@ -267,7 +266,6 @@ wgpu.workspace = true
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 async-io.workspace = true
 axum.workspace = true
-build_cache.workspace = true
 cloud_object_persistence.workspace = true
 diesel = { workspace = true, features = ["sqlite", "chrono"] }
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
