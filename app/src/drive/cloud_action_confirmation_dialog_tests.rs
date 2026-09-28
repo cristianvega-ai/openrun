@@ -33,18 +33,6 @@ fn removal_confirmation_copy_matches_membership_scope() {
         "Are you sure you want to remove member@example.com from the workspace? This will remove member@example.com from all teams in Acme and from the workspace itself."
     );
     assert_eq!(dialog.confirm_button_text(), "Remove from workspace");
-
-    dialog.set_variant(CloudActionConfirmationDialogVariant::RemoveTeamMemberReloadCredits);
-
-    assert_eq!(
-        dialog.title_text(),
-        "Are you sure you want to remove this member?"
-    );
-    assert_eq!(
-        dialog.body_text(),
-        REMOVE_TEAM_MEMBER_RELOAD_CREDITS_BODY_TEXT
-    );
-    assert_eq!(dialog.confirm_button_text(), "Remove Member");
 }
 #[test]
 fn native_workspace_leave_preserves_other_access() {

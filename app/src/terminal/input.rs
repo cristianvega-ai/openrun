@@ -94,7 +94,6 @@ use warpui::{
 
 use self::decorations::InputBackgroundJobOptions;
 use super::alias::is_expandable_alias;
-use super::block_list_viewport::InputMode;
 use super::event::{BlockCompletedEvent, BlockType, UserBlockCompleted};
 use super::ligature_settings::LigatureSettings;
 use super::model::block::{AgentInteractionMetadata, BlockId, BlockMetadata};
@@ -122,7 +121,6 @@ use super::{
 };
 #[allow(unused_imports)]
 use crate::ASSETS;
-use crate::ai::AIRequestUsageModel;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::{AIAgentContext, AIAgentExchangeId, CancellationReason, EntrypointType};
 use crate::ai::agent_conversations_model::{
@@ -136,7 +134,6 @@ use crate::ai::blocklist::agent_view::{
 use crate::ai::blocklist::block::cli_controller::{CLISubagentController, CLISubagentEvent};
 use crate::ai::blocklist::block::status_bar::BlocklistAIStatusBar;
 use crate::ai::blocklist::conversation_selection::ConversationSelectionHandle;
-use crate::ai::blocklist::prompt::prompt_alert::{PromptAlertEvent, PromptAlertView};
 use crate::ai::blocklist::{
     AttachmentType, BLOCK_CONTEXT_ATTACHMENT_REGEX, BlocklistAIActionModel,
     BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
@@ -209,7 +206,6 @@ use crate::suggestions::ignored_suggestions_model::{
     IgnoredSuggestionsModel, IgnoredSuggestionsModelEvent, SuggestionType,
 };
 use crate::terminal::CLIAgent;
-use crate::terminal::buy_credits_banner::{BuyCreditsBanner, BuyCreditsBannerEvent};
 use crate::terminal::cli_agent_sessions::{
     CLIAgentInputState, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
 };
@@ -850,9 +846,6 @@ pub enum Event {
     SubmitCLIAgentInput {
         text: String,
     },
-    OpenAutoReloadModal {
-        purchased_credits: i32,
-    },
     ShowToast {
         message: String,
         flavor: ToastFlavor,
@@ -1481,7 +1474,6 @@ pub struct Input {
     /// Weak handle to this input view for drop target data
     weak_view_handle: WeakViewHandle<Input>,
 
-    buy_credits_banner: ViewHandle<BuyCreditsBanner>,
     agent_status_view: ViewHandle<BlocklistAIStatusBar>,
     /// Optional queued-prompts panel rendered between `agent_status_view` and the input editor.
     /// Constructed in [`Input::new`] when [`FeatureFlag::QueueSlashCommand`] is enabled.
@@ -1577,8 +1569,7 @@ pub fn init(app: &mut AppContext) {
                 & !id!("ProfileModelSelectorOpen")
                 & !id!("PromptChipMenuOpen")
                 & !id!(QUEUED_PROMPT_INLINE_EDITOR_OPEN_CONTEXT)
-                & !id!("AIContextMenuOpen")
-                & !id!("BuyCreditsBannerOpen"),
+                & !id!("AIContextMenuOpen"),
         ),
     ]);
 
@@ -1951,9 +1942,6 @@ impl Input {
                         ctx,
                     );
                 }
-                AgentInputFooterEvent::PromptAlert(prompt_alert_event) => {
-                    me.handle_prompt_alert(prompt_alert_event, ctx);
-                }
                 AgentInputFooterEvent::ModelSelectorOpened => {
                     me.close_overlays(false, ctx);
                 }
@@ -2254,7 +2242,7 @@ impl Input {
         });
         let inline_history_model = inline_history_menu_view.as_ref(ctx).model().clone();
 
-        let terminal_input_message_bar = ctx.add_typed_action_view(|ctx| {
+        let terminal_input_message_bar = ctx.add_view(|ctx| {
             TerminalInputMessageBar::new(
                 model.clone(),
                 ai_input_model.clone(),
@@ -2744,35 +2732,6 @@ impl Input {
             }
         });
 
-        let ai_req_usage_model = AIRequestUsageModel::handle(ctx);
-        ctx.subscribe_to_model(&ai_req_usage_model, |_, _, _, ctx| {
-            ctx.notify();
-        });
-        ctx.observe(&ai_req_usage_model, |_, _, ctx| {
-            ctx.notify();
-        });
-
-        let buy_credits_banner = ctx.add_typed_action_view(BuyCreditsBanner::new);
-        ctx.subscribe_to_view(&buy_credits_banner, |me, _, event, ctx| match event {
-            BuyCreditsBannerEvent::OpenBillingAndUsage => {
-                ctx.emit(Event::OpenSettings(SettingsSection::BillingAndUsage));
-            }
-            BuyCreditsBannerEvent::RefocusInput => {
-                ctx.focus(&me.editor);
-            }
-            BuyCreditsBannerEvent::OpenAutoReloadModal { purchased_credits } => {
-                ctx.emit(Event::OpenAutoReloadModal {
-                    purchased_credits: *purchased_credits,
-                });
-            }
-            BuyCreditsBannerEvent::ShowAutoReloadError { error_message } => {
-                ctx.emit(Event::ShowToast {
-                    message: error_message.to_string(),
-                    flavor: ToastFlavor::Error,
-                });
-            }
-        });
-
         let agent_status_view = ctx.add_typed_action_view(|ctx| {
             BlocklistAIStatusBar::new(
                 ai_controller.clone(),
@@ -2876,7 +2835,6 @@ impl Input {
             cached_agent_mode_hint_text: None,
             is_editor_empty_on_last_edit: is_editor_empty,
             weak_view_handle: ctx.handle(),
-            buy_credits_banner,
             agent_status_view,
             queued_prompts_panel,
             agent_view_controller,
@@ -4627,23 +4585,6 @@ impl Input {
         });
     }
 
-    fn handle_prompt_alert(
-        &mut self,
-        prompt_alert: &PromptAlertEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match prompt_alert {
-            PromptAlertEvent::OpenBillingAndUsagePage => {
-                ctx.emit(Event::OpenSettings(SettingsSection::BillingAndUsage));
-            }
-            PromptAlertEvent::OpenBillingPortal { team_uid } => {
-                UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
-                    user_workspaces.generate_stripe_billing_portal_link(*team_uid, ctx);
-                });
-            }
-        }
-    }
-
     fn handle_universal_developer_input_button_bar_event(
         &mut self,
         event: &UniversalDeveloperInputButtonBarEvent,
@@ -4682,9 +4623,6 @@ impl Input {
             UniversalDeveloperInputButtonBarEvent::SetAIContextMenuOpen(open) => {
                 self.focus_input_box(ctx);
                 self.set_ai_context_menu_open(*open, ctx);
-            }
-            UniversalDeveloperInputButtonBarEvent::PromptAlert(prompt_alert_event) => {
-                self.handle_prompt_alert(prompt_alert_event, ctx);
             }
             UniversalDeveloperInputButtonBarEvent::ModelSelectorOpened => {
                 self.close_overlays(false, ctx);
@@ -10111,12 +10049,6 @@ impl Input {
 
             self.model.lock().set_is_input_dirty(false);
         }
-
-        AISettings::handle(ctx).update(ctx, |ai_settings, ctx| {
-            // Don't show the quota banner once a user has run a command or AI query.
-            ai_settings.mark_quota_banner_as_dismissed(ctx);
-            ctx.notify();
-        });
     }
 
     /// Submits the rich-input buffer on Ctrl+Enter when `submit_on_ctrl_enter` is enabled.
@@ -10497,40 +10429,6 @@ impl Input {
                 conversation_id: None,
                 origin: AgentViewEntryOrigin::Input,
             });
-            return;
-        }
-
-        let has_any_ai = {
-            let user_workspaces = UserWorkspaces::as_ref(ctx);
-            let scope = user_workspaces.team_context_for_view(ctx);
-            AIRequestUsageModel::as_ref(ctx).has_any_ai_remaining(&scope, ctx)
-        };
-        if !has_any_ai {
-            AIRequestUsageModel::handle(ctx).update(ctx, |model, ctx| {
-                model.enable_buy_credits_banner(ctx);
-            });
-        }
-
-        let alert_blocks_ai = {
-            let user_workspaces = UserWorkspaces::as_ref(ctx);
-            let scope = user_workspaces.team_context_for_view(ctx);
-            PromptAlertView::does_alert_block_ai_requests(&scope, ctx)
-        };
-        if alert_blocks_ai {
-            AIRequestUsageModel::handle(ctx).update(ctx, |usage_model, ctx| {
-                // Rate limit requests to fetch the user's AI usage if triggered by enter
-                // keypress.
-                const USAGE_LIMIT_UPDATE_REQUEST_RATE_LIMIT: Duration = Duration::from_secs(10);
-
-                let last_update_time = usage_model.last_update_time();
-                if last_update_time
-                    .is_some_and(|time| time.elapsed() >= USAGE_LIMIT_UPDATE_REQUEST_RATE_LIMIT)
-                    || last_update_time.is_none()
-                {
-                    usage_model.refresh_request_usage_async(ctx);
-                }
-            });
-
             return;
         }
 
@@ -11400,15 +11298,6 @@ impl Input {
     pub(crate) fn is_voltron_open(&self) -> bool {
         self.is_voltron_open
     }
-
-    /// Returns whether the input box is currently pinned to the top of the screen.
-    fn is_input_at_top(&self, model: &TerminalModel, ctx: &AppContext) -> bool {
-        match InputModeSettings::as_ref(ctx).input_mode.value() {
-            InputMode::PinnedToBottom => false,
-            InputMode::PinnedToTop => true,
-            InputMode::Waterfall => model.is_block_list_empty(),
-        }
-    }
 }
 
 impl Entity for Input {
@@ -11717,14 +11606,6 @@ impl View for Input {
             .is_conversation_menu()
         {
             ctx.set.insert(flags::OPEN_INLINE_CONVERSATION_MENU);
-        }
-
-        if self
-            .buy_credits_banner
-            .as_ref(app)
-            .is_denomination_dropdown_open(app)
-        {
-            ctx.set.insert("BuyCreditsBannerOpen");
         }
 
         if self.is_editing_queued_prompt(app) {

@@ -11,60 +11,6 @@ use warpui::{
 
 use super::*;
 use crate::appearance::Appearance;
-use crate::workspaces::workspace::{BillingMetadata, CustomerType};
-
-fn billing_metadata(customer_type: CustomerType) -> BillingMetadata {
-    BillingMetadata {
-        customer_type,
-        ..Default::default()
-    }
-}
-
-#[test]
-fn paid_workspace_without_team_shows_only_workspace_badge() {
-    let billing_metadata = billing_metadata(CustomerType::Enterprise);
-
-    let presentation = plan_header_presentation(Some(&billing_metadata), false, false);
-
-    assert_eq!(presentation.badge_label.as_deref(), Some("Enterprise"));
-    assert!(!presentation.show_personal_upgrade);
-}
-
-#[test]
-fn free_workspace_without_team_shows_free_badge_once() {
-    let billing_metadata = billing_metadata(CustomerType::Free);
-
-    let presentation = plan_header_presentation(Some(&billing_metadata), false, false);
-
-    assert_eq!(presentation.badge_label.as_deref(), Some("Free"));
-    assert!(presentation.show_personal_upgrade);
-}
-
-#[test]
-fn paid_workspace_with_team_shows_only_workspace_badge() {
-    let billing_metadata = billing_metadata(CustomerType::Enterprise);
-
-    let presentation = plan_header_presentation(Some(&billing_metadata), true, false);
-
-    assert_eq!(presentation.badge_label.as_deref(), Some("Enterprise"));
-    assert!(!presentation.show_personal_upgrade);
-}
-
-#[test]
-fn anonymous_account_shows_free_badge_once() {
-    let presentation = plan_header_presentation(None, false, true);
-
-    assert_eq!(presentation.badge_label.as_deref(), Some("Free"));
-    assert!(presentation.show_personal_upgrade);
-}
-
-#[test]
-fn signed_in_account_without_workspace_shows_free_badge_once() {
-    let presentation = plan_header_presentation(None, false, false);
-
-    assert_eq!(presentation.badge_label.as_deref(), Some("Free"));
-    assert!(presentation.show_personal_upgrade);
-}
 
 // ── MatchData behavior ──────────────────────────────────────────────────────
 
@@ -122,7 +68,6 @@ fn subpage_display_names_are_correct() {
 /// breaks the exhaustive match there, which is the prompt to add it here.
 const ALL_SECTIONS: &[SettingsSection] = &[
     SettingsSection::About,
-    SettingsSection::BillingAndUsage,
     SettingsSection::Appearance,
     SettingsSection::Features,
     SettingsSection::Keybindings,
@@ -152,7 +97,6 @@ fn all_sections_list_is_exhaustive() {
     fn is_listed(section: SettingsSection) -> bool {
         let known = match section {
             SettingsSection::About
-            | SettingsSection::BillingAndUsage
             | SettingsSection::Appearance
             | SettingsSection::Features
             | SettingsSection::Keybindings
@@ -329,7 +273,7 @@ fn realistic_nav_items() -> Vec<SettingsNavItem> {
     vec![
         SettingsNavItem::Page(SettingsSection::Appearance),
         SettingsNavItem::Umbrella(SettingsUmbrella::new("Agents", AGENT_SUBPAGES.to_vec())),
-        SettingsNavItem::Page(SettingsSection::BillingAndUsage),
+        SettingsNavItem::Page(SettingsSection::Features),
         SettingsNavItem::Umbrella(SettingsUmbrella::new(
             "Code",
             vec![
@@ -363,7 +307,7 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
     // All umbrellas default to collapsed.
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    // Expect: Appearance, <Agents umbrella>, BillingAndUsage, <Code umbrella>,
+    // Expect: Appearance, <Agents umbrella>, Features, <Code umbrella>,
     // <Cloud platform umbrella>, Teams.
     assert_eq!(stops.len(), 6);
     assert!(matches!(
@@ -380,7 +324,7 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
     ));
     assert!(matches!(
         stops[2],
-        NavStop::Section(SettingsSection::BillingAndUsage)
+        NavStop::Section(SettingsSection::Features)
     ));
     assert!(matches!(
         stops[3],
@@ -410,7 +354,7 @@ fn expanded_umbrella_produces_section_stop_per_subpage() {
     let stops = build_nav_stops(&nav_items, |_| true);
 
     // Expect: Appearance, WarpAgent, AgentProfiles,
-    // ThirdPartyCLIAgents, BillingAndUsage, <Code umbrella>,
+    // ThirdPartyCLIAgents, Features, <Code umbrella>,
     // <Cloud platform umbrella>, Teams.
     let sections: Vec<_> = stops
         .iter()
@@ -426,7 +370,7 @@ fn expanded_umbrella_produces_section_stop_per_subpage() {
             "WarpAgent",
             "AgentProfiles",
             "ThirdPartyCLIAgents",
-            "BillingAndUsage",
+            "Features",
             "Umbrella@3",
             "Umbrella@4",
             "Teams",
@@ -525,7 +469,7 @@ fn current_stop_index_matches_section_stop() {
     let nav_items = realistic_nav_items();
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    let idx = current_stop_index(&stops, &nav_items, SettingsSection::BillingAndUsage);
+    let idx = current_stop_index(&stops, &nav_items, SettingsSection::Features);
     assert_eq!(idx, Some(2));
 }
 
@@ -611,7 +555,7 @@ fn arrow_down_from_leading_page_with_collapsed_agents_lands_on_first_subpage() {
     let stops = build_nav_stops(&nav_items, |_| true);
 
     // Pressing Down from Appearance should auto-expand Agents and select WarpAgent,
-    // not skip over to BillingAndUsage.
+    // not skip over to Features.
     let next = simulate_cycle(
         &nav_items,
         &stops,
@@ -622,18 +566,18 @@ fn arrow_down_from_leading_page_with_collapsed_agents_lands_on_first_subpage() {
 }
 
 #[test]
-fn arrow_up_from_billing_and_usage_with_collapsed_agents_lands_on_last_subpage() {
+fn arrow_up_from_features_with_collapsed_agents_lands_on_last_subpage() {
     let nav_items = realistic_nav_items();
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    // Pressing Up from BillingAndUsage should land on the collapsed Agents
+    // Pressing Up from Features should land on the collapsed Agents
     // umbrella, which resolves to ThirdPartyCLIAgents (last visible subpage)
     // so the user continues moving in natural reading order rather than being
     // jumped back to the top of the umbrella.
     let next = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::BillingAndUsage,
+        SettingsSection::Features,
         CycleDirection::Up,
     );
     assert_eq!(next, SettingsSection::ThirdPartyCLIAgents);
@@ -648,13 +592,13 @@ fn arrow_up_into_collapsed_umbrella_respects_search_filter_for_last_subpage() {
         |section: SettingsSection| !matches!(section, SettingsSection::ThirdPartyCLIAgents);
     let stops = build_nav_stops(&nav_items, is_visible);
 
-    // From BillingAndUsage, Up should land on the last *visible* AI subpage
+    // From Features, Up should land on the last *visible* AI subpage
     // (AgentProfiles), not on the filtered-out ThirdPartyCLIAgents
     // or on the first subpage WarpAgent.
     let next = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::BillingAndUsage,
+        SettingsSection::Features,
         CycleDirection::Up,
     );
     assert_eq!(next, SettingsSection::AgentProfiles);
@@ -667,14 +611,14 @@ fn arrow_down_from_expanded_last_subpage_leaves_umbrella() {
     let stops = build_nav_stops(&nav_items, |_| true);
 
     // ThirdPartyCLIAgents is the last Agents subpage; Down should move to
-    // BillingAndUsage (the next top-level page in the nav order).
+    // Features (the next top-level page in the nav order).
     let next = simulate_cycle(
         &nav_items,
         &stops,
         SettingsSection::ThirdPartyCLIAgents,
         CycleDirection::Down,
     );
-    assert_eq!(next, SettingsSection::BillingAndUsage);
+    assert_eq!(next, SettingsSection::Features);
 }
 
 #[test]
@@ -683,12 +627,12 @@ fn arrow_down_across_adjacent_collapsed_umbrellas() {
     // Both Code and Cloud platform umbrellas are collapsed.
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    // From BillingAndUsage, Down should land on the first Code subpage
+    // From Features, Down should land on the first Code subpage
     // (Code umbrella auto-expands).
     let next_after_billing = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::BillingAndUsage,
+        SettingsSection::Features,
         CycleDirection::Down,
     );
     assert_eq!(next_after_billing, SettingsSection::Projects);

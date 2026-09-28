@@ -40,13 +40,6 @@ fn command_registry_filters_explicit_surface_metadata() {
             command.name
         );
     }
-    assert_eq!(COST.kind, SlashCommandKind::Cost);
-    assert!(matches!(
-        COST.supported_surfaces,
-        SlashCommandSurfaces::GuiAndTui {
-            icon_path: "bundled/svg/bar-chart-04.svg"
-        }
-    ));
     assert_eq!(EXIT.kind, SlashCommandKind::Exit);
     assert_eq!(EXIT.supported_surfaces, SlashCommandSurfaces::TuiOnly);
 }
@@ -57,7 +50,7 @@ fn command_registry_contains_commands_for_both_surfaces() {
 
     assert_eq!(
         registry
-            .get_command_with_name(UPGRADE.name)
+            .get_command_with_name(EXIT.name)
             .map(|command| command.supported_surfaces),
         Some(SlashCommandSurfaces::TuiOnly)
     );

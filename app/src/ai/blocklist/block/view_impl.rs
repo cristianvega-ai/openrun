@@ -1047,7 +1047,6 @@ impl View for AIBlock {
                 autonomy_setting_speedbump: &self.autonomy_setting_speedbump,
                 keyboard_navigable_buttons: self.keyboard_navigable_buttons.as_ref(),
                 response_rating: &self.response_rating,
-                request_refunded_count: self.request_refunded_count,
                 search_codebase_view: &self.search_codebase_view,
                 web_search_views: &self.web_search_views,
                 web_fetch_views: &self.web_fetch_views,
@@ -1056,8 +1055,6 @@ impl View for AIBlock {
                 has_accepted_edits,
                 current_todo_list: self.current_todo_list(app),
                 finish_reason: self.finish_reason.as_ref(),
-                is_usage_footer_expanded: self.is_usage_footer_expanded,
-                is_turn_panel_expanded: self.is_turn_panel_expanded,
                 terminal_view_id: self.terminal_view_id,
                 is_conversation_transcript_viewer,
                 aws_bedrock_credentials_error_view: self

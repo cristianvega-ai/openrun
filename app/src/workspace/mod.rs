@@ -1,6 +1,5 @@
 mod action;
 mod active_session;
-pub mod bonus_grant_notification_model;
 #[cfg(target_os = "macos")]
 pub(crate) mod cli_install;
 pub(crate) mod cross_window_tab_drag;
@@ -11,7 +10,6 @@ pub mod header_toolbar_item;
 mod home;
 mod lightbox_view;
 mod native_modal;
-mod one_time_modal_model;
 mod registry;
 pub mod rewind_confirmation_dialog;
 pub mod sync_inputs;
@@ -55,7 +53,6 @@ pub fn panel_header_corner_radius() -> warpui::elements::CornerRadius {
     warpui::elements::CornerRadius::with_top(warpui::elements::Radius::Pixels(8.))
 }
 
-pub use one_time_modal_model::OneTimeModalModel;
 pub use registry::WorkspaceRegistry;
 pub use toast_stack::{ToastStack, ToastStackEvent};
 
@@ -82,8 +79,6 @@ pub fn init(app: &mut AppContext) {
     delete_conversation_confirmation_dialog::init(app);
     crate::tab_configs::remove_confirmation_dialog::init(app);
     tab_configs::session_config_modal::init(app);
-    view::codex_modal::init(app);
-    view::free_ai_removal_modal::init(app);
     view::global_search::view::GlobalSearchView::init(app);
     view::right_panel::RightPanelView::init(app);
     header_toolbar_editor::init(app);
@@ -126,33 +121,9 @@ pub fn init(app: &mut AppContext) {
             // Debug actions for build plan migration modal (command palette only)
             app.register_editable_bindings([
                 EditableBinding::new(
-                    "workspace:open_build_plan_migration_modal",
-                    "[Debug] Open Build Plan Migration Modal",
-                    WorkspaceAction::OpenBuildPlanMigrationModal,
-                )
-                .with_context_predicate(id!("Workspace")),
-                EditableBinding::new(
-                    "workspace:reset_build_plan_migration_modal_state",
-                    "[Debug] Reset Build Plan Migration Modal State",
-                    WorkspaceAction::ResetBuildPlanMigrationModalState,
-                )
-                .with_context_predicate(id!("Workspace")),
-                EditableBinding::new(
                     "workspace:debug_reset_aws_bedrock_login_banner_dismissed",
                     "[Debug] Un-dismiss AWS login banner",
                     WorkspaceAction::DebugResetAwsBedrockLoginBannerDismissed,
-                )
-                .with_context_predicate(id!("Workspace")),
-                EditableBinding::new(
-                    "workspace:open_free_ai_removal_modal",
-                    "[Debug] Open Free AI Removal Modal",
-                    WorkspaceAction::OpenFreeAiRemovalModal,
-                )
-                .with_context_predicate(id!("Workspace")),
-                EditableBinding::new(
-                    "workspace:reset_free_ai_removal_modal_state",
-                    "[Debug] Reset Free AI Removal Modal State",
-                    WorkspaceAction::ResetFreeAiRemovalModalState,
                 )
                 .with_context_predicate(id!("Workspace")),
                 EditableBinding::new(
@@ -1130,13 +1101,6 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
             WorkspaceAction::ShowSettingsPage(SettingsSection::WarpAgent),
         )
         .with_enabled(|| FeatureFlag::AgentMode.is_enabled())
-        .with_group(bindings::BindingGroup::Settings.as_str())
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
-            "workspace:show_settings_billing_and_usage_page",
-            BindingDescription::new("Open Settings: Billing and usage"),
-            WorkspaceAction::ShowSettingsPage(SettingsSection::BillingAndUsage),
-        )
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace")),
         EditableBinding::new(

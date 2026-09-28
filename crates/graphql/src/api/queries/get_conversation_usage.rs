@@ -1,116 +1,6 @@
 use std::collections::HashMap;
 
-use crate::request_context::RequestContext;
-use crate::scalars::Time;
 use crate::schema;
-
-/*
-query GetConversationUsage(
-  $requestContext: RequestContext!,
-  $days: Int,
-  $limit: Int,
-  $lastUpdatedEndTimestamp: Time
-) {
-  user(requestContext: $requestContext) {
-    ... on UserOutput {
-      user {
-        conversationUsage(
-          days: $days,
-          limit: $limit,
-          lastUpdatedEndTimestamp: $lastUpdatedEndTimestamp
-        ) {
-          conversationId
-          title
-          lastUpdated
-          usageMetadata {
-            contextWindowUsage
-            creditsSpent
-            platformCreditsSpent
-            totalProviderCostInCents
-            summarized
-            tokenUsage { modelId totalTokens }
-            warpTokenUsage { modelId totalTokens tokenUsageByCategory { category tokens } }
-            byokTokenUsage { modelId totalTokens tokenUsageByCategory { category tokens } }
-            toolUsageMetadata {
-              runCommandStats { count }
-              runCommandsExecuted
-              readFilesStats { count }
-              searchCodebaseStats { count }
-              grepStats { count }
-              fileGlobStats { count }
-              callMcpToolStats { count }
-              readMcpResourceStats { count }
-              suggestPlanStats { count }
-              suggestCreatePlanStats { count }
-              writeToLongRunningShellCommandStats { count }
-              applyFileDiffStats { count linesAdded linesRemoved filesChanged }
-              readShellCommandOutputStats { count }
-              useComputerStats { count }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-*/
-
-#[derive(cynic::QueryVariables, Debug)]
-pub struct GetConversationUsageVariables {
-    pub request_context: RequestContext,
-    pub days: Option<i32>,
-    pub limit: Option<i32>,
-    pub last_updated_end_timestamp: Option<Time>,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(
-    graphql_type = "RootQuery",
-    variables = "GetConversationUsageVariables"
-)]
-pub struct GetConversationUsage {
-    #[arguments(requestContext: $request_context)]
-    pub user: UserResult,
-}
-crate::client::define_operation! {
-    get_conversation_usage_history(GetConversationUsageVariables) -> GetConversationUsage;
-}
-
-#[derive(cynic::InlineFragments, Debug)]
-#[cynic(variables = "GetConversationUsageVariables")]
-pub enum UserResult {
-    UserOutput(UserOutput),
-    #[cynic(fallback)]
-    Unknown,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(
-    graphql_type = "UserOutput",
-    variables = "GetConversationUsageVariables"
-)]
-pub struct UserOutput {
-    pub user: User,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "User", variables = "GetConversationUsageVariables")]
-pub struct User {
-    #[arguments(
-        days: $days,
-        limit: $limit,
-        lastUpdatedEndTimestamp: $last_updated_end_timestamp
-    )]
-    pub conversation_usage: Vec<ConversationUsage>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone)]
-pub struct ConversationUsage {
-    pub conversation_id: String,
-    pub last_updated: Time,
-    pub title: String,
-    pub usage_metadata: ConversationUsageMetadata,
-}
 
 #[derive(cynic::QueryFragment, Debug, Clone)]
 pub struct ConversationUsageMetadata {
@@ -279,7 +169,6 @@ pub struct ToolUsageMetadata {
     pub write_to_long_running_shell_command_stats: ToolCallStats,
     pub apply_file_diff_stats: ApplyFileDiffStats,
     pub read_shell_command_output_stats: ToolCallStats,
-    pub use_computer_stats: ToolCallStats,
 }
 
 impl From<&ToolUsageMetadata> for persistence::model::ToolUsageMetadata {
@@ -324,9 +213,6 @@ impl From<&ToolUsageMetadata> for persistence::model::ToolUsageMetadata {
             },
             read_shell_command_output_stats: persistence::model::ToolCallStats {
                 count: gql.read_shell_command_output_stats.count,
-            },
-            use_computer_stats: persistence::model::ToolCallStats {
-                count: gql.use_computer_stats.count,
             },
         }
     }

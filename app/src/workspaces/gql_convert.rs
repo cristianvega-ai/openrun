@@ -6,7 +6,6 @@ use warp_errors::report_error;
 use warp_graphql::billing::{
     AiAutonomyPolicy as GqlAiAutonomyPolicy, AmbientAgentsPolicy as GqlAmbientAgentsPolicy,
     BillingCycleUsageHistory as GqlBillingCycleUsageHistory, BillingMetadata as GqlBillingMetadata,
-    BonusGrant as GqlBonusGrant, BonusGrantScope as GqlBonusGrantScope,
     ByoApiKeyPolicy as GqlByoApiKeyPolicy, ByoEndpointPolicy as GqlByoEndpointPolicy,
     CodebaseContextPolicy as GqlCodebaseContextPolicy, CustomerType as GqlCustomerType,
     DelinquencyStatus as GqlDelinquencyStatus,
@@ -25,7 +24,6 @@ use warp_graphql::billing::{
     UsageVisibilityGranularity as GqlUsageVisibilityGranularity,
     UsageVisibilityPolicy as GqlUsageVisibilityPolicy, WarpAiPolicy as GqlWarpAiPolicy,
 };
-use warp_graphql::queries::get_conversation_usage as gql_usage;
 use warp_graphql::queries::get_workspaces_metadata_for_user::User as GqlUser;
 use warp_graphql::subscriptions::get_warp_drive_updates::WarpDriveUpdate;
 use warp_graphql::user::{
@@ -70,10 +68,8 @@ use super::workspace::{
     UsageVisibilityGranularity, UsageVisibilityPolicy, WarpAiPolicy, Workspace, WorkspaceMember,
     WorkspaceMemberUsageInfo, WorkspaceSettings, WorkspaceSizePolicy,
 };
-use crate::ai::blocklist::usage::conversation_usage_view::ConversationUsageInfo;
 use crate::ai::execution_profiles::{ActionPermission, WriteToPtyPermission};
 use crate::ai::llms::ModelsByFeature;
-use crate::ai::{BonusGrant, BonusGrantScope};
 use crate::auth::UserUid;
 use crate::server::cloud_objects::listener::ObjectUpdateMessage;
 use crate::server::graphql::schema::object_action_history_from_gql;
@@ -83,7 +79,7 @@ use crate::workspaces::workspace::{
     AiOverages, BonusGrantsPurchased, ByoApiKeyPolicy, ByoEndpointPolicy, CodebaseContextPolicy,
     EnterpriseCreditsAutoReloadPolicy, EnterprisePayAsYouGoPolicy, ManagedByokByoePolicy,
     MultiAdminPolicy, NativeWorkspacesPolicy, PurchaseAddOnCreditsPolicy,
-    UsageBasedPricingSettings, WorkspaceUid,
+    UsageBasedPricingSettings,
 };
 
 pub const PLACEHOLDER_WORKSPACE_UID: &str = "NOT_A_REAL_WORKSPACE_UID";
@@ -368,40 +364,6 @@ impl From<GqlUgcCollectionEnablementSetting> for UgcCollectionEnablementSetting 
                 );
                 UgcCollectionEnablementSetting::RespectUserSetting
             }
-        }
-    }
-}
-
-impl From<&gql_usage::ConversationUsage> for ConversationUsageInfo {
-    fn from(gql: &gql_usage::ConversationUsage) -> Self {
-        let persistence::model::ConversationUsageMetadata {
-            credits_spent,
-            platform_credits_spent,
-            token_usage: models,
-            tool_usage_metadata: tool,
-            context_window_usage,
-            context_window_segments,
-            ..
-        } = (&gql.usage_metadata).into();
-        ConversationUsageInfo {
-            credits_spent,
-            platform_credits_spent,
-            credits_spent_for_last_block: None,
-            tool_calls: tool.total_tool_calls(),
-            models,
-            context_window_usage,
-            context_window_segments,
-            files_changed: tool.apply_file_diff_stats.files_changed,
-            lines_added: tool.apply_file_diff_stats.lines_added,
-            lines_removed: tool.apply_file_diff_stats.lines_removed,
-            commands_executed: tool.run_command_stats.commands_executed,
-            // GAP: the settings usage-history surface sources this view from
-            // a GraphQL query that does not yet expose a token count or
-            // per-category cost breakdown (Milestone 3 / vertical B).
-            total_tokens: None,
-            total_cost_in_cents: None,
-            tokens_for_last_block: None,
-            cost_in_cents_for_last_block: None,
         }
     }
 }
@@ -757,63 +719,6 @@ impl From<GqlDelinquencyStatus> for DelinquencyStatus {
             GqlDelinquencyStatus::Unpaid => DelinquencyStatus::Unpaid,
             GqlDelinquencyStatus::TeamLimitExceeded => DelinquencyStatus::TeamLimitExceeded,
             GqlDelinquencyStatus::Other(_) => DelinquencyStatus::Unknown,
-        }
-    }
-}
-
-fn bonus_grant_scope_from_gql(
-    scope: GqlBonusGrantScope,
-    workspace_uid: Option<WorkspaceUid>,
-) -> BonusGrantScope {
-    match (scope, workspace_uid) {
-        (GqlBonusGrantScope::User, _) => BonusGrantScope::User,
-        (GqlBonusGrantScope::Team, Some(uid)) => BonusGrantScope::Team(uid),
-        (GqlBonusGrantScope::Workspace, Some(uid)) => BonusGrantScope::Workspace(uid),
-        // A team/workspace-scoped grant is always fetched under a workspace, so a
-        // missing uid means an unexpected server shape; fall back to user scope.
-        (GqlBonusGrantScope::Team | GqlBonusGrantScope::Workspace, None) => {
-            report_error!(
-                anyhow!(
-                    "Team/Workspace-scoped bonus grant fetched without a workspace uid; treating as user scope"
-                ),
-                warp_errors::ReportErrorLogMode::OncePerRun
-            );
-            BonusGrantScope::User
-        }
-        // Unknown scope from a newer server: preserve the pre-scope behavior by
-        // attributing it to the workspace it was fetched under when available.
-        (GqlBonusGrantScope::Other, Some(uid)) => BonusGrantScope::Workspace(uid),
-        (GqlBonusGrantScope::Other, None) => BonusGrantScope::User,
-    }
-}
-
-impl BonusGrant {
-    pub fn from_gql_user_bonus_grant(bonus_grant: GqlBonusGrant) -> Self {
-        Self::from_gql_bonus_grant(bonus_grant, None)
-    }
-
-    pub fn from_gql_workspace_or_team_bonus_grant(
-        bonus_grant: GqlBonusGrant,
-        workspace_uid: WorkspaceUid,
-    ) -> Self {
-        Self::from_gql_bonus_grant(bonus_grant, Some(workspace_uid))
-    }
-
-    fn from_gql_bonus_grant(
-        bonus_grant: GqlBonusGrant,
-        workspace_uid: Option<WorkspaceUid>,
-    ) -> Self {
-        let scope = bonus_grant_scope_from_gql(bonus_grant.scope, workspace_uid);
-        Self {
-            created_at: bonus_grant.created_at.utc(),
-            cost_cents: bonus_grant.cost_cents,
-            expiration: bonus_grant.expiration.map(|exp| exp.utc()),
-            grant_type: bonus_grant.grant_type,
-            reason: bonus_grant.reason,
-            user_facing_message: bonus_grant.user_facing_message,
-            request_credits_granted: bonus_grant.request_credits_granted,
-            request_credits_remaining: bonus_grant.request_credits_remaining,
-            scope,
         }
     }
 }
@@ -1494,7 +1399,6 @@ pub fn workspaces_metadata_response_from_gql(
     WorkspacesMetadataResponse {
         workspaces,
         joinable_teams,
-        ai_credit_availability: Some(gql_user.ai_credit_availability.into()),
         user_purchase_policy,
     }
 }

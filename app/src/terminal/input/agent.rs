@@ -6,8 +6,7 @@ use warpui::{AppContext, SingletonEntity as _};
 
 use super::common::{
     add_command_xray_overlay, add_input_suggestions_overlays, add_voltron_overlay,
-    add_workflow_info_overlay, maybe_add_buy_credits_banner,
-    wrap_input_with_terminal_padding_and_focus_handler,
+    add_workflow_info_overlay, wrap_input_with_terminal_padding_and_focus_handler,
 };
 use super::{Input, InputAction, InputDropTargetData};
 use crate::ai::blocklist::InputType;
@@ -24,7 +23,7 @@ impl Input {
         let appearance = Appearance::as_ref(app);
         let menu_positioning = self.menu_positioning(app);
 
-        let model = self.model.lock();
+        let _model = self.model.lock();
 
         // We should likely rework this stack to not need to use `with_constrain_absolute_children`,
         // by reworking the positioning of the children to not depend on this.
@@ -185,16 +184,6 @@ impl Input {
 
         let mut outer_stack = Stack::new().with_constrain_absolute_children();
         outer_stack.add_child(column.finish());
-        maybe_add_buy_credits_banner(
-            &mut outer_stack,
-            &self.buy_credits_banner,
-            self.is_pane_focused(app),
-            self.terminal_view_id,
-            self.is_input_at_top(&model, app),
-            &self.team_scope(app),
-            &model,
-            app,
-        );
 
         SavePosition::new(outer_stack.finish(), &self.save_position_id()).finish()
     }

@@ -89,12 +89,11 @@ use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::telemetry::ForTelemetry as _;
 use crate::ai::agent::{
     AIAgentAction, AIAgentActionId, AIAgentActionResultType, AIAgentActionType, AIAgentAttachment,
-    AIAgentCitation, AIAgentContext, AIAgentExchangeId, AIAgentInput, AIAgentOutput,
-    AIAgentOutputMessage, AIAgentOutputMessageType, AIAgentTextSection, AIIdentifiers,
-    CancellationReason, MessageId, ProgrammingLanguage, RenderableAIError,
-    RequestCommandOutputResult, RequestFileEditsResult, SearchCodebaseResult, ServerOutputId,
-    SubagentCall, SubagentType, SuggestPromptRequest, SuggestPromptResult, SummarizationType,
-    TodoOperation,
+    AIAgentCitation, AIAgentContext, AIAgentInput, AIAgentOutput, AIAgentOutputMessage,
+    AIAgentOutputMessageType, AIAgentTextSection, AIIdentifiers, CancellationReason, MessageId,
+    ProgrammingLanguage, RenderableAIError, RequestCommandOutputResult, RequestFileEditsResult,
+    SearchCodebaseResult, ServerOutputId, SubagentCall, SubagentType, SuggestPromptRequest,
+    SuggestPromptResult, SummarizationType, TodoOperation,
 };
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::ambient_agents::AmbientAgentTaskId;
@@ -139,7 +138,6 @@ use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::get_relevant_files::controller::{
     GetRelevantFilesController, GetRelevantFilesControllerEvent,
 };
-use crate::ai::{AIRequestUsageModel, AIRequestUsageModelEvent};
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::code::editor::comment_editor::create_readonly_comment_markdown_editor;
 use crate::code::editor::view::{CodeEditorEvent, CodeEditorRenderOptions, CodeEditorView};
@@ -426,12 +424,6 @@ pub(super) struct AIBlockStateHandles {
     /// Mouse state handle for the fork conversation button
     fork_conversation_handle: MouseStateHandle,
 
-    /// Mouse state handle for the usage button
-    usage_button_handle: MouseStateHandle,
-
-    /// Mouse state handle for the per-turn request-metadata "Turn" panel trigger
-    turn_panel_button_handle: MouseStateHandle,
-
     /// Mouse state handles per citation.
     /// A given citation should only appear once per block.
     footer_citation_chip_handles: HashMap<AIAgentCitation, MouseStateHandle>,
@@ -466,9 +458,6 @@ pub(super) struct AIBlockStateHandles {
 
     /// Mouse state handle for the invalid API key button
     invalid_api_key_button_handle: MouseStateHandle,
-
-    /// Mouse state handle for the Subscribe button shown on the out-of-credits error
-    subscribe_button_handle: MouseStateHandle,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -999,10 +988,6 @@ pub struct AIBlock {
     /// The thumbs up/down rating of the AI block response.
     response_rating: OnceCell<AIBlockResponseRating>,
 
-    /// The number of requests that have been refunded.
-    /// Right now, this happens when a user thumbs down a response.
-    request_refunded_count: Option<i32>,
-
     /// Requested commands that were auto-expanded,
     /// and should thus be auto-collapsed when the block is finished.
     requested_commands_to_auto_collapse: HashSet<AIAgentActionId>,
@@ -1016,13 +1001,6 @@ pub struct AIBlock {
     /// Stores the last command that was right-clicked by a child component.
     /// When set, CopyCommand will copy this specific command instead of all commands.
     last_right_clicked_command: Option<String>,
-
-    /// Whether the usage summary footer is expanded.
-    is_usage_footer_expanded: bool,
-
-    /// Whether the per-turn request-metadata "Turn" panel is expanded. Independent of
-    /// `is_usage_footer_expanded`: the two panels are separate surfaces.
-    is_turn_panel_expanded: bool,
 
     /// Controller for reading/modifying `AgentView` state for this terminal pane (e.g. if there is
     /// an active agent view or not, which affects whether or not this block should be hidden).
@@ -1219,31 +1197,6 @@ impl AIBlock {
             }
         });
 
-        ctx.subscribe_to_model(&AIRequestUsageModel::handle(ctx), |me, _, event, ctx| {
-            if let AIRequestUsageModelEvent::RequestBonusRefunded {
-                requests_refunded,
-                server_conversation_id,
-                request_id,
-            } = event
-            {
-                let server_conversation_token = BlocklistAIHistoryModel::as_ref(ctx)
-                    .conversation(&me.client_ids.conversation_id)
-                    .and_then(|conversation| conversation.server_conversation_token())
-                    .cloned();
-
-                let server_output_id = me.model.server_output_id(ctx);
-
-                if let (Some(server_conversation_token), Some(server_output_id)) =
-                    (server_conversation_token, server_output_id)
-                    && request_id.eq(server_output_id.to_string().as_str())
-                    && server_conversation_id.eq(server_conversation_token.as_str())
-                {
-                    me.request_refunded_count = Some(*requests_refunded);
-                    ctx.notify();
-                }
-            }
-        });
-
         ctx.subscribe_to_model(
             cli_subagent_controller,
             move |me, _, event, ctx| match event {
@@ -1410,7 +1363,6 @@ impl AIBlock {
             keyboard_navigable_buttons: None,
             response_rating: OnceCell::new(),
             terminal_view_id,
-            request_refunded_count: None,
             action_buttons: Default::default(),
             search_codebase_view: Default::default(),
             web_search_views: Default::default(),
@@ -1420,8 +1372,6 @@ impl AIBlock {
             open_all_comments_button,
             rewind_button,
             last_right_clicked_command: None,
-            is_usage_footer_expanded: false,
-            is_turn_panel_expanded: false,
             agent_view_controller,
             aws_bedrock_credentials_error_view: None,
             gemini_enterprise_credentials_error_view: None,
@@ -5413,18 +5363,6 @@ fn set_imported_comment_button_disabled(
     });
 }
 
-impl AIBlock {
-    /// Notifies the terminal view of the turn panel's current expansion state, using this
-    /// block's own conversation/exchange ids.
-    fn emit_turn_panel_toggled(&self, ctx: &mut ViewContext<Self>) {
-        ctx.emit(AIBlockEvent::TurnPanelToggled {
-            conversation_id: self.client_ids.conversation_id,
-            exchange_id: self.client_ids.client_exchange_id,
-            is_expanded: self.is_turn_panel_expanded,
-        });
-    }
-}
-
 fn num_attached_context_blocks(inputs: &[AIAgentInput]) -> usize {
     inputs.iter().fold(0, |count, input| {
         if let Some(context) = input.context() {
@@ -5492,20 +5430,6 @@ pub enum AIBlockEvent {
     /// interactable (if any requested commands or requested actions were included, all requested
     /// commands and requested actions have been executed or cancelled).
     Finished,
-
-    /// Emitted when we want to show or hide the usage footer.
-    UsageFooterToggled {
-        conversation_id: AIConversationId,
-        is_expanded: bool,
-    },
-
-    /// Emitted when we want to show or hide the per-turn request-metadata "Turn" panel.
-    TurnPanelToggled {
-        conversation_id: AIConversationId,
-        /// The exchange this block renders, used to look up that turn's record
-        exchange_id: AIAgentExchangeId,
-        is_expanded: bool,
-    },
 
     /// Emitted when the AI block requires user confirmation to execute.
     ActionBlockedOnUserConfirmation,
@@ -5717,11 +5641,6 @@ pub enum AIBlockAction {
     CopyDebugId(String),
     /// Open Warp feedback documentation
     OpenFeedbackDocs,
-    /// Toggle the usage summary footer expansion state
-    ToggleIsUsageFooterExpanded,
-    /// Toggle the per-turn request-metadata "Turn" panel expansion state.
-    ToggleIsTurnPanelExpanded,
-    SetIsTurnPanelExpanded(bool),
     CommentExpanded {
         id: CommentId,
     },
@@ -5975,21 +5894,6 @@ impl TypedActionView for AIBlock {
             AIBlockAction::ToggleReferencesSection => {
                 self.is_references_section_open = !self.is_references_section_open;
             }
-            AIBlockAction::ToggleIsUsageFooterExpanded => {
-                self.is_usage_footer_expanded = !self.is_usage_footer_expanded;
-                ctx.emit(AIBlockEvent::UsageFooterToggled {
-                    conversation_id: self.client_ids.conversation_id,
-                    is_expanded: self.is_usage_footer_expanded,
-                });
-            }
-            AIBlockAction::ToggleIsTurnPanelExpanded => {
-                self.is_turn_panel_expanded = !self.is_turn_panel_expanded;
-                self.emit_turn_panel_toggled(ctx);
-            }
-            AIBlockAction::SetIsTurnPanelExpanded(is_expanded) => {
-                self.is_turn_panel_expanded = *is_expanded;
-                self.emit_turn_panel_toggled(ctx);
-            }
             AIBlockAction::CommentExpanded { id } => {
                 let Some(comment) = self.comment_states.get_mut(id) else {
                     return;
@@ -6129,18 +6033,8 @@ impl TypedActionView for AIBlock {
                 }
 
                 if matches!(rating, AIBlockResponseRating::Negative)
-                    && let Some(output_id) = output_id.clone()
-                {
-                    let request_usage_model = AIRequestUsageModel::handle(ctx);
-                    request_usage_model.update(ctx, |request_usage_model, ctx| {
-                        request_usage_model.provide_negative_feedback_response_for_ai_conversation(
-                            self.client_ids.conversation_id,
-                            output_id.to_string(),
-                            self.client_ids.client_exchange_id,
-                            ctx,
-                        );
-                    });
-                }
+                    && let Some(_output_id) = output_id.clone()
+                {}
 
                 let window_id = ctx.window_id();
                 ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {

@@ -65,8 +65,6 @@ use crate::workspace::view::left_panel::{MAX_SIDEBAR_WIDTH_RATIO, MIN_SIDEBAR_WI
 pub enum ReviewDestination {
     /// No terminal is available to receive comments.
     None,
-    /// A Warp agent terminal is available (input box visible, not executing).
-    Warp,
     /// A CLI agent (e.g. Claude Code, Gemini) is running in a terminal.
     Cli(CLIAgent),
 }
@@ -1435,7 +1433,7 @@ impl RightPanelView {
 
     fn log_code_review_debug_state(debug_state: &CodeReviewCommentDebugState) {
         log::info!(
-            "Active code review view: repo_path={}, has_active_comment_model={}, review_destination={:?}, total_comments={}, sendable_comments={}, is_collapsed={}, is_outdated_section_collapsed={:?}, ai_available={}, ai_enabled={}, send_button_tooltip={}",
+            "Active code review view: repo_path={}, has_active_comment_model={}, review_destination={:?}, total_comments={}, sendable_comments={}, is_collapsed={}, is_outdated_section_collapsed={:?}, ai_enabled={}, send_button_tooltip={}",
             Self::format_optional_location(debug_state.repo_path.as_ref()),
             debug_state.has_active_comment_model,
             debug_state.comment_list.review_destination,
@@ -1443,7 +1441,6 @@ impl RightPanelView {
             debug_state.comment_list.sendable_comments,
             debug_state.comment_list.is_collapsed,
             debug_state.comment_list.is_outdated_section_collapsed,
-            debug_state.comment_list.ai_available,
             debug_state.comment_list.ai_enabled,
             debug_state.comment_list.send_button_tooltip_text,
         );
@@ -1660,13 +1657,8 @@ impl RightPanelView {
         let ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
         let destination = self
             .find_review_terminal(pane_group, &repo_path, ai_enabled, ctx)
-            .map(|tv| {
-                tv.read(ctx, |t, ctx| {
-                    t.active_cli_agent(ctx)
-                        .map(ReviewDestination::Cli)
-                        .unwrap_or(ReviewDestination::Warp)
-                })
-            })
+            .and_then(|tv| tv.read(ctx, |t, ctx| t.active_cli_agent(ctx)))
+            .map(ReviewDestination::Cli)
             .unwrap_or(ReviewDestination::None);
 
         code_review_view.update(ctx, |view, ctx| {

@@ -270,7 +270,6 @@ pub enum TerminalAction {
     },
     SummarizeConversation,
     AddProjectAtCurrentDirectory,
-    OpenBillingAndUsagePane,
     OpenConversationsPalette,
     PickRepoToOpen,
     OpenFilesPalette {
@@ -299,8 +298,6 @@ pub enum TerminalAction {
     OpenModelSelector,
     AwsBedrockLoginBanner(AwsBedrockLoginBannerAction),
     AwsCliNotInstalledBanner(AwsCliNotInstalledBannerAction),
-    /// Toggle the usage footer on the last AI block in the active conversation.
-    ToggleUsageFooter,
     /// Reveal a hidden child agent pane from the orchestrator status card.
     RevealChildAgent {
         conversation_id: AIConversationId,
@@ -551,7 +548,6 @@ impl fmt::Debug for TerminalAction {
             }
             ToggleCodeReviewPane { .. } => write!(f, "ToggleCodeReviewPane"),
             AddProjectAtCurrentDirectory => write!(f, "AddProjectAtCurrentDirectory"),
-            OpenBillingAndUsagePane => write!(f, "OpenBillingAndUsagePane"),
             OpenConversationsPalette => write!(f, "OpenConversationsPalette"),
             PickRepoToOpen => write!(f, "PickRepoToOpen"),
             OpenFilesPalette { .. } => write!(f, "OpenFilesPalette"),
@@ -575,7 +571,6 @@ impl fmt::Debug for TerminalAction {
             OpenModelSelector => write!(f, "OpenModelSelector"),
             AwsBedrockLoginBanner(action) => write!(f, "AwsBedrockLoginBanner({action:?})"),
             AwsCliNotInstalledBanner(action) => write!(f, "AwsCliNotInstalledBanner({action:?})"),
-            ToggleUsageFooter => write!(f, "ToggleUsageFooter"),
             RevealChildAgent { .. } => write!(f, "RevealChildAgent"),
             SwitchAgentViewToConversation { .. } => write!(f, "SwitchAgentViewToConversation"),
             OpenChildAgentInNewPane { .. } => write!(f, "OpenChildAgentInNewPane"),

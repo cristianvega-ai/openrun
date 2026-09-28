@@ -144,14 +144,6 @@ impl RichContent {
         matches!(self.metadata, Some(RichContentMetadata::AIBlock(_)))
     }
 
-    pub fn is_usage_footer(&self) -> bool {
-        matches!(self.metadata, Some(RichContentMetadata::UsageFooter))
-    }
-
-    pub fn is_turn_panel(&self) -> bool {
-        matches!(self.metadata, Some(RichContentMetadata::TurnPanel))
-    }
-
     pub fn is_telemetry_banner(&self) -> bool {
         matches!(
             self.metadata,
@@ -210,8 +202,6 @@ pub enum RichContentMetadata {
         /// The ID corresponding to the `AIAgentExchange` represented in this block.
         exchange_id: AIAgentExchangeId,
     },
-    UsageFooter,
-    TurnPanel,
     InitEnvironment {
         block_handle: ViewHandle<InitEnvironmentBlock>,
     },

@@ -26,7 +26,6 @@ mod persistence;
 pub mod prompt;
 pub mod summarization_cancel_dialog;
 pub(crate) mod telemetry;
-pub mod usage;
 
 pub(crate) mod telemetry_banner;
 pub(crate) mod view_util;
@@ -87,7 +86,6 @@ pub(crate) use queued_query::{
     AutofireAction, QueuedQuery, QueuedQueryId, QueuedQueryOrigin, is_lrc_auto_queue_active,
 };
 pub use queued_query::{QueuedQueryEvent, QueuedQueryModel};
-pub use view_util::error_color;
 pub(crate) use view_util::{
     ai_brand_color, ai_indicator_height, get_ai_block_overflow_menu_element_position_id,
     get_attached_blocks_chip_element_position_id, render_ai_agent_mode_icon,

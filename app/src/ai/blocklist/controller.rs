@@ -9,7 +9,6 @@ pub mod response_stream;
 mod slash_command;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
@@ -34,7 +33,6 @@ use super::history_model::BlocklistAIHistoryModel;
 use super::orchestration_events::{OrchestrationEventService, OrchestrationEventServiceEvent};
 use super::queued_query::{QueuedQueryId, QueuedQueryModel};
 use super::{BlocklistAIInputModel, ResponseStreamId};
-use crate::ai::AIRequestUsageModel;
 use crate::ai::agent::api::{self, ServerConversationToken};
 use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent::task::TaskId;
@@ -56,7 +54,6 @@ use crate::network::NetworkStatus;
 use crate::notebooks::editor::model::FileLinkResolutionContext;
 use crate::persistence::ModelEvent;
 use crate::send_telemetry_from_ctx;
-use crate::server::server_api::AIApiError;
 use crate::server::team_scope::RequestTeamScope;
 use crate::server::telemetry::TelemetryEvent;
 use crate::terminal::ShellLaunchData;
@@ -2324,22 +2321,6 @@ impl BlocklistAIController {
                         }
                     }
                     Err(e) => {
-                        if matches!(e.as_ref(), AIApiError::QuotaLimit { .. }) {
-                            // If the error is a quota limit, we want to refresh workspace metadata
-                            // So the current state of AI overages is immediately up to date.
-                            TeamUpdateManager::handle(ctx).update(
-                                ctx,
-                                |team_update_manager, ctx| {
-                                    std::mem::drop(
-                                        team_update_manager.refresh_workspace_metadata(ctx),
-                                    );
-                                },
-                            );
-                            AIRequestUsageModel::handle(ctx).update(ctx, |model, ctx| {
-                                model.enable_buy_credits_banner(ctx);
-                            });
-                        }
-
                         // A resume scheduled for this failure keeps the conversation in
                         // the non-terminal TransientError status instead of Error.
                         let recovery_pending = response_stream
@@ -2531,11 +2512,6 @@ impl BlocklistAIController {
                     stream_id,
                     conversation_id,
                 });
-                AIRequestUsageModel::handle(ctx).update(ctx, |request_usage_model, ctx| {
-                    request_usage_model.refresh_request_usage_async(ctx);
-                });
-
-                self.maybe_refresh_ai_overages(ctx);
             }
         }
     }
@@ -2552,39 +2528,6 @@ impl BlocklistAIController {
                 ctx,
             );
         });
-    }
-
-    /// Checks if we should refresh AI overage information after an AI request completes.
-    /// This is used to ensure the UI matches the state of the workspace,
-    /// especially because overages are not real-time communicated to clients.
-    fn maybe_refresh_ai_overages(&mut self, ctx: &mut ModelContext<Self>) {
-        let workspace = UserWorkspaces::as_ref(ctx).current_workspace();
-        let Some(workspace) = workspace else {
-            return;
-        };
-
-        // We want to minimize the number of times we ping our backend for updated usage information;
-        // doing it after every AI query finishes would be very expensive.
-
-        // If a user is below their personal limits, then we know that they won't eat into overages,
-        // so we don't need to refresh.
-        let has_no_base_plan_requests_remaining =
-            !AIRequestUsageModel::as_ref(ctx).has_base_plan_requests_remaining();
-        // If overages aren't enabled, we're not going to reap the benefit of refreshing at all anyway.
-        let are_overages_enabled = workspace.are_overages_enabled();
-
-        if are_overages_enabled && has_no_base_plan_requests_remaining {
-            // Give a one second delay to ensure that Stripe has been charged and the database is completely updated,
-            // before syncing new AI overages data.
-            ctx.spawn(
-                async move { Timer::after(Duration::from_secs(1)).await },
-                |_, _, ctx| {
-                    UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
-                        user_workspaces.refresh_ai_overages(ctx);
-                    });
-                },
-            );
-        }
     }
 
     pub(super) fn handle_response_stream_finished(

@@ -554,21 +554,9 @@ pub enum WorkspaceAction {
     ToggleConversationListView,
     OpenConversationListView,
     OpenAgentManagementView,
-    /// Open the Build Plan Migration Modal (for debugging)
-    #[cfg(debug_assertions)]
-    OpenBuildPlanMigrationModal,
-    /// Reset the build plan migration modal dismissed state (for debugging)
-    #[cfg(debug_assertions)]
-    ResetBuildPlanMigrationModalState,
     /// Reset the AWS Bedrock login banner dismissed state (for debugging).
     #[cfg(debug_assertions)]
     DebugResetAwsBedrockLoginBannerDismissed,
-    /// Open the Free AI Removal Modal (for debugging)
-    #[cfg(debug_assertions)]
-    OpenFreeAiRemovalModal,
-    /// Reset the free AI removal modal seen state (for debugging)
-    #[cfg(debug_assertions)]
-    ResetFreeAiRemovalModalState,
     /// Take a process sample of the app (equivalent to Activity Monitor > Sample Process).
     #[cfg(target_os = "macos")]
     SampleProcess,
@@ -895,11 +883,7 @@ impl WorkspaceAction {
             | BrowseTeams
             | ShowTeamSwitcherMenu => false,
             #[cfg(debug_assertions)]
-            OpenBuildPlanMigrationModal
-            | ResetBuildPlanMigrationModalState
-            | DebugResetAwsBedrockLoginBannerDismissed
-            | OpenFreeAiRemovalModal
-            | ResetFreeAiRemovalModalState => false,
+            DebugResetAwsBedrockLoginBannerDismissed => false,
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => false,
             #[cfg(target_os = "macos")]

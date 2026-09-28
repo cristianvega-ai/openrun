@@ -20,9 +20,7 @@ use super::workspace::{
     AdminEnablementSetting, EnterpriseSecretRegex, UgcCollectionEnablementSetting, Workspace,
     WorkspaceUid,
 };
-use crate::ai::credit_availability::AICreditAvailability;
 use crate::ai::llms::{AvailableLLMs, MODELS_BY_FEATURE_CACHE_KEY, ModelsByFeature};
-use crate::ai::request_usage_model::AIRequestUsageModel;
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::channel::ChannelState;
 use crate::cloud_object::model::persistence::CloudModel;
@@ -148,9 +146,6 @@ pub struct WorkspacesMetadataResponse {
     pub workspaces: Vec<Workspace>,
     /// The list of discoverable teams that the user can join.
     pub joinable_teams: Vec<DiscoverableTeam>,
-    /// The server-authoritative AI credit availability decision, piggybacked
-    /// on the metadata query so every refresh keeps the shared state fresh.
-    pub ai_credit_availability: Option<AICreditAvailability>,
     /// The user-level add-on credits purchase policy; the teamless-purchase
     /// fallback (see [`UserWorkspaces::purchase_policy`]).
     pub user_purchase_policy: Option<PurchaseAddOnCreditsPolicy>,
@@ -834,12 +829,6 @@ impl UserWorkspaces {
                 if let Some(pricing_info) = response.pricing_info {
                     PricingInfoModel::handle(ctx).update(ctx, |model, ctx| {
                         model.update_pricing_info(pricing_info, ctx);
-                    });
-                }
-
-                if let Some(availability) = response.metadata.ai_credit_availability {
-                    AIRequestUsageModel::handle(ctx).update(ctx, |usage_model, ctx| {
-                        usage_model.apply_server_availability(Ok(availability), ctx);
                     });
                 }
 

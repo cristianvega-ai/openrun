@@ -10,7 +10,6 @@ use warpui::{App, EntityId};
 
 use super::*;
 use crate::ai::agent::conversation::{AIConversation, AIConversationId};
-use crate::ai::agent::request_metadata::summarize_turn;
 use crate::ai::agent::task::TaskId;
 use crate::ai::agent::{
     AIAgentActionId, AIAgentActionResult, AIAgentActionResultType, AIAgentInput,
@@ -450,9 +449,6 @@ fn legacy_turn_with_tool_round_trip_has_one_timing_record_per_exchange() {
         .map(|record| record.request_duration_ms())
         .collect();
     assert_eq!(per_exchange_ms, [Some(1_000), Some(1_000)]);
-
-    let summary = summarize_turn(&records);
-    assert_eq!(summary.request_duration_ms(), Some(61_000));
 }
 
 /// A tool-result round trip: the request the client sends after executing a tool call. It has no
@@ -548,8 +544,7 @@ fn tool_round_trips_group_into_the_user_query_turn() {
     assert_eq!(turn_b_request_ids, ["req-4"]);
 
     let turn_records = conversation.request_metadata_records_for_turn(third);
-    let summary = summarize_turn(&turn_records);
-    assert_eq!(summary.records.len(), 3);
+    assert_eq!(turn_records.len(), 3);
     let total_cost_in_cents: f32 = turn_records
         .iter()
         .map(|record| record.total_cost_in_cents())
@@ -919,98 +914,4 @@ fn records_resolve_in_restored_summarized_history() {
         .collect();
     assert_eq!(resolved, ["req-1".to_string()]);
     assert!(conversation.turn_panel_records(exchange.id).is_some());
-}
-
-fn with_timing(
-    mut message: api::Message,
-    started: i64,
-    first_token: i64,
-    ended: i64,
-) -> api::Message {
-    if let Some(api::message::Message::RequestMetadata(metadata)) = message.message.as_mut() {
-        metadata.timing = Some(api::RequestTiming {
-            request_timespan: Some(api::TimeSpan {
-                started_at: Some(timestamp(started)),
-                ended_at: Some(timestamp(ended)),
-            }),
-            first_token_at: Some(timestamp(first_token)),
-            llm_generation_timespans: vec![api::TimeSpan {
-                started_at: Some(timestamp(started)),
-                ended_at: Some(timestamp(started + 1)),
-            }],
-        });
-    }
-    message
-}
-
-/// The Turn panel groups an exchange's records (one per underlying API request) into one summed
-/// view: charges merge per model, timing spans the whole turn, tool counts add up, and the
-/// context window comes from the latest record.
-#[test]
-fn summarize_turn_sums_charges_timing_and_tools_across_records() {
-    let records = vec![
-        RequestMetadataRecord::from_message(&with_timing(
-            record_message("req-1", true),
-            1_000,
-            1_001,
-            1_010,
-        ))
-        .unwrap(),
-        RequestMetadataRecord::from_message(&with_timing(
-            record_message("req-2", true),
-            2_000,
-            2_002,
-            2_030,
-        ))
-        .unwrap(),
-        RequestMetadataRecord::from_message(&with_timing(
-            record_message("req-3", false),
-            3_000,
-            3_004,
-            3_060,
-        ))
-        .unwrap(),
-    ];
-
-    let summary = summarize_turn(&records);
-    assert_eq!(summary.records.len(), 3);
-
-    // Both charged records use the same model, so they merge into one row with summed
-    // tokens and costs; the errored record carried no charges.
-    assert_eq!(summary.model_charges.len(), 1);
-    assert_eq!(summary.total_tokens(), 2 * 1250);
-    assert!((summary.inference_cost_in_cents() - 2.22).abs() < 1e-5);
-    assert!((summary.platform_cost_in_cents() - 4.0).abs() < 1e-5);
-    assert_eq!(summary.model_charges[0].web_search_count, 2);
-
-    // Wall-clock span covers the whole turn; generation spans concatenate; the first token is
-    // the earliest one. (Test timestamps are epoch seconds, so a 2_060 s span is 2_060_000 ms.)
-    assert_eq!(summary.request_duration_ms(), Some(2_060_000));
-    assert_eq!(summary.time_to_first_token_ms(), Some(1_000));
-    // Each record contributes one 1-second LLM span.
-    assert_eq!(summary.llm_generation_spans.len(), 3);
-
-    // Tool counts add up (the helper stamps 4/2/3/40/8 on every record, including the errored
-    // one, which keeps its tool summary); the context window is the latest record's reading.
-    assert_eq!(summary.tool_calls, Some(12));
-    assert_eq!(summary.commands_executed, Some(6));
-    assert_eq!(summary.files_changed, Some(9));
-    assert_eq!(summary.lines_added, Some(120));
-    assert_eq!(summary.lines_removed, Some(24));
-    assert_eq!(summary.context_window_usage, Some(0.42));
-}
-
-#[test]
-fn summarize_turn_of_one_record_matches_the_record() {
-    let record = RequestMetadataRecord::from_message(&record_message("req-1", true)).unwrap();
-    let summary = summarize_turn(std::slice::from_ref(&record));
-    assert_eq!(summary.model_charges, record.model_charges);
-    assert_eq!(summary.platform_charges, record.platform_charges);
-    assert_eq!(
-        summary.time_to_first_token_ms(),
-        record.time_to_first_token_ms()
-    );
-    assert_eq!(summary.request_duration_ms(), record.request_duration_ms());
-    assert_eq!(summary.tool_calls, record.tool_calls);
-    assert_eq!(summary.context_window_usage, record.context_window_usage);
 }

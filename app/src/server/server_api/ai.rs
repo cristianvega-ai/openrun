@@ -24,11 +24,6 @@ use warp_graphql::mutations::generate_metadata_for_command::{
     GenerateMetadataForCommand, GenerateMetadataForCommandInput, GenerateMetadataForCommandResult,
     GenerateMetadataForCommandStatus, GenerateMetadataForCommandVariables,
 };
-use warp_graphql::mutations::request_bonus::{
-    ProvideNegativeFeedbackResponseForAiConversation,
-    ProvideNegativeFeedbackResponseForAiConversationInput,
-    ProvideNegativeFeedbackResponseForAiConversationVariables, RequestsRefundedResult,
-};
 use warp_graphql::mutations::update_agent_task::{
     AgentTaskStatusMessageInput, UpdateAgentTask, UpdateAgentTaskInput, UpdateAgentTaskResult,
     UpdateAgentTaskVariables,
@@ -38,22 +33,11 @@ use warp_graphql::queries::free_available_models::{
     FreeAvailableModels, FreeAvailableModelsInput, FreeAvailableModelsResult,
     FreeAvailableModelsVariables,
 };
-#[cfg(not(feature = "agent_mode_evals"))]
-use warp_graphql::queries::get_ai_credit_availability::{
-    GetAICreditAvailability, GetAICreditAvailabilityVariables,
-};
 use warp_graphql::queries::get_available_harnesses::{
     GetAvailableHarnesses, GetAvailableHarnessesVariables,
 };
-use warp_graphql::queries::get_conversation_usage::{
-    ConversationUsage, GetConversationUsage, GetConversationUsageVariables, UserResult,
-};
 use warp_graphql::queries::get_feature_model_choices::{
     GetFeatureModelChoices, GetFeatureModelChoicesVariables,
-};
-#[cfg(not(feature = "agent_mode_evals"))]
-use warp_graphql::queries::get_request_limit_info::{
-    GetRequestLimitInfo, GetRequestLimitInfoVariables,
 };
 use warp_graphql::queries::setup_failure_debug_authorization::{
     SetupFailureDebugAuthorization, SetupFailureDebugAuthorizationInput,
@@ -63,8 +47,6 @@ use warp_multi_agent_api::ConversationData;
 
 use super::ServerApi;
 use super::presigned_upload::{UploadField, UploadTarget};
-#[cfg(not(feature = "agent_mode_evals"))]
-use crate::ai::BonusGrant;
 pub use crate::ai::agent::UserQueryMode;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{AIAgentHarness, ServerAIConversationMetadata};
@@ -80,19 +62,11 @@ use crate::ai::llms::{
     AvailableLLMs, DisableReason, LLMContextWindow, LLMInfo, LLMModelHost, LLMSpec,
     LLMUsageMetadata, ModelsByFeature, RoutingHostConfig,
 };
-#[cfg(feature = "agent_mode_evals")]
-use crate::ai::request_usage_model::RequestLimitInfo;
-use crate::ai::{AICreditAvailability, RequestUsageInfo};
 use crate::drive::workflows::ai_assist::{GeneratedCommandMetadata, GeneratedCommandMetadataError};
 use crate::persistence::model::ConversationUsageMetadata;
 use crate::server::graphql::{get_request_context, get_user_facing_error_message};
 use crate::server::team_scope::RequestTeamScope;
 use crate::terminal::model::block::SerializedBlock;
-#[cfg(not(feature = "agent_mode_evals"))]
-use crate::{
-    server::ids::ServerId,
-    workspaces::{gql_convert::PLACEHOLDER_WORKSPACE_UID, workspace::WorkspaceUid},
-};
 
 const AI_ASSISTANT_REQUEST_TIMEOUT_SECONDS: u64 = 30;
 
@@ -604,22 +578,6 @@ pub trait AIClient: 'static + Send + Sync {
         command: String,
     ) -> Result<GeneratedCommandMetadata, GeneratedCommandMetadataError>;
 
-    async fn get_request_limit_info(&self) -> Result<RequestUsageInfo, anyhow::Error>;
-
-    /// Fetches the server-authoritative decision on whether the authenticated
-    /// user can start an interactive AI request.
-    async fn get_ai_credit_availability(&self) -> Result<AICreditAvailability, anyhow::Error>;
-
-    /// Returns conversation usage history for the current user over the requested number of days.
-    ///
-    /// If `last_updated_end_timestamp` is provided, only conversations updated before that timestamp are returned.
-    async fn get_conversation_usage_history(
-        &self,
-        days: Option<i32>,
-        limit: Option<i32>,
-        last_updated_end_timestamp: Option<warp_graphql::scalars::Time>,
-    ) -> Result<Vec<ConversationUsage>, anyhow::Error>;
-
     async fn get_feature_model_choices(&self) -> Result<ModelsByFeature, anyhow::Error>;
 
     async fn get_available_harnesses(&self) -> Result<Vec<HarnessAvailability>, anyhow::Error>;
@@ -635,12 +593,6 @@ pub trait AIClient: 'static + Send + Sync {
         &self,
         referrer: Option<String>,
     ) -> Result<ModelsByFeature, anyhow::Error>;
-
-    async fn provide_negative_feedback_response_for_ai_conversation(
-        &self,
-        conversation_id: String,
-        request_ids: Vec<String>,
-    ) -> anyhow::Result<i32, anyhow::Error>;
 
     async fn create_agent_task(
         &self,
@@ -921,115 +873,6 @@ impl AIClient for ServerApi {
         }
     }
 
-    #[cfg(feature = "agent_mode_evals")]
-    async fn get_request_limit_info(&self) -> Result<RequestUsageInfo, anyhow::Error> {
-        Ok(RequestUsageInfo {
-            request_limit_info: RequestLimitInfo::new_for_evals(),
-            bonus_grants: vec![],
-        })
-    }
-
-    #[cfg(not(feature = "agent_mode_evals"))]
-    async fn get_request_limit_info(&self) -> Result<RequestUsageInfo, anyhow::Error> {
-        let variables = GetRequestLimitInfoVariables {
-            request_context: get_request_context(),
-        };
-        let operation = GetRequestLimitInfo::build(variables);
-        let response = self.send_graphql_request(operation, None).await?;
-
-        match response.user {
-            warp_graphql::queries::get_request_limit_info::UserResult::UserOutput(user_output) => {
-                let request_limit_info = user_output.user.request_limit_info.into();
-
-                let workspace_and_team_bonus_grants = user_output
-                    .user
-                    .workspaces
-                    .into_iter()
-                    .filter(|workspace| workspace.uid != PLACEHOLDER_WORKSPACE_UID.into())
-                    .flat_map(|workspace| {
-                        let workspace_uid =
-                            WorkspaceUid::from(ServerId::from_string_lossy(workspace.uid.inner()));
-                        workspace
-                            .bonus_grants_info
-                            .grants
-                            .into_iter()
-                            .map(move |grant| {
-                                BonusGrant::from_gql_workspace_or_team_bonus_grant(
-                                    grant,
-                                    workspace_uid,
-                                )
-                            })
-                    });
-
-                let bonus_grants: Vec<BonusGrant> = user_output
-                    .user
-                    .bonus_grants
-                    .into_iter()
-                    .map(BonusGrant::from_gql_user_bonus_grant)
-                    .chain(workspace_and_team_bonus_grants)
-                    .collect();
-
-                Ok(RequestUsageInfo {
-                    request_limit_info,
-                    bonus_grants,
-                })
-            }
-            warp_graphql::queries::get_request_limit_info::UserResult::UserFacingError(e) => {
-                Err(anyhow!(get_user_facing_error_message(e)))
-            }
-            warp_graphql::queries::get_request_limit_info::UserResult::Unknown => {
-                Err(anyhow!("failed to get request limit info"))
-            }
-        }
-    }
-
-    #[cfg(feature = "agent_mode_evals")]
-    async fn get_ai_credit_availability(&self) -> Result<AICreditAvailability, anyhow::Error> {
-        Ok(AICreditAvailability::available_with_source(Some(
-            crate::ai::AICreditSource::BaseLimit,
-        )))
-    }
-
-    #[cfg(not(feature = "agent_mode_evals"))]
-    async fn get_ai_credit_availability(&self) -> Result<AICreditAvailability, anyhow::Error> {
-        let variables = GetAICreditAvailabilityVariables {
-            request_context: get_request_context(),
-        };
-        let operation = GetAICreditAvailability::build(variables);
-        let response = self.send_graphql_request(operation, None).await?;
-
-        match response.user {
-            warp_graphql::queries::get_ai_credit_availability::UserResult::UserOutput(output) => {
-                Ok(output.user.ai_credit_availability.into())
-            }
-            warp_graphql::queries::get_ai_credit_availability::UserResult::UserFacingError(e) => {
-                Err(anyhow!(get_user_facing_error_message(e)))
-            }
-            warp_graphql::queries::get_ai_credit_availability::UserResult::Unknown => {
-                Err(anyhow!("failed to get AI credit availability"))
-            }
-        }
-    }
-
-    async fn get_conversation_usage_history(
-        &self,
-        days: Option<i32>,
-        limit: Option<i32>,
-        last_updated_end_timestamp: Option<warp_graphql::scalars::Time>,
-    ) -> Result<Vec<ConversationUsage>, anyhow::Error> {
-        let operation = GetConversationUsage::build(GetConversationUsageVariables {
-            request_context: get_request_context(),
-            days,
-            limit,
-            last_updated_end_timestamp,
-        });
-        let response = self.send_graphql_request(operation, None).await?;
-        match response.user {
-            UserResult::UserOutput(output) => Ok(output.user.conversation_usage),
-            UserResult::Unknown => Err(anyhow!("Unable to fetch conversation usage")),
-        }
-    }
-
     async fn get_feature_model_choices(&self) -> Result<ModelsByFeature, anyhow::Error> {
         let variables = GetFeatureModelChoicesVariables {
             request_context: get_request_context(),
@@ -1124,33 +967,6 @@ impl AIClient for ServerApi {
             FreeAvailableModelsResult::Unknown => {
                 Err(anyhow!("Unexpected freeAvailableModels response variant"))
             }
-        }
-    }
-
-    async fn provide_negative_feedback_response_for_ai_conversation(
-        &self,
-        conversation_id: String,
-        request_ids: Vec<String>,
-    ) -> anyhow::Result<i32, anyhow::Error> {
-        let variables = ProvideNegativeFeedbackResponseForAiConversationVariables {
-            input: ProvideNegativeFeedbackResponseForAiConversationInput {
-                conversation_id: conversation_id.into(),
-                request_ids: request_ids.into_iter().map(Into::into).collect(),
-            },
-            request_context: get_request_context(),
-        };
-
-        let operation = ProvideNegativeFeedbackResponseForAiConversation::build(variables);
-        let response = self.send_graphql_request(operation, None).await?;
-
-        match response.provide_negative_feedback_response_for_ai_conversation {
-            RequestsRefundedResult::RequestsRefundedOutput(output) => Ok(output.requests_refunded),
-            RequestsRefundedResult::UserFacingError(e) => {
-                Err(anyhow!(get_user_facing_error_message(e)))
-            }
-            RequestsRefundedResult::Unknown => Err(anyhow!(
-                "failed to provide negative feedback response for ai conversation"
-            )),
         }
     }
 

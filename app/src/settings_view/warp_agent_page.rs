@@ -59,7 +59,6 @@ use super::{
     SettingActionPairContexts, SettingActionPairDescriptions, SettingsAction, SettingsSection,
     ToggleSettingActionPair, editor_text_colors, flags,
 };
-use crate::ai::AIRequestUsageModel;
 #[cfg(not(target_family = "wasm"))]
 use crate::ai::aws_credentials::refresh_aws_credentials;
 use crate::ai::blocklist::agent_view::agent_input_footer::editor::AgentToolbarInlineEditor;
@@ -905,23 +904,18 @@ impl WarpAgentPageView {
             .clone()
     }
 
-    /// Whether to offer switching the default model. Scoped to free-plan users
-    /// who are out of monthly (base-plan) credits, since only they hit the
-    /// "no credits" error with an `auto` model. Also skips when the current
-    /// default is already served by a BYO credential.
+    /// Whether to offer switching the default model. Scoped to non-paid users,
+    /// and skipped when the current default is already served by a BYO credential.
     fn should_offer_default_model_switch(ctx: &ViewContext<Self>) -> bool {
         // Exclude only confirmed paid plans. Solo/individual users have no
         // `current_workspace`, and billing may not have loaded yet (Unknown), so
-        // treat both as eligible and rely on the out-of-credits check below to
-        // filter anyone who can still run Warp-hosted models. (A strict
+        // treat both as eligible. (A strict
         // `is_free_plan()` check here meant solo free users — the common case —
         // never saw the prompt.)
         let on_paid_plan = UserWorkspaces::as_ref(ctx)
             .current_workspace()
             .is_some_and(|workspace| workspace.billing_metadata.is_user_on_paid_plan());
-        let out_of_monthly_credits =
-            !AIRequestUsageModel::as_ref(ctx).has_base_plan_requests_remaining();
-        !on_paid_plan && out_of_monthly_credits && !Self::active_base_model_is_byo_covered(ctx)
+        !on_paid_plan && !Self::active_base_model_is_byo_covered(ctx)
     }
 
     /// Detects a provider key that was just added (absent -> present) by diffing

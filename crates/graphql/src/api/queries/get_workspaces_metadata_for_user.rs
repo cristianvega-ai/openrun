@@ -1,4 +1,3 @@
-use crate::ai::AICreditAvailability;
 use crate::billing::{PricingInfo, PurchaseAddOnCreditsPolicy};
 use crate::request_context::RequestContext;
 use crate::schema;
@@ -251,7 +250,6 @@ pub enum PricingInfoResult {
 #[derive(cynic::QueryFragment, Debug)]
 pub struct User {
     pub profile: UserProfile,
-    pub ai_credit_availability: AICreditAvailability,
     pub billing_metadata: Option<UserPurchasePolicyBillingMetadata>,
     pub workspaces: Vec<Workspace>,
     pub discoverable_teams: Vec<DiscoverableTeamData>,

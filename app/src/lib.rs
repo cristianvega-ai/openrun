@@ -194,7 +194,6 @@ use workflows::manager::WorkflowManager;
 use workspace::sync_inputs::SyncedInputState;
 
 use self::features::FeatureFlag;
-use crate::ai::AIRequestUsageModel;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::ambient_agents::github_auth_notifier::GitHubAuthNotifier;
 use crate::ai::connected_self_hosted_workers::ConnectedSelfHostedWorkersModel;
@@ -256,13 +255,11 @@ use crate::vim_registers::VimRegisters;
 use crate::warp_managed_paths_watcher::{WarpManagedPathsWatcher, ensure_warp_watch_roots_exist};
 use crate::workflows::aliases::WorkflowAliases;
 use crate::workflows::local_workflows::LocalWorkflows;
-use crate::workspace::{
-    ActiveSession, OneTimeModalModel, PaneViewLocator, ToastStack, Workspace, WorkspaceAction,
-};
+use crate::workspace::{ActiveSession, PaneViewLocator, ToastStack, Workspace, WorkspaceAction};
 use crate::workspaces::team_tester::TeamTesterStatus;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_profiles::UserProfiles;
-use crate::workspaces::user_workspaces::{UserWorkspaces, UserWorkspacesEvent};
+use crate::workspaces::user_workspaces::UserWorkspaces;
 
 /// Our embedded application assets.
 pub static ASSETS: warp_assets::Assets = warp_assets::Assets;
@@ -771,8 +768,6 @@ pub(crate) fn initialize_app(
         move |ctx| ServerApiProvider::new(auth_state, iap_state, ctx)
     });
 
-    let ai_client = server_api_provider.as_ref(ctx).get_ai_client();
-
     ctx.add_singleton_model(|_ctx| AuthStateProvider::new(auth_state.clone()));
 
     ctx.add_singleton_model(AuthManager::new);
@@ -864,8 +859,6 @@ pub(crate) fn initialize_app(
             )
         });
 
-    ctx.add_singleton_model(|ctx| AIRequestUsageModel::new(ai_client, ctx));
-
     ctx.add_singleton_model(|ctx| {
         UserWorkspaces::new(
             server_api_provider.as_ref(ctx).get_team_client(),
@@ -908,28 +901,6 @@ pub(crate) fn initialize_app(
         manager
     });
 
-    ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |_, event, ctx| {
-        if matches!(
-            event,
-            UserWorkspacesEvent::CurrentWorkspaceChanged
-                | UserWorkspacesEvent::AiOveragesUpdated
-                | UserWorkspacesEvent::PurchaseAddonCreditsSuccess
-        ) {
-            AIRequestUsageModel::handle(ctx).update(ctx, |usage_model, ctx| {
-                usage_model.request_availability_refresh(ctx);
-            });
-        }
-    });
-    ctx.subscribe_to_model(
-        &::ai::api_keys::ApiKeyManager::handle(ctx),
-        |_, event, ctx| {
-            let ::ai::api_keys::ApiKeyManagerEvent::KeysUpdated = event;
-            AIRequestUsageModel::handle(ctx).update(ctx, |usage_model, ctx| {
-                usage_model.request_availability_refresh(ctx);
-            });
-        },
-    );
-
     ctx.add_singleton_model(AntivirusInfo::new);
 
     ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
@@ -943,7 +914,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(|_| ExecutionProfileEditorManager::default());
     ctx.add_singleton_model(|_| NetworkLogPaneManager::default());
     ctx.add_singleton_model(|_| pricing::PricingInfoModel::new());
-    ctx.add_singleton_model(ai::pricing_promotion::PricingPromotionState::new);
     ctx.add_singleton_model(|ctx| {
         // Not using the *Provider types isn't ideal, but it's worth it for the ability to move managed secrets to a separate crate.
         ManagedSecretManager::new(
@@ -1102,10 +1072,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(UndoCloseStack::new);
     ctx.add_singleton_model(|_| ToastStack);
     ctx.add_singleton_model(|_| GlobalCodeReviewModel);
-    ctx.add_singleton_model(workspace::OneTimeModalModel::new);
-    ctx.add_singleton_model(
-        workspace::bonus_grant_notification_model::BonusGrantNotificationModel::new,
-    );
     #[cfg(feature = "local_fs")]
     ctx.add_singleton_model(FileModel::new);
     ctx.add_singleton_model(GlobalBufferModel::new);
@@ -1602,12 +1568,6 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
                     "root_view:update_quake_mode_state",
                     &update_quake_mode_arg,
                 );
-            }
-
-            if let Some(active_window_id) = active_window_id {
-                OneTimeModalModel::handle(ctx).update(ctx, |model, ctx| {
-                    model.update_target_window_id(active_window_id, ctx);
-                });
             }
 
             ctx.dispatch_global_action("workspace:save_app", &());

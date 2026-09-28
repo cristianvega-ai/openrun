@@ -7,57 +7,6 @@ use crate::scalars::Time;
 use crate::schema;
 use crate::user::PublicUserProfile;
 
-#[derive(cynic::Enum, Clone, Copy, Debug)]
-pub enum RequestLimitRefreshDuration {
-    Monthly,
-    Weekly,
-    EveryTwoWeeks,
-}
-
-#[derive(cynic::Enum, Clone, Debug, PartialEq, Eq)]
-pub enum AICreditAvailabilityDenialReason {
-    None,
-    OutOfCredits,
-    Delinquent,
-    EnterpriseTeamSpendLimitHit,
-    EnterprisePerUserSpendLimitHit,
-    EnterprisePerUnassignedUserSpendLimitHit,
-    EnterpriseWorkspaceSpendLimitHit,
-    #[cynic(fallback)]
-    Other(String),
-}
-
-#[derive(cynic::Enum, Clone, Debug, PartialEq, Eq)]
-pub enum AICreditAvailabilitySource {
-    BaseLimit,
-    BonusGrant,
-    Payg,
-    Overage,
-    AmbientBonusGrant,
-    #[cynic(fallback)]
-    Other(String),
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone)]
-pub struct AICreditAvailability {
-    pub available: bool,
-    pub denial_reason: AICreditAvailabilityDenialReason,
-    pub credit_source: Option<AICreditAvailabilitySource>,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-pub struct RequestLimitInfo {
-    pub is_unlimited: bool,
-    pub next_refresh_time: Time,
-    pub request_limit: i32,
-    pub requests_used_since_last_refresh: i32,
-    pub request_limit_refresh_duration: RequestLimitRefreshDuration,
-    pub is_unlimited_codebase_indices: bool,
-    pub max_codebase_indices: i32,
-    pub max_files_per_repo: i32,
-    pub embedding_generation_batch_size: i32,
-}
-
 #[derive(cynic::Enum, Clone, Copy, Debug, PartialEq)]
 pub enum AgentTaskState {
     #[cynic(rename = "BLOCKED")]

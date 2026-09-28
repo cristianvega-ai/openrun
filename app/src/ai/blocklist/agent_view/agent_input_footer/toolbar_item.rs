@@ -32,10 +32,9 @@ pub enum AgentToolbarItemKind {
     ModelSelector,
     /// No longer shown; kept so stored toolbar layouts that list it still load.
     NLDToggle,
+    /// No longer shown; kept so stored toolbar layouts that list it still load.
     ContextWindowUsage,
-    /// Trigger for the "Conversation" usage popover. Gated on
-    /// [`FeatureFlag::PricingTransparency`], since the popover's content is
-    /// entirely usage figures.
+    /// No longer shown; kept so stored toolbar layouts that list it still load.
     UsageSummary,
 
     FileExplorer,
@@ -94,10 +93,10 @@ impl AgentToolbarItemKind {
     /// handles runtime conditions that depend on user settings or workspace state.
     pub fn is_available(&self, app: &warpui::AppContext) -> bool {
         match self {
-            Self::NLDToggle | Self::HandoffToCloud => false,
-            // Drops the item from the toolbar editor once the flag goes off. The render
-            // path does not consult this method, so it repeats the check itself.
-            Self::UsageSummary => FeatureFlag::PricingTransparency.is_enabled(),
+            Self::NLDToggle
+            | Self::HandoffToCloud
+            | Self::ContextWindowUsage
+            | Self::UsageSummary => false,
             // Matches the gating on every other project explorer entry point, so the chip
             // cannot open a tool view the rest of the app hides. See
             // `Workspace::compute_left_panel_views` and the `SHOW_PROJECT_EXPLORER`
@@ -136,11 +135,7 @@ impl AgentToolbarItemKind {
 
     /// Default right-side items for the agent view footer.
     pub fn default_right() -> Vec<Self> {
-        let mut items = vec![Self::ContextWindowUsage];
-        if FeatureFlag::PricingTransparency.is_enabled() {
-            items.push(Self::UsageSummary);
-        }
-        items.push(Self::ModelSelector);
+        let mut items = vec![Self::ModelSelector];
         items.push(Self::FileAttach);
         items
     }
@@ -154,13 +149,9 @@ impl AgentToolbarItemKind {
         items.extend([
             Self::ModelSelector,
             Self::FileAttach,
-            Self::ContextWindowUsage,
             // Opt-in only: deliberately absent from `default_left`/`default_right`.
             Self::FileExplorer,
         ]);
-        if FeatureFlag::PricingTransparency.is_enabled() {
-            items.push(Self::UsageSummary);
-        }
         if FeatureFlag::FastForwardAutoexecuteButton.is_enabled() {
             items.push(Self::FastForwardToggle);
         }

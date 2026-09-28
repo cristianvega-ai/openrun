@@ -60,7 +60,6 @@ fn commands_have_typed_identities() {
         (&*commands::AGENT, SlashCommandKind::Agent),
         (&*commands::NEW, SlashCommandKind::New),
         (&*commands::COMPACT, SlashCommandKind::Compact),
-        (&commands::COST, SlashCommandKind::Cost),
         (&*commands::PLAN, SlashCommandKind::Plan),
         (&*commands::MODEL, SlashCommandKind::Model),
         (

@@ -5,9 +5,7 @@ use warp_core::ui::appearance::Appearance;
 use warpui::elements::{Element, Empty, MouseStateHandle};
 use warpui::keymap::Keystroke;
 use warpui::platform::OperatingSystem;
-use warpui::{
-    AppContext, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
-};
+use warpui::{AppContext, Entity, ModelHandle, SingletonEntity, View, ViewContext};
 
 use super::{AgentViewState, EphemeralMessageModel, EphemeralMessageModelEvent};
 use crate::BlocklistAIHistoryModel;
@@ -16,21 +14,12 @@ use crate::ai::agent::{
     AIAgentExchangeId, AIAgentOutputStatus, FinishedAIAgentOutput, RenderableAIError,
 };
 use crate::ai::blocklist::agent_view::shortcuts::AgentShortcutViewModel;
-use crate::ai::blocklist::agent_view::zero_state_block::{
-    render_ambient_credits_banner, render_dismissible_promo_pill,
-};
 use crate::ai::blocklist::agent_view::{
     AgentViewController, AgentViewControllerEvent, is_in_cloud_context,
 };
 use crate::ai::blocklist::{
     BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIHistoryEvent,
     BlocklistAIInputEvent, BlocklistAIInputModel,
-};
-use crate::ai::pricing_promotion::{
-    PricingPromotionState, PricingPromotionStateEvent, PricingPromotionSurface,
-};
-use crate::ai::request_usage_model::{
-    AIRequestUsageModel, AIRequestUsageModelEvent, AMBIENT_AGENT_TRIAL_CREDIT_THRESHOLD,
 };
 use crate::search::slash_command_menu::static_commands::commands;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
@@ -64,9 +53,6 @@ pub struct AgentMessageBarMouseStates {
     pub toggle_conversation_menu: MouseStateHandle,
     pub toggle_code_review: MouseStateHandle,
     pub clear_attached_context: MouseStateHandle,
-    /// Mouse state handle for dismissing the ambient credits banner.
-    pub ambient_credits_banner_close: MouseStateHandle,
-    pub pricing_promotion_close: MouseStateHandle,
 }
 
 /// Renders contextual hint text at the bottom of the agent view status bar.
@@ -86,12 +72,6 @@ pub struct AgentMessageBar {
 impl Entity for AgentMessageBar {
     type Event = ();
 }
-#[derive(Clone, Debug)]
-pub enum AgentMessageBarAction {
-    DismissAmbientCreditsBanner,
-    DismissPricingPromotion,
-}
-
 impl AgentMessageBar {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -106,13 +86,12 @@ impl AgentMessageBar {
         terminal_model: Arc<FairMutex<TerminalModel>>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        ctx.subscribe_to_model(&agent_view_controller, |me, _, event, ctx| {
+        ctx.subscribe_to_model(&agent_view_controller, |_, _, event, ctx| {
             if matches!(
                 event,
                 AgentViewControllerEvent::EnteredAgentView { .. }
                     | AgentViewControllerEvent::ExitedAgentView { .. }
             ) {
-                me.record_visible_promotion(ctx);
                 ctx.notify();
             }
         });
@@ -158,7 +137,6 @@ impl AgentMessageBar {
                     me.ephemeral_message_model
                         .update(ctx, |m, ctx| m.try_dismiss_explicit_message(ctx));
                 }
-                me.record_visible_promotion(ctx);
                 ctx.notify();
             }
         });
@@ -175,12 +153,6 @@ impl AgentMessageBar {
                 ctx.notify();
             }
         });
-        ctx.subscribe_to_model(&PricingPromotionState::handle(ctx), |me, _, event, ctx| {
-            if matches!(event, PricingPromotionStateEvent::Updated) {
-                me.record_visible_promotion(ctx);
-                ctx.notify();
-            }
-        });
 
         ctx.subscribe_to_model(&context_model, |_me, _, event, ctx| {
             if let BlocklistAIContextEvent::UpdatedPendingContext { .. } = event {
@@ -194,18 +166,7 @@ impl AgentMessageBar {
             }
         });
 
-        ctx.subscribe_to_model(&AIRequestUsageModel::handle(ctx), |_, _, event, ctx| {
-            if matches!(
-                event,
-                AIRequestUsageModelEvent::RequestUsageUpdated
-                    | AIRequestUsageModelEvent::CreditAvailabilityUpdated
-                    | AIRequestUsageModelEvent::AmbientCreditsBannerDismissed
-            ) {
-                ctx.notify();
-            }
-        });
-
-        let message_bar = Self {
+        Self {
             agent_view_controller,
             ephemeral_message_model,
             shortcut_view_model,
@@ -216,34 +177,11 @@ impl AgentMessageBar {
             context_model,
             terminal_model,
             mouse_states: AgentMessageBarMouseStates::default(),
-        };
-        message_bar.record_visible_promotion(ctx);
-        message_bar
+        }
     }
 }
 
-impl AgentMessageBar {
-    fn record_visible_promotion(&self, ctx: &mut ViewContext<Self>) {
-        if cfg!(target_family = "wasm")
-            || !self.agent_view_controller.as_ref(ctx).is_active()
-            || self
-                .input_suggestions_model
-                .as_ref(ctx)
-                .is_inline_menu_open()
-        {
-            return;
-        }
-        if PricingPromotionState::as_ref(ctx)
-            .visible_message(PricingPromotionSurface::AgentMessageBar, ctx)
-            .is_none()
-        {
-            return;
-        }
-        PricingPromotionState::handle(ctx).update(ctx, |state, ctx| {
-            state.record_displayed(PricingPromotionSurface::AgentMessageBar, ctx);
-        });
-    }
-}
+impl AgentMessageBar {}
 
 impl View for AgentMessageBar {
     fn ui_name() -> &'static str {
@@ -310,61 +248,10 @@ impl View for AgentMessageBar {
             return Empty::new().finish();
         };
 
-        let right_element = if cfg!(target_family = "wasm") {
-            None
-        } else if let Some(message) = PricingPromotionState::as_ref(app)
-            .visible_message(PricingPromotionSurface::AgentMessageBar, app)
-        {
-            Some(render_dismissible_promo_pill(
-                message,
-                appearance.theme().ansi_fg_green(),
-                None,
-                None,
-                self.mouse_states.pricing_promotion_close.clone(),
-                AgentMessageBarAction::DismissPricingPromotion,
-                app,
-            ))
-        } else {
-            let request_usage_model = AIRequestUsageModel::as_ref(app);
-            request_usage_model
-                .ambient_only_credits_remaining()
-                .filter(|credits| {
-                    *credits >= AMBIENT_AGENT_TRIAL_CREDIT_THRESHOLD
-                        && !request_usage_model.is_ambient_credits_banner_dismissed()
-                })
-                .map(|credits| {
-                    render_ambient_credits_banner(
-                        credits,
-                        self.mouse_states.ambient_credits_banner_close.clone(),
-                        AgentMessageBarAction::DismissAmbientCreditsBanner,
-                        app,
-                    )
-                })
-        };
-
-        render_standard_message_bar(message, right_element, app)
+        render_standard_message_bar(message, None, app)
     }
 }
 
-impl TypedActionView for AgentMessageBar {
-    type Action = AgentMessageBarAction;
-
-    fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
-        match action {
-            AgentMessageBarAction::DismissAmbientCreditsBanner => {
-                AIRequestUsageModel::handle(ctx).update(ctx, |model, ctx| {
-                    model.dismiss_ambient_credits_banner(ctx);
-                });
-            }
-            AgentMessageBarAction::DismissPricingPromotion => {
-                PricingPromotionState::handle(ctx).update(ctx, |state, ctx| {
-                    state.dismiss(PricingPromotionSurface::AgentMessageBar, ctx);
-                });
-                ctx.notify();
-            }
-        }
-    }
-}
 /// Arguments for agent message producers.
 #[derive(Copy, Clone)]
 pub struct AgentMessageArgs<'a> {

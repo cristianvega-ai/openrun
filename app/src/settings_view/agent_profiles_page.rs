@@ -4,21 +4,18 @@
 //! per-profile permission dropdowns, the allow/denylist editors, the model
 //! pickers and the context-window control, plus the AI credit usage summary.
 
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use ::ai::api_keys::ApiKeyManager;
 use itertools::Itertools;
-use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use regex::Regex;
 use settings::{Setting, ToggleableSetting};
 use strum::IntoEnumIterator;
 use warp_core::features::FeatureFlag;
 use warp_errors::{report_error, report_if_error};
 use warpui::elements::{
-    ChildView, ConstrainedBox, Container, CrossAxisAlignment, Dismiss, Element, Flex,
-    FormattedTextElement, HighlightedHyperlink, HyperlinkUrl, MainAxisAlignment, MainAxisSize,
-    MouseStateHandle, ParentElement, Shrinkable, Text,
+    ChildView, ConstrainedBox, Container, CrossAxisAlignment, Dismiss, Element, Flex, HyperlinkUrl,
+    MainAxisSize, MouseStateHandle, ParentElement, Shrinkable, Text,
 };
 use warpui::keymap::ContextPredicate;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
@@ -52,9 +49,7 @@ use crate::ai::execution_profiles::{
 };
 use crate::ai::llms::{LLMContextWindow, LLMId, LLMPreferences, LLMPreferencesEvent};
 use crate::ai::paths::host_native_absolute_path;
-use crate::ai::{AIRequestUsageModel, AIRequestUsageModelEvent};
 use crate::appearance::Appearance;
-use crate::auth::AuthStateProvider;
 use crate::editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions, TextOptions};
 use crate::server::telemetry::AutonomySettingToggleSource;
 use crate::settings::{
@@ -62,7 +57,6 @@ use crate::settings::{
     AgentModeCommandExecutionPredicate,
 };
 use crate::terminal::session_settings::{SessionSettings, SessionSettingsChangedEvent};
-use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
 use crate::util::bindings;
 use crate::view_components::action_button::{ActionButton, ButtonSize, SecondaryTheme};
@@ -753,18 +747,6 @@ impl AgentProfilesPageView {
             }
         });
 
-        let ai_request_model = AIRequestUsageModel::handle(ctx);
-        ctx.subscribe_to_model(&ai_request_model, |me, _, event, ctx| {
-            match event {
-                AIRequestUsageModelEvent::RequestUsageUpdated => ctx.notify(),
-                AIRequestUsageModelEvent::CreditAvailabilityUpdated => ctx.notify(),
-                AIRequestUsageModelEvent::RequestBonusRefunded { .. } => ctx.notify(),
-                AIRequestUsageModelEvent::AmbientCreditsBannerDismissed => {}
-            }
-            Self::refresh_base_model_menu(&me.base_model_dropdown, ctx);
-            Self::refresh_coding_model_menu(&me.coding_model_dropdown, ctx);
-        });
-
         let profile_views = Self::create_profile_views(ctx);
 
         let add_profile_button = ctx.add_typed_action_view(|_| {
@@ -813,19 +795,10 @@ impl AgentProfilesPageView {
         }
     }
 
-    fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
-        // This page is multi-section: it renders its own subheader-sized
-        // section titles inside each widget, so it gets no page-level title,
-        // in either arm below.
-        if FeatureFlag::UsageBasedPricing.is_enabled() {
-            PageType::new_monolith(AgentsWidget::default(), None, true)
-        } else {
-            let widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
-                Box::new(UsageWidget::new(ctx)),
-                Box::new(AgentsWidget::default()),
-            ];
-            PageType::new_uncategorized(widgets, None)
-        }
+    fn build_page(_ctx: &mut ViewContext<Self>) -> PageType<Self> {
+        // This page renders its own subheader-sized section titles inside
+        // its widget, so it gets no page-level title.
+        PageType::new_monolith(AgentsWidget::default(), None, true)
     }
 
     fn handle_context_window_editor_event(
@@ -1528,14 +1501,6 @@ impl SettingsPageMeta for AgentProfilesPageView {
         FeatureFlag::AgentMode.is_enabled()
     }
 
-    fn on_page_selected(&mut self, _: bool, ctx: &mut ViewContext<Self>) {
-        // The usage widget on this page is the only consumer of the request
-        // usage model, so the refresh lives here.
-        AIRequestUsageModel::handle(ctx).update(ctx, |ai_request_usage_model, ctx| {
-            ai_request_usage_model.refresh_request_usage_async(ctx)
-        });
-    }
-
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {
         self.page.update_filter(query, ctx)
     }
@@ -1597,298 +1562,6 @@ fn render_ai_list(
         .with_child(Container::new(description).with_margin_bottom(-8.).finish())
         .with_child(input_list)
         .finish()
-}
-
-struct UsageWidget {
-    view_handle: WeakViewHandle<AgentProfilesPageView>,
-    requests_highlight_index: HighlightedHyperlink,
-}
-
-impl UsageWidget {
-    fn new(ctx: &ViewContext<AgentProfilesPageView>) -> Self {
-        Self {
-            view_handle: ctx.handle(),
-            requests_highlight_index: Default::default(),
-        }
-    }
-    fn render_request_usage_count(
-        &self,
-        used: usize,
-        limit: usize,
-        is_unlimited: bool,
-        workspace_is_delinquent_due_to_payment_issue: bool,
-        appearance: &Appearance,
-    ) -> Box<dyn warpui::Element> {
-        let mut row = Flex::row();
-        if used >= limit || workspace_is_delinquent_due_to_payment_issue {
-            row.add_child(
-                ConstrainedBox::new(
-                    Icon::AlertTriangle
-                        .to_warpui_icon(appearance.theme().ui_error_color().into())
-                        .finish(),
-                )
-                .with_height(16.)
-                .with_width(16.)
-                .finish(),
-            )
-        }
-
-        let request_count_label = if workspace_is_delinquent_due_to_payment_issue {
-            "Restricted due to billing issue".to_string()
-        } else if is_unlimited {
-            "Unlimited".to_string()
-        } else {
-            format!("{used}/{limit}")
-        };
-
-        row.add_child(
-            appearance
-                .ui_builder()
-                .paragraph(request_count_label)
-                .with_style(UiComponentStyles {
-                    font_color: {
-                        if used >= limit {
-                            Some(appearance.theme().ui_error_color())
-                        } else {
-                            Some(blended_colors::text_sub(
-                                appearance.theme(),
-                                appearance.theme().surface_1(),
-                            ))
-                        }
-                    },
-                    font_size: Some(16.),
-                    margin: Some(Coords {
-                        top: 0.,
-                        bottom: 0.,
-                        left: 8.,
-                        right: 0.,
-                    }),
-                    ..Default::default()
-                })
-                .build()
-                .finish(),
-        );
-
-        row.finish()
-    }
-
-    /// Renders a row of what is being limited, along with the current used/limit.
-    #[allow(clippy::too_many_arguments)]
-    fn render_ai_usage_limit_row(
-        &self,
-        header: impl Into<Cow<'static, str>>,
-        description: impl Into<Cow<'static, str>>,
-        used: usize,
-        limit: usize,
-        is_unlimited: bool,
-        workspace_is_delinquent_due_to_payment_issue: bool,
-        appearance: &Appearance,
-    ) -> Box<dyn warpui::Element> {
-        let request_usage_details = Flex::column()
-            .with_cross_axis_alignment(CrossAxisAlignment::End)
-            .with_child(self.render_request_usage_count(
-                used,
-                limit,
-                is_unlimited,
-                workspace_is_delinquent_due_to_payment_issue,
-                appearance,
-            ));
-
-        let request_usage_description = FormattedTextElement::from_str(
-            description,
-            appearance.ui_font_family(),
-            appearance.ui_font_size(),
-        )
-        .with_color(blended_colors::text_sub(
-            appearance.theme(),
-            appearance.theme().surface_1(),
-        ));
-
-        Flex::row()
-            .with_child(
-                Shrinkable::new(
-                    2.,
-                    Container::new(
-                        Flex::column()
-                            .with_child(
-                                appearance
-                                    .ui_builder()
-                                    .paragraph(header)
-                                    .with_style(UiComponentStyles {
-                                        font_color: Some(blended_colors::text_main(
-                                            appearance.theme(),
-                                            appearance.theme().surface_1(),
-                                        )),
-                                        margin: Some(Coords {
-                                            top: 0.,
-                                            bottom: 4.,
-                                            left: 0.,
-                                            right: 0.,
-                                        }),
-                                        ..Default::default()
-                                    })
-                                    .build()
-                                    .finish(),
-                            )
-                            .with_child(request_usage_description.finish())
-                            .finish(),
-                    )
-                    .with_margin_bottom(16.)
-                    .finish(),
-                )
-                .finish(),
-            )
-            .with_child(
-                Shrinkable::new(
-                    1.,
-                    Container::new(request_usage_details.finish())
-                        .with_margin_bottom(16.)
-                        .finish(),
-                )
-                .finish(),
-            )
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-            .with_main_axis_size(MainAxisSize::Max)
-            .finish()
-    }
-}
-
-impl SettingsWidget for UsageWidget {
-    type View = AgentProfilesPageView;
-
-    fn search_terms(&self) -> &str {
-        "a.i. ai usage limit plan"
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ai_request_usage_model = AIRequestUsageModel::as_ref(app);
-        let next_refresh_time = ai_request_usage_model.next_refresh_time();
-        let formatted_next_refresh_time = next_refresh_time.format("%b %d").to_string();
-        let workspace_is_delinquent_due_to_payment_issue = UserWorkspaces::as_ref(app)
-            .team_for_view_handle(&self.view_handle, app)
-            .map(|team| team.billing_metadata.is_delinquent_due_to_payment_issue())
-            .unwrap_or_default();
-
-        let usage_header = Container::new(
-            Flex::row()
-                .with_main_axis_size(MainAxisSize::Max)
-                .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_child(
-                    build_sub_header(
-                        appearance,
-                        "Usage",
-                        Some(styles::header_font_color(true, app)),
-                    )
-                    .finish(),
-                )
-                .with_child(
-                    appearance
-                        .ui_builder()
-                        .paragraph(format!("Resets {formatted_next_refresh_time}"))
-                        .with_style(UiComponentStyles {
-                            font_color: Some(blended_colors::text_sub(
-                                appearance.theme(),
-                                appearance.theme().surface_1(),
-                            )),
-                            ..Default::default()
-                        })
-                        .build()
-                        .finish(),
-                )
-                .finish(),
-        )
-        .with_padding_bottom(HEADER_PADDING)
-        .finish();
-
-        let request_limit_description = format!(
-            "This is the {} limit of AI credits for your account.",
-            ai_request_usage_model.refresh_duration_to_string()
-        );
-
-        let request_usage_row = self.render_ai_usage_limit_row(
-            "Credits",
-            request_limit_description,
-            ai_request_usage_model.requests_used(),
-            ai_request_usage_model.request_limit(),
-            ai_request_usage_model.is_unlimited(),
-            workspace_is_delinquent_due_to_payment_issue,
-            appearance,
-        );
-
-        let auth_state = AuthStateProvider::as_ref(app).get();
-        let upgrade_cta_text_fragments = if let Some(team) =
-            UserWorkspaces::as_ref(app).team_for_view_handle(&self.view_handle, app)
-        {
-            let current_user_email = auth_state.user_email().unwrap_or_default();
-            let has_admin_permissions = team.has_admin_permissions(&current_user_email);
-            if team.billing_metadata.can_upgrade_to_higher_tier_plan() {
-                let upgrade_url = UserWorkspaces::upgrade_link_for_team(team.uid);
-                if has_admin_permissions {
-                    vec![
-                        FormattedTextFragment::hyperlink("Upgrade", upgrade_url),
-                        FormattedTextFragment::plain_text(" to get more AI usage."),
-                    ]
-                } else {
-                    // The /upgrade page says to contact their administrator.
-                    vec![
-                        FormattedTextFragment::hyperlink("Compare plans", upgrade_url),
-                        FormattedTextFragment::plain_text(" for more AI usage."),
-                    ]
-                }
-            } else {
-                vec![
-                    FormattedTextFragment::hyperlink("Contact support", "mailto:support@warp.dev"),
-                    FormattedTextFragment::plain_text(" for more AI usage."),
-                ]
-            }
-        } else {
-            let user_id = auth_state.user_id().unwrap_or_default();
-            let upgrade_url = UserWorkspaces::upgrade_link(user_id);
-            vec![
-                FormattedTextFragment::hyperlink("Upgrade", upgrade_url),
-                FormattedTextFragment::plain_text(" to get more AI usage."),
-            ]
-        };
-
-        let mut column = Flex::column().with_children([
-            render_separator(appearance),
-            usage_header,
-            request_usage_row,
-        ]);
-
-        // Upgrading requires an account.
-        if !AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out()
-        {
-            let upgrade_cta = FormattedTextElement::new(
-                FormattedText::new([FormattedTextLine::Line(upgrade_cta_text_fragments)]),
-                appearance.ui_font_size(),
-                appearance.ui_font_family(),
-                appearance.ui_font_family(),
-                styles::description_font_color(true, app).into(),
-                self.requests_highlight_index.clone(),
-            )
-            .with_hyperlink_font_color(appearance.theme().accent().into_solid())
-            .register_default_click_handlers(|url, ctx, _| {
-                ctx.dispatch_typed_action(AgentProfilesPageAction::HyperlinkClick(url));
-            });
-            column.add_child(
-                Container::new(upgrade_cta.finish())
-                    .with_margin_bottom(16.)
-                    .finish(),
-            );
-        }
-
-        column.finish()
-    }
 }
 
 #[derive(Default)]

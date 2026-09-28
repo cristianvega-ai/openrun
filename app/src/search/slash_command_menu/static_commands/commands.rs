@@ -83,24 +83,6 @@ pub const CONNECT_GROK: StaticCommand = StaticCommand {
     argument: None,
 };
 
-pub const MANAGE_BILLING: StaticCommand = StaticCommand {
-    name: "/manage-billing",
-    description: "Open the team billing page in your browser",
-    kind: SlashCommandKind::ManageBilling,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-pub const UPGRADE: StaticCommand = StaticCommand {
-    name: "/upgrade",
-    description: "Open the Warp upgrade page in your browser",
-    kind: SlashCommandKind::Upgrade,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
 pub const THEME: StaticCommand = StaticCommand {
     name: "/theme",
     description: "Set color theme",
@@ -482,30 +464,6 @@ pub const FORK_FROM: StaticCommand = StaticCommand {
     argument: None,
 };
 
-pub const USAGE: StaticCommand = StaticCommand {
-    name: "/usage",
-    description: "View account and credit usage",
-    kind: SlashCommandKind::Usage,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/bar-chart-04.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const COST: StaticCommand = StaticCommand {
-    name: "/cost",
-    description: "Toggle credit usage details",
-    kind: SlashCommandKind::Cost,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/bar-chart-04.svg",
-    },
-    availability: Availability::AGENT_VIEW.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
 pub const CONVERSATIONS: StaticCommand = StaticCommand {
     name: "/conversations",
     description: "Open conversation history",
@@ -656,13 +614,10 @@ fn all_commands(settings_mode: settings::SettingsMode) -> Vec<StaticCommand> {
 fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
     let mut commands = vec![
         AUTO_APPROVE,
-        COST,
         EXIT,
         FEEDBACK.clone(),
         API_KEYS,
         CONNECT_GROK,
-        UPGRADE,
-        MANAGE_BILLING,
         LOGOUT,
         AGENT.clone(),
         CLEAR,
@@ -675,7 +630,6 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         RESET_STATUSLINE,
         THEME,
         VIM_MODE,
-        USAGE,
         CONVERSATIONS,
         EXPORT_TO_CLIPBOARD,
         COPY_DEBUGGING_ID,

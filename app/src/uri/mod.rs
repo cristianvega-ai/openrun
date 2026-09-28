@@ -71,8 +71,6 @@ pub enum UriHost {
     /// A host prefix for a general-purpose home/landing page. Unlike other intent URIs, the home
     /// page behavior may change over time and vary from platform to platform.
     Home,
-    /// Opens a new tab with the Codex model and starts a conversation.
-    Codex,
     /// Actions triggered from Linear integrations (e.g. work on issue).
     Linear,
     /// Opens a saved tab config in an existing window or a new one.
@@ -92,7 +90,6 @@ impl FromStr for UriHost {
             "conversation" => Ok(Self::Conversation),
             "settings" => Ok(Self::Settings),
             "home" => Ok(Self::Home),
-            "codex" => Ok(Self::Codex),
             "linear" => Ok(Self::Linear),
             "tab_config" if FeatureFlag::TabConfigs.is_enabled() => Ok(Self::TabConfig),
             "session" => Ok(Self::Session),
@@ -203,7 +200,6 @@ impl UriHost {
                 // - warp://settings?q={query} - opens settings with the search bar pre-filled
                 // - warp://settings?widget={widget_id} - opens settings scrolled to a widget
                 // - warp://settings/teams?invite={email} - opens team settings with invite modal
-                // - warp://settings/billing_and_usage - opens billing and usage settings page
                 // - warp://settings/environments - opens environments settings page
                 // - warp://settings/platform - opens platform settings page
                 // - warp://settings/appearance - opens appearance settings page (themes, fonts, etc.)
@@ -254,7 +250,7 @@ impl UriHost {
                     }
                     // No special sub-page: route the bare host, the `q` (search) and
                     // `widget` (scroll-to) query params, and the simple section
-                    // sub-pages (e.g. billing_and_usage, platform, appearance,
+                    // sub-pages (e.g. platform, appearance,
                     // warp_agent) resolved via `settings_section_for_simple_subpage`.
                     maybe_simple_subpage => {
                         let simple_section =
@@ -316,15 +312,6 @@ impl UriHost {
             }
             UriHost::Home => {
                 ctx.dispatch_global_action("root_view::open_new", &());
-            }
-            UriHost::Codex => {
-                dispatch_action_in_new_or_existing_window(
-                    primary_window_id,
-                    "root_view:open_codex_in_existing_window",
-                    "root_view:open_codex_in_new_window",
-                    &(),
-                    ctx,
-                );
             }
             UriHost::Linear => match LinearAction::parse(url) {
                 Ok(LinearAction::WorkOnIssue) => {
@@ -402,8 +389,6 @@ impl UriHost {
             Self::Launch | Self::Conversation | Self::Home => W::Nothing,
             // This will actually be handled by [`Action::window_behavior_hint`].
             Self::Action => W::Nothing,
-            // Codex opens a new tab with AI mode, use default behavior
-            Self::Codex => W::default(),
             // Linear deeplink opens a new tab with agent view
             Self::Linear => W::default(),
             // Handler picks the window itself based on `?new_window=true`.
@@ -1251,7 +1236,6 @@ fn dispatch_action_in_new_or_existing_window<T: 'static>(
 
 fn settings_section_for_simple_subpage(subpage: &str) -> Option<SettingsSection> {
     match subpage {
-        "billing_and_usage" => Some(SettingsSection::BillingAndUsage),
         "platform" => Some(SettingsSection::WarpCloudAgentAPIKeys),
         "appearance" => Some(SettingsSection::Appearance),
         "warp_agent" => Some(SettingsSection::WarpAgent),
@@ -1283,7 +1267,6 @@ fn validate_custom_uri(url: &Url) -> Result<UriHost> {
         | UriHost::Conversation
         | UriHost::Team
         | UriHost::Settings
-        | UriHost::Codex
         | UriHost::Linear
         | UriHost::TabConfig
         | UriHost::Session => true,

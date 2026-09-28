@@ -52,7 +52,7 @@ use crate::ai::agent_management::telemetry::{
 };
 use crate::ai::ambient_agents::{AgentSource, cancel_task_with_toast};
 use crate::ai::artifacts::{Artifact, ArtifactButtonsRow, ArtifactButtonsRowEvent};
-use crate::ai::blocklist::view_util::{UsageLabelKind, format_usage, usage_label};
+use crate::ai::blocklist::view_util::{format_usage, usage_label};
 use crate::ai::conversation_details_panel::{
     ConversationDetailsData, ConversationDetailsPanel, ConversationDetailsPanelEvent,
 };
@@ -100,11 +100,7 @@ fn format_request_usage(
     cost_in_cents: Option<f32>,
     usage_display_unit: UsageDisplayUnit,
 ) -> String {
-    let label = usage_label(
-        UsageLabelKind::DetailsPanel,
-        cost_in_cents,
-        usage_display_unit,
-    );
+    let label = usage_label(cost_in_cents, usage_display_unit);
     let value = format_usage(credits, None, cost_in_cents, usage_display_unit);
     format!("{label}: {value}")
 }

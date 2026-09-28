@@ -71,6 +71,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Cloud mode, ambient-agent terminal UI and handoff](#cloud-mode-ambient-agent-terminal-ui-and-handoff) — removed the cloud-agent terminal (setup, follow-up input, tombstones, queued cloud prompts), local-to-cloud and cloud-to-cloud handoff, auto-handoff on sleep, the cloud environment and host selectors and the cloud slash commands, tab types, panes and settings
 - [Tolerant stored inline-menu heights](#tolerant-stored-inline-menu-heights) — stored per-menu heights ignore keys of removed menus (`skill_menu`, `prompts_menu`, `plan_menu`) instead of failing to parse and discarding all heights
 - [Repository metadata: standing queries and force-included paths](#repository-metadata-standing-queries-and-force-included-paths) — removed the skill-only standing-query results, force-included path list and `StandingQueryResultsUpdated` events from `repo_metadata`
+- [AI credits, usage, billing and promotions UI](#ai-credits-usage-billing-and-promotions-ui) — removed the AI request-usage and credit-availability models, the buy-credits banner and auto-reload modal, the usage popover, Turn panel and usage footer, the Billing and usage settings page, and the pricing-promotion, free-AI-removal, build-plan-migration and Codex modals
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1849,3 +1850,35 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 **User-visible impact:** None. The file tree, `@`-context file search and repository watchers build and update the same trees as before.
 
 **Notes:** Closes the `repo_metadata` item left by the Skills section.
+## AI credits, usage, billing and promotions UI
+**Why:** Without Warp accounts and Warp-hosted models there are no credits to meter, buy or display. The models behind these surfaces polled Warp's servers for request limits, credit availability and bonus grants, and the surfaces pushed users toward plans, top-ups and Warp-run promotions.
+
+**Removed:**
+- `ai/{request_usage_model, credit_availability, pricing_promotion}` and the `AIRequestUsageModel` and `PricingPromotionState` singletons, with their registrations in `lib.rs` and the test setup helpers.
+- `terminal/buy_credits_banner.rs` and `terminal/enable_auto_reload_modal.rs`: the "buy credits" banner above the input, the auto-reload modal and the events that carried them from the input up to the workspace (`OpenAutoReloadModal`). The `BuyCreditsBannerOpen` binding context is gone too.
+- `workspace/bonus_grant_notification_model.rs` and its toast.
+- `ai/blocklist/usage/`: the per-conversation usage popover, the usage footer and its rollup, and the per-turn "Turn" panel. In the agent view this took the usage button, the context-window button and the prompt-cache-expiry dot, plus the `TerminalAction::ToggleUsageFooter` and `AIBlockAction::{ToggleIsUsageFooterExpanded, ToggleIsTurnPanelExpanded, SetIsTurnPanelExpanded}` actions and the matching block and rich-content events. The block's refund notice ("We've refunded you N credits") and the negative-feedback refund mutation went with it.
+- `ai/blocklist/prompt/prompt_alert.rs`, the "out of credits", spend-limit, delinquent and offline chip in the input footers.
+- `settings_view/billing_and_usage*` (the page, its v1/v2 dispatch, usage history, overage-limit modal and billing-cycle sections), `SettingsSection::BillingAndUsage`, its nav entry, the `workspace:show_settings_billing_and_usage_page` binding and the `warp://settings/billing_and_usage` deep link. A stored "Billing and usage" page slug now opens the default page.
+- `workspace/view/{free_ai_removal_modal, build_plan_migration_modal, codex_modal}.rs`, their debug actions and bindings, `OneTimeModalModel`'s free-AI-removal and build-plan-migration triggers, `warp://codex`, and `AgentViewEntryOrigin::CodexModal`.
+- The `/usage`, `/cost`, `/manage-billing` and `/upgrade` slash commands.
+- Settings: the quota-reset banner state (`AIRequestQuotaInfo`, `CycleInfo`, and the `AISettings` methods that maintained them, plus the "Monthly AI credits reset" popup on the prompt chips), `did_check_to_trigger_free_ai_removal_modal`, `build_plan_migration_modal_dismissed` and `bonus_grants_shown`.
+- Server and GraphQL: `AIClient::{get_request_limit_info, get_ai_credit_availability, get_conversation_usage_history, provide_negative_feedback_response_for_ai_conversation}` and their queries and mutations, the `aiCreditAvailability` field on the workspaces-metadata query and its piggyback into `UserWorkspaces` and `TeamUpdateManager`, the unused `generateDialogue` mutation, and the `use_computer_stats` field of the conversation tool-usage metadata (in `persistence` and `warp_graphql`).
+- The usage widget on the Agent profiles page, the AI credit limits in the team-deletion and leave/remove-member confirmations (`TeamDeleteDisabledReason::RemainingBonusCredits`, the `*ReloadCredits` dialog variants), the free-credits banner of the cloud-agent setup form, and the `Warp` review destination in code review (comments are sent only to a running CLI agent).
+- The plan header presentation helper and `ui_components/tab_selector.rs` (used only by the billing page), and unused `FeaturePopup::alert_icon` and `Dropdown::with_drop_shadow`.
+
+**Modified:**
+- `AgentToolbarItemKind::{ContextWindowUsage, UsageSummary}` stay as unrendered variants so stored toolbar layouts still deserialize, like `NLDToggle`; they are no longer offered, in the defaults or in the editor.
+- `FailedOutputPresentation::OutOfCredits`, its Subscribe button and the "won't count towards your usage" notice are gone; a quota-limit error renders as a plain message. `should_show_failed_output_usage_notice` became `should_show_failed_output_debug_footer` because it also gated the debug footer.
+- `AgentMessageBar` and `TerminalInputMessageBar` no longer render promotion pills, so they have no typed actions and are created with `add_view`.
+- Settings navigation tests that used Billing and usage as the page after the Agents group now use the next remaining page.
+
+**User-visible impact:** No credit balances, usage totals, billing page, upgrade prompts or promotional modals appear anywhere. The `/usage`, `/cost`, `/manage-billing` and `/upgrade` commands and the `warp://codex` and `warp://settings/billing_and_usage` links no longer exist.
+
+**Notes:**
+- Left for BILL-1: `app/src/pricing/` (`PricingInfoModel::{addon_credits_options, promotion_message}` are now unused), `UserWorkspaces::{purchase_addon_credits, refresh_ai_overages, update_addon_credits_settings, purchase_policy}` and their events, `SunsettedToBuildDataUpdated`, `WorkspaceAction::ShowUpgrade`, the add-on credit and usage-based-pricing workspace settings and billing-cycle data, `AdminActions`, the `billing_and_usage_page_v2` Cargo feature and `FeatureFlag::BillingAndUsagePageV2`.
+- Left for AI-17a: `CloudAgentCapacityModal`'s billing link, `show_out_of_credits_modal`, `CloudAgentStartupFailure::OutOfCredits`. Left for AI-17b: `PlatformErrorCode::InsufficientCredits`.
+- Left for AI-21 and AI-30: `UsageDisplayUnit`, `format_usage`/`usage_label`/`format_credits` (used by the conversation details panel and the agent management view), `AIConversation::{turn_panel_data, turn_panel_records, usage_totals}` and the `ConversationUsageMetadataUpdated` history event.
+- Left for AI-22 and AI-29: `AISettings::can_use_warp_credits_for_fallback` (the "Warp credits as BYOK fallback" switch on the Warp Agent page and the `allow_use_of_warp_credits` request field).
+- Left for TEL-4: telemetry variants whose callers are gone (`AutoReloadModalClosed`/`AutoReloadModalAction`, `OutOfCreditsBannerClosed`/`OutOfCreditsBannerAction`, `CodexModalOpened`, `CodexModalUseCodexClicked` and the buy-credits, usage-popover and free-AI-removal events).
+- The old free-AI-removal telemetry and the `FreeAiRemovalModalVariant` enum are deleted with the modal.

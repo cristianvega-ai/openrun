@@ -30,7 +30,6 @@ use super::SettingsSection;
 use super::about_page::AboutPageView;
 use super::agent_profiles_page::AgentProfilesPageView;
 use super::appearance_page::AppearanceSettingsPageView;
-use super::billing_and_usage_dispatch::BillingAndUsageDispatchView;
 use super::cli_agents_page::CLIAgentsPageView;
 use super::code_editor_review_page::EditorAndCodeReviewPageView;
 use super::environments_page::EnvironmentsPageView;
@@ -112,7 +111,6 @@ pub enum SettingsPageViewHandle {
     AgentProfiles(ViewHandle<AgentProfilesPageView>),
     CLIAgents(ViewHandle<CLIAgentsPageView>),
     CloudEnvironments(ViewHandle<EnvironmentsPageView>),
-    BillingAndUsage(ViewHandle<BillingAndUsageDispatchView>),
 }
 
 impl SettingsPageViewHandle {
@@ -134,7 +132,6 @@ impl SettingsPageViewHandle {
             AgentProfiles(view_handle) => ChildView::new(view_handle).finish(),
             CLIAgents(view_handle) => ChildView::new(view_handle).finish(),
             CloudEnvironments(view_handle) => ChildView::new(view_handle).finish(),
-            BillingAndUsage(view_handle) => ChildView::new(view_handle).finish(),
         }
     }
 }
