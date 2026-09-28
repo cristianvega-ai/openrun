@@ -76,6 +76,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Integration test triage](#integration-test-triage) — deleted the two integration tests for the removed Warp Drive "Create a New Personal/Team Workflow" actions; documented the remaining failures (SSH tests that need a gcloud IAP tunnel to a Warp-owned GCP VM)
 - [Persisted values of removed enum variants](#persisted-values-of-removed-enum-variants) — audit of settings, sqlite state and user files for removed enum variants; a removed pane kind no longer costs the whole tab, a stale `mcp_server` pane row no longer blocks saving the session, and stale prompt chips, welcome tips and non-workflow YAML documents no longer discard their neighbours
 - [Ambient-agent task model, cloud-load path and restoration](#ambient-agent-task-model-cloud-load-path-and-restoration) — removed the ambient-agent spawn, GitHub-auth and telemetry code, the cloud conversation and task fetch/poll/RTC path of `AgentConversationsModel`, `AmbientAgentTaskId` plumbing in terminal, pane and workspace code, the CLI-agent cloud transcript branch and `AgentViewEntryOrigin::{CloudAgent, ThirdPartyCloudAgent}`; deleted `presigned_upload.rs` and the `AIClient` spawn, attachment and follow-up calls
+- [Retired cloud values in settings and tab configs](#retired-cloud-values-in-settings-and-tab-configs) — a `cloud` tab-config pane opens as a terminal; retired `cloud_agent`/`docker_sandbox` default session modes read as Terminal
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
@@ -1996,3 +1997,16 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **Notes:**
 - Kept for later tasks because live code of theirs still uses it: `AmbientAgentTask`, `AmbientAgentTaskId` and the task cache with `get_or_async_fetch_task_data` (AI-19 orchestration, `local_agent_task_sync_model`); the `ai/artifacts/` buttons and `artifact_download.rs` and the entry display fields and filters for source, environment, artifacts, session status and executor (AI-21 agent-management view, details panel and notifications; AI-29 for the `Artifact` type); `ai/ambient_agents/{scheduled,github_auth_url}.rs` (AI-18 scheduled agents and the environment form); the controller, action-model and `send_message` executor `ambient_agent_task_id` (AI-19); `ServerAIConversationMetadata::ambient_agent_task_id` (AI-30).
 - Left for the server plan: `PlatformErrorCode::InsufficientCredits` (a cynic input enum that must match the GraphQL schema), `ObjectUpdateMessage::AmbientTaskUpdated` and the `AmbientTaskUpdated` GraphQL type (now ignored), the `warp://conversation` URI and the cloud conversation loader (`load_conversation_from_server`, `NewWorkspaceSource::FromCloudConversationId`). Left for the `QueuedQueryModel` deleter: `finish_native_setup`. Left for FLAGS-1: `AmbientAgentsRTC`, `ScheduledAmbientAgents` and the `ambient_agents_*` Cargo features.
+
+## Retired cloud values in settings and tab configs
+**Why:** The cloud-mode removal deleted `DefaultSessionMode::CloudAgent` and `TabConfigPaneType::Cloud`, so files written by earlier builds can still name them. This checks what such a file does now.
+
+**Modified:**
+- `DefaultSessionMode` reads the retired values `cloud_agent` and `docker_sandbox` (and their `CloudAgent`/`DockerSandbox` serialized spellings) as the default mode, Terminal, instead of rejecting the setting. Before, the setting fell back to its default but writes to the key were blocked, so the user could not change it from the UI. Other unknown names are still rejected. The enum's `SettingsValue` and `Deserialize` impls are written by hand for this.
+- `TabConfigPaneType::Terminal` accepts `cloud` as an alias, so a tab config with `type = "cloud"` loads and opens that pane as a terminal instead of failing the whole file with a parse error.
+
+**Added:** tests for both cases (`settings::ai::tests::retired_default_session_modes_read_as_the_default_mode`, `user_config::tests::test_load_tab_configs_opens_retired_cloud_pane_type_as_terminal`).
+
+**User-visible impact:** Upgrading users with a cloud tab config keep it (as a terminal tab). This supersedes the "no longer load" note in the cloud-mode section.
+
+**Notes:** Launch configurations always produce terminal panes, so they have no pane mode to migrate.

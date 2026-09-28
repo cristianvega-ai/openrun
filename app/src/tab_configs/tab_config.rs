@@ -97,7 +97,9 @@ pub struct TabConfigParam {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TabConfigPaneType {
-    /// A standard terminal shell session.
+    /// A standard terminal shell session. Configs that still name the retired `cloud` pane
+    /// type open as terminals.
+    #[serde(alias = "cloud")]
     Terminal,
     /// A terminal that immediately enters Agent Mode.
     Agent,

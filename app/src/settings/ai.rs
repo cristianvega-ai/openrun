@@ -91,16 +91,7 @@ impl SingletonEntity for FocusedTerminalInfo {}
 
 /// The default mode for new terminal sessions.
 #[derive(
-    Default,
-    Debug,
-    serde::Serialize,
-    serde::Deserialize,
-    PartialEq,
-    Copy,
-    Clone,
-    EnumIter,
-    schemars::JsonSchema,
-    settings_value::SettingsValue,
+    Default, Debug, serde::Serialize, PartialEq, Copy, Clone, EnumIter, schemars::JsonSchema,
 )]
 #[schemars(
     description = "Default mode for new sessions.",
@@ -127,6 +118,62 @@ settings::macros::implement_setting_for_enum!(
     toml_path: "general.default_session_mode",
     description: "The default mode for new terminal sessions.",
 );
+
+/// Modes that earlier builds offered and that no longer exist. A stored value naming one of
+/// these opens new sessions in the default mode instead of invalidating the setting.
+const RETIRED_DEFAULT_SESSION_MODES: [&str; 2] = ["cloud_agent", "docker_sandbox"];
+
+impl DefaultSessionMode {
+    /// Reads a stored mode name in either the settings-file (`tab_config`) or the serialized
+    /// (`TabConfig`) spelling. Retired modes read as the default; unknown names are rejected.
+    fn from_stored_name(name: &str) -> Option<Self> {
+        let snake_case = name
+            .chars()
+            .enumerate()
+            .flat_map(|(index, c)| {
+                let separator = (c.is_ascii_uppercase() && index > 0).then_some('_');
+                separator.into_iter().chain(std::iter::once(c.to_ascii_lowercase()))
+            })
+            .collect::<String>();
+        match snake_case.as_str() {
+            "terminal" => Some(Self::Terminal),
+            "agent" => Some(Self::Agent),
+            "tab_config" => Some(Self::TabConfig),
+            retired if RETIRED_DEFAULT_SESSION_MODES.contains(&retired) => {
+                log::warn!("Ignoring retired default session mode {name:?}");
+                Some(Self::default())
+            }
+            _ => None,
+        }
+    }
+
+    fn file_name(&self) -> &'static str {
+        match self {
+            DefaultSessionMode::Terminal => "terminal",
+            DefaultSessionMode::Agent => "agent",
+            DefaultSessionMode::TabConfig => "tab_config",
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DefaultSessionMode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Self::from_stored_name(&name).ok_or_else(|| {
+            serde::de::Error::custom(format!("unknown default session mode {name:?}"))
+        })
+    }
+}
+
+impl settings_value::SettingsValue for DefaultSessionMode {
+    fn to_file_value(&self) -> serde_json::Value {
+        serde_json::Value::String(self.file_name().to_owned())
+    }
+
+    fn from_file_value(value: &serde_json::Value) -> Option<Self> {
+        Self::from_stored_name(value.as_str()?)
+    }
+}
 
 impl DefaultSessionMode {
     /// Display name for the settings dropdown.

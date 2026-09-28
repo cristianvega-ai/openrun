@@ -125,6 +125,28 @@ fn test_load_tab_configs_deterministic_tie_breaking() {
 
 #[cfg(feature = "local_fs")]
 #[test]
+fn test_load_tab_configs_opens_retired_cloud_pane_type_as_terminal() {
+    let dir = tempfile::tempdir().unwrap();
+    write_tab_config_toml(dir.path(), "plain.toml", "Plain");
+    std::fs::write(
+        dir.path().join("cloud.toml"),
+        "name = \"Cloud\"\n\n[[panes]]\nid = \"main\"\ntype = \"cloud\"\n",
+    )
+    .unwrap();
+
+    let (configs, errors) = load_tab_configs(dir.path());
+
+    assert!(errors.is_empty(), "no tab config may fail to load: {errors:?}");
+    let names: Vec<&str> = configs.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, vec!["Cloud", "Plain"]);
+    assert_eq!(
+        configs[0].panes[0].pane_type,
+        Some(TabConfigPaneType::Terminal)
+    );
+}
+
+#[cfg(feature = "local_fs")]
+#[test]
 fn test_load_tab_configs_empty_directory() {
     let dir = tempfile::tempdir().unwrap();
 
