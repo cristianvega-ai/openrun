@@ -15,14 +15,11 @@ const MAX_RESULTS: usize = 50;
 /// recency so the mixer's score-based ordering places more recent items higher.
 const ZERO_STATE_BASE_SCORE: i64 = 1000;
 
-pub struct NotebookDataSource {
-    is_plan: bool,
-}
+pub struct NotebookDataSource;
 
 impl NotebookDataSource {
-    #[allow(dead_code)]
-    pub fn new(is_plan: bool) -> Self {
-        Self { is_plan }
+    pub fn new() -> Self {
+        Self
     }
 }
 
@@ -46,10 +43,7 @@ impl SyncDataSource for NotebookDataSource {
 
         let mut notebooks: Vec<_> = cloud_model
             .get_all_active_notebooks()
-            .filter(|notebook| {
-                // Notebooks and plans have separate filters.
-                self.is_plan == notebook.model().ai_document_id.is_some()
-            })
+            .filter(|notebook| notebook.model().ai_document_id.is_none())
             .filter(|notebook| !notebook.metadata.is_welcome_object)
             .collect();
 
@@ -132,13 +126,11 @@ impl SyncDataSource for NotebookDataSource {
                 match_result.score += 10000;
             }
 
-            let ai_document_uid = notebook.model().ai_document_id;
             let search_item = NotebookSearchItem {
                 notebook_name,
                 notebook_description,
                 notebook_uid,
                 match_result,
-                ai_document_uid: ai_document_uid.map(|id| id.to_string()),
                 is_match_on_name,
             };
 

@@ -12,7 +12,6 @@ pub mod inline_history;
 pub mod inline_menu;
 pub mod message_bar;
 pub mod models;
-pub mod plans;
 pub mod profiles;
 pub mod repos;
 pub mod rewind;
@@ -178,7 +177,6 @@ use crate::ai::connected_self_hosted_workers::{
 };
 #[cfg(not(target_family = "wasm"))]
 use crate::ai::conversation_export::export_conversation_markdown;
-use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentVersion};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::harness_availability::{
     CloudAgentStartBlocker, HarnessAvailabilityModel, cloud_agent_start_blocker,
@@ -267,7 +265,6 @@ use crate::terminal::input::inline_menu::InlineMenuPositioner;
 use crate::terminal::input::models::{
     InlineModelSelectorEvent, InlineModelSelectorTab, InlineModelSelectorView,
 };
-use crate::terminal::input::plans::{InlinePlanMenuEvent, InlinePlanMenuView};
 use crate::terminal::input::profiles::{InlineProfileSelectorEvent, InlineProfileSelectorView};
 use crate::terminal::input::repos::{InlineReposMenuEvent, InlineReposMenuView};
 use crate::terminal::input::rewind::{RewindMenuEvent, RewindMenuView};
@@ -542,7 +539,6 @@ pub enum TelemetryInputSuggestionsMode {
     ProfileSelector,
     InlineHistoryMenu,
     IndexedReposMenu,
-    PlanMenu,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -692,11 +688,6 @@ pub enum InputSuggestionsMode {
     /// Repos switcher menu mode.
     IndexedReposMenu,
 
-    /// Plan menu mode for selecting among multiple AI document plans.
-    PlanMenu {
-        conversation_id: AIConversationId,
-    },
-
     /// Mode indicating that no suggestion UI is being shown.
     Closed,
 }
@@ -732,7 +723,6 @@ impl InputSuggestionsMode {
                 | Self::ModelSelector
                 | Self::UserQueryMenu { .. }
                 | Self::InlineHistoryMenu { .. }
-                | Self::PlanMenu { .. }
                 | Self::IndexedReposMenu
         ) || (FeatureFlag::InlineProfileSelector.is_enabled()
             && matches!(self, Self::ProfileSelector))
@@ -770,7 +760,6 @@ impl InputSuggestionsMode {
             InputSuggestionsMode::ProfileSelector => Some("Search profiles"),
             InputSuggestionsMode::SlashCommands => Some("Search commands"),
             InputSuggestionsMode::IndexedReposMenu => Some("Search repos"),
-            InputSuggestionsMode::PlanMenu { .. } => Some("Search plans"),
             _ => None,
         }
     }
@@ -812,7 +801,6 @@ impl InputSuggestionsMode {
             InputSuggestionsMode::IndexedReposMenu => {
                 TelemetryInputSuggestionsMode::IndexedReposMenu
             }
-            InputSuggestionsMode::PlanMenu { .. } => TelemetryInputSuggestionsMode::PlanMenu,
             InputSuggestionsMode::Closed => unreachable!(),
         }
     }
@@ -1031,16 +1019,8 @@ pub enum Event {
     OpenFilesPalette {
         source: PaletteSource,
     },
-    ToggleAIDocumentPane {
-        document_id: AIDocumentId,
-        document_version: AIDocumentVersion,
-    },
     SubmitCLIAgentInput {
         text: String,
-    },
-    OpenAIDocumentPane {
-        document_id: AIDocumentId,
-        document_version: AIDocumentVersion,
     },
     OpenAutoReloadModal {
         purchased_credits: i32,
@@ -1696,9 +1676,6 @@ pub struct Input {
 
     /// Inline conversation menu for selecting AI conversations.
     inline_conversation_menu_view: ViewHandle<InlineConversationMenuView>,
-
-    /// Inline plan menu for selecting among multiple plans.
-    inline_plan_menu_view: ViewHandle<InlinePlanMenuView>,
 
     /// Inline repos switcher menu.
     inline_repos_menu_view: ViewHandle<InlineReposMenuView>,
@@ -2787,15 +2764,6 @@ impl Input {
                 AgentInputFooterEvent::OpenCodeReview => {
                     ctx.emit(Event::OpenCodeReviewPane);
                 }
-                AgentInputFooterEvent::OpenAIDocument {
-                    document_id,
-                    document_version,
-                } => {
-                    ctx.emit(Event::ToggleAIDocumentPane {
-                        document_id: *document_id,
-                        document_version: *document_version,
-                    });
-                }
                 AgentInputFooterEvent::ShowContextMenu { position } => {
                     me.show_prompt_context_menu(*position, ctx);
                 }
@@ -3623,20 +3591,6 @@ impl Input {
             me.handle_user_query_menu_event(event, ctx);
         });
 
-        let inline_plan_menu_view = ctx.add_view(|ctx| {
-            InlinePlanMenuView::new(
-                AIConversationId::default(),
-                suggestions_mode_model.clone(),
-                agent_view_controller.clone(),
-                &inline_terminal_menu_positioner,
-                &buffer_model,
-                ctx,
-            )
-        });
-        ctx.subscribe_to_view(&inline_plan_menu_view, |me, _, event, ctx| {
-            me.handle_plan_menu_event(event, ctx);
-        });
-
         let rewind_menu_view = ctx.add_view(|ctx| {
             RewindMenuView::new(
                 AIConversationId::default(),
@@ -3842,7 +3796,6 @@ impl Input {
             inline_slash_commands_view,
             cloud_mode_v2_slash_commands_view,
             inline_conversation_menu_view,
-            inline_plan_menu_view,
             inline_repos_menu_view,
             inline_model_selector_view,
             inline_profile_selector_view,
@@ -5291,45 +5244,6 @@ impl Input {
         ctx.notify();
     }
 
-    pub fn open_plan_menu(
-        &mut self,
-        conversation_id: AIConversationId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.suggestions_mode_model.update(ctx, |model, ctx| {
-            model.set_mode(InputSuggestionsMode::PlanMenu { conversation_id }, ctx);
-        });
-        ctx.notify();
-    }
-
-    fn handle_plan_menu_event(&mut self, event: &InlinePlanMenuEvent, ctx: &mut ViewContext<Self>) {
-        match event {
-            InlinePlanMenuEvent::OpenPlan {
-                document_id,
-                document_version,
-            } => {
-                ctx.emit(Event::OpenAIDocumentPane {
-                    document_id: *document_id,
-                    document_version: *document_version,
-                });
-                if self.suggestions_mode_model.as_ref(ctx).is_plan_menu() {
-                    self.suggestions_mode_model.update(ctx, |model, ctx| {
-                        model.set_mode(InputSuggestionsMode::Closed, ctx);
-                    });
-                    ctx.notify();
-                }
-            }
-            InlinePlanMenuEvent::Dismissed => {
-                if self.suggestions_mode_model.as_ref(ctx).is_plan_menu() {
-                    self.suggestions_mode_model.update(ctx, |model, ctx| {
-                        model.close_and_restore_buffer(ctx);
-                    });
-                    ctx.notify();
-                }
-            }
-        }
-    }
-
     fn open_conversation_menu(&mut self, ctx: &mut ViewContext<Self>) {
         // Don't open menu if there's a long-running command
         if self
@@ -6000,15 +5914,6 @@ impl Input {
                         self.input_contents_before_prompt_chip_command = Some(current_input);
                     }
                 }
-            }
-            PromptDisplayEvent::OpenAIDocument {
-                document_id,
-                document_version,
-            } => {
-                ctx.emit(Event::ToggleAIDocumentPane {
-                    document_id: *document_id,
-                    document_version: *document_version,
-                });
             }
         }
     }
@@ -8089,9 +7994,6 @@ impl Input {
                     InputSuggestionsMode::IndexedReposMenu => {
                         // Repos menu selection is handled separately
                     }
-                    InputSuggestionsMode::PlanMenu { .. } => {
-                        // Plan menu selection is handled via InlinePlanMenuView
-                    }
                     InputSuggestionsMode::Closed => {
                         log::warn!("Got a InputSuggestionsEvent::Select when the mode was Closed!");
                     }
@@ -8246,10 +8148,6 @@ impl Input {
             }
             InputSuggestionsMode::IndexedReposMenu => {
                 // Repos menu selection is handled separately
-                false
-            }
-            InputSuggestionsMode::PlanMenu { .. } => {
-                // Plan menu selection is handled via InlinePlanMenuView
                 false
             }
         }
@@ -8519,12 +8417,6 @@ impl Input {
             }
             InputSuggestionsMode::IndexedReposMenu => {
                 self.inline_repos_menu_view.update(ctx, |view, ctx| {
-                    view.select_up(ctx);
-                });
-                true
-            }
-            InputSuggestionsMode::PlanMenu { .. } => {
-                self.inline_plan_menu_view.update(ctx, |view, ctx| {
                     view.select_up(ctx);
                 });
                 true
@@ -8799,12 +8691,6 @@ impl Input {
             }
             InputSuggestionsMode::IndexedReposMenu => {
                 self.inline_repos_menu_view.update(ctx, |view, ctx| {
-                    view.select_down(ctx);
-                });
-                true
-            }
-            InputSuggestionsMode::PlanMenu { .. } => {
-                self.inline_plan_menu_view.update(ctx, |view, ctx| {
                     view.select_down(ctx);
                 });
                 true
@@ -9805,9 +9691,6 @@ impl Input {
                     InputSuggestionsMode::IndexedReposMenu => {
                         // Repos menu handles its own state
                     }
-                    InputSuggestionsMode::PlanMenu { .. } => {
-                        // Plan menu handles its own state
-                    }
                 }
             }
             EditorEvent::BufferReplaced => {}
@@ -9909,9 +9792,6 @@ impl Input {
                         }
                         InputSuggestionsMode::IndexedReposMenu => {
                             // Repos menu handles its own selection state
-                        }
-                        InputSuggestionsMode::PlanMenu { .. } => {
-                            // Plan menu handles its own selection state
                         }
                     }
                 }
@@ -10219,11 +10099,6 @@ impl Input {
                         // For InsertDriveObject, format as <object_type:uid> and replace the "@" and any filter text
                         let drive_object_text = format!("<{object_type}:{object_uid}>");
                         self.replace_at_symbol_with_text(&drive_object_text, ctx);
-                    }
-                    AIContextMenuSearchableAction::InsertPlan { ai_document_uid } => {
-                        // For InsertPlan, format as <plan:uid> and replace the "@" and any filter text
-                        let ai_document_text = format!("<plan:{ai_document_uid}>");
-                        self.replace_at_symbol_with_text(&ai_document_text, ctx);
                     }
                     AIContextMenuSearchableAction::InsertConversation { conversation_id } => {
                         let conversation_text = format!("<convo:{conversation_id}>");
@@ -12390,10 +12265,6 @@ impl Input {
         } else if self.suggestions_mode_model.as_ref(ctx).is_repos_menu() {
             self.inline_repos_menu_view
                 .update(ctx, |view, ctx| view.accept_selected_item(false, ctx));
-            return;
-        } else if self.suggestions_mode_model.as_ref(ctx).is_plan_menu() {
-            self.inline_plan_menu_view
-                .update(ctx, |view, ctx| view.accept_selected_item(ctx));
             return;
         } else if self.suggestions_mode_model.as_ref(ctx).is_slash_commands() {
             if self.is_cloud_mode_input_v2_composing(ctx) {

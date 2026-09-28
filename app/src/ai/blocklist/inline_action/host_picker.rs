@@ -187,14 +187,6 @@ impl HostPicker {
         ctx.notify();
     }
 
-    /// Pass `true` to paint the open menu in the overlay layer (avoids
-    /// being visually covered by sibling pickers below the host picker).
-    pub fn set_use_overlay_layer(&mut self, use_overlay_layer: bool, ctx: &mut ViewContext<Self>) {
-        self.dropdown.update(ctx, |dropdown, ctx_dropdown| {
-            dropdown.set_use_overlay_layer(use_overlay_layer, ctx_dropdown);
-        });
-    }
-
     /// Anchors the open menu (e.g. flip upward to avoid covering siblings).
     pub fn set_menu_position(
         &mut self,

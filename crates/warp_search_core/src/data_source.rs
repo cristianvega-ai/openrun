@@ -31,10 +31,6 @@ lazy_static! {
         primary_text: "notebooks:",
         aliases: vec!["n:"]
     };
-    static ref PLANS_FILTER_ATOM: FilterAtom = FilterAtom {
-        primary_text: "plans:",
-        aliases: vec![]
-    };
     static ref ACTIONS_FILTER_ATOM: FilterAtom = FilterAtom {
         primary_text: "actions:",
         aliases: vec![]
@@ -138,9 +134,6 @@ pub enum QueryFilter {
     /// Only include results from NotebooksDataSource.
     Notebooks,
 
-    /// Only include results from PlansDataSource.
-    Plans,
-
     /// Filter results for command palette actions.
     Actions,
 
@@ -205,7 +198,6 @@ impl QueryFilter {
             QueryFilter::History => "Search history",
             QueryFilter::Workflows => "Search workflows",
             QueryFilter::Notebooks => "Search notebooks",
-            QueryFilter::Plans => "Search plans",
             QueryFilter::Actions => "Search actions",
             QueryFilter::Sessions => "Search sessions",
             QueryFilter::Tabs => "Search tabs",
@@ -234,7 +226,6 @@ impl QueryFilter {
             QueryFilter::History => &HISTORY_FILTER_ATOM,
             QueryFilter::Workflows => &WORKFLOWS_FILTER_ATOM,
             QueryFilter::Notebooks => &NOTEBOOKS_FILTER_ATOM,
-            QueryFilter::Plans => &PLANS_FILTER_ATOM,
             QueryFilter::Actions => &ACTIONS_FILTER_ATOM,
             QueryFilter::Sessions => &SESSIONS_FILTER_ATOM,
             QueryFilter::Tabs => &NO_FILTER_ATOM,
@@ -261,7 +252,6 @@ impl QueryFilter {
             QueryFilter::History => "history",
             QueryFilter::Workflows => "workflows",
             QueryFilter::Notebooks => "notebooks",
-            QueryFilter::Plans => "plans",
             QueryFilter::Actions => "actions",
             QueryFilter::Sessions => "sessions",
             QueryFilter::Tabs => "tabs",
@@ -288,7 +278,6 @@ impl QueryFilter {
             QueryFilter::History => Some("bundled/svg/history.svg"),
             QueryFilter::Workflows => Some("bundled/svg/workflow.svg"),
             QueryFilter::Notebooks => Some("bundled/svg/notebook.svg"),
-            QueryFilter::Plans => Some("bundled/svg/compass-3.svg"),
             QueryFilter::Actions => None,
             QueryFilter::Sessions => Some("bundled/svg/terminal-input.svg"),
             QueryFilter::Tabs => Some("bundled/svg/terminal-input.svg"),

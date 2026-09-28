@@ -20,12 +20,10 @@ use crate::ai::orchestration::OrchestrationConfigState;
 #[strum_discriminants(derive(EnumIter))]
 pub enum BlocklistOrchestrationTelemetryEvent {
     TeamAgentCommunicationFailed(TeamAgentCommunicationFailedEvent),
-    PlanConfigApprovalToggled(PlanConfigApprovalToggledEvent),
     RunAgentsCardDecision(RunAgentsCardDecisionEvent),
     RunAgentsCompleted(RunAgentsCompletedEvent),
     PillBarInteraction(PillBarInteractionEvent),
     OrchestrationEntered(OrchestrationEnteredEvent),
-    AgentProposedConfig(AgentProposedConfigEvent),
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -149,22 +147,6 @@ pub(crate) mod orchestration_modified_field {
     pub const AUTH_SECRET: &str = "auth_secret";
 }
 
-#[derive(Debug, Serialize)]
-pub struct PlanConfigApprovalToggledEvent {
-    pub conversation_id: AIConversationId,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plan_id: Option<String>,
-    /// State after the toggle. The pre-toggle state is the opposite
-    /// since this event only fires on a binary flip.
-    pub status: OrchestrationApprovalStatus,
-    pub execution_mode: OrchestrationExecutionModeKind,
-    pub harness: OrchestrationHarnessKind,
-    pub has_model: bool,
-    pub has_environment: bool,
-    pub has_worker_host: bool,
-    pub has_auth_secret: bool,
-}
-
 /// Decision a user took on the run_agents confirmation card.
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -219,11 +201,6 @@ pub struct RunAgentsCompletedEvent {
 }
 
 /// Surface that first introduced orchestration into a conversation.
-///
-/// Plan-card surfacing is intentionally NOT a variant here — that signal
-/// is covered by [`AgentProposedConfigEvent`] (fires once per plan card
-/// instance when an agent-authored snapshot first becomes visible) plus
-/// [`PlanConfigApprovalToggledEvent`] (the user's approval toggle).
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OrchestrationEntrySource {
@@ -239,21 +216,6 @@ pub struct OrchestrationEnteredEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_id: Option<String>,
     pub entry_source: OrchestrationEntrySource,
-}
-
-/// Fires when an agent-authored orchestration config snapshot first
-/// becomes visible to the user on a plan card. One emission per
-/// `OrchestrationConfigBlockView` instance.
-#[derive(Debug, Serialize)]
-pub struct AgentProposedConfigEvent {
-    pub conversation_id: AIConversationId,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plan_id: Option<String>,
-    pub harness: OrchestrationHarnessKind,
-    pub execution_mode: OrchestrationExecutionModeKind,
-    pub has_model: bool,
-    pub has_environment: bool,
-    pub has_worker_host: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -544,12 +506,10 @@ impl TelemetryEvent for BlocklistOrchestrationTelemetryEvent {
     fn payload(&self) -> Option<Value> {
         match self {
             Self::TeamAgentCommunicationFailed(event) => Some(json!(event)),
-            Self::PlanConfigApprovalToggled(event) => Some(json!(event)),
             Self::RunAgentsCardDecision(event) => Some(json!(event)),
             Self::RunAgentsCompleted(event) => Some(json!(event)),
             Self::PillBarInteraction(event) => Some(json!(event)),
             Self::OrchestrationEntered(event) => Some(json!(event)),
-            Self::AgentProposedConfig(event) => Some(json!(event)),
         }
     }
 
@@ -576,12 +536,10 @@ impl TelemetryEventDesc for BlocklistOrchestrationTelemetryEventDiscriminants {
             Self::TeamAgentCommunicationFailed => {
                 "AgentMode.Orchestration.TeamAgentCommunicationFailed"
             }
-            Self::PlanConfigApprovalToggled => "AgentMode.Orchestration.PlanConfigApprovalToggled",
             Self::RunAgentsCardDecision => "AgentMode.Orchestration.RunAgentsCardDecision",
             Self::RunAgentsCompleted => "AgentMode.Orchestration.RunAgentsCompleted",
             Self::PillBarInteraction => "AgentMode.Orchestration.PillBarInteraction",
             Self::OrchestrationEntered => "AgentMode.Orchestration.Entered",
-            Self::AgentProposedConfig => "AgentMode.Orchestration.AgentProposedConfig",
         }
     }
 
@@ -589,9 +547,6 @@ impl TelemetryEventDesc for BlocklistOrchestrationTelemetryEventDiscriminants {
         match self {
             Self::TeamAgentCommunicationFailed => {
                 "Failed to send an orchestration message or lifecycle event for a TeamAgent"
-            }
-            Self::PlanConfigApprovalToggled => {
-                "User toggled the Use orchestration switch on a plan card"
             }
             Self::RunAgentsCardDecision => {
                 "User accepted, accepted-without-orchestration, or rejected a run_agents confirmation card. Reports which config fields diverged from the original tool call and/or the active approved config."
@@ -603,10 +558,7 @@ impl TelemetryEventDesc for BlocklistOrchestrationTelemetryEventDiscriminants {
                 "User interacted with the orchestration pill bar (switch, pin, open in pane/tab, stop, kill, etc.)"
             }
             Self::OrchestrationEntered => {
-                "Orchestration was activated in a conversation via /orchestrate or a run_agents confirmation card surfacing. Plan-card entries are tracked separately via AgentProposedConfig + PlanConfigApprovalToggled."
-            }
-            Self::AgentProposedConfig => {
-                "An agent-authored orchestration config snapshot first became visible to the user on a plan card"
+                "Orchestration was activated in a conversation via /orchestrate or a run_agents confirmation card surfacing."
             }
         }
     }

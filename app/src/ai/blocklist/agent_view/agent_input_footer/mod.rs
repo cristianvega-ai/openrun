@@ -5,7 +5,6 @@ pub mod toolbar_item;
 
 use std::sync::Arc;
 
-use ai::document::{AIDocumentId, AIDocumentVersion};
 use ai::harness::Harness;
 use chrono::{DateTime, Local};
 use parking_lot::FairMutex;
@@ -1002,7 +1001,6 @@ impl AgentInputFooter {
                 chips
                     .iter()
                     .find(|chip| chip.as_ref(app).chip_kind() == chip_kind)
-                    .filter(|chip| chip.as_ref(app).should_render(app))
                     .map(|chip| ChildView::new(chip).finish())
             }
             AgentToolbarItemKind::ModelSelector => {
@@ -1353,10 +1351,6 @@ pub enum AgentInputFooterEvent {
     },
     OpenSettings(SettingsSection),
     OpenCodeReview,
-    OpenAIDocument {
-        document_id: AIDocumentId,
-        document_version: AIDocumentVersion,
-    },
     ShowContextMenu {
         position: Vector2F,
     },

@@ -82,7 +82,6 @@ pub enum AIContextMenuCategory {
     Blocks,
     Workflows,
     Notebooks,
-    Plans,
     Diffs,
     Docs,
     Tasks,
@@ -105,7 +104,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::Blocks => "Blocks",
             AIContextMenuCategory::Workflows => "Workflows",
             AIContextMenuCategory::Notebooks => "Notebooks",
-            AIContextMenuCategory::Plans => "Plans",
             AIContextMenuCategory::Diffs => "Diffs",
             AIContextMenuCategory::Docs => "Docs",
             AIContextMenuCategory::Tasks => "Past tasks",
@@ -128,7 +126,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::Blocks => "bundled/svg/terminal.svg",
             AIContextMenuCategory::Workflows => "bundled/svg/workflow.svg",
             AIContextMenuCategory::Notebooks => "bundled/svg/notebook.svg",
-            AIContextMenuCategory::Plans => "bundled/svg/compass-3.svg",
             AIContextMenuCategory::Diffs => "bundled/svg/diff.svg",
             AIContextMenuCategory::Docs => "bundled/svg/docs.svg",
             AIContextMenuCategory::Tasks => "bundled/svg/tasks.svg",
@@ -909,21 +906,7 @@ impl AIContextMenu {
             }
             #[cfg(not(target_family = "wasm"))]
             NavigationState::Category(AIContextMenuCategory::Notebooks) => {
-                let notebook_data_source = ctx.add_model(|_| NotebookDataSource::new(false));
-                self.mixer.update(ctx, |mixer, ctx| {
-                    mixer.add_sync_source(notebook_data_source, [QueryFilter::Notebooks]);
-                    mixer.run_query(
-                        Query {
-                            text: "".into(),
-                            filters: HashSet::new(),
-                        },
-                        ctx,
-                    );
-                });
-            }
-            #[cfg(not(target_family = "wasm"))]
-            NavigationState::Category(AIContextMenuCategory::Plans) => {
-                let notebook_data_source = ctx.add_model(|_| NotebookDataSource::new(true));
+                let notebook_data_source = ctx.add_model(|_| NotebookDataSource::new());
                 self.mixer.update(ctx, |mixer, ctx| {
                     mixer.add_sync_source(notebook_data_source, [QueryFilter::Notebooks]);
                     mixer.run_query(
@@ -1060,13 +1043,7 @@ impl AIContextMenu {
                     });
                 }
                 AIContextMenuCategory::Notebooks => {
-                    let notebook_data_source = ctx.add_model(|_| NotebookDataSource::new(false));
-                    self.mixer.update(ctx, |mixer, _ctx| {
-                        mixer.add_sync_source(notebook_data_source, [QueryFilter::Notebooks]);
-                    });
-                }
-                AIContextMenuCategory::Plans => {
-                    let notebook_data_source = ctx.add_model(|_| NotebookDataSource::new(true));
+                    let notebook_data_source = ctx.add_model(|_| NotebookDataSource::new());
                     self.mixer.update(ctx, |mixer, _ctx| {
                         mixer.add_sync_source(notebook_data_source, [QueryFilter::Notebooks]);
                     });

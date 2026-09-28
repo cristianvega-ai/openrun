@@ -59,6 +59,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Launch, feature-intro and vertical-tabs intro modals](#launch-feature-intro-and-vertical-tabs-intro-modals) — deleted the Oz, OpenWarp, orchestration and Warp Agent CLI launch modals, the feature-intro popover and the vertical-tabs intro flow, with their one-time flags and debug actions
 - [Onboarding: AI slides, callout tutorial and Get Started](#onboarding-ai-slides-callout-tutorial-and-get-started) — onboarding is now four slides (welcome, customize, CLI agents, theme); removed the agent-intention flow, the AI-access and offer slides, the in-terminal callout tutorial that started an agent, the Get Started pane and coding entrypoints
 - [Skills](#skills) — deleted the skills feature (`SKILL.md` discovery, the `/skills` and `/open-skill` commands, the `@`-menu skills category, the `read_skill` tool, bundled and channel-gated skill files) and the "Fix with Warp Agent" and tab-config-editor agent buttons that invoked bundled skills
+- [AI plan documents and to-do popup](#ai-plan-documents-and-to-do-popup) — removed the plan (AI document) pane, the plan menu and plan/to-do chips, the to-do popup and the plan-related shortcuts and attachments
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1587,3 +1588,28 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for the multi-agent API cleanup (AI-29): the proto-facing `ReadSkill`/`InvokeSkill` message and tool handling in `agent/api/convert_*`, `task/helper.rs` and `conversation_yaml.rs`. They are wire types from `warp_multi_agent_api`; nothing maps them to client actions any more.
 - Left for a `repo_metadata` cleanup: the standing-query and force-included-path machinery in `crates/repo_metadata` (`standing_queries.rs`, `Entry::build_tree_with_standing_queries`, `register_force_included_paths`, `set_project_skill_provider_paths`, `RepoMetadataEvent::StandingQueryResultsUpdated`) existed for skill discovery and now has no callers.
 - Left for SWP: the launch modals' copy mentioning skills (`oz_launch.rs`, `openwarp_launch_modal`), and dev-workflow docs in `AGENTS.md`, `CONTRIBUTING.md` and `FAQ.md` about coding-agent skills.
+
+## AI plan documents and to-do popup
+**Why:** Plans are documents the built-in agent writes, versions and syncs to Warp Drive as notebooks, and the plan pane, plan menu and to-do popup are the only ways to read and act on them. With the built-in agent going away they have no purpose.
+
+**Removed:**
+- `app/src/ai/ai_document_view.rs` (the plan editor, its version history and "attach to agent" actions), `pane_group/pane/ai_document_pane.rs` with `IPaneType::AIDocument`, `LeafContents::AIDocument` / `AIDocumentPaneSnapshot`, the deferred-pane restoration that only this pane used (`IPaneType::DeferredPlaceholder`, `process_deferred_panes`), and the `PaneGroup` plan-pane functions.
+- `terminal/input/plans/` (the `/plan` picker menu: `InputSuggestionsMode::PlanMenu`, `InlineMenuType::PlanMenu`), the `@`-menu "Plans" category (`AIContextMenuCategory::Plans`, `AIContextMenuSearchableAction::InsertPlan`, `QueryFilter::Plans`) and the `<plan:...>` attachment inserted by "Attach to active session" on a plan notebook.
+- `ai/agent/todos/popup.rs` (the to-do list popup), `ai/blocklist/prompt/plan_and_todo_list.rs` (the plan and to-do chip), `ContextChipKind::AgentPlanAndTodoList` and the agent footer entry that hosted it.
+- `ai/document/orchestration_config_block.rs` (the orchestration config card on a plan) and its telemetry (`PlanConfigApprovalToggled`, `AgentProposedConfig`).
+- `ai/blocklist/inline_action/create_or_edit_document.rs` (the "plan created" card in an AI block), the plan streaming preview in `AIBlock`, and the auto-open of the plan pane.
+- Actions and events: `WorkspaceAction::{ToggleAIDocumentPane, HideAIDocumentPanes, OpenAIDocumentPane}`, `TerminalAction::{ToggleAIDocumentPane, ToggleTodoPopup, CloseTodoPopup}`, the `cmdorctrl-alt-p` / `cmd-meta-p` bindings, the "to view plan" hint in the agent message bar, and the matching terminal, input, block, footer and chip events.
+- Persistence: the `ai_document_panes` reads and writes, `ModelEvent::SaveAIDocumentContent` and the `AIDocumentPane` / `NewAIDocumentPane` model types. `save_app_state` still clears `ai_document_panes` (foreign key to `pane_leaves`) until DB-1.
+- Integration tests `test_copy_ai_document_as_markdown_from_overflow_menu` and `test_restored_ai_document_populates_code_block_after_first_layout`, with `integration_testing/ai_document.rs`.
+
+**Modified:**
+- `AIDocumentModel` keeps only what the agent's create, edit and read document actions need: the pane visibility tracking and the SQLite restore hook are gone.
+- A session that was saved with a plan pane restores without it (the leaf fails with "Unrecognized pane kind", like the removed Rules and MCP panes).
+- Stored agent toolbar layouts that list the plan and to-do chip no longer parse that entry, which falls back like any other unknown value.
+
+**User-visible impact:** No plan pane, plan picker, plan or to-do chip, to-do popup or plan shortcut. Plan notebooks in Drive stay ordinary notebooks.
+
+**Notes:**
+- Left for AI-28/AI-29: `AIDocumentModel` (`app/src/ai/document/`) and the `CreateDocuments`, `EditDocuments` and `ReadDocuments` agent actions with their executors, history restore and conversation conversion. The plan says to delete `ai/document/` here, but those AI model modules stay until the agent core goes. `AIAgentTodoList` also stays with the agent.
+- Left for DRV-3: `notebook.ai_document_id`, `AIDocumentId` in the notebook cloud model and GraphQL types, `DriveObjectType::Notebook { is_ai_document }`, `Notebook { is_plan }` in vertical tabs and the `is_plan` accessors in `notebooks/`.
+- Left for AI-19: `OrchestrationConfigState::to_orchestration_config` is now only used by its tests. Left for DB-1: the `ai_document_panes` table.

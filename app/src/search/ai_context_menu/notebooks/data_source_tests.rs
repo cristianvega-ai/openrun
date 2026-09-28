@@ -116,7 +116,7 @@ fn zero_state_scores_reflect_recency() {
             );
         });
 
-        let data_source = NotebookDataSource::new(false);
+        let data_source = NotebookDataSource::new();
         let results = app.read(|app| data_source.run_query(&Query::from(""), app).unwrap());
 
         assert_eq!(results.len(), 3);
@@ -163,7 +163,7 @@ fn filtered_state_adds_recency_bonus_to_equal_matches() {
             );
         });
 
-        let data_source = NotebookDataSource::new(false);
+        let data_source = NotebookDataSource::new();
         let results = app.read(|app| data_source.run_query(&Query::from("plan"), app).unwrap());
 
         assert_eq!(results.len(), 3);

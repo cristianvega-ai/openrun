@@ -277,9 +277,6 @@ pub enum TerminalAction {
     ToggleQueueNextPrompt,
     ResumeConversation,
     ForkConversationFromLastKnownGoodState,
-    ToggleAIDocumentPane,
-    ToggleTodoPopup,
-    CloseTodoPopup,
     ToggleCodeReviewPane {
         entrypoint: CodeReviewPaneEntrypoint,
     },
@@ -575,9 +572,6 @@ impl fmt::Debug for TerminalAction {
             ForkConversationFromLastKnownGoodState => {
                 write!(f, "ForkConversationFromLastKnownGoodState")
             }
-            ToggleAIDocumentPane => write!(f, "ToggleAIDocumentPane"),
-            ToggleTodoPopup => write!(f, "ToggleTodoPopup"),
-            CloseTodoPopup => write!(f, "CloseTodoPopup"),
             ToggleCodeReviewPane { .. } => write!(f, "ToggleCodeReviewPane"),
             AddProjectAtCurrentDirectory => write!(f, "AddProjectAtCurrentDirectory"),
             OpenBillingAndUsagePane => write!(f, "OpenBillingAndUsagePane"),

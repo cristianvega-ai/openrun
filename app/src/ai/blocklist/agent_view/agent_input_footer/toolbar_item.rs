@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use warpui::SingletonEntity;
 
 use crate::chip_configurator::ConfigurableToolbarItem;
-use crate::context_chips::{ContextChipKind, agent_footer_available_chips};
+use crate::context_chips::{ContextChipKind, available_chips};
 use crate::features::FeatureFlag;
 use crate::settings::{AISettings, CodeSettings};
 use crate::terminal::shared_session::SharedSessionStatus;
@@ -180,10 +180,7 @@ impl AgentToolbarItemKind {
 
     /// Default right-side items for the agent view footer.
     pub fn default_right() -> Vec<Self> {
-        let mut items = vec![
-            Self::ContextChip(ContextChipKind::AgentPlanAndTodoList),
-            Self::ContextWindowUsage,
-        ];
+        let mut items = vec![Self::ContextWindowUsage];
         if FeatureFlag::PricingTransparency.is_enabled() {
             items.push(Self::UsageSummary);
         }
@@ -201,7 +198,7 @@ impl AgentToolbarItemKind {
 
     /// All items available for the agent view footer configurator.
     pub fn all_available() -> Vec<Self> {
-        let mut items: Vec<Self> = agent_footer_available_chips()
+        let mut items: Vec<Self> = available_chips()
             .into_iter()
             .map(Self::ContextChip)
             .collect();

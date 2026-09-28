@@ -23,7 +23,6 @@ pub struct NotebookSearchItem {
     pub notebook_description: Option<String>,
     pub notebook_uid: String,
     pub match_result: FuzzyMatchResult,
-    pub ai_document_uid: Option<String>,
     /// True if match_result was computed against the notebook name (vs description)
     pub is_match_on_name: bool,
 }
@@ -39,11 +38,7 @@ impl SearchItem for NotebookSearchItem {
         Container::new(
             ConstrainedBox::new(
                 Icon::new(
-                    if self.ai_document_uid.is_some() {
-                        "bundled/svg/compass-3.svg"
-                    } else {
-                        "bundled/svg/notebook.svg"
-                    },
+                    "bundled/svg/notebook.svg",
                     highlight_state.icon_fill(appearance).into_solid(),
                 )
                 .finish(),
@@ -172,11 +167,6 @@ impl SearchItem for NotebookSearchItem {
     }
 
     fn accept_result(&self) -> Self::Action {
-        if let Some(ai_document_uid) = &self.ai_document_uid {
-            return AIContextMenuSearchableAction::InsertPlan {
-                ai_document_uid: ai_document_uid.clone(),
-            };
-        }
         AIContextMenuSearchableAction::InsertDriveObject {
             object_type: ObjectType::Notebook,
             object_uid: self.notebook_uid.clone(),

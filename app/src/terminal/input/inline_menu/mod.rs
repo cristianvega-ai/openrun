@@ -44,7 +44,6 @@ pub enum InlineMenuType {
     RewindMenu,
     InlineHistoryMenu,
     IndexedReposMenu,
-    PlanMenu,
 }
 
 impl InlineMenuType {
@@ -58,7 +57,6 @@ impl InlineMenuType {
             InlineMenuType::RewindMenu => "/Rewind",
             InlineMenuType::InlineHistoryMenu => "History",
             InlineMenuType::IndexedReposMenu => "/Repos",
-            InlineMenuType::PlanMenu => "/Plans",
         }
     }
 
@@ -80,7 +78,6 @@ impl InlineMenuType {
                 Some(InlineMenuType::InlineHistoryMenu)
             }
             InputSuggestionsMode::IndexedReposMenu => Some(InlineMenuType::IndexedReposMenu),
-            InputSuggestionsMode::PlanMenu { .. } => Some(InlineMenuType::PlanMenu),
             InputSuggestionsMode::Closed
             | InputSuggestionsMode::HistoryUp { .. }
             | InputSuggestionsMode::CompletionSuggestions { .. }

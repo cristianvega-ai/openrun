@@ -6,19 +6,15 @@ use warpui::elements::{
     ParentElement, Wrap,
 };
 use warpui::{
-    AppContext, Entity, EntityId, FocusContext, ModelHandle, SingletonEntity, TypedActionView,
-    View, ViewContext, ViewHandle,
+    AppContext, Entity, EntityId, FocusContext, ModelHandle, TypedActionView, View, ViewContext,
+    ViewHandle,
 };
 
 use super::display_chip::{DisplayChip, DisplayChipConfig, PromptDisplayChipEvent};
 use super::prompt_type::PromptType;
-use super::{ChipResult, ContextChipKind, git_line_changes_from_chips};
+use super::{ChipResult, git_line_changes_from_chips};
 use crate::ai::blocklist::agent_view::AgentViewController;
-use crate::ai::blocklist::{
-    BlocklistAIContextModel, BlocklistAIHistoryEvent, BlocklistAIHistoryModel,
-    BlocklistAIInputEvent, BlocklistAIInputModel,
-};
-use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentVersion};
+use crate::ai::blocklist::{BlocklistAIContextModel, BlocklistAIInputEvent, BlocklistAIInputModel};
 use crate::completer::SessionContext;
 use crate::context_chips::display_chip::{DisplayChipAction, PromptChipShellCommand};
 use crate::terminal::input::MenuPositioningProvider;
@@ -55,18 +51,12 @@ pub enum PromptDisplayAction {
 pub enum PromptDisplayEvent {
     OpenFile(String),
     OpenTextFileInCodeEditor(String),
-    ToggleMenu {
-        open: bool,
-    },
+    ToggleMenu { open: bool },
     OpenCodeReview,
     OpenConversationHistory,
     OpenCommandPaletteFiles,
     RunAgentQuery(String),
     TryExecuteCommand(PromptChipShellCommand),
-    OpenAIDocument {
-        document_id: AIDocumentId,
-        document_version: AIDocumentVersion,
-    },
 }
 
 impl PromptDisplay {
@@ -96,23 +86,6 @@ impl PromptDisplay {
                 }
             }
         });
-
-        // Subscribe todo list updates to refresh the todo list chip visibility
-        ctx.subscribe_to_model(
-            &BlocklistAIHistoryModel::handle(ctx),
-            |me, _, event, ctx| {
-                if let BlocklistAIHistoryEvent::UpdatedTodoList {
-                    terminal_surface_id,
-                    ..
-                } = event
-                {
-                    if *terminal_surface_id != me.terminal_view_id {
-                        return;
-                    }
-                    ctx.notify();
-                }
-            },
-        );
 
         ctx.subscribe_to_model(&agent_view_controller, |_, _, _, ctx| {
             ctx.notify();
@@ -244,16 +217,6 @@ impl PromptDisplay {
                     ctx.emit(PromptDisplayEvent::TryExecuteCommand(cmd.clone()));
                     ctx.notify();
                 }
-                PromptDisplayChipEvent::OpenAIDocument {
-                    document_id,
-                    document_version,
-                } => {
-                    ctx.emit(PromptDisplayEvent::OpenAIDocument {
-                        document_id: *document_id,
-                        document_version: *document_version,
-                    });
-                    ctx.notify();
-                }
             });
 
             self.display_chips.push(view_handle.clone());
@@ -312,7 +275,9 @@ impl PromptDisplay {
             prompt
                 .chips(ctx)
                 .iter()
-                .find(|chip_result| matches!(chip_result.kind, ContextChipKind::ShellGitBranch))
+                .find(|chip_result| {
+                    matches!(chip_result.kind, super::ContextChipKind::ShellGitBranch)
+                })
                 .and_then(|chip_result| chip_result.value.as_ref().map(|v| v.to_string()))
         })
     }
@@ -375,7 +340,7 @@ impl View for PromptDisplay {
         }
     }
 
-    fn render(&self, app: &AppContext) -> Box<dyn Element> {
+    fn render(&self, _app: &AppContext) -> Box<dyn Element> {
         let mut row = Wrap::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_alignment(MainAxisAlignment::Start)
@@ -383,14 +348,7 @@ impl View for PromptDisplay {
             .with_run_spacing(super::spacing::UDI_ROW_RUN_SPACING);
 
         self.display_chips.iter().for_each(|display_chip| {
-            let chip = display_chip.as_ref(app);
-            // AgentPlanAndTodoList is only shown in the agent input footer
-            if matches!(chip.chip_kind(), ContextChipKind::AgentPlanAndTodoList) {
-                return;
-            }
-            if chip.should_render(app) {
-                row.add_child(ChildView::new(display_chip).finish());
-            }
+            row.add_child(ChildView::new(display_chip).finish());
         });
 
         // This is a hack to apply horizontal clipping without vertical clipping (for padding).

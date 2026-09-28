@@ -9,13 +9,13 @@ use warp_multi_agent_api::response_event::stream_finished;
 use warp_multi_agent_api::{self as api};
 
 use super::schema::{
-    agent_conversations, agent_tasks, ai_document_panes, ambient_agent_panes, app, blocks,
-    cloud_objects_refreshes, code_pane_tabs, code_panes, code_review_panes, commands,
-    env_var_collection_panes, folders, generic_string_objects, ignored_suggestions, notebook_panes,
-    notebooks, object_actions, object_metadata, object_permissions, pane_branches, pane_leaves,
-    pane_nodes, panels, projects, settings_panes, tab_groups, tabs, team_members, team_settings,
-    teams, terminal_panes, user_profiles, windows, workflow_panes, workflows,
-    workspace_language_server, workspace_metadata, workspace_teams, workspaces,
+    agent_conversations, agent_tasks, ambient_agent_panes, app, blocks, cloud_objects_refreshes,
+    code_pane_tabs, code_panes, code_review_panes, commands, env_var_collection_panes, folders,
+    generic_string_objects, ignored_suggestions, notebook_panes, notebooks, object_actions,
+    object_metadata, object_permissions, pane_branches, pane_leaves, pane_nodes, panels, projects,
+    settings_panes, tab_groups, tabs, team_members, team_settings, teams, terminal_panes,
+    user_profiles, windows, workflow_panes, workflows, workspace_language_server,
+    workspace_metadata, workspace_teams, workspaces,
 };
 
 #[derive(Insertable)]
@@ -551,9 +551,6 @@ pub const CODE_REVIEW_PANE_KIND: &str = "code_review";
 /// The [`pane_leaves::kind`] value for execution profile editor panes.
 pub const EXECUTION_PROFILE_EDITOR_PANE_KIND: &str = "execution_profile_editor";
 
-/// The [`pane_leaves::kind`] value for AI document panes.
-pub const AI_DOCUMENT_PANE_KIND: &str = "ai_document";
-
 /// The [`pane_leaves::kind`] value for ambient agent (cloud mode) panes.
 pub const AMBIENT_AGENT_PANE_KIND: &str = "ambient_agent";
 
@@ -845,28 +842,6 @@ pub struct AgentTaskRecord {
     pub task_id: String,
     pub task: Vec<u8>,
     pub last_modified_at: NaiveDateTime,
-}
-
-#[derive(Debug, PartialEq, Queryable, Selectable, Clone)]
-#[diesel(table_name = ai_document_panes)]
-#[diesel(primary_key(id))]
-pub struct AIDocumentPane {
-    pub id: i32,
-    pub kind: String,
-    pub document_id: String,
-    pub version: i32,
-    pub content: Option<String>,
-    pub title: Option<String>,
-}
-
-#[derive(Debug, Insertable)]
-#[diesel(table_name = ai_document_panes)]
-pub struct NewAIDocumentPane {
-    pub id: i32,
-    pub document_id: String,
-    pub version: i32,
-    pub content: Option<String>,
-    pub title: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]

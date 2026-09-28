@@ -488,7 +488,6 @@ impl CLIAgentFooter {
         self.display_chips
             .iter()
             .find(|chip| chip.as_ref(app).chip_kind() == chip_kind)
-            .filter(|chip| chip.as_ref(app).should_render(app))
             .map(|chip| ChildView::new(chip).finish())
     }
 
