@@ -131,7 +131,6 @@ enum AICreditsUsageBucket {
   COMPUTE
   PLATFORM
   SUGGESTED_CODE_DIFFS
-  VOICE
 }
 
 enum AICreditsUsageSource {

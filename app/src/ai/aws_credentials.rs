@@ -224,14 +224,10 @@ impl AwsCredentialRefresher for ApiKeyManager {
     }
 
     fn subscribe_to_settings_changes(&mut self, ctx: &mut ModelContext<Self>) {
-        // Subscribe to UserWorkspaces events to refresh AWS credentials when workspace settings change
-        // (this also initializes AWS credentials on app startup via TeamsChanged)
+        // Refresh AWS credentials when the workspace changes (this also initializes AWS credentials
+        // on app startup via TeamsChanged)
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |manager, _, event, ctx| {
-            if matches!(
-                event,
-                UserWorkspacesEvent::UpdateWorkspaceSettingsSuccess
-                    | UserWorkspacesEvent::TeamsChanged
-            ) {
+            if matches!(event, UserWorkspacesEvent::TeamsChanged) {
                 drop(refresh_aws_credentials(manager, ctx));
             }
         });

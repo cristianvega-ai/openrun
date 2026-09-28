@@ -22,23 +22,18 @@ use super::workspace::{
 };
 use crate::ai::llms::{AvailableLLMs, MODELS_BY_FEATURE_CACHE_KEY, ModelsByFeature};
 use crate::auth::{AuthStateProvider, UserUid};
-use crate::channel::ChannelState;
 use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{CloudObjectEventEntrypoint, ObjectType, Owner, Space};
-use crate::pricing::PricingInfoModel;
+use crate::cloud_object::{CloudObjectEventEntrypoint, Owner, Space};
 use crate::server::ids::ServerId;
 use crate::server::server_api::team::TeamClient;
-use crate::server::server_api::workspace::{PurchaseAddonCreditsOutcome, WorkspaceClient};
+use crate::server::server_api::workspace::WorkspaceClient;
 #[cfg(test)]
 use crate::server::server_api::{team::MockTeamClient, workspace::MockWorkspaceClient};
 use crate::settings::PrivacySettings;
 #[cfg(test)]
 use crate::workspaces::workspace::{
-    AIAutonomyPolicy, AiAutonomySettings, BillingMetadata, CustomerType, SplitListSetting,
-    WorkspaceMember, WorkspaceSettings,
-};
-use crate::workspaces::workspace::{
-    AiOverages, PurchaseAddOnCreditsPolicy, UsageBasedPricingSettings,
+    AIAutonomyPolicy, AiAutonomySettings, BillingMetadata, SplitListSetting, WorkspaceMember,
+    WorkspaceSettings,
 };
 pub(crate) mod billing_workspace_settings;
 pub(crate) mod team_workspace_settings;
@@ -49,8 +44,6 @@ pub use team_workspace_settings::TeamContextForOperation;
 #[cfg(test)]
 pub(crate) use team_workspace_settings::TeamlessScopeForTest;
 pub use team_workspace_settings::{ResolvedTeamScope, TeamContext, TeamContextResolver, TeamScope};
-
-const STRIPE_SUBSCRIPTION_INTERVAL_PAGE_PREFIX: &str = "/upgrade";
 
 #[derive(Debug)]
 pub enum UserWorkspacesEvent {
@@ -66,10 +59,6 @@ pub enum UserWorkspacesEvent {
     ResetInviteLinksRejected(anyhow::Error),
     DeleteTeamInvite,
     DeleteTeamInviteRejected(anyhow::Error),
-    GenerateUpgradeLink(String),
-    GenerateUpgradeLinkRejected(anyhow::Error),
-    GenerateStripeBillingPortalLink(String),
-    GenerateStripeBillingPortalLinkRejected(anyhow::Error),
     ToggleTeamDiscoverabilitySuccess,
     ToggleTeamDiscoverabilityRejected(anyhow::Error),
     JoinTeamWithTeamDiscoverySuccess,
@@ -91,17 +80,6 @@ pub enum UserWorkspacesEvent {
     RemoveUserFromTeamRejected(anyhow::Error),
     RemoveUserFromWorkspaceSuccess,
     RemoveUserFromWorkspaceRejected(anyhow::Error),
-    UpdateWorkspaceSettingsSuccess,
-    UpdateWorkspaceSettingsRejected(anyhow::Error),
-    AiOveragesUpdated,
-    PurchaseAddonCreditsSuccess,
-    /// The purchase requires the user to complete checkout in the browser
-    /// (no saved payment method). Credits arrive via webhook + polling after
-    /// checkout completes.
-    PurchaseAddonCreditsCheckoutRequired {
-        checkout_url: String,
-    },
-    PurchaseAddonCreditsRejected(anyhow::Error),
     /// Fired whenever the set of teams the user is on changes.
     TeamsChanged,
     /// Fired when the selected workspace actually changes to a different one.
@@ -111,8 +89,6 @@ pub enum UserWorkspacesEvent {
     WindowTeamChanged {
         window_id: WindowId,
     },
-    /// Fired when a service agreement's sunsetted_to_build_ts field is updated.
-    SunsettedToBuildDataUpdated,
 }
 
 /// UserWorkspaces is a singleton model that holds workspace metadata (name, members, etc).
@@ -124,12 +100,6 @@ pub struct UserWorkspaces {
     workspaces: Tracked<Vec<Workspace>>,
     window_team_uids: HashMap<WindowId, Option<ServerId>>,
     joinable_teams: Vec<DiscoverableTeam>,
-    /// The user-level add-on credits purchase policy from the latest
-    /// workspaces-metadata response. Teamless (fresh free) users have no
-    /// team and their only workspace is the server's placeholder, which is
-    /// filtered out of `workspaces` — this is the only place their purchase
-    /// policy survives.
-    user_purchase_policy: Option<PurchaseAddOnCreditsPolicy>,
     /// The model catalog to fall back to when no current workspace exists: before login, or
     /// for a logged-in user whose only workspace is the server's placeholder, which is
     /// filtered out of `workspaces`.
@@ -145,17 +115,6 @@ pub struct WorkspacesMetadataResponse {
     pub workspaces: Vec<Workspace>,
     /// The list of discoverable teams that the user can join.
     pub joinable_teams: Vec<DiscoverableTeam>,
-    /// The user-level add-on credits purchase policy; the teamless-purchase
-    /// fallback (see [`UserWorkspaces::purchase_policy`]).
-    pub user_purchase_policy: Option<PurchaseAddOnCreditsPolicy>,
-}
-
-// A representation of all data we fetch at a single time via our 10 minute poll.
-// Prefer adding to this struct if you need relatively fresh data vs making
-// independent queries.
-pub struct WorkspacesMetadataWithPricing {
-    pub metadata: WorkspacesMetadataResponse,
-    pub pricing_info: Option<warp_graphql::billing::PricingInfo>,
 }
 
 pub struct CreateTeamResponse {
@@ -184,7 +143,6 @@ impl UserWorkspaces {
             workspaces: cached_workspaces.into(),
             window_team_uids: Default::default(),
             joinable_teams: Default::default(),
-            user_purchase_policy: None,
             workspaceless_models_by_feature: None,
             team_client,
             workspace_client,
@@ -213,7 +171,6 @@ impl UserWorkspaces {
             workspaces: cached_workspaces.into(),
             window_team_uids: Default::default(),
             joinable_teams: Default::default(),
-            user_purchase_policy: None,
             workspaceless_models_by_feature: None,
             team_client,
             workspace_client,
@@ -239,56 +196,6 @@ impl UserWorkspaces {
 
     pub(crate) fn set_workspaceless_models_by_feature(&mut self, models: ModelsByFeature) {
         self.workspaceless_models_by_feature = Some(models);
-    }
-
-    pub fn upgrade_link(user_id: UserUid) -> String {
-        format!(
-            "{}{}/{}/{}",
-            ChannelState::server_root_url(),
-            STRIPE_SUBSCRIPTION_INTERVAL_PAGE_PREFIX,
-            "user",
-            user_id.as_str()
-        )
-    }
-
-    // TODO(isaiah): make me private in favour for upgrade_link_for_scope being the public facing api
-    pub fn upgrade_link_for_team(team_uid: ServerId) -> String {
-        format!(
-            "{}{}/{}",
-            ChannelState::server_root_url(),
-            STRIPE_SUBSCRIPTION_INTERVAL_PAGE_PREFIX,
-            team_uid
-        )
-    }
-
-    pub(crate) fn upgrade_link_for_scope<S: TeamScope + ?Sized>(
-        &self,
-        scope: &S,
-        app: &AppContext,
-    ) -> String {
-        match scope.team_uid() {
-            Some(team_uid) => Self::upgrade_link_for_team(team_uid),
-            None => Self::upgrade_link(
-                AuthStateProvider::as_ref(app)
-                    .get()
-                    .user_id()
-                    .unwrap_or_default(),
-            ),
-        }
-    }
-
-    pub fn admin_billing_link_for_team(team_uid: ServerId) -> String {
-        format!(
-            "{}/admin/{team_uid}/billing",
-            ChannelState::server_root_url().trim_end_matches('/')
-        )
-    }
-
-    pub fn admin_billing_link_for_default_team(&self, user_email: &str) -> Option<String> {
-        let team_uid = self.inherited_or_default_team_uid(None)?;
-        self.team_from_uid(team_uid)
-            .filter(|team| team.has_admin_permissions(user_email))
-            .map(|_| Self::admin_billing_link_for_team(team_uid))
     }
 
     pub fn team_from_uid(&self, team_uid: ServerId) -> Option<&Team> {
@@ -456,64 +363,6 @@ impl UserWorkspaces {
         self.workspaces.iter_mut().find(|w| w.uid == workspace_uid)
     }
 
-    pub fn is_at_tier_limit_for_object_type(
-        team_uid: ServerId,
-        object_type: ObjectType,
-        ctx: &AppContext,
-    ) -> bool {
-        match object_type {
-            ObjectType::Notebook => {
-                !UserWorkspaces::has_capacity_for_shared_notebooks(team_uid, ctx, 1)
-            }
-            ObjectType::Folder => false,
-            ObjectType::GenericStringObject(_) => false,
-        }
-    }
-
-    pub fn is_at_tier_limit_for_some_warp_drive_objects(
-        team_uid: ServerId,
-        ctx: &AppContext,
-    ) -> bool {
-        UserWorkspaces::is_at_tier_limit_for_object_type(team_uid, ObjectType::Notebook, ctx)
-    }
-
-    // Checks if the team has capacity for another shared notebook for their current
-    // billing tier, given their current notebook count and delinquency status.
-    pub fn has_capacity_for_shared_notebooks(
-        team_uid: ServerId,
-        ctx: &AppContext,
-        new_shared_notebooks: usize,
-    ) -> bool {
-        let current_shared_notebooks = CloudModel::as_ref(ctx)
-            .active_notebooks_in_space(Space::Team { team_uid }, ctx)
-            .count();
-
-        let team = UserWorkspaces::as_ref(ctx).team_from_uid(team_uid);
-        if let Some(team) = team {
-            // If the team is past due or unpaid, then don't allow new notebooks.
-            if team.billing_metadata.is_delinquent_due_to_payment_issue() {
-                return false;
-            }
-
-            if let Some(policy) = team.billing_metadata.tier.shared_notebooks_policy {
-                // Allow new notebooks if policy is unlimited or if the number of notebooks
-                // is less than the limit.
-                policy.is_unlimited
-                    || current_shared_notebooks + new_shared_notebooks
-                        <= policy
-                            .limit
-                            .try_into()
-                            .expect("shared notebooks limit should be within max i64 range")
-            } else {
-                // If no policy is set, then allow it to go through by default (should still be enforced server-side)
-                true
-            }
-        } else {
-            // If the team is not found, then allow it to go through by default (should still be enforced server-side)
-            true
-        }
-    }
-
     /// The user's single team in the current workspace.
     ///
     /// Having no workspace is reported as [`SoleTeamError::NoTeam`]: a user with no workspace
@@ -544,13 +393,6 @@ impl UserWorkspaces {
     pub fn current_workspace(&self) -> Option<&Workspace> {
         self.current_workspace_uid
             .and_then(|workspace_uid| self.workspace_from_uid(workspace_uid))
-    }
-
-    /// Updates the user-level add-on credits purchase policy captured from a
-    /// workspaces-metadata response. Must be called on every path that
-    /// applies such a response so the teamless fallback can't go stale.
-    pub fn set_user_purchase_policy(&mut self, policy: Option<PurchaseAddOnCreditsPolicy>) {
-        self.user_purchase_policy = policy;
     }
 
     pub fn current_workspace_mut(&mut self) -> Option<&mut Workspace> {
@@ -696,52 +538,10 @@ impl UserWorkspaces {
     }
 
     pub fn update_workspaces(&mut self, workspaces: Vec<Workspace>, ctx: &mut ModelContext<Self>) {
-        // Check if sunsetted_to_build_ts changed for any workspace
-        let sunsetted_to_build_changed = self.has_sunsetted_to_build_data_changed(&workspaces);
-
         *self.workspaces = workspaces;
         let reassigned_windows = self.reconcile_window_team_assignments();
         self.notify_and_emit_teams_changed(ctx);
         Self::emit_window_team_changed(reassigned_windows, ctx);
-
-        if sunsetted_to_build_changed {
-            ctx.emit(UserWorkspacesEvent::SunsettedToBuildDataUpdated);
-        }
-    }
-
-    /// Checks if any workspace's service agreement sunsetted_to_build_ts field has changed.
-    fn has_sunsetted_to_build_data_changed(&self, new_workspaces: &[Workspace]) -> bool {
-        for new_workspace in new_workspaces {
-            // Find the corresponding old workspace
-            let old_workspace = self.workspaces.iter().find(|w| w.uid == new_workspace.uid);
-
-            if let Some(old_workspace) = old_workspace {
-                // Check if any team's service agreement sunsetted_to_build_ts changed
-                for new_team in &new_workspace.teams {
-                    let old_team = old_workspace.teams.iter().find(|t| t.uid == new_team.uid);
-
-                    if let Some(old_team) = old_team {
-                        let old_sunsetted = old_team
-                            .billing_metadata
-                            .service_agreements
-                            .first()
-                            .and_then(|sa| sa.sunsetted_to_build_ts);
-
-                        let new_sunsetted = new_team
-                            .billing_metadata
-                            .service_agreements
-                            .first()
-                            .and_then(|sa| sa.sunsetted_to_build_ts);
-
-                        // Detect if it changed from None to Some or changed value
-                        if old_sunsetted != new_sunsetted {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        false
     }
 
     fn notify_and_emit_teams_changed(&self, ctx: &mut ModelContext<Self>) {
@@ -779,21 +579,14 @@ impl UserWorkspaces {
     // TODO follow up with moving other modifying calls out of UserWorkspaces to TeamUpdateManager
     fn on_workspaces_updated(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
             Ok(response) => {
-                if let Some(pricing_info) = response.pricing_info {
-                    PricingInfoModel::handle(ctx).update(ctx, |model, ctx| {
-                        model.update_pricing_info(pricing_info, ctx);
-                    });
-                }
+                let workspaces = response.workspaces;
+                let joinable_teams = response.joinable_teams;
 
-                let workspaces = response.metadata.workspaces;
-                let joinable_teams = response.metadata.joinable_teams;
-
-                self.set_user_purchase_policy(response.metadata.user_purchase_policy);
                 self.update_workspaces(workspaces.clone(), ctx);
                 self.update_joinable_teams(joinable_teams, ctx);
 
@@ -830,7 +623,7 @@ impl UserWorkspaces {
 
     fn on_remove_user_from_team(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -882,7 +675,7 @@ impl UserWorkspaces {
 
     fn on_remove_user_from_workspace(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -915,7 +708,7 @@ impl UserWorkspaces {
 
     fn on_add_invite_link_domain_restrictions(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -949,7 +742,7 @@ impl UserWorkspaces {
 
     fn on_delete_invite_link_domain_restriction(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -981,7 +774,7 @@ impl UserWorkspaces {
 
     fn on_email_invite_sent(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1011,7 +804,7 @@ impl UserWorkspaces {
 
     pub fn on_is_invite_link_enabled_set(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1043,7 +836,7 @@ impl UserWorkspaces {
 
     pub fn on_invite_links_reset(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1066,7 +859,7 @@ impl UserWorkspaces {
 
     pub fn on_team_discoverability_set(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1098,7 +891,7 @@ impl UserWorkspaces {
 
     pub fn on_join_team_with_team_discovery(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1126,7 +919,7 @@ impl UserWorkspaces {
     fn on_join_team_in_workspace(
         &mut self,
         team_uid: ServerId,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1157,7 +950,7 @@ impl UserWorkspaces {
 
     fn on_join_workspace_from_discovery(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1189,7 +982,7 @@ impl UserWorkspaces {
 
     fn on_team_ownership_transferred(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1216,7 +1009,7 @@ impl UserWorkspaces {
 
     fn on_team_member_role_set(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1249,7 +1042,7 @@ impl UserWorkspaces {
 
     pub fn on_delete_team_invite(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
@@ -1277,210 +1070,6 @@ impl UserWorkspaces {
             },
             Self::on_delete_team_invite,
         );
-    }
-
-    pub fn on_generate_upgrade_link(
-        &mut self,
-        result: Result<String>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        match result {
-            Err(err) => ctx.emit(UserWorkspacesEvent::GenerateUpgradeLinkRejected(err)),
-            Ok(upgrade_link) => {
-                ctx.emit(UserWorkspacesEvent::GenerateUpgradeLink(upgrade_link));
-            }
-        };
-        ctx.notify();
-    }
-
-    pub fn generate_upgrade_link(&mut self, team_uid: ServerId, ctx: &mut ModelContext<Self>) {
-        Self::on_generate_upgrade_link(
-            self,
-            Ok(UserWorkspaces::upgrade_link_for_team(team_uid)),
-            ctx,
-        );
-    }
-
-    pub fn on_generate_stripe_billing_portal_link(
-        &mut self,
-        result: Result<String>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        match result {
-            Err(err) => ctx.emit(UserWorkspacesEvent::GenerateStripeBillingPortalLinkRejected(err)),
-            Ok(billing_session_link) => {
-                ctx.emit(UserWorkspacesEvent::GenerateStripeBillingPortalLink(
-                    billing_session_link,
-                ));
-            }
-        };
-        ctx.notify();
-    }
-
-    pub fn generate_stripe_billing_portal_link(
-        &mut self,
-        team_uid: ServerId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let workspace_client = self.workspace_client.clone();
-        let _ = ctx.spawn(
-            async move {
-                workspace_client
-                    .generate_stripe_billing_portal_link(team_uid)
-                    .await
-            },
-            Self::on_generate_stripe_billing_portal_link,
-        );
-    }
-
-    pub fn update_usage_based_pricing_settings(
-        &mut self,
-        team_uid: ServerId,
-        usage_based_pricing_enabled: bool,
-        max_monthly_spend_cents: Option<u32>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let workspace_client = self.workspace_client.clone();
-        let _ = ctx.spawn(
-            async move {
-                workspace_client
-                    .update_usage_based_pricing_settings(
-                        team_uid,
-                        usage_based_pricing_enabled,
-                        max_monthly_spend_cents,
-                    )
-                    .await
-            },
-            Self::on_update_workspace_metadata,
-        );
-    }
-
-    fn on_update_workspace_metadata(
-        &mut self,
-        result: Result<WorkspacesMetadataResponse>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        match result {
-            Ok(result) => {
-                let wrapped = WorkspacesMetadataWithPricing {
-                    metadata: result,
-                    pricing_info: None,
-                };
-                self.on_workspaces_updated(Ok(wrapped), ctx);
-                ctx.emit(UserWorkspacesEvent::UpdateWorkspaceSettingsSuccess);
-            }
-            Err(err) => {
-                let err_for_event = anyhow::anyhow!("{}", err);
-                self.on_workspaces_updated(Err(err), ctx);
-                ctx.emit(UserWorkspacesEvent::UpdateWorkspaceSettingsRejected(
-                    err_for_event,
-                ));
-            }
-        };
-        ctx.notify();
-    }
-
-    pub fn purchase_addon_credits(
-        &mut self,
-        team_uid: Option<ServerId>,
-        credits: i32,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let workspace_client = self.workspace_client.clone();
-        let _ = ctx.spawn(
-            async move {
-                workspace_client
-                    .purchase_addon_credits(team_uid, credits)
-                    .await
-            },
-            Self::on_purchase_addon_credits,
-        );
-    }
-
-    fn on_purchase_addon_credits(
-        &mut self,
-        result: Result<PurchaseAddonCreditsOutcome>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        match result {
-            Ok(PurchaseAddonCreditsOutcome::Completed(result)) => {
-                let wrapped = WorkspacesMetadataWithPricing {
-                    metadata: *result,
-                    pricing_info: None,
-                };
-                self.on_workspaces_updated(Ok(wrapped), ctx);
-                ctx.emit(UserWorkspacesEvent::PurchaseAddonCreditsSuccess);
-            }
-            Ok(PurchaseAddonCreditsOutcome::CheckoutRequired { checkout_url }) => {
-                ctx.emit(UserWorkspacesEvent::PurchaseAddonCreditsCheckoutRequired {
-                    checkout_url,
-                });
-            }
-            Err(err) => {
-                ctx.emit(UserWorkspacesEvent::PurchaseAddonCreditsRejected(
-                    anyhow::anyhow!(err),
-                ));
-            }
-        };
-        ctx.notify();
-    }
-
-    pub fn refresh_ai_overages(&mut self, ctx: &mut ModelContext<Self>) {
-        let workspace_client = self.workspace_client.clone();
-        let _ = ctx.spawn(
-            async move { workspace_client.refresh_ai_overages().await },
-            Self::on_refresh_ai_overages,
-        );
-    }
-
-    pub fn update_addon_credits_settings(
-        &mut self,
-        team_uid: ServerId,
-        auto_reload_enabled: Option<bool>,
-        max_monthly_spend_cents: Option<i32>,
-        selected_auto_reload_credit_denomination: Option<i32>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let workspace_client = self.workspace_client.clone();
-        let _ = ctx.spawn(
-            async move {
-                workspace_client
-                    .update_addon_credits_settings(
-                        team_uid,
-                        auto_reload_enabled,
-                        max_monthly_spend_cents,
-                        selected_auto_reload_credit_denomination,
-                    )
-                    .await
-            },
-            Self::on_update_workspace_metadata,
-        );
-    }
-
-    fn on_refresh_ai_overages(&mut self, result: Result<AiOverages>, ctx: &mut ModelContext<Self>) {
-        match result {
-            Ok(fresh_ai_overages) => {
-                // TODO: We really need to stop having duplicate billing metadata...
-                if let Some(workspace) = self.current_workspace_mut() {
-                    workspace.billing_metadata.ai_overages = Some(fresh_ai_overages.clone());
-                    for team in &mut workspace.teams {
-                        team.billing_metadata.ai_overages = Some(fresh_ai_overages.clone());
-                    }
-                }
-
-                ctx.emit(UserWorkspacesEvent::AiOveragesUpdated);
-                ctx.notify();
-            }
-            Err(e) => {
-                log::warn!("Failed to refresh AI overages for workspace: {e:?}");
-            }
-        }
-    }
-
-    pub fn usage_based_pricing_settings(&self) -> UsageBasedPricingSettings {
-        self.current_workspace()
-            .map(|workspace| workspace.settings.usage_based_pricing_settings.clone())
-            .unwrap_or_default()
     }
 
     pub fn is_enterprise_secret_redaction_enabled(&self) -> bool {
@@ -1571,7 +1160,6 @@ impl UserWorkspaces {
         let workspace = Workspace {
             uid: workspace_uid,
             name: "Test Workspace".to_string(),
-            stripe_customer_id: None,
             teams: vec![Team {
                 uid: ServerId::from(2),
                 name: "Test Team".to_string(),
@@ -1582,10 +1170,8 @@ impl UserWorkspaces {
                 invite_link: None,
                 pending_email_invites: vec![],
                 invite_link_domain_restrictions: vec![],
-                stripe_customer_id: None,
                 feature_model_choice: Default::default(),
                 is_eligible_for_discovery: false,
-                has_billing_history: false,
                 visibility: TeamVisibility::Open,
             }],
             open_teams: vec![],
@@ -1602,9 +1188,6 @@ impl UserWorkspaces {
                 },
             }],
             billing_metadata: BillingMetadata::default(),
-            bonus_grants_purchased_this_month: Default::default(),
-            billing_cycle_usage: None,
-            has_billing_history: false,
             settings: workspace_settings,
             feature_model_choice: Default::default(),
             invite_link_domain_restrictions: vec![],

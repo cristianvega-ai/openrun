@@ -8,11 +8,8 @@ use warpui::{AppContext, SingletonEntity};
 
 use super::UserWorkspaces;
 use crate::auth::AuthStateProvider;
-use crate::channel::ChannelState;
 use crate::workspaces::team::Team;
-use crate::workspaces::workspace::{
-    BillingMetadata, CustomerType, PurchaseAddOnCreditsPolicy, Workspace,
-};
+use crate::workspaces::workspace::{BillingMetadata, Workspace};
 
 impl UserWorkspaces {
     pub fn current_workspace_billing_metadata(&self) -> Option<&BillingMetadata> {
@@ -22,8 +19,7 @@ impl UserWorkspaces {
 
     /// The given team's billing metadata when the team is known, otherwise
     /// the current workspace's. For purchase surfaces that need
-    /// team/workspace-scoped state (e.g. delinquency); for the purchase
-    /// policy itself use [`Self::purchase_policy`].
+    /// team/workspace-scoped state (e.g. delinquency).
     pub fn team_billing_metadata<'a>(
         &'a self,
         team: Option<&'a Team>,
@@ -40,44 +36,6 @@ impl UserWorkspaces {
             })
             .unwrap_or(false)
     }
-
-    /// The add-on credits purchase policy for the current viewer context: the
-    /// current workspace's policy when one exists, else the user-level policy
-    /// from the workspaces-metadata response (how teamless users get one).
-    ///
-    /// This is workspace-level: `purchase_add_on_credits_policy` is a plan
-    /// entitlement, so it does not vary by the window's selected team.
-    pub fn purchase_policy(&self) -> Option<PurchaseAddOnCreditsPolicy> {
-        self.current_workspace_billing_metadata()
-            .and_then(|billing| billing.tier.purchase_add_on_credits_policy)
-            .or(self.user_purchase_policy)
-    }
-
-    /// Returns `true` if active AI is allowed for the current workspace, based on billing config.
-    ///
-    /// In the future, we should store active AI enablement on the policy directly. For now, we
-    /// proxy whether active AI by checking whether any active AI feature is enabled.
-    pub fn is_active_ai_allowed(&self) -> bool {
-        self.current_workspace().is_none_or(|workspace| {
-            workspace
-                .billing_metadata
-                .tier
-                .warp_ai_policy
-                .is_none_or(|policy| {
-                    policy.is_prompt_suggestions_toggleable
-                        || policy.is_next_command_enabled
-                        || policy.is_code_suggestions_toggleable
-                        || policy.is_git_operations_ai_enabled
-                })
-        })
-    }
-
-    pub fn ai_allowed_for_team(team: Option<&Team>) -> bool {
-        !team.is_some_and(|team| team.billing_metadata.customer_type == CustomerType::Enterprise)
-            || team.is_some_and(|team| team.billing_metadata.is_warp_plan())
-            || ChannelState::channel().is_dogfood()
-    }
-
     /// Whether BYO API key is enabled for the current user, based on the active policies.
     /// Note that the value may be incorrect if called before the team's billing metadata has been fetched.
     /// For solo users (no workspace), this is controlled by the `SoloUserByok` feature flag.

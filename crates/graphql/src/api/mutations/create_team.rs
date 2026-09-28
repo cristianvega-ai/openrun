@@ -31,7 +31,6 @@ mutation CreateTeam($input: CreateTeamInput!, $request_context: RequestContext!)
         }
         billingMetadata {
           customerType
-          delinquencyStatus
           tier {
             name
             description
@@ -43,14 +42,6 @@ mutation CreateTeam($input: CreateTeamInput!, $request_context: RequestContext!)
               isGitOperationsAiEnabled
             }
             teamSizePolicy {
-              isUnlimited
-              limit
-            }
-            sharedNotebooksPolicy {
-              isUnlimited
-              limit
-            }
-            sharedWorkflowsPolicy {
               isUnlimited
               limit
             }
@@ -67,17 +58,6 @@ mutation CreateTeam($input: CreateTeamInput!, $request_context: RequestContext!)
             byoApiKeyPolicy {
               enabled
             }
-            pricing {
-              enablePayAsYouGo
-              autoReloadCreditDenomination
-              autoReloadCostCents
-            }
-          }
-          serviceAgreements {
-            currentPeriodEnd
-            status
-            stripeSubscriptionId
-            type
           }
         }
         settings {
@@ -94,7 +74,6 @@ mutation CreateTeam($input: CreateTeamInput!, $request_context: RequestContext!)
             directLinkSharingEnabled
           }
         }
-        hasBillingHistory
         pendingEmailInvites {
           email
           expired
@@ -104,7 +83,6 @@ mutation CreateTeam($input: CreateTeamInput!, $request_context: RequestContext!)
           uid
           domain
         }
-        stripeCustomerId
         isEligibleForDiscovery
       }
       responseContext {

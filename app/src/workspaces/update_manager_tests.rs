@@ -22,7 +22,7 @@ use crate::settings::{AISettings, CodeSettings, PrivacySettings};
 use crate::system::SystemStats;
 use crate::workspaces::team::Team;
 use crate::workspaces::user_profiles::UserProfiles;
-use crate::workspaces::workspace::{PurchaseAddOnCreditsPolicy, Workspace, WorkspaceUid};
+use crate::workspaces::workspace::{Workspace, WorkspaceUid};
 
 fn initialize_app(
     team_client: Arc<dyn TeamClient>,
@@ -91,13 +91,9 @@ fn test_leaving_team_removes_objects() {
 
         let mut team_client = MockTeamClient::new();
         team_client.expect_workspaces_metadata().returning(|| {
-            Ok(WorkspacesMetadataWithPricing {
-                metadata: WorkspacesMetadataResponse {
-                    workspaces: vec![],
-                    joinable_teams: vec![],
-                    user_purchase_policy: None,
-                },
-                pricing_info: None,
+            Ok(WorkspacesMetadataResponse {
+                workspaces: vec![],
+                joinable_teams: vec![],
             })
         });
 
@@ -161,13 +157,9 @@ fn test_leaving_team_removes_objects() {
         team_update_manager.update(&mut app, |team_manager, ctx| {
             team_manager.on_team_left(
                 team_uid,
-                Ok(WorkspacesMetadataWithPricing {
-                    metadata: WorkspacesMetadataResponse {
-                        workspaces: vec![],
-                        joinable_teams: vec![],
-                        user_purchase_policy: None,
-                    },
-                    pricing_info: None,
+                Ok(WorkspacesMetadataResponse {
+                    workspaces: vec![],
+                    joinable_teams: vec![],
                 }),
                 ctx,
             );
@@ -201,59 +193,6 @@ fn test_leaving_team_removes_objects() {
             assert_eq!(
                 objects,
                 vec![personal_folder_id.to_string(), shared_folder_id.to_string()]
-            );
-        });
-    });
-}
-
-#[test]
-fn test_poll_path_apply_refreshes_user_purchase_policy() {
-    App::test((), |mut app| async move {
-        let team_client = Arc::new(MockTeamClient::new());
-        let workspace_client = Arc::new(MockWorkspaceClient::new());
-        initialize_app(team_client.clone(), workspace_client, vec![], &mut app);
-
-        let team_update_manager =
-            app.add_singleton_model(|ctx| TeamUpdateManager::new(team_client, None, ctx));
-
-        // The periodic poll applies metadata through TeamUpdateManager's
-        // own on_workspaces_updated; it must refresh the stored user-level
-        // policy.
-        let response_with_policy = WorkspacesMetadataResponse {
-            workspaces: vec![],
-            joinable_teams: vec![],
-            user_purchase_policy: Some(PurchaseAddOnCreditsPolicy {
-                enabled: false,
-                premium_enabled: true,
-                price_premium_bps: 1000,
-            }),
-        };
-        team_update_manager.update(&mut app, |manager, ctx| {
-            manager.on_workspaces_updated(Ok(response_with_policy), ctx);
-        });
-        app.read(|ctx| {
-            assert!(
-                UserWorkspaces::as_ref(ctx)
-                    .purchase_policy()
-                    .is_some_and(|policy| policy.allows_purchases()),
-                "a poll-path apply should store the user-level policy"
-            );
-        });
-
-        // A later poll without the policy must clear the stored fallback so
-        // it can't go stale.
-        let response_without_policy = WorkspacesMetadataResponse {
-            workspaces: vec![],
-            joinable_teams: vec![],
-            user_purchase_policy: None,
-        };
-        team_update_manager.update(&mut app, |manager, ctx| {
-            manager.on_workspaces_updated(Ok(response_without_policy), ctx);
-        });
-        app.read(|ctx| {
-            assert!(
-                UserWorkspaces::as_ref(ctx).purchase_policy().is_none(),
-                "a poll-path apply without the policy should clear the stored fallback"
             );
         });
     });
@@ -336,7 +275,6 @@ fn on_workspaces_updated_keeps_teams_distinct_and_prunes_a_team_the_response_omi
                         team_with_model(team_b, model_b.as_str()),
                     ])],
                     joinable_teams: vec![],
-                    user_purchase_policy: None,
                 }),
                 ctx,
             );
@@ -378,7 +316,6 @@ fn on_workspaces_updated_keeps_teams_distinct_and_prunes_a_team_the_response_omi
                         model_b.as_str(),
                     )])],
                     joinable_teams: vec![],
-                    user_purchase_policy: None,
                 }),
                 ctx,
             );
@@ -404,7 +341,6 @@ fn on_workspaces_updated_keeps_teams_distinct_and_prunes_a_team_the_response_omi
                 Ok(WorkspacesMetadataResponse {
                     workspaces: vec![workspace_with_teams(vec![])],
                     joinable_teams: vec![],
-                    user_purchase_policy: None,
                 }),
                 ctx,
             );

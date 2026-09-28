@@ -33,7 +33,6 @@ use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
 use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
-use crate::pricing::PricingInfoModel;
 use crate::resource_center::TipsCompleted;
 use crate::search::files::model::FileSearchModel;
 use crate::server::cloud_objects::listener::Listener;
@@ -139,7 +138,6 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(|_| WorkspaceRegistry::new());
     app.add_singleton_model(UndoCloseStack::new);
     app.add_singleton_model(|_| IgnoredSuggestionsModel::new(vec![]));
-    app.add_singleton_model(|_| PricingInfoModel::new());
     app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
     app.add_singleton_model(AgentConversationsModel::new);

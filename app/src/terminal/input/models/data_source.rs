@@ -1,14 +1,12 @@
 use fuzzy_match::{FuzzyMatchResult, match_indices_case_insensitive};
 use itertools::Itertools;
-use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use ordered_float::OrderedFloat;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::icons::Icon;
 use warp_core::ui::theme::Fill;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::elements::{
-    ConstrainedBox, Container, CornerRadius, FormattedTextElement, Highlight, HighlightedHyperlink,
-    MouseStateHandle, Radius, Text,
+    ConstrainedBox, Container, CornerRadius, Highlight, MouseStateHandle, Radius, Text,
 };
 use warpui::fonts::{Properties, Style, Weight};
 use warpui::keymap::Keystroke;
@@ -26,8 +24,8 @@ use super::model_spec_scores::{
 use crate::ai::custom_model_routers::is_custom_router_id;
 use crate::ai::execution_profiles::model_menu_items::is_auto;
 use crate::ai::llms::{
-    ByoKeySource, DisableReason, LLMId, LLMInfo, LLMPreferences, LLMProvider, LLMSpec,
-    ModelIconFlags, byo_key_source_for_model, is_model_allowed_for_scope, model_leading_icon,
+    ByoKeySource, DisableReason, LLMId, LLMInfo, LLMPreferences, LLMSpec, ModelIconFlags,
+    byo_key_source_for_model, is_model_allowed_for_scope, model_leading_icon,
     should_show_bedrock_icon_for_model,
     should_show_gemini_enterprise_agent_platform_icon_for_model, should_show_key_icon_for_model,
 };
@@ -42,7 +40,7 @@ use crate::terminal::input::inline_menu::{
 };
 use crate::terminal::input::message_bar::{Message, MessageItem};
 use crate::workspace::WorkspaceAction;
-use crate::workspaces::user_workspaces::{TeamContextResolver, TeamScope, UserWorkspaces};
+use crate::workspaces::user_workspaces::{TeamContextResolver, TeamScope};
 
 /// Auto models pick their concrete model server-side, so the cost line names the
 /// class of inference rather than a host the request may never reach.
@@ -277,18 +275,11 @@ impl SyncDataSource for ModelSelectorDataSource {
                 .get_base_llm_choices_for_agent_mode(&scope, app)
                 .collect_vec()
         };
-        let upgrade_url = UserWorkspaces::as_ref(app).upgrade_link_for_scope(&scope, app);
         Ok(
             query_model_picker_choices(llm_preferences, choices, &query.text, &scope, app)
                 .into_iter()
                 .map(|choice| {
-                    QueryResult::from(ModelSearchItem::new(
-                        choice,
-                        &active_llm_id,
-                        &upgrade_url,
-                        &scope,
-                        app,
-                    ))
+                    QueryResult::from(ModelSearchItem::new(choice, &active_llm_id, &scope, app))
                 })
                 .collect(),
         )
@@ -302,8 +293,6 @@ impl Entity for ModelSelectorDataSource {
 #[derive(Clone)]
 struct ModelSearchItem {
     id: LLMId,
-    upgrade_url: String,
-    provider: LLMProvider,
     spec: Option<LLMSpec>,
     leading_icon: Icon,
     credential_icon: Option<Icon>,
@@ -328,7 +317,6 @@ impl ModelSearchItem {
     fn new(
         choice: ModelPickerChoice,
         active_llm_id: &LLMId,
-        upgrade_url: &str,
         scope: &dyn TeamScope,
         app: &AppContext,
     ) -> Self {
@@ -353,8 +341,6 @@ impl ModelSearchItem {
             (!is_using_cloud_host && byo_key_source.is_some()).then_some(Icon::Key);
         Self {
             id: llm.id.clone(),
-            upgrade_url: upgrade_url.to_owned(),
-            provider: llm.provider,
             spec: llm.spec.clone(),
             leading_icon,
             credential_icon,
@@ -636,68 +622,9 @@ impl SearchItem for ModelSearchItem {
             app,
         );
 
-        let mut column = Flex::column()
+        let column = Flex::column()
             .with_child(Container::new(header).with_margin_bottom(12.).finish())
             .with_child(scores);
-
-        if self.disable_reason.as_ref() == Some(&DisableReason::RequiresUpgrade) {
-            let mut display_name = self.display_text.clone();
-            if let Some(first) = display_name.get_mut(..1) {
-                first.make_ascii_uppercase();
-            }
-
-            // Show a BYOK option when the user's tier supports it and the provider
-            // is one that accepts user-supplied API keys.
-            let byok_available = UserWorkspaces::as_ref(app).is_byo_api_key_enabled(app)
-                && matches!(
-                    self.provider,
-                    LLMProvider::OpenAI | LLMProvider::Anthropic | LLMProvider::Google
-                );
-
-            let mut text_fragments = vec![
-                FormattedTextFragment::plain_text(format!(
-                    "{display_name} is not available for free users. "
-                )),
-                FormattedTextFragment::hyperlink("Upgrade", self.upgrade_url.clone()),
-            ];
-
-            if byok_available {
-                text_fragments.push(FormattedTextFragment::plain_text(" or ".to_string()));
-                text_fragments.push(FormattedTextFragment::hyperlink_action(
-                    "bring your own key",
-                    WorkspaceAction::ShowSettingsPageWithSearch {
-                        search_query: "api".to_string(),
-                        section: Some(SettingsSection::ThirdPartyCLIAgents),
-                    },
-                ));
-            }
-
-            let upgrade_text = FormattedTextElement::new(
-                FormattedText::new([FormattedTextLine::Line(text_fragments)]),
-                inline_styles::font_size(appearance),
-                appearance.ui_font_family(),
-                appearance.ui_font_family(),
-                theme.disabled_ui_text_color().into_solid(),
-                HighlightedHyperlink::default(),
-            )
-            .with_hyperlink_font_color(theme.accent().into_solid())
-            .register_default_click_handlers_with_action_support(|hyperlink_lens, event, ctx| {
-                match hyperlink_lens {
-                    warpui::elements::HyperlinkLens::Url(url) => {
-                        ctx.open_url(url);
-                    }
-                    warpui::elements::HyperlinkLens::Action(action_ref) => {
-                        if let Some(action) = action_ref.as_any().downcast_ref::<WorkspaceAction>()
-                        {
-                            event.dispatch_typed_action(action.clone());
-                        }
-                    }
-                }
-            })
-            .finish();
-
-            column = column.with_child(Container::new(upgrade_text).with_margin_top(12.).finish());
-        }
 
         Some(
             ConstrainedBox::new(column.finish())

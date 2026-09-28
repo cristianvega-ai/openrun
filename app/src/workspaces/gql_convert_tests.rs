@@ -299,15 +299,6 @@ mod team_settings_conversion {
             telemetry_settings: gqlws::TelemetrySettings {
                 force_enabled: true,
             },
-            usage_based_pricing_settings: gqlws::UsageBasedPricingSettings {
-                enabled: true,
-                max_monthly_spend_cents: Some(500),
-            },
-            addon_credits_settings: gqlws::AddonCreditsSettings {
-                auto_reload_enabled: true,
-                max_monthly_spend_cents: Some(100),
-                selected_auto_reload_credit_denomination: Some(50),
-            },
             ambient_agent_settings: Some(gqlws::AmbientAgentSettings {
                 enable_warp_attribution: gqlws::AdminEnablementSetting::Enable,
                 default_host_slug: Some("my-host".to_string()),
@@ -398,14 +389,6 @@ mod team_settings_conversion {
         // Passthrough groups map directly.
         assert!(settings.llm_settings.enabled);
         assert!(settings.telemetry_settings.force_enabled);
-        assert!(settings.usage_based_pricing_settings.enabled);
-        assert_eq!(
-            settings
-                .usage_based_pricing_settings
-                .max_monthly_spend_cents,
-            Some(500)
-        );
-        assert!(settings.addon_credits_settings.auto_reload_enabled);
 
         // Ambient agent settings surface attribution + default host slug.
         assert_eq!(

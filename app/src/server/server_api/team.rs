@@ -62,7 +62,7 @@ use warp_graphql::queries::get_discoverable_teams::{
     GetDiscoverableTeams, GetDiscoverableTeamsVariables,
 };
 use warp_graphql::queries::get_workspaces_metadata_for_user::{
-    GetWorkspacesMetadataForUser, GetWorkspacesMetadataForUserVariables, PricingInfoResult,
+    GetWorkspacesMetadataForUser, GetWorkspacesMetadataForUserVariables,
 };
 
 use super::ServerApi;
@@ -72,26 +72,26 @@ use crate::server::graphql::{get_request_context, get_user_facing_error_message}
 use crate::server::ids::ServerId;
 use crate::workspaces::gql_convert::workspaces_metadata_response_from_gql;
 use crate::workspaces::team::{DiscoveryOptions, MembershipRole};
-use crate::workspaces::user_workspaces::{CreateTeamResponse, WorkspacesMetadataWithPricing};
+use crate::workspaces::user_workspaces::{CreateTeamResponse, WorkspacesMetadataResponse};
 use crate::workspaces::workspace::{Workspace, WorkspaceUid};
 
 #[cfg_attr(test, automock)]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 pub trait TeamClient: 'static + Send + Sync {
-    async fn workspaces_metadata(&self) -> Result<WorkspacesMetadataWithPricing>;
+    async fn workspaces_metadata(&self) -> Result<WorkspacesMetadataResponse>;
 
     async fn add_invite_link_domain_restriction(
         &self,
         team_uid: ServerId,
         domain: String,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn delete_invite_link_domain_restriction(
         &self,
         team_uid: ServerId,
         domain_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     /// Creates a team and returns the result from the server with the newly created team.
     async fn create_team(
@@ -108,7 +108,7 @@ pub trait TeamClient: 'static + Send + Sync {
         user_uid: UserUid,
         team_uid: ServerId,
         entrypoint: CloudObjectEventEntrypoint,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     /// Removes the _current_ user from the team (user leaving the team) and returns the list of
     /// all teams that the current user is still a member of.
@@ -117,33 +117,33 @@ pub trait TeamClient: 'static + Send + Sync {
         user_uid: UserUid,
         team_uid: ServerId,
         entrypoint: CloudObjectEventEntrypoint,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn join_team_with_team_discovery(
         &self,
         team_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
     async fn join_team_in_workspace(
         &self,
         team_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
     async fn join_workspace_from_discovery(
         &self,
         workspace_uid: WorkspaceUid,
         team_uid: Option<ServerId>,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn send_team_invite_email(
         &self,
         team_uid: ServerId,
         email: String,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn delete_team_invite(
         &self,
         team_uid: ServerId,
         email: String,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn get_discovery_options(&self) -> Result<DiscoveryOptions>;
 
@@ -151,73 +151,63 @@ pub trait TeamClient: 'static + Send + Sync {
         &self,
         new_name: String,
         team_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
-    async fn reset_invite_links(&self, team_uid: ServerId)
-    -> Result<WorkspacesMetadataWithPricing>;
+    async fn reset_invite_links(&self, team_uid: ServerId) -> Result<WorkspacesMetadataResponse>;
 
     async fn set_is_invite_link_enabled(
         &self,
         team_uid: ServerId,
         new_value: bool,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn set_team_discoverability(
         &self,
         team_uid: ServerId,
         discoverable: bool,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn transfer_team_ownership(
         &self,
         new_owner_email: String,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 
     async fn set_team_member_role(
         &self,
         user_uid: UserUid,
         team_uid: ServerId,
         role: MembershipRole,
-    ) -> Result<WorkspacesMetadataWithPricing>;
+    ) -> Result<WorkspacesMetadataResponse>;
 }
 
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 impl TeamClient for ServerApi {
-    async fn workspaces_metadata(&self) -> Result<WorkspacesMetadataWithPricing> {
+    async fn workspaces_metadata(&self) -> Result<WorkspacesMetadataResponse> {
         let variables = GetWorkspacesMetadataForUserVariables {
             request_context: get_request_context(),
         };
         let operation = GetWorkspacesMetadataForUser::build(variables);
         let response = self.send_graphql_request(operation, None).await?;
 
-        let metadata = match response.user {
+        match response.user {
             warp_graphql::queries::get_workspaces_metadata_for_user::UserResult::UserOutput(
                 user_output,
-            ) => workspaces_metadata_response_from_gql(user_output.user, self.is_service_account()),
+            ) => Ok(workspaces_metadata_response_from_gql(
+                user_output.user,
+                self.is_service_account(),
+            )),
             warp_graphql::queries::get_workspaces_metadata_for_user::UserResult::Unknown => {
-                return Err(anyhow!("Unable to fetch workspaces metadata"));
+                Err(anyhow!("Unable to fetch workspaces metadata"))
             }
-        };
-
-        let pricing_info = match response.pricing_info {
-            PricingInfoResult::PricingInfoOutput(pricing_output) => {
-                Some(pricing_output.pricing_info)
-            }
-            PricingInfoResult::Unknown => None,
-        };
-
-        Ok(WorkspacesMetadataWithPricing {
-            metadata,
-            pricing_info,
-        })
+        }
     }
 
     async fn add_invite_link_domain_restriction(
         &self,
         team_uid: ServerId,
         domain: String,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = AddInviteLinkDomainRestrictionVariables {
             input: AddInviteLinkDomainRestrictionInput {
                 team_uid: team_uid.into(),
@@ -255,7 +245,7 @@ impl TeamClient for ServerApi {
         &self,
         team_uid: ServerId,
         domain_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = DeleteInviteLinkDomainRestrictionVariables {
             input: DeleteInviteLinkDomainRestrictionInput {
                 uid: domain_uid.into(),
@@ -335,7 +325,7 @@ impl TeamClient for ServerApi {
         user_uid: UserUid,
         team_uid: ServerId,
         entrypoint: CloudObjectEventEntrypoint,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = RemoveUserFromTeamVariables {
             input: RemoveUserFromTeamInput {
                 user_uid: user_uid.as_str().into(),
@@ -373,7 +363,7 @@ impl TeamClient for ServerApi {
         user_uid: UserUid,
         team_uid: ServerId,
         entrypoint: CloudObjectEventEntrypoint,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = RemoveUserFromTeamVariables {
             input: RemoveUserFromTeamInput {
                 user_uid: user_uid.into(),
@@ -407,7 +397,7 @@ impl TeamClient for ServerApi {
     async fn join_team_with_team_discovery(
         &self,
         team_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = JoinTeamWithTeamDiscoveryVariables {
             input: JoinTeamWithTeamDiscoveryInput {
                 team_uid: team_uid.into(),
@@ -442,7 +432,7 @@ impl TeamClient for ServerApi {
     async fn join_team_in_workspace(
         &self,
         team_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = JoinTeamInWorkspaceVariables {
             input: JoinTeamInWorkspaceInput {
                 team_uid: team_uid.into(),
@@ -474,7 +464,7 @@ impl TeamClient for ServerApi {
         &self,
         workspace_uid: WorkspaceUid,
         team_uid: Option<ServerId>,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = JoinWorkspaceFromDiscoveryVariables {
             input: JoinWorkspaceFromDiscoveryInput {
                 workspace_uid: String::from(workspace_uid).into(),
@@ -509,7 +499,7 @@ impl TeamClient for ServerApi {
         &self,
         team_uid: ServerId,
         email: String,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = SendTeamInviteEmailVariables {
             input: SendTeamInviteEmailInput {
                 team_uid: team_uid.into(),
@@ -545,7 +535,7 @@ impl TeamClient for ServerApi {
         &self,
         team_uid: ServerId,
         email: String,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = DeleteTeamInviteVariables {
             input: DeleteTeamInviteInput {
                 team_uid: team_uid.into(),
@@ -614,7 +604,7 @@ impl TeamClient for ServerApi {
         &self,
         new_name: String,
         team_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = RenameTeamVariables {
             input: RenameTeamInput {
                 new_name,
@@ -643,10 +633,7 @@ impl TeamClient for ServerApi {
         }
     }
 
-    async fn reset_invite_links(
-        &self,
-        team_uid: ServerId,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    async fn reset_invite_links(&self, team_uid: ServerId) -> Result<WorkspacesMetadataResponse> {
         let variables = ResetInviteLinksVariables {
             input: ResetInviteLinksInput {
                 team_uid: team_uid.into(),
@@ -681,7 +668,7 @@ impl TeamClient for ServerApi {
         &self,
         team_uid: ServerId,
         new_value: bool,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = SetIsInviteLinkEnabledVariables {
             input: SetIsInviteLinkEnabledInput {
                 team_uid: team_uid.into(),
@@ -717,7 +704,7 @@ impl TeamClient for ServerApi {
         &self,
         team_uid: ServerId,
         new_value: bool,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = SetTeamDiscoverabilityVariables {
             input: SetTeamDiscoverabilityInput {
                 team_uid: team_uid.into(),
@@ -752,7 +739,7 @@ impl TeamClient for ServerApi {
     async fn transfer_team_ownership(
         &self,
         new_owner_email: String,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = TransferTeamOwnershipVariables {
             input: TransferTeamOwnershipInput { new_owner_email },
             request_context: get_request_context(),
@@ -785,7 +772,7 @@ impl TeamClient for ServerApi {
         user_uid: UserUid,
         team_uid: ServerId,
         role: MembershipRole,
-    ) -> Result<WorkspacesMetadataWithPricing> {
+    ) -> Result<WorkspacesMetadataResponse> {
         let variables = SetTeamMemberRoleVariables {
             input: SetTeamMemberRoleInput {
                 user_uid: user_uid.as_str().into(),

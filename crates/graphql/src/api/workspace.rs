@@ -1,4 +1,4 @@
-use super::billing::{BillingCycleUsageHistory, BillingMetadata, BonusGrantsInfo};
+use super::billing::BillingMetadata;
 use crate::schema;
 use crate::user::DiscoverableTeamData;
 
@@ -6,15 +6,11 @@ use crate::user::DiscoverableTeamData;
 pub struct Workspace {
     pub uid: cynic::Id,
     pub name: String,
-    pub stripe_customer_id: Option<cynic::Id>,
     pub members: Vec<WorkspaceMember>,
     pub teams: Vec<Team>,
     pub open_teams: Vec<DiscoverableTeamData>,
     pub billing_metadata: BillingMetadata,
-    pub bonus_grants_info: BonusGrantsInfo,
-    pub billing_cycle_usage_history: Option<BillingCycleUsageHistory>,
     pub settings: WorkspaceSettings,
-    pub has_billing_history: bool,
     pub pending_email_invites: Vec<EmailInvite>,
     pub invite_link_domain_restrictions: Vec<InviteLinkDomainRestriction>,
     pub is_eligible_for_discovery: bool,
@@ -149,8 +145,6 @@ pub struct WorkspaceSettings {
     pub link_sharing_settings: LinkSharingSettings,
     pub secret_redaction_settings: SecretRedactionSettings,
     pub ai_autonomy_settings: AiAutonomySettings,
-    pub usage_based_pricing_settings: UsageBasedPricingSettings,
-    pub addon_credits_settings: AddonCreditsSettings,
     pub codebase_context_settings: CodebaseContextSettings,
     pub sandboxed_agent_settings: Option<SandboxedAgentSettings>,
     pub ambient_agent_settings: Option<AmbientAgentSettings>,
@@ -323,8 +317,6 @@ pub struct TeamSettings {
     pub sandboxed_agent: SandboxedAgentSettingsInfo,
     pub llm_settings: LlmSettings,
     pub telemetry_settings: TelemetrySettings,
-    pub usage_based_pricing_settings: UsageBasedPricingSettings,
-    pub addon_credits_settings: AddonCreditsSettings,
     pub ambient_agent_settings: Option<AmbientAgentSettings>,
     pub team_byo: Option<TeamByoSettings>,
 }
@@ -474,17 +466,4 @@ pub struct EmailInvite {
     pub email: String,
     pub expired: bool,
     pub team_uid: Option<cynic::Id>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone)]
-pub struct UsageBasedPricingSettings {
-    pub enabled: bool,
-    pub max_monthly_spend_cents: Option<i32>,
-}
-
-#[derive(cynic::QueryFragment, Debug, Clone)]
-pub struct AddonCreditsSettings {
-    pub auto_reload_enabled: bool,
-    pub max_monthly_spend_cents: Option<i32>,
-    pub selected_auto_reload_credit_denomination: Option<i32>,
 }

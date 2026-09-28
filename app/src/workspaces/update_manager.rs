@@ -11,15 +11,12 @@ use warpui::{
 };
 
 use super::team_tester::{TeamTesterStatus, TeamTesterStatusEvent};
-use super::user_workspaces::{
-    CreateTeamResponse, UserWorkspaces, WorkspacesMetadataResponse, WorkspacesMetadataWithPricing,
-};
+use super::user_workspaces::{CreateTeamResponse, UserWorkspaces, WorkspacesMetadataResponse};
 use super::workspace::WorkspaceUid;
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::CloudObjectEventEntrypoint;
 use crate::network::{NetworkStatus, NetworkStatusEvent, NetworkStatusKind};
 use crate::persistence::ModelEvent;
-use crate::pricing::PricingInfoModel;
 use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::ServerId;
 use crate::server::retry_strategies::{
@@ -117,13 +114,9 @@ impl TeamUpdateManager {
         // avoid noisy `No matching expectation found` errors.
         let mut team_client = MockTeamClient::new();
         team_client.expect_workspaces_metadata().returning(|| {
-            Ok(WorkspacesMetadataWithPricing {
-                metadata: WorkspacesMetadataResponse {
-                    workspaces: vec![],
-                    joinable_teams: vec![],
-                    user_purchase_policy: None,
-                },
-                pricing_info: None,
+            Ok(WorkspacesMetadataResponse {
+                workspaces: vec![],
+                joinable_teams: vec![],
             })
         });
 
@@ -337,23 +330,15 @@ impl TeamUpdateManager {
     fn on_team_left(
         &mut self,
         left_team_uid: ServerId,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
             Ok(response) => {
-                if let Some(pricing_info) = response.pricing_info {
-                    PricingInfoModel::handle(ctx).update(ctx, |model, ctx| {
-                        model.update_pricing_info(pricing_info, ctx);
-                    });
-                }
-
-                let workspaces = response.metadata.workspaces;
-                let joinable_teams = response.metadata.joinable_teams;
-                let user_purchase_policy = response.metadata.user_purchase_policy;
+                let workspaces = response.workspaces;
+                let joinable_teams = response.joinable_teams;
 
                 UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
-                    user_workspaces.set_user_purchase_policy(user_purchase_policy);
                     user_workspaces.update_workspaces(workspaces.clone(), ctx);
                     user_workspaces.update_joinable_teams(joinable_teams, ctx);
                 });
@@ -406,23 +391,17 @@ impl TeamUpdateManager {
 
     fn on_team_renamed(
         &mut self,
-        result: Result<WorkspacesMetadataWithPricing>,
+        result: Result<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) {
         match result {
             Err(_) => ctx.emit(TeamUpdateManagerEvent::RenameTeamError),
             Ok(response) => {
-                if let Some(pricing_info) = response.pricing_info.clone() {
-                    PricingInfoModel::handle(ctx).update(ctx, |model, ctx| {
-                        model.update_pricing_info(pricing_info, ctx);
-                    });
-                }
-
-                self.on_workspaces_updated(Ok(response.metadata.clone()), ctx);
+                self.on_workspaces_updated(Ok(response.clone()), ctx);
 
                 // Update sqlite
                 self.save_to_db([ModelEvent::UpsertWorkspaces {
-                    workspaces: response.metadata.workspaces,
+                    workspaces: response.workspaces,
                 }]);
 
                 ctx.emit(TeamUpdateManagerEvent::RenameTeamSuccess);
@@ -433,20 +412,14 @@ impl TeamUpdateManager {
 
     fn handle_workspace_metadata_with_request_state(
         &mut self,
-        request_state: RequestState<WorkspacesMetadataWithPricing>,
+        request_state: RequestState<WorkspacesMetadataResponse>,
         ctx: &mut ModelContext<Self>,
     ) -> Option<Result<()>> {
         match request_state {
             RequestState::RequestSucceeded(response) => {
-                if let Some(pricing_info) = response.pricing_info.clone() {
-                    PricingInfoModel::handle(ctx).update(ctx, |model, ctx| {
-                        model.update_pricing_info(pricing_info, ctx);
-                    });
-                }
-
                 // Right now, this function is coupled with how we handle leaving a team.
                 // TODO(zheng) refactor so we can separate these two cases and have clearer logic.
-                self.on_workspaces_updated(Ok(response.metadata), ctx);
+                self.on_workspaces_updated(Ok(response), ctx);
                 Some(Ok(()))
             }
             RequestState::RequestFailedRetryPending(err) => {
@@ -473,10 +446,8 @@ impl TeamUpdateManager {
             Ok(user_workspaces_access) => {
                 let workspaces = user_workspaces_access.workspaces;
                 let joinable_teams = user_workspaces_access.joinable_teams;
-                let user_purchase_policy = user_workspaces_access.user_purchase_policy;
 
                 UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
-                    user_workspaces.set_user_purchase_policy(user_purchase_policy);
                     user_workspaces.update_workspaces(workspaces.clone(), ctx);
                     user_workspaces.update_joinable_teams(joinable_teams.clone(), ctx);
                 });

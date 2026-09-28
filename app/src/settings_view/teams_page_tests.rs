@@ -21,7 +21,7 @@ use crate::workspaces::team::TeamMember;
 #[cfg(not(target_family = "wasm"))]
 use crate::workspaces::user_workspaces::CreateTeamResponse;
 use crate::workspaces::workspace::{
-    EmailInvite, MultiAdminPolicy, NativeWorkspacesPolicy, Tier, WorkspaceMember,
+    BillingMetadata, EmailInvite, MultiAdminPolicy, NativeWorkspacesPolicy, Tier, WorkspaceMember,
     WorkspaceMemberUsageInfo,
 };
 
@@ -120,11 +120,9 @@ fn team_with_members(members: Vec<TeamMember>, multi_admin_enabled: bool) -> Tea
             },
             ..Default::default()
         },
-        stripe_customer_id: None,
         settings: Default::default(),
         feature_model_choice: Default::default(),
         is_eligible_for_discovery: false,
-        has_billing_history: false,
         visibility: Default::default(),
     }
 }
@@ -705,7 +703,7 @@ fn non_native_workspace_keeps_create_team_ui() {
     let workspace = workspace_with_member(ADMIN_EMAIL, MembershipRole::Admin, false);
 
     assert_eq!(
-        TeamsWidget::page_sections_for(Some(&workspace), Some(ADMIN_EMAIL), true),
+        TeamsWidget::page_sections_for(Some(&workspace), true),
         vec![
             TeamsPageSection::CreateTeam,
             TeamsPageSection::JoinTeams {
@@ -714,7 +712,7 @@ fn non_native_workspace_keeps_create_team_ui() {
         ]
     );
     assert_eq!(
-        TeamsWidget::page_sections_for(Some(&workspace), Some(ADMIN_EMAIL), false),
+        TeamsWidget::page_sections_for(Some(&workspace), false),
         vec![TeamsPageSection::CreateTeam]
     );
 }
@@ -722,42 +720,23 @@ fn non_native_workspace_keeps_create_team_ui() {
 #[test]
 fn unresolved_workspace_keeps_create_team_ui() {
     assert_eq!(
-        TeamsWidget::page_sections_for(None, Some(MEMBER_EMAIL), false),
+        TeamsWidget::page_sections_for(None, false),
         vec![TeamsPageSection::CreateTeam]
     );
 }
 
 #[test]
-fn native_workspace_admin_gets_admin_panel_cta() {
-    let workspace = admin_workspace(ADMIN_EMAIL);
-
-    assert_eq!(
-        TeamsWidget::page_sections_for(Some(&workspace), Some(ADMIN_EMAIL), true),
-        vec![
-            TeamsPageSection::JoinTeams {
-                header: JOIN_TEAM_HEADER
-            },
-            TeamsPageSection::AdminPanelCta
-        ]
-    );
-    assert_eq!(
-        TeamsWidget::page_sections_for(Some(&workspace), Some(ADMIN_EMAIL), false),
-        vec![TeamsPageSection::AdminPanelCta]
-    );
-}
-
-#[test]
-fn native_workspace_member_gets_join_or_empty_state() {
+fn native_workspace_gets_join_or_empty_state() {
     let workspace = workspace_with_member(MEMBER_EMAIL, MembershipRole::User, true);
 
     assert_eq!(
-        TeamsWidget::page_sections_for(Some(&workspace), Some(MEMBER_EMAIL), true),
+        TeamsWidget::page_sections_for(Some(&workspace), true),
         vec![TeamsPageSection::JoinTeams {
             header: JOIN_TEAM_HEADER
         }]
     );
     assert_eq!(
-        TeamsWidget::page_sections_for(Some(&workspace), Some(MEMBER_EMAIL), false),
+        TeamsWidget::page_sections_for(Some(&workspace), false),
         vec![TeamsPageSection::NoTeamsToJoin]
     );
 }
@@ -895,16 +874,6 @@ fn joined_team_disappears_from_open_teams_after_membership_refresh() {
     assert!(
         TeamsPageView::open_team_states_for_workspace(Some(&workspace)).is_empty(),
         "a refreshed membership must hide the joined team even if openTeams is stale"
-    );
-}
-
-#[test]
-fn viewer_missing_from_the_workspace_roster_is_not_an_admin() {
-    let workspace = admin_workspace(ADMIN_EMAIL);
-
-    assert_eq!(
-        TeamsWidget::page_sections_for(Some(&workspace), None, false),
-        vec![TeamsPageSection::NoTeamsToJoin]
     );
 }
 

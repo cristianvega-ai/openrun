@@ -6,7 +6,6 @@ use std::sync::Arc;
 use email_address::EmailAddress;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
 use regex::Regex;
@@ -16,10 +15,9 @@ use warp_errors::report_error;
 use warpui::clipboard::ClipboardContent;
 use warpui::elements::{
     Align, Border, ChildAnchor, ClippedScrollStateHandle, ConstrainedBox, Container, CornerRadius,
-    CrossAxisAlignment, Element, Flex, FormattedTextElement, HighlightedHyperlink, Hoverable,
-    MainAxisAlignment, MainAxisSize, MouseStateHandle, OffsetPositioning, ParentAnchor,
-    ParentElement, ParentOffsetBounds, Radius, SavePosition, ScrollTarget, ScrollToPositionMode,
-    Shrinkable, Stack, Text,
+    CrossAxisAlignment, Element, Flex, Hoverable, MainAxisAlignment, MainAxisSize,
+    MouseStateHandle, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Radius,
+    SavePosition, ScrollTarget, ScrollToPositionMode, Shrinkable, Stack, Text,
 };
 use warpui::fonts::{Properties, Weight};
 use warpui::platform::Cursor;
@@ -34,11 +32,10 @@ use warpui::{
 };
 
 use super::SettingsSection;
-use super::admin_actions::AdminActions;
 use super::join_teams_modal::{JoinTeamsModal, JoinTeamsModalEvent};
 use super::settings_page::{
     MatchData, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, render_banner,
-    render_cta_banner, render_customer_type_badge, render_separator, render_sub_header,
+    render_separator, render_sub_header,
 };
 use super::tab_menu::Tabs;
 use super::transfer_ownership_confirmation_modal::{
@@ -47,19 +44,16 @@ use super::transfer_ownership_confirmation_modal::{
 use crate::appearance::Appearance;
 use crate::auth::auth_state::AuthState;
 use crate::auth::{AuthStateProvider, UserUid};
+use crate::cloud_object::CloudObjectEventEntrypoint;
 use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{CloudObjectEventEntrypoint, Space};
 use crate::drive::cloud_action_confirmation_dialog::{
     CloudActionConfirmationDialog, CloudActionConfirmationDialogEvent,
     CloudActionConfirmationDialogVariant,
 };
-use crate::editor::{
-    EditorView, Event as EditorEvent, InteractionState, SingleLineEditorOptions, TextOptions,
-};
+use crate::editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions, TextOptions};
 use crate::menu::{self, Menu, MenuItem, MenuItemFields};
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::network::NetworkStatus;
-use crate::pricing::PricingInfoModel;
 use crate::send_telemetry_from_ctx;
 use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::ServerId;
@@ -78,9 +72,7 @@ use crate::workspaces::team::{
 };
 use crate::workspaces::update_manager::{TeamUpdateManager, TeamUpdateManagerEvent};
 use crate::workspaces::user_workspaces::{UserWorkspaces, UserWorkspacesEvent};
-use crate::workspaces::workspace::{
-    BillingMetadata, CustomerType, DelinquencyStatus, Workspace, WorkspaceSizePolicy, WorkspaceUid,
-};
+use crate::workspaces::workspace::{CustomerType, Workspace, WorkspaceUid};
 
 const TEAM_MEMBERS_HEADER_POSITION_ID: &str = "team_settings:team_members_header";
 // Styling for team create page
@@ -98,8 +90,6 @@ const OR_JOIN_WORKSPACE_OR_TEAM_HEADER: &str =
 const NO_JOINABLE_TEAMS_HEADER: &str = "There are currently no joinable teams.";
 const NO_TEAMS_TO_JOIN_DESCRIPTION: &str =
     "Contact an admin to join a team to gain access to more features.";
-const ADMIN_PANEL_CTA_LINK_TEXT: &str = "Visit the admin panel";
-const ADMIN_PANEL_CTA_TRAILING_COPY: &str = "to manage and create new teams.";
 
 // Styling for team management page
 const LEAVE_TEAM_BUTTON_LABEL: &str = "Leave team";
@@ -219,18 +209,6 @@ pub enum TeamsPageAction {
     SendEmailInvites {
         team_uid: ServerId,
     },
-    GenerateUpgradeLink {
-        team_uid: ServerId,
-    },
-    GenerateStripeBillingPortalLink {
-        team_uid: ServerId,
-    },
-    OpenAdminPanel {
-        team_uid: ServerId,
-    },
-    OpenWorkspaceAdminPanel,
-    ContactSupport,
-    ContactSales,
     /// This action is for toggling the discoverability checkbox before a team is created.
     ToggleTeamDiscoverabilityBeforeCreation,
     /// This action is for toggling the discoverability toggle after a team has been created.
@@ -281,12 +259,6 @@ impl TeamsPageAction {
                 | AddDomainRestrictions { .. }
                 | DeleteDomainRestriction { .. }
                 | SendEmailInvites { .. }
-                | GenerateUpgradeLink { .. }
-                | GenerateStripeBillingPortalLink { .. }
-                | OpenAdminPanel { .. }
-                | OpenWorkspaceAdminPanel
-                | ContactSupport
-                | ContactSales
                 | ToggleTeamDiscoverabilityBeforeCreation
                 | ToggleTeamDiscoverability { .. }
                 | JoinTeamWithTeamDiscovery { .. }
@@ -336,17 +308,8 @@ struct TeamsWidgetMouseHandles {
     approve_domains_button: MouseStateHandle,
     reset_invite_links_button: MouseStateHandle,
     invite_by_link_toggle_state: SwitchStateHandle,
-    upgrade_link: MouseStateHandle,
-    stripe_billing_portal_link: MouseStateHandle,
-    manage_plan_link: MouseStateHandle,
-    enterprise_contact_us_link: MouseStateHandle,
     discoverable_team_toggle_state: SwitchStateHandle,
     checkbox_mouse_state: MouseStateHandle,
-    admin_panel_button: MouseStateHandle,
-    grow_team_warning_cta_button: MouseStateHandle,
-    team_members_count_tooltip: MouseStateHandle,
-    outgrow_upgrade_link: MouseStateHandle,
-    workspace_admin_panel_link: HighlightedHyperlink,
     browse_teams_button: MouseStateHandle,
     discovery_back_button: MouseStateHandle,
 }
@@ -382,40 +345,9 @@ impl Tabs for TeamsInviteOption {
     }
 }
 
-/// What's blocking the team from growing right now. Resolved by
-/// `grow_team_warning`; consumed by `render_grow_team_warning_alert` and
-/// `grow_team_warning_cta`. Priority order is delinquency > over-cap > at-cap.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum GrowTeamWarning {
-    /// Team size equals the workspace size policy limit.
-    SeatCapReached,
-    /// Team size exceeds the workspace size policy limit.
-    SeatCapExceeded,
-    /// Subscription has a past-due payment.
-    PaymentPastDue,
-    /// Subscription is unpaid.
-    PaymentUnpaid,
-}
-
-/// The action an admin can take to resolve a `GrowTeamWarning`. `None`
-/// indicates no actionable path (non-admin viewer, enterprise with no
-/// self-serve option, or no higher-cap plan available).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum GrowTeamWarningCta {
-    /// Self-serve upgrade is available; route to `/upgrade`.
-    Upgrade,
-    /// Self-serve admin can resolve billing via the Stripe portal.
-    UpdateBilling,
-    /// Non-self-serve admin (e.g. enterprise) should reach out to support.
-    ContactSupport,
-    /// No actionable CTA from this viewer in this state.
-    None,
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum TeamsPageSection {
     CreateTeam,
-    AdminPanelCta,
     JoinTeams { header: &'static str },
     NoTeamsToJoin,
 }
@@ -570,7 +502,6 @@ enum DiscoveryJoinTarget {
 #[derive(Copy, Clone)]
 struct TeamInvitationPermissions {
     has_admin_permissions: bool,
-    is_workspace_admin: bool,
 }
 
 impl DiscoverableTeamState {
@@ -612,7 +543,6 @@ pub struct TeamsPageView {
     // Note that rather than storing just the current workspace, we're storing the entire
     // ModelHandle<UserWorkspaces>. That's because eventually we'll be handling more than one workspace.
     user_workspaces: ModelHandle<UserWorkspaces>,
-    pricing_info_model: ModelHandle<PricingInfoModel>,
     cloud_model: ModelHandle<CloudModel>,
     invite_view: TeamsInviteOption,
     team_members_mouse_states: Vec<ItemMouseStates>,
@@ -761,24 +691,6 @@ impl TypedActionView for TeamsPageView {
                 domain_uid,
                 team_uid,
             } => self.delete_domain_restriction(*team_uid, *domain_uid, ctx),
-            TeamsPageAction::GenerateUpgradeLink { team_uid } => {
-                self.generate_upgrade_link(*team_uid, ctx)
-            }
-            TeamsPageAction::GenerateStripeBillingPortalLink { team_uid } => {
-                self.generate_stripe_billing_portal_link(*team_uid, ctx)
-            }
-            TeamsPageAction::OpenAdminPanel { team_uid } => {
-                AdminActions::open_admin_panel(*team_uid, ctx);
-            }
-            TeamsPageAction::OpenWorkspaceAdminPanel => {
-                AdminActions::open_workspace_admin_panel(ctx);
-            }
-            TeamsPageAction::ContactSupport => {
-                AdminActions::contact_support(ctx);
-            }
-            TeamsPageAction::ContactSales => {
-                AdminActions::contact_sales(ctx);
-            }
             TeamsPageAction::ToggleTeamDiscoverability {
                 team_uid,
                 current_state,
@@ -903,8 +815,6 @@ impl TeamsPageView {
             me.update_team_members_state(ctx);
             me.update_approved_domains_state(ctx);
         });
-
-        let pricing_info_model = PricingInfoModel::handle(ctx);
 
         let appearance = Appearance::as_ref(ctx);
         let font_size = appearance.ui_font_size();
@@ -1073,7 +983,6 @@ impl TeamsPageView {
                 num_chips: 0,
             },
             user_workspaces,
-            pricing_info_model,
             cloud_model,
             invite_view: TeamsInviteOption::default(),
             team_members_mouse_states,
@@ -1203,22 +1112,6 @@ impl TeamsPageView {
             UserWorkspacesEvent::DeleteDomainRestrictionRejected(err) => {
                 self.show_error("Failed to delete domain restriction", Some(err), ctx)
             }
-            UserWorkspacesEvent::GenerateUpgradeLink(upgrade_link) => {
-                ctx.open_url(upgrade_link);
-            }
-            UserWorkspacesEvent::GenerateUpgradeLinkRejected(err) => self.show_error(
-                "Failed to generate upgrade link. Please contact us at feedback@warp.dev",
-                Some(err),
-                ctx,
-            ),
-            UserWorkspacesEvent::GenerateStripeBillingPortalLink(billing_session_link) => {
-                ctx.open_url(billing_session_link);
-            }
-            UserWorkspacesEvent::GenerateStripeBillingPortalLinkRejected(err) => self.show_error(
-                "Failed to generate billing link. Please contact us at feedback@warp.dev",
-                Some(err),
-                ctx,
-            ),
             UserWorkspacesEvent::ToggleTeamDiscoverabilitySuccess => {
                 self.show_success("Toggled team discoverability", ctx);
                 ctx.notify();
@@ -1348,25 +1241,6 @@ impl TeamsPageView {
                     ctx,
                 );
             }
-            UserWorkspacesEvent::UpdateWorkspaceSettingsSuccess => {
-                // as of right now, this is only emitted on the billing & usage page
-            }
-            UserWorkspacesEvent::UpdateWorkspaceSettingsRejected(_) => {
-                // as of right now, this is only emitted on the billing & usage page
-            }
-            UserWorkspacesEvent::AiOveragesUpdated => {
-                // AI overages update doesn't affect teams page display
-            }
-            UserWorkspacesEvent::PurchaseAddonCreditsSuccess => {
-                // Addon credits purchase success is handled in billing_and_usage_page
-            }
-            UserWorkspacesEvent::PurchaseAddonCreditsCheckoutRequired { .. } => {
-                // Checkout handoff is handled by the surface that initiated the purchase
-            }
-            UserWorkspacesEvent::PurchaseAddonCreditsRejected(_) => {
-                // Addon credits purchase rejection is handled in billing_and_usage_page
-            }
-            UserWorkspacesEvent::SunsettedToBuildDataUpdated => {}
         }
     }
 
@@ -1771,27 +1645,6 @@ impl TeamsPageView {
         self.update_team_member_mouse_state_handles(ctx);
         self.update_email_validator(ctx);
         self.update_team_name(ctx);
-        self.update_email_editor_interaction_state(ctx);
-    }
-
-    /// Disables the invite-by-email chip editor whenever the grow-team
-    /// warning banner is showing (seat cap reached, delinquent billing,
-    /// etc.). Visual styling is unchanged; only interaction is blocked.
-    fn update_email_editor_interaction_state(&mut self, ctx: &mut ViewContext<Self>) {
-        let blocked = self
-            .user_workspaces
-            .as_ref(ctx)
-            .team_for_view(ctx)
-            .map(|team| TeamsWidget::grow_team_warning(team).is_some())
-            .unwrap_or(false);
-        let state = if blocked {
-            InteractionState::Disabled
-        } else {
-            InteractionState::Editable
-        };
-        self.email_invites_block_editor.update(ctx, |editor, ctx| {
-            editor.set_interaction_state(state, ctx);
-        });
     }
 
     fn update_team_member_mouse_state_handles(&mut self, ctx: &mut ViewContext<Self>) {
@@ -2159,25 +2012,6 @@ impl TeamsPageView {
                 user_workspaces.delete_team_invite(team_uid, invitee_email, ctx);
             });
     }
-
-    fn generate_upgrade_link(&mut self, team_uid: ServerId, ctx: &mut ViewContext<Self>) {
-        self.user_workspaces
-            .update(ctx, move |user_workspaces, ctx| {
-                user_workspaces.generate_upgrade_link(team_uid, ctx);
-            });
-    }
-
-    fn generate_stripe_billing_portal_link(
-        &mut self,
-        team_uid: ServerId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.user_workspaces
-            .update(ctx, move |user_workspaces, ctx| {
-                user_workspaces.generate_stripe_billing_portal_link(team_uid, ctx);
-            });
-    }
-
     fn handle_editor_event(&mut self, event: &EditorEvent, ctx: &mut ViewContext<Self>) {
         match event {
             EditorEvent::Edited(_) => ctx.notify(),
@@ -2235,7 +2069,6 @@ impl TeamsPageView {
     fn renders_create_team_ui(&self, ctx: &AppContext) -> bool {
         TeamsWidget::page_sections_for(
             self.user_workspaces.as_ref(ctx).current_workspace(),
-            self.auth_state.user_email().as_deref(),
             !self.discoverable_teams_states.is_empty(),
         )
         .contains(&TeamsPageSection::CreateTeam)
@@ -2448,333 +2281,6 @@ struct TeamsWidget {
 }
 
 impl TeamsWidget {
-    /// Gets the per-seat costs (monthly and yearly) for the current team plan.
-    /// Returns None if pricing info is unavailable or the plan doesn't support per-seat pricing.
-    fn get_per_seat_costs(
-        &self,
-        team_metadata: &Team,
-        pricing_info_model: &PricingInfoModel,
-    ) -> Option<(f64, f64)> {
-        let stripe_subscription_plan = (&team_metadata.billing_metadata).try_into().ok()?;
-        let plan_pricing = pricing_info_model.plan_pricing(&stripe_subscription_plan)?;
-        let monthly_cost = plan_pricing.monthly_plan_price_per_month_usd_cents as f64 / 100.;
-        let yearly_cost = plan_pricing.yearly_plan_price_per_month_usd_cents as f64 * 12. / 100.;
-        Some((monthly_cost, yearly_cost))
-    }
-
-    fn grow_team_warning(team: &Team) -> Option<GrowTeamWarning> {
-        match team.billing_metadata.delinquency_status {
-            DelinquencyStatus::PastDue => return Some(GrowTeamWarning::PaymentPastDue),
-            DelinquencyStatus::Unpaid => return Some(GrowTeamWarning::PaymentUnpaid),
-            DelinquencyStatus::NoDelinquency
-            // team limit is split into 2 cases below
-            | DelinquencyStatus::TeamLimitExceeded
-            | DelinquencyStatus::Unknown => {}
-        }
-        let policy = team.billing_metadata.tier.workspace_size_policy?;
-        if policy.is_unlimited {
-            return None;
-        }
-        let team_size = i64::try_from(team.members.len()).unwrap_or(i64::MAX);
-        if team_size > policy.limit {
-            return Some(GrowTeamWarning::SeatCapExceeded);
-        }
-        if team_size >= policy.limit {
-            return Some(GrowTeamWarning::SeatCapReached);
-        }
-        None
-    }
-
-    /// Maps an admin's actionable path out of a `GrowTeamWarning`.
-    fn grow_team_warning_cta(
-        warning: GrowTeamWarning,
-        has_admin_permissions: bool,
-        billing_metadata: &BillingMetadata,
-        pricing_info: &PricingInfoModel,
-    ) -> GrowTeamWarningCta {
-        if !has_admin_permissions {
-            return GrowTeamWarningCta::None;
-        }
-        match warning {
-            GrowTeamWarning::PaymentPastDue | GrowTeamWarning::PaymentUnpaid => {
-                // Self-serve admins should be able to fix billing themselves;
-                // everyone else (enterprise / legacy) needs to reach support.
-                if billing_metadata.is_on_stripe_paid_plan() {
-                    GrowTeamWarningCta::UpdateBilling
-                } else {
-                    GrowTeamWarningCta::ContactSupport
-                }
-            }
-            GrowTeamWarning::SeatCapReached | GrowTeamWarning::SeatCapExceeded => {
-                // Business teams route through the upgrade flow for the
-                // Enterprise upsell when they need more seats.
-                if billing_metadata.customer_type == CustomerType::Business {
-                    return GrowTeamWarningCta::Upgrade;
-                }
-                if billing_metadata.is_enterprise_plan() {
-                    return GrowTeamWarningCta::None;
-                }
-                let Some(policy) = billing_metadata.tier.workspace_size_policy else {
-                    return GrowTeamWarningCta::None;
-                };
-                if Self::has_higher_seat_cap_plan_available(&policy, pricing_info) {
-                    GrowTeamWarningCta::Upgrade
-                } else {
-                    GrowTeamWarningCta::None
-                }
-            }
-        }
-    }
-
-    fn has_higher_seat_cap_plan_available(
-        workspace_size_policy: &WorkspaceSizePolicy,
-        pricing_info: &PricingInfoModel,
-    ) -> bool {
-        if workspace_size_policy.is_unlimited {
-            return false;
-        }
-        pricing_info
-            .plans()
-            .iter()
-            .filter_map(|plan| plan.max_team_size)
-            .any(|max| i64::from(max) > workspace_size_policy.limit)
-    }
-
-    /// Renders the red warning alert at the top of the invite section.
-    fn render_grow_team_warning_alert(
-        &self,
-        team: &Team,
-        warning: GrowTeamWarning,
-        has_admin_permissions: bool,
-        pricing_info: &PricingInfoModel,
-        appearance: &Appearance,
-    ) -> Box<dyn Element> {
-        let horizontal_padding = 16.;
-        let theme = appearance.theme();
-        let active_text = theme.active_ui_text_color();
-
-        let alert_icon = Container::new(
-            ConstrainedBox::new(
-                Icon::AlertCircle
-                    .to_warpui_icon(active_text.with_opacity(90))
-                    .finish(),
-            )
-            .with_max_height(20.)
-            .with_max_width(20.)
-            .finish(),
-        )
-        .with_margin_right(horizontal_padding)
-        .finish();
-
-        let title = match warning {
-            GrowTeamWarning::SeatCapReached => "Your team is full",
-            GrowTeamWarning::SeatCapExceeded => "You've exceeded your member limit",
-            GrowTeamWarning::PaymentPastDue => "Payment past due",
-            GrowTeamWarning::PaymentUnpaid => "Subscription unpaid",
-        };
-        let title_element = self.render_subsection_header(title.to_owned(), appearance);
-
-        let cta = Self::grow_team_warning_cta(
-            warning,
-            has_admin_permissions,
-            &team.billing_metadata,
-            pricing_info,
-        );
-
-        let body_prefix = match warning {
-            GrowTeamWarning::SeatCapReached => "You've reached your plan's member limit.",
-            GrowTeamWarning::SeatCapExceeded => {
-                "You've exceeded your plan's member limit. Existing team members keep their access, but you won't be able to add new members."
-            }
-            GrowTeamWarning::PaymentPastDue => {
-                "Team invites have been restricted due to a past-due payment."
-            }
-            GrowTeamWarning::PaymentUnpaid => {
-                "Team invites have been restricted due to an unpaid subscription."
-            }
-        };
-
-        let is_delinquency = matches!(
-            warning,
-            GrowTeamWarning::PaymentPastDue | GrowTeamWarning::PaymentUnpaid
-        );
-        let cta_sentence = if !has_admin_permissions {
-            if is_delinquency {
-                "Contact a team admin to restore access."
-            } else {
-                "Contact a team admin to grow the team."
-            }
-        } else {
-            match cta {
-                GrowTeamWarningCta::Upgrade => "Upgrade to grow your team.",
-                GrowTeamWarningCta::UpdateBilling => {
-                    "Update your payment information to restore access."
-                }
-                GrowTeamWarningCta::ContactSupport => "Contact support to restore access.",
-                GrowTeamWarningCta::None => {
-                    if is_delinquency {
-                        "Contact support to restore access."
-                    } else {
-                        "Contact sales to grow your team."
-                    }
-                }
-            }
-        };
-        let body_text = format!("{body_prefix} {cta_sentence}");
-        let body = self.render_sub_text(body_text, appearance, None);
-        let title_container = Container::new(title_element)
-            .with_margin_bottom(4.)
-            .finish();
-        let text_column = Flex::column()
-            .with_child(title_container)
-            .with_child(body)
-            .finish();
-        let left_content = Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_child(alert_icon)
-            .with_child(Shrinkable::new(1., text_column).finish())
-            .finish();
-
-        let mut content_row = Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-            .with_main_axis_size(MainAxisSize::Max)
-            .with_child(Shrinkable::new(1., left_content).finish());
-
-        // CTA button only renders when there's an actionable path. A single
-        // mouse state handle is fine because at most one CTA shows at a time.
-        if let Some((cta_label, cta_action)) = match cta {
-            GrowTeamWarningCta::Upgrade => Some((
-                "Upgrade",
-                TeamsPageAction::GenerateUpgradeLink { team_uid: team.uid },
-            )),
-            GrowTeamWarningCta::UpdateBilling => Some((
-                "Update billing",
-                TeamsPageAction::GenerateStripeBillingPortalLink { team_uid: team.uid },
-            )),
-            GrowTeamWarningCta::ContactSupport => {
-                Some(("Contact support", TeamsPageAction::ContactSupport))
-            }
-            GrowTeamWarningCta::None => None,
-        } {
-            let cta_mouse_state = self
-                .mouse_state_handles
-                .grow_team_warning_cta_button
-                .clone();
-            let cta_styles = UiComponentStyles {
-                font_weight: Some(Weight::Medium),
-                font_size: Some(13.),
-                height: Some(32.),
-                padding: Some(Coords {
-                    top: 6.,
-                    bottom: 6.,
-                    left: 14.,
-                    right: 14.,
-                }),
-                ..Default::default()
-            };
-            let error_color = theme.ui_error_color();
-            let cta_button = appearance
-                .ui_builder()
-                .button(ButtonVariant::Secondary, cta_mouse_state)
-                .with_style(cta_styles)
-                .with_centered_text_label(cta_label.to_owned())
-                .with_hovered_styles(UiComponentStyles {
-                    background: Some(
-                        themes::theme::Fill::from(error_color)
-                            .with_opacity(20)
-                            .into(),
-                    ),
-                    border_color: Some(themes::theme::Fill::from(error_color).into()),
-                    ..Default::default()
-                })
-                .build()
-                .with_cursor(Cursor::PointingHand)
-                .on_click(move |ctx, _, _| ctx.dispatch_typed_action(cta_action.clone()))
-                .finish();
-            content_row =
-                content_row.with_child(Container::new(cta_button).with_margin_left(16.).finish());
-        }
-
-        let error_color = theme.ui_error_color();
-        let background_fill = themes::theme::Fill::from(error_color).with_opacity(10);
-        let border_fill = themes::theme::Fill::from(error_color);
-        Container::new(content_row.finish())
-            .with_vertical_padding(12.)
-            .with_horizontal_padding(horizontal_padding)
-            .with_background(background_fill)
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-            .with_border(Border::all(1.).with_border_fill(border_fill))
-            .finish()
-    }
-
-    fn outgrow_upgrade_line_copy(
-        billing_metadata: &BillingMetadata,
-    ) -> (&'static str, &'static str) {
-        if billing_metadata.customer_type == CustomerType::Business {
-            (
-                "Upgrade to Enterprise",
-                " for an unlimited team member limit.",
-            )
-        } else {
-            ("Upgrade to Business", " for a higher team member limit.")
-        }
-    }
-
-    fn render_team_member_cost_info(
-        &self,
-        team_metadata: &Team,
-        pricing_info_model: &PricingInfoModel,
-        appearance: &Appearance,
-        has_admin_permissions: bool,
-    ) -> Box<dyn Element> {
-        let prorated_message = if has_admin_permissions {
-            "You'll be charged for a portion of the team member's usage of Warp."
-        } else {
-            "Your admin will be charged for a portion of the team member's usage of Warp."
-        };
-
-        let additional_members_cost_money_msg = if let Some((monthly_cost, yearly_cost)) =
-            self.get_per_seat_costs(team_metadata, pricing_info_model)
-        {
-            format!(
-                "Additional members are billed at your plan's per-user rate: ${monthly_cost:.0}/month or ${yearly_cost:.0}/year, depending on your billing interval. {prorated_message}"
-            )
-        } else {
-            format!(
-                "Additional members are billed at your plan's per-user rate. {prorated_message}"
-            )
-        };
-
-        let horizontal_padding = 16.;
-        let theme = appearance.theme();
-        let currency_icon = Container::new(
-            ConstrainedBox::new(Icon::CoinsStacked.to_warpui_icon(theme.accent()).finish())
-                .with_max_height(20.)
-                .with_max_width(20.)
-                .finish(),
-        )
-        .with_margin_right(horizontal_padding)
-        .finish();
-
-        let member_pricing_info =
-            self.render_sub_text(additional_members_cost_money_msg, appearance, None);
-
-        let content_row = Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_main_axis_size(MainAxisSize::Max)
-            .with_child(currency_icon)
-            .with_child(Shrinkable::new(1., member_pricing_info).finish());
-
-        // Wrap in a container with an accent-tinted alert background.
-        Container::new(content_row.finish())
-            .with_vertical_padding(20.)
-            .with_horizontal_padding(horizontal_padding)
-            .with_background(internal_colors::accent_overlay_1(theme))
-            .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-            .finish()
-    }
-
     fn render_team_management_page(
         &self,
         team_metadata: &Team,
@@ -2783,7 +2289,7 @@ impl TeamsWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let cloud_model = view.cloud_model.as_ref(app);
+        let _cloud_model = view.cloud_model.as_ref(app);
         let current_user_email = view.auth_state.user_email().unwrap_or_default();
         let has_admin_permissions =
             TeamsPageView::has_admin_permissions(team_metadata, workspace, &current_user_email);
@@ -2798,33 +2304,13 @@ impl TeamsWidget {
             .set_border_color(appearance.theme().foreground().with_opacity(20).into())
             .set_padding(Coords::uniform(0.).top(4.).right(5.));
 
-        let use_workspace_admin_panel = workspace.is_native_workspaces_admin(&current_user_email);
-
         // 1) Team name header
         main_content.add_child(self.render_header(
             has_admin_permissions,
             team_metadata,
-            use_workspace_admin_panel,
             view,
             appearance,
         ));
-
-        // has_plan_limit will be true if the team has any shared object policy that
-        // is not unlimited.
-        let has_plan_limit = team_metadata
-            .billing_metadata
-            .tier
-            .shared_notebooks_policy
-            .map(|policy| !policy.is_unlimited)
-            .unwrap_or_else(|| false);
-        if has_plan_limit {
-            // Render plan usage and limits
-            main_content.add_child(
-                Container::new(self.render_plan_usage(team_metadata, cloud_model, appearance, app))
-                    .with_padding_top(CONTENT_SEPARATION_PADDING)
-                    .finish(),
-            )
-        }
 
         // 2) Horizontal separator
         main_content.add_child(
@@ -2839,7 +2325,6 @@ impl TeamsWidget {
             team_metadata,
             TeamInvitationPermissions {
                 has_admin_permissions,
-                is_workspace_admin: use_workspace_admin_panel,
             },
             view,
             appearance,
@@ -2865,22 +2350,7 @@ impl TeamsWidget {
             appearance,
         ));
 
-        // 6) Optional outgrow CTA
-        let pricing_info_model = view.pricing_info_model.as_ref(app);
-        if let Some(cta) = self.render_outgrow_upgrade_cta(
-            team_metadata,
-            has_admin_permissions,
-            pricing_info_model,
-            appearance,
-        ) {
-            main_content.add_child(
-                Container::new(cta)
-                    .with_padding_top(CONTENT_SEPARATION_PADDING)
-                    .finish(),
-            );
-        }
-
-        // 7) Deleting/leaving teams
+        // 6) Deleting/leaving teams
         let mut button_row = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
         let footer_action = Self::team_footer_action(team_metadata, workspace, is_owner);
         if let Some(footer_action) = footer_action {
@@ -2899,11 +2369,9 @@ impl TeamsWidget {
             // and if the current user actually has the perms to delete the team
             if has_admin_permissions && footer_action == Some(TeamFooterAction::Delete) {
                 button_row.add_child(
-                    Container::new(self.render_delete_disabled_help_text(
-                        delete_disabled_reason,
-                        team_metadata.uid,
-                        appearance,
-                    ))
+                    Container::new(
+                        self.render_delete_disabled_help_text(delete_disabled_reason, appearance),
+                    )
                     .with_padding_right(24.)
                     .finish(),
                 );
@@ -2961,7 +2429,6 @@ impl TeamsWidget {
         &self,
         has_admin_permissions: bool,
         team: &Team,
-        use_workspace_admin_panel: bool,
         view: &TeamsPageView,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
@@ -2985,45 +2452,6 @@ impl TeamsWidget {
             );
         }
 
-        if team.billing_metadata.customer_type != CustomerType::Unknown {
-            left_side.add_child(
-                Container::new(render_customer_type_badge(
-                    appearance,
-                    team.billing_metadata.customer_type.to_display_string(),
-                ))
-                .with_margin_left(12.)
-                .finish(),
-            );
-        }
-
-        match team.billing_metadata.delinquency_status {
-            DelinquencyStatus::PastDue => {
-                left_side.add_child(
-                    Container::new(self.render_delinquency_badge(
-                        appearance,
-                        "PAST DUE".into(),
-                        themes::theme::Fill::from(*PAST_DUE_BADGE_COLOR).into(),
-                    ))
-                    .with_margin_left(8.)
-                    .finish(),
-                );
-            }
-            DelinquencyStatus::Unpaid => {
-                left_side.add_child(
-                    Container::new(self.render_delinquency_badge(
-                        appearance,
-                        "UNPAID".into(),
-                        themes::theme::Fill::from(*UNPAID_BADGE_COLOR).into(),
-                    ))
-                    .with_margin_left(8.)
-                    .finish(),
-                );
-            }
-            DelinquencyStatus::NoDelinquency
-            | DelinquencyStatus::TeamLimitExceeded
-            | DelinquencyStatus::Unknown => (),
-        }
-
         team_name_header.add_child(left_side.finish());
         let has_joinable_teams = !view.open_team_states.is_empty();
         let mut right_side = Flex::row()
@@ -3033,230 +2461,12 @@ impl TeamsWidget {
         if has_joinable_teams {
             right_side.add_child(self.render_browse_teams_button(appearance));
         }
-        if has_admin_permissions {
-            let billing_links =
-                self.render_billing_links(team, use_workspace_admin_panel, appearance);
-            right_side.add_child(if has_joinable_teams {
-                Container::new(billing_links)
-                    .with_border(Border::left(1.).with_border_fill(appearance.theme().outline()))
-                    .with_margin_left(12.)
-                    .finish()
-            } else {
-                billing_links
-            });
-        }
-        if has_joinable_teams || has_admin_permissions {
+        if has_joinable_teams {
             team_name_header.add_child(right_side.finish());
         }
 
         team_name_header.finish()
     }
-
-    fn render_contact_support_button(&self, appearance: &Appearance) -> Box<dyn Element> {
-        appearance
-            .ui_builder()
-            .button(
-                ButtonVariant::Link,
-                self.mouse_state_handles.enterprise_contact_us_link.clone(),
-            )
-            .with_text_and_icon_label(
-                TextAndIcon::new(
-                    TextAndIconAlignment::IconFirst,
-                    "Contact support",
-                    Icon::Phone.to_warpui_icon(appearance.theme().accent()),
-                    MainAxisSize::Min,
-                    MainAxisAlignment::Center,
-                    vec2f(14., 14.),
-                )
-                .with_inner_padding(4.),
-            )
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(TeamsPageAction::ContactSupport);
-            })
-            .finish()
-    }
-
-    fn render_manage_billing_button(
-        &self,
-        team_uid: ServerId,
-        appearance: &Appearance,
-    ) -> Box<dyn Element> {
-        appearance
-            .ui_builder()
-            .button(
-                ButtonVariant::Link,
-                self.mouse_state_handles.stripe_billing_portal_link.clone(),
-            )
-            .with_text_and_icon_label(
-                TextAndIcon::new(
-                    TextAndIconAlignment::IconFirst,
-                    "Manage billing",
-                    Icon::CoinsStacked.to_warpui_icon(appearance.theme().accent()),
-                    MainAxisSize::Min,
-                    MainAxisAlignment::Center,
-                    vec2f(14., 14.),
-                )
-                .with_inner_padding(4.),
-            )
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(TeamsPageAction::GenerateStripeBillingPortalLink {
-                    team_uid,
-                });
-            })
-            .finish()
-    }
-
-    fn render_admin_panel_button(
-        &self,
-        team_uid: ServerId,
-        use_workspace_admin_panel: bool,
-        appearance: &Appearance,
-    ) -> Box<dyn Element> {
-        appearance
-            .ui_builder()
-            .button(
-                ButtonVariant::Link,
-                self.mouse_state_handles.admin_panel_button.clone(),
-            )
-            .with_text_and_icon_label(
-                TextAndIcon::new(
-                    TextAndIconAlignment::IconFirst,
-                    "Open admin panel",
-                    Icon::Users.to_warpui_icon(appearance.theme().accent()),
-                    MainAxisSize::Min,
-                    MainAxisAlignment::Center,
-                    vec2f(14., 14.),
-                )
-                .with_inner_padding(4.),
-            )
-            .build()
-            .on_click(move |ctx, _, _| {
-                if use_workspace_admin_panel {
-                    ctx.dispatch_typed_action(TeamsPageAction::OpenWorkspaceAdminPanel);
-                } else {
-                    ctx.dispatch_typed_action(TeamsPageAction::OpenAdminPanel { team_uid });
-                }
-            })
-            .finish()
-    }
-
-    fn render_billing_links(
-        &self,
-        team: &Team,
-        use_workspace_admin_panel: bool,
-        appearance: &Appearance,
-    ) -> Box<dyn Element> {
-        let mut billing_links = Flex::row()
-            .with_main_axis_alignment(MainAxisAlignment::End)
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_main_axis_size(MainAxisSize::Min);
-
-        let team_uid = team.uid;
-
-        // For enterprise we actually hide both upgrade/billing links and have a contact support link instead
-        if team.billing_metadata.customer_type == CustomerType::Enterprise {
-            billing_links.add_child(
-                Container::new(self.render_contact_support_button(appearance))
-                    .with_margin_left(12.)
-                    .finish(),
-            );
-        } else {
-            // If the team is upgradeable to self-serve tier, show them the upgrade link.
-            if team.billing_metadata.can_upgrade_to_higher_tier_plan() {
-                let description = if team.billing_metadata.can_upgrade_to_build_plan() {
-                    "Upgrade to Build"
-                } else {
-                    match team.billing_metadata.customer_type {
-                        CustomerType::Prosumer => "Upgrade to Turbo plan",
-                        CustomerType::Turbo => "Upgrade to Lightspeed plan",
-                        _ => "Compare plans",
-                    }
-                };
-                billing_links.add_child(
-                    Container::new(self.render_compare_plans_button(
-                        description,
-                        self.mouse_state_handles.upgrade_link.clone(),
-                        team_uid,
-                        appearance,
-                        None,
-                    ))
-                    .with_margin_left(12.)
-                    .finish(),
-                );
-            } else if team.has_billing_history {
-                billing_links.add_child(
-                    Container::new(self.render_manage_billing_button(team_uid, appearance))
-                        .with_margin_left(12.)
-                        .finish(),
-                );
-            }
-        }
-
-        billing_links.add_child(
-            Container::new(self.render_admin_panel_button(
-                team_uid,
-                use_workspace_admin_panel,
-                appearance,
-            ))
-            .with_margin_left(12.)
-            .finish(),
-        );
-
-        billing_links.finish()
-    }
-
-    fn render_plan_usage(
-        &self,
-        team: &Team,
-        cloud_model: &CloudModel,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let mut section = Flex::column();
-        let sub_header_text = match team.billing_metadata.customer_type {
-            CustomerType::Free => "Free plan usage limits",
-            _ => "Plan usage limits",
-        };
-        section.add_child(self.render_subsection_header(sub_header_text.into(), appearance));
-
-        let mut shared_objects_usage_row =
-            Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
-
-        if let Some(policy) = team.billing_metadata.tier.shared_notebooks_policy
-            && !policy.is_unlimited
-        {
-            let mut shared_notebooks_column = Flex::column();
-            shared_notebooks_column
-                .add_child(self.render_plan_usage_header("Shared Notebooks".into(), appearance));
-            let num_shared_notebooks = cloud_model
-                .active_notebooks_in_space(Space::Team { team_uid: team.uid }, app)
-                .count();
-            shared_notebooks_column.add_child(
-                Container::new(self.render_plan_usage_text(
-                    format!("{}/{}", num_shared_notebooks, policy.limit),
-                    appearance,
-                ))
-                .with_margin_top(4.)
-                .finish(),
-            );
-            shared_objects_usage_row.add_child(
-                Container::new(shared_notebooks_column.finish())
-                    .with_margin_right(64.)
-                    .finish(),
-            );
-        }
-
-        section.add_child(
-            Container::new(shared_objects_usage_row.finish())
-                .with_margin_top(16.)
-                .finish(),
-        );
-
-        section.finish()
-    }
-
     fn render_team_invitation_section(
         &self,
         team_metadata: &Team,
@@ -3272,20 +2482,6 @@ impl TeamsWidget {
         let is_invite_link_enabled = team_metadata.invite_link.is_some();
         let is_discoverable = user_workspaces.is_discoverable();
 
-        // "team is full" or "billing issue" or some other alert thats restricting you from adding team members
-        let warning = Self::grow_team_warning(team_metadata);
-        let pricing_info_model = view.pricing_info_model.as_ref(app);
-        if let Some(warning) = warning {
-            let alert = self.render_grow_team_warning_alert(
-                team_metadata,
-                warning,
-                permissions.has_admin_permissions,
-                pricing_info_model,
-                appearance,
-            );
-            invitation_section.add_child(Container::new(alert).with_padding_bottom(24.).finish());
-        }
-
         invitation_section.add_child(
             Container::new(
                 self.render_subsection_header("Invite team members".to_owned(), appearance),
@@ -3293,20 +2489,6 @@ impl TeamsWidget {
             .with_padding_bottom(16.)
             .finish(),
         );
-
-        if team_metadata.billing_metadata.is_on_stripe_paid_plan() {
-            let pricing_alert = self.render_team_member_cost_info(
-                team_metadata,
-                pricing_info_model,
-                appearance,
-                permissions.has_admin_permissions,
-            );
-            invitation_section.add_child(
-                Container::new(pricing_alert)
-                    .with_padding_bottom(24.)
-                    .finish(),
-            );
-        }
 
         // Invite by link section
         // Only show invite-by-link if user is admin (so they can see the
@@ -3326,14 +2508,11 @@ impl TeamsWidget {
             ));
         }
 
-        // Invite by email. Disabled whenever the warning banner is showing —
-        // the banner owns the explanation + recovery CTA.
         invitation_section.add_child(self.render_invite_by_email_section(
             team_metadata,
             view,
             appearance,
             chip_editor_style,
-            warning.is_some(),
         ));
 
         // By discovery — third invitation method, same hierarchical level as
@@ -3378,36 +2557,11 @@ impl TeamsWidget {
                     Some(Coords::uniform(0.).right(48.)),
                 )
             } else {
-                let mut fragments = vec![FormattedTextFragment::plain_text(
-                    INVITE_LINK_UNAVAILABLE_INSTRUCTIONS,
-                )];
-                if permissions.is_workspace_admin {
-                    fragments.extend([
-                        FormattedTextFragment::plain_text(" Update team visibility in the "),
-                        FormattedTextFragment::hyperlink(
-                            "workspace admin panel",
-                            AdminActions::workspace_teams_admin_panel_link(),
-                        ),
-                        FormattedTextFragment::plain_text("."),
-                    ]);
-                }
-                FormattedTextElement::new(
-                    FormattedText::new([FormattedTextLine::Line(fragments)]),
-                    appearance.ui_font_size(),
-                    appearance.ui_font_family(),
-                    appearance.ui_font_family(),
-                    appearance
-                        .theme()
-                        .active_ui_text_color()
-                        .with_opacity(60)
-                        .into(),
-                    self.mouse_state_handles.workspace_admin_panel_link.clone(),
+                self.render_sub_text(
+                    INVITE_LINK_UNAVAILABLE_INSTRUCTIONS.into(),
+                    appearance,
+                    Some(Coords::uniform(0.).right(48.)),
                 )
-                .with_hyperlink_font_color(appearance.theme().accent().into_solid())
-                .register_default_click_handlers(|url, _, ctx| {
-                    ctx.open_url(&url.url);
-                })
-                .finish()
             };
             Flex::column()
                 .with_child(header)
@@ -3507,7 +2661,6 @@ impl TeamsWidget {
         view: &TeamsPageView,
         appearance: &Appearance,
         chip_editor_style: UiComponentStyles,
-        force_disabled: bool,
     ) -> Box<dyn Element> {
         let mut section = Flex::column();
 
@@ -3519,10 +2672,6 @@ impl TeamsWidget {
                 .finish(),
         );
 
-        // Form stays visually unchanged when blocked; the chip editor is
-        // disabled via `update_email_editor_interaction_state` and the send
-        // button is force-disabled below. The warning banner at the top of
-        // the invitation section owns the explanation + recovery CTA.
         section.add_child(
             Container::new(self.render_sub_text(
                 INVITE_BY_EMAIL_EXPIRY_INSTRUCTIONS.into(),
@@ -3545,18 +2694,11 @@ impl TeamsWidget {
                     )
                     .finish(),
                 )
-                .with_child(self.render_send_email_invites_button(
-                    team.uid,
-                    view,
-                    appearance,
-                    force_disabled,
-                ))
+                .with_child(self.render_send_email_invites_button(team.uid, view, appearance))
                 .finish(),
         );
 
-        // Skip the "invalid emails" hint when the form is disabled.
-        if !force_disabled
-            && !view.email_invites_block_editor_state.is_valid
+        if !view.email_invites_block_editor_state.is_valid
             && !view.email_invites_block_editor_state.is_empty
             && view.email_invites_block_editor_state.num_chips > 0
         {
@@ -3610,7 +2752,6 @@ impl TeamsWidget {
     }
 
     /// Right-aligned "{N} team members" label next to the section header.
-    /// On finite-cap plans, appends an info icon with a capacity tooltip.
     fn render_team_members_count(&self, team: &Team, appearance: &Appearance) -> Box<dyn Element> {
         let count = team.members.len();
         let count_label = if count == 1 {
@@ -3619,125 +2760,17 @@ impl TeamsWidget {
             format!("{count} team members")
         };
 
-        // No capacity tooltip when the plan is unlimited (or workspace size
-        // policy is missing). Just render the count text on its own.
-        let policy = team.billing_metadata.tier.workspace_size_policy;
-        let finite_cap = match policy {
-            Some(p) if !p.is_unlimited => Some(p.limit),
-            _ => None,
-        };
-        let theme = appearance.theme();
-        let count_color = match finite_cap {
-            Some(cap) => {
-                let count = i64::try_from(count).unwrap_or(i64::MAX);
-                if count >= cap {
-                    theme.ui_error_color()
-                } else if count >= cap.saturating_sub(2) {
-                    theme.ansi_fg_yellow()
-                } else {
-                    theme.active_ui_text_color().into_solid()
-                }
-            }
-            None => theme.active_ui_text_color().into_solid(),
-        };
-        // Info icon uses the muted gray that matches other secondary UI hints.
-        let muted_color = theme.active_ui_text_color().with_opacity(60);
-
-        let count_text = appearance
+        appearance
             .ui_builder()
             .span(count_label)
             .with_style(UiComponentStyles {
                 font_family_id: Some(appearance.ui_font_family()),
-                font_color: Some(count_color),
+                font_color: Some(appearance.theme().active_ui_text_color().into_solid()),
                 font_size: Some(12.),
                 ..Default::default()
             })
             .build()
-            .finish();
-        let Some(cap) = finite_cap else {
-            return count_text;
-        };
-
-        let plan_display = team.billing_metadata.customer_type.to_display_string();
-        let tooltip_text =
-            format!("Your plan ({plan_display}) has a maximum capacity of {cap} members.");
-
-        let info_icon = Container::new(
-            ConstrainedBox::new(Icon::Info.to_warpui_icon(muted_color).finish())
-                .with_max_height(14.)
-                .with_max_width(14.)
-                .finish(),
-        )
-        .with_margin_left(6.)
-        .finish();
-
-        let info_icon_with_tooltip = appearance.ui_builder().overlay_tool_tip_on_element(
-            tooltip_text,
-            self.mouse_state_handles.team_members_count_tooltip.clone(),
-            info_icon,
-            ParentAnchor::TopRight,
-            ChildAnchor::BottomRight,
-            vec2f(0., -5.),
-        );
-
-        Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_main_axis_size(MainAxisSize::Min)
-            .with_child(count_text)
-            .with_child(info_icon_with_tooltip)
             .finish()
-    }
-
-    /// "Need more seats? <Upgrade to ...> ..."
-    fn render_outgrow_upgrade_cta(
-        &self,
-        team: &Team,
-        has_admin_permissions: bool,
-        pricing_info: &PricingInfoModel,
-        appearance: &Appearance,
-    ) -> Option<Box<dyn Element>> {
-        if team.billing_metadata.is_delinquent_due_to_payment_issue() {
-            return None;
-        }
-        match Self::grow_team_warning_cta(
-            GrowTeamWarning::SeatCapReached,
-            has_admin_permissions,
-            &team.billing_metadata,
-            pricing_info,
-        ) {
-            GrowTeamWarningCta::UpdateBilling
-            | GrowTeamWarningCta::ContactSupport
-            | GrowTeamWarningCta::None => return None,
-            GrowTeamWarningCta::Upgrade => {}
-        }
-
-        let team_uid = team.uid;
-        let (link_text, suffix) = Self::outgrow_upgrade_line_copy(&team.billing_metadata);
-        let prefix = self.render_sub_text("Need more seats? ".to_string(), appearance, None);
-        let link = appearance
-            .ui_builder()
-            .link(
-                link_text.to_string(),
-                None,
-                Some(Box::new(move |ctx| {
-                    ctx.dispatch_typed_action(TeamsPageAction::GenerateUpgradeLink { team_uid });
-                })),
-                self.mouse_state_handles.outgrow_upgrade_link.clone(),
-            )
-            .soft_wrap(false)
-            .build()
-            .finish();
-        let suffix = self.render_sub_text(suffix.to_string(), appearance, None);
-
-        Some(
-            Flex::row()
-                .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_main_axis_size(MainAxisSize::Min)
-                .with_child(prefix)
-                .with_child(link)
-                .with_child(suffix)
-                .finish(),
-        )
     }
 
     fn render_approved_domains_section(
@@ -3873,12 +2906,9 @@ impl TeamsWidget {
         team_uid: ServerId,
         view: &TeamsPageView,
         appearance: &Appearance,
-        force_disabled: bool,
     ) -> Box<dyn Element> {
-        // Only render enabled button with action if email list is valid AND
-        // the caller hasn't forced the disabled state (e.g. team at seat cap).
-        let (action, variant) = if !force_disabled && view.email_invites_block_editor_state.is_valid
-        {
+        // Only render enabled button with action if email list is valid.
+        let (action, variant) = if view.email_invites_block_editor_state.is_valid {
             (
                 Some(TeamsPageAction::SendEmailInvites { team_uid }),
                 ButtonVariant::Accent,
@@ -4029,7 +3059,6 @@ impl TeamsWidget {
     fn render_delete_disabled_help_text(
         &self,
         delete_disabled_reason: TeamDeleteDisabledReason,
-        team_uid: ServerId,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let description = self.render_sub_text(
@@ -4038,47 +3067,8 @@ impl TeamsWidget {
             None,
         );
 
-        let mut children = vec![description];
-
-        if delete_disabled_reason == TeamDeleteDisabledReason::ActivePaidSubscription {
-            let link = appearance
-                .ui_builder()
-                .link(
-                    "Manage plan".into(),
-                    None,
-                    Some(Box::new(move |ctx| {
-                        ctx.dispatch_typed_action(
-                            TeamsPageAction::GenerateStripeBillingPortalLink { team_uid },
-                        );
-                    })),
-                    self.mouse_state_handles.manage_plan_link.clone(),
-                )
-                .build()
-                .finish();
-            children.push(link);
-        }
-
-        Flex::column().with_children(children).finish()
+        description
     }
-
-    fn render_delinquency_badge(
-        &self,
-        appearance: &Appearance,
-        text: String,
-        chip_color: ColorU,
-    ) -> Box<dyn Element> {
-        Container::new(
-            Text::new_inline(text, appearance.ui_font_family(), appearance.ui_font_size())
-                .with_color(*DELINQUENCY_BADGE_TEXT_COLOR)
-                .with_style(Properties::default().weight(Weight::Medium))
-                .finish(),
-        )
-        .with_uniform_padding(4.)
-        .with_background(chip_color)
-        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.)))
-        .finish()
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn render_state_chip(
         &self,
@@ -4593,57 +3583,6 @@ impl TeamsWidget {
         .left()
         .finish()
     }
-
-    fn render_plan_usage_header(&self, text: String, appearance: &Appearance) -> Box<dyn Element> {
-        Align::new(
-            appearance
-                .ui_builder()
-                .span(text)
-                .with_style(UiComponentStyles {
-                    font_family_id: Some(appearance.ui_font_family()),
-                    font_weight: Some(Weight::Light),
-                    font_color: Some(
-                        appearance
-                            .theme()
-                            .active_ui_text_color()
-                            .with_opacity(40)
-                            .into(),
-                    ),
-                    font_size: Some(13.),
-                    ..Default::default()
-                })
-                .build()
-                .finish(),
-        )
-        .left()
-        .finish()
-    }
-
-    fn render_plan_usage_text(&self, text: String, appearance: &Appearance) -> Box<dyn Element> {
-        Align::new(
-            appearance
-                .ui_builder()
-                .span(text)
-                .with_style(UiComponentStyles {
-                    font_family_id: Some(appearance.ui_font_family()),
-                    font_weight: Some(Weight::Light),
-                    font_color: Some(
-                        appearance
-                            .theme()
-                            .active_ui_text_color()
-                            .with_opacity(60)
-                            .into(),
-                    ),
-                    font_size: Some(20.),
-                    ..Default::default()
-                })
-                .build()
-                .finish(),
-        )
-        .left()
-        .finish()
-    }
-
     fn render_sub_text(
         &self,
         text: String,
@@ -4681,11 +3620,7 @@ impl TeamsWidget {
             .finish()
     }
 
-    fn page_sections_for(
-        workspace: Option<&Workspace>,
-        email: Option<&str>,
-        join_teams: bool,
-    ) -> Vec<TeamsPageSection> {
+    fn page_sections_for(workspace: Option<&Workspace>, join_teams: bool) -> Vec<TeamsPageSection> {
         let mut sections = Vec::new();
         if !workspace.is_some_and(Workspace::is_native_workspaces_enabled) {
             sections.push(TeamsPageSection::CreateTeam);
@@ -4696,18 +3631,12 @@ impl TeamsWidget {
             }
             return sections;
         }
-        let is_workspace_admin = workspace
-            .zip(email)
-            .is_some_and(|(workspace, email)| workspace.is_workspace_admin(email));
         if join_teams {
             sections.push(TeamsPageSection::JoinTeams {
                 header: JOIN_TEAM_HEADER,
             });
-        } else if !is_workspace_admin {
+        } else {
             sections.push(TeamsPageSection::NoTeamsToJoin);
-        }
-        if is_workspace_admin {
-            sections.push(TeamsPageSection::AdminPanelCta);
         }
         sections
     }
@@ -4729,7 +3658,6 @@ impl TeamsWidget {
             || !view.discoverable_teams_states.is_empty();
         let sections = Self::page_sections_for(
             view.user_workspaces.as_ref(app).current_workspace(),
-            view.auth_state.user_email().as_deref(),
             has_discovery_options,
         );
 
@@ -4743,19 +3671,6 @@ impl TeamsWidget {
             match section {
                 TeamsPageSection::CreateTeam => {
                     page.add_child(self.render_create_team_section(view, appearance, app));
-                }
-                TeamsPageSection::AdminPanelCta => {
-                    page.add_child(
-                        Container::new(render_cta_banner(
-                            Icon::Users,
-                            ADMIN_PANEL_CTA_LINK_TEXT,
-                            ADMIN_PANEL_CTA_TRAILING_COPY,
-                            TeamsPageAction::OpenWorkspaceAdminPanel,
-                            appearance,
-                        ))
-                        .with_padding_top(16.)
-                        .finish(),
-                    );
                 }
                 TeamsPageSection::JoinTeams { header } => {
                     let header = if view.discoverable_workspaces_states.is_empty() {
@@ -5223,44 +4138,6 @@ impl TeamsWidget {
             element.finish()
         }
     }
-
-    fn render_compare_plans_button(
-        &self,
-        text: &str,
-        mouse_state_handle: MouseStateHandle,
-        team_uid: ServerId,
-        appearance: &Appearance,
-        style: Option<UiComponentStyles>,
-    ) -> Box<dyn Element> {
-        let icon_color = appearance.theme().accent();
-
-        let mut button = appearance
-            .ui_builder()
-            .button(ButtonVariant::Link, mouse_state_handle)
-            .with_text_and_icon_label(
-                TextAndIcon::new(
-                    TextAndIconAlignment::IconFirst,
-                    text.to_string(),
-                    Icon::CoinsStacked.to_warpui_icon(icon_color),
-                    MainAxisSize::Min,
-                    MainAxisAlignment::Center,
-                    vec2f(14., 14.),
-                )
-                .with_inner_padding(4.),
-            );
-
-        if let Some(style) = style {
-            button = button.with_style(style);
-        }
-
-        button
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(TeamsPageAction::GenerateUpgradeLink { team_uid });
-            })
-            .finish()
-    }
-
     fn render_button(
         &self,
         label: &str,

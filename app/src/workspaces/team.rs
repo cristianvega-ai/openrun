@@ -87,16 +87,12 @@ pub struct DiscoveryOptions {
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum TeamDeleteDisabledReason {
-    ActivePaidSubscription,
     OtherMembers,
 }
 
 impl TeamDeleteDisabledReason {
     pub fn user_facing_message(&self) -> &str {
         match self {
-            TeamDeleteDisabledReason::ActivePaidSubscription => {
-                "Your team cannot be deleted with an active subscription."
-            }
             TeamDeleteDisabledReason::OtherMembers => {
                 "Your team cannot be deleted with other team members."
             }
@@ -115,13 +111,11 @@ pub struct Team {
     pub pending_email_invites: Vec<EmailInvite>,
     pub invite_link_domain_restrictions: Vec<InviteLinkDomainRestriction>,
     pub billing_metadata: BillingMetadata,
-    pub stripe_customer_id: Option<String>,
     /// The team's effective settings, sourced from the server's `Team.settings`.
     pub settings: TeamSettings,
     pub feature_model_choice: ModelsByFeature,
     /// If the team is eligible for discovery, then show toggle for setting discoverability to the team's admin
     pub is_eligible_for_discovery: bool,
-    pub has_billing_history: bool,
     pub visibility: TeamVisibility,
 }
 
@@ -143,11 +137,9 @@ impl Team {
             pending_email_invites: Default::default(),
             invite_link_domain_restrictions: Default::default(),
             billing_metadata: billing_metadata.unwrap_or_default(),
-            stripe_customer_id: Default::default(),
             settings: settings.unwrap_or_default(),
             feature_model_choice: feature_model_choice.unwrap_or_default(),
             is_eligible_for_discovery: false,
-            has_billing_history: false,
             visibility: TeamVisibility::default(),
         }
     }
@@ -186,9 +178,6 @@ impl Team {
                 .is_none_or(|m| m.email != current_user_email)
         {
             return Some(TeamDeleteDisabledReason::OtherMembers);
-        }
-        if self.billing_metadata.is_user_on_paid_plan() {
-            return Some(TeamDeleteDisabledReason::ActivePaidSubscription);
         }
         None // No reason found, team can be deleted
     }

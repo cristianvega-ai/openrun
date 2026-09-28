@@ -38,9 +38,9 @@ use crate::gpu_state::GPUState;
 use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::pane_group::{Direction, PaneGroupAction, PaneId};
-use crate::pricing::PricingInfoModel;
 use crate::server::cloud_objects::listener::Listener;
 use crate::server::cloud_objects::update_manager::UpdateManager;
+use crate::server::ids::ServerId;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::team::{MockTeamClient, TeamClient};
 use crate::server::server_api::workspace::MockWorkspaceClient;
@@ -175,7 +175,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     crate::crash_recovery::CrashRecovery::register_for_test(app);
 
     app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
-    app.add_singleton_model(|_| PricingInfoModel::new());
     app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
 

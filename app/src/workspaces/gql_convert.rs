@@ -5,24 +5,14 @@ use regex::Regex;
 use warp_errors::report_error;
 use warp_graphql::billing::{
     AiAutonomyPolicy as GqlAiAutonomyPolicy, AmbientAgentsPolicy as GqlAmbientAgentsPolicy,
-    BillingCycleUsageHistory as GqlBillingCycleUsageHistory, BillingMetadata as GqlBillingMetadata,
-    ByoApiKeyPolicy as GqlByoApiKeyPolicy, ByoEndpointPolicy as GqlByoEndpointPolicy,
-    CodebaseContextPolicy as GqlCodebaseContextPolicy, CustomerType as GqlCustomerType,
-    DelinquencyStatus as GqlDelinquencyStatus,
-    EnterpriseCreditsAutoReloadPolicy as GqlEnterpriseCreditsAutoReloadPolicy,
-    EnterprisePayAsYouGoPolicy as GqlEnterprisePayAsYouGoPolicy, InstanceShape as GqlInstanceShape,
+    BillingMetadata as GqlBillingMetadata, ByoApiKeyPolicy as GqlByoApiKeyPolicy,
+    ByoEndpointPolicy as GqlByoEndpointPolicy, CodebaseContextPolicy as GqlCodebaseContextPolicy,
+    CustomerType as GqlCustomerType, InstanceShape as GqlInstanceShape,
     ManagedByokByoePolicy as GqlManagedByokByoePolicy, MultiAdminPolicy as GqlMultiAdminPolicy,
     NativeWorkspacesPolicy as GqlNativeWorkspacesPolicy,
-    PurchaseAddOnCreditsPolicy as GqlPurchaseAddOnCreditsPolicy, ServiceAgreementType,
-    SessionSharingPolicy as GqlSessionSharingPolicy,
-    SharedNotebooksPolicy as GqlSharedNotebooksPolicy,
-    SharedWorkflowsPolicy as GqlSharedWorkflowsPolicy, StripeSubscriptionPlan,
-    TeamSizePolicy as GqlTeamSizePolicy,
+    SessionSharingPolicy as GqlSessionSharingPolicy, TeamSizePolicy as GqlTeamSizePolicy,
     TelemetryDataCollectionPolicy as GqlTelemetryDataCollectionPolicy, Tier as GqlTier,
-    UgcDataCollectionPolicy as GqlUgcDataCollectionPolicy,
-    UsageBasedPricingPolicy as GqlUsageBasedPricingPolicy,
-    UsageVisibilityGranularity as GqlUsageVisibilityGranularity,
-    UsageVisibilityPolicy as GqlUsageVisibilityPolicy, WarpAiPolicy as GqlWarpAiPolicy,
+    UgcDataCollectionPolicy as GqlUgcDataCollectionPolicy, WarpAiPolicy as GqlWarpAiPolicy,
 };
 use warp_graphql::queries::get_workspaces_metadata_for_user::User as GqlUser;
 use warp_graphql::subscriptions::get_warp_drive_updates::WarpDriveUpdate;
@@ -31,7 +21,6 @@ use warp_graphql::user::{
     DiscoverableWorkspaceData as GqlDiscoverableWorkspaceData,
 };
 use warp_graphql::workspace::{
-    AddonCreditsSettings as GqlAddonCreditsSettings,
     AdminEnablementSetting as GqlAdminEnablementSetting, AiAutonomyValue as GqlAiAutonomyValue,
     AiPermissionsSettings as GqlAiPermissionsSettings,
     ByoEndpointMetadata as GqlByoEndpointMetadata,
@@ -53,19 +42,16 @@ use super::team::{
 };
 use super::user_workspaces::WorkspacesMetadataResponse;
 use super::workspace::{
-    AIAutonomyPolicy, AddonCreditsSettings, AdminEnablementSetting, AiAutonomySettings,
-    AiPermissionsSettings, AmbientAgentsPolicy, BillingCycleUsageData, BillingCycleUsageEntry,
-    BillingCycleUsageSummary, BillingMetadata, ByoEndpointMetadata, ByoEndpointModelMetadata,
+    AIAutonomyPolicy, AdminEnablementSetting, AiAutonomySettings, AiPermissionsSettings,
+    AmbientAgentsPolicy, BillingMetadata, ByoEndpointMetadata, ByoEndpointModelMetadata,
     ByoFirstPartyKey, CloudConversationStorageSettings, CodebaseContextSettings, CustomerType,
-    DelinquencyStatus, EmailInvite, EnforceableSetting, EnterpriseSecretRegex,
-    HostEnablementSetting, InstanceShape, InviteLinkDomainRestriction, LinkSharingSettings,
-    LlmSettings, MaxPriorCycles, SandboxedAgentSettings, SecretRedactionSettings,
-    SessionSharingPolicy, SharedNotebooksPolicy, SharedWorkflowsPolicy, SplitListSetting,
-    TeamAiAutonomySettings, TeamAiPermissionsSettings, TeamByoSettings, TeamLinkSharingSettings,
+    EmailInvite, EnforceableSetting, EnterpriseSecretRegex, HostEnablementSetting, InstanceShape,
+    InviteLinkDomainRestriction, LinkSharingSettings, LlmSettings, SandboxedAgentSettings,
+    SecretRedactionSettings, SessionSharingPolicy, SplitListSetting, TeamAiAutonomySettings,
+    TeamAiPermissionsSettings, TeamByoSettings, TeamLinkSharingSettings,
     TeamSandboxedAgentSettings, TeamSecretRedactionSettings, TeamSettings,
     TelemetryDataCollectionPolicy, TelemetrySettings, Tier, UgcCollectionEnablementSetting,
-    UgcCollectionSettings, UgcDataCollectionPolicy, UsageBasedPricingPolicy,
-    UsageVisibilityGranularity, UsageVisibilityPolicy, WarpAiPolicy, Workspace, WorkspaceMember,
+    UgcCollectionSettings, UgcDataCollectionPolicy, WarpAiPolicy, Workspace, WorkspaceMember,
     WorkspaceMemberUsageInfo, WorkspaceSettings, WorkspaceSizePolicy,
 };
 use crate::ai::execution_profiles::{ActionPermission, WriteToPtyPermission};
@@ -76,10 +62,8 @@ use crate::server::graphql::schema::object_action_history_from_gql;
 use crate::server::ids::ServerId;
 use crate::settings::AgentModeCommandExecutionPredicate;
 use crate::workspaces::workspace::{
-    AiOverages, BonusGrantsPurchased, ByoApiKeyPolicy, ByoEndpointPolicy, CodebaseContextPolicy,
-    EnterpriseCreditsAutoReloadPolicy, EnterprisePayAsYouGoPolicy, ManagedByokByoePolicy,
-    MultiAdminPolicy, NativeWorkspacesPolicy, PurchaseAddOnCreditsPolicy,
-    UsageBasedPricingSettings,
+    ByoApiKeyPolicy, ByoEndpointPolicy, CodebaseContextPolicy, ManagedByokByoePolicy,
+    MultiAdminPolicy, NativeWorkspacesPolicy,
 };
 
 pub const PLACEHOLDER_WORKSPACE_UID: &str = "NOT_A_REAL_WORKSPACE_UID";
@@ -309,24 +293,6 @@ impl From<GqlTeamSizePolicy> for WorkspaceSizePolicy {
     }
 }
 
-impl From<GqlSharedNotebooksPolicy> for SharedNotebooksPolicy {
-    fn from(gql_shared_notebooks_policy: GqlSharedNotebooksPolicy) -> SharedNotebooksPolicy {
-        Self {
-            is_unlimited: gql_shared_notebooks_policy.is_unlimited,
-            limit: i64::from(gql_shared_notebooks_policy.limit),
-        }
-    }
-}
-
-impl From<GqlSharedWorkflowsPolicy> for SharedWorkflowsPolicy {
-    fn from(gql_shared_workflows_policy: GqlSharedWorkflowsPolicy) -> SharedWorkflowsPolicy {
-        Self {
-            is_unlimited: gql_shared_workflows_policy.is_unlimited,
-            limit: i64::from(gql_shared_workflows_policy.limit),
-        }
-    }
-}
-
 impl From<GqlSessionSharingPolicy> for SessionSharingPolicy {
     fn from(gql_session_sharing_policy: GqlSessionSharingPolicy) -> SessionSharingPolicy {
         Self {
@@ -465,25 +431,6 @@ impl From<GqlTelemetryDataCollectionPolicy> for TelemetryDataCollectionPolicy {
     }
 }
 
-impl From<GqlUsageBasedPricingPolicy> for UsageBasedPricingPolicy {
-    fn from(gql_usage_based_pricing_policy: GqlUsageBasedPricingPolicy) -> UsageBasedPricingPolicy {
-        Self {
-            toggleable: gql_usage_based_pricing_policy.toggleable,
-        }
-    }
-}
-
-impl From<GqlAddonCreditsSettings> for AddonCreditsSettings {
-    fn from(gql_settings: GqlAddonCreditsSettings) -> AddonCreditsSettings {
-        Self {
-            auto_reload_enabled: gql_settings.auto_reload_enabled,
-            max_monthly_spend_cents: gql_settings.max_monthly_spend_cents,
-            selected_auto_reload_credit_denomination: gql_settings
-                .selected_auto_reload_credit_denomination,
-        }
-    }
-}
-
 impl From<GqlCodebaseContextPolicy> for CodebaseContextPolicy {
     fn from(gql_codebase_context_policy: GqlCodebaseContextPolicy) -> CodebaseContextPolicy {
         Self {
@@ -510,34 +457,6 @@ impl From<GqlByoEndpointPolicy> for ByoEndpointPolicy {
     fn from(gql_byo_endpoint_policy: GqlByoEndpointPolicy) -> ByoEndpointPolicy {
         Self {
             enabled: gql_byo_endpoint_policy.enabled,
-        }
-    }
-}
-
-impl From<GqlPurchaseAddOnCreditsPolicy> for PurchaseAddOnCreditsPolicy {
-    fn from(
-        gql_purchase_add_on_credits_policy: GqlPurchaseAddOnCreditsPolicy,
-    ) -> PurchaseAddOnCreditsPolicy {
-        Self {
-            enabled: gql_purchase_add_on_credits_policy.enabled,
-            premium_enabled: gql_purchase_add_on_credits_policy.premium_enabled,
-            price_premium_bps: gql_purchase_add_on_credits_policy.price_premium_bps,
-        }
-    }
-}
-
-impl From<GqlEnterprisePayAsYouGoPolicy> for EnterprisePayAsYouGoPolicy {
-    fn from(gql_policy: GqlEnterprisePayAsYouGoPolicy) -> EnterprisePayAsYouGoPolicy {
-        Self {
-            enabled: gql_policy.enabled,
-        }
-    }
-}
-
-impl From<GqlEnterpriseCreditsAutoReloadPolicy> for EnterpriseCreditsAutoReloadPolicy {
-    fn from(gql_policy: GqlEnterpriseCreditsAutoReloadPolicy) -> EnterpriseCreditsAutoReloadPolicy {
-        Self {
-            enabled: gql_policy.enabled,
         }
     }
 }
@@ -576,86 +495,6 @@ impl From<GqlAmbientAgentsPolicy> for AmbientAgentsPolicy {
     }
 }
 
-impl From<GqlUsageVisibilityGranularity> for UsageVisibilityGranularity {
-    fn from(gql_granularity: GqlUsageVisibilityGranularity) -> UsageVisibilityGranularity {
-        match gql_granularity {
-            GqlUsageVisibilityGranularity::OwnOnly => UsageVisibilityGranularity::OwnOnly,
-            GqlUsageVisibilityGranularity::TeamAggregate => {
-                UsageVisibilityGranularity::TeamAggregate
-            }
-            GqlUsageVisibilityGranularity::PerUserTotals => {
-                UsageVisibilityGranularity::PerUserTotals
-            }
-            GqlUsageVisibilityGranularity::FullBreakdown => {
-                UsageVisibilityGranularity::FullBreakdown
-            }
-            GqlUsageVisibilityGranularity::Other(value) => {
-                report_error!(
-                    "Invalid UsageVisibilityGranularity. Make sure to update client GraphQL types!",
-                    extra: { "value" => %value },
-                    warp_errors::ReportErrorLogMode::OncePerRun
-                );
-                // Fail closed to the most restrictive granularity.
-                UsageVisibilityGranularity::OwnOnly
-            }
-        }
-    }
-}
-
-fn from_gql_max_prior_cycles(value: i32) -> MaxPriorCycles {
-    match value {
-        0 => MaxPriorCycles::None,
-        n if n > 0 => MaxPriorCycles::Limited(n as u32),
-        -1 => MaxPriorCycles::Unlimited,
-        other => {
-            report_error!(
-                "Unexpected maxPriorCycles value from server; treating as unlimited",
-                extra: { "value" => %other }
-            );
-            MaxPriorCycles::None
-        }
-    }
-}
-
-impl From<GqlUsageVisibilityPolicy> for UsageVisibilityPolicy {
-    fn from(gql_policy: GqlUsageVisibilityPolicy) -> UsageVisibilityPolicy {
-        Self {
-            admin_granularity: gql_policy.admin_granularity.into(),
-            max_prior_cycles: from_gql_max_prior_cycles(gql_policy.max_prior_cycles),
-        }
-    }
-}
-
-fn convert_billing_cycle_usage(history: GqlBillingCycleUsageHistory) -> BillingCycleUsageData {
-    BillingCycleUsageData {
-        current_period_start: history.current_period_start.utc(),
-        current_period_end: history.current_period_end.utc(),
-        summaries: history
-            .summaries
-            .into_iter()
-            .map(|summary| BillingCycleUsageSummary {
-                period_start: summary.period_start.utc(),
-                period_end: summary.period_end.utc(),
-                entries: summary
-                    .entries
-                    .into_iter()
-                    .map(|entry| BillingCycleUsageEntry {
-                        subject_type: entry.subject_type,
-                        subject_uid: entry.subject_uid,
-                        subject_display_name: entry.subject_display_name,
-                        cost_type: entry.cost_type,
-                        usage_bucket: entry.usage_bucket,
-                        usage_source: entry.usage_source,
-                        credits_used: entry.credits_used,
-                        cost_cents: entry.cost_cents,
-                        attributed_team_uid: entry.attributed_team_uid,
-                    })
-                    .collect(),
-            })
-            .collect(),
-    }
-}
-
 impl From<GqlTier> for Tier {
     fn from(gql_tier: GqlTier) -> Tier {
         Self {
@@ -663,30 +502,19 @@ impl From<GqlTier> for Tier {
             description: gql_tier.description,
             warp_ai_policy: gql_tier.warp_ai_policy.map(From::from),
             workspace_size_policy: gql_tier.team_size_policy.map(From::from),
-            shared_notebooks_policy: gql_tier.shared_notebooks_policy.map(From::from),
-            shared_workflows_policy: gql_tier.shared_workflows_policy.map(From::from),
             session_sharing_policy: gql_tier.session_sharing_policy.map(From::from),
             ai_autonomy_policy: gql_tier.ai_autonomy_policy.map(From::from),
             telemetry_data_collection_policy: gql_tier
                 .telemetry_data_collection_policy
                 .map(From::from),
             ugc_data_collection_policy: gql_tier.ugc_data_collection_policy.map(From::from),
-            usage_based_pricing_policy: gql_tier.usage_based_pricing_policy.map(From::from),
             codebase_context_policy: gql_tier.codebase_context_policy.map(From::from),
             byo_api_key_policy: gql_tier.byo_api_key_policy.map(From::from),
             byo_endpoint_policy: gql_tier.byo_endpoint_policy.map(From::from),
             managed_byok_byoe_policy: gql_tier.managed_byok_byoe_policy.map(From::from),
-            purchase_add_on_credits_policy: gql_tier.purchase_add_on_credits_policy.map(From::from),
-            enterprise_pay_as_you_go_policy: gql_tier
-                .enterprise_pay_as_you_go_policy
-                .map(From::from),
-            enterprise_credits_auto_reload_policy: gql_tier
-                .enterprise_credits_auto_reload_policy
-                .map(From::from),
             multi_admin_policy: gql_tier.multi_admin_policy.map(From::from),
             native_workspaces_policy: gql_tier.native_workspaces_policy.map(From::from),
             ambient_agents_policy: gql_tier.ambient_agents_policy.map(From::from),
-            usage_visibility_policy: gql_tier.usage_visibility_policy.map(From::from),
         }
     }
 }
@@ -711,64 +539,11 @@ impl From<GqlCustomerType> for CustomerType {
     }
 }
 
-impl From<GqlDelinquencyStatus> for DelinquencyStatus {
-    fn from(gql_delinquency_status: GqlDelinquencyStatus) -> DelinquencyStatus {
-        match gql_delinquency_status {
-            GqlDelinquencyStatus::NoDelinquency => DelinquencyStatus::NoDelinquency,
-            GqlDelinquencyStatus::PastDue => DelinquencyStatus::PastDue,
-            GqlDelinquencyStatus::Unpaid => DelinquencyStatus::Unpaid,
-            GqlDelinquencyStatus::TeamLimitExceeded => DelinquencyStatus::TeamLimitExceeded,
-            GqlDelinquencyStatus::Other(_) => DelinquencyStatus::Unknown,
-        }
-    }
-}
-
 impl From<GqlBillingMetadata> for BillingMetadata {
     fn from(gql_billing_metadata: GqlBillingMetadata) -> BillingMetadata {
         Self {
             tier: gql_billing_metadata.tier.into(),
             customer_type: gql_billing_metadata.customer_type.into(),
-            delinquency_status: gql_billing_metadata.delinquency_status.into(),
-            service_agreements: gql_billing_metadata.service_agreements,
-            ai_overages: gql_billing_metadata.ai_overages.map(|overages| AiOverages {
-                current_monthly_request_cost_cents: overages.current_monthly_request_cost_cents,
-                current_monthly_requests_used: overages.current_monthly_requests_used,
-                current_period_end: overages.current_period_end.utc(),
-            }),
-        }
-    }
-}
-
-impl TryFrom<&BillingMetadata> for StripeSubscriptionPlan {
-    type Error = ();
-
-    fn try_from(billing_metadata: &BillingMetadata) -> Result<Self, Self::Error> {
-        match billing_metadata.customer_type {
-            CustomerType::Turbo => Ok(StripeSubscriptionPlan::Turbo),
-            CustomerType::SelfServe => Ok(StripeSubscriptionPlan::Team),
-            CustomerType::Prosumer => Ok(StripeSubscriptionPlan::Pro),
-            CustomerType::Business => {
-                // Check if this is a legacy Business Plan, or a new Build Business plan based on service agreement type
-                // See: https://github.com/warpdotdev/warp-server/pull/6828#discussion_r2496242091
-                match billing_metadata
-                    .service_agreements
-                    .first()
-                    .map(|sa| sa.type_.clone())
-                {
-                    Some(ServiceAgreementType::SelfServe) => {
-                        Ok(StripeSubscriptionPlan::BuildBusiness)
-                    }
-                    _ => Ok(StripeSubscriptionPlan::Business),
-                }
-            }
-            CustomerType::Lightspeed => Ok(StripeSubscriptionPlan::Lightspeed),
-            CustomerType::Build => Ok(StripeSubscriptionPlan::Build),
-            CustomerType::BuildMax => Ok(StripeSubscriptionPlan::BuildMax),
-            // legacy customer types we don't support anymore, or customer types that don't get billed via stripe
-            CustomerType::Free
-            | CustomerType::Legacy
-            | CustomerType::Enterprise
-            | CustomerType::Unknown => Err(()),
         }
     }
 }
@@ -977,24 +752,6 @@ impl From<GqlWorkspaceSettings> for WorkspaceSettings {
                     .write_to_pty_setting
                     .and_then(convert_gql_write_to_pty_autonomy_value_to_write_to_pty_permission),
             },
-            usage_based_pricing_settings: UsageBasedPricingSettings {
-                enabled: gql_workspace_settings.usage_based_pricing_settings.enabled,
-                max_monthly_spend_cents: gql_workspace_settings
-                    .usage_based_pricing_settings
-                    .max_monthly_spend_cents
-                    .and_then(|cents| {
-                        if cents < 0 {
-                            report_error!(
-                                "Usage-based pricing has a negative max monthly spend",
-                                extra: { "cents" => %cents }
-                            );
-                            None
-                        } else {
-                            Some(cents as u32)
-                        }
-                    }),
-            },
-            addon_credits_settings: gql_workspace_settings.addon_credits_settings.into(),
             codebase_context_settings: CodebaseContextSettings {
                 setting: gql_workspace_settings
                     .codebase_context_settings
@@ -1183,24 +940,6 @@ impl From<GqlTeamSettings> for TeamSettings {
             telemetry_settings: TelemetrySettings {
                 force_enabled: gql_team_settings.telemetry_settings.force_enabled,
             },
-            usage_based_pricing_settings: UsageBasedPricingSettings {
-                enabled: gql_team_settings.usage_based_pricing_settings.enabled,
-                max_monthly_spend_cents: gql_team_settings
-                    .usage_based_pricing_settings
-                    .max_monthly_spend_cents
-                    .and_then(|cents| {
-                        if cents < 0 {
-                            report_error!(
-                                "Usage-based pricing has a negative max monthly spend",
-                                extra: { "cents" => %cents }
-                            );
-                            None
-                        } else {
-                            Some(cents as u32)
-                        }
-                    }),
-            },
-            addon_credits_settings: gql_team_settings.addon_credits_settings.into(),
             enable_warp_attribution: gql_team_settings
                 .ambient_agent_settings
                 .as_ref()
@@ -1273,16 +1012,11 @@ impl Team {
                 .map(|gql_domain_restriction| gql_domain_restriction.into())
                 .collect(),
             billing_metadata: gql_workspace.billing_metadata.clone().into(),
-            stripe_customer_id: gql_workspace
-                .stripe_customer_id
-                .as_ref()
-                .map(|id| id.clone().into_inner()),
             // Team-effective settings come from the team payload, not from a
             // clone of the workspace settings.
             settings: team_settings_from_gql(gql_team.settings),
             feature_model_choice: feature_model_choice_from_gql(gql_team.feature_model_choice),
             is_eligible_for_discovery: gql_workspace.is_eligible_for_discovery,
-            has_billing_history: gql_workspace.has_billing_history,
             visibility: gql_team.visibility.into(),
         }
     }
@@ -1293,10 +1027,6 @@ impl From<GqlWorkspace> for Workspace {
         Self {
             uid: ServerId::from_string_lossy(gql_workspace.uid.inner()).into(),
             name: gql_workspace.name.clone(),
-            stripe_customer_id: gql_workspace
-                .stripe_customer_id
-                .as_ref()
-                .map(|id| id.clone().into_inner()),
             teams: gql_workspace
                 .teams
                 .clone()
@@ -1310,18 +1040,6 @@ impl From<GqlWorkspace> for Workspace {
                 .map(Into::into)
                 .collect(),
             billing_metadata: gql_workspace.billing_metadata.clone().into(),
-            bonus_grants_purchased_this_month: gql_workspace
-                .bonus_grants_info
-                .spending_info
-                .map(|info| BonusGrantsPurchased {
-                    total_credits_purchased: info.current_month_credits_purchased,
-                    cents_spent: info.current_month_spend_cents,
-                })
-                .unwrap_or_default(),
-            billing_cycle_usage: gql_workspace
-                .billing_cycle_usage_history
-                .map(convert_billing_cycle_usage),
-            has_billing_history: gql_workspace.has_billing_history,
             settings: gql_workspace.settings.clone().into(),
             feature_model_choice: feature_model_choice_from_gql(
                 gql_workspace.feature_model_choice.clone(),
@@ -1385,21 +1103,10 @@ pub fn workspaces_metadata_response_from_gql(
         .map(|gql_joinable_team| gql_joinable_team.into())
         .collect();
 
-    // A teamless user's only workspace is the placeholder filtered out
-    // above, so the user-level policy is the only place their add-on
-    // credits purchase policy — gating and premium pricing alike —
-    // survives (see
-    // [`crate::workspaces::user_workspaces::UserWorkspaces::purchase_policy`]).
-    let user_purchase_policy = gql_user
-        .billing_metadata
-        .and_then(|billing_metadata| billing_metadata.tier.purchase_add_on_credits_policy)
-        .map(Into::into);
-
     // TODO(skambashi) refactor to return back workspaces, and not teams
     WorkspacesMetadataResponse {
         workspaces,
         joinable_teams,
-        user_purchase_policy,
     }
 }
 

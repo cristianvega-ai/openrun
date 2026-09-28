@@ -1,4 +1,3 @@
-use crate::billing::{PricingInfo, PurchaseAddOnCreditsPolicy};
 use crate::request_context::RequestContext;
 use crate::schema;
 use crate::user::DiscoverableTeamData;
@@ -11,20 +10,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
       user {
         profile {
           uid
-        }
-        aiCreditAvailability {
-          available
-          denialReason
-          creditSource
-        }
-        billingMetadata {
-          tier {
-            purchaseAddOnCreditsPolicy {
-              enabled
-              premiumEnabled
-              pricePremiumBps
-            }
-          }
         }
         workspaces {
           uid
@@ -56,7 +41,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
           }
           billingMetadata {
             customerType
-            delinquencyStatus
             tier {
               name
               description
@@ -68,14 +52,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
                 isGitOperationsAiEnabled
               }
               teamSizePolicy {
-                isUnlimited
-                limit
-              }
-              sharedNotebooksPolicy {
-                isUnlimited
-                limit
-              }
-              sharedWorkflowsPolicy {
                 isUnlimited
                 limit
               }
@@ -97,40 +73,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
               }
               managedByokByoePolicy {
                 enabled
-              }
-              usageVisibilityPolicy {
-                adminGranularity
-                maxPriorCycles
-              }
-              pricing {
-                enablePayAsYouGo
-                autoReloadCreditDenomination
-                autoReloadCostCents
-              }
-            }
-            serviceAgreements {
-              currentPeriodEnd
-              status
-              stripeSubscriptionId
-              type
-            }
-          }
-          billingCycleUsageHistory {
-            currentPeriodStart
-            currentPeriodEnd
-            summaries {
-              periodStart
-              periodEnd
-              entries {
-                subjectType
-                subjectUid
-                subjectDisplayName
-                costType
-                usageBucket
-                usageSource
-                creditsUsed
-                costCents
-                attributedTeamUid
               }
             }
           }
@@ -174,7 +116,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
               enabled
             }
           }
-          hasBillingHistory
           pendingEmailInvites {
             email
             expired
@@ -184,7 +125,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
             uid
             domain
           }
-          stripeCustomerId
           isEligibleForDiscovery
         }
         discoverableTeams {
@@ -193,25 +133,6 @@ query GetWorkspacesMetadataForUser($requestContext: RequestContext!) {
           name
           teamAcceptingInvites
         }
-      }
-    }
-  }
-  pricingInfo(requestContext: $requestContext) {
-    ... on PricingInfoOutput {
-      pricingInfo {
-        plans {
-          plan
-          monthlyPlanPricePerMonthUsdCents
-          yearlyPlanPricePerMonthUsdCents
-          requestLimit
-          codebaseLimit
-          codebaseContextFileLimit
-          maxTeamSize
-        }
-        overages {
-          pricePerRequestUsdCents
-        }
-        promotionMessage
       }
     }
   }
@@ -236,39 +157,10 @@ pub enum UserResult {
 }
 
 #[derive(cynic::QueryFragment, Debug)]
-pub struct PricingInfoOutput {
-    pub pricing_info: PricingInfo,
-}
-
-#[derive(cynic::InlineFragments, Debug)]
-pub enum PricingInfoResult {
-    PricingInfoOutput(PricingInfoOutput),
-    #[cynic(fallback)]
-    Unknown,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
 pub struct User {
     pub profile: UserProfile,
-    pub billing_metadata: Option<UserPurchasePolicyBillingMetadata>,
     pub workspaces: Vec<Workspace>,
     pub discoverable_teams: Vec<DiscoverableTeamData>,
-}
-
-/// Slim selection of the user-level `billingMetadata`: only the add-on
-/// credits purchase policy. This is the teamless-purchase fallback (fresh
-/// free users have no team and their only workspace is the server's
-/// placeholder) — do not widen it into the full `BillingMetadata` selection.
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "BillingMetadata")]
-pub struct UserPurchasePolicyBillingMetadata {
-    pub tier: UserPurchasePolicyTier,
-}
-
-#[derive(cynic::QueryFragment, Debug)]
-#[cynic(graphql_type = "Tier")]
-pub struct UserPurchasePolicyTier {
-    pub purchase_add_on_credits_policy: Option<PurchaseAddOnCreditsPolicy>,
 }
 
 #[derive(cynic::QueryFragment, Debug)]
@@ -285,8 +177,6 @@ pub struct UserProfile {
 pub struct GetWorkspacesMetadataForUser {
     #[arguments(requestContext: $request_context)]
     pub user: UserResult,
-    #[arguments(requestContext: $request_context)]
-    pub pricing_info: PricingInfoResult,
 }
 crate::client::define_operation! {
     get_workspaces_metadata_for_user(GetWorkspacesMetadataForUserVariables) -> GetWorkspacesMetadataForUser;

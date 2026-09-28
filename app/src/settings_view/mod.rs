@@ -57,7 +57,6 @@ use crate::view_components::ToastFlavor;
 use crate::workspace::WorkspaceAction;
 
 mod about_page;
-mod admin_actions;
 mod agent_assisted_environment_modal;
 mod appearance_page;
 mod cli_agents_page;

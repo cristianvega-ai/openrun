@@ -2,20 +2,17 @@ use core::fmt::{self, Display};
 use std::borrow::Cow;
 
 use itertools::Itertools as _;
-use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
 use settings::Setting;
-use warp_core::ui::color::blend::Blend;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::elements::new_scrollable::{
     ClippedAxisConfiguration, DualAxisConfig, SingleAxisConfig,
 };
 use warpui::elements::{
     Align, Border, ChildAnchor, ChildView, ClippedScrollStateHandle, ConstrainedBox, Container,
-    CornerRadius, CrossAxisAlignment, Element, Empty, Expanded, Flex, FormattedTextElement,
-    HighlightedHyperlink, Hoverable, HyperlinkLens, MainAxisAlignment, MainAxisSize,
-    MouseStateHandle, NewScrollable, OffsetPositioning, ParentAnchor, ParentElement,
+    CornerRadius, CrossAxisAlignment, Element, Empty, Expanded, Flex, Hoverable, MainAxisAlignment,
+    MainAxisSize, MouseStateHandle, NewScrollable, OffsetPositioning, ParentAnchor, ParentElement,
     ParentOffsetBounds, Radius, SavePosition, ScrollTarget, ScrollToPositionMode, Shrinkable,
     SizeConstraintCondition, SizeConstraintSwitch, Stack, Text,
 };
@@ -54,7 +51,6 @@ pub(super) const HEADER_FONT_SIZE: f32 = 23.;
 pub const SUBHEADER_FONT_SIZE: f32 = 16.;
 const ALTERNATING_LIST_CLOSE_BUTTON_DIAMETER: f32 = 20.0;
 const ALTERNATING_LIST_ITEM_PADDING: f32 = 8.0;
-const GREY_TEXT_OPACITY: u8 = 60;
 const MIN_PAGE_WIDTH: f32 = 520.;
 const MAX_PAGE_WIDTH: f32 = 800.;
 const INFO_TOOLTIP_MAX_WIDTH: f32 = 320.;
@@ -180,36 +176,6 @@ pub enum PaneEventWrapper {
     Close,
 }
 
-pub fn render_customer_type_badge(appearance: &Appearance, text: String) -> Box<dyn Element> {
-    Container::new(
-        Text::new_inline(text, appearance.ui_font_family(), appearance.ui_font_size())
-            .with_color(
-                appearance
-                    .theme()
-                    .background()
-                    .blend(
-                        &appearance
-                            .theme()
-                            .foreground()
-                            .with_opacity(GREY_TEXT_OPACITY),
-                    )
-                    .into(),
-            )
-            .with_style(Properties::default().weight(Weight::Medium))
-            .finish(),
-    )
-    .with_uniform_padding(4.)
-    .with_background(
-        appearance
-            .theme()
-            .background()
-            .blend(&appearance.theme().foreground().with_opacity(25)),
-    )
-    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.)))
-    .with_margin_left(10.)
-    .finish()
-}
-
 /// Adds padding to the sub header
 pub fn render_sub_header(
     appearance: &Appearance,
@@ -300,57 +266,6 @@ pub fn render_separator(appearance: &Appearance) -> Box<dyn Element> {
         .with_border(Border::bottom(2.).with_border_fill(appearance.theme().outline()))
         .with_margin_bottom(HEADER_PADDING)
         .finish()
-}
-
-/// A single line of sub-text whose leading phrase is a hyperlink dispatching `action`.
-pub fn render_cta_line<A: Action + Clone>(
-    link_text: &str,
-    trailing_copy: &str,
-    action: A,
-    font_size: f32,
-    appearance: &Appearance,
-) -> Box<dyn Element> {
-    let theme = appearance.theme();
-    let sub_text = theme.sub_text_color(theme.background());
-    FormattedTextElement::new(
-        FormattedText::new([FormattedTextLine::Line(vec![
-            FormattedTextFragment::hyperlink_action(link_text, action),
-            FormattedTextFragment::plain_text(format!(" {trailing_copy}")),
-        ])]),
-        font_size,
-        appearance.ui_font_family(),
-        appearance.ui_font_family(),
-        sub_text.into(),
-        HighlightedHyperlink::default(),
-    )
-    .with_no_text_wrapping()
-    .with_hyperlink_font_color(theme.accent().into_solid())
-    .register_default_click_handlers_with_action_support(|lens, event, ctx| match lens {
-        HyperlinkLens::Url(url) => ctx.open_url(url),
-        HyperlinkLens::Action(dispatched) => {
-            if let Some(action) = dispatched.as_any().downcast_ref::<A>() {
-                event.dispatch_typed_action(action.clone());
-            }
-        }
-    })
-    .finish()
-}
-
-pub fn render_cta_banner<A: Action + Clone>(
-    icon: Icon,
-    link_text: &str,
-    trailing_copy: &str,
-    action: A,
-    appearance: &Appearance,
-) -> Box<dyn Element> {
-    let body = render_cta_line(
-        link_text,
-        trailing_copy,
-        action,
-        appearance.ui_font_size(),
-        appearance,
-    );
-    render_banner(icon, body, appearance)
 }
 
 pub fn render_banner(
