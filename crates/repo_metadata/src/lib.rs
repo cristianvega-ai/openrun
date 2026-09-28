@@ -40,7 +40,6 @@ pub mod local_model;
 pub mod repositories;
 pub mod repository;
 pub mod repository_identifier;
-pub mod standing_queries;
 mod telemetry;
 pub mod watcher;
 pub mod wrapper_model;
@@ -72,9 +71,6 @@ pub fn is_in_repo(_path: &str, _app: &warpui_core::AppContext) -> bool {
 pub use file_tree_store::FileTreeEntry;
 pub use local_model::{LocalRepoMetadataModel, RepoContent, RepoContents};
 pub use repository_identifier::RepositoryIdentifier;
-pub use standing_queries::{
-    StandingQueryContent, StandingQueryDefinitions, StandingQueryResults, StandingQueryResultsDelta,
-};
 pub use wrapper_model::{RepoMetadataEvent, RepoMetadataModel};
 
 /// A wrapper around PathBuf that ensures the path is canonicalized.

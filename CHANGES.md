@@ -70,6 +70,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Agent tips](#agent-tips) — removed the rotating "Tip:" line under the agent warping indicator and the cloud-mode loading screen, the Show agent tips setting and its toggle
 - [Cloud mode, ambient-agent terminal UI and handoff](#cloud-mode-ambient-agent-terminal-ui-and-handoff) — removed the cloud-agent terminal (setup, follow-up input, tombstones, queued cloud prompts), local-to-cloud and cloud-to-cloud handoff, auto-handoff on sleep, the cloud environment and host selectors and the cloud slash commands, tab types, panes and settings
 - [Tolerant stored inline-menu heights](#tolerant-stored-inline-menu-heights) — stored per-menu heights ignore keys of removed menus (`skill_menu`, `prompts_menu`, `plan_menu`) instead of failing to parse and discarding all heights
+- [Repository metadata: standing queries and force-included paths](#repository-metadata-standing-queries-and-force-included-paths) — removed the skill-only standing-query results, force-included path list and `StandingQueryResultsUpdated` events from `repo_metadata`
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1831,3 +1832,20 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 **User-visible impact:** A stale `skill_menu`, `prompts_menu` or `plan_menu` entry no longer resets the other menus' heights or blocks saving new ones. Users without stale entries see no change.
 
 **Notes:** Stale keys are dropped from the file the next time a height is saved.
+## Repository metadata: standing queries and force-included paths
+**Why:** `crates/repo_metadata` carried a second tree-building path that existed only for skill discovery. It kept "standing query" results (project skill files found below ignored or shallow directories) and a list of force-included paths that were built even when gitignored or past the depth or file budget. Skills are gone and nothing calls the registration functions, so the list was always empty and the results were never read.
+
+**Removed:**
+- `crates/repo_metadata/src/standing_queries.rs` (`StandingQueryDefinitions`, `StandingQueryContent`, `StandingQueryResults`, `StandingQueryResultsDelta`) and its tests.
+- `Entry::build_tree_with_standing_queries` and its symlinked-skill bookkeeping, `matches_force_included_path`, `BuildTreeOptions::force_included_paths`, and the force-included-path parameter of `should_watch_repo_directory` and `repo_watch_filter`.
+- `register_force_included_paths` and `set_project_skill_provider_paths` on `LocalRepoMetadataModel` and `RepoMetadataModel`, `DirectoryWatcher::register_force_included_paths`, the stored standing results and definitions, `standing_query_results` and the test helper `insert_test_standing_results`.
+- `RepositoryMetadataEvent::StandingQueryResultsUpdated` and `RepoMetadataEvent::StandingQueryResultsUpdated`, with their match arms in `app/src/code/file_tree/view.rs` and `app/src/search/files/model.rs`.
+- Tests that only covered force-included or skill behavior (ignored skill directories loaded for a provider path, force-included watch descent, budget exemption for force-included paths, standing-query deltas, skill symlink refreshes).
+
+**Modified:**
+- `Entry::build_tree_with_options` (was the private `build_tree_with_force_included_paths_and_ancestor`) is the single tree-building entry point; `compute_file_tree_mutations` no longer returns standing results.
+- Ignored directories are now always unloaded placeholders under `IncludeLazy`, and the file budget applies to every directory. Both were already the behavior whenever no force-included paths were registered, which is always.
+
+**User-visible impact:** None. The file tree, `@`-context file search and repository watchers build and update the same trees as before.
+
+**Notes:** Closes the `repo_metadata` item left by the Skills section.

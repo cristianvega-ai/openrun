@@ -5,9 +5,6 @@ use std::sync::Arc;
 use ignore::gitignore::Gitignore;
 
 use super::{Entry, IgnoredPathStrategy, matches_gitignores};
-#[cfg(unix)]
-use crate::StandingQueryContent;
-use crate::{StandingQueryDefinitions, StandingQueryResults};
 
 fn run<T>(future: impl Future<Output = T>) -> T {
     futures::executor::block_on(future)
@@ -203,28 +200,24 @@ fn should_watch_prunes_gitignored_directory() {
     assert!(super::should_watch_repo_directory(
         &root,
         &root,
-        &gitignores,
-        &[]
+        &gitignores
     ));
     assert!(super::should_watch_repo_directory(
         &root.join("src"),
         &root,
-        &gitignores,
-        &[]
+        &gitignores
     ));
     assert!(!super::should_watch_repo_directory(
         &root.join("node_modules"),
         &root,
-        &gitignores,
-        &[]
+        &gitignores
     ));
     // Descendants of an ignored dir are also pruned (ancestor-aware), which is
     // what preserves the watcher's monotonicity invariant.
     assert!(!super::should_watch_repo_directory(
         &root.join("node_modules/foo"),
         &root,
-        &gitignores,
-        &[]
+        &gitignores
     ));
 }
 
@@ -241,13 +234,11 @@ fn should_watch_prunes_directory_symlinks_and_their_descendants() {
     assert!(!super::should_watch_repo_directory(
         &root.join("result"),
         &root,
-        &[],
         &[]
     ));
     assert!(!super::should_watch_repo_directory(
         &root.join("result/tree"),
         &root,
-        &[],
         &[]
     ));
 }
@@ -265,7 +256,6 @@ fn should_watch_ignores_symlinks_above_repo_root() {
     assert!(super::should_watch_repo_directory(
         &repo_root.join("src"),
         &repo_root,
-        &[],
         &[]
     ));
 }
@@ -282,119 +272,12 @@ fn should_watch_allows_symlinked_repo_root() {
     assert!(super::should_watch_repo_directory(
         &symlinked_root,
         &symlinked_root,
-        &[],
         &[]
     ));
     assert!(super::should_watch_repo_directory(
         &symlinked_root.join("src"),
         &symlinked_root,
-        &[],
         &[]
-    ));
-}
-
-#[cfg(unix)]
-#[test]
-fn should_watch_allows_symlinked_force_included_paths() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
-    fs::create_dir_all(root.join("targets/skills/linked")).unwrap();
-    fs::create_dir_all(root.join(".agents/skills")).unwrap();
-    std::os::unix::fs::symlink(
-        root.join("targets/skills/linked"),
-        root.join(".agents/skills/linked"),
-    )
-    .unwrap();
-    let force_included = [std::path::PathBuf::from(".agents/skills")];
-
-    // Project-skill providers intentionally support symlinked skill
-    // directories, so the explicit force-included path remains watchable.
-    assert!(super::should_watch_repo_directory(
-        &root.join(".agents/skills/linked"),
-        &root,
-        &[],
-        &force_included
-    ));
-    assert!(super::should_watch_repo_directory(
-        &root.join(".agents/skills/linked/SKILL.md"),
-        &root,
-        &[],
-        &force_included
-    ));
-}
-
-#[test]
-fn should_watch_descends_to_force_included_under_ignored_ancestor() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
-    fs::create_dir_all(root.join(".agents/skills/test")).unwrap();
-    fs::create_dir(root.join(".agents/other")).unwrap();
-    let gitignores = vec![gitignore_rooted(&root, ".agents/\n")];
-    let force_included = vec![std::path::PathBuf::from(".agents/skills")];
-
-    // The whole `.agents` subtree is gitignored, but we still descend along the
-    // prefix to reach the force-included path, and into its subtree.
-    assert!(super::should_watch_repo_directory(
-        &root.join(".agents"),
-        &root,
-        &gitignores,
-        &force_included
-    ));
-    assert!(super::should_watch_repo_directory(
-        &root.join(".agents/skills"),
-        &root,
-        &gitignores,
-        &force_included
-    ));
-    assert!(super::should_watch_repo_directory(
-        &root.join(".agents/skills/test"),
-        &root,
-        &gitignores,
-        &force_included
-    ));
-    // A sibling ignored dir that is not force-included is still pruned.
-    assert!(!super::should_watch_repo_directory(
-        &root.join(".agents/other"),
-        &root,
-        &gitignores,
-        &force_included
-    ));
-}
-
-#[test]
-fn should_watch_handles_nested_ignored_ancestor_with_deeper_force_included() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
-    fs::create_dir_all(root.join("a/b/c")).unwrap();
-    fs::create_dir(root.join("a/b/other")).unwrap();
-    let gitignores = vec![gitignore_rooted(&root, "a/b/\n")];
-    let force_included = vec![std::path::PathBuf::from("a/b/c")];
-
-    // `a/b` is ignored but `a/b/c` is force-included: descend along the whole
-    // prefix and into it, while pruning the ignored sibling.
-    assert!(super::should_watch_repo_directory(
-        &root.join("a"),
-        &root,
-        &gitignores,
-        &force_included
-    ));
-    assert!(super::should_watch_repo_directory(
-        &root.join("a/b"),
-        &root,
-        &gitignores,
-        &force_included
-    ));
-    assert!(super::should_watch_repo_directory(
-        &root.join("a/b/c"),
-        &root,
-        &gitignores,
-        &force_included
-    ));
-    assert!(!super::should_watch_repo_directory(
-        &root.join("a/b/other"),
-        &root,
-        &gitignores,
-        &force_included
     ));
 }
 
@@ -411,16 +294,14 @@ fn should_watch_descends_dir_only_reinclude_negation() {
     assert!(super::should_watch_repo_directory(
         &root.join("parentdir"),
         &root,
-        &gitignores,
-        &[]
+        &gitignores
     ));
     // The subdirectory is re-included by the directory-only negation, so it is
     // still watched even though `parentdir/*` matched it first.
     assert!(super::should_watch_repo_directory(
         &root.join("parentdir/sub"),
         &root,
-        &gitignores,
-        &[]
+        &gitignores
     ));
     // The loose file remains gitignored (the negation is directory-only); the
     // emit predicate filters it, but `parentdir` stays watched for its subdirs.
@@ -434,7 +315,7 @@ fn should_watch_descends_dir_only_reinclude_negation() {
 
 #[test]
 fn should_watch_preserves_git_internal_allowlist() {
-    // No gitignores / force-included paths needed: `.git` handling is
+    // No gitignores needed: `.git` handling is
     // path-based, mirroring `should_watch_directory_in_git_path`.
     let temp_dir = tempfile::tempdir().unwrap();
     let repo = dunce::canonicalize(temp_dir.path()).unwrap();
@@ -443,13 +324,11 @@ fn should_watch_preserves_git_internal_allowlist() {
     assert!(super::should_watch_repo_directory(
         &repo.join(".git/refs/heads"),
         &repo,
-        &[],
         &[]
     ));
     assert!(!super::should_watch_repo_directory(
         &repo.join(".git/objects"),
         &repo,
-        &[],
         &[]
     ));
 }
@@ -466,190 +345,6 @@ fn find_entry<'a>(entry: &'a super::Entry, path: &std::path::Path) -> Option<&'a
         .children
         .iter()
         .find_map(|child| find_entry(child, path))
-}
-
-fn build_skill_tree_with_gitignore(root: &std::path::Path, gitignore: &str) -> super::Entry {
-    std::fs::write(root.join(".gitignore"), gitignore).unwrap();
-    let mut files = Vec::new();
-    let mut gitignores = Vec::new();
-    let mut file_limit = 1000;
-    run(super::Entry::build_tree_with_force_included_paths(
-        root,
-        &mut files,
-        &mut gitignores,
-        Some(&mut file_limit),
-        super::BuildTreeOptions {
-            max_depth: 200,
-            current_depth: 0,
-            ignored_path_strategy: &super::IgnoredPathStrategy::IncludeLazy,
-            force_included_paths: &[std::path::PathBuf::from(".agents/skills")],
-            budget_exceeded_behavior: super::BudgetExceededBehavior::StopAndLazyLoad,
-        },
-    ))
-    .unwrap()
-}
-
-#[test]
-fn standing_queries_report_skills_below_an_ignored_directory() {
-    virtual_fs::VirtualFS::test("standing_queries_report_ignored_skills", |dirs, mut vfs| {
-        vfs.mkdir("repo/.agents/skills/test")
-            .with_files(vec![virtual_fs::Stub::FileWithContent(
-                "repo/.agents/skills/test/SKILL.md",
-                "name: test",
-            )]);
-        let repo = dirs.tests().join("repo");
-        std::fs::write(repo.join(".gitignore"), ".agents/\n").unwrap();
-
-        let mut files = Vec::new();
-        let mut gitignores = Vec::new();
-        let mut results = StandingQueryResults::default();
-        let mut definitions = StandingQueryDefinitions::default();
-        definitions.set_project_skill_provider_paths([std::path::PathBuf::from(".agents/skills")]);
-        let tree = run(Entry::build_tree_with_standing_queries(
-            &repo,
-            &mut files,
-            &mut gitignores,
-            None,
-            super::BuildTreeOptions {
-                max_depth: 200,
-                current_depth: 0,
-                ignored_path_strategy: &IgnoredPathStrategy::IncludeLazy,
-                force_included_paths: &[std::path::PathBuf::from(".agents/skills")],
-                budget_exceeded_behavior: super::BudgetExceededBehavior::StopAndLazyLoad,
-            },
-            false,
-            &mut results,
-            &definitions,
-        ))
-        .unwrap();
-
-        let agents = find_entry(&tree, &repo.join(".agents")).expect(".agents should be present");
-        assert!(agents.loaded());
-        assert!(find_entry(&tree, &repo.join(".agents/skills/test/SKILL.md")).is_some());
-
-        let skill_path = warp_util::standardized_path::StandardizedPath::try_from_local(
-            &repo.join(".agents/skills/test/SKILL.md"),
-        )
-        .unwrap();
-        assert!(
-            results
-                .project_skills()
-                .any(|content| content.path == skill_path && !content.is_directory)
-        );
-    });
-}
-
-#[cfg(unix)]
-#[test]
-fn standing_queries_report_symlinked_skills_without_materializing_symlinked_directories() {
-    virtual_fs::VirtualFS::test(
-        "standing_queries_report_symlinked_skills",
-        |dirs, mut vfs| {
-            vfs.mkdir("repo/.agents/skills")
-                .mkdir("targets/linked")
-                .with_files(vec![virtual_fs::Stub::FileWithContent(
-                    "targets/linked/SKILL.md",
-                    "name: linked",
-                )]);
-            let repo = dirs.tests().join("repo");
-            let linked_directory = repo.join(".agents/skills/linked");
-            std::os::unix::fs::symlink(dirs.tests().join("targets/linked"), &linked_directory)
-                .unwrap();
-
-            let mut files = Vec::new();
-            let mut gitignores = Vec::new();
-            let mut results = StandingQueryResults::default();
-            let mut definitions = StandingQueryDefinitions::default();
-            definitions
-                .set_project_skill_provider_paths([std::path::PathBuf::from(".agents/skills")]);
-            let tree = run(Entry::build_tree_with_standing_queries(
-                &repo,
-                &mut files,
-                &mut gitignores,
-                None,
-                super::BuildTreeOptions {
-                    max_depth: 200,
-                    current_depth: 0,
-                    ignored_path_strategy: &IgnoredPathStrategy::IncludeLazy,
-                    force_included_paths: &[],
-                    budget_exceeded_behavior: super::BudgetExceededBehavior::StopAndLazyLoad,
-                },
-                false,
-                &mut results,
-                &definitions,
-            ))
-            .unwrap();
-
-            assert!(find_entry(&tree, &linked_directory).is_none());
-            assert!(results.project_skills().any(|content| {
-                content
-                    == &StandingQueryContent::file(
-                        warp_util::standardized_path::StandardizedPath::try_from_local(
-                            &linked_directory.join("SKILL.md"),
-                        )
-                        .unwrap(),
-                    )
-            }));
-        },
-    );
-}
-#[test]
-fn shallow_tree_expands_force_included_skill_branch_only() {
-    virtual_fs::VirtualFS::test("shallow_tree_force_included_skills", |dirs, mut vfs| {
-        vfs.mkdir("workspace/.agents/skills/review")
-            .mkdir("workspace/src/deep")
-            .with_files(vec![
-                virtual_fs::Stub::FileWithContent(
-                    "workspace/.agents/skills/review/SKILL.md",
-                    "name: review",
-                ),
-                virtual_fs::Stub::FileWithContent("workspace/src/deep/notes.md", "notes"),
-            ]);
-        let workspace = dirs.tests().join("workspace");
-        let skill_path = workspace.join(".agents/skills/review/SKILL.md");
-        let deep_file_path = workspace.join("src/deep/notes.md");
-
-        let mut files = Vec::new();
-        let mut gitignores = Vec::new();
-        let mut results = StandingQueryResults::default();
-        let mut definitions = StandingQueryDefinitions::default();
-        definitions.set_project_skill_provider_paths([std::path::PathBuf::from(".agents/skills")]);
-        let tree = run(Entry::build_tree_with_standing_queries(
-            &workspace,
-            &mut files,
-            &mut gitignores,
-            None,
-            super::BuildTreeOptions {
-                max_depth: 1,
-                current_depth: 0,
-                ignored_path_strategy: &IgnoredPathStrategy::IncludeLazy,
-                force_included_paths: &[std::path::PathBuf::from(".agents/skills")],
-                budget_exceeded_behavior: super::BudgetExceededBehavior::StopAndLazyLoad,
-            },
-            false,
-            &mut results,
-            &definitions,
-        ))
-        .unwrap();
-
-        let agents = find_entry(&tree, &workspace.join(".agents"))
-            .expect("force-included ancestor should be represented");
-        assert!(agents.loaded());
-        assert!(find_entry(&tree, &skill_path).is_some());
-
-        let src = find_entry(&tree, &workspace.join("src"))
-            .expect("unrelated shallow directory should be represented");
-        assert!(!src.loaded());
-        assert!(find_entry(&tree, &deep_file_path).is_none());
-
-        let skill_path =
-            warp_util::standardized_path::StandardizedPath::try_from_local(&skill_path).unwrap();
-        assert!(
-            results
-                .project_skills()
-                .any(|content| content.path == skill_path && !content.is_directory)
-        );
-    });
 }
 
 #[test]
@@ -675,103 +370,6 @@ fn ignored_directory_stays_lazy() {
             super::BudgetExceededBehavior::StopAndLazyLoad,
         ))
         .unwrap();
-        let target_dir = find_entry(&tree, &repo.join("target"))
-            .expect("ignored unrelated directory should be present as lazy");
-        assert!(target_dir.ignored());
-        assert!(!target_dir.loaded());
-        assert!(find_entry(&tree, &repo.join("target/debug/app")).is_none());
-    });
-}
-
-#[test]
-fn ignored_skill_file_is_loaded_for_registered_provider_path() {
-    virtual_fs::VirtualFS::test("ignored_skill_file_loaded", |dirs, mut vfs| {
-        vfs.mkdir("repo/.agents/skills/test")
-            .with_files(vec![virtual_fs::Stub::FileWithContent(
-                "repo/.agents/skills/test/SKILL.md",
-                "name: test",
-            )]);
-        let repo = dirs.tests().join("repo");
-
-        let tree = build_skill_tree_with_gitignore(&repo, ".agents/skills/test/SKILL.md\n");
-        let skill_file = find_entry(&tree, &repo.join(".agents/skills/test/SKILL.md"))
-            .expect("ignored skill file should be present");
-        assert!(skill_file.ignored());
-    });
-}
-
-#[test]
-fn ignored_skill_directory_is_loaded_for_registered_provider_path() {
-    virtual_fs::VirtualFS::test("ignored_skill_dir_loaded", |dirs, mut vfs| {
-        vfs.mkdir("repo/.agents/skills/test")
-            .with_files(vec![virtual_fs::Stub::FileWithContent(
-                "repo/.agents/skills/test/SKILL.md",
-                "name: test",
-            )]);
-        let repo = dirs.tests().join("repo");
-
-        let tree = build_skill_tree_with_gitignore(&repo, ".agents/skills/test/\n");
-        let skill_dir = find_entry(&tree, &repo.join(".agents/skills/test"))
-            .expect("ignored skill directory should be present");
-        assert!(skill_dir.ignored());
-        assert!(skill_dir.loaded());
-        assert!(find_entry(&tree, &repo.join(".agents/skills/test/SKILL.md")).is_some());
-    });
-}
-
-#[test]
-fn ignored_agents_directory_is_loaded_for_registered_provider_path() {
-    virtual_fs::VirtualFS::test("ignored_agents_dir_loaded", |dirs, mut vfs| {
-        vfs.mkdir("repo/.agents/skills/test")
-            .with_files(vec![virtual_fs::Stub::FileWithContent(
-                "repo/.agents/skills/test/SKILL.md",
-                "name: test",
-            )]);
-        let repo = dirs.tests().join("repo");
-
-        let tree = build_skill_tree_with_gitignore(&repo, ".agents/\n");
-        let agents_dir = find_entry(&tree, &repo.join(".agents"))
-            .expect("ignored .agents directory should be present");
-        assert!(agents_dir.ignored());
-        assert!(agents_dir.loaded());
-        assert!(find_entry(&tree, &repo.join(".agents/skills/test/SKILL.md")).is_some());
-    });
-}
-
-#[test]
-fn ignored_agents_skills_directory_is_loaded_for_registered_provider_path() {
-    virtual_fs::VirtualFS::test("ignored_agents_skills_dir_loaded", |dirs, mut vfs| {
-        vfs.mkdir("repo/.agents/skills/test")
-            .with_files(vec![virtual_fs::Stub::FileWithContent(
-                "repo/.agents/skills/test/SKILL.md",
-                "name: test",
-            )]);
-        let repo = dirs.tests().join("repo");
-
-        let tree = build_skill_tree_with_gitignore(&repo, ".agents/skills/\n");
-        let skills_dir = find_entry(&tree, &repo.join(".agents/skills"))
-            .expect("ignored .agents/skills directory should be present");
-        assert!(skills_dir.ignored());
-        assert!(skills_dir.loaded());
-        assert!(find_entry(&tree, &repo.join(".agents/skills/test/SKILL.md")).is_some());
-    });
-}
-
-#[test]
-fn unrelated_ignored_directory_stays_lazy_without_registered_force_included() {
-    virtual_fs::VirtualFS::test("unrelated_ignored_dir_lazy", |dirs, mut vfs| {
-        vfs.mkdir("repo/.agents/skills/test")
-            .mkdir("repo/target/debug")
-            .with_files(vec![
-                virtual_fs::Stub::FileWithContent(
-                    "repo/.agents/skills/test/SKILL.md",
-                    "name: test",
-                ),
-                virtual_fs::Stub::FileWithContent("repo/target/debug/app", "binary"),
-            ]);
-        let repo = dirs.tests().join("repo");
-
-        let tree = build_skill_tree_with_gitignore(&repo, "target/\n");
         let target_dir = find_entry(&tree, &repo.join("target"))
             .expect("ignored unrelated directory should be present as lazy");
         assert!(target_dir.ignored());
@@ -946,15 +544,9 @@ fn gitignore_affects_descend_predicate_but_not_emitted_events() {
     assert!(!should_watch_repo_directory(
         &node_modules,
         &root_path,
-        &gitignores,
-        &[]
+        &gitignores
     ));
-    assert!(should_watch_repo_directory(
-        &src,
-        &root_path,
-        &gitignores,
-        &[]
-    ));
+    assert!(should_watch_repo_directory(&src, &root_path, &gitignores));
 
     // Emit predicate building block (`!should_ignore_git_path`): gitignored,
     // non-`.git` paths are NOT suppressed, so their events still flow. Only
@@ -1039,17 +631,13 @@ fn test_extract_worktree_git_dir() {
     );
 }
 
-/// Builds a tree with an explicit file budget and force-included paths using
-/// the lazy ignored-path strategy.
-fn build_with_budget(
-    root: &std::path::Path,
-    budget: usize,
-    force_included_paths: &[std::path::PathBuf],
-) -> super::Entry {
+/// Builds a tree with an explicit file budget using the lazy ignored-path
+/// strategy.
+fn build_with_budget(root: &std::path::Path, budget: usize) -> super::Entry {
     let mut files = Vec::new();
     let mut gitignores = Vec::new();
     let mut file_limit = budget;
-    run(super::Entry::build_tree_with_force_included_paths(
+    run(super::Entry::build_tree_with_options(
         root,
         &mut files,
         &mut gitignores,
@@ -1058,9 +646,9 @@ fn build_with_budget(
             max_depth: 200,
             current_depth: 0,
             ignored_path_strategy: &super::IgnoredPathStrategy::IncludeLazy,
-            force_included_paths,
             budget_exceeded_behavior: super::BudgetExceededBehavior::StopAndLazyLoad,
         },
+        false,
     ))
     .unwrap()
 }
@@ -1084,7 +672,7 @@ fn build_tree_budget_covers_breadth_first_and_leaves_remainder_unloaded() {
     }
 
     // Budget exactly covers the 10 level-1 files; level-2 `sub` dirs are cut.
-    let tree = build_with_budget(&root, 10, &[]);
+    let tree = build_with_budget(&root, 10);
 
     // Root stays loaded (no whole-tree depth-1 collapse on budget exhaustion).
     let Entry::Directory(root_dir) = &tree else {
@@ -1110,31 +698,6 @@ fn build_tree_budget_covers_breadth_first_and_leaves_remainder_unloaded() {
 }
 
 #[test]
-fn build_tree_budget_does_not_prune_force_included_paths() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
-
-    // Files at the root so the budget is exhausted almost immediately.
-    for i in 0..5 {
-        fs::write(root.join(format!("f{i}.txt")), "").unwrap();
-    }
-    // A skill provider directory nested several levels under the root.
-    let skill_dir = root.join(".agents").join("skills").join("test");
-    fs::create_dir_all(&skill_dir).unwrap();
-    fs::write(skill_dir.join("SKILL.md"), "name: test").unwrap();
-
-    // Tiny budget: the root expands and is immediately exhausted, but the
-    // force-included path must still be loaded all the way down.
-    let force_included = [std::path::PathBuf::from(".agents/skills")];
-    let tree = build_with_budget(&root, 1, &force_included);
-
-    assert!(
-        find_entry(&tree, &skill_dir.join("SKILL.md")).is_some(),
-        "force-included path files must load even when the budget is exhausted"
-    );
-}
-
-#[test]
 fn build_tree_full_coverage_reaches_full_depth_within_budget() {
     let temp_dir = tempfile::tempdir().unwrap();
     let root = dunce::canonicalize(temp_dir.path()).unwrap();
@@ -1146,7 +709,7 @@ fn build_tree_full_coverage_reaches_full_depth_within_budget() {
     fs::write(root.join("top.txt"), "").unwrap();
 
     // A generous budget must fully cover this small tree to its full depth.
-    let tree = build_with_budget(&root, 1000, &[]);
+    let tree = build_with_budget(&root, 1000);
 
     for dir in [
         root.join("a"),
@@ -1175,7 +738,7 @@ fn build_tree_directories_do_not_consume_budget() {
 
     // Even a budget of 1 fully expands the tree, because only files — not
     // directories — draw down the budget.
-    let tree = build_with_budget(&root, 1, &[]);
+    let tree = build_with_budget(&root, 1);
     let leaf = find_entry(&tree, &deep).expect("deepest dir present");
     assert!(
         leaf.loaded(),
@@ -1202,7 +765,7 @@ fn build_tree_gitignored_files_do_not_consume_budget() {
     // Budget only covers the 3 tracked root files. The 50 gitignored files must
     // not draw it down, so both tracked files are still indexed and the ignored
     // directory stays a lazy (unloaded) placeholder.
-    let tree = build_with_budget(&root, 3, &[]);
+    let tree = build_with_budget(&root, 3);
 
     assert!(find_entry(&tree, &root.join("tracked0.txt")).is_some());
     assert!(find_entry(&tree, &root.join("tracked1.txt")).is_some());

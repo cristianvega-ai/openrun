@@ -10,13 +10,13 @@ use std::path::Path;
 use warp_util::standardized_path::StandardizedPath;
 use warpui_core::{AppContext, ModelContext, ModelHandle, SingletonEntity};
 
+use crate::RepoMetadataError;
 use crate::file_tree_store::FileTreeState;
 use crate::local_model::{
     GetContentsArgs, IndexedRepoState, LocalRepoMetadataModel, RepoContents,
     RepositoryMetadataEvent,
 };
 use crate::repository_identifier::RepositoryIdentifier;
-use crate::{RepoMetadataError, StandingQueryResults, StandingQueryResultsDelta};
 
 /// Unified events emitted by the [`RepoMetadataModel`] wrapper.
 ///
@@ -32,11 +32,6 @@ pub enum RepoMetadataEvent {
     FileTreeUpdated { ids: Vec<RepositoryIdentifier> },
     /// A file tree entry was updated.
     FileTreeEntryUpdated { id: RepositoryIdentifier },
-    /// Stored standing-query paths changed for a repository.
-    StandingQueryResultsUpdated {
-        id: RepositoryIdentifier,
-        delta: StandingQueryResultsDelta,
-    },
     /// Updating a repository failed.
     UpdatingRepositoryFailed { id: RepositoryIdentifier },
 }
@@ -90,12 +85,6 @@ impl RepoMetadataModel {
                     id: RepositoryIdentifier::local(path.clone()),
                 }
             }
-            RepositoryMetadataEvent::StandingQueryResultsUpdated { path, delta } => {
-                RepoMetadataEvent::StandingQueryResultsUpdated {
-                    id: RepositoryIdentifier::local(path.clone()),
-                    delta: delta.clone(),
-                }
-            }
             RepositoryMetadataEvent::UpdatingRepositoryFailed { path } => {
                 RepoMetadataEvent::UpdatingRepositoryFailed {
                     id: RepositoryIdentifier::local(path.clone()),
@@ -115,18 +104,6 @@ impl RepoMetadataModel {
     ) -> Option<&'a FileTreeState> {
         match id {
             RepositoryIdentifier::Local(path) => self.local.as_ref(ctx).get_repository(path),
-        }
-    }
-
-    pub fn standing_query_results<'a>(
-        &self,
-        id: &RepositoryIdentifier,
-        ctx: &'a AppContext,
-    ) -> Option<&'a StandingQueryResults> {
-        match id {
-            RepositoryIdentifier::Local(path) => {
-                self.local.as_ref(ctx).standing_query_results(path)
-            }
         }
     }
 
@@ -266,33 +243,6 @@ impl RepoMetadataModel {
         })
     }
 
-    /// Registers paths that must be loaded even when gitignored or beyond the
-    /// tree's size limit.
-    ///
-    /// This delegates to the local model because force-included path matching
-    /// happens while building local file trees.
-    pub fn register_force_included_paths(
-        &self,
-        paths: impl IntoIterator<Item = std::path::PathBuf>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let paths: Vec<_> = paths.into_iter().collect();
-        self.local.update(ctx, |local, _| {
-            local.register_force_included_paths(paths);
-        });
-    }
-
-    pub fn set_project_skill_provider_paths(
-        &self,
-        paths: impl IntoIterator<Item = std::path::PathBuf>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let paths: Vec<_> = paths.into_iter().collect();
-        self.local.update(ctx, |local, _| {
-            local.set_project_skill_provider_paths(paths);
-        });
-    }
-
     /// Removes a lazily-loaded local standalone path from tracking.
     #[cfg(feature = "local_fs")]
     pub fn remove_lazy_loaded_path(&self, path: &StandardizedPath, ctx: &mut ModelContext<Self>) {
@@ -339,17 +289,6 @@ impl RepoMetadataModel {
     ) {
         self.local.update(ctx, |local, _ctx| {
             local.insert_test_state(repo_path, state);
-        });
-    }
-
-    pub fn insert_test_standing_results(
-        &self,
-        repo_path: StandardizedPath,
-        standing_results: StandingQueryResults,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.local.update(ctx, |local, _ctx| {
-            local.insert_test_standing_results(repo_path, standing_results);
         });
     }
 }

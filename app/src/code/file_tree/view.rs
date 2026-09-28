@@ -444,8 +444,7 @@ impl FileTreeView {
                 self.update_directory_contents(std::slice::from_ref(std_path), false, ctx);
             }
             RepoMetadataEvent::FileTreeUpdated { .. }
-            | RepoMetadataEvent::RepositoryRemoved { .. }
-            | RepoMetadataEvent::StandingQueryResultsUpdated { .. } => {}
+            | RepoMetadataEvent::RepositoryRemoved { .. } => {}
         }
     }
 
