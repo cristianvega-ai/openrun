@@ -61,6 +61,9 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Skills](#skills) — deleted the skills feature (`SKILL.md` discovery, the `/skills` and `/open-skill` commands, the `@`-menu skills category, the `read_skill` tool, bundled and channel-gated skill files) and the "Fix with Warp Agent" and tab-config-editor agent buttons that invoked bundled skills
 - [AI plan documents and to-do popup](#ai-plan-documents-and-to-do-popup) — removed the plan (AI document) pane, the plan menu and plan/to-do chips, the to-do popup and the plan-related shortcuts and attachments
 
+- [Warp Drive: environment-variable collections](#warp-drive-environment-variable-collections) — removed the environment-variable collection objects, editor pane, invocation blocks, subshell invocation, workflow env-var selectors and the search filter
+- [Warp Drive: 1Password and LastPass secrets](#warp-drive-1password-and-lastpass-secrets) — removed the external secret manager integration, whose only entry point was environment-variable collections
+
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
 **Why:** <reason it was removed or changed>
@@ -1210,8 +1213,7 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 
 **Notes:**
 - Kept for later tasks: `drive/workflows/` (DRV-4); `drive/folders` and the access-level types in `drive/sharing/mod.rs` (DRV-5); `drive/cloud_action_confirmation_dialog.rs` (Teams page, TEAM-1); `drive/cloud_object_styling.rs` and `DriveObjectType`, still used for object icon colours by vertical tabs, filter chips and search items (DRV-2 to DRV-4); `drive/export.rs` and `drive/sharing/{dialog, qr_code, style}` (next section); `integration_testing/cloud_object`, used by the cloud notebook and workflow integration tests (DRV-3/DRV-4).
-- [Warp Drive: environment-variable collections](#warp-drive-environment-variable-collections) — removed the environment-variable collection objects, editor pane, invocation blocks, subshell invocation, workflow env-var selectors and the search filter
-- Dead code left for its owners: in `CloudModel` / `CloudViewModel` / `UpdateManager` / `SyncQueue` the trash, sort and leave/rename helpers (DRV-5); `search/notebooks` and `search/env_var_collections` fuzzy matchers (DRV-3, DRV-2); `WorkflowModal::open_with_new` (DRV-4); `NotebookView::online_only_operation_allowed` (DRV-3); `ai::facts::view::is_syncing` (AI-15).
+- Dead code left for its owners: in `CloudModel` / `CloudViewModel` / `UpdateManager` / `SyncQueue` the trash, sort and leave/rename helpers (DRV-5); the `search/notebooks` fuzzy matcher (DRV-3); `WorkflowModal::open_with_new` (DRV-4); `NotebookView::online_only_operation_allowed` (DRV-3); `ai::facts::view::is_syncing` (AI-15).
 - `OpenWarpDriveObjectInPane` (terminal and pane-group events) stays: AI citations and plans use it to open cloud objects in panes, and the AI tasks own it.
 - `WarpDrivePrivacySettings` is not Drive-only: it holds the telemetry and cloud-conversation-storage toggles, so TEL-1 and the AI plan own it.
 - The Drive login purpose in `auth/login_slide.rs` and `onboarding::WARP_DRIVE_FEATURES` are left for AUTH-1.
@@ -1649,4 +1651,17 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - `Workflow::Command::environment_variables` and the alias `env_vars` field stay for DRV-4; saving a workflow from the editor now writes `None` for the former.
 - `WorkflowAliasEnvVarsAttached` in `server/telemetry/events.rs` no longer has an emitter and is left for TEL-4. `crates/graphql` `JsonEnvVarCollection` and the schema stay for SRV-1.
 - `crates/local_control/src/protocol_tests.rs` keeps `"drive.env_var_collection.open"` as a negative test of an unknown action name.
-- The external secret managers (`ExternalSecret`, `OnePasswordSecret`, `LastPassSecret`) moved unchanged to `cloud_object_models::external_secret` so that this commit builds; the next section removes them.
+- The external secret managers stay in this commit (their types moved to `cloud_object_models::external_secret` so it builds) and are removed in the next section.
+
+## Warp Drive: 1Password and LastPass secrets
+**Why:** The integration let an environment-variable collection resolve a variable from the `op` (1Password) or `lpass` (LastPass) CLI. Its only entry point was the collection editor, which is removed with Warp Drive (user decision 1), so nothing can reach it.
+
+**Removed:**
+- `app/src/external_secrets/` — `SecretManager`, the installed checks and the list and fetch commands for `op` and `lpass`, and the docs links.
+- `app/src/search/external_secrets/` — the searchable secret list (data source, fuzzy matcher, search item, searcher and view).
+- `cloud_object_models::external_secret` — `ExternalSecret`, `OnePasswordSecret` and `LastPassSecret`, which had moved out of the deleted `env_vars` module in the previous commit.
+- `Icon::OnePassword` and `Icon::LastPass` with `onepassword.svg` and `lastpass.svg`.
+
+**User-visible impact:** Secrets can no longer be picked from 1Password or LastPass in Warp, and the app no longer runs `op` or `lpass`. Users can still run those CLIs in a terminal.
+
+**Notes:** Nothing else referenced these modules. The external secret types were never stored outside collection objects, so no data migration is involved (existing `ENVVARCOLLECTION` rows are left for DB-1).

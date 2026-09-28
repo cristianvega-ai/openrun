@@ -14,7 +14,6 @@
 pub mod ai_execution_profile;
 pub mod cloud_agent_config;
 pub mod cloud_environment;
-pub mod external_secret;
 pub mod folder;
 pub mod json_model;
 pub mod notebook;
@@ -28,7 +27,6 @@ pub mod workflow_enum;
 pub use ai_execution_profile::*;
 pub use cloud_agent_config::*;
 pub use cloud_environment::*;
-pub use external_secret::*;
 pub use folder::*;
 pub use json_model::*;
 pub use notebook::*;

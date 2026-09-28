@@ -26,7 +26,6 @@ mod default_terminal;
 mod drive;
 #[cfg(windows)]
 mod dynamic_libraries;
-mod external_secrets;
 mod global_resource_handles;
 mod gpu_state;
 mod interval_timer;
