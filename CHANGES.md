@@ -64,6 +64,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp Drive: environment-variable collections](#warp-drive-environment-variable-collections) — removed the environment-variable collection objects, editor pane, invocation blocks, subshell invocation, workflow env-var selectors and the search filter
 - [Warp Drive: 1Password and LastPass secrets](#warp-drive-1password-and-lastpass-secrets) — removed the external secret manager integration, whose only entry point was environment-variable collections
 - [Session sharing: viewer, joins and shared-session model state](#session-sharing-viewer-joins-and-shared-session-model-state) — removed joining and viewing another user's shared session (the viewer network, presence, tombstones, join links and the viewer paths through the terminal model, input, panes and workspace) and the shared-session state and replication in the terminal model and input editor
+- [Session-sharing protocol dependency](#session-sharing-protocol-dependency) — dropped the `session-sharing-protocol` crate and its patch entry, so no crate can build the relay wire types
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1700,3 +1701,16 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for FLAGS-1: the `CreatingSharedSessions`, `ViewingSharedSessions`, `SharedSessionWriteToLongRunningCommands`, `AgentSharedSessions`, `SessionSharingAcls` and `CtrlCCancelsThirdPartyHarness` flags and the `creating_shared_sessions`, `viewing_shared_sessions`, `shared_session_long_running_commands`, `agent_shared_sessions` and `session_sharing_acls` Cargo features.
 - Left for TEAM-1: `UserWorkspaces::update_session_sharing_enablement` and `session_sharing_policy` on the workspace tier. Left for TEL-4: `OpenedSharingDialog`/`SharingDialogSource` telemetry. Left for AUTH-1: `AuthViewVariant::ShareRequirementCloseable`. Left for SRV-1: the shared-session parts of the GraphQL schema.
 - `Icon::QrCode` and its SVG have no user left (the QR code went with the Drive sharing dialog) and can go with the next icon sweep.
+
+## Session-sharing protocol dependency
+**Why:** After the sharer (SS-1) and viewer (SS-2) code is gone, nothing links against the relay's wire types, so the crate that defines them (a git dependency on a private Warp fork) has no reason to stay in the build.
+
+**Removed:**
+- `session-sharing-protocol` from `[workspace.dependencies]`, from the `[patch]` section, and from the `Cargo.toml` of `app`, `warp_terminal`, `warp_server_client`, `cloud_objects`, `cloud_object_models` and `cloud_object_persistence`; `lazy_static` from `cloud_object_persistence`'s dev-dependencies, which only its protocol-typed tests used.
+
+**Modified:**
+- `Cargo.lock` no longer lists `session-sharing-protocol`.
+
+**User-visible impact:** None.
+
+**Notes:** `cargo tree --workspace -i session-sharing-protocol` finds nothing. The build-time git dependencies on other `warpdotdev/*` forks are unchanged.
