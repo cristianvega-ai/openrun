@@ -49,7 +49,7 @@ use crate::drive::cloud_object_styling::warp_drive_icon_color;
 use crate::editor::EditorView;
 use crate::pane_group::pane::IPaneType;
 use crate::pane_group::{
-    CodePane, NotebookPane, PaneGroup, PaneId, TabBarHoverIndex, TerminalPane, WorkflowPane,
+    CodePane, NotebookPane, PaneGroup, PaneId, TabBarHoverIndex, TerminalPane,
 };
 use crate::safe_triangle::SafeTriangle;
 use crate::tab::{
@@ -906,11 +906,10 @@ pub(super) enum SummaryPaneKind {
     CodeDiff,
     File,
     Notebook { is_plan: bool },
-    Workflow { is_ai_prompt: bool },
+    Workflow,
     Settings,
     EnvVarCollection,
     EnvironmentManagement,
-    AIFact,
     AIDocument,
     ExecutionProfileEditor,
     Other,
@@ -3380,23 +3379,13 @@ fn resolve_icon_with_status_variant(
                 is_ai_document: *is_plan,
             }),
         },
-        TypedPane::Workflow { is_ai_prompt: true } => IconWithStatusVariant::Neutral {
-            icon: typed.icon(),
-            icon_color: drive_color(DriveObjectType::AgentModeWorkflow),
-        },
-        TypedPane::Workflow {
-            is_ai_prompt: false,
-        } => IconWithStatusVariant::Neutral {
+        TypedPane::Workflow => IconWithStatusVariant::Neutral {
             icon: typed.icon(),
             icon_color: drive_color(DriveObjectType::Workflow),
         },
         TypedPane::EnvVarCollection => IconWithStatusVariant::Neutral {
             icon: typed.icon(),
             icon_color: drive_color(DriveObjectType::EnvVarCollection),
-        },
-        TypedPane::AIFact => IconWithStatusVariant::Neutral {
-            icon: typed.icon(),
-            icon_color: drive_color(DriveObjectType::AIFact),
         },
         // Other pane types use sub-text color
         other => IconWithStatusVariant::Neutral {
@@ -3635,11 +3624,10 @@ enum TypedPane<'a> {
     CodeDiff,
     File,
     Notebook { is_plan: bool },
-    Workflow { is_ai_prompt: bool },
+    Workflow,
     Settings,
     EnvVarCollection,
     EnvironmentManagement,
-    AIFact,
     AIDocument,
     ExecutionProfileEditor,
     Other,
@@ -3669,13 +3657,10 @@ impl TypedPane<'_> {
             TypedPane::CodeDiff => SummaryPaneKind::CodeDiff,
             TypedPane::File => SummaryPaneKind::File,
             TypedPane::Notebook { is_plan } => SummaryPaneKind::Notebook { is_plan: *is_plan },
-            TypedPane::Workflow { is_ai_prompt } => SummaryPaneKind::Workflow {
-                is_ai_prompt: *is_ai_prompt,
-            },
+            TypedPane::Workflow => SummaryPaneKind::Workflow,
             TypedPane::Settings => SummaryPaneKind::Settings,
             TypedPane::EnvVarCollection => SummaryPaneKind::EnvVarCollection,
             TypedPane::EnvironmentManagement => SummaryPaneKind::EnvironmentManagement,
-            TypedPane::AIFact => SummaryPaneKind::AIFact,
             TypedPane::AIDocument => SummaryPaneKind::AIDocument,
             TypedPane::ExecutionProfileEditor => SummaryPaneKind::ExecutionProfileEditor,
             TypedPane::Other => SummaryPaneKind::Other,
@@ -3697,11 +3682,10 @@ impl TypedPane<'_> {
             TypedPane::CodeDiff => "Code Diff",
             TypedPane::File => "File",
             TypedPane::Notebook { .. } => "Notebook",
-            TypedPane::Workflow { .. } => "Workflow",
+            TypedPane::Workflow => "Workflow",
             TypedPane::Settings => "Settings",
             TypedPane::EnvVarCollection => "Environment Variables",
             TypedPane::EnvironmentManagement => "Environments",
-            TypedPane::AIFact => "Rules",
             TypedPane::AIDocument => "Plan",
             TypedPane::ExecutionProfileEditor => "Execution Profile",
             TypedPane::Other => "Other",
@@ -3719,11 +3703,10 @@ impl TypedPane<'_> {
             | TypedPane::CodeDiff
             | TypedPane::File
             | TypedPane::Notebook { .. }
-            | TypedPane::Workflow { .. }
+            | TypedPane::Workflow
             | TypedPane::Settings
             | TypedPane::EnvVarCollection
             | TypedPane::EnvironmentManagement
-            | TypedPane::AIFact
             | TypedPane::AIDocument
             | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => None,
@@ -3738,13 +3721,9 @@ impl TypedPane<'_> {
             TypedPane::File => WarpIcon::File,
             TypedPane::Notebook { is_plan: true } => WarpIcon::Compass,
             TypedPane::Notebook { is_plan: false } => WarpIcon::Notebook,
-            TypedPane::Workflow { is_ai_prompt: true } => WarpIcon::Prompt,
-            TypedPane::Workflow {
-                is_ai_prompt: false,
-            } => WarpIcon::Workflow,
+            TypedPane::Workflow => WarpIcon::Workflow,
             TypedPane::Settings | TypedPane::EnvironmentManagement => WarpIcon::Gear,
             TypedPane::EnvVarCollection => WarpIcon::EnvVarCollection,
-            TypedPane::AIFact => WarpIcon::BookOpen,
             TypedPane::AIDocument => WarpIcon::Compass,
             TypedPane::ExecutionProfileEditor => WarpIcon::Lightning,
             TypedPane::Other => WarpIcon::File,
@@ -3886,11 +3865,10 @@ fn build_vertical_tabs_summary_data(
             TypedPane::CodeDiff
             | TypedPane::File
             | TypedPane::Notebook { .. }
-            | TypedPane::Workflow { .. }
+            | TypedPane::Workflow
             | TypedPane::Settings
             | TypedPane::EnvVarCollection
             | TypedPane::EnvironmentManagement
-            | TypedPane::AIFact
             | TypedPane::AIDocument
             | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => {
@@ -4030,11 +4008,10 @@ impl<'a> PaneProps<'a> {
             | TypedPane::CodeDiff
             | TypedPane::File
             | TypedPane::Notebook { .. }
-            | TypedPane::Workflow { .. }
+            | TypedPane::Workflow
             | TypedPane::Settings
             | TypedPane::EnvVarCollection
             | TypedPane::EnvironmentManagement
-            | TypedPane::AIFact
             | TypedPane::AIDocument
             | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => {
@@ -4452,20 +4429,10 @@ impl PaneGroup {
                     .unwrap_or(false);
                 TypedPane::Notebook { is_plan }
             }
-            IPaneType::Workflow => {
-                let is_ai_prompt = self
-                    .downcast_pane_by_id::<WorkflowPane>(pane_id)
-                    .map(|wp| {
-                        let wv = wp.get_view(app);
-                        wv.as_ref(app).is_agent_mode_workflow()
-                    })
-                    .unwrap_or(false);
-                TypedPane::Workflow { is_ai_prompt }
-            }
+            IPaneType::Workflow => TypedPane::Workflow,
             IPaneType::Settings => TypedPane::Settings,
             IPaneType::EnvVarCollection => TypedPane::EnvVarCollection,
             IPaneType::EnvironmentManagement => TypedPane::EnvironmentManagement,
-            IPaneType::AIFact => TypedPane::AIFact,
             IPaneType::AIDocument => TypedPane::AIDocument,
             IPaneType::ExecutionProfileEditor => TypedPane::ExecutionProfileEditor,
             IPaneType::CustomRouterEditor
@@ -5208,11 +5175,10 @@ pub(super) fn render_summary_pane_kind_icon_circle(
         | SummaryPaneKind::CodeDiff
         | SummaryPaneKind::File
         | SummaryPaneKind::Notebook { .. }
-        | SummaryPaneKind::Workflow { .. }
+        | SummaryPaneKind::Workflow
         | SummaryPaneKind::Settings
         | SummaryPaneKind::EnvVarCollection
         | SummaryPaneKind::EnvironmentManagement
-        | SummaryPaneKind::AIFact
         | SummaryPaneKind::AIDocument
         | SummaryPaneKind::ExecutionProfileEditor
         | SummaryPaneKind::Other => {
@@ -5293,18 +5259,7 @@ fn summary_pane_kind_icon(
                 is_ai_document: is_plan,
             }),
         ),
-        SummaryPaneKind::Workflow { is_ai_prompt } => (
-            if is_ai_prompt {
-                WarpIcon::Prompt
-            } else {
-                WarpIcon::Workflow
-            },
-            if is_ai_prompt {
-                drive_color(DriveObjectType::AgentModeWorkflow)
-            } else {
-                drive_color(DriveObjectType::Workflow)
-            },
-        ),
+        SummaryPaneKind::Workflow => (WarpIcon::Workflow, drive_color(DriveObjectType::Workflow)),
         SummaryPaneKind::Settings | SummaryPaneKind::EnvironmentManagement => {
             (WarpIcon::Gear, main_text)
         }
@@ -5312,7 +5267,6 @@ fn summary_pane_kind_icon(
             WarpIcon::EnvVarCollection,
             drive_color(DriveObjectType::EnvVarCollection),
         ),
-        SummaryPaneKind::AIFact => (WarpIcon::BookOpen, drive_color(DriveObjectType::AIFact)),
         SummaryPaneKind::AIDocument => (WarpIcon::Compass, sub_text),
         SummaryPaneKind::ExecutionProfileEditor => (WarpIcon::Lightning, sub_text),
         SummaryPaneKind::Other => (WarpIcon::File, sub_text),
@@ -7157,12 +7111,8 @@ fn typed_pane_warp_drive_object_type(typed: &TypedPane<'_>) -> Option<DriveObjec
         TypedPane::Notebook { is_plan } => Some(DriveObjectType::Notebook {
             is_ai_document: *is_plan,
         }),
-        TypedPane::Workflow { is_ai_prompt: true } => Some(DriveObjectType::AgentModeWorkflow),
-        TypedPane::Workflow {
-            is_ai_prompt: false,
-        } => Some(DriveObjectType::Workflow),
+        TypedPane::Workflow => Some(DriveObjectType::Workflow),
         TypedPane::EnvVarCollection => Some(DriveObjectType::EnvVarCollection),
-        TypedPane::AIFact => Some(DriveObjectType::AIFact),
         TypedPane::AIDocument => Some(DriveObjectType::Notebook {
             is_ai_document: true,
         }),
@@ -7191,9 +7141,8 @@ fn render_detail_section(
         ),
         TypedPane::Code(_) => render_code_detail_section(props, appearance, app),
         TypedPane::Notebook { .. }
-        | TypedPane::Workflow { .. }
+        | TypedPane::Workflow
         | TypedPane::EnvVarCollection
-        | TypedPane::AIFact
         | TypedPane::AIDocument => render_warp_drive_object_detail_section(props, appearance, app),
         TypedPane::CodeDiff
         | TypedPane::File

@@ -27,7 +27,7 @@ use crate::search::slash_command_menu::static_commands::commands::{self, COMMAND
 use crate::settings::{
     InputSettings, InputSettingsChangedEvent, PrivacySettings, PrivacySettingsChangedEvent,
 };
-use crate::terminal::input::slash_commands::AcceptSlashCommandOrSavedPrompt;
+use crate::terminal::input::slash_commands::AcceptSlashMenuItem;
 use crate::terminal::model::session::active_session::ActiveSession;
 use crate::terminal::view::ambient_agent::AmbientAgentViewModel;
 use crate::terminal::view::is_retained_setup_failure_debug_editable_for_task;
@@ -322,7 +322,7 @@ impl GuiSlashCommandDataSource {
 }
 
 impl SyncDataSource for GuiSlashCommandDataSource {
-    type Action = AcceptSlashCommandOrSavedPrompt;
+    type Action = AcceptSlashMenuItem;
 
     fn run_query(
         &self,

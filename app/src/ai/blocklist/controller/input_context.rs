@@ -5,7 +5,6 @@ use chrono::Local;
 use lazy_static::lazy_static;
 use regex::Regex;
 use warp_core::features::FeatureFlag;
-use warp_graphql::generic_string_object::GenericStringObjectFormat as GraphQLFormat;
 use warpui::{AppContext, SingletonEntity};
 
 use crate::ai::agent::conversation::AIConversationId;
@@ -15,13 +14,9 @@ use crate::ai::agent::{
 use crate::ai::block_context::BlockContext;
 use crate::ai::blocklist::{BlocklistAIContextModel, SessionContext};
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentModel};
-use crate::ai::facts::CloudAIFactModel;
 use crate::ai::skills::list_skills_if_changed;
-use crate::cloud_object::model::generic_string_model::{CloudStringObject, GenericStringObjectId};
+use crate::cloud_object::ObjectType;
 use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{
-    GenericCloudObject, GenericStringObjectFormat, JsonObjectType, ObjectType,
-};
 use crate::terminal::TerminalView;
 use crate::terminal::model::block::BlockId;
 use crate::terminal::model::session::active_session::ActiveSession;
@@ -31,7 +26,7 @@ lazy_static! {
     pub static ref BLOCK_CONTEXT_ATTACHMENT_REGEX: Regex = Regex::new(r"<block:([^>]+)>")
         .expect("Block context attachment regex should be parsed");
     // Regex to match warp drive objects inserted via at-context. Ex: <notebook:[workflow_id]>
-    pub static ref DRIVE_OBJECT_ATTACHMENT_REGEX: Regex = Regex::new(r"<(workflow|notebook|plan|rule):([^>]+)>")
+    pub static ref DRIVE_OBJECT_ATTACHMENT_REGEX: Regex = Regex::new(r"<(workflow|notebook|plan):([^>]+)>")
         .expect("Drive object attachment regex should be parsed");
     // Regex to match <change:filename:line_start-line_end> patterns
     pub static ref DIFF_HUNK_ATTACHMENT_REGEX: Regex = Regex::new(r"<change:([^>]+)>")
@@ -152,9 +147,6 @@ pub(super) fn parse_context_attachments(
                 let object_type = match object_type_str {
                     "workflow" => ObjectType::Workflow,
                     "notebook" => ObjectType::Notebook,
-                    "rule" => ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                        JsonObjectType::AIFact,
-                    )),
                     _ => continue, // Skip unknown object types
                 };
 
@@ -268,25 +260,6 @@ fn get_object_attachment_payload(
                 title: notebook.model().title.clone(),
                 content: notebook.model().data.clone(),
             }),
-        ObjectType::GenericStringObject(_) => {
-            // For generic string objects, we only support AI facts (rules) for now
-            CloudModel::as_ref(ctx)
-                .get_by_uid(&uid.to_string())
-                .and_then(|object| {
-                    if let Some(ai_fact) = object.as_any().downcast_ref::<GenericCloudObject<GenericStringObjectId, CloudAIFactModel>>() {
-                        let string_object = ai_fact as &dyn CloudStringObject;
-                        // Convert the format to GraphQL format since that's what the server expects
-                        let graphql_format: GraphQLFormat =
-                            string_object.generic_string_object_format().into();
-                        Some(DriveObjectPayload::GenericStringObject {
-                            payload: string_object.serialized().model_as_str().to_string(),
-                            object_type: graphql_format.to_string(),
-                        })
-                    } else {
-                        None
-                    }
-                })
-        }
         _ => None, // Other object types not supported for drive object attachments
     }
 }

@@ -18,8 +18,6 @@ pub enum GenericStringObjectFormat {
     JsonPreference,
     #[cynic(rename = "JsonWorkflowEnum")]
     JsonWorkflowEnum,
-    #[cynic(rename = "JsonAIFact")]
-    JsonAIFact,
     #[cynic(rename = "JsonMCPServer")]
     JsonMCPServer,
     #[cynic(rename = "JsonAIExecutionProfile")]
@@ -56,7 +54,6 @@ impl std::fmt::Display for GenericStringObjectFormat {
             GenericStringObjectFormat::JsonEnvVarCollection => "JsonEnvVarCollection",
             GenericStringObjectFormat::JsonPreference => "JsonPreference",
             GenericStringObjectFormat::JsonWorkflowEnum => "JsonWorkflowEnum",
-            GenericStringObjectFormat::JsonAIFact => "JsonAIFact",
             GenericStringObjectFormat::JsonMCPServer => "JsonMCPServer",
             GenericStringObjectFormat::JsonAIExecutionProfile => "JsonAIExecutionProfile",
             GenericStringObjectFormat::JsonTemplatableMCPServer => "JsonTemplatableMCPServer",

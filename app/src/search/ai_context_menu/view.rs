@@ -44,7 +44,6 @@ use crate::search::ai_context_menu::mixer::{AIContextMenuMixer, AIContextMenuSea
 #[cfg(not(target_family = "wasm"))]
 use crate::search::ai_context_menu::notebooks::data_source::NotebookDataSource;
 #[cfg(not(target_family = "wasm"))]
-use crate::search::ai_context_menu::rules::data_source::RulesDataSource;
 #[cfg(not(target_family = "wasm"))]
 use crate::search::ai_context_menu::skills::data_source::SkillsDataSource;
 #[cfg(not(target_family = "wasm"))]
@@ -88,7 +87,6 @@ pub enum AIContextMenuCategory {
     Diffs,
     Docs,
     Tasks,
-    Rules,
     Servers,
     Terminal,
     Web,
@@ -113,7 +111,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::Diffs => "Diffs",
             AIContextMenuCategory::Docs => "Docs",
             AIContextMenuCategory::Tasks => "Past tasks",
-            AIContextMenuCategory::Rules => "Rules",
             AIContextMenuCategory::Servers => "Servers and integrations",
             AIContextMenuCategory::Terminal => "Terminal",
             AIContextMenuCategory::Web => "Web",
@@ -138,7 +135,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::Diffs => "bundled/svg/diff.svg",
             AIContextMenuCategory::Docs => "bundled/svg/docs.svg",
             AIContextMenuCategory::Tasks => "bundled/svg/tasks.svg",
-            AIContextMenuCategory::Rules => "bundled/svg/book-open.svg",
             AIContextMenuCategory::Servers => "bundled/svg/server.svg",
             AIContextMenuCategory::Terminal => "bundled/svg/terminal.svg",
             AIContextMenuCategory::Web => "bundled/svg/web.svg",
@@ -945,20 +941,6 @@ impl AIContextMenu {
                 });
             }
             #[cfg(not(target_family = "wasm"))]
-            NavigationState::Category(AIContextMenuCategory::Rules) => {
-                let rules_data_source = ctx.add_model(|_| RulesDataSource::new());
-                self.mixer.update(ctx, |mixer, ctx| {
-                    mixer.add_sync_source(rules_data_source, [QueryFilter::Rules]);
-                    mixer.run_query(
-                        Query {
-                            text: "".into(),
-                            filters: HashSet::new(),
-                        },
-                        ctx,
-                    );
-                });
-            }
-            #[cfg(not(target_family = "wasm"))]
             NavigationState::Category(AIContextMenuCategory::DiffSet) => {
                 let diffset_data_source = ctx.add_model(|_| DiffSetDataSource);
                 self.mixer.update(ctx, |mixer, ctx| {
@@ -1106,12 +1088,6 @@ impl AIContextMenu {
                     let notebook_data_source = ctx.add_model(|_| NotebookDataSource::new(true));
                     self.mixer.update(ctx, |mixer, _ctx| {
                         mixer.add_sync_source(notebook_data_source, [QueryFilter::Notebooks]);
-                    });
-                }
-                AIContextMenuCategory::Rules => {
-                    let rules_data_source = ctx.add_model(|_| RulesDataSource::new());
-                    self.mixer.update(ctx, |mixer, _ctx| {
-                        mixer.add_sync_source(rules_data_source, [QueryFilter::Rules]);
                     });
                 }
                 AIContextMenuCategory::DiffSet => {

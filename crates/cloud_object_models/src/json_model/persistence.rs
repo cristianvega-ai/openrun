@@ -11,19 +11,17 @@ use diesel::SqliteConnection;
 use diesel::result::Error;
 
 use crate::{
-    CloudAIExecutionProfile, CloudAIExecutionProfileModel, CloudAIFact, CloudAIFactModel,
-    CloudAmbientAgentEnvironment, CloudAmbientAgentEnvironmentModel, CloudEnvVarCollection,
-    CloudEnvVarCollectionModel, CloudMCPServer, CloudMCPServerModel, CloudPreference,
-    CloudPreferenceModel, CloudScheduledAmbientAgent, CloudScheduledAmbientAgentModel,
-    CloudTemplatableMCPServer, CloudTemplatableMCPServerModel, CloudWorkflowEnum,
-    CloudWorkflowEnumModel,
+    CloudAIExecutionProfile, CloudAIExecutionProfileModel, CloudAmbientAgentEnvironment,
+    CloudAmbientAgentEnvironmentModel, CloudEnvVarCollection, CloudEnvVarCollectionModel,
+    CloudMCPServer, CloudMCPServerModel, CloudPreference, CloudPreferenceModel,
+    CloudScheduledAmbientAgent, CloudScheduledAmbientAgentModel, CloudTemplatableMCPServer,
+    CloudTemplatableMCPServerModel, CloudWorkflowEnum, CloudWorkflowEnumModel,
 };
 
 pub enum PersistedGenericStringObject {
     Preference(CloudPreference),
     EnvVarCollection(CloudEnvVarCollection),
     WorkflowEnum(CloudWorkflowEnum),
-    AIFact(CloudAIFact),
     MCPServer(CloudMCPServer),
     TemplatableMCPServer(CloudTemplatableMCPServer),
     AIExecutionProfile(CloudAIExecutionProfile),
@@ -80,17 +78,6 @@ pub fn read_generic_string_objects(
                     let model = CloudWorkflowEnumModel::deserialize_owned(&object.data);
                     model.ok().map(|model| {
                         PersistedGenericStringObject::WorkflowEnum(CloudWorkflowEnum::new(
-                            object_id,
-                            model,
-                            to_cloud_object_metadata(metadata),
-                            cloud_object_permissions,
-                        ))
-                    })
-                }
-                JsonObjectType::AIFact => {
-                    let model = CloudAIFactModel::deserialize_owned(&object.data);
-                    model.ok().map(|model| {
-                        PersistedGenericStringObject::AIFact(CloudAIFact::new(
                             object_id,
                             model,
                             to_cloud_object_metadata(metadata),

@@ -8,7 +8,7 @@ use warp_graphql::mutations::update_generic_string_object::{
 use warp_graphql::object::ObjectUpdateSuccess;
 
 use crate::cloud_object::{
-    RevisionAndLastEditor, ServerAIExecutionProfile, ServerAIFact, ServerAmbientAgentEnvironment,
+    RevisionAndLastEditor, ServerAIExecutionProfile, ServerAmbientAgentEnvironment,
     ServerEnvVarCollection, ServerFolder, ServerMCPServer, ServerObject, ServerPreference,
     ServerScheduledAmbientAgent, ServerTemplatableMCPServer, ServerWorkflowEnum, TryFromGql,
     UpdateCloudObjectResult,
@@ -55,11 +55,6 @@ pub fn update_generic_string_object_result_to_update_result(
                         }
                         GenericStringObjectFormat::JsonWorkflowEnum => {
                             boxed_rejected_generic_string_object::<ServerWorkflowEnum>(
-                                rejected.conflicting_generic_string_object,
-                            )?
-                        }
-                        GenericStringObjectFormat::JsonAIFact => {
-                            boxed_rejected_generic_string_object::<ServerAIFact>(
                                 rejected.conflicting_generic_string_object,
                             )?
                         }

@@ -6,7 +6,6 @@ mod diffset;
 mod files;
 pub mod mixer;
 mod notebooks;
-mod rules;
 pub mod search;
 #[cfg(not(target_family = "wasm"))]
 mod skills;

@@ -142,7 +142,6 @@ pub struct RequestParams {
     #[allow(unused)]
     pub coding_model: LLMId,
     pub cli_agent_model: LLMId,
-    pub is_memory_enabled: bool,
     pub warp_drive_context_enabled: bool,
     pub context_window_limit: Option<u32>,
     pub mcp_context: Option<MCPContext>,
@@ -213,7 +212,6 @@ impl RequestParams {
             model: LLMId::from("test-model"),
             coding_model: LLMId::from("test-model"),
             cli_agent_model: LLMId::from("test-model"),
-            is_memory_enabled: false,
             warp_drive_context_enabled: false,
             context_window_limit: None,
             mcp_context: None,
@@ -246,7 +244,6 @@ impl RequestParams {
         app: &AppContext,
     ) -> Self {
         let ai_settings = AISettings::as_ref(app);
-        let is_memory_enabled = ai_settings.is_memory_enabled(app);
         let warp_drive_context_enabled = ai_settings.is_warp_drive_context_enabled(app);
 
         // Build MCP context - either grouped by server or flat lists based on feature flag
@@ -399,7 +396,6 @@ impl RequestParams {
             model: request_input.model_id.clone(),
             coding_model: request_input.coding_model_id.clone(),
             cli_agent_model: request_input.cli_agent_model_id.clone(),
-            is_memory_enabled,
             warp_drive_context_enabled,
             mcp_context,
             planning_enabled: true,

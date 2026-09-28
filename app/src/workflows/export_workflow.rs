@@ -197,18 +197,6 @@ where
             state.serialize_field("author_url", author_url)?;
             state.serialize_field("shells", shells)?;
         }
-        Workflow::AgentMode {
-            name,
-            description,
-            query,
-            ..
-        } => {
-            state.serialize_field("type", "agent_mode")?;
-            state.serialize_field("name", name)?;
-            state.serialize_field("query", query)?;
-            state.serialize_field("description", description)?;
-            state.serialize_field("arguments", &export_args)?;
-        }
     }
 
     state.end()

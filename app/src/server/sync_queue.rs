@@ -23,7 +23,6 @@ use crate::ai::ambient_agents::scheduled::CloudScheduledAmbientAgentModel;
 use crate::ai::cloud_agent_config::CloudAgentConfigModel;
 use crate::ai::cloud_environments::CloudAmbientAgentEnvironmentModel;
 use crate::ai::execution_profiles::CloudAIExecutionProfileModel;
-use crate::ai::facts::CloudAIFactModel;
 use crate::ai::mcp::CloudMCPServerModel;
 use crate::ai::mcp::templatable::CloudTemplatableMCPServerModel;
 use crate::cloud_object::model::actions::{
@@ -181,11 +180,6 @@ pub enum QueueItem {
     },
     UpdateWorkflowEnum {
         model: Arc<CloudWorkflowEnumModel>,
-        id: SyncId,
-        revision: Option<Revision>,
-    },
-    UpdateAIFact {
-        model: Arc<CloudAIFactModel>,
         id: SyncId,
         revision: Option<Revision>,
     },
@@ -433,7 +427,6 @@ impl SyncQueue {
             | QueueItem::UpdatePreference { id, .. }
             | QueueItem::UpdateEnvVarCollection { id, .. }
             | QueueItem::UpdateWorkflowEnum { id, .. }
-            | QueueItem::UpdateAIFact { id, .. }
             | QueueItem::UpdateMCPServer { id, .. }
             | QueueItem::UpdateAIExecutionProfile { id, .. }
             | QueueItem::UpdateTemplatableMCPServer { id, .. }
@@ -551,7 +544,6 @@ impl SyncQueue {
                 | QueueItem::UpdateFolder { id, .. }
                 | QueueItem::UpdateEnvVarCollection { id, .. }
                 | QueueItem::UpdateWorkflowEnum { id, .. }
-                | QueueItem::UpdateAIFact { id, .. }
                 | QueueItem::UpdateMCPServer { id, .. }
                 | QueueItem::UpdateAIExecutionProfile { id, .. }
                 | QueueItem::UpdateTemplatableMCPServer { id, .. }
@@ -659,7 +651,6 @@ impl SyncQueue {
                 | QueueItem::UpdatePreference { id, revision, .. }
                 | QueueItem::UpdateEnvVarCollection { id, revision, .. }
                 | QueueItem::UpdateWorkflowEnum { id, revision, .. }
-                | QueueItem::UpdateAIFact { id, revision, .. }
                 | QueueItem::UpdateMCPServer { id, revision, .. }
                 | QueueItem::UpdateAIExecutionProfile { id, revision, .. }
                 | QueueItem::UpdateTemplatableMCPServer { id, revision, .. }
@@ -771,20 +762,6 @@ impl SyncQueue {
                     );
                 }
                 QueueItem::UpdateEnvVarCollection {
-                    model,
-                    id,
-                    revision,
-                } => {
-                    self.update_object(
-                        model.clone(),
-                        id,
-                        revision,
-                        object_client,
-                        dequeued_item_id,
-                        ctx,
-                    );
-                }
-                QueueItem::UpdateAIFact {
                     model,
                     id,
                     revision,
@@ -1255,13 +1232,6 @@ impl SyncQueue {
                             }
                             JsonObjectType::WorkflowEnum => {
                                 CloudWorkflowEnumModel::send_create_request(
-                                    object_client_clone,
-                                    create_request,
-                                )
-                                .await
-                            }
-                            JsonObjectType::AIFact => {
-                                CloudAIFactModel::send_create_request(
                                     object_client_clone,
                                     create_request,
                                 )
@@ -1900,9 +1870,6 @@ impl SyncQueue {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
                 QueueItem::UpdateWorkflowEnum { id, .. } => {
-                    self.handle_update_failure_response(id, item_id, ctx);
-                }
-                QueueItem::UpdateAIFact { id, .. } => {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
                 QueueItem::UpdateMCPServer { id, .. } => {

@@ -123,7 +123,6 @@ const SCROLLBAR_WIDTH: ScrollbarWidth = ScrollbarWidth::Auto;
 const TITLE_PLACEHOLDER_TEXT: &str = "Add a title";
 const DESCRIPTION_PLACEHOLDER_TEXT: &str = "Add a description";
 const COMMAND_PLACEHOLDER_TEXT: &str = "echo \"Hello {{your_name}}\" # insert arguments with curly braces\n# enter a single-line command or an entire shell script";
-const AGENT_MODE_QUERY_PLACEHOLDER_TEXT: &str = "Enter your prompt here... (e.g., 'Create a function to sort an array of objects by date' or 'Help me debug this React component').";
 const DESCRIPTION_MARGIN_TOP: f32 = 10.;
 
 const CORE_HORIZONATAL_MARGIN: f32 = 24.;
@@ -297,17 +296,6 @@ pub struct WorkflowView {
     show_enum_creation_dialog: bool,
     enum_creation_dialog: ViewHandle<EnumCreationDialog>,
     all_workflow_enums: HashMap<SyncId, WorkflowEnumData>,
-
-    /// `true` if this workflow view is for viewing/editing an AI workflow.
-    ///
-    /// This is currently internal-only, gated with the `am_workflows` feature flag.
-    is_for_agent_mode: bool,
-}
-
-impl WorkflowView {
-    pub fn is_agent_mode_workflow(&self) -> bool {
-        self.is_for_agent_mode
-    }
 }
 
 impl WorkflowView {
@@ -438,7 +426,6 @@ impl WorkflowView {
             show_enum_creation_dialog: false,
             enum_creation_dialog,
             all_workflow_enums: Default::default(),
-            is_for_agent_mode: false,
         };
 
         me.subscribe_to_model_updates(ctx);
@@ -452,7 +439,6 @@ impl WorkflowView {
         content: Option<String>,
         owner: Owner,
         initial_folder_id: Option<SyncId>,
-        is_for_agent_mode: bool,
         sync_id: SyncId,
         ctx: &mut ViewContext<Self>,
     ) {
@@ -460,13 +446,6 @@ impl WorkflowView {
         self.set_workflow_id(sync_id, ctx);
         self.workflow_view_mode = WorkflowViewMode::Create;
         self.command_display_data = WorkflowCommandDisplayData::new_empty();
-        self.is_for_agent_mode = is_for_agent_mode;
-        if is_for_agent_mode {
-            self.content_editor.update(ctx, |editor, ctx| {
-                editor.set_placeholder_text(AGENT_MODE_QUERY_PLACEHOLDER_TEXT, ctx);
-                editor.set_font_family(Appearance::as_ref(ctx).ui_font_family(), ctx);
-            });
-        }
 
         if let Some(title_string) = title {
             self.name_editor.update(ctx, |editor, ctx| {
@@ -483,12 +462,6 @@ impl WorkflowView {
         self.owner = Some(owner);
         self.all_workflow_enums =
             workflow_arg_type_helpers::load_workflow_enums_with_owner(owner, ctx);
-
-        if is_for_agent_mode {
-            self.content_editor.update(ctx, |editor, ctx| {
-                editor.set_placeholder_text(AGENT_MODE_QUERY_PLACEHOLDER_TEXT, ctx);
-            });
-        }
 
         self.update_editors_interactivity(ctx);
     }
@@ -639,14 +612,6 @@ impl WorkflowView {
         ctx: &mut ViewContext<Self>,
     ) {
         self.set_workflow_id(workflow.id, ctx);
-        self.is_for_agent_mode = workflow.model().data.is_agent_mode_workflow();
-        if self.is_for_agent_mode {
-            self.content_editor.update(ctx, |editor, ctx| {
-                editor.set_placeholder_text(AGENT_MODE_QUERY_PLACEHOLDER_TEXT, ctx);
-                editor.set_font_family(Appearance::as_ref(ctx).ui_font_family(), ctx);
-            });
-        }
-
         self.workflow_view_mode = match mode {
             // Force view mode if the user is not allowed to edit the workflow.
             WorkflowViewMode::Edit => {
@@ -726,34 +691,26 @@ impl WorkflowView {
         self.update_arguments_rows(ctx);
         self.load_argument_data(workflow_data, ctx);
 
-        if self.is_for_agent_mode {
-            self.content_editor.update(ctx, |editor, ctx| {
-                editor.set_placeholder_text(AGENT_MODE_QUERY_PLACEHOLDER_TEXT, ctx);
+        self.content_editor_highlight_model
+            .update(ctx, |model, ctx| {
+                model.highlight_syntax(ctx);
             });
-        } else {
-            self.content_editor_highlight_model
-                .update(ctx, |model, ctx| {
-                    model.highlight_syntax(ctx);
-                });
-            self.view_only_content_editor_highlight_model
-                .update(ctx, |model, ctx| {
-                    model.highlight_syntax(ctx);
-                });
+        self.view_only_content_editor_highlight_model
+            .update(ctx, |model, ctx| {
+                model.highlight_syntax(ctx);
+            });
 
-            if let Workflow::Command {
-                environment_variables,
-                ..
-            } = workflow_data
-            {
-                self.env_vars_state = EnvironmentVariablesState {
-                    default_env_vars: *environment_variables,
-                    is_dirty: false,
-                };
-                self.env_vars_selector.update(ctx, |selector, ctx| {
-                    selector.set_selected_env_vars(*environment_variables, ctx)
-                });
-            }
-        }
+        let Workflow::Command {
+            environment_variables,
+            ..
+        } = workflow_data;
+        self.env_vars_state = EnvironmentVariablesState {
+            default_env_vars: *environment_variables,
+            is_dirty: false,
+        };
+        self.env_vars_selector.update(ctx, |selector, ctx| {
+            selector.set_selected_env_vars(*environment_variables, ctx)
+        });
         self.update_editors_interactivity(ctx);
         self.refresh_pane_overflow_menu(ctx);
 
@@ -913,26 +870,20 @@ impl WorkflowView {
 
                 self.errors.content_empty_error = current_content.trim().is_empty();
 
-                self.arguments_state = if self.is_for_agent_mode {
-                    ArgumentsState::for_saved_prompt(&self.arguments_state, current_content.clone())
-                } else {
-                    ArgumentsState::for_command_workflow(
-                        &self.arguments_state,
-                        current_content.clone(),
-                    )
-                };
+                self.arguments_state = ArgumentsState::for_command_workflow(
+                    &self.arguments_state,
+                    current_content.clone(),
+                );
                 self.update_arguments_rows(ctx);
 
                 self.clear_content_formatting(current_content.chars().count(), ctx);
                 self.apply_error_underlining_to_content(ctx);
                 self.apply_argument_highlighting_to_content(ctx);
 
-                if !self.is_for_agent_mode {
-                    self.content_editor_highlight_model
-                        .update(ctx, |model, ctx| {
-                            model.highlight_syntax(ctx);
-                        });
-                }
+                self.content_editor_highlight_model
+                    .update(ctx, |model, ctx| {
+                        model.highlight_syntax(ctx);
+                    });
 
                 self.errors.invalid_argument_error = !self
                     .arguments_state
@@ -1438,26 +1389,17 @@ impl WorkflowView {
             title_in_editor
         };
 
-        let mut workflow = if self.is_for_agent_mode {
-            Workflow::AgentMode {
-                name: workflow_name,
-                query: content,
-                arguments: self.arguments_with_metadata(ctx),
-                description: None,
-            }
-        } else {
-            Workflow::Command {
-                name: workflow_name,
-                command: content,
-                description: None,
-                arguments: self.arguments_with_metadata(ctx),
-                tags: vec![],
-                source_url: None,
-                author: None,
-                author_url: None,
-                shells: vec![],
-                environment_variables: self.env_vars_state.default_env_vars,
-            }
+        let mut workflow = Workflow::Command {
+            name: workflow_name,
+            command: content,
+            description: None,
+            arguments: self.arguments_with_metadata(ctx),
+            tags: vec![],
+            source_url: None,
+            author: None,
+            author_url: None,
+            shells: vec![],
+            environment_variables: self.env_vars_state.default_env_vars,
         };
 
         let workflow_description = self.description_editor.as_ref(ctx).buffer_text(ctx);
@@ -1636,11 +1578,7 @@ impl WorkflowView {
         let window_id = ctx.window_id();
         crate::workspace::ToastStack::handle(ctx).update(ctx, |stack, ctx| {
             stack.add_ephemeral_toast(
-                DismissibleToast::success(if self.is_for_agent_mode {
-                    "Prompt copied.".to_string()
-                } else {
-                    "Command copied.".to_string()
-                }),
+                DismissibleToast::success("Command copied.".to_string()),
                 window_id,
                 ctx,
             );
@@ -1921,23 +1859,11 @@ impl WorkflowView {
     fn render_workflow_details(&self, appearance: &Appearance) -> Box<dyn Element> {
         let workflow_icon = Container::new(
             ConstrainedBox::new(
-                if self.is_for_agent_mode {
-                    Icon::Prompt
-                } else {
-                    Icon::Workflow
-                }
-                .to_warpui_icon(
-                    warp_drive_icon_color(
-                        appearance,
-                        if self.is_for_agent_mode {
-                            DriveObjectType::AgentModeWorkflow
-                        } else {
-                            DriveObjectType::Workflow
-                        },
+                Icon::Workflow
+                    .to_warpui_icon(
+                        warp_drive_icon_color(appearance, DriveObjectType::Workflow).into(),
                     )
-                    .into(),
-                )
-                .finish(),
+                    .finish(),
             )
             .with_width(WORKFLOW_ICON_DIMENSIONS)
             .with_height(WORKFLOW_ICON_DIMENSIONS)
@@ -2299,10 +2225,7 @@ impl WorkflowView {
 
         if let Some((label, icon)) = label_and_icon {
             // AI-generated workflow metadata is only supported for Command workflows currently.
-            if AISettings::as_ref(app).is_any_ai_enabled(app)
-                && self.is_editable()
-                && !self.is_for_agent_mode
-            {
+            if AISettings::as_ref(app).is_any_ai_enabled(app) && self.is_editable() {
                 let mut button = self
                     .build_footer_button(
                         ButtonVariant::Secondary,
@@ -2767,7 +2690,7 @@ impl View for WorkflowView {
         let mut main_section = Flex::column();
         main_section.add_child(self.render_workflow_details(appearance));
 
-        if FeatureFlag::WorkflowAliases.is_enabled() && !self.is_for_agent_mode {
+        if FeatureFlag::WorkflowAliases.is_enabled() {
             main_section.add_child(self.render_alias_section(appearance));
         }
 

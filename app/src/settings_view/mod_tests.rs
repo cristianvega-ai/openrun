@@ -96,7 +96,6 @@ fn subpage_display_names_are_correct() {
     assert_eq!(SettingsSection::WarpAgent.to_string(), "Warp Agent");
     assert_eq!(SettingsSection::AgentProfiles.to_string(), "Profiles");
     assert_eq!(SettingsSection::AgentMCPServers.to_string(), "MCP servers");
-    assert_eq!(SettingsSection::Knowledge.to_string(), "Knowledge");
     assert_eq!(
         SettingsSection::ThirdPartyCLIAgents.to_string(),
         "Third party CLI agents"
@@ -135,7 +134,6 @@ const ALL_SECTIONS: &[SettingsSection] = &[
     SettingsSection::WarpAgent,
     SettingsSection::AgentProfiles,
     SettingsSection::AgentMCPServers,
-    SettingsSection::Knowledge,
     SettingsSection::ThirdPartyCLIAgents,
     SettingsSection::Projects,
     SettingsSection::EditorAndCodeReview,
@@ -167,7 +165,6 @@ fn all_sections_list_is_exhaustive() {
             | SettingsSection::WarpAgent
             | SettingsSection::AgentProfiles
             | SettingsSection::AgentMCPServers
-            | SettingsSection::Knowledge
             | SettingsSection::ThirdPartyCLIAgents
             | SettingsSection::Projects
             | SettingsSection::EditorAndCodeReview
@@ -335,7 +332,6 @@ const AGENT_SUBPAGES: &[SettingsSection] = &[
     SettingsSection::WarpAgent,
     SettingsSection::AgentProfiles,
     SettingsSection::AgentMCPServers,
-    SettingsSection::Knowledge,
     SettingsSection::ThirdPartyCLIAgents,
 ];
 
@@ -425,7 +421,7 @@ fn expanded_umbrella_produces_section_stop_per_subpage() {
 
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    // Expect: Appearance, WarpAgent, AgentProfiles, AgentMCPServers, Knowledge,
+    // Expect: Appearance, WarpAgent, AgentProfiles, AgentMCPServers,
     // ThirdPartyCLIAgents, BillingAndUsage, <Code umbrella>,
     // <Cloud platform umbrella>, Teams.
     let sections: Vec<_> = stops
@@ -442,7 +438,6 @@ fn expanded_umbrella_produces_section_stop_per_subpage() {
             "WarpAgent",
             "AgentProfiles",
             "AgentMCPServers",
-            "Knowledge",
             "ThirdPartyCLIAgents",
             "BillingAndUsage",
             "Umbrella@3",
@@ -555,11 +550,11 @@ fn current_stop_index_maps_subpage_to_collapsed_umbrella() {
     let nav_items = realistic_nav_items();
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    let idx = current_stop_index(&stops, &nav_items, SettingsSection::Knowledge);
+    let idx = current_stop_index(&stops, &nav_items, SettingsSection::AgentMCPServers);
     assert_eq!(
         idx,
         Some(1),
-        "Knowledge is under the collapsed Agents umbrella at nav_index 1"
+        "AgentMCPServers is under the collapsed Agents umbrella at nav_index 1"
     );
 }
 
@@ -569,10 +564,10 @@ fn current_stop_index_returns_none_when_section_is_not_present() {
     // Filter out all Agents subpages (and therefore the umbrella) entirely.
     let stops = build_nav_stops(&nav_items, |section| !AGENT_SUBPAGES.contains(&section));
 
-    // Knowledge isn't directly in stops, and no remaining collapsed umbrella
+    // AgentMCPServers isn't directly in stops, and no remaining collapsed umbrella
     // contains it, so current_stop_index should return None.
     assert_eq!(
-        current_stop_index(&stops, &nav_items, SettingsSection::Knowledge),
+        current_stop_index(&stops, &nav_items, SettingsSection::AgentMCPServers),
         None
     );
 }
@@ -661,17 +656,17 @@ fn arrow_up_from_billing_and_usage_with_collapsed_agents_lands_on_last_subpage()
 fn arrow_up_into_collapsed_umbrella_respects_search_filter_for_last_subpage() {
     let nav_items = realistic_nav_items();
     // Hide the last two AI subpages; the last *visible* subpage of the
-    // still-collapsed Agents umbrella should be AgentMCPServers.
+    // still-collapsed Agents umbrella should be AgentProfiles.
     let is_visible = |section: SettingsSection| {
         !matches!(
             section,
-            SettingsSection::Knowledge | SettingsSection::ThirdPartyCLIAgents
+            SettingsSection::AgentMCPServers | SettingsSection::ThirdPartyCLIAgents
         )
     };
     let stops = build_nav_stops(&nav_items, is_visible);
 
     // From BillingAndUsage, Up should land on the last *visible* AI subpage
-    // (AgentMCPServers), not on the filtered-out Knowledge/ThirdPartyCLIAgents
+    // (AgentProfiles), not on the filtered-out AgentMCPServers/ThirdPartyCLIAgents
     // or on the first subpage WarpAgent.
     let next = simulate_cycle(
         &nav_items,
@@ -679,7 +674,7 @@ fn arrow_up_into_collapsed_umbrella_respects_search_filter_for_last_subpage() {
         SettingsSection::BillingAndUsage,
         CycleDirection::Up,
     );
-    assert_eq!(next, SettingsSection::AgentMCPServers);
+    assert_eq!(next, SettingsSection::AgentProfiles);
 }
 
 #[test]

@@ -498,10 +498,8 @@ impl CategoriesView {
         for space in user_workspaces.spaces_for_window(ctx.window_id(), ctx) {
             let workflows_in_space = cloud_model.active_workflows_in_space(space, ctx);
             let new_workflows_in_space = Self::categorize_workflows(
-                // Don't include AI workflows in Voltron.
                 workflows_in_space
                     .into_iter()
-                    .filter(|workflow| !workflow.model().data.is_agent_mode_workflow())
                     .map(|w| Arc::new(WorkflowType::Cloud(Box::new(w.clone())))),
             );
             self.workflows_by_source

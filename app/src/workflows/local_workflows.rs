@@ -141,15 +141,11 @@ impl LocalWorkflows {
                     .map(|workflow| (WorkflowSource::Local, workflow)),
             )
             .find(|(_, workflow)| {
-                if let Workflow::Command {
+                let Workflow::Command {
                     command: workflow_command,
                     ..
-                } = workflow
-                {
-                    workflow_command == command
-                } else {
-                    false
-                }
+                } = workflow;
+                workflow_command == command
             })
             .map(|(workflow_source, workflow)| (workflow_source, workflow.clone()))
     }

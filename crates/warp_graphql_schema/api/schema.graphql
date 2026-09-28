@@ -1684,7 +1684,6 @@ type GenericStringObject {
 
 enum GenericStringObjectFormat {
   JsonAIExecutionProfile
-  JsonAIFact
   JsonCloudEnvironment
   JsonEnvVarCollection
   JsonMCPServer

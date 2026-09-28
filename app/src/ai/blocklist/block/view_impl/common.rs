@@ -1009,8 +1009,7 @@ fn render_force_refresh_inline(
             .finish();
         let text_with_margin = Container::new(text).with_margin_top(1.).finish();
 
-        // Tooltip overlay, positioned above the element on hover. Same pattern as
-        // `render_ai_follow_up_icon` in `view_util.rs`.
+        // Tooltip overlay, positioned above the element on hover.
         let mut stack = Stack::new().with_child(text_with_margin);
         if state.is_hovered() {
             let tool_tip = ui_builder

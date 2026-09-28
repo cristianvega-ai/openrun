@@ -124,7 +124,7 @@ pub struct WorkflowsMoreInfoView {
     /// View for selecting environment variables to apply to the workflow.
     ///
     /// This is `None` for AI workflows.
-    environment_variables_dropdown: Option<ViewHandle<EnvVarSelector>>,
+    environment_variables_dropdown: ViewHandle<EnvVarSelector>,
 
     scroll_state: ClippedScrollStateHandle,
 }
@@ -154,19 +154,18 @@ impl WorkflowsMoreInfoView {
             ..
         } = compute_workflow_display_data(workflow.as_workflow());
 
-        let environment_variables_dropdown = (!workflow.as_workflow().is_agent_mode_workflow())
-            .then(|| {
-                let dropdown = ctx.add_typed_action_view(|ctx| {
-                    let mut dropdown = EnvVarSelector::new(ctx);
-                    dropdown.set_orientation(FilterableDropdownOrientation::Up, ctx);
-                    dropdown.set_width(ENV_VAR_DROPDOWN_WIDTH, ctx);
-                    dropdown
-                });
-                ctx.subscribe_to_view(&dropdown, |me, _, event, ctx| {
-                    me.handle_env_var_selector_event(event, ctx);
-                });
+        let environment_variables_dropdown = {
+            let dropdown = ctx.add_typed_action_view(|ctx| {
+                let mut dropdown = EnvVarSelector::new(ctx);
+                dropdown.set_orientation(FilterableDropdownOrientation::Up, ctx);
+                dropdown.set_width(ENV_VAR_DROPDOWN_WIDTH, ctx);
                 dropdown
             });
+            ctx.subscribe_to_view(&dropdown, |me, _, event, ctx| {
+                me.handle_env_var_selector_event(event, ctx);
+            });
+            dropdown
+        };
 
         Self {
             workflow,
@@ -203,11 +202,10 @@ impl WorkflowsMoreInfoView {
         env_vars_id: Option<SyncId>,
         ctx: &mut ViewContext<Self>,
     ) {
-        if let Some(dropdown) = self.environment_variables_dropdown.as_ref() {
-            dropdown.update(ctx, |dropdown, ctx| {
+        self.environment_variables_dropdown
+            .update(ctx, |dropdown, ctx| {
                 dropdown.set_selected_env_vars(env_vars_id, ctx)
             });
-        }
     }
 
     fn handle_env_var_selector_event(
@@ -246,11 +244,7 @@ impl WorkflowsMoreInfoView {
         cloud_workflow: &CloudWorkflow,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
-        let label = if cloud_workflow.model().data.is_agent_mode_workflow() {
-            "Edit prompt"
-        } else {
-            "Edit workflow"
-        };
+        let label = "Edit workflow";
         let workflow = cloud_workflow.clone();
         render_hoverable_card_button(
             icons::Icon::Rename,
@@ -341,11 +335,7 @@ impl WorkflowsMoreInfoView {
             .ui_builder()
             .wrappable_text(title_string, matches!(wrap_text, WrapText::Yes))
             .with_style(UiComponentStyles {
-                font_family_id: Some(if self.workflow.as_workflow().is_agent_mode_workflow() {
-                    appearance.ui_font_family()
-                } else {
-                    appearance.monospace_font_family()
-                }),
+                font_family_id: Some(appearance.monospace_font_family()),
                 font_color: Some(
                     appearance
                         .theme()
@@ -579,7 +569,7 @@ impl WorkflowsMoreInfoView {
         .with_margin_right(ENV_VAR_HORIZONTAL_MARGIN)
         .finish();
 
-        let environment_variables_dropdown = self.environment_variables_dropdown.as_ref()?;
+        let environment_variables_dropdown = &self.environment_variables_dropdown;
         if !environment_variables_dropdown.as_ref(app).has_env_vars(app) {
             return None;
         }
@@ -768,17 +758,10 @@ impl WorkflowsMoreInfoView {
     fn render_content(&self, appearance: &Appearance) -> Box<dyn Element> {
         let selected_argument = self.selected_workflow_state.currently_selected_argument;
 
-        let (font_family, font_size) = if self.workflow.as_workflow().is_agent_mode_workflow() {
-            (
-                appearance.ui_font_family(),
-                appearance.monospace_font_size(),
-            )
-        } else {
-            (
-                appearance.monospace_font_family(),
-                appearance.monospace_font_size() * 0.85,
-            )
-        };
+        let (font_family, font_size) = (
+            appearance.monospace_font_family(),
+            appearance.monospace_font_size() * 0.85,
+        );
 
         let mut content_text = appearance
             .ui_builder()
@@ -823,7 +806,7 @@ impl WorkflowsMoreInfoView {
         content_text.build().finish()
     }
 
-    /// Renders the "content" of the workflow (command for Workflow::Command, query for Workflow::AgentMode)
+    /// Renders the "content" of the workflow (the command)
     /// with its interleaved arguments.
     fn render_content_and_arguments(&self, appearance: &Appearance) -> Box<dyn Element> {
         let content = self.render_content(appearance);

@@ -104,7 +104,6 @@ impl FilterChipRenderer for QueryFilter {
             | QueryFilter::Commands
             | QueryFilter::Blocks
             | QueryFilter::Code
-            | QueryFilter::Rules
             | QueryFilter::Repos
             | QueryFilter::DiffSets
             | QueryFilter::StaticSlashCommands
@@ -134,9 +133,6 @@ impl FilterChipRenderer for QueryFilter {
             ),
             QueryFilter::EnvironmentVariables => {
                 warp_drive_icon_color(appearance, DriveObjectType::EnvVarCollection)
-            }
-            QueryFilter::AgentModeWorkflows => {
-                warp_drive_icon_color(appearance, DriveObjectType::AgentModeWorkflow)
             }
         }
     }

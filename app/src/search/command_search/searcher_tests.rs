@@ -424,25 +424,31 @@ fn test_history_score_stays_comparable_to_other_sources_raw_skim_scale() {
             fuzzy_matched_workflow,
         };
 
-        let weak_saved_prompt = Workflow::AgentMode {
-            name: "Unrelated saved prompt".to_owned(),
-            query: weak_match_text.to_owned(),
+        let second_weak_workflow = Workflow::Command {
+            name: "Unrelated cleanup task".to_owned(),
+            command: weak_match_text.to_owned(),
+            tags: vec![],
             description: None,
             arguments: vec![],
+            source_url: None,
+            author: None,
+            author_url: None,
+            shells: vec![],
+            environment_variables: None,
         };
-        let fuzzy_matched_saved_prompt =
-            FuzzyMatchWorkflowResult::try_match("test", &weak_saved_prompt, "")
-                .expect("the saved prompt's query should fuzzy-match \"test\"");
-        let saved_prompt_item = WorkflowSearchItem {
-            identity: WorkflowIdentity::Local(Box::new(WorkflowType::Local(weak_saved_prompt))),
+        let fuzzy_matched_second_workflow =
+            FuzzyMatchWorkflowResult::try_match("test", &second_weak_workflow, "")
+                .expect("the workflow's command should fuzzy-match \"test\"");
+        let second_workflow_item = WorkflowSearchItem {
+            identity: WorkflowIdentity::Local(Box::new(WorkflowType::Local(second_weak_workflow))),
             source: WorkflowSource::Local,
-            fuzzy_matched_workflow: fuzzy_matched_saved_prompt,
+            fuzzy_matched_workflow: fuzzy_matched_second_workflow,
         };
 
         let mixer = app.add_model(|_| CommandSearchMixer::new());
         mixer.update(&mut app, |mixer, ctx| {
             mixer.add_sync_source(
-                FixedResults(vec![workflow_item, saved_prompt_item]),
+                FixedResults(vec![workflow_item, second_workflow_item]),
                 HashSet::from([QueryFilter::Workflows]),
             );
             mixer.add_async_source(

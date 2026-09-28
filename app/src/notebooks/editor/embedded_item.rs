@@ -266,15 +266,11 @@ impl EmbeddedItem for EmbeddedWorkflow {
             text_layout,
         );
 
-        let is_agent_mode_prompt =
-            cloud_workflow.is_some_and(|w| w.model().data.is_agent_mode_workflow());
-
         Box::new(LaidOutEmbeddedWorkflow::new(
             title_frame,
             description_frame,
             content_frames,
             width,
-            is_agent_mode_prompt,
         ))
     }
 
@@ -338,7 +334,6 @@ pub struct LaidOutEmbeddedWorkflow {
     pub command_height: Pixels,
 
     width: Pixels,
-    is_agent_mode_prompt: bool,
 }
 
 impl LaidOutEmbeddedWorkflow {
@@ -347,7 +342,6 @@ impl LaidOutEmbeddedWorkflow {
         description: Option<Arc<TextFrame>>,
         command: Vec<Arc<TextFrame>>,
         width: Pixels,
-        is_agent_mode_prompt: bool,
     ) -> Self {
         let title_height = title
             .lines()
@@ -384,7 +378,6 @@ impl LaidOutEmbeddedWorkflow {
             description_height,
             command_height,
             width,
-            is_agent_mode_prompt,
         }
     }
 }
@@ -417,12 +410,7 @@ impl LaidOutEmbeddedItem for LaidOutEmbeddedWorkflow {
         model: Option<&dyn EmbeddedItemModel>,
         ctx: &AppContext,
     ) -> Box<dyn RenderableBlock> {
-        Box::new(RenderableEmbeddedWorkflow::new(
-            viewport_item,
-            model,
-            ctx,
-            self.is_agent_mode_prompt,
-        ))
+        Box::new(RenderableEmbeddedWorkflow::new(viewport_item, model, ctx))
     }
 
     fn spacing(&self) -> BlockSpacing {
@@ -446,21 +434,13 @@ impl RenderableEmbeddedWorkflow {
         viewport_item: ViewportItem,
         model: Option<&dyn EmbeddedItemModel>,
         ctx: &AppContext,
-        is_agent_mode_prompt: bool,
     ) -> Self {
         let appearance = Appearance::as_ref(ctx);
 
-        let (icon, icon_color) = if is_agent_mode_prompt {
-            (
-                Icon::Prompt,
-                warp_drive_icon_color(appearance, DriveObjectType::AgentModeWorkflow),
-            )
-        } else {
-            (
-                Icon::Workflow,
-                warp_drive_icon_color(appearance, DriveObjectType::Workflow),
-            )
-        };
+        let (icon, icon_color) = (
+            Icon::Workflow,
+            warp_drive_icon_color(appearance, DriveObjectType::Workflow),
+        );
         let workflow_icon = ConstrainedBox::new(
             icon.to_warpui_icon(icon_color.into())
                 .with_opacity(1.0)

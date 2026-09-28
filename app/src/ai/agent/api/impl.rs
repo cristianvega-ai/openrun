@@ -72,7 +72,7 @@ pub async fn generate_multi_agent_output(
                 base_model_context_window_limit: params.context_window_limit.unwrap_or(0),
                 ..Default::default()
             }),
-            rules_enabled: params.is_memory_enabled,
+            rules_enabled: false,
             warp_drive_context_enabled: params.warp_drive_context_enabled,
             web_context_retrieval_enabled: true,
             supports_parallel_tool_calls: true,

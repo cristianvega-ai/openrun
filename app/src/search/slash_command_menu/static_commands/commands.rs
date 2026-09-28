@@ -242,30 +242,6 @@ pub static INVOKE_SKILL: LazyLock<StaticCommand> = LazyLock::new(|| StaticComman
     argument: None,
 });
 
-pub const ADD_PROMPT: StaticCommand = StaticCommand {
-    name: "/add-prompt",
-    description: "Add new Agent prompt",
-    kind: SlashCommandKind::AddPrompt,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/prompt.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const ADD_RULE: StaticCommand = StaticCommand {
-    name: "/add-rule",
-    description: "Add a new global rule for the agent",
-    kind: SlashCommandKind::AddRule,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/book-open.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
 pub static EDIT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
     name: "/open-file",
     description: "Open a file in Warp's code editor",
@@ -424,18 +400,6 @@ pub const OPEN_REPO: StaticCommand = StaticCommand {
         icon_path: "bundled/svg/folder.svg",
     },
     availability: Availability::LOCAL.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const OPEN_RULES: StaticCommand = StaticCommand {
-    name: "/open-rules",
-    description: "View all of your global and project rules",
-    kind: SlashCommandKind::OpenRules,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/book-open.svg",
-    },
-    availability: Availability::AI_ENABLED,
     auto_enter_ai_mode: false,
     argument: None,
 };
@@ -727,18 +691,6 @@ pub const CONVERSATIONS: StaticCommand = StaticCommand {
     argument: None,
 };
 
-pub static PROMPTS: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/prompts",
-    description: "Search saved prompts",
-    kind: SlashCommandKind::Prompts,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/prompt.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-});
-
 pub const REWIND: StaticCommand = StaticCommand {
     name: "/rewind",
     description: "Rewind to a previous point in the conversation",
@@ -883,8 +835,6 @@ fn all_commands(settings_mode: settings::SettingsMode) -> Vec<StaticCommand> {
 fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
     let mut commands = vec![
         ADD_MCP,
-        ADD_PROMPT,
-        ADD_RULE,
         AUTO_APPROVE,
         COST,
         EXIT,
@@ -896,7 +846,6 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         LOGOUT,
         MCP,
         OPEN_MCP_SERVERS,
-        OPEN_RULES,
         AGENT.clone(),
         CLEAR,
         NEW.clone(),
@@ -918,8 +867,6 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         VIEW_LOGS,
         VOICE,
     ];
-
-    commands.push(PROMPTS.clone());
 
     commands.push(OPEN_CODE_REVIEW);
 

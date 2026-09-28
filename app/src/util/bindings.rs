@@ -102,7 +102,6 @@ pub enum CustomAction {
     WindowsPaste,
     #[cfg(windows)]
     WindowsCopy,
-    OpenAIFactCollection,
     OpenMCPServerCollection,
     ToggleProjectExplorer,
     OpenRepository,
@@ -422,7 +421,6 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::DisableSyncTerminalInputs
         | CustomAction::ToggleSyncAllTerminalInputsInAllTabs
         | CustomAction::OpenTeamSettings
-        | CustomAction::OpenAIFactCollection
         | CustomAction::OpenMCPServerCollection
         | CustomAction::NewAgentTab => None,
     }

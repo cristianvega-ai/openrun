@@ -27,10 +27,6 @@ lazy_static! {
         primary_text: "workflows:",
         aliases: vec!["w:"]
     };
-    static ref AGENT_MODE_WORKFLOWS_FILTER_ATOM: FilterAtom = FilterAtom {
-        primary_text: "prompts:",
-        aliases: vec!["p:"]
-    };
     static ref NOTEBOOKS_FILTER_ATOM: FilterAtom = FilterAtom {
         primary_text: "notebooks:",
         aliases: vec!["n:"]
@@ -78,10 +74,6 @@ lazy_static! {
     static ref CODE_FILTER_ATOM: FilterAtom = FilterAtom {
         primary_text: "code:",
         aliases: vec![]
-    };
-    static ref RULES_FILTER_ATOM: FilterAtom = FilterAtom {
-        primary_text: "rules:",
-        aliases: vec!["r:"]
     };
     static ref STATIC_SLASH_COMMANDS_FILTER_ATOM: FilterAtom = FilterAtom {
         primary_text: "slash:",
@@ -143,9 +135,6 @@ pub enum QueryFilter {
     /// Only include command workflows from WorkflowsDataSource.
     Workflows,
 
-    /// Only include agent mode workflows (prompts) from WorkflowsDataSource.
-    AgentModeWorkflows,
-
     /// Only include results from NotebooksDataSource.
     Notebooks,
 
@@ -185,9 +174,6 @@ pub enum QueryFilter {
     /// Filter results for code symbols.
     Code,
 
-    /// Filter results for AI rules.
-    Rules,
-
     /// Filter results for known/indexed code repos.
     Repos,
 
@@ -221,7 +207,6 @@ impl QueryFilter {
         match self {
             QueryFilter::History => "Search history",
             QueryFilter::Workflows => "Search workflows",
-            QueryFilter::AgentModeWorkflows => "Search prompts",
             QueryFilter::Notebooks => "Search notebooks",
             QueryFilter::Plans => "Search plans",
             QueryFilter::Actions => "Search actions",
@@ -235,7 +220,6 @@ impl QueryFilter {
             QueryFilter::Commands => "Search commands",
             QueryFilter::Blocks => "Search blocks",
             QueryFilter::Code => "Search code symbols",
-            QueryFilter::Rules => "Search AI rules",
             QueryFilter::Repos => "Search code repos",
             QueryFilter::DiffSets => "Search diff sets",
             QueryFilter::StaticSlashCommands => "Search static slash commands",
@@ -253,7 +237,6 @@ impl QueryFilter {
         match self {
             QueryFilter::History => &HISTORY_FILTER_ATOM,
             QueryFilter::Workflows => &WORKFLOWS_FILTER_ATOM,
-            QueryFilter::AgentModeWorkflows => &AGENT_MODE_WORKFLOWS_FILTER_ATOM,
             QueryFilter::Notebooks => &NOTEBOOKS_FILTER_ATOM,
             QueryFilter::Plans => &PLANS_FILTER_ATOM,
             QueryFilter::Actions => &ACTIONS_FILTER_ATOM,
@@ -267,7 +250,6 @@ impl QueryFilter {
             QueryFilter::Commands => &COMMANDS_FILTER_ATOM,
             QueryFilter::Blocks => &BLOCKS_FILTER_ATOM,
             QueryFilter::Code => &CODE_FILTER_ATOM,
-            QueryFilter::Rules => &RULES_FILTER_ATOM,
             QueryFilter::Repos => &REPOS_FILTER_ATOM,
             QueryFilter::DiffSets => &DIFFSETS_FILTER_ATOM,
             QueryFilter::StaticSlashCommands => &STATIC_SLASH_COMMANDS_FILTER_ATOM,
@@ -283,7 +265,6 @@ impl QueryFilter {
         match self {
             QueryFilter::History => "history",
             QueryFilter::Workflows => "workflows",
-            QueryFilter::AgentModeWorkflows => "prompts",
             QueryFilter::Notebooks => "notebooks",
             QueryFilter::Plans => "plans",
             QueryFilter::Actions => "actions",
@@ -297,7 +278,6 @@ impl QueryFilter {
             QueryFilter::Commands => "commands",
             QueryFilter::Blocks => "blocks",
             QueryFilter::Code => "code",
-            QueryFilter::Rules => "rules",
             QueryFilter::Repos => "repos",
             QueryFilter::DiffSets => "diff sets",
             QueryFilter::StaticSlashCommands => "slash commands",
@@ -321,14 +301,11 @@ impl QueryFilter {
             QueryFilter::Conversations => Some("bundled/svg/conversation.svg"),
             QueryFilter::LaunchConfigurations => Some("bundled/svg/navigation.svg"),
             QueryFilter::EnvironmentVariables => Some("bundled/svg/env-var-collection.svg"),
-            QueryFilter::AgentModeWorkflows | QueryFilter::PromptHistory => {
-                Some(Icon::Prompt.into())
-            }
+            QueryFilter::PromptHistory => Some(Icon::Prompt.into()),
             QueryFilter::Files => Some("bundled/svg/completion-file.svg"),
             QueryFilter::Commands => Some("bundled/svg/terminal.svg"),
             QueryFilter::Blocks => Some("bundled/svg/block.svg"),
             QueryFilter::Code => Some("bundled/svg/code-02.svg"),
-            QueryFilter::Rules => Some("bundled/svg/book-open.svg"),
             QueryFilter::Repos => Some("bundled/svg/folder.svg"),
             QueryFilter::DiffSets => Some("bundled/svg/diff.svg"),
             QueryFilter::StaticSlashCommands => None,

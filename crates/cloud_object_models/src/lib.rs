@@ -12,7 +12,6 @@
 #![allow(ambiguous_glob_reexports)]
 
 pub mod ai_execution_profile;
-pub mod ai_fact;
 pub mod cloud_agent_config;
 pub mod cloud_environment;
 pub mod env_vars;
@@ -28,7 +27,6 @@ pub mod workflow;
 pub mod workflow_enum;
 
 pub use ai_execution_profile::*;
-pub use ai_fact::*;
 pub use cloud_agent_config::*;
 pub use cloud_environment::*;
 pub use env_vars::*;

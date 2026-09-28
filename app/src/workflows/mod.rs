@@ -212,11 +212,7 @@ impl CloudModelType for CloudWorkflowModel {
     type IdType = WorkflowId;
 
     fn model_type_name(&self) -> &'static str {
-        if self.data.is_agent_mode_workflow() {
-            "Prompt"
-        } else {
-            "Workflow"
-        }
+        "Workflow"
     }
 
     fn object_type(&self) -> ObjectType {

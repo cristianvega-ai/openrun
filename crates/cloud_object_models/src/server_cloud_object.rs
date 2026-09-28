@@ -8,9 +8,9 @@ use cloud_objects::ids::{GenericStringObjectId, ObjectUid, ServerId, SyncId};
 use warp_graphql::object::CloudObjectWithDescendants;
 
 use crate::{
-    AIExecutionProfile, AIFact, AmbientAgentEnvironment, CloudFolderModel, CloudNotebookModel,
+    AIExecutionProfile, AmbientAgentEnvironment, CloudFolderModel, CloudNotebookModel,
     CloudWorkflowModel, EnvVarCollection, JsonSerializer, MCPServer, Preference,
-    ScheduledAmbientAgent, ServerAIExecutionProfile, ServerAIFact, ServerAmbientAgentEnvironment,
+    ScheduledAmbientAgent, ServerAIExecutionProfile, ServerAmbientAgentEnvironment,
     ServerCloudAgentConfig, ServerEnvVarCollection, ServerFolder, ServerMCPServer, ServerNotebook,
     ServerPreference, ServerScheduledAmbientAgent, ServerTemplatableMCPServer, ServerWorkflow,
     ServerWorkflowEnum, TemplatableMCPServer, WorkflowEnum,
@@ -25,7 +25,6 @@ pub enum ServerCloudObject {
     Preference(ServerPreference),
     EnvVarCollection(ServerEnvVarCollection),
     WorkflowEnum(ServerWorkflowEnum),
-    AIFact(ServerAIFact),
     MCPServer(ServerMCPServer),
     AIExecutionProfile(ServerAIExecutionProfile),
     TemplatableMCPServer(ServerTemplatableMCPServer),
@@ -43,7 +42,6 @@ impl ServerCloudObject {
             ServerCloudObject::Preference(preferences) => &preferences.metadata,
             ServerCloudObject::EnvVarCollection(env_var_collection) => &env_var_collection.metadata,
             ServerCloudObject::WorkflowEnum(workflow_enum) => &workflow_enum.metadata,
-            ServerCloudObject::AIFact(aifact) => &aifact.metadata,
             ServerCloudObject::MCPServer(mcp_server) => &mcp_server.metadata,
             ServerCloudObject::TemplatableMCPServer(templatable_mcp_server) => {
                 &templatable_mcp_server.metadata
@@ -69,7 +67,6 @@ impl ServerCloudObject {
             ServerCloudObject::Preference(preferences) => preferences.id.uid(),
             ServerCloudObject::EnvVarCollection(env_var_collection) => env_var_collection.id.uid(),
             ServerCloudObject::WorkflowEnum(workflow_enum) => workflow_enum.id.uid(),
-            ServerCloudObject::AIFact(aifact) => aifact.id.uid(),
             ServerCloudObject::MCPServer(mcp_server) => mcp_server.id.uid(),
             ServerCloudObject::AIExecutionProfile(ai_execution_profile) => {
                 ai_execution_profile.id.uid()
@@ -109,8 +106,6 @@ where
             ServerCloudObject::EnvVarCollection(server_env_var_collection.clone())
         } else if let Some(server_workflow_enum) = value.downcast_ref::<ServerWorkflowEnum>() {
             ServerCloudObject::WorkflowEnum(server_workflow_enum.clone())
-        } else if let Some(server_aifact) = value.downcast_ref::<ServerAIFact>() {
-            ServerCloudObject::AIFact(server_aifact.clone())
         } else if let Some(server_mcp_server) = value.downcast_ref::<ServerMCPServer>() {
             ServerCloudObject::MCPServer(server_mcp_server.clone())
         } else if let Some(server_ai_execution_profile) =
@@ -286,11 +281,6 @@ fn server_gso_to_cloud_object(
         warp_graphql::generic_string_object::GenericStringObjectFormat::JsonWorkflowEnum => Ok(
             ServerCloudObject::WorkflowEnum(
                 GenericServerObject::<GenericStringObjectId, GenericStringModel<WorkflowEnum, JsonSerializer>>::try_from_gql(gso)?,
-            ),
-        ),
-        warp_graphql::generic_string_object::GenericStringObjectFormat::JsonAIFact => Ok(
-            ServerCloudObject::AIFact(
-                GenericServerObject::<GenericStringObjectId, GenericStringModel<AIFact, JsonSerializer>>::try_from_gql(gso)?,
             ),
         ),
         warp_graphql::generic_string_object::GenericStringObjectFormat::JsonMCPServer => Ok(

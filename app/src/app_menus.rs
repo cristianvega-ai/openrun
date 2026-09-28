@@ -61,17 +61,17 @@ const MAX_RECENT_REPOS_IN_MENU: usize = 10;
 
 /// Creates the root app menu bar
 pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
-    MenuBar::new(vec![
+    let mut menus = vec![
         make_new_app_menu(ctx),
         make_new_file_menu(ctx),
         make_new_edit_menu(ctx),
         make_new_view_menu(ctx),
         make_new_tab_menu(ctx),
         make_new_blocks_menu(ctx),
-        make_new_ai_menu(ctx),
-        make_new_window_menu(),
-        make_new_help_menu(),
-    ])
+    ];
+    menus.extend(make_new_ai_menu(ctx));
+    menus.extend([make_new_window_menu(), make_new_help_menu()]);
+    MenuBar::new(menus)
 }
 
 // Creates the app dock menu
@@ -485,15 +485,8 @@ fn make_new_tab_menu(ctx: &AppContext) -> Menu {
     Menu::new("Tab", items)
 }
 
-fn make_new_ai_menu(ctx: &AppContext) -> Menu {
+fn make_new_ai_menu(ctx: &AppContext) -> Option<Menu> {
     let mut items = vec![];
-
-    if FeatureFlag::AIRules.is_enabled() {
-        items.push(updateable_custom_item_without_checkmark(
-            CustomAction::OpenAIFactCollection,
-            ctx,
-        ));
-    }
 
     if FeatureFlag::McpServer.is_enabled() && ContextFlag::ShowMCPServers.is_enabled() {
         items.push(updateable_custom_item_without_checkmark(
@@ -502,7 +495,7 @@ fn make_new_ai_menu(ctx: &AppContext) -> Menu {
         ));
     }
 
-    Menu::new("AI", items)
+    (!items.is_empty()).then(|| Menu::new("AI", items))
 }
 
 fn make_new_blocks_menu(ctx: &AppContext) -> Menu {

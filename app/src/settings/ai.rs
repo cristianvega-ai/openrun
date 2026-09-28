@@ -956,19 +956,6 @@ define_settings_group!(AISettings, settings: [
         toml_path: "agents.warp_agent.active_ai.enabled",
         description: "Controls whether proactive AI features like suggestions are enabled.",
     },
-    // This field should not be referenced directly to lookup Rule Suggestions
-    // enablement -- use the `is_rule_suggestions_enabled()` getter.
-    rule_suggestions_enabled_internal: RuleSuggestionsEnabled {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: false,
-        toml_path: "agents.warp_agent.active_ai.rule_suggestions_enabled",
-        description: "Controls whether the agent suggests rules to save after responses.",
-        feature_flag: FeatureFlag::SuggestedRules,
-    }
     // This field should not be referenced directly to lookup Voice AI enablement -- use the
     // `is_voice_input_enabled()` getter.
     voice_input_enabled_internal: VoiceInputEnabled {
@@ -1266,17 +1253,6 @@ define_settings_group!(AISettings, settings: [
         private: false,
         toml_path: "cloud_platform.third_party_api_keys.gemini_enterprise_credentials_enabled",
         description: "Whether Warp should route eligible requests through your workspace's Gemini Enterprise Google Cloud project.",
-    }
-    // Whether or not the user wants agent mode requests to use their saved rules.
-    memory_enabled: MemoryEnabled {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: false,
-        toml_path: "agents.knowledge.rules_enabled",
-        description: "Whether the agent uses your saved rules during requests.",
     }
     // Whether warp drive context should be included in AI requests
     warp_drive_context_enabled: WarpDriveContextEnabled {
@@ -1687,10 +1663,6 @@ impl AISettings {
             && AppExecutionMode::as_ref(app).allows_active_ai()
     }
 
-    pub fn is_rule_suggestions_enabled(&self, app: &warpui::AppContext) -> bool {
-        self.is_active_ai_enabled(app) && *self.rule_suggestions_enabled_internal
-    }
-
     pub fn is_voice_input_enabled(&self, app: &warpui::AppContext) -> bool {
         // Voice input is conditionally-compiled because it requires additional dependencies on some platforms.
         cfg!(feature = "voice_input")
@@ -1702,10 +1674,6 @@ impl AISettings {
     pub fn voice_input_language_code(&self) -> Option<&str> {
         let code = self.voice_input_language.as_str();
         if code.is_empty() { None } else { Some(code) }
-    }
-
-    pub fn is_memory_enabled(&self, app: &warpui::AppContext) -> bool {
-        self.is_any_ai_enabled(app) && *self.memory_enabled
     }
 
     pub fn is_warp_drive_context_enabled(&self, app: &warpui::AppContext) -> bool {

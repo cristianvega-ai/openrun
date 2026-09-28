@@ -112,9 +112,6 @@ impl fmt::Display for ObjectType {
             ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
                 JsonObjectType::EnvVarCollection,
             )) => write!(f, "{ENV_VAR_COLLECTION_STRING}"),
-            ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                JsonObjectType::AIFact,
-            )) => write!(f, "rule"),
             ObjectType::GenericStringObject(_) => write!(f, "string_object_placeholder"), // placeholder value
         }
     }
@@ -183,7 +180,6 @@ pub enum JsonObjectType {
     Preference,
     EnvVarCollection,
     WorkflowEnum,
-    AIFact,
     MCPServer,
     AIExecutionProfile,
     TemplatableMCPServer,
@@ -198,7 +194,6 @@ impl JsonObjectType {
             JsonObjectType::Preference => "PREFERENCE",
             JsonObjectType::EnvVarCollection => "ENVVARCOLLECTION",
             JsonObjectType::WorkflowEnum => "WORKFLOWENUM",
-            JsonObjectType::AIFact => "AIFACT",
             JsonObjectType::MCPServer => "MCPSERVER",
             JsonObjectType::AIExecutionProfile => "AIEXECUTIONPROFILE",
             JsonObjectType::TemplatableMCPServer => "TEMPLATABLEMCPSERVER",
@@ -217,7 +212,6 @@ impl TryFrom<&str> for JsonObjectType {
             "PREFERENCE" => Ok(JsonObjectType::Preference),
             "ENVVARCOLLECTION" => Ok(JsonObjectType::EnvVarCollection),
             "WORKFLOWENUM" => Ok(JsonObjectType::WorkflowEnum),
-            "AIFACT" => Ok(JsonObjectType::AIFact),
             "MCPSERVER" => Ok(JsonObjectType::MCPServer),
             "AIEXECUTIONPROFILE" => Ok(JsonObjectType::AIExecutionProfile),
             "TEMPLATABLEMCPSERVER" => Ok(JsonObjectType::TemplatableMCPServer),
@@ -858,7 +852,6 @@ impl From<GenericStringObjectFormat>
             GenericStringObjectFormat::Json(JsonObjectType::WorkflowEnum) => {
                 GraphQLFormat::JsonWorkflowEnum
             }
-            GenericStringObjectFormat::Json(JsonObjectType::AIFact) => GraphQLFormat::JsonAIFact,
             GenericStringObjectFormat::Json(JsonObjectType::MCPServer) => {
                 GraphQLFormat::JsonMCPServer
             }

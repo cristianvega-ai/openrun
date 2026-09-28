@@ -9,13 +9,13 @@ use warp_multi_agent_api::response_event::stream_finished;
 use warp_multi_agent_api::{self as api};
 
 use super::schema::{
-    active_mcp_servers, agent_conversations, agent_tasks, ai_document_panes, ai_memory_panes,
-    ambient_agent_panes, app, blocks, cloud_objects_refreshes, code_pane_tabs, code_panes,
-    code_review_panes, commands, env_var_collection_panes, folders, generic_string_objects,
-    ignored_suggestions, mcp_environment_variables, mcp_server_installations, mcp_server_panes,
-    notebook_panes, notebooks, object_actions, object_metadata, object_permissions, pane_branches,
-    pane_leaves, pane_nodes, panels, projects, settings_panes, tab_groups, tabs, team_members,
-    team_settings, teams, terminal_panes, user_profiles, windows, workflow_panes, workflows,
+    active_mcp_servers, agent_conversations, agent_tasks, ai_document_panes, ambient_agent_panes,
+    app, blocks, cloud_objects_refreshes, code_pane_tabs, code_panes, code_review_panes, commands,
+    env_var_collection_panes, folders, generic_string_objects, ignored_suggestions,
+    mcp_environment_variables, mcp_server_installations, mcp_server_panes, notebook_panes,
+    notebooks, object_actions, object_metadata, object_permissions, pane_branches, pane_leaves,
+    pane_nodes, panels, projects, settings_panes, tab_groups, tabs, team_members, team_settings,
+    teams, terminal_panes, user_profiles, windows, workflow_panes, workflows,
     workspace_language_server, workspace_metadata, workspace_teams, workspaces,
 };
 
@@ -487,16 +487,6 @@ pub struct SettingsPane {
     pub current_page: String,
 }
 
-/// Maps to the `ai_memory_panes` table
-/// (where table name is historical and not worth a migration to change).
-#[derive(Identifiable, Queryable, Selectable)]
-#[diesel(table_name = ai_memory_panes)]
-#[diesel(primary_key(id))]
-pub struct AIFactPane {
-    pub id: i32,
-    pub kind: String,
-}
-
 /// Subset of the [`terminal_panes`] table needed to retrieve per-session block lists.
 ///
 /// The true primary key of the table is [`terminal_panes::id`]. However, Diesel's associations API
@@ -555,10 +545,6 @@ pub const WORKFLOW_PANE_KIND: &str = "workflow";
 
 /// The [`pane_leaves::kind`] value for settings panes.
 pub const SETTINGS_PANE_KIND: &str = "settings";
-
-/// The [`pane_leaves::kind`] value for AI fact panes
-/// (where kind name is historical and not worth a migration to change).
-pub const AI_FACT_PANE_KIND: &str = "ai_memory";
 
 /// The [`pane_leaves::kind`] value for MCP server panes
 pub const MCP_SERVER_PANE_KIND: &str = "mcp_server";
@@ -648,12 +634,6 @@ pub struct NewCodeReviewPane {
 pub struct NewSettingsPane {
     pub id: i32,
     pub current_page: String,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = ai_memory_panes)]
-pub struct NewAIFactPane {
-    pub id: i32,
 }
 
 #[derive(Insertable)]

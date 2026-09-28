@@ -326,7 +326,6 @@ fn pane_type_supports_vertical_tabs_detail_sidecar(pane_type: IPaneType) -> bool
             | IPaneType::Notebook
             | IPaneType::Workflow
             | IPaneType::EnvVarCollection
-            | IPaneType::AIFact
             | IPaneType::AIDocument
     )
 }
@@ -368,9 +367,6 @@ fn detail_sidecar_supports_terminal_code_and_warp_drive_object_panes() {
     ));
     assert!(pane_type_supports_vertical_tabs_detail_sidecar(
         IPaneType::EnvVarCollection
-    ));
-    assert!(pane_type_supports_vertical_tabs_detail_sidecar(
-        IPaneType::AIFact
     ));
     assert!(pane_type_supports_vertical_tabs_detail_sidecar(
         IPaneType::AIDocument

@@ -3309,7 +3309,20 @@ pub struct RequestMetadata {
     pub is_auto_resume_after_error: bool,
 }
 
-pub use cloud_object_models::SuggestedLoggingId;
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SuggestedLoggingId(String);
+
+impl Display for SuggestedLoggingId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for SuggestedLoggingId {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SuggestedRule {

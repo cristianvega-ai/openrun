@@ -10,20 +10,8 @@ use serde_json::Value;
 
 /// Workflow model used by Warp and warp-internal.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant)]
+#[serde(untagged)]
 pub enum Workflow {
-    AgentMode {
-        name: String,
-        /// The query to be inserted in the terminal input.
-        query: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(default)]
-        arguments: Vec<Argument>,
-    },
-    #[serde(untagged)]
     Command {
         name: String,
         command: String,
@@ -44,98 +32,53 @@ pub enum Workflow {
 
 impl Workflow {
     pub fn name(&self) -> &str {
-        match self {
-            Self::AgentMode { name, .. } => name.as_str(),
-            Self::Command { name, .. } => name.as_str(),
-        }
+        let Self::Command { name, .. } = self;
+        name.as_str()
     }
 
-    /// The core "content" of the workflow.
-    ///
-    /// For Command workflows, this is the shell command. For Agent Mode workflows, this is the
-    /// query.
+    /// The core "content" of the workflow: the shell command.
     pub fn content(&self) -> &str {
-        match self {
-            Self::AgentMode { query, .. } => query,
-            Self::Command { command, .. } => command,
-        }
-    }
-
-    pub fn prompt(&self) -> Option<&str> {
-        if let Self::AgentMode { query, .. } = self {
-            Some(query.as_str())
-        } else {
-            None
-        }
+        let Self::Command { command, .. } = self;
+        command
     }
 
     pub fn command(&self) -> Option<&str> {
-        if let Self::Command { command, .. } = self {
-            Some(command.as_str())
-        } else {
-            None
-        }
+        let Self::Command { command, .. } = self;
+        Some(command.as_str())
     }
 
     pub fn description(&self) -> Option<&String> {
-        match self {
-            Self::AgentMode { description, .. } => description.as_ref(),
-            Self::Command { description, .. } => description.as_ref(),
-        }
+        let Self::Command { description, .. } = self;
+        description.as_ref()
     }
 
     pub fn arguments(&self) -> &Vec<Argument> {
-        match self {
-            Self::AgentMode { arguments, .. } => arguments,
-            Self::Command { arguments, .. } => arguments,
-        }
+        let Self::Command { arguments, .. } = self;
+        arguments
     }
 
     pub fn tags(&self) -> Option<&Vec<String>> {
-        match self {
-            Self::Command { tags, .. } => Some(tags),
-            Self::AgentMode { .. } => None,
-        }
+        let Self::Command { tags, .. } = self;
+        Some(tags)
     }
 
     pub fn source_url(&self) -> Option<&String> {
-        match self {
-            Self::Command { source_url, .. } => source_url.as_ref(),
-            Self::AgentMode { .. } => None,
-        }
+        let Self::Command { source_url, .. } = self;
+        source_url.as_ref()
     }
 
     pub fn author_name(&self) -> Option<&String> {
-        match self {
-            Self::Command { author, .. } => author.as_ref(),
-            Self::AgentMode { .. } => None,
-        }
+        let Self::Command { author, .. } = self;
+        author.as_ref()
     }
 
     pub fn shells(&self) -> Option<&Vec<warp_workflows::Shell>> {
-        match self {
-            Self::Command { shells, .. } => Some(shells),
-            Self::AgentMode { .. } => None,
-        }
+        let Self::Command { shells, .. } = self;
+        Some(shells)
     }
 
     pub fn is_command_workflow(&self) -> bool {
         matches!(self, Self::Command { .. })
-    }
-
-    pub fn is_agent_mode_workflow(&self) -> bool {
-        matches!(self, Self::AgentMode { .. })
-    }
-
-    /// Returns `true` if the workflow name starts with the given character (case-insensitive).
-    ///
-    /// Used by prompt search datasources to prefix-match on single-character queries, where
-    /// fuzzy matching would be unreliable.
-    pub fn name_starts_with_char_ignore_case(&self, c: char) -> bool {
-        self.name()
-            .chars()
-            .next()
-            .is_some_and(|first| first.eq_ignore_ascii_case(&c))
     }
 
     /// Return a list of every enum ID referenced by this workflow.
@@ -162,23 +105,22 @@ impl Workflow {
     }
 
     pub fn default_env_vars(&self) -> Option<SyncId> {
-        match self {
-            Workflow::Command {
-                environment_variables,
-                ..
-            } => *environment_variables,
-            Workflow::AgentMode { .. } => None,
-        }
+        let Self::Command {
+            environment_variables,
+            ..
+        } = self;
+        *environment_variables
     }
 
     /// Given two IDs, replace any instance of the old ID referenced by this workflow with the new ID.
     /// Returns `true` if any instances of the old_id were present.
     pub fn replace_object_id(&mut self, old_id: SyncId, new_id: SyncId) -> bool {
         let mut changed = false;
-        let arguments = match self {
-            Self::Command { arguments, .. } => arguments,
-            Self::AgentMode { arguments, .. } => arguments,
-        };
+        let Self::Command {
+            arguments,
+            environment_variables,
+            ..
+        } = self;
         for arg in arguments.iter_mut() {
             match &mut arg.arg_type {
                 ArgumentType::Enum { enum_id } if *enum_id == old_id => {
@@ -188,12 +130,7 @@ impl Workflow {
                 ArgumentType::Enum { .. } | ArgumentType::Text => {}
             }
         }
-        if let Self::Command {
-            environment_variables,
-            ..
-        } = self
-            && *environment_variables == Some(old_id)
-        {
+        if *environment_variables == Some(old_id) {
             *environment_variables = Some(new_id);
             changed = true;
         }
@@ -216,41 +153,25 @@ impl Workflow {
     }
 
     pub fn with_arguments(mut self, new_arguments: Vec<Argument>) -> Self {
-        match self {
-            Workflow::AgentMode {
-                ref mut arguments, ..
-            }
-            | Workflow::Command {
-                ref mut arguments, ..
-            } => {
-                *arguments = new_arguments;
-            }
-        }
+        let Workflow::Command {
+            ref mut arguments, ..
+        } = self;
+        *arguments = new_arguments;
         self
     }
 
     pub fn with_description(mut self, new_description: String) -> Self {
-        match self {
-            Workflow::AgentMode {
-                ref mut description,
-                ..
-            }
-            | Workflow::Command {
-                ref mut description,
-                ..
-            } => {
-                *description = Some(new_description);
-            }
-        }
+        let Workflow::Command {
+            ref mut description,
+            ..
+        } = self;
+        *description = Some(new_description);
         self
     }
 
     pub fn set_name(&mut self, new_name: &str) {
-        match self {
-            Workflow::AgentMode { name, .. } | Workflow::Command { name, .. } => {
-                new_name.clone_into(name)
-            }
-        }
+        let Workflow::Command { name, .. } = self;
+        new_name.clone_into(name)
     }
 }
 

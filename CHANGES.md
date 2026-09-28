@@ -53,6 +53,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [CLI-agent support moved out of the AI module](#cli-agent-support-moved-out-of-the-ai-module) — CLI agent settings, review/diff and image types, agent status and notifications now live outside `crate::ai`
 - [AI gates removed from CLI-agent support](#ai-gates-removed-from-cli-agent-support) — the CLI agents settings page, Rich Input auto-open/auto-toggle and Rich Input image paste no longer depend on AI being enabled
 - [Accounts: login, sign-up and SSO](#accounts-login-sign-up-and-sso) — removed every login, sign-up, SSO, web-handoff, paste-token and reauth flow and the Account page; the app is permanently in the no-account state and deletes the previously stored credential once
+- [Rules, facts, memory and saved prompts](#rules-facts-memory-and-saved-prompts) — removed the AI Rules (Knowledge) pane and settings page, agent memory and rule suggestions, saved prompts (Agent Mode workflows) and their slash commands, menus, panes and modals
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1409,3 +1410,32 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - The TUI's separate secure-storage namespace (`<data domain>.tui`) is not cleaned up; the TUI was removed before this change.
 - The spec's `log_out` grep still matches `log_outcome`/`log_output` identifiers and the MCP servers' own OAuth log-out (AI-14).
 - `crates/integration/src/test/settings_navigation.rs` still named the removed `SettingsSection::CodeIndexing` (left broken by the codebase-indexing removal); it now asserts `SettingsSection::Projects`, the page that replaced it.
+
+## Rules, facts, memory and saved prompts
+**Why:** AI Rules (facts and memory) were stored as Warp Drive objects, synced to Warp's servers and attached to built-in agent requests. Saved prompts (Agent Mode workflows) were Drive workflows that were only usable by the built-in agent. Suggested rules and suggested prompts came from the agent's responses. All of it is built-in AI or Drive-synced state that the offline fork removes.
+
+**Removed:**
+- `app/src/ai/facts/` (`AIFactManager`, the Rules pane view and the memory/rule editors), `settings_view/knowledge_page.rs` (Settings > Agents > Knowledge), `pane_group/pane/ai_fact_pane.rs`, `drive/items/{ai_fact, ai_fact_collection}.rs`, `crates/cloud_object_models/src/ai_fact.rs` (`AIFact`, `AIMemory`, `CloudAIFactModel`, `ServerAIFact`) and the `JsonAIFact` GraphQL format.
+- `ai/blocklist/{suggested_rule_modal, suggested_agent_mode_workflow_modal, suggestion_chip_view}.rs`, the "Suggestions:" footer of an AI block (rule and prompt chips, "Dismiss" and "Don't show again", "Manage rules"), `search/ai_context_menu/rules/` (the `@` menu "Rules" category and `QueryFilter::Rules`), `terminal/input/prompts/` (the `/prompts` inline menu), `terminal/input/slash_commands/data_source/saved_prompts*`, `integration_testing/rules/` and `crates/integration/src/test/rules.rs`.
+- `Workflow::AgentMode`: `Workflow` now has only the `Command` variant, so `prompt()`, `is_agent_mode_workflow()` and the agent-mode serialization went. `DriveObjectType::{AgentModeWorkflow, AIFact, AIFactCollection}`, sync-queue and update-manager support for AI facts (`QueueItem::UpdateAIFact`, `UpdateManager::{create_ai_fact, update_ai_fact}`) and `is_for_agent_mode` in the workflow editor and `WorkflowOpenSource`.
+- Slash commands `/add-rule`, `/open-rules`, `/add-prompt` and `/prompts`; `QueryFilter::AgentModeWorkflows` (the `prompts:` filter of the command palette and command search); `AIBlockAction`/`AIBlockEvent` variants for opening rules and suggestions; the "Save as prompt" item of the AI block context menu; `TerminalAction::{OpenAddRulePane, OpenRulesPane, OpenAddPromptPane}`.
+- Menus and bindings: `CustomAction::{OpenAIFactCollection, NewPersonalAIPrompt, NewTeamAIPrompt}` with `workspace:{open_ai_fact_collection, create_personal_ai_prompt, create_team_ai_prompt}`, and their entries in the AI and Drive menus. The AI menu is now built only when it has an item (today MCP servers, which AI-14 removes), so no empty menu is left.
+- `SettingsSection::Knowledge`, the `AISettings` settings `MemoryEnabled` (`agents.knowledge.rules_enabled`) and `RuleSuggestionsEnabled`, and the `AI_Rules` and `Suggested_Rules` keymap flags. Agent requests always send `rules_enabled: false`.
+- The `AIFactManager` singleton, from `lib.rs` and the workspace test setup.
+- Persisted panes: `LeafContents::AIFact`, `AIFactPaneSnapshot`, the `ai_memory_panes` reads and writes and the `AIFactPane`/`NewAIFactPane`/`AI_FACT_PANE_KIND` model types. `save_app_state` still deletes the `ai_memory_panes` rows (foreign key to `pane_leaves`) until DB-1.
+
+**Modified:**
+- `SuggestedLoggingId` now lives in `ai/agent/mod.rs`. The agent-core `Suggestions`, `SuggestedRule` and `SuggestedAgentModeWorkflow` types stay until AI-29; nothing renders them.
+- `AcceptSlashCommandOrSavedPrompt` is `AcceptSlashMenuItem` (slash command or skill). `InputSuggestionsMode::PromptsMenu`, `InlineMenuType::PromptsMenu` and the cloud-mode slash menu "Prompts" section are gone. `/prompts` is no longer allowed in the CLI agent composer.
+- `SettingsSection::from_slug` no longer accepts "Knowledge". The settings navigation tests use the Profiles page where they used Knowledge.
+- `@` attachments no longer accept `<rule:...>`.
+- `ai/agent_sdk`: `--saved-prompt` is rejected at run time (AI-12 deletes the agent SDK).
+- The searcher test that ranked a saved prompt against a workflow now uses two command workflows.
+
+**User-visible impact:** There is no Rules pane, Knowledge settings page, rule or prompt suggestions, saved prompt or `/prompts` menu. Command search and the command palette list only command workflows. Existing Drive objects of these kinds are ignored, and a session that was restored with a Rules pane opens without it.
+
+**Notes:**
+- A restored `ai_memory` leaf now fails with "Unrecognized pane kind", the same way removed MCP panes do.
+- Left for AI-13/AI-22: the `WarpDriveContextEnabled` setting (`agents.knowledge.warp_drive_context_enabled`) and the `warp_drive_context_enabled` request field; its page went with Knowledge.
+- Left for TEL-4: telemetry variants whose callers are gone (`KnowledgePaneOpened`/`KnowledgePaneEntrypoint`, `AISuggestedRule*`, `*SuggestedAgentModeWorkflow*`, `ExecutedWarpDrivePrompt`, `SlashCommandAccepted` details).
+- Left for AI-12: `Prompt::SavedPrompt` and `--saved-prompt` in `crates/warp_cli` and `ai/agent_sdk`. Left for AI-29: `Suggestions`, `SuggestedRule`, `SuggestedAgentModeWorkflow` in `ai/agent`, and `Conversation::dismiss_current_suggestions`. Left for FLAGS-1: `FeatureFlag::{AIRules, SuggestedRules, SuggestedAgentModeWorkflows, AgentModeWorkflows, KnowledgeSidebar}`.
