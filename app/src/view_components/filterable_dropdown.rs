@@ -275,6 +275,7 @@ where
     }
 
     /// The number of items in the dropdown.
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.items.len()
     }

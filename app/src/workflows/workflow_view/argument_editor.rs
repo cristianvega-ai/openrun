@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 
 use itertools::Itertools;
 use pathfinder_color::ColorU;
-use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::Appearance;
 use warp_editor::editor::NavigationKey;
 use warpui::elements::{
@@ -40,9 +39,6 @@ const ARGUMENT_DESCRIPTION_PLACEHOLDER_TEXT: &str = "Description";
 const ARGUMENT_ALIAS_DESCRIPTION_PLACEHOLDER_TEXT: &str = "Value (optional)";
 const ARGUMENT_DEFAULT_VALUE_PLACEHOLDER_TEXT: &str = "Default value (optional)";
 pub const DEFAULT_ARGUMENT_PREFIX: &str = "argument";
-
-/// Width of the argument editor in alias mode.
-pub const ALIAS_ARGUMENT_EDITOR_WIDTH: f32 = 300.;
 
 /// Which version of the argument-editing section to show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -537,15 +533,6 @@ impl WorkflowView {
             }
         }
 
-        if FeatureFlag::WorkflowAliases.is_enabled()
-            && matches!(
-                mode,
-                ArgumentEditorMode::WorkflowDefinition | ArgumentEditorMode::Alias
-            )
-        {
-            arguments_section.extend(self.render_env_vars_selector(appearance, app));
-        }
-
         Some(arguments_section.finish())
     }
 
@@ -797,37 +784,5 @@ impl WorkflowView {
         }
 
         arguments.finish()
-    }
-
-    fn render_env_vars_selector(
-        &self,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Option<Box<dyn Element>> {
-        if !self.env_vars_selector.as_ref(app).has_env_vars(app) {
-            return None;
-        }
-        let action_element =
-            Shrinkable::new(1., ChildView::new(&self.env_vars_selector).finish()).finish();
-
-        let row = Flex::row()
-            .with_children([
-                appearance
-                    .ui_builder()
-                    .span("Environment variables")
-                    .with_style(UiComponentStyles {
-                        font_size: Some(13.),
-                        ..Default::default()
-                    })
-                    .build()
-                    .with_margin_right(8.)
-                    .finish(),
-                action_element,
-            ])
-            .with_main_axis_alignment(MainAxisAlignment::SpaceBetween)
-            .with_main_axis_size(MainAxisSize::Max)
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .finish();
-        Some(row)
     }
 }

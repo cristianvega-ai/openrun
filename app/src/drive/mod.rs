@@ -16,7 +16,6 @@ pub enum DriveObjectType {
         is_ai_document: bool,
     },
     Folder,
-    EnvVarCollection,
 }
 
 impl From<DriveObjectType> for Icon {
@@ -31,7 +30,6 @@ impl From<DriveObjectType> for Icon {
                 }
             }
             DriveObjectType::Folder => Icon::Folder,
-            DriveObjectType::EnvVarCollection => Icon::EnvVarCollection,
         }
     }
 }

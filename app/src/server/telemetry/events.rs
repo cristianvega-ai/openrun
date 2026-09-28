@@ -170,8 +170,8 @@ impl From<Space> for TelemetrySpace {
 }
 
 /// Common metadata to include in all Warp Drive telemetry events that act on a specific object.
-/// Events that only apply to a single object type may use specific metadata like [`WorkflowTelemetryMetadata`],
-/// [`NotebookTelemetryMetadata`], or [`EnvVarTelemetryMetadata`] instead.
+/// Events that only apply to a single object type may use specific metadata like [`WorkflowTelemetryMetadata`]
+/// or [`NotebookTelemetryMetadata`] instead.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CloudObjectTelemetryMetadata {
     pub object_type: TelemetryCloudObjectType,
@@ -248,15 +248,6 @@ pub struct NotebookActionEvent {
     pub action: NotebookTelemetryAction,
     #[serde(flatten)]
     pub metadata: NotebookTelemetryMetadata,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct EnvVarTelemetryMetadata {
-    /// The object ID, only available for cloud env vars that have been synced to the server.
-    pub object_id: Option<GenericStringObjectId>,
-    /// The team UID, only available for cloud env vars in a shared team.
-    pub team_uid: Option<ServerId>,
-    pub space: TelemetrySpace,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -437,7 +428,6 @@ pub enum CommandSearchResultType {
     Workflow,
     OpenWarpAI,
     TranslateUsingWarpAI,
-    EnvVarCollection,
     ViewInWarpDrive,
     AIQuery,
     Project,
@@ -1965,9 +1955,6 @@ pub enum TelemetryEvent {
         /// The OS footprint, not RSS, at confirmation time.
         confirmation_footprint_bytes: u64,
     },
-    EnvVarCollectionInvoked(EnvVarTelemetryMetadata),
-    EnvVarWorkflowParameterization(EnvVarTelemetryMetadata),
-
     /// The user imported settings from another terminal.
     CompletedSettingsImport {
         terminal_type: TerminalType,
@@ -3264,8 +3251,6 @@ impl TelemetryEvent {
                 "triggering_footprint_bytes": triggering_footprint_bytes,
                 "confirmation_footprint_bytes": confirmation_footprint_bytes,
             })),
-            TelemetryEvent::EnvVarCollectionInvoked(metadata) => Some(json!(metadata)),
-            TelemetryEvent::EnvVarWorkflowParameterization(metadata) => Some(json!(metadata)),
             TelemetryEvent::CompletedSettingsImport {
                 terminal_type,
                 imported_settings,
@@ -4338,8 +4323,6 @@ impl TelemetryEvent {
             | TelemetryEvent::MemoryUsageStats { .. }
             | TelemetryEvent::MemoryUsageHigh { .. }
             | TelemetryEvent::TransientMemorySpike { .. }
-            | TelemetryEvent::EnvVarCollectionInvoked(_)
-            | TelemetryEvent::EnvVarWorkflowParameterization(_)
             | TelemetryEvent::CompletedSettingsImport { .. }
             | TelemetryEvent::SettingsImportConfigFocused(_)
             | TelemetryEvent::SettingsImportResetButtonClicked
@@ -4821,9 +4804,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             | Self::AgentModeToggleAutoDetectionSetting
             | Self::AgentModePotentialAutoDetectionFalsePositive => {
                 EnablementState::Flag(FeatureFlag::AgentMode)
-            }
-            Self::EnvVarCollectionInvoked | Self::EnvVarWorkflowParameterization => {
-                EnablementState::Always
             }
             Self::BlockCompletedOnDogfoodOnly => EnablementState::ChannelSpecific {
                 channels: vec![Channel::Local, Channel::Dev],
@@ -5308,10 +5288,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
                 "Toggle Intelligent Autosuggestions Setting"
             }
             Self::ToggleVoiceInputSetting => "Toggle Voice Input Setting",
-            Self::EnvVarCollectionInvoked => "Invoked Environment Variables",
-            Self::EnvVarWorkflowParameterization => {
-                "Parameterized Workflow With Environment Variables"
-            }
             Self::CompletedSettingsImport => "Completed Settings Import",
             Self::SettingsImportConfigFocused => "Focused Config in Settings Import",
             Self::SettingsImportResetButtonClicked => {
@@ -5999,10 +5975,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::AgentModeCodeFilesNavigated => "Agent Mode Code files navigated",
             Self::AgentModeCodeDiffHunksNavigated => "Agent Mode Code diff hunks navigated",
-            Self::EnvVarCollectionInvoked => "Invoked an environment variables object",
-            Self::EnvVarWorkflowParameterization => {
-                "Selected from environment variables dropdown to parameterize workflow"
-            }
             Self::ObjectLinkCopied => "The web link to an object has been copied.",
             Self::FileTreeToggled => "Opened the file tree/project explorer",
             Self::GlobalSearchOpened => "Opened the global search view",

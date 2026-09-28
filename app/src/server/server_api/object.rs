@@ -141,7 +141,6 @@ use crate::cloud_object::{
 };
 use crate::drive::folders::FolderId;
 use crate::drive::sharing::SharingAccessLevel;
-use crate::env_vars::EnvVarCollection;
 use crate::notebooks::{NotebookId, SerializedNotebook};
 use crate::server::graphql::schema::{
     action_type_to_gql_action_type, object_action_history_from_gql,
@@ -767,13 +766,6 @@ impl ObjectClient for ServerApi {
                 if let Some(objects) = output.generic_string_objects {
                     for gso in objects {
                         match gso.format {
-                            warp_graphql::generic_string_object::GenericStringObjectFormat::JsonEnvVarCollection => {
-                                parse_server_gso::<EnvVarCollection, JsonSerializer>(
-                                    &mut updated_generic_string_objects,
-                                    GenericStringObjectFormat::Json(JsonObjectType::EnvVarCollection),
-                                    gso,
-                                );
-                            }
                             warp_graphql::generic_string_object::GenericStringObjectFormat::JsonPreference => {
                                 parse_server_gso::<Preference, JsonSerializer>(
                                     &mut updated_generic_string_objects,
@@ -815,6 +807,7 @@ impl ObjectClient for ServerApi {
                             // decode the whole response.
                             warp_graphql::generic_string_object::GenericStringObjectFormat::JsonMCPServer
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonTemplatableMCPServer
+                            | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonEnvVarCollection
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::Unknown => {}
                         }
                     }

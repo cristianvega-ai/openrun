@@ -27,7 +27,10 @@ pub use local_command_executor::LocalCommandExecutor;
 pub use noop_command_executor::NoOpCommandExecutor;
 #[cfg(feature = "local_tty")]
 pub use remote_command_executor::RemoteCommandExecutor;
-pub use shared::{ExecutorCommandEvent, shell_escape_single_quotes, shell_quote_arg};
+pub use shared::{
+    ExecutorCommandEvent, serialize_variables_for_shell, shell_escape_single_quotes,
+    shell_quote_arg,
+};
 use warp_completer::completer::CommandOutput;
 use warpui::ModelContext;
 

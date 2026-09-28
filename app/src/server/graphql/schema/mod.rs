@@ -8,9 +8,9 @@ use warp_graphql::mutations::update_generic_string_object::{
 use warp_graphql::object::ObjectUpdateSuccess;
 
 use crate::cloud_object::{
-    RevisionAndLastEditor, ServerAIExecutionProfile, ServerAmbientAgentEnvironment,
-    ServerEnvVarCollection, ServerFolder, ServerObject, ServerPreference,
-    ServerScheduledAmbientAgent, ServerWorkflowEnum, TryFromGql, UpdateCloudObjectResult,
+    RevisionAndLastEditor, ServerAIExecutionProfile, ServerAmbientAgentEnvironment, ServerFolder,
+    ServerObject, ServerPreference, ServerScheduledAmbientAgent, ServerWorkflowEnum, TryFromGql,
+    UpdateCloudObjectResult,
 };
 use crate::server::graphql::get_user_facing_error_message;
 
@@ -42,11 +42,6 @@ pub fn update_generic_string_object_result_to_update_result(
                 GenericStringObjectUpdate::GenericStringObjectUpdateRejected(rejected) => {
                     let format = rejected.conflicting_generic_string_object.format;
                     let boxed: Box<dyn ServerObject> = match format {
-                        GenericStringObjectFormat::JsonEnvVarCollection => {
-                            boxed_rejected_generic_string_object::<ServerEnvVarCollection>(
-                                rejected.conflicting_generic_string_object,
-                            )?
-                        }
                         GenericStringObjectFormat::JsonPreference => {
                             boxed_rejected_generic_string_object::<ServerPreference>(
                                 rejected.conflicting_generic_string_object,
@@ -74,6 +69,7 @@ pub fn update_generic_string_object_result_to_update_result(
                         }
                         GenericStringObjectFormat::JsonMCPServer
                         | GenericStringObjectFormat::JsonTemplatableMCPServer
+                        | GenericStringObjectFormat::JsonEnvVarCollection
                         | GenericStringObjectFormat::Unknown => {
                             bail!("conflicting generic string object has unknown format")
                         }

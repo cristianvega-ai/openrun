@@ -104,14 +104,6 @@ impl Workflow {
             .collect()
     }
 
-    pub fn default_env_vars(&self) -> Option<SyncId> {
-        let Self::Command {
-            environment_variables,
-            ..
-        } = self;
-        *environment_variables
-    }
-
     /// Given two IDs, replace any instance of the old ID referenced by this workflow with the new ID.
     /// Returns `true` if any instances of the old_id were present.
     pub fn replace_object_id(&mut self, old_id: SyncId, new_id: SyncId) -> bool {

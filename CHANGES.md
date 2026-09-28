@@ -1210,6 +1210,7 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 
 **Notes:**
 - Kept for later tasks: `drive/workflows/` (DRV-4); `drive/folders` and the access-level types in `drive/sharing/mod.rs` (DRV-5); `drive/cloud_action_confirmation_dialog.rs` (Teams page, TEAM-1); `drive/cloud_object_styling.rs` and `DriveObjectType`, still used for object icon colours by vertical tabs, filter chips and search items (DRV-2 to DRV-4); `drive/export.rs` and `drive/sharing/{dialog, qr_code, style}` (next section); `integration_testing/cloud_object`, used by the cloud notebook and workflow integration tests (DRV-3/DRV-4).
+- [Warp Drive: environment-variable collections](#warp-drive-environment-variable-collections) — removed the environment-variable collection objects, editor pane, invocation blocks, subshell invocation, workflow env-var selectors and the search filter
 - Dead code left for its owners: in `CloudModel` / `CloudViewModel` / `UpdateManager` / `SyncQueue` the trash, sort and leave/rename helpers (DRV-5); `search/notebooks` and `search/env_var_collections` fuzzy matchers (DRV-3, DRV-2); `WorkflowModal::open_with_new` (DRV-4); `NotebookView::online_only_operation_allowed` (DRV-3); `ai::facts::view::is_syncing` (AI-15).
 - `OpenWarpDriveObjectInPane` (terminal and pane-group events) stays: AI citations and plans use it to open cloud objects in panes, and the AI tasks own it.
 - `WarpDrivePrivacySettings` is not Drive-only: it holds the telemetry and cloud-conversation-storage toggles, so TEL-1 and the AI plan own it.
@@ -1613,3 +1614,39 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Left for AI-28/AI-29: `AIDocumentModel` (`app/src/ai/document/`) and the `CreateDocuments`, `EditDocuments` and `ReadDocuments` agent actions with their executors, history restore and conversation conversion. The plan says to delete `ai/document/` here, but those AI model modules stay until the agent core goes. `AIAgentTodoList` also stays with the agent.
 - Left for DRV-3: `notebook.ai_document_id`, `AIDocumentId` in the notebook cloud model and GraphQL types, `DriveObjectType::Notebook { is_ai_document }`, `Notebook { is_plan }` in vertical tabs and the `is_plan` accessors in `notebooks/`.
 - Left for AI-19: `OrchestrationConfigState::to_orchestration_config` is now only used by its tests. Left for DB-1: the `ai_document_panes` table.
+
+
+## Warp Drive: environment-variable collections
+**Why:** An environment-variable collection is a Warp Drive object that syncs through Warp's servers, and Drive is removed (user decision 1). Its entry points (the Drive index, the command palette and workflow parameterization) were already gone or depended on cloud objects.
+
+**Removed:**
+- `app/src/env_vars/` (README included) — the collection object model, `EnvVarCollectionManager` singleton, the editor pane view (variables, secrets from external managers, command dialog, unsaved-changes dialog), and the invocation block shown in the blocklist.
+- `app/src/search/env_var_collections/` — the fuzzy matcher for collections.
+- `pane_group/pane/env_var_collection_pane.rs`, `IPaneType::EnvVarCollection`, `LeafContents::EnvVarCollection`, `EnvVarCollectionPaneSnapshot`, `pane_group::Event::InvokeEnvVarCollection`, `PaneGroup::env_var_collection_pane_by_pane_id`, and the vertical-tabs `TypedPane` and `SummaryPaneKind` arms.
+- `workflows/workflow_view/env_var_selector.rs`, the "Environment variables" dropdown in the workflow info box (`WorkflowsInfoBoxViewEvent`, `WorkflowsInfoBoxViewAction::SelectEnvironmentVariables`) and in the workflow and alias editors, `AliasBar::{set_current_env_vars, current_env_vars}`, and the argument-editor row that hosted the selector.
+- `terminal/view.rs`: the collection block and everything that drove it (`pending_env_var_collection`, `env_vars`, `active_env_var_collection_block`, `cancel_env_var_block`, `add_env_var_block_to_blocklist`, `invoke_environment_variables`, `invoke_env_vars_in_{current_session,subshell}`, `set_and_execute_subshell_command`, `display_non_local_environment_variable_error`, `reset_focus_after_rich_block`), `RichContentMetadata::EnvVarCollectionBlock`, and the 60 s bootstrap timeout used for collection subshells.
+- Terminal model: `BlocklistEnvVarMetadata`, `Block::{env_var_metadata, cloud_env_var_collection_state}`, `AfterBlockCompletedEvent::cloud_env_var_collection_id`, `TerminalModel::{set_env_var_collection_name, start_command_execution_from_env_var_collection}`, `SubshellInitializationInfo::env_var_collection_name`, `CommandExecutionSource::EnvVarCollection`, and `SubshellSource`. Subshell flags now carry the spawning executable name as a `String`.
+- Input: `EnvVarCollectionState`, the environment-variable command prefix that the workflow info box could insert, and the `selected_env_vars` argument of `insert_workflow_into_input` and `reset_workflow_state`. Workflow aliases and up-arrow history no longer carry an env-var id into the input.
+- `cloud_object_models::env_vars` (`EnvVar`, `EnvVarValue`, `EnvVarCollection`, the cloud and server aliases), `JsonObjectType::EnvVarCollection` and its `ENVVARCOLLECTION` string, the `env-vars` `ObjectType` string, `PersistedGenericStringObject::EnvVarCollection`, `ServerCloudObject::EnvVarCollection`, `QueueItem::UpdateEnvVarCollection`, the sync-queue create and dependency arms, the `UpdateManager` create, update, conflict, transfer and duplicate arms, the `CloudModel` collection accessors, `Workflow::default_env_vars`, and the GraphQL `JsonEnvVarCollection` arms in `server_api/object.rs` and `server/graphql/schema` (the format is now skipped like an unknown one; the enum itself stays for SRV-1).
+- `DriveObjectType::EnvVarCollection`, `Icon::EnvVarCollection` with `env-var-collection.svg`, `BindingGroup::EnvVarCollection`, `QueryFilter::EnvironmentVariables` (the `env_vars:` palette filter) and their style arms.
+- Telemetry variants `EnvVarCollectionInvoked` and `EnvVarWorkflowParameterization`, `EnvVarTelemetryMetadata` and `CommandSearchResultType::EnvVarCollection`.
+- `NewEnvVarCollectionPane`, `EnvVarCollectionPane` and `ENV_VAR_COLLECTION_PANE_KIND` from `crates/persistence/src/model.rs`.
+- Helpers only the collection views used: `view_components::alert::{Alert::basic, AlertConfig::error, AlertFlavor::Error}` and the `Alert` re-export, `ui_components::menu_button::highlight_icon_button_with_context_menu`, and the alias argument-editor width constant.
+
+**Modified:**
+- `terminal/model/session/command_executor/shared.rs` — new `serialize_variables_for_shell(pairs of (&str, &str), ShellType)`, the small `export` serializer that used to live in `env_vars`. The SSH `RemoteCommandExecutor` and the WSL executor use it for the environment and the `PATH` they prepend to a command; the output is unchanged.
+- `terminal/bootstrap.rs` — `init_subshell_command` and the subshell script no longer take collection variables; the script starts with `export WARP_HONOR_PS1=...;`.
+- `terminal/warpify/{mod,success_block}.rs` — `subshell_bootstrap_success_block_bytes` drops the collection check and its argument.
+- `persistence/sqlite.rs` — `save_app_state` no longer writes collection panes and the restore path no longer reads them. It still clears the `env_var_collection_panes` table, which has a foreign key to `pane_leaves` (DB-1 owns the schema).
+- `terminal/local_shell/mod.rs` — the `LocalShellState` doc no longer points to the removed secret-manager caller.
+- `ai/blocklist/inline_action/requested_command_attribution.rs` — a citation of a collection is no longer matched against the command, and `is_command_copied_from_document` drops its `shell_type` argument (minimal compile fix; the module belongs to the AI tasks).
+- `Block::is_eligible_to_tag_in_agent` and `Block::should_hide` no longer consult the collection metadata.
+
+**User-visible impact:** Environment-variable collections can no longer be created, opened, invoked (in the current session or as a subshell) or attached to workflows and aliases, and the `env_vars:` filter in the command palette is gone. A saved tab that contained a collection pane is dropped on the next restore, because its pane kind is no longer recognized (the rest of the window restores normally).
+
+**Notes:**
+- Old `env_var_collection` rows in `pane_leaves`, the `env_var_collection_panes` table, `generic_string_objects` rows of type `ENVVARCOLLECTION`, `schema.rs` and the integration `tests/data/*.sqlite` fixtures are left for DB-1.
+- `Workflow::Command::environment_variables` and the alias `env_vars` field stay for DRV-4; saving a workflow from the editor now writes `None` for the former.
+- `WorkflowAliasEnvVarsAttached` in `server/telemetry/events.rs` no longer has an emitter and is left for TEL-4. `crates/graphql` `JsonEnvVarCollection` and the schema stay for SRV-1.
+- `crates/local_control/src/protocol_tests.rs` keeps `"drive.env_var_collection.open"` as a negative test of an unknown action name.
+- The external secret managers (`ExternalSecret`, `OnePasswordSecret`, `LastPassSecret`) moved unchanged to `cloud_object_models::external_secret` so that this commit builds; the next section removes them.

@@ -198,11 +198,6 @@ impl WorkflowType {
             _ => None,
         }
     }
-
-    /// We don't show env var selection for Agent Mode suggested commands.
-    pub(super) fn should_show_env_var_selection(&self) -> bool {
-        !matches!(self, WorkflowType::AIGenerated { .. },)
-    }
 }
 
 #[cfg_attr(not(target_family = "wasm"), async_trait)]

@@ -26,7 +26,6 @@ mod default_terminal;
 mod drive;
 #[cfg(windows)]
 mod dynamic_libraries;
-mod env_vars;
 mod external_secrets;
 mod global_resource_handles;
 mod gpu_state;
@@ -219,7 +218,6 @@ use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
 use crate::default_terminal::DefaultTerminal;
 use crate::drive::CloudObjectTypeAndId;
-use crate::env_vars::manager::EnvVarCollectionManager;
 pub use crate::global_resource_handles::{GlobalResourceHandles, GlobalResourceHandlesProvider};
 use crate::gpu_state::GPUState;
 use crate::network::NetworkStatus;
@@ -1094,10 +1092,8 @@ pub(crate) fn initialize_app(
     ai::blocklist::init(ctx);
     ai::blocklist::block::status_bar::init(ctx);
     settings_view::update_environment_form::init(ctx);
-    env_vars::env_var_collection_block::init(ctx);
     context_chips::display_menu::init(ctx);
     context_chips::node_version_popup::init(ctx);
-    env_vars::view::env_var_collection::init(ctx);
     terminal::view::init_environment::mode_selector::init(ctx);
     if FeatureFlag::CodeReviewSaveChanges.is_enabled() {
         code_review::init(ctx);
@@ -1356,7 +1352,6 @@ pub(crate) fn initialize_app(
     // Add a singleton model to maintain state of shared session across all windows.
     ctx.add_singleton_model(terminal::shared_session::manager::Manager::new);
 
-    ctx.add_singleton_model(EnvVarCollectionManager::new);
     ctx.add_singleton_model(WorkflowManager::new);
 
     ctx.add_singleton_model(LocalWorkflows::new);

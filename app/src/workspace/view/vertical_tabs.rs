@@ -907,7 +907,6 @@ pub(super) enum SummaryPaneKind {
     Notebook { is_plan: bool },
     Workflow,
     Settings,
-    EnvVarCollection,
     EnvironmentManagement,
     ExecutionProfileEditor,
     Other,
@@ -3378,10 +3377,6 @@ fn resolve_icon_with_status_variant(
             icon: typed.icon(),
             icon_color: drive_color(DriveObjectType::Workflow),
         },
-        TypedPane::EnvVarCollection => IconWithStatusVariant::Neutral {
-            icon: typed.icon(),
-            icon_color: drive_color(DriveObjectType::EnvVarCollection),
-        },
         // Other pane types use sub-text color
         other => IconWithStatusVariant::Neutral {
             icon: other.icon(),
@@ -3621,7 +3616,6 @@ enum TypedPane<'a> {
     Notebook { is_plan: bool },
     Workflow,
     Settings,
-    EnvVarCollection,
     EnvironmentManagement,
     ExecutionProfileEditor,
     Other,
@@ -3653,7 +3647,6 @@ impl TypedPane<'_> {
             TypedPane::Notebook { is_plan } => SummaryPaneKind::Notebook { is_plan: *is_plan },
             TypedPane::Workflow => SummaryPaneKind::Workflow,
             TypedPane::Settings => SummaryPaneKind::Settings,
-            TypedPane::EnvVarCollection => SummaryPaneKind::EnvVarCollection,
             TypedPane::EnvironmentManagement => SummaryPaneKind::EnvironmentManagement,
             TypedPane::ExecutionProfileEditor => SummaryPaneKind::ExecutionProfileEditor,
             TypedPane::Other => SummaryPaneKind::Other,
@@ -3677,7 +3670,6 @@ impl TypedPane<'_> {
             TypedPane::Notebook { .. } => "Notebook",
             TypedPane::Workflow => "Workflow",
             TypedPane::Settings => "Settings",
-            TypedPane::EnvVarCollection => "Environment Variables",
             TypedPane::EnvironmentManagement => "Environments",
             TypedPane::ExecutionProfileEditor => "Execution Profile",
             TypedPane::Other => "Other",
@@ -3697,7 +3689,6 @@ impl TypedPane<'_> {
             | TypedPane::Notebook { .. }
             | TypedPane::Workflow
             | TypedPane::Settings
-            | TypedPane::EnvVarCollection
             | TypedPane::EnvironmentManagement
             | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => None,
@@ -3714,7 +3705,6 @@ impl TypedPane<'_> {
             TypedPane::Notebook { is_plan: false } => WarpIcon::Notebook,
             TypedPane::Workflow => WarpIcon::Workflow,
             TypedPane::Settings | TypedPane::EnvironmentManagement => WarpIcon::Gear,
-            TypedPane::EnvVarCollection => WarpIcon::EnvVarCollection,
             TypedPane::ExecutionProfileEditor => WarpIcon::Lightning,
             TypedPane::Other => WarpIcon::File,
         }
@@ -3857,7 +3847,6 @@ fn build_vertical_tabs_summary_data(
             | TypedPane::Notebook { .. }
             | TypedPane::Workflow
             | TypedPane::Settings
-            | TypedPane::EnvVarCollection
             | TypedPane::EnvironmentManagement
             | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => {
@@ -3999,7 +3988,6 @@ impl<'a> PaneProps<'a> {
             | TypedPane::Notebook { .. }
             | TypedPane::Workflow
             | TypedPane::Settings
-            | TypedPane::EnvVarCollection
             | TypedPane::EnvironmentManagement
             | TypedPane::ExecutionProfileEditor
             | TypedPane::Other => {
@@ -4419,7 +4407,6 @@ impl PaneGroup {
             }
             IPaneType::Workflow => TypedPane::Workflow,
             IPaneType::Settings => TypedPane::Settings,
-            IPaneType::EnvVarCollection => TypedPane::EnvVarCollection,
             IPaneType::EnvironmentManagement => TypedPane::EnvironmentManagement,
             IPaneType::ExecutionProfileEditor => TypedPane::ExecutionProfileEditor,
             IPaneType::CustomRouterEditor | IPaneType::NetworkLog => TypedPane::Other,
@@ -5161,7 +5148,6 @@ pub(super) fn render_summary_pane_kind_icon_circle(
         | SummaryPaneKind::Notebook { .. }
         | SummaryPaneKind::Workflow
         | SummaryPaneKind::Settings
-        | SummaryPaneKind::EnvVarCollection
         | SummaryPaneKind::EnvironmentManagement
         | SummaryPaneKind::ExecutionProfileEditor
         | SummaryPaneKind::Other => {
@@ -5246,10 +5232,6 @@ fn summary_pane_kind_icon(
         SummaryPaneKind::Settings | SummaryPaneKind::EnvironmentManagement => {
             (WarpIcon::Gear, main_text)
         }
-        SummaryPaneKind::EnvVarCollection => (
-            WarpIcon::EnvVarCollection,
-            drive_color(DriveObjectType::EnvVarCollection),
-        ),
         SummaryPaneKind::ExecutionProfileEditor => (WarpIcon::Lightning, sub_text),
         SummaryPaneKind::Other => (WarpIcon::File, sub_text),
     }
@@ -7094,7 +7076,6 @@ fn typed_pane_warp_drive_object_type(typed: &TypedPane<'_>) -> Option<DriveObjec
             is_ai_document: *is_plan,
         }),
         TypedPane::Workflow => Some(DriveObjectType::Workflow),
-        TypedPane::EnvVarCollection => Some(DriveObjectType::EnvVarCollection),
         TypedPane::Terminal(_)
         | TypedPane::Code(_)
         | TypedPane::CodeDiff
@@ -7119,7 +7100,7 @@ fn render_detail_section(
             app,
         ),
         TypedPane::Code(_) => render_code_detail_section(props, appearance, app),
-        TypedPane::Notebook { .. } | TypedPane::Workflow | TypedPane::EnvVarCollection => {
+        TypedPane::Notebook { .. } | TypedPane::Workflow => {
             render_warp_drive_object_detail_section(props, appearance, app)
         }
         TypedPane::CodeDiff

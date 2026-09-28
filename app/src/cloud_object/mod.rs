@@ -866,8 +866,8 @@ pub use cloud_object_client::{
 };
 pub use cloud_object_models::{
     ServerAIExecutionProfile, ServerAmbientAgentEnvironment, ServerCloudAgentConfig,
-    ServerCloudObject, ServerEnvVarCollection, ServerFolder, ServerNotebook, ServerPreference,
-    ServerScheduledAmbientAgent, ServerWorkflow, ServerWorkflowEnum, TryFromGql,
+    ServerCloudObject, ServerFolder, ServerNotebook, ServerPreference, ServerScheduledAmbientAgent,
+    ServerWorkflow, ServerWorkflowEnum, TryFromGql,
 };
 use warp_errors::report_error;
 

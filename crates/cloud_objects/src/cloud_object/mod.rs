@@ -84,7 +84,6 @@ const NOTEBOOK_OBJECT_STRING: &str = "notebook";
 const WORKFLOW_OBJECT_STRING: &str = "workflow";
 const PROMPT_OBJECT_STRING: &str = "prompt";
 const FOLDER_OBJECT_STRING: &str = "folder";
-const ENV_VAR_COLLECTION_STRING: &str = "env-vars";
 
 impl FromStr for ObjectType {
     type Err = anyhow::Error;
@@ -95,9 +94,6 @@ impl FromStr for ObjectType {
             WORKFLOW_OBJECT_STRING => Ok(Self::Workflow),
             PROMPT_OBJECT_STRING => Ok(Self::Workflow),
             FOLDER_OBJECT_STRING => Ok(Self::Folder),
-            ENV_VAR_COLLECTION_STRING => Ok(Self::GenericStringObject(
-                GenericStringObjectFormat::Json(JsonObjectType::EnvVarCollection),
-            )),
             _ => Err(anyhow!("Unexpected object type")),
         }
     }
@@ -109,9 +105,6 @@ impl fmt::Display for ObjectType {
             ObjectType::Notebook => write!(f, "{NOTEBOOK_OBJECT_STRING}"),
             ObjectType::Workflow => write!(f, "{WORKFLOW_OBJECT_STRING}"),
             ObjectType::Folder => write!(f, "{FOLDER_OBJECT_STRING}"),
-            ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                JsonObjectType::EnvVarCollection,
-            )) => write!(f, "{ENV_VAR_COLLECTION_STRING}"),
             ObjectType::GenericStringObject(_) => write!(f, "string_object_placeholder"), // placeholder value
         }
     }
@@ -178,7 +171,6 @@ impl ToString for GenericStringObjectFormat {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Hash)]
 pub enum JsonObjectType {
     Preference,
-    EnvVarCollection,
     WorkflowEnum,
     AIExecutionProfile,
     CloudEnvironment,
@@ -190,7 +182,6 @@ impl JsonObjectType {
     pub fn as_str(&self) -> &'static str {
         match self {
             JsonObjectType::Preference => "PREFERENCE",
-            JsonObjectType::EnvVarCollection => "ENVVARCOLLECTION",
             JsonObjectType::WorkflowEnum => "WORKFLOWENUM",
             JsonObjectType::AIExecutionProfile => "AIEXECUTIONPROFILE",
             JsonObjectType::CloudEnvironment => "CLOUDENVIRONMENT",
@@ -206,7 +197,6 @@ impl TryFrom<&str> for JsonObjectType {
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "PREFERENCE" => Ok(JsonObjectType::Preference),
-            "ENVVARCOLLECTION" => Ok(JsonObjectType::EnvVarCollection),
             "WORKFLOWENUM" => Ok(JsonObjectType::WorkflowEnum),
             "AIEXECUTIONPROFILE" => Ok(JsonObjectType::AIExecutionProfile),
             "CLOUDENVIRONMENT" => Ok(JsonObjectType::CloudEnvironment),
@@ -243,9 +233,6 @@ impl From<ObjectType> for warp_graphql::object::ObjectType {
             ObjectType::Notebook => warp_graphql::object::ObjectType::Notebook,
             ObjectType::Workflow => warp_graphql::object::ObjectType::Workflow,
             ObjectType::Folder => warp_graphql::object::ObjectType::Folder,
-            ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                JsonObjectType::EnvVarCollection,
-            )) => warp_graphql::object::ObjectType::GenericStringObject,
             ObjectType::GenericStringObject(gso) => {
                 todo!("Moving is not implemented for {:?}", gso);
             }
@@ -839,9 +826,6 @@ impl From<GenericStringObjectFormat>
         match format {
             GenericStringObjectFormat::Json(JsonObjectType::Preference) => {
                 GraphQLFormat::JsonPreference
-            }
-            GenericStringObjectFormat::Json(JsonObjectType::EnvVarCollection) => {
-                GraphQLFormat::JsonEnvVarCollection
             }
             GenericStringObjectFormat::Json(JsonObjectType::WorkflowEnum) => {
                 GraphQLFormat::JsonWorkflowEnum

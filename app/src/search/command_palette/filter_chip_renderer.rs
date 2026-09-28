@@ -124,9 +124,6 @@ impl FilterChipRenderer for QueryFilter {
                     is_ai_document: false,
                 },
             ),
-            QueryFilter::EnvironmentVariables => {
-                warp_drive_icon_color(appearance, DriveObjectType::EnvVarCollection)
-            }
         }
     }
 }
