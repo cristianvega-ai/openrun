@@ -217,6 +217,11 @@ impl AuthSession {
         let client = self.client.clone();
         Box::pin(async move {
             let firebase_api_key = ChannelState::firebase_api_key();
+            if firebase_api_key.is_empty() {
+                return Err(UserAuthenticationError::Unexpected(anyhow::anyhow!(
+                    "no Firebase API key is configured for this build"
+                )));
+            }
             let url = token.access_token_url(&firebase_api_key);
             let request_body = token.access_token_request_body();
             let proxy_url = token.proxy_url(&ChannelState::server_root_url(), &firebase_api_key);
