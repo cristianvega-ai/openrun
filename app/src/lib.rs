@@ -69,7 +69,6 @@ mod tab;
 mod test_util;
 mod throttle;
 mod tips;
-mod tracing;
 mod ui_components;
 mod undo_close;
 mod uri;
@@ -338,13 +337,6 @@ impl LaunchMode {
             LaunchMode::Test { .. } => false,
         }
     }
-
-    fn as_str_for_tracing(&self) -> &'static str {
-        match self {
-            LaunchMode::App { .. } => "app",
-            LaunchMode::Test { .. } => "test",
-        }
-    }
 }
 
 /// If the given event is a key down event containing alt modifiers, and those
@@ -384,7 +376,6 @@ fn apply_scroll_multiplier(event: &mut Event, app: &AppContext) {
 ///
 /// The bundled Warp Control wrapper injects `--warpctrl`, which is dispatched
 /// before the normal Warp parser.
-#[::tracing::instrument(skip_all, fields(tags.cloud_agent = true))]
 pub fn run() -> Result<()> {
     // Perform any necessary platform-specific initialization.
     platform::init();
@@ -522,16 +513,9 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // for other entrypoints.
     features::init_feature_flags();
 
-    let mut tracing_initialization = Some(tracing::init()?);
-
-    // Start the `run_internal` span here - we can't do it before this point
-    // because we need the tracing initialization to be complete first.
-    let span = ::tracing::info_span!(
-        "run_internal",
-        tags.cloud_agent = true,
-        launch_mode = launch_mode.as_str_for_tracing()
-    );
-    let _enter = span.enter();
+    // With the `tracing` crate's `log` feature, spans and events become log lines unless a
+    // subscriber is installed, so a no-op subscriber keeps them out of the logs.
+    tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::new())?;
 
     cfg_if::cfg_if! {
         if #[cfg(enable_crash_recovery)] {
@@ -551,9 +535,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         }
     }
 
-    if let Some(initialization) = tracing_initialization.as_mut() {
-        initialization.log_initialization_warning();
-    }
     timer.mark_interval_end("LOG_FILE_SETUP_COMPLETE");
 
     #[cfg(windows)]
@@ -657,10 +638,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     let pty_spawner =
         terminal::local_tty::spawner::PtySpawner::new().context("Failed to create pty spawner")?;
 
-    let callbacks = app_callbacks(
-        launch_mode.is_integration_test(),
-        tracing_initialization.take(),
-    );
+    let callbacks = app_callbacks(launch_mode.is_integration_test());
     let mut app_builder = warpui::platform::AppBuilder::new(
         callbacks,
         Box::new(ASSETS),
@@ -804,7 +782,6 @@ fn refresh_user_after_iap_access(ctx: &mut AppContext) {
     iap_manager.update(ctx, |manager, ctx| manager.ensure_access(ctx));
 }
 
-#[::tracing::instrument(skip_all, fields(tags.cloud_agent = true))]
 pub(crate) fn initialize_app(
     mut timer: IntervalTimer,
     startup_toml_parse_error: Option<warpui_extras::user_preferences::Error>,
@@ -868,13 +845,6 @@ pub(crate) fn initialize_app(
 
     let server_api = server_api_provider.as_ref(ctx).get();
     let ai_client = server_api_provider.as_ref(ctx).get_ai_client();
-    #[cfg(not(target_family = "wasm"))]
-    // Refresh starts only after the authenticated server client exists; tracing initialization
-    // remains responsible for deciding whether this process opted in to cloud-agent export.
-    tracing::start_auth_refresh(
-        server_api_provider.as_ref(ctx).get_managed_secrets_client(),
-        ctx,
-    );
 
     ctx.add_singleton_model(|_ctx| AuthStateProvider::new(auth_state.clone()));
 
@@ -1632,10 +1602,7 @@ pub(crate) fn initialize_app(
     app_state
 }
 
-pub(crate) fn app_callbacks(
-    is_integration_test: bool,
-    mut tracing_initialization: Option<tracing::Initialization>,
-) -> warpui::platform::AppCallbacks {
+pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppCallbacks {
     warpui::platform::AppCallbacks {
         on_internet_reachability_changed: Some(Box::new(move |reachable, ctx| {
             NetworkStatus::handle(ctx)
@@ -1725,9 +1692,6 @@ pub(crate) fn app_callbacks(
             crash_recovery::CrashRecovery::handle(ctx).update(ctx, |crash_recovery, _ctx| {
                 crash_recovery.teardown();
             });
-            if let Some(initialization) = tracing_initialization.as_mut() {
-                initialization.shutdown();
-            }
         })),
         on_should_close_window: Some(Box::new(move |window_id, ctx| {
             let general_settings = GeneralSettings::as_ref(ctx);
@@ -2045,7 +2009,6 @@ fn is_cloud_agent_web_home_launch_url(url: &Url) -> bool {
             .any(|(key, value)| key == "source" && value == "web_home")
 }
 
-#[::tracing::instrument(skip_all, fields(tags.cloud_agent = true))]
 fn launch(ctx: &mut warpui::AppContext, app_state: Option<AppState>, launch_mode: LaunchMode) {
     IntervalTimer::handle(ctx).update(ctx, |timer, _ctx| {
         timer.mark_interval_end("APP_LAUNCHED");

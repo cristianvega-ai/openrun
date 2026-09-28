@@ -2,7 +2,6 @@ use base64::Engine as _;
 use base64::prelude::BASE64_URL_SAFE;
 use futures::StreamExt as _;
 use prost::Message as _;
-use tracing_futures::Instrument as _;
 use warp_core::channel::ChannelState;
 use warp_server_client::base_client::{AmbientHeaderPolicy, BaseClient, TEAM_UID_HEADER};
 
@@ -87,32 +86,6 @@ pub async fn generate_multi_agent_output(
             Err(error) => Some(Err(Error::EventSource(Box::new(error)))),
         }
     });
-
-    // Once we get the init event, add some identifiers to the trace span.
-    let output_stream = output_stream.inspect(|event| {
-        if let Ok(event) = &event {
-            match &event.r#type {
-                Some(warp_multi_agent_api::response_event::Type::Init(init)) => {
-                    tracing::info!("StreamInit");
-                    tracing::Span::current().record("conversation_id", &init.conversation_id);
-                    tracing::Span::current().record("request_id", &init.request_id);
-                    tracing::Span::current().record("run_id", &init.run_id);
-                }
-                Some(warp_multi_agent_api::response_event::Type::Finished(_finished)) => {
-                    tracing::info!("StreamFinished");
-                }
-                _ => {}
-            }
-        }
-    });
-    // Wrap the output stream with a trace span.
-    let output_stream = output_stream.instrument(tracing::info_span!(
-        "generate_multi_agent_output",
-        tags.cloud_agent = true,
-        conversation_id = tracing::field::Empty,
-        request_id = tracing::field::Empty,
-        run_id = tracing::field::Empty,
-    ));
 
     cfg_if::cfg_if! {
         if #[cfg(target_family = "wasm")] {

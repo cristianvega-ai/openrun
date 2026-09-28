@@ -40,6 +40,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Changelog](#changelog) — removed the changelog model, the "What's New?" resource-center section, the changelog toast and its setting, `/changelog`, the "What's new" and "View latest changelog" entry points and the agent zero-state "Latest updates" section
 - [Docker sandbox sessions and local child-agent harnesses](#docker-sandbox-sessions-and-local-child-agent-harnesses) — removed `sbx` Docker sandbox tabs, `/docker-sandbox`, the sandbox shell type and the agent-SDK launcher for local Claude Code/Codex child agents
 - [Oz CLI and agent SDK](#oz-cli-and-agent-sdk) — deleted the `oz` command-line interface (every agent, environment, schedule, secret, MCP, memory, artifact and runner subcommand plus `login`/`logout`/`whoami`/`--api-key`), the headless agent SDK driver behind it, and the harness-support/harness-usage server clients
+- [Cloud-agent OpenTelemetry trace export](#cloud-agent-opentelemetry-trace-export) — removed the OTLP span exporter that cloud-agent processes sent traces to Warp with, its dispatch-token credential refresh and the `X-Warp-Traceparent` request header
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1016,3 +1017,20 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left for AI-19: `ai/local_harness_setup.rs`, the dormant-Claude wake listener in `orchestration_event_streamer.rs`, the CLI-harness task mapping in `LocalAgentTaskSyncModel` (now only registered by tests). Nothing binds `BlocklistAIController::native_prompt_conversation_id` any more (the SDK did), so it is always `None` and the bound-prompt routing in `controller/startup_queue.rs` and `controller/shared_session.rs` never runs; it goes with the shared-session prompt paths. Left for AI-14: MCP event fields that only the SDK read (`CloudEnvMcpScanComplete`/`InitialGlobalMcpScanComplete` wait sets, `ParsedTemplatableMCPServerResult::variable_values`, `TemplatableMCPServerManagerEvent::StateChanged::state`) and the `is_headless: false` in MCP OAuth. Left for AI-17a: the snapshot-less handoff pipeline. Left for AI-18: `IapManager`'s managed WIF mint (no longer constructed; its comments still cite `oz federate`). Left for AI-10: the `/init` detection of `oz environment create` in `terminal/view.rs`. Left for AI-11: the `warp_cli_binary_name` bundled-skill variable. Left for AUTH-1: `AuthState::initialize_for_credential_validation`, API-key credentials and the rest of the auth stack.
 - These dead-code warnings are expected until AI-14 lands: `ai/mcp/{file_based_manager, parsing, templatable_manager}.rs` (unread event and result fields).
 - AI code comments that still mention `AgentDriver` (MCP managers, skills, startup-queue tests) go with their modules.
+
+## Cloud-agent OpenTelemetry trace export
+**Why:** `app/src/tracing/` installed an OpenTelemetry OTLP exporter when a process was started as a Warp cloud agent (`WARP_CLOUD_AGENT_OTLP_ENDPOINT` plus a dispatch token) and sent the spans tagged `tags.cloud_agent` to Warp's collector, refreshing its credentials through the managed-secrets client. With the Oz CLI and agent SDK gone nothing starts the app that way, and an offline fork sends no traces to Warp (ai.md decision D15, master decisions 1 and 9).
+
+**Removed:**
+- `app/src/tracing.rs` and `app/src/tracing/{native.rs, cloud_agent_auth.rs, cloud_agent_auth_tests.rs}`: the OTLP exporter and subscriber, the shutdown-aware tracer and active-span registry, the cloud-agent span filter, the dispatch-token credential refresh and the `Initialization` handle `run_internal` carried to shutdown.
+- `app/src/lib.rs`: the `run_internal` span, the exporter warning and shutdown hooks, the `start_auth_refresh` call, `LaunchMode::as_str_for_tracing` and the `tags.cloud_agent` `instrument` attributes on `run`, `initialize_app` and `launch`.
+- The other `tags.cloud_agent` spans, which existed only to be exported: `instrument` attributes on `ServerApi` agent-task and workspace-metadata calls, `persistence::initialize` and `ManagedSecretManager::get_task_secrets`, and the `generate_multi_agent_output` stream span in `warp_multi_agent_client` (with its `tracing`/`tracing-futures` deps).
+- `http_client`: the `X-Warp-Traceparent` header added to every Warp request when a span context was active, `current_trace_link_header` and its tests.
+- Dependencies: `opentelemetry`, `opentelemetry-http`, `opentelemetry-otlp`, `opentelemetry_sdk`, `tracing-opentelemetry` and `tracing-subscriber` from `app`, `http_client` and `[workspace.dependencies]`; `tracing` from `warp_managed_secrets`.
+
+**Modified:**
+- `run_internal` installs `tracing`'s no-op subscriber directly, as the removed module did for every non-cloud-agent launch. The workspace enables `tracing`'s `log` feature, which turns spans and events into log lines when no subscriber is set.
+
+**User-visible impact:** None. The exporter only ran in cloud-agent processes.
+
+**Notes:** `crates/build_cache` still has a `tags.cloud_agent` span and `tracing-opentelemetry` field names; the crate is deleted in [Agent build cache and harness usage crates](#agent-build-cache-and-harness-usage-crates). `ManagedSecretManager::get_task_secrets` keeps its inner async function until AI-18 deletes `managed_secrets`.

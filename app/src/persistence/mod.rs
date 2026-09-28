@@ -139,7 +139,6 @@ pub struct ConversationSummaryBackfill {
 /// Returns the previously-persisted data, if any, and handles for
 /// writing updated data to persist, if the persistence subsystem is
 /// available.
-#[tracing::instrument(name = "persistence::initialize", skip_all, fields(tags.cloud_agent = true))]
 #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
 pub fn initialize(
     ctx: &mut AppContext,

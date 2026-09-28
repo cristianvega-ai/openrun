@@ -195,8 +195,6 @@ where
         task_id: String,
     ) -> impl Future<Output = anyhow::Result<HashMap<String, ManagedSecretValue>>> + use<RequestScope>
     {
-        // Define and invoke an inner async function to simplify tracing instrumentation.
-        #[tracing::instrument(name = "get_task_secrets", skip_all, err, fields(tags.cloud_agent = true))]
         async fn inner<RequestScope>(
             client: Arc<dyn ManagedSecretsClient<RequestScope = RequestScope>>,
             task_id: String,

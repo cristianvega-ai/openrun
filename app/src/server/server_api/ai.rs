@@ -1167,11 +1167,6 @@ impl AIClient for ServerApi {
         }
     }
 
-    #[tracing::instrument(skip_all, err, fields(
-        tags.cloud_agent = true,
-        config.worker_host = tracing::field::Empty,
-        config.harness = tracing::field::Empty
-    ))]
     async fn create_agent_task(
         &self,
         prompt: String,
@@ -1180,19 +1175,6 @@ impl AIClient for ServerApi {
         config: Option<AgentConfigSnapshot>,
         team_scope: RequestTeamScope,
     ) -> anyhow::Result<AmbientAgentTaskId, anyhow::Error> {
-        if let Some(config) = &config {
-            if let Some(worker_host) = &config.worker_host {
-                tracing::Span::current().record("config.worker_host", worker_host);
-            }
-            if let Some(harness) = &config.harness {
-                let harness: Option<serde_json::Value> =
-                    serde_json::to_value(harness.harness_type).ok();
-                if let Some(serde_json::Value::String(harness)) = harness {
-                    tracing::Span::current().record("config.harness", harness);
-                }
-            }
-        }
-
         // Serialize the config to JSON if provided
         let agent_config_snapshot = config
             .map(|c| serde_json::to_string(&c))
@@ -1228,13 +1210,6 @@ impl AIClient for ServerApi {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[tracing::instrument(skip_all, err, fields(
-        tags.cloud_agent = true,
-        ?task_state,
-        ?session_id,
-        ?conversation_id,
-        error_code = ?status_message.as_ref().map(|m| m.error_code)
-    ))]
     async fn update_agent_task(
         &self,
         task_id: AmbientAgentTaskId,
@@ -1327,7 +1302,6 @@ impl AIClient for ServerApi {
         Ok(response.runs)
     }
 
-    #[tracing::instrument(skip_all, err, fields(tags.cloud_agent = true))]
     async fn get_ambient_agent_task(
         &self,
         task_id: &AmbientAgentTaskId,
@@ -1347,7 +1321,6 @@ impl AIClient for ServerApi {
             .await
     }
 
-    #[tracing::instrument(skip_all, err, fields(tags.cloud_agent = true))]
     async fn get_ai_conversation(
         &self,
         server_conversation_token: ServerConversationToken,
@@ -1488,7 +1461,6 @@ impl AIClient for ServerApi {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, err, fields(tags.cloud_agent = true))]
     async fn setup_failure_debug_authorization(
         &self,
         task_id: AmbientAgentTaskId,
