@@ -23,6 +23,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Current input UI made permanent](#current-input-ui-made-permanent) — legacy flag-off input paths removed outside `app/src/ai`
 - [Telemetry collection (RudderStack)](#telemetry-collection-rudderstack) — stopped collecting, persisting and sending usage telemetry; removed the RudderStack pipeline and the telemetry privacy toggle
 - [Block sharing (web permalinks)](#block-sharing-web-permalinks) — removed the "Share block" modal, block permalinks and embeds, the Shared blocks settings page, and the related menu items, keybindings and server client
+- [Referrals, rewards and referral-unlocked themes](#referrals-rewards-and-referral-unlocked-themes) — removed the Referrals page, invite entry points, the reward modal and the server referral client; the two reward themes are always available as "Nebula" and "Opal"
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -485,3 +486,30 @@ Each section below covers one removal (a single commit or a small group of relat
 - `TelemetryEvent::ContextMenuOpenShareModal` is no longer emitted; TEL-4 deletes it. The `SharedBlockTitleGeneration` feature flag and Cargo feature are left for FLAGS-1.
 - The `ShareBlock`, `UnshareBlock` and `GetBlocksForUser` operations in `crates/graphql` have no callers now and go with the crate in SRV-1.
 - `AuthViewVariant::ShareRequirementCloseable` stays because Warp Drive sharing still uses it (AUTH-1/DRV-1).
+
+## Referrals, rewards and referral-unlocked themes
+**Why:** The referral program ran on Warp's servers. The Referrals settings page fetched the user's referral link and claim count (GraphQL `GetReferralInfo`) and sent invite emails (`SendReferralInviteEmails`). At startup every window asked the server whether a logged-in user had referred someone or been referred, to unlock two reward themes and show a "you earned a theme" modal. The offline build has no accounts and no server, so the program is removed and the reward themes are simply available to everyone.
+
+**Removed:**
+- `app/src/settings_view/referrals_page.rs` and `SettingsSection::Referrals` — the Referrals page (referral link, copy link, email invites, swag reward meter), its nav item, page handle, slug (`"Referrals"`) and the `workspace:show_settings_referrals_page` binding.
+- `app/src/server/server_api/referral.rs` — `ReferralsClient`, `ReferralInfo` and `ServerApiProvider::get_referrals_client`.
+- `app/src/referral_theme_status.rs` — `ReferralThemeStatus`, which queried the server and stored unlock state in user defaults (`ReferralThemeActive`, `ReceivedReferralTheme`), and `GlobalResourceHandles::referral_theme_status`.
+- `app/src/reward_view.rs` and the workspace reward modal (`reward_modal`, `reward_modal_pending`, `WorkspaceState::is_reward_modal_open`, the hand-off that delayed it behind the changelog) and `ContextFlag::ShowRewardModal`.
+- Referral entry points: `WorkspaceAction::ShowReferralSettingsPage`, the "Invite People..." command and macOS app-menu item (`workspace:show_invite_modal`, `CustomAction::ReferAFriend`), "Invite a friend" in the account menu, the "Invite a friend to Warp" button in the resource center, and `EarnRewardsWidget` ("Earn rewards by sharing Warp with friends & colleagues" / "Refer a friend") on the Account settings page.
+- Assets used only by these views: `bundled/svg/referral-*.svg` (swag icons) and `bundled/svg/send.svg`.
+- The `referral_code` parameter of `AuthManager::create_anonymous_user` and `warp_server_client::AuthClient::create_anonymous_user`. Every caller passed `None`.
+- The workspace reward-modal tests.
+
+**Modified:**
+- `themes/theme_chooser.rs` — the theme chooser lists every built-in theme. `ThemeChooser::new` no longer takes the referral model.
+- `themes/{theme, default_themes}.rs` — the two reward themes are ordinary built-in themes named "Nebula" (dark, formerly "Warp Referral") and "Opal" (light, formerly "Referred to Warp" / "Received Referral Reward"). Their backgrounds are renamed to `jpg/nebula_bg.jpg` and `jpg/opal_bg.jpg`.
+- `workspace/view.rs` — changelog handling no longer holds back a pending reward modal. `build_settings_views` lost its unused `GlobalResourceHandles` parameter.
+- `lib.rs`, `global_resource_handles.rs` and the `terminal/input_tests.rs` test setup — the referral model is no longer created.
+- `crates/integration` session-restoration test and its `restored_settings.sqlite` fixture — the restored settings pane is on Appearance instead of the removed Referrals page.
+
+**User-visible impact:** Nebula and Opal appear in the theme picker for everyone, and a saved selection of either theme keeps working. The Referrals settings page, the "Invite People..." command and menu item, "Invite a friend" in the account menu, the resource-center invite button, the Account-page rewards row and the "you earned a theme" modal are gone. A restored settings pane that was showing Referrals opens on the default page.
+
+**Notes:**
+- The `ThemeKind::SentReferralReward` / `ReceivedReferralReward` variant names and the `ReferralReward` serde alias are kept on purpose. They are the values stored in `settings.toml` and user defaults, so renaming them would reset users' theme choice. This is the only remaining `referral` match in `app/src` apart from the telemetry below. Both themes stay `schemars(skip)`, so the generated settings schema still omits these legacy value names.
+- `TelemetryEvent::CopyInviteLink` ("Copy Link" on the referral modal) is no longer emitted. TEL-4 deletes it.
+- The `GetReferralInfo` and `SendReferralInviteEmails` operations in `crates/graphql` have no callers now, and `CreateAnonymousUser` always sends `referral_code: None`. They go with the crate in SRV-1. Anonymous-user creation itself is removed by AUTH-1.

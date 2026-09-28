@@ -569,7 +569,7 @@ pub(super) fn dark_city() -> WarpTheme {
     )
 }
 
-pub(super) fn sent_referral_reward() -> WarpTheme {
+pub(super) fn nebula() -> WarpTheme {
     WarpTheme::new(
         Fill::Solid(ColorU::from_u32(0x334567FF)),
         ColorU::white(),
@@ -578,10 +578,10 @@ pub(super) fn sent_referral_reward() -> WarpTheme {
         Some(Details::Darker),
         dark_mode_colors(),
         Some(Image {
-            source: bundled_or_fetched_asset!("jpg/sent_referral_reward_bg.jpg"),
+            source: bundled_or_fetched_asset!("jpg/nebula_bg.jpg"),
             opacity: 100,
         }),
-        Some("Warp Referral".to_string()),
+        Some("Nebula".to_string()),
     )
 }
 
@@ -614,7 +614,7 @@ pub(super) fn adeberry() -> WarpTheme {
     )
 }
 
-pub(super) fn received_referral_reward() -> WarpTheme {
+pub(super) fn opal() -> WarpTheme {
     WarpTheme::new(
         Fill::Solid(ColorU::from_u32(0xFFFFFFFF)),
         ColorU::black(),
@@ -623,9 +623,9 @@ pub(super) fn received_referral_reward() -> WarpTheme {
         Some(Details::Lighter),
         light_mode_colors(),
         Some(Image {
-            source: bundled_or_fetched_asset!("jpg/received_referral_reward_bg.jpg"),
+            source: bundled_or_fetched_asset!("jpg/opal_bg.jpg"),
             opacity: 100,
         }),
-        Some("Received Referral Reward".to_string()),
+        Some("Opal".to_string()),
     )
 }

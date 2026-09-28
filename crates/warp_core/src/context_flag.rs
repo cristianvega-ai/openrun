@@ -19,7 +19,6 @@ pub enum ContextFlag {
     CreateNewSession,
     CloseWindow,
     ForceSidePanelOpen,
-    ShowRewardModal,
     HideOpenOnDesktopButton,
     NetworkLogConsole,
     RunWorkflow,
@@ -59,7 +58,6 @@ impl ContextFlag {
 
     pub fn set_warp_home_link_only() {
         disable_flag(Self::ForceSidePanelOpen);
-        disable_flag(Self::ShowRewardModal);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::RunWorkflow);
         disable_flag(Self::CreateSharedSession);
@@ -72,7 +70,6 @@ impl ContextFlag {
 
     pub fn set_settings_link_only() {
         disable_flag(Self::ForceSidePanelOpen);
-        disable_flag(Self::ShowRewardModal);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::RunWorkflow);
         disable_flag(Self::CreateSharedSession);
@@ -88,7 +85,6 @@ impl ContextFlag {
 
     pub fn set_warp_drive_link_only() {
         disable_flag(Self::ForceSidePanelOpen);
-        disable_flag(Self::ShowRewardModal);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::RunWorkflow);
         disable_flag(Self::CreateSharedSession);
@@ -105,7 +101,6 @@ impl ContextFlag {
         disable_flag(Self::CreateNewSession);
         disable_flag(Self::CloseWindow);
         disable_flag(Self::ForceSidePanelOpen);
-        disable_flag(Self::ShowRewardModal);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::NetworkLogConsole);
         disable_flag(Self::LaunchConfigurations);
@@ -118,7 +113,6 @@ impl ContextFlag {
         disable_flag(Self::CreateNewSession);
         disable_flag(Self::CloseWindow);
         disable_flag(Self::ForceSidePanelOpen);
-        disable_flag(Self::ShowRewardModal);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::NetworkLogConsole);
         disable_flag(Self::LaunchConfigurations);
@@ -137,7 +131,6 @@ impl FromStr for ContextFlag {
             "CreateNewSession" => Ok(Self::CreateNewSession),
             "CloseWindow" => Ok(Self::CloseWindow),
             "ForceSidePanelOpen" => Ok(Self::ForceSidePanelOpen),
-            "ShowRewardModal" => Ok(Self::ShowRewardModal),
             "HideOpenOnDesktopButton" => Ok(Self::HideOpenOnDesktopButton),
             "NetworkLogConsole" => Ok(Self::NetworkLogConsole),
             "RunWorkflow" => Ok(Self::RunWorkflow),
