@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use ai::diff_validation::DiffDelta;
 use futures::FutureExt;
 use futures::future::BoxFuture;
+use warp_editor::diff::DiffDelta;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
 use super::{ActionExecution, AnyActionExecution, ExecuteActionInput, PreprocessActionInput};
@@ -97,7 +97,7 @@ impl EditDocumentsExecutor {
             }
 
             // Accumulate deltas for this document
-            if let ai::diff_validation::DiffType::Update { deltas, .. } = fuzzy_result.diff_type {
+            if let warp_editor::diff::DiffType::Update { deltas, .. } = fuzzy_result.diff_type {
                 document_deltas
                     .entry(diff.document_id)
                     .or_default()

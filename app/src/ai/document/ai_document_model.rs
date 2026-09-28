@@ -6,13 +6,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ai::agent::orchestration_config::{OrchestrationConfig, OrchestrationConfigStatus};
-use ai::diff_validation::DiffDelta;
 use ai::document::DEFAULT_PLANNING_DOCUMENT_TITLE;
 // TODO(vorporeal): Remove this re-export at some point.
 pub use ai::document::{AIDocumentId, AIDocumentVersion};
 use chrono::{DateTime, Local, Utc};
 use itertools::Itertools;
 use uuid::Uuid;
+use warp_editor::diff::DiffDelta;
 use warp_editor::model::RichTextEditorModel;
 use warp_editor::render::model::RichTextStyles;
 use warp_errors::{ReportErrorLogMode, report_error};

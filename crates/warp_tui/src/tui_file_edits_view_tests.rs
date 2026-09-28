@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use ai::diff_validation::{DiffDelta, DiffType};
 use futures::channel::oneshot;
 use warp::appearance::Appearance;
 use warp::editor::{CodeEditorModel, CodeEditorModelEvent};
@@ -9,6 +8,7 @@ use warp::tui_export::{
     RegisteredDiffStorage, TaskId, queue_tui_permission_action,
 };
 use warp_editor::content::buffer::InitialBufferState;
+use warp_editor::diff::{DiffDelta, DiffType};
 use warp_editor::model::CoreEditorModel;
 use warpui::platform::WindowStyle;
 use warpui::{AddWindowOptions, App, WindowInvalidation};

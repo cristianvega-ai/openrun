@@ -1,10 +1,11 @@
 use std::io::Write as _;
 use std::sync::Arc;
 
-use ai::diff_validation::{DiffDelta, ParsedDiff, V4AHunk};
+use ai::diff_validation::{ParsedDiff, V4AHunk};
 use async_io::block_on;
 use tempfile::NamedTempFile;
 use vec1::vec1;
+use warp_editor::diff::DiffDelta;
 use warpui::App;
 
 use super::*;

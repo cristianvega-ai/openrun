@@ -2936,7 +2936,7 @@ impl CodeReviewView {
     }
 
     /// Converts GitDiffData hunks to DiffDelta format for CodeEditorView.apply_diffs
-    fn convert_hunks_to_diff_deltas(hunks: &[DiffHunk]) -> Vec<ai::diff_validation::DiffDelta> {
+    fn convert_hunks_to_diff_deltas(hunks: &[DiffHunk]) -> Vec<warp_editor::diff::DiffDelta> {
         let mut diff_deltas = Vec::new();
 
         for hunk in hunks {
@@ -2966,7 +2966,7 @@ impl CodeReviewView {
                         if let Some(start) = current_replacement_start.take() {
                             let end = if has_removals { old_line } else { start };
 
-                            diff_deltas.push(ai::diff_validation::DiffDelta {
+                            diff_deltas.push(warp_editor::diff::DiffDelta {
                                 replacement_line_range: start..end,
                                 insertion: current_insertion.clone(),
                             });
@@ -2983,7 +2983,7 @@ impl CodeReviewView {
 
             if let Some(start) = current_replacement_start.take() {
                 let end = if has_removals { old_line } else { start };
-                diff_deltas.push(ai::diff_validation::DiffDelta {
+                diff_deltas.push(warp_editor::diff::DiffDelta {
                     replacement_line_range: start..end,
                     insertion: current_insertion,
                 });

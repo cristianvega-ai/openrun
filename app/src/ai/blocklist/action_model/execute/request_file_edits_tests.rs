@@ -1,9 +1,10 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use ai::diff_validation::{AIRequestedCodeDiff, DiffType};
+use ai::diff_validation::AIRequestedCodeDiff;
 use async_channel::unbounded;
 use futures::FutureExt;
+use warp_editor::diff::DiffType;
 use warpui::{App, AppContext, EntityId};
 
 use super::*;

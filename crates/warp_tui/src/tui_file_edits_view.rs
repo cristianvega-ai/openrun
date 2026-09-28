@@ -23,7 +23,6 @@ use std::path::Path;
 
 use ai::agent::action::FileEdit;
 use ai::agent::action_result::{AIAgentActionResultType, RequestFileEditsResult};
-use ai::diff_validation::{DiffDelta, DiffType};
 use itertools::Itertools;
 use warp::editor::{CodeEditorModel, CodeEditorModelEvent};
 use warp::tui_export::{
@@ -32,6 +31,7 @@ use warp::tui_export::{
     convert_file_edits_to_file_diffs,
 };
 use warp_editor::content::buffer::InitialBufferState;
+use warp_editor::diff::{DiffDelta, DiffType};
 use warpui_core::elements::MouseStateHandle;
 use warpui_core::elements::tui::{
     Modifier, TuiContainer, TuiElement, TuiFlex, TuiParentElement, TuiStyle, TuiText,

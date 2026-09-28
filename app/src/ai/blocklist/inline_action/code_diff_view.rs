@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ai::diff_validation::{
-    DiffDelta, DiffType, ParsedDiff, SearchAndReplace, V4AHunk, fuzzy_match_diffs,
-    fuzzy_match_v4a_diffs, parse_line_numbers,
+    ParsedDiff, SearchAndReplace, V4AHunk, fuzzy_match_diffs, fuzzy_match_v4a_diffs,
+    parse_line_numbers,
 };
 use anyhow::Result;
 use futures::FutureExt;
@@ -24,6 +24,7 @@ use warp_core::ui::color::CLAUDE_ORANGE;
 use warp_core::ui::theme::Fill;
 use warp_core::ui::theme::color::internal_colors::{fg_overlay_6, neutral_1, neutral_4};
 use warp_editor::content::buffer::InitialBufferState;
+use warp_editor::diff::{DiffDelta, DiffType};
 use warp_editor::render::element::VerticalExpansionBehavior;
 use warp_errors::report_error;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
@@ -2885,7 +2886,7 @@ pub fn convert_file_edits_to_file_diffs(
             if !search_and_replace_diffs.is_empty() {
                 let fuzzy_match_result =
                     fuzzy_match_diffs(&path, &search_and_replace_diffs, &dummy_content);
-                if let ai::diff_validation::DiffType::Update { deltas, .. } =
+                if let warp_editor::diff::DiffType::Update { deltas, .. } =
                     fuzzy_match_result.diff_type
                 {
                     applied_diffs.extend(deltas);
@@ -2896,7 +2897,7 @@ pub fn convert_file_edits_to_file_diffs(
             if !v4a_hunks.is_empty() && !show_as_deleted {
                 let v4a_match_result =
                     fuzzy_match_v4a_diffs(&path, &v4a_hunks, v4a_move_to.clone(), &dummy_content);
-                if let ai::diff_validation::DiffType::Update { deltas, .. } =
+                if let warp_editor::diff::DiffType::Update { deltas, .. } =
                     v4a_match_result.diff_type
                 {
                     applied_diffs.extend(deltas);

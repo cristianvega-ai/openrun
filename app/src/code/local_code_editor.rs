@@ -10,7 +10,6 @@ use std::{
     time::Duration,
 };
 
-use ai::diff_validation::DiffType;
 use futures::stream::AbortHandle;
 use lsp::types::FileLocation;
 use lsp::{
@@ -35,6 +34,7 @@ use warp_core::ui::appearance::Appearance;
 use warp_core::ui::icons::Icon;
 use warp_editor::content::buffer::InitialBufferState;
 use warp_editor::content::text::IndentUnit;
+use warp_editor::diff::DiffType;
 use warp_editor::render::model::{Decoration, LineCount};
 use warp_util::content_version::ContentVersion;
 use warp_util::file::{FileId, FileLoadError, FileSaveError};

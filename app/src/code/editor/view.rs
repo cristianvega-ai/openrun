@@ -5,7 +5,6 @@ use std::fmt::Debug;
 use std::ops::Range;
 use std::path::Path;
 
-use ai::diff_validation::DiffDelta;
 use lazy_static::lazy_static;
 use num_traits::SaturatingSub;
 use pathfinder_geometry::vector::vec2f;
@@ -20,6 +19,7 @@ use warp_editor::content::buffer::{
 };
 use warp_editor::content::text::IndentUnit;
 use warp_editor::content::version::BufferVersion;
+use warp_editor::diff::DiffDelta;
 use warp_editor::model::{CoreEditorModel, PlainTextEditorModel};
 use warp_editor::multiline::AnyMultilineString;
 use warp_editor::render::element::lens_element::RichTextElementLens;

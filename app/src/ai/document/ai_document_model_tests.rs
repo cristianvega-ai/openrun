@@ -1,7 +1,7 @@
 use std::ops::Range;
 
-use ai::diff_validation::DiffDelta;
 use chrono::Local;
+use warp_editor::diff::DiffDelta;
 use warpui::{App, SingletonEntity};
 
 use super::*;

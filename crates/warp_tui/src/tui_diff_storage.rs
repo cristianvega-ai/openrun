@@ -10,13 +10,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ai::agent::action_result::RequestFileEditsResult;
-use ai::diff_validation::{DiffDelta, DiffType};
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use warp::tui_export::{
     DiffSessionType, DiffStorage, DiffStorageHelper, FileDiff, FileSnapshot, RegisteredDiffStorage,
     SaveFuture, UpdatedFileState, changed_lines_from_op,
 };
+use warp_editor::diff::{DiffDelta, DiffType};
 use warp_files::FileModel;
 use warp_util::content_version::ContentVersion;
 use warp_util::file::{FileId, FileSaveError};

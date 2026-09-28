@@ -1,6 +1,6 @@
 use std::slice;
 
-use ai::diff_validation::{DiffDelta, DiffType};
+use warp_editor::diff::{DiffDelta, DiffType};
 
 use super::{
     changed_lines_intersect_terminal_range, has_malformed_terminal_correction_signal,

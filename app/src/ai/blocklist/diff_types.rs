@@ -6,8 +6,8 @@
 //! depending on any GUI view.
 use std::ops::Range;
 
-use ai::diff_validation::{DiffDelta, DiffType};
 use warp_core::HostId;
+use warp_editor::diff::{DiffDelta, DiffType};
 
 /// The base content and file path for a diff.
 #[derive(Clone)]

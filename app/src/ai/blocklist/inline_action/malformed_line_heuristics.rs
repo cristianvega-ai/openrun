@@ -1,4 +1,4 @@
-use ai::diff_validation::{DiffDelta, DiffType};
+use warp_editor::diff::{DiffDelta, DiffType};
 
 pub(super) fn proposed_terminal_line_range(diff_type: &DiffType) -> Option<std::ops::Range<usize>> {
     let (terminal_delta, cumulative_line_shift) = terminal_update_delta_with_shift(diff_type)?;
