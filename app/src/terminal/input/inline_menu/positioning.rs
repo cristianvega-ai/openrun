@@ -7,7 +7,7 @@ use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity, Win
 use super::styles::{HEADER_BORDER, HEADER_ROW_HEIGHT};
 use crate::ai::blocklist::agent_view::AgentViewController;
 use crate::appearance::Appearance;
-use crate::settings::{InputModeSettings, InputSettings};
+use crate::settings::{InlineMenuHeights, InputModeSettings, InputSettings};
 use crate::terminal::block_list_viewport::InputMode;
 use crate::terminal::input::inline_menu::InlineMenuType;
 use crate::terminal::input::inline_menu::message_bar::INLINE_MENU_BORDER_WIDTH;
@@ -63,6 +63,7 @@ impl InlineMenuPositioner {
         let persisted_heights = InputSettings::as_ref(ctx)
             .inline_menu_custom_content_heights
             .value()
+            .0
             .clone();
         ctx.subscribe_to_model(suggestions_mode_model, |me, _, _, ctx| {
             let suggestions_mode_model = me.suggestions_mode_model.as_ref(ctx);
@@ -264,7 +265,7 @@ impl InlineMenuPositioner {
         InputSettings::handle(ctx).update(ctx, |settings, ctx| {
             let _ = settings
                 .inline_menu_custom_content_heights
-                .set_value(self.custom_content_heights.clone(), ctx);
+                .set_value(InlineMenuHeights(self.custom_content_heights.clone()), ctx);
         });
     }
 

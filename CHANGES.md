@@ -69,6 +69,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp-distributed CLI-agent plugins](#warp-distributed-cli-agent-plugins) — removed the install/update flows, the "Enable notifications" chips, the manual-instructions pane and the OpenCode debug actions for the `claude-code-warp`, `codex-warp`, `gemini-cli-warp` and `opencode-warp` plugins; the OSC 777/9 listener stays
 - [Agent tips](#agent-tips) — removed the rotating "Tip:" line under the agent warping indicator and the cloud-mode loading screen, the Show agent tips setting and its toggle
 - [Cloud mode, ambient-agent terminal UI and handoff](#cloud-mode-ambient-agent-terminal-ui-and-handoff) — removed the cloud-agent terminal (setup, follow-up input, tombstones, queued cloud prompts), local-to-cloud and cloud-to-cloud handoff, auto-handoff on sleep, the cloud environment and host selectors and the cloud slash commands, tab types, panes and settings
+- [Tolerant stored inline-menu heights](#tolerant-stored-inline-menu-heights) — stored per-menu heights ignore keys of removed menus (`skill_menu`, `prompts_menu`, `plan_menu`) instead of failing to parse and discarding all heights
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1819,3 +1820,14 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Pieces that belonged to AI-17b and had to go here to compile: `LeafContents::AmbientAgent` and its persistence, `ambient_pane_restoration`, the remote child launch and the ambient handling in `hydration.rs`.
 - Left for AI-17b: `ai/ambient_agents/` and `AmbientAgentTaskId` plumbing (`TerminalView::ambient_agent_task_id`, `TerminalModel` task ids, `ConversationRestorationInNewPaneType::Historical.ambient_agent_task_id`), the cloud-load path of `agent_conversations_model.rs`, `AgentViewEntryOrigin::{CloudAgent, ThirdPartyCloudAgent}`, `OpenCloudAgentSetupGuide`, the `Tombstone*` and `SlashCommandContinueLocally` telemetry variants, `server_api` spawn structs and `presigned_upload.rs`.
 - Left for the task that deletes `QueuedQueryModel`: `QueuedQueryOrigin::InitialCloudMode` and its locked-row handling in the queued-prompts panel. Left for AI-18: `harness_availability`, `auth_secret_types`, the auth-secret and environment pages. Left for AI-19: `ai/orchestration/remote_child.rs`. Left for FLAGS-1: the `CloudMode`, `CloudModeSetupV2`, `CloudModeInputV2`, `HandoffCloudCloud`, `HandoffLocalCloud` and `OzHandoff` feature flags. Left for DB-1: the `ambient_agent_panes` table.
+## Tolerant stored inline-menu heights
+**Why:** The per-menu drag-resize heights are stored as a map keyed by inline-menu type. Earlier removals deleted the `SkillMenu`, `PromptsMenu` and `PlanMenu` variants, so a settings file or stored value that still names `skill_menu`, `prompts_menu` or `plan_menu` failed to parse as a whole. The settings layer then dropped every stored height, logged an error and inhibited writes for the key, so later resizes were not saved either.
+
+**Modified:**
+- `InputSettings::inline_menu_custom_content_heights` now holds `InlineMenuHeights` (`app/src/settings/input.rs`), a newtype over `HashMap<InlineMenuType, f32>`. Reading it, from the settings file or from stored JSON, skips entries whose key is not a current `InlineMenuType` or whose height is not a number and keeps the rest. Writing is unchanged, and so are the setting's name, default and (private) visibility.
+- `InlineMenuPositioningModel` unwraps and wraps the newtype when it loads and persists heights.
+- Tests in `app/src/settings/input_tests.rs`: stale keys are ignored (file and serde forms), non-numeric heights are ignored, values round-trip, and a non-object value is still rejected.
+
+**User-visible impact:** A stale `skill_menu`, `prompts_menu` or `plan_menu` entry no longer resets the other menus' heights or blocks saving new ones. Users without stale entries see no change.
+
+**Notes:** Stale keys are dropped from the file the next time a height is saved.

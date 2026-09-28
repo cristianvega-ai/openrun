@@ -11,6 +11,51 @@ use crate::terminal::session_settings::SessionSettings;
 
 pub const MAX_TIMES_TO_SHOW_AUTOSUGGESTION_HINT: i8 = 2;
 
+/// Per-menu content heights set by drag-to-resize.
+///
+/// Reading skips entries whose key is not a known [`InlineMenuType`] (for
+/// example a menu that no longer exists) or whose height is not a number, so a
+/// stale entry does not discard the rest of the stored heights.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, schemars::JsonSchema)]
+#[serde(transparent)]
+pub struct InlineMenuHeights(pub HashMap<InlineMenuType, f32>);
+
+impl<'de> Deserialize<'de> for InlineMenuHeights {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = HashMap::<String, serde_json::Value>::deserialize(deserializer)?;
+        let heights = raw
+            .into_iter()
+            .filter_map(|(key, height)| {
+                let menu_type = serde_json::from_value(serde_json::Value::String(key)).ok()?;
+                Some((menu_type, height.as_f64()? as f32))
+            })
+            .collect();
+        Ok(Self(heights))
+    }
+}
+
+impl settings_value::SettingsValue for InlineMenuHeights {
+    fn to_file_value(&self) -> serde_json::Value {
+        self.0.to_file_value()
+    }
+
+    fn from_file_value(value: &serde_json::Value) -> Option<Self> {
+        let heights = value
+            .as_object()?
+            .iter()
+            .filter_map(|(key, height)| {
+                let menu_type =
+                    InlineMenuType::from_file_value(&serde_json::Value::String(key.clone()))?;
+                Some((menu_type, f32::from_file_value(height)?))
+            })
+            .collect();
+        Some(Self(heights))
+    }
+}
+
 #[derive(
     Debug,
     Copy,
@@ -201,8 +246,8 @@ define_settings_group!(InputSettings,
         },
         // Per-menu custom content heights set by drag-to-resize. Not user-visible.
         inline_menu_custom_content_heights: InlineMenuCustomContentHeights {
-            type: HashMap<InlineMenuType, f32>,
-            default: HashMap::default(),
+            type: InlineMenuHeights,
+            default: InlineMenuHeights::default(),
             supported_platforms: SupportedPlatforms::ALL,
             sync_to_cloud: SyncToCloud::Never,
             surface: settings::SettingSurfaces::GUI,
@@ -258,3 +303,7 @@ impl InputSettings {
         *self.show_terminal_input_message_bar
     }
 }
+
+#[cfg(test)]
+#[path = "input_tests.rs"]
+mod tests;
