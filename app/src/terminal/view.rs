@@ -14096,7 +14096,7 @@ impl TerminalView {
         }
 
         // The first Agent Modality callout expects terminal mode. If the default
-        // session mode is Agent (e.g. from cloud-synced settings), the tab
+        // session mode is Agent (e.g. from the user's settings), the tab
         // may already be in agent view — exit it first.
         self.exit_agent_view(ctx);
 
@@ -25945,7 +25945,7 @@ impl TypedActionView for TerminalView {
                 match version {
                     OnboardingVersion::Agent(agent_version) => {
                         // The first Agent Modality callout expects terminal mode. If the
-                        // default session mode is Agent (e.g. cloud-synced settings),
+                        // default session mode is Agent (e.g. from the user's settings),
                         // the tab may already be in agent view — exit it first.
                         // This also removes any zero-state welcome blocks.
                         self.exit_agent_view(ctx);

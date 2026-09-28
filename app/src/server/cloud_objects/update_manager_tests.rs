@@ -24,6 +24,7 @@ use crate::cloud_object::model::actions::{
 };
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::model::persistence::{CloudModel, CloudModelEvent, UpdateSource};
+use crate::cloud_object::preference::{CloudPreferenceModel, Preference};
 use crate::cloud_object::{
     BulkCreateCloudObjectResult, CloudModelType, CloudObjectEventEntrypoint, CloudObjectGuest,
     CloudObjectLocation, ConflictStatus, CreateCloudObjectResult, CreatedCloudObject,
@@ -50,7 +51,6 @@ use crate::server::ids::{
     ClientId, HashableId, ObjectUid, ServerId, ServerIdAndType, SyncId, ToServerId,
 };
 use crate::server::sync_queue::SyncQueue;
-use crate::settings::{CloudPreferenceModel, Preference};
 use crate::workflows::workflow::{Argument, ArgumentType, Workflow};
 use crate::workflows::workflow_enum::{
     CloudWorkflowEnum, CloudWorkflowEnumModel, EnumVariants, WorkflowEnum,

@@ -1,13 +1,11 @@
 //! Dispatch wrapper that routes between the legacy and v2 billing & usage
 //! pages.
-use std::cell::RefCell;
-use std::collections::HashMap;
 
 use ::settings::Setting;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::Appearance;
 use warp_errors::{report_error, report_if_error};
-use warpui::elements::{ChildView, Container, Flex, MouseStateHandle, ParentElement};
+use warpui::elements::{ChildView, Container, Flex, ParentElement};
 use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
@@ -16,8 +14,8 @@ use super::SettingsSection;
 use super::billing_and_usage_page::{BillingAndUsagePageEvent, BillingAndUsagePageView};
 use super::billing_and_usage_page_v2::BillingAndUsagePageV2View;
 use super::settings_page::{
-    LocalOnlyIconState, MatchData, PageType, SettingsPageMeta, SettingsPageViewHandle,
-    SettingsWidget, render_dropdown_item,
+    MatchData, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
+    render_dropdown_item,
 };
 use crate::auth::{AuthManager, AuthStateProvider};
 use crate::settings::{AISettings, AISettingsChangedEvent, UsageDisplayUnit};
@@ -29,7 +27,6 @@ pub struct BillingAndUsageDispatchView {
     page: PageType<Self>,
     v1: ViewHandle<BillingAndUsagePageView>,
     v2: ViewHandle<BillingAndUsagePageV2View>,
-    local_only_icon_tooltip_states: RefCell<HashMap<String, MouseStateHandle>>,
     usage_display_unit_dropdown: ViewHandle<Dropdown<BillingAndUsageDispatchAction>>,
 }
 
@@ -106,7 +103,6 @@ impl BillingAndUsageDispatchView {
             page,
             v1,
             v2,
-            local_only_icon_tooltip_states: Default::default(),
             usage_display_unit_dropdown,
         }
     }
@@ -251,12 +247,6 @@ impl SettingsWidget for BillingAndUsageWidget {
                     "Usage display unit",
                     Some("Select the unit for usage and spend amounts."),
                     None,
-                    LocalOnlyIconState::for_setting(
-                        UsageDisplayUnit::storage_key(),
-                        UsageDisplayUnit::sync_to_cloud(),
-                        &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                        app,
-                    ),
                     None,
                     &view.usage_display_unit_dropdown,
                 ))

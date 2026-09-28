@@ -235,7 +235,8 @@ impl ThemeChooser {
 
     pub fn handle_theme_change(&mut self, ctx: &mut ViewContext<Self>) {
         // Ensure that we are still showing the right mode and have the correct theme selected.
-        // The only time this can get out of sync is if there's a cloud preferences change affecting settings.
+        // This can get out of sync when the theme settings change outside the chooser, e.g. through
+        // an edit to the settings file.
         // Note that we intentionally read from the settings model, not appearance here, as
         // the appearance will give us the derived theme, but we are trying to stay in sync
         // with the actual theme settings.

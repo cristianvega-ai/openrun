@@ -14,7 +14,7 @@ pub use warp_server_auth::{auth_state, credentials, user, user_uid};
 #[cfg(target_family = "wasm")]
 pub mod web_handoff;
 
-use ::settings::{Setting, SettingsManager, ToggleableSetting};
+use ::settings::{Setting, ToggleableSetting};
 use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
 pub use auth_manager::AuthManager;
 pub use auth_state::AuthStateProvider;
@@ -22,7 +22,7 @@ use itertools::Itertools;
 pub use login_failure_notification::LoginFailureReason;
 pub use user_uid::UserUid;
 use warp_core::channel::ChannelState;
-use warp_errors::{report_error, report_if_error};
+use warp_errors::report_if_error;
 use warpui::modals::{AlertDialogWithCallbacks, ModalButton};
 use warpui::{AppContext, SingletonEntity};
 
@@ -43,7 +43,7 @@ use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::sync_queue::SyncQueue;
 use crate::server::telemetry::{PaletteSource, TelemetryEvent};
 use crate::session_management::{RunningSessionSummary, SessionNavigationData};
-use crate::settings::{AISettings, CloudPreferencesSettings, PrivacySettings};
+use crate::settings::{AISettings, PrivacySettings};
 use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::shared_session::manager::Manager as SharedSessionManager;
 use crate::workflows::manager::WorkflowManager;
@@ -265,7 +265,7 @@ pub fn log_out(app: &mut AppContext) {
     TeamUpdateManager::handle(app).update(app, |manager, _| {
         manager.stop_polling_for_workspace_metadata_updates();
     });
-    remove_cloud_persisted_settings(app);
+    reset_privacy_settings(app);
 
     let settings_profiles_are_explicit = AISettings::as_ref(app)
         .execution_profiles
@@ -304,24 +304,8 @@ pub fn log_out(app: &mut AppContext) {
     crate::platform::wasm::emit_event(crate::platform::wasm::WarpEvent::LoggedOut);
 }
 
-// Remove the cloud persisted settings from user defaults.
-// When a user signs out, we remove cloud persisted settings of their account.
-// This is so they do not experience the old settings when they log in with a different account.
-// Partial deletion of user defaults is a stopgap for Logout v0. The correct solution is:
-fn remove_cloud_persisted_settings(app: &mut AppContext) {
-    let is_settings_sync_enabled = *CloudPreferencesSettings::as_ref(app).settings_sync_enabled;
-    if is_settings_sync_enabled {
-        SettingsManager::handle(app).update(app, |settings_manager, ctx| {
-            let errors = settings_manager.clear_cloud_settings_local_state(ctx);
-            for e in errors {
-                report_error!(
-                    e.context("Failed to remove cloud synced setting from user defaults")
-                );
-            }
-        });
-    }
-
-    // Reset the Privacy Settings in the login screen to default values.
+// Reset the privacy settings to their defaults so the next account doesn't inherit them.
+fn reset_privacy_settings(app: &mut AppContext) {
     PrivacySettings::handle(app).update(app, |privacy_settings, _| {
         privacy_settings.refresh_to_default();
     });

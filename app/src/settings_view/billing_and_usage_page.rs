@@ -1988,7 +1988,6 @@ impl BillingAndUsagePageView {
             "Auto reload".into(),
             None,
             Default::default(),
-            Default::default(),
             appearance,
             auto_reload_switch,
             Some(format!(

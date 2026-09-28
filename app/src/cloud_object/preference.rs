@@ -1,6 +1,4 @@
-pub use cloud_object_models::{CloudPreference, CloudPreferenceModel, Platform, Preference};
-use settings::macros::define_settings_group;
-use settings::{RespectUserSyncSetting, SupportedPlatforms, SyncToCloud};
+pub use cloud_object_models::{CloudPreference, CloudPreferenceModel, Preference};
 
 use crate::cloud_object::model::generic_string_model::StringModel;
 use crate::cloud_object::model::json_model::JsonModel;
@@ -8,20 +6,7 @@ use crate::cloud_object::{
     GenericStringObjectFormat, GenericStringObjectUniqueKey, JsonObjectType, Revision, UniquePer,
 };
 use crate::server::sync_queue::QueueItem;
-define_settings_group!(CloudPreferencesSettings, settings: [
-   settings_sync_enabled: IsSettingsSyncEnabled {
-       type: bool,
-       default: false,
-       supported_platforms: SupportedPlatforms::ALL,
-       sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::No),
-       surface: settings::SettingSurfaces::GUI,
-       private: false,
-       toml_path: "account.is_settings_sync_enabled",
-       description: "Whether settings are synced across devices via the cloud.",
-   },
-]);
 
-/// Defines a based model for syncing cloud preferences.
 impl StringModel for Preference {
     type CloudObjectType = CloudPreference;
 
@@ -57,7 +42,7 @@ impl StringModel for Preference {
         revision_ts: Option<Revision>,
         object: &CloudPreference,
     ) -> QueueItem {
-        QueueItem::UpdateCloudPreferences {
+        QueueItem::UpdatePreference {
             model: object.model().clone().into(),
             id: object.id,
             revision: revision_ts.or(object.metadata.revision),

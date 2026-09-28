@@ -33,6 +33,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [SSH remote server](#ssh-remote-server) — removed the SSH extension daemon (downloaded from Warp's CDN, authenticated with Warp credentials) and every remote file, diff, git, search, indexing and agent-context backend it powered; plain SSH, SSH Warpify and blocks and completions over SSH stay
 - [Natural-language detection and input auto-detection](#natural-language-detection-and-input-auto-detection) — deleted the `input_classifier` and `natural_language_detection` crates, the classifier singleton, input auto-detection and its settings, toolbar toggle and slash command
 - [Session sharing: sharer side and entry points](#session-sharing-sharer-side-and-entry-points) — removed sharing a session and every share entry point (menus, keybindings, palette, `/remote-control`, tab indicator, quit and close warnings); viewing stays until SS-2
+- [Settings cloud sync](#settings-cloud-sync) — removed the Warp Drive settings syncer, the "Settings sync" switch, the "not synced" icons and the cloud-sync APIs of the settings crate; settings are local only
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -793,3 +794,49 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left for the AI tasks, as dead code: `BaseUserQuery::{decode_b64, for_viewer, unattributed}` (viewer prompts accepted by the sharer), `PendingCliHarnessPromptQueue::queue` (its only producer was the sharer), `IdleTimeoutSender::refresh` and `DebugWindowController::refresh_from_last_armed` in the agent SDK driver, `AIClient::setup_failure_debug_authorization` (the sharer's check of a viewer's debug prompt), and `BlocklistAIController`'s `sharer_participant_id`.
 - Left for FLAGS-1: the `CreatingSharedSessions` and `HOARemoteControl` feature flags and the `creating_shared_sessions`/`hoa_remote_control` Cargo features. `server/experiments` and the team tier policy still set `CreatingSharedSessions`, but nothing reads it.
 - Left for TEL-4: the sharing telemetry variants in `server/telemetry/events.rs`.
+
+## Settings cloud sync
+**Why:** Settings sync uploaded cloud-synced settings to Warp's server as Warp Drive `Preference` objects and applied values written by other devices. It needs a Warp account and Warp's servers, and neither exists in the offline build.
+- `app/src/settings/cloud_preferences_syncer.rs`: the `CloudPreferencesSyncer` singleton, covering local/cloud reconciliation, the startup settings-file hash check, the retry loop and duplicate-preference cleanup. Its tests went with it, including the flaky `test_sync_local_pref_to_cloud_on_initial_sync_for_returning_user`. `server/cloud_objects/fake_object_client.rs` was also deleted; only those tests used it.
+- The `CloudPreferencesSettings` group and its `IsSettingsSyncEnabled` setting (`account.is_settings_sync_enabled`).
+- Settings UI:
+  - The "Settings sync" switch on the Account page, with its docs link and the "settings sync" search term.
+  - The `ToggleSettingsSync` action, command-palette toggle, `settings_sync` context flag, login gate and telemetry event.
+  - The "not synced to your other devices" local-only icon: `LocalOnlyIconState`, `render_local_only_icon`, `UiBuilder::local_only_icon_with_tooltip`, `cloud-off.svg` and the per-page tooltip mouse-state maps. The settings render helpers (`render_body_item*`, `render_sub_header`, `render_sub_sub_header`, `render_dropdown_item*`, `render_ai_setting_toggle`/`_label`) lost that parameter.
+- `crates/settings`:
+  - The `SettingsManager` cloud APIs: `clear_cloud_settings_local_state`, `all_storage_keys`, `sync_regardless_of_users_syncing_setting`, `is_current_value_syncable`, `cloud_syncing_mode_for_storage_key`, `supported_platforms_for_storage_key`, `is_private_for_storage_key`, `read_local_setting_value` and `are_equal_settings`.
+  - The clear and syncability callbacks, `SettingsEvent::LocalPreferencesUpdated` and the `from_cloud_sync` flag of `update_setting_with_storage_key`.
+  - `Setting::{set_value_from_cloud_sync, current_value_is_syncable, is_setting_syncable_on_current_platform}` and `SettingsMode::should_sync_to_cloud`.
+- `AppExecutionMode::can_sync_preferences` in `warp_core`.
+- Filters that only decided what to upload:
+  - Custom-theme path portability: `Theme`/`SystemThemes::current_value_is_syncable`, `ThemeKind::is_custom_theme_reference_syncable` and `custom_theme_path_is_portable`.
+  - `TomlBackedUserPreferences::file_content_hash`, together with the `sha2` dependency of `warpui_extras`.
+- Code that waited for or fed the syncer:
+  - `RootView::handle_cloud_preferences_syncer_event` and the `AuthManager` user-fetch hook.
+  - `PrivacySettings::maybe_sync_with_warp_drive_prefs`.
+  - The logout step that cleared cloud-synced settings from user defaults.
+  - `UpdateManagerEvent::CloudPreferencesUpdated` and `CloudModel::get_all_cloud_preferences_by_storage_key`.
+- The `CLOUD_PREFERENCES_*` experiment values in `crates/graphql` and the schema.
+- `app/src/cloud_object/preference.rs`, moved from `settings/cloud_preferences.rs`: keeps the `StringModel`/`JsonModel` impls of the `Preference` Drive object type, which the cloud-object layer still loads until DRV-5. `QueueItem::UpdateCloudPreferences` is renamed `UpdatePreference`.
+- Window backdrop: the legacy `appearance.window.override_blur_texture` → `backdrop = acrylic` migration used to be staged until the cloud load finished. It now runs once during settings init.
+- Code that waited for the first cloud load now runs without it:
+  - Post-login onboarding settings are applied as soon as login completes.
+  - One-time modal checks for existing users run on auth completion.
+  - Legacy custom endpoints are migrated at startup.
+  - The execution-profile migration neither waits for nor uploads through the syncer.
+  - None of these login paths can complete offline.
+- `PrivacySettings`: after a server settings fetch, the default secret-redaction regexes are initialized directly. They used to be initialized after the Warp Drive preferences loaded.
+- `integration_testing::notebook::assert_cloud_preference_exists` now takes a storage key and a value, and the `crates/integration` session-restoration test uses it.
+- Comments that described settings cloud sync were rewritten or removed.
+**User-visible impact:**
+- Settings are local only. The TOML settings file, user defaults and the settings UI work as before.
+- There is no "Settings sync" switch on the Account page or in the command palette, and no "not synced" icons next to settings.
+- A saved `account.is_settings_sync_enabled` value is ignored.
+- The `SyncToCloud`/`RespectUserSyncSetting` attributes and `Setting::sync_to_cloud()` stay for SYNC-1, as do the comments on setting definitions that explain each setting's sync choice. The runtime no longer reads the attribute: `SettingsManager` doesn't store it.
+- `WarpDrivePrivacySettings` stays. It stores the telemetry and cloud-conversation-storage toggles, which are not about settings sync.
+- `ChangeEventReason::CloudSync` stays. Team-driven enterprise secret redaction uses it (TEAM-1).
+- Left for DRV-5: the `Preference` cloud-object type. That covers `cloud_object_models`, `JsonObjectType::Preference`, its sync-queue and update-manager handling, and persisted rows.
+- With the syncer gone, nothing in the GUI build calls `UpdateManager::bulk_create_generic_string_objects` or constructs `GenericStringObjectInput`, so `cargo check --bin warp-oss --features gui` reports 2 dead-code warnings for them. DRV-5 deletes both.
+- Data left on disk: the private preference `SettingsFileLastSyncedHash` and any `Preference` rows in SQLite (DB-1).
+- Logged-out users never get the default secret-redaction regexes. This predates the change: they were only ever initialized after a login. AUTH-1 may want to run `initialize_default_regexes_once` at startup.
+- The login slide still says "sync settings across devices" (AUTH-1).

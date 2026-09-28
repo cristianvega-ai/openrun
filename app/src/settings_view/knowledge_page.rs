@@ -1,8 +1,5 @@
 //! The "Knowledge" settings page, shown under the Agents umbrella.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
 use warp_core::features::FeatureFlag;
 use warp_core::settings::ToggleableSetting as _;
@@ -23,7 +20,7 @@ use super::settings_page::{
 };
 use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, flags};
 use crate::appearance::Appearance;
-use crate::settings::{AISettings, MemoryEnabled, RuleSuggestionsEnabled, WarpDriveContextEnabled};
+use crate::settings::AISettings;
 use crate::util::bindings;
 
 const PAGE_TITLE: &str = "Knowledge";
@@ -32,14 +29,12 @@ const RULES_DOCS_URL: &str = "https://docs.warp.dev/agents/capabilities/rules";
 
 pub struct KnowledgePageView {
     page: PageType<Self>,
-    local_only_icon_tooltip_states: RefCell<HashMap<String, MouseStateHandle>>,
 }
 
 impl KnowledgePageView {
     pub fn new(_ctx: &mut ViewContext<Self>) -> Self {
         Self {
             page: Self::build_page(),
-            local_only_icon_tooltip_states: RefCell::new(HashMap::new()),
         }
     }
 
@@ -209,18 +204,17 @@ impl SettingsWidget for RulesWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let toggle = render_ai_setting_toggle::<MemoryEnabled>(
+        let toggle = render_ai_setting_toggle(
             "Rules",
             KnowledgePageAction::ToggleRules,
             *ai_settings.memory_enabled,
             ai_settings.is_any_ai_enabled(app),
             self.rules_toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         );
 
@@ -271,18 +265,17 @@ impl SettingsWidget for SuggestedRulesWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let toggle = render_ai_setting_toggle::<RuleSuggestionsEnabled>(
+        let toggle = render_ai_setting_toggle(
             "Suggested Rules",
             KnowledgePageAction::ToggleRuleSuggestions,
             *ai_settings.rule_suggestions_enabled_internal,
             ai_settings.is_any_ai_enabled(app),
             self.rule_suggestions_toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         );
 
@@ -341,18 +334,17 @@ impl SettingsWidget for WarpDriveContextWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let toggle = render_ai_setting_toggle::<WarpDriveContextEnabled>(
+        let toggle = render_ai_setting_toggle(
             "Warp Drive as agent context",
             KnowledgePageAction::ToggleWarpDriveContext,
             *ai_settings.warp_drive_context_enabled,
             ai_settings.is_any_ai_enabled(app),
             self.warp_drive_context_toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         );
 

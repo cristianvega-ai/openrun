@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt::Display;
 
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
@@ -19,16 +17,16 @@ use warpui::{
 };
 
 use super::settings_page::{
-    Category, CategoryHeader, HEADER_FONT_SIZE, LocalOnlyIconState, MatchData, PageType,
-    SettingsPageEvent, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, ToggleState,
-    add_setting, render_alternating_color_list, render_body_item, render_page_title,
+    Category, CategoryHeader, HEADER_FONT_SIZE, MatchData, PageType, SettingsPageEvent,
+    SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, ToggleState, add_setting,
+    render_alternating_color_list, render_body_item, render_page_title,
 };
 use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, flags};
 use crate::appearance::Appearance;
 use crate::send_telemetry_from_ctx;
 use crate::server::telemetry::TelemetryEvent;
-use crate::settings::{ReuseExistingSshControlMaster, SshSettings};
-use crate::terminal::warpify::settings::{EnableSshWarpification, WarpifySettings};
+use crate::settings::SshSettings;
+use crate::terminal::warpify::settings::WarpifySettings;
 use crate::ui_components::blended_colors;
 use crate::view_components::{SubmittableTextInput, SubmittableTextInputEvent};
 
@@ -503,7 +501,6 @@ impl SettingsWidget for SubshellsWidget {
 struct SSHWidget {
     enable_ssh_warpification_switch_state: SwitchStateHandle,
     reuse_control_master_switch_state: SwitchStateHandle,
-    local_only_icon_tooltip_states: RefCell<HashMap<String, MouseStateHandle>>,
 }
 
 impl SettingsWidget for SSHWidget {
@@ -536,12 +533,6 @@ impl SettingsWidget for SSHWidget {
                 render_body_item::<WarpifyPageAction>(
                     "Warpify SSH Sessions".into(),
                     None,
-                    LocalOnlyIconState::for_setting(
-                        EnableSshWarpification::storage_key(),
-                        EnableSshWarpification::sync_to_cloud(),
-                        &mut self.local_only_icon_tooltip_states.borrow_mut(),
-                        app,
-                    ),
                     ToggleState::Enabled,
                     appearance,
                     ui_builder
@@ -568,12 +559,6 @@ impl SettingsWidget for SSHWidget {
                 column.add_child(render_body_item::<WarpifyPageAction>(
                     "Reuse existing SSH ControlMaster".into(),
                     None,
-                    LocalOnlyIconState::for_setting(
-                        ReuseExistingSshControlMaster::storage_key(),
-                        ReuseExistingSshControlMaster::sync_to_cloud(),
-                        &mut self.local_only_icon_tooltip_states.borrow_mut(),
-                        app,
-                    ),
                     enable_ssh_warpification.into(),
                     appearance,
                     ui_builder

@@ -155,14 +155,6 @@ impl Setting for LocalControlModeSetting {
         Ok(())
     }
 
-    fn set_value_from_cloud_sync(
-        &mut self,
-        _: Self::Value,
-        _: &mut ModelContext<Self::Group>,
-    ) -> Result<()> {
-        Ok(())
-    }
-
     fn set_value(
         &mut self,
         new_value: Self::Value,

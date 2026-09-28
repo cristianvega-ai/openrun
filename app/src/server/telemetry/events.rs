@@ -1460,9 +1460,6 @@ pub enum TelemetryEvent {
     TeamCreated,
     TeamJoined,
     TeamLeft,
-    ToggleSettingsSync {
-        is_settings_sync_enabled: bool,
-    },
     TeamLinkCopied,
     RemovedUserFromTeam,
     DeletedWorkflow,
@@ -2795,9 +2792,6 @@ impl TelemetryEvent {
             } => Some(json!({"num_blocks_reverted": num_blocks_reverted})),
             TelemetryEvent::BootstrappingSlow(info) => Some(json!(info)),
             TelemetryEvent::BootstrappingSlowContents(info) => Some(json!(info)),
-            TelemetryEvent::ToggleSettingsSync {
-                is_settings_sync_enabled,
-            } => Some(json!({ "is_settings_sync_enabled": is_settings_sync_enabled })),
             TelemetryEvent::SessionAbandonedBeforeBootstrap {
                 pending_shell,
                 has_pending_ssh_session,
@@ -4471,7 +4465,6 @@ impl TelemetryEvent {
             | TelemetryEvent::TeamCreated
             | TelemetryEvent::TeamJoined
             | TelemetryEvent::TeamLeft
-            | TelemetryEvent::ToggleSettingsSync { .. }
             | TelemetryEvent::TeamLinkCopied
             | TelemetryEvent::RemovedUserFromTeam
             | TelemetryEvent::DeletedWorkflow
@@ -4894,7 +4887,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::OpenNotebook | Self::EditNotebook | Self::NotebookAction => {
                 EnablementState::Always
             }
-            Self::ToggleSettingsSync { .. } => EnablementState::Always,
             Self::AgentTipShown | Self::AgentTipClicked | Self::ToggleShowAgentTips => {
                 EnablementState::Flag(FeatureFlag::AgentTips)
             }
@@ -5320,7 +5312,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentModeRewindDialogOpened { .. } => "Opened Rewind Confirmation Dialog",
             Self::AgentModeRewindExecuted { .. } => "Executed Conversation Rewind",
             Self::ReinputCommands => "Context Menu: Reinput Commands",
-            Self::ToggleSettingsSync => "Toggle Settings Sync",
             Self::ToggleFocusPaneOnHover => "Toggle Focus Pane On Hover",
             Self::LoginLaterButtonClicked => "Login Later Button Clicked",
             Self::LoginLaterConfirmationButtonClicked => "Login Later Confirmation Button Clicked",
@@ -5883,7 +5874,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AISuggestedRuleContentChanged { .. } => {
                 "Content changed by the user in the suggested rule dialog"
             }
-            Self::ToggleSettingsSync => "Toggle Settings Sync",
             Self::Login => "Login is successful",
             Self::LoginLaterButtonClicked => "Clicked \"Login later\" button",
             Self::LoginLaterConfirmationButtonClicked => {

@@ -30,6 +30,7 @@ use crate::cloud_object::model::actions::{
     ObjectAction, ObjectActionHistory, ObjectActionSubtype, ObjectActionType,
 };
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
+use crate::cloud_object::preference::CloudPreferenceModel;
 use crate::cloud_object::{
     BulkCreateCloudObjectResult, BulkCreateGenericStringObjectsRequest, CloudModelType,
     CloudObject, CloudObjectEventEntrypoint, CreateCloudObjectResult, CreateObjectRequest,
@@ -42,7 +43,6 @@ use crate::drive::folders::CloudFolderModel;
 use crate::env_vars::CloudEnvVarCollectionModel;
 use crate::notebooks::CloudNotebookModel;
 use crate::server::cloud_objects::update_manager::InitiatedBy;
-use crate::settings::cloud_preferences::CloudPreferenceModel;
 use crate::workflows::CloudWorkflowModel;
 use crate::workflows::workflow_enum::CloudWorkflowEnumModel;
 
@@ -169,7 +169,7 @@ pub enum QueueItem {
         id: SyncId,
         model: Arc<CloudFolderModel>,
     },
-    UpdateCloudPreferences {
+    UpdatePreference {
         model: Arc<CloudPreferenceModel>,
         id: SyncId,
         revision: Option<Revision>,
@@ -440,7 +440,7 @@ impl SyncQueue {
             // Update requests will depend on any existing create/updates to the same object
             QueueItem::UpdateNotebook { id, .. }
             | QueueItem::UpdateFolder { id, .. }
-            | QueueItem::UpdateCloudPreferences { id, .. }
+            | QueueItem::UpdatePreference { id, .. }
             | QueueItem::UpdateEnvVarCollection { id, .. }
             | QueueItem::UpdateWorkflowEnum { id, .. }
             | QueueItem::UpdateAIFact { id, .. }
@@ -555,7 +555,7 @@ impl SyncQueue {
                         )
                     })
                 }
-                QueueItem::UpdateCloudPreferences { id, .. }
+                QueueItem::UpdatePreference { id, .. }
                 | QueueItem::UpdateNotebook { id, .. }
                 | QueueItem::UpdateWorkflow { id, .. }
                 | QueueItem::UpdateFolder { id, .. }
@@ -666,7 +666,7 @@ impl SyncQueue {
             match item {
                 QueueItem::UpdateNotebook { id, revision, .. }
                 | QueueItem::UpdateWorkflow { id, revision, .. }
-                | QueueItem::UpdateCloudPreferences { id, revision, .. }
+                | QueueItem::UpdatePreference { id, revision, .. }
                 | QueueItem::UpdateEnvVarCollection { id, revision, .. }
                 | QueueItem::UpdateWorkflowEnum { id, revision, .. }
                 | QueueItem::UpdateAIFact { id, revision, .. }
@@ -766,7 +766,7 @@ impl SyncQueue {
                         ctx,
                     );
                 }
-                QueueItem::UpdateCloudPreferences {
+                QueueItem::UpdatePreference {
                     model,
                     id,
                     revision,
@@ -1903,7 +1903,7 @@ impl SyncQueue {
                 QueueItem::UpdateFolder { id, .. } => {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
-                QueueItem::UpdateCloudPreferences { id, .. } => {
+                QueueItem::UpdatePreference { id, .. } => {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
                 QueueItem::UpdateEnvVarCollection { id, .. } => {

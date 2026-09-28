@@ -40,6 +40,7 @@ use crate::workspaces::user_workspaces::UserWorkspaces;
 pub mod breadcrumbs;
 pub mod grab_edit_access_modal;
 pub mod model;
+pub mod preference;
 pub mod toast_message;
 
 pub use cloud_objects::cloud_object::*;

@@ -3,9 +3,8 @@ use warp_core::features::FeatureFlag;
 use warpui::{App, SingletonEntity};
 
 use super::{
-    AISettings, AuthManager, AuthManagerEvent, AuthStateProvider, CloudPreferencesSyncer,
-    FEATURE_INTROS, FeatureIntroId, FreeAiRemovalModalDecision, OneTimeModalModel,
-    free_ai_removal_modal_decision, hoa_onboarding,
+    AISettings, AuthManager, AuthManagerEvent, AuthStateProvider, FEATURE_INTROS, FeatureIntroId,
+    FreeAiRemovalModalDecision, OneTimeModalModel, free_ai_removal_modal_decision, hoa_onboarding,
 };
 use crate::test_util::terminal::{add_window_with_terminal, initialize_app_for_terminal_view};
 use crate::workspaces::workspace::CustomerType;
@@ -366,9 +365,6 @@ fn hoa_onboarding_pre_dismissed_for_new_users_on_auth_complete() {
         let _hoa_notifications = FeatureFlag::HOANotifications.override_enabled(true);
         let _tab_configs = FeatureFlag::TabConfigs.override_enabled(true);
         initialize_app_for_terminal_view(&mut app);
-        app.add_singleton_model(|ctx| {
-            CloudPreferencesSyncer::new(false, std::path::PathBuf::new(), true, ctx)
-        });
         let terminal = add_window_with_terminal(&mut app, None);
 
         terminal.update(&mut app, |_, ctx| {
@@ -394,9 +390,6 @@ fn hoa_onboarding_pre_dismissed_for_new_users_on_auth_complete() {
 fn hoa_onboarding_not_pre_dismissed_for_existing_users_on_auth_complete() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        app.add_singleton_model(|ctx| {
-            CloudPreferencesSyncer::new(false, std::path::PathBuf::new(), true, ctx)
-        });
         let terminal = add_window_with_terminal(&mut app, None);
 
         terminal.update(&mut app, |_, ctx| {

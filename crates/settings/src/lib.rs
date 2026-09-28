@@ -179,8 +179,8 @@ pub enum RespectUserSyncSetting {
 
 /// The surface the settings system is running in. Set once at startup by the
 /// start-app logic (see [`set_settings_mode`]) and consulted by the settings
-/// infrastructure to vary behavior per surface (cloud sync, native-store
-/// migration, and which config directory the settings file lives in).
+/// infrastructure to vary behavior per surface (native-store migration, and
+/// which config directory the settings file lives in).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsMode {
     /// The full desktop GUI application.
@@ -190,16 +190,6 @@ pub enum SettingsMode {
 }
 
 impl SettingsMode {
-    /// Whether settings for this mode are synced to the cloud (Warp Drive). The
-    /// GUI syncs; the TUI keeps its config local so the two surfaces never
-    /// clobber shared cloud state.
-    pub fn should_sync_to_cloud(self) -> bool {
-        match self {
-            SettingsMode::Gui => true,
-            SettingsMode::Tui => false,
-        }
-    }
-
     /// Whether this surface performs the one-time native-store → TOML settings
     /// migration. Only the GUI has legacy native-store settings to migrate;
     /// other surfaces (e.g. the TUI) start fresh and must never migrate or touch
@@ -380,34 +370,6 @@ pub trait Setting {
     /// user-editable file.
     fn is_private() -> bool;
 
-    /// Returns whether the current value of this setting should be synced.
-    /// Only applies if sync_to_cloud() returns a value other than SyncToCloud::Never.
-    /// Specific settings can implement this to filter which values should be synced.
-    fn current_value_is_syncable(&self) -> bool {
-        true
-    }
-
-    /// Returns whether the current value of this setting is syncable on the current platform,
-    /// given the user's settings sync preference.
-    fn is_setting_syncable_on_current_platform(&self, settings_sync_enabled: bool) -> bool {
-        if !self.current_value_is_syncable() {
-            return false;
-        }
-        match (Self::sync_to_cloud(), settings_sync_enabled) {
-            (SyncToCloud::Never, _) => false,
-            (SyncToCloud::Globally(RespectUserSyncSetting::No), _) => true,
-            (SyncToCloud::Globally(RespectUserSyncSetting::Yes), true) => true,
-            (SyncToCloud::Globally(RespectUserSyncSetting::Yes), false) => false,
-            (SyncToCloud::PerPlatform(RespectUserSyncSetting::No), _) => {
-                self.is_supported_on_current_platform()
-            }
-            (SyncToCloud::PerPlatform(RespectUserSyncSetting::Yes), true) => {
-                self.is_supported_on_current_platform()
-            }
-            (SyncToCloud::PerPlatform(RespectUserSyncSetting::Yes), false) => false,
-        }
-    }
-
     /// Returns the current value of the setting.  This may be different from
     /// the value persisted in storage.
     fn value(&self) -> &Self::Value;
@@ -435,14 +397,6 @@ pub trait Setting {
         new_value: Self::Value,
         explicitly_set: bool,
         ctx: &mut ModelContext<Self::Group>,
-    ) -> anyhow::Result<()>;
-
-    /// Sets the value of the setting persisting it to storage. The change event indicates
-    /// that the update was initiated from a cloud sync.
-    fn set_value_from_cloud_sync(
-        &mut self,
-        new_value: Self::Value,
-        ctx: &mut warpui_core::ModelContext<Self::Group>,
     ) -> anyhow::Result<()>;
 
     /// Sets the value of the setting persisting it to storage.

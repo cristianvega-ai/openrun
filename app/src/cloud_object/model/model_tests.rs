@@ -18,6 +18,7 @@ use crate::cloud_object::model::generic_string_model::GenericStringModel;
 use crate::cloud_object::model::view::{
     CloudViewModel, EDITOR_TIMEOUT_DURATION_MINUTES, EditorState, UpdateTimestamp,
 };
+use crate::cloud_object::preference::{CloudPreference, Preference};
 use crate::cloud_object::{
     CloudObjectMetadata, CloudObjectPermissions, CloudObjectStatuses, CloudObjectSyncStatus,
     NumInFlightRequests, ObjectIdType, Owner, ServerMetadata, ServerPermissions,
@@ -34,7 +35,7 @@ use crate::server::server_api::object::ObjectClient;
 use crate::server::server_api::team::MockTeamClient;
 use crate::server::server_api::workspace::MockWorkspaceClient;
 use crate::server::sync_queue::SyncQueue;
-use crate::settings::{Preference, init_and_register_user_preferences};
+use crate::settings::init_and_register_user_preferences;
 use crate::system::SystemStats;
 use crate::workflows::CloudWorkflowModel;
 use crate::workspaces::team::Team;

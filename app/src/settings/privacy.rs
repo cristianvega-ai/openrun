@@ -6,16 +6,13 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use settings::macros::{define_settings_group, maybe_define_setting, register_settings_events};
 use settings::{RespectUserSyncSetting, Setting, SupportedPlatforms, SyncToCloud};
-use warp_errors::{report_error, report_if_error};
+use warp_errors::report_error;
 use warp_graphql::mutations::update_user_settings::UpdateUserSettingsInput;
 pub use warp_terminal::model::secrets::RegexDisplayInfo;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity, UpdateModel};
 
-use super::cloud_preferences_syncer::CloudPreferencesSyncer;
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_state::AuthState;
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::server_api::ServerApiProvider;
 #[cfg(any(test, feature = "test-util"))]
 use crate::server::server_api::auth::MockAuthClient;
@@ -309,7 +306,7 @@ impl PrivacySettings {
             }
         }
 
-        self.maybe_sync_with_warp_drive_prefs(ctx);
+        self.initialize_default_regexes_once(ctx);
     }
 
     fn overwrite_local_settings_if_cloud_disabled(
@@ -498,79 +495,6 @@ impl PrivacySettings {
                 },
                 |_, _, _| (),
             );
-        }
-    }
-
-    /// We wait until warp drive prefs have loaded and then either
-    /// 1) use them as the data store for is_cloud_conversation_storage_enabled, if that value is
-    ///    set in warp drive, or
-    /// 2) update the warp drive prefs to match the values from the legacy user_settings endpoint so
-    ///    that we can use warp drive prefs going forward.
-    pub fn maybe_sync_with_warp_drive_prefs(&mut self, ctx: &mut ModelContext<Self>) {
-        // Wait for cloud objects to load, and, if the privacy settings are synced to warp drive
-        // initialize from the warp drive values.
-        let update_manager = UpdateManager::as_ref(ctx);
-        ctx.spawn(
-            update_manager.initial_load_complete(),
-            Self::handle_warp_drive_objects_loaded,
-        );
-    }
-
-    fn handle_warp_drive_objects_loaded(&mut self, _: (), ctx: &mut ModelContext<Self>) {
-        self.initialize_default_regexes_once(ctx);
-        // Check if the warp drive preferences are set. If they are, and the privacy settings are set
-        // as warp drive prefs, then use those.  Otherwise, update the warp drive prefs to match the
-        // values from the legacy user_settings endpoint so that we can use warp drive prefs going
-        // forward.
-        let cloud_model = CloudModel::as_ref(ctx);
-        let cloud_prefs = cloud_model.get_all_cloud_preferences_by_storage_key();
-        let cloud_conversation_storage_value = cloud_prefs
-            .get(IsCloudConversationStorageEnabled::storage_key())
-            .map(|pref| {
-                pref.model()
-                    .string_model
-                    .value
-                    .as_bool()
-                    .unwrap_or_default()
-            });
-
-        match cloud_conversation_storage_value {
-            Some(is_cloud_conversation_storage_enabled) => {
-                log::info!(
-                    "Warp Drive privacy preferences are set, using those for \
-                    cloud_conversation_storage={is_cloud_conversation_storage_enabled}"
-                );
-                self.set_is_cloud_conversation_storage_enabled(
-                    is_cloud_conversation_storage_enabled,
-                    ctx,
-                );
-            }
-            None => {
-                log::info!(
-                    "Warp Drive privacy preferences are not set, syncing local PrivacySettings values to \
-                    WarpDrivePrivacySettings and cloud. cloud_conversation_storage={}",
-                    self.is_cloud_conversation_storage_enabled
-                );
-                // First, ensure WarpDrivePrivacySettings (the define_settings_group model)
-                // reflects the actual PrivacySettings in-memory values. These may differ
-                // because WarpDrivePrivacySettings defaults to `true`,
-                // while the user may have changed it to `false` via PrivacySettings before
-                // signing up. Without this step, maybe_sync_local_prefs_to_cloud would read
-                // the stale WarpDrivePrivacySettings defaults and push those to the cloud.
-                WarpDrivePrivacySettings::handle(ctx).update(ctx, |settings, ctx| {
-                    report_if_error!(
-                        settings
-                            .is_cloud_conversation_storage_enabled
-                            .set_value(self.is_cloud_conversation_storage_enabled, ctx)
-                    );
-                });
-                CloudPreferencesSyncer::handle(ctx).update(ctx, |syncer, ctx| {
-                    syncer.maybe_sync_local_prefs_to_cloud(
-                        vec![IsCloudConversationStorageEnabled::storage_key().to_string()],
-                        ctx,
-                    );
-                });
-            }
         }
     }
 }

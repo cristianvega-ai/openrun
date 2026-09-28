@@ -33,8 +33,8 @@ pub enum SLPBlockState {
 // When a user has been shown the same line prompt onboarding block,
 // we want to remember that they have already been shown it.
 // That way, we skip displaying it in the future and prevent it from becoming
-// an annoyance. We use a Setting for this, so we get the underlying infrastructure
-// for free e.g. cloud-syncing.
+// an annoyance. We use a Setting for this, so we get the underlying persistence
+// infrastructure for free.
 define_settings_group!(SameLinePromptBlockSettings, settings: [
     same_line_prompt_block_state: SameLinePromptBlockState {
         type: SLPBlockState,

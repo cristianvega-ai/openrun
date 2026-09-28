@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use settings::{RespectUserSyncSetting, SyncToCloud};
 use string_offset::CharOffset;
 use warp_editor::render::model::BlockItem;
 use warpui::integration::{AssertionCallback, AssertionOutcome, AssertionWithDataCallback};
@@ -6,6 +7,7 @@ use warpui::{App, ViewHandle, async_assert, async_assert_eq};
 
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::model::persistence::CloudModel;
+use crate::cloud_object::preference::{CloudPreferenceModel, Preference};
 use crate::integration_testing::cloud_object::assert_metadata_revision;
 use crate::integration_testing::terminal::util::ExpectedOutput;
 use crate::integration_testing::view_getters::{notebook_view, terminal_view};
@@ -13,7 +15,6 @@ use crate::notebooks::notebook::NotebookView;
 use crate::notebooks::{CloudNotebookModel, NotebookId};
 use crate::pane_group::PaneGroup;
 use crate::server::ids::SyncId;
-use crate::settings::{CloudPreferenceModel, Preference};
 
 /// Asserts that the notebook in the given pane has the expected Markdown content.
 pub fn assert_notebook_contents(
@@ -32,8 +33,15 @@ pub fn assert_notebook_contents(
     })
 }
 
-/// Asserts that there is a json preference object in the SQLite db with the given contents.
-pub fn assert_cloud_preference_exists(expected_preference: Preference) -> AssertionCallback {
+/// Asserts that there is a json preference object in the SQLite db with the given storage key and
+/// JSON-serialized value.
+pub fn assert_cloud_preference_exists(storage_key: &str, value: &str) -> AssertionCallback {
+    let expected_preference = Preference::new(
+        storage_key.to_owned(),
+        value,
+        SyncToCloud::Globally(RespectUserSyncSetting::Yes),
+    )
+    .expect("error creating preference");
     Box::new(move |app, _window_id| {
         let stored_preference =
             app.get_singleton_model_handle::<CloudModel>()

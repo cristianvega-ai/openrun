@@ -76,9 +76,6 @@ use crate::server::ids::{ServerId, SyncId};
 use crate::server::server_api::auth::UserAuthenticationError;
 use crate::server::server_api::{ServerApi, ServerApiProvider};
 use crate::server::telemetry::{LaunchConfigUiLocation, TelemetryEvent};
-use crate::settings::cloud_preferences_syncer::{
-    CloudPreferencesSyncer, CloudPreferencesSyncerEvent,
-};
 use crate::settings::{
     AISettings, QuakeModeSettings, ThemeSettings, apply_account_first_onboarding_settings,
     apply_onboarding_settings,
@@ -1836,12 +1833,8 @@ pub struct RootView {
     /// Stores the tutorial from onboarding when the user needs to log in before
     /// the guided tour can start. Consumed after auth completes.
     pending_tutorial: Option<OnboardingTutorial>,
-    /// settings to apply after a new user login / initial cloud load completes
+    /// settings to apply after a new user login completes
     pending_post_auth_onboarding_settings: Option<SelectedSettings>,
-    pending_account_first_settings_class: Option<FtueAccountClass>,
-    /// Prevents onboarding on a new device from overwriting an existing preference.
-    pending_account_first_is_new_account: bool,
-    pending_account_first_tutorial_after_settings: bool,
     pending_account_first_sso_login: Option<AccountFirstLoginContext>,
     account_first_refresh_in_flight: bool,
     paste_auth_token_modal: Option<ViewHandle<PasteAuthTokenModalView>>,
@@ -1864,10 +1857,6 @@ impl RootView {
 
         ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, event, ctx| {
             me.handle_auth_manager_event(event, ctx);
-        });
-
-        ctx.subscribe_to_model(&CloudPreferencesSyncer::handle(ctx), |me, _, event, ctx| {
-            me.handle_cloud_preferences_syncer_event(event, ctx);
         });
 
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |me, _, event, ctx| {
@@ -1948,9 +1937,6 @@ impl RootView {
             window_id: ctx.window_id(),
             pending_tutorial: None,
             pending_post_auth_onboarding_settings: None,
-            pending_account_first_settings_class: None,
-            pending_account_first_is_new_account: false,
-            pending_account_first_tutorial_after_settings: false,
             pending_account_first_sso_login: None,
             account_first_refresh_in_flight: false,
             paste_auth_token_modal: None,
@@ -2021,8 +2007,6 @@ impl RootView {
 
     // Switch to Auth Screen while destroying Workspace.
     fn log_out(&mut self, _: &(), ctx: &mut ViewContext<Self>) -> bool {
-        self.pending_account_first_settings_class = None;
-        self.pending_account_first_tutorial_after_settings = false;
         self.pending_account_first_sso_login = None;
         self.account_first_refresh_in_flight = false;
         self.auth_onboarding_state.log_out(ctx);
@@ -2411,31 +2395,20 @@ impl RootView {
 
         let account_class = completion.account_class();
         self.pending_account_first_sso_login = None;
-        let cloud_ready = CloudPreferencesSyncer::as_ref(ctx).has_completed_initial_load();
-        let settings_applied = if account_class.is_none() || cloud_ready {
-            self.pending_account_first_settings_class = None;
-            if let Some(selected_settings) = self.pending_post_auth_onboarding_settings.take() {
-                let team_context = UserWorkspaces::as_ref(ctx).team_context_for_operation(ctx);
-                apply_account_first_onboarding_settings(
-                    &selected_settings,
-                    account_class,
-                    is_new_account,
-                    team_context,
-                    ctx,
-                );
-            }
-            true
-        } else {
-            self.pending_account_first_settings_class = account_class;
-            self.pending_account_first_is_new_account = is_new_account;
-            false
-        };
+        if let Some(selected_settings) = self.pending_post_auth_onboarding_settings.take() {
+            let team_context = UserWorkspaces::as_ref(ctx).team_context_for_operation(ctx);
+            apply_account_first_onboarding_settings(
+                &selected_settings,
+                account_class,
+                is_new_account,
+                team_context,
+                ctx,
+            );
+        }
 
         if !completion.starts_agent_tutorial() {
             self.pending_tutorial = None;
         }
-        self.pending_account_first_tutorial_after_settings =
-            completion.starts_agent_tutorial() && !settings_applied;
 
         send_telemetry_from_ctx!(
             OnboardingEvent::OnboardingCompleted {
@@ -2446,7 +2419,7 @@ impl RootView {
 
         self.auth_onboarding_state = AuthOnboardingState::Terminal(target.to_workspace(ctx));
         ctx.emit(RootViewEvent::AuthOnboardingStateChanged);
-        if completion.starts_agent_tutorial() && settings_applied {
+        if completion.starts_agent_tutorial() {
             self.start_pending_tutorial(ctx);
         }
         self.focus(ctx);
@@ -2472,9 +2445,6 @@ impl RootView {
                 };
                 self.pending_tutorial = None;
                 self.pending_post_auth_onboarding_settings = None;
-                self.pending_account_first_settings_class = None;
-                self.pending_account_first_is_new_account = false;
-                self.pending_account_first_tutorial_after_settings = false;
                 ctx.emit(RootViewEvent::AuthOnboardingStateChanged);
                 self.focus(ctx);
                 ctx.notify();
@@ -3518,6 +3488,7 @@ impl RootView {
                     self.auth_onboarding_state.complete_web_import(ctx);
                 }
 
+                self.apply_pending_post_auth_onboarding_settings(ctx);
                 self.focus(ctx);
             }
             AuthManagerEvent::AuthFailed(err) => match err {
@@ -3756,41 +3727,9 @@ impl RootView {
         true
     }
 
-    /// If onboarding stashed `SelectedSettings` to be applied after auth + the
-    /// initial cloud-pref sync, drain the stash and apply now.
-    ///
-    /// Mirrors `start_pending_tutorial` in shape but triggers on a later event:
-    /// `CloudPreferencesSyncerEvent::InitialLoadCompleted` fires once
-    /// `handle_initial_load` has finished reconciling cloud→local, so any
-    /// writes we make here are the last writes and won't be clobbered by that
-    /// pass. By this point the user is also logged in, so AIExecutionProfile
-    /// edits can successfully create cloud objects via `edit_profile_internal`.
-    fn handle_cloud_preferences_syncer_event(
-        &mut self,
-        event: &CloudPreferencesSyncerEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !matches!(event, CloudPreferencesSyncerEvent::InitialLoadCompleted) {
-            return;
-        }
-        if let Some(account_class) = self.pending_account_first_settings_class.take() {
-            let is_new_account = self.pending_account_first_is_new_account;
-            if let Some(selected_settings) = self.pending_post_auth_onboarding_settings.take() {
-                let team_context = UserWorkspaces::as_ref(ctx).team_context_for_operation(ctx);
-                apply_account_first_onboarding_settings(
-                    &selected_settings,
-                    Some(account_class),
-                    is_new_account,
-                    team_context,
-                    ctx,
-                );
-            }
-            if self.pending_account_first_tutorial_after_settings {
-                self.pending_account_first_tutorial_after_settings = false;
-                self.start_pending_tutorial(ctx);
-            }
-            return;
-        }
+    /// If onboarding stashed `SelectedSettings` to be applied after login, drain the stash and
+    /// apply now. Account-first onboarding applies its stash when it completes instead.
+    fn apply_pending_post_auth_onboarding_settings(&mut self, ctx: &mut ViewContext<Self>) {
         if self.account_first_login_context(ctx).is_some()
             || self.pending_account_first_sso_login.is_some()
             || matches!(

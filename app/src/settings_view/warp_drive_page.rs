@@ -18,8 +18,8 @@ use super::settings_page::{
     render_body_item,
 };
 use super::{
-    LocalOnlyIconState, SettingActionPairContexts, SettingActionPairDescriptions, SettingsAction,
-    SettingsSection, ToggleSettingActionPair, ToggleState, flags,
+    SettingActionPairContexts, SettingActionPairDescriptions, SettingsAction, SettingsSection,
+    ToggleSettingActionPair, ToggleState, flags,
 };
 use crate::appearance::Appearance;
 use crate::auth::AuthStateProvider;
@@ -261,7 +261,6 @@ impl SettingsWidget for WarpDriveToggleWidget {
                 secondary_text: None,
                 tooltip_override_text: None,
             }),
-            LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
             appearance,
             appearance

@@ -18,9 +18,6 @@ use crate::auth::auth_manager::AuthManagerEvent;
 use crate::auth::{AuthManager, AuthStateProvider};
 use crate::channel::{Channel, ChannelState};
 use crate::root_view::has_completed_local_onboarding;
-use crate::settings::cloud_preferences_syncer::{
-    CloudPreferencesSyncer, CloudPreferencesSyncerEvent,
-};
 use crate::settings::{AISettings, CodeSettings};
 use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::session_settings::{AgentToolbarChipSelection, SessionSettings};
@@ -58,9 +55,7 @@ pub struct OneTimeModalModel {
     /// intentionally excluded from `is_any_modal_open` (which suppresses terminal
     /// focus stealing) to keep the terminal usable while it is visible.
     active_feature_intro: Option<FeatureIntroId>,
-    /// Whether the initial one-time modal checks have run. The seen markers are
-    /// cloud-synced settings, so event-driven re-checks must wait for the initial
-    /// cloud preferences load to avoid acting on stale values.
+    /// Whether the initial one-time modal checks have run. Event-driven re-checks wait for them.
     has_completed_initial_modal_checks: bool,
     /// Whether `UserWorkspaces` has emitted `TeamsChanged`, meaning workspace billing
     /// data reflects more than the local cache and "no workspace" can be trusted to
@@ -101,7 +96,7 @@ impl OneTimeModalModel {
         });
 
         // Subscribe to auth manager events to automatically trigger modal when user becomes onboarded
-        ctx.subscribe_to_model(&AuthManager::handle(ctx), |_, _, event, ctx| {
+        ctx.subscribe_to_model(&AuthManager::handle(ctx), |me, _, event, ctx| {
             let AuthManagerEvent::AuthComplete = event else {
                 return;
             };
@@ -109,19 +104,9 @@ impl OneTimeModalModel {
             let auth_state = crate::auth::AuthStateProvider::as_ref(ctx).get().clone();
             let is_existing_user = auth_state.is_onboarded().unwrap_or_default();
             if is_existing_user {
-                // Settings modals settings are synced to the cloud, not respecting the user's sync setting, so they
-                // must all await initial load to be triggered, else we risk reading a stale triggered value.
-                ctx.subscribe_to_model(
-                    &CloudPreferencesSyncer::handle(ctx),
-                    move |me, _, event, ctx| {
-                        if let CloudPreferencesSyncerEvent::InitialLoadCompleted = event {
-                            ctx.unsubscribe_from_model(&CloudPreferencesSyncer::handle(ctx));
-                            me.has_completed_initial_modal_checks = true;
-                            me.check_and_trigger_all_modals(ctx);
-                            maybe_ensure_handoff_chip_in_toolbar(ctx);
-                        }
-                    },
-                );
+                me.has_completed_initial_modal_checks = true;
+                me.check_and_trigger_all_modals(ctx);
+                maybe_ensure_handoff_chip_in_toolbar(ctx);
             } else {
                 AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     if let Err(e) = settings

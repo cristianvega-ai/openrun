@@ -82,7 +82,6 @@ use crate::server::server_api::object::{GuestIdentifier, ObjectClient};
 use crate::server::sync_queue::{
     CreationFailureReason, GenericStringObjectToCreate, QueueItem, SyncQueue, SyncQueueEvent,
 };
-use crate::settings::cloud_preferences::Preference;
 use crate::workflows::workflow::Workflow;
 use crate::workflows::workflow_enum::{CloudWorkflowEnum, CloudWorkflowEnumModel, WorkflowEnum};
 use crate::workflows::{CloudWorkflowModel, WorkflowId};
@@ -139,9 +138,6 @@ pub struct ObjectOperationResult {
 pub enum UpdateManagerEvent {
     ObjectOperationComplete {
         result: ObjectOperationResult,
-    },
-    CloudPreferencesUpdated {
-        updated: Vec<Preference>,
     },
     MCPGalleryUpdated {
         templates: Vec<MCPGalleryTemplate>,
@@ -854,7 +850,6 @@ impl UpdateManager {
             },
         ];
 
-        let mut updated_preferences: Vec<Preference> = Vec::new();
         // Handle generic string object updates.
         for (format, objects) in response.updated_generic_string_objects {
             match format {
@@ -863,9 +858,6 @@ impl UpdateManager {
                         .iter()
                         .filter_map(|obj| {
                             let server_obj: Option<&ServerPreference> = obj.into();
-                            if let Some(server_obj) = server_obj {
-                                updated_preferences.push(server_obj.model.string_model.clone());
-                            }
                             server_obj.cloned()
                         })
                         .collect::<Vec<_>>();
@@ -1089,12 +1081,6 @@ impl UpdateManager {
         if !response.mcp_gallery.is_empty() {
             ctx.emit(UpdateManagerEvent::MCPGalleryUpdated {
                 templates: response.mcp_gallery,
-            });
-        }
-
-        if !updated_preferences.is_empty() {
-            ctx.emit(UpdateManagerEvent::CloudPreferencesUpdated {
-                updated: updated_preferences,
             });
         }
     }
@@ -1351,13 +1337,6 @@ impl UpdateManager {
         // Update sqlite.
         let cloud_model = CloudModel::as_ref(ctx);
         self.save_in_memory_object_to_sqlite(cloud_model, &uid);
-
-        if let ServerCloudObject::Preference(preference) = &cloud_object {
-            let preference = preference.model.string_model.clone();
-            ctx.emit(UpdateManagerEvent::CloudPreferencesUpdated {
-                updated: vec![preference],
-            });
-        }
     }
 
     /// Compare incoming metadata_ts and in_memory metadata_ts to determine whether to accept a new incoming metadata

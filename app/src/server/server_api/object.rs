@@ -132,6 +132,7 @@ use crate::channel::ChannelState;
 use crate::cloud_object::model::generic_string_model::{
     GenericStringModel, GenericStringObjectId, Serializer, StringModel,
 };
+use crate::cloud_object::preference::Preference;
 use crate::cloud_object::{
     BulkCreateCloudObjectResult, BulkCreateGenericStringObjectsRequest, CreateCloudObjectResult,
     CreateObjectRequest, CreatedCloudObject, GenericCloudObject, GenericServerObject,
@@ -152,7 +153,6 @@ use crate::server::graphql::{get_request_context, get_user_facing_error_message}
 use crate::server::ids::{ClientId, HashableId, ServerId, ServerIdAndType, SyncId, ToServerId};
 use crate::server::server_api::ServerApi;
 use crate::server::sync_queue::SerializedModel;
-use crate::settings::Preference;
 use crate::workflows::WorkflowId;
 use crate::workflows::workflow_enum::WorkflowEnum;
 use crate::workspaces::gql_convert::object_update_message_from_gql;

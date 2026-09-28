@@ -5,8 +5,6 @@
 //! Enterprise, custom endpoints, custom routers) and the miscellaneous
 //! agent display settings.
 
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::ops::Not;
 #[cfg(feature = "local_fs")]
 use std::path::PathBuf;
@@ -57,10 +55,10 @@ use super::remove_custom_endpoint_confirmation_dialog::{
 };
 use super::set_default_model_modal::{SetDefaultModelModalBody, SetDefaultModelModalBodyEvent};
 use super::settings_page::{
-    CONTENT_FONT_SIZE, Category, CategoryHeader, HEADER_PADDING, LocalOnlyIconState, MatchData,
-    PageTitle, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
-    TOGGLE_BUTTON_RIGHT_PADDING, ToggleState, build_toggle_element, render_body_item_label,
-    render_dropdown_item, render_filterable_dropdown_item,
+    CONTENT_FONT_SIZE, Category, CategoryHeader, HEADER_PADDING, MatchData, PageTitle, PageType,
+    SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, TOGGLE_BUTTON_RIGHT_PADDING,
+    ToggleState, build_toggle_element, render_body_item_label, render_dropdown_item,
+    render_filterable_dropdown_item,
 };
 use super::{
     SettingActionPairContexts, SettingActionPairDescriptions, SettingsAction, SettingsSection,
@@ -85,15 +83,9 @@ use crate::editor::{
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::server::telemetry::ToggleCodeSuggestionsSettingSource;
 use crate::settings::{
-    AISettings, AISettingsChangedEvent, AgentModeQuerySuggestionsEnabled,
-    AutoApproveBypassesCommandDenylist, AwsBedrockAutoLogin, AwsBedrockCredentialsEnabled,
-    CanUseWarpCreditsForFallback, GeminiEnterpriseCredentialsEnabled, GitOperationsAutogenEnabled,
-    IncludeAgentCommandsInHistory, InputSettings, IntelligentAutosuggestionsEnabled,
-    LongRunningCommandSubmissionMode, NaturalLanguageAutosuggestionsEnabled,
-    OrchestrationMessageDisplayMode, PromptSubmissionMode, SharedBlockTitleGenerationEnabled,
-    ShouldRenderUseAgentToolbarForUserCommands, ShouldShowOzUpdatesInZeroState, ShowAgentTips,
-    ShowConversationHistory, ShowHintText, ThinkingDisplayMode, VOICE_INPUT_LANGUAGES,
-    VoiceInputEnabled, VoiceInputLanguage, VoiceInputToggleKey,
+    AISettings, AISettingsChangedEvent, InputSettings, LongRunningCommandSubmissionMode,
+    OrchestrationMessageDisplayMode, PromptSubmissionMode, ThinkingDisplayMode,
+    VOICE_INPUT_LANGUAGES, VoiceInputToggleKey,
 };
 use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
@@ -587,7 +579,6 @@ pub struct WarpAgentPageView {
     self_handle: WeakViewHandle<Self>,
     voice_input_toggle_key_dropdown: ViewHandle<Dropdown<WarpAgentPageAction>>,
     voice_input_language_dropdown: ViewHandle<FilterableDropdown<WarpAgentPageAction>>,
-    local_only_icon_tooltip_states: RefCell<HashMap<String, MouseStateHandle>>,
     agent_toolbar_inline_editor: ViewHandle<AgentToolbarInlineEditor>,
 
     thinking_display_mode_dropdown: ViewHandle<Dropdown<WarpAgentPageAction>>,
@@ -1055,7 +1046,6 @@ impl WarpAgentPageView {
             self_handle,
             voice_input_toggle_key_dropdown,
             voice_input_language_dropdown,
-            local_only_icon_tooltip_states: Default::default(),
             agent_toolbar_inline_editor,
             thinking_display_mode_dropdown,
             orchestration_message_display_mode_dropdown,
@@ -2693,9 +2683,6 @@ impl TypedActionView for WarpAgentPageView {
                 ctx.notify();
             }
             WarpAgentPageAction::ToggleAgentAttribution => {
-                // The updated value syncs to warp-server automatically via
-                // `CloudPreferencesSyncer` as a `JsonPreference` GSO keyed
-                // `Global_AgentAttributionEnabled`; no bespoke server call needed.
                 AISettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(
                         settings
@@ -2961,7 +2948,7 @@ impl SettingsWidget for NextCommandWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
@@ -2969,17 +2956,14 @@ impl SettingsWidget for NextCommandWidget {
         let is_toggleable = ai_settings.is_active_ai_enabled(app);
 
         Flex::column()
-            .with_child(
-                render_ai_setting_toggle::<IntelligentAutosuggestionsEnabled>(
-                    "Next Command",
-                    WarpAgentPageAction::ToggleIntelligentAutosuggestions,
-                    *ai_settings.intelligent_autosuggestions_enabled_internal,
-                    is_toggleable,
-                    self.toggle.clone(),
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-            )
+            .with_child(render_ai_setting_toggle(
+                "Next Command",
+                WarpAgentPageAction::ToggleIntelligentAutosuggestions,
+                *ai_settings.intelligent_autosuggestions_enabled_internal,
+                is_toggleable,
+                self.toggle.clone(),
+                app,
+            ))
             .with_child(render_ai_setting_description(
                 NEXT_COMMAND_DESCRIPTION,
                 is_toggleable,
@@ -3007,24 +2991,21 @@ impl SettingsWidget for PromptSuggestionsWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_active_ai_enabled(app);
         Flex::column()
-            .with_child(
-                render_ai_setting_toggle::<AgentModeQuerySuggestionsEnabled>(
-                    "Prompt Suggestions",
-                    WarpAgentPageAction::TogglePromptSuggestions,
-                    *ai_settings.prompt_suggestions_enabled_internal,
-                    is_toggleable,
-                    self.toggle.clone(),
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-            )
+            .with_child(render_ai_setting_toggle(
+                "Prompt Suggestions",
+                WarpAgentPageAction::TogglePromptSuggestions,
+                *ai_settings.prompt_suggestions_enabled_internal,
+                is_toggleable,
+                self.toggle.clone(),
+                app,
+            ))
             .with_child(render_ai_setting_description(
                 PROMPT_SUGGESTIONS_DESCRIPTION,
                 is_toggleable,
@@ -3052,24 +3033,21 @@ impl SettingsWidget for SuggestedCodeBannersWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_active_ai_enabled(app);
         Flex::column()
-            .with_child(
-                render_ai_setting_toggle::<AgentModeQuerySuggestionsEnabled>(
-                    "Suggested Code Banners",
-                    WarpAgentPageAction::ToggleCodeSuggestions,
-                    *ai_settings.code_suggestions_enabled_internal,
-                    is_toggleable,
-                    self.toggle.clone(),
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-            )
+            .with_child(render_ai_setting_toggle(
+                "Suggested Code Banners",
+                WarpAgentPageAction::ToggleCodeSuggestions,
+                *ai_settings.code_suggestions_enabled_internal,
+                is_toggleable,
+                self.toggle.clone(),
+                app,
+            ))
             .with_child(render_ai_setting_description(
                 SUGGESTED_CODE_BANNERS_DESCRIPTION,
                 is_toggleable,
@@ -3097,22 +3075,19 @@ impl SettingsWidget for NaturalLanguageAutosuggestionsWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_active_ai_enabled(app);
         Flex::column()
-            .with_child(render_ai_setting_toggle::<
-                NaturalLanguageAutosuggestionsEnabled,
-            >(
+            .with_child(render_ai_setting_toggle(
                 "Natural Language Autosuggestions",
                 WarpAgentPageAction::ToggleNaturalLanguageAutosuggestions,
                 *ai_settings.natural_language_autosuggestions_enabled_internal,
                 is_toggleable,
                 self.toggle.clone(),
-                &view.local_only_icon_tooltip_states,
                 app,
             ))
             .with_child(render_ai_setting_description(
@@ -3151,24 +3126,21 @@ impl SettingsWidget for SharedBlockTitleGenerationWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_active_ai_enabled(app);
         Flex::column()
-            .with_child(
-                render_ai_setting_toggle::<SharedBlockTitleGenerationEnabled>(
-                    "Shared Block Title Generation",
-                    WarpAgentPageAction::ToggleSharedTitleGeneration,
-                    *ai_settings.shared_block_title_generation_enabled_internal,
-                    is_toggleable,
-                    self.toggle.clone(),
-                    &view.local_only_icon_tooltip_states,
-                    app,
-                ),
-            )
+            .with_child(render_ai_setting_toggle(
+                "Shared Block Title Generation",
+                WarpAgentPageAction::ToggleSharedTitleGeneration,
+                *ai_settings.shared_block_title_generation_enabled_internal,
+                is_toggleable,
+                self.toggle.clone(),
+                app,
+            ))
             .with_child(render_ai_setting_description(
                 SHARED_BLOCK_TITLE_GENERATION_DESCRIPTION,
                 is_toggleable,
@@ -3196,20 +3168,19 @@ impl SettingsWidget for GitOperationsAutogenWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_active_ai_enabled(app);
         Flex::column()
-            .with_child(render_ai_setting_toggle::<GitOperationsAutogenEnabled>(
+            .with_child(render_ai_setting_toggle(
                 "Commit & Pull Request Generation",
                 WarpAgentPageAction::ToggleGitOperationsAutogen,
                 *ai_settings.git_operations_autogen_enabled_internal,
                 is_toggleable,
                 self.toggle.clone(),
-                &view.local_only_icon_tooltip_states,
                 app,
             ))
             .with_child(render_ai_setting_description(
@@ -3235,18 +3206,17 @@ impl SettingsWidget for ShowInputHintTextWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let is_any_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
-        render_ai_setting_toggle::<ShowHintText>(
+        render_ai_setting_toggle(
             "Show input hint text",
             WarpAgentPageAction::ToggleShowInputHintText,
             *InputSettings::as_ref(app).show_hint_text,
             is_any_ai_enabled,
             self.toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         )
     }
@@ -3270,18 +3240,17 @@ impl SettingsWidget for ShowAgentTipsWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let is_any_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
-        render_ai_setting_toggle::<ShowAgentTips>(
+        render_ai_setting_toggle(
             "Show agent tips",
             WarpAgentPageAction::ToggleShowAgentTips,
             *InputSettings::as_ref(app).show_agent_tips,
             is_any_ai_enabled,
             self.toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         )
     }
@@ -3301,19 +3270,18 @@ impl SettingsWidget for IncludeAgentCommandsInHistoryWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
-        render_ai_setting_toggle::<IncludeAgentCommandsInHistory>(
+        render_ai_setting_toggle(
             "Include agent-executed commands in history",
             WarpAgentPageAction::ToggleIncludeAgentCommandsInHistory,
             *ai_settings.include_agent_commands_in_history,
             is_any_ai_enabled,
             self.toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         )
     }
@@ -3333,20 +3301,19 @@ impl SettingsWidget for AutoApproveBypassesCommandDenylistWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
         Flex::column()
-            .with_child(render_ai_setting_toggle::<AutoApproveBypassesCommandDenylist>(
+            .with_child(render_ai_setting_toggle(
                 "Allow auto-approve to bypass command denylist",
                 WarpAgentPageAction::ToggleAutoApproveBypassesCommandDenylist,
                 *ai_settings.auto_approve_bypasses_command_denylist,
                 is_any_ai_enabled,
                 self.toggle.clone(),
-                &view.local_only_icon_tooltip_states,
                 app,
             ))
             .with_child(render_ai_setting_description(
@@ -3390,12 +3357,6 @@ impl SettingsWidget for PromptSubmissionModeWidget {
                  toggle.",
             ),
             None,
-            LocalOnlyIconState::for_setting(
-                PromptSubmissionMode::storage_key(),
-                PromptSubmissionMode::sync_to_cloud(),
-                &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                app,
-            ),
             (!is_any_ai_enabled).then(|| appearance.theme().disabled_ui_text_color()),
             &view.default_prompt_submission_mode_dropdown,
         ));
@@ -3413,12 +3374,6 @@ impl SettingsWidget for PromptSubmissionModeWidget {
                          agent when the command finishes.",
                     ),
                     None,
-                    LocalOnlyIconState::for_setting(
-                        LongRunningCommandSubmissionMode::storage_key(),
-                        LongRunningCommandSubmissionMode::sync_to_cloud(),
-                        &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                        app,
-                    ),
                     (!is_any_ai_enabled).then(|| appearance.theme().disabled_ui_text_color()),
                     &view.lrc_submission_mode_dropdown,
                 ))
@@ -3446,13 +3401,12 @@ impl VoiceWidget {
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_any_ai_enabled(app);
-        let mut column = Flex::column().with_child(render_ai_setting_toggle::<VoiceInputEnabled>(
+        let mut column = Flex::column().with_child(render_ai_setting_toggle(
             "Voice Input",
             WarpAgentPageAction::ToggleVoiceInput,
             *ai_settings.voice_input_enabled_internal,
             is_toggleable,
             self.voice_input_toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         ));
 
@@ -3493,12 +3447,6 @@ impl VoiceWidget {
                 "Key for Activating Voice Input",
                 Some("Press and hold to activate."),
                 None,
-                LocalOnlyIconState::for_setting(
-                    VoiceInputToggleKey::storage_key(),
-                    VoiceInputToggleKey::sync_to_cloud(),
-                    &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                    app,
-                ),
                 None,
                 &view.voice_input_toggle_key_dropdown,
             ));
@@ -3507,12 +3455,6 @@ impl VoiceWidget {
                 "Speech Language",
                 Some("Language used when transcribing voice input."),
                 None,
-                LocalOnlyIconState::for_setting(
-                    VoiceInputLanguage::storage_key(),
-                    VoiceInputLanguage::sync_to_cloud(),
-                    &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                    app,
-                ),
                 None,
                 &view.voice_input_language_dropdown,
             ));
@@ -3649,19 +3591,18 @@ impl SettingsWidget for ShowOzUpdatesInZeroStateWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_any_ai_enabled(app);
-        render_ai_setting_toggle::<ShouldShowOzUpdatesInZeroState>(
+        render_ai_setting_toggle(
             "Show Warp Agent changelog in new conversation view",
             WarpAgentPageAction::ToggleShowOzUpdatesInZeroState,
             *ai_settings.should_show_oz_updates_in_zero_state,
             is_toggleable,
             self.toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         )
     }
@@ -3681,7 +3622,7 @@ impl SettingsWidget for UseAgentFooterWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
@@ -3689,15 +3630,12 @@ impl SettingsWidget for UseAgentFooterWidget {
         let is_toggleable = ai_settings.is_any_ai_enabled(app);
 
         Flex::column()
-            .with_child(render_ai_setting_toggle::<
-                ShouldRenderUseAgentToolbarForUserCommands,
-            >(
+            .with_child(render_ai_setting_toggle(
                 "Show \"Use Agent\" footer",
                 WarpAgentPageAction::ToggleUseAgentToolbar,
                 *ai_settings.should_render_use_agent_footer_for_user_commands,
                 is_toggleable,
                 self.toggle.clone(),
-                &view.local_only_icon_tooltip_states,
                 app,
             ))
             .with_child(render_ai_setting_description(
@@ -3747,19 +3685,18 @@ impl SettingsWidget for ShowConversationHistoryWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         _appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_toggleable = ai_settings.is_any_ai_enabled(app);
-        render_ai_setting_toggle::<ShowConversationHistory>(
+        render_ai_setting_toggle(
             "Show conversation history in tools panel",
             WarpAgentPageAction::ToggleShowConversationHistory,
             *ai_settings.show_conversation_history,
             is_toggleable,
             self.toggle.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         )
     }
@@ -3787,12 +3724,6 @@ impl SettingsWidget for ThinkingDisplayModeWidget {
             "Agent thinking display",
             Some("Controls how reasoning/thinking traces are displayed."),
             None,
-            LocalOnlyIconState::for_setting(
-                ThinkingDisplayMode::storage_key(),
-                ThinkingDisplayMode::sync_to_cloud(),
-                &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                app,
-            ),
             (!is_any_ai_enabled).then(|| appearance.theme().disabled_ui_text_color()),
             &view.thinking_display_mode_dropdown,
         )
@@ -3821,12 +3752,6 @@ impl SettingsWidget for OrchestrationMessageDisplayModeWidget {
             "Orchestration message display",
             Some("Controls whether orchestration messages stay expanded."),
             None,
-            LocalOnlyIconState::for_setting(
-                OrchestrationMessageDisplayMode::storage_key(),
-                OrchestrationMessageDisplayMode::sync_to_cloud(),
-                &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                app,
-            ),
             (!is_any_ai_enabled).then(|| appearance.theme().disabled_ui_text_color()),
             &view.orchestration_message_display_mode_dropdown,
         )
@@ -3854,20 +3779,12 @@ impl SettingsWidget for ConversationLayoutPreferenceWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        use crate::util::file::external_editor::settings::OpenConversationLayoutPreference;
-
         let is_any_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
         render_dropdown_item(
             appearance,
             "Preferred layout when opening existing agent conversations",
             None,
             None,
-            LocalOnlyIconState::for_setting(
-                OpenConversationLayoutPreference::storage_key(),
-                OpenConversationLayoutPreference::sync_to_cloud(),
-                &mut view.local_only_icon_tooltip_states.borrow_mut(),
-                app,
-            ),
             (!is_any_ai_enabled).then(|| appearance.theme().disabled_ui_text_color()),
             &view.conversation_layout_dropdown,
         )
@@ -3975,7 +3892,6 @@ impl SettingsWidget for AgentAttributionWidget {
                 "Enable agent attribution".to_string(),
                 Some(styles::header_font_color(!state.is_disabled, app)),
                 None,
-                LocalOnlyIconState::Hidden,
                 ToggleState::Enabled,
                 appearance,
             ),
@@ -4067,7 +3983,6 @@ impl SettingsWidget for CloudHandoffWidget {
                 "Cloud handoff".to_string(),
                 Some(styles::header_font_color(!is_force_disabled, app)),
                 None,
-                LocalOnlyIconState::Hidden,
                 ToggleState::Enabled,
                 appearance,
             ),
@@ -4130,7 +4045,6 @@ impl SettingsWidget for AutoHandoffOnSleepWidget {
                 "Auto-handoff before sleep".to_string(),
                 Some(styles::header_font_color(true, app)),
                 None,
-                LocalOnlyIconState::Hidden,
                 ToggleState::Enabled,
                 appearance,
             ),
@@ -4191,7 +4105,6 @@ impl SettingsWidget for AmpersandHandoffWidget {
                 "Use & to trigger handoff".to_string(),
                 Some(styles::header_font_color(true, app)),
                 None,
-                LocalOnlyIconState::Hidden,
                 ToggleState::Enabled,
                 appearance,
             ),
@@ -4896,20 +4809,15 @@ impl ApiKeysWidget {
             .finish()
     }
 
-    fn render_warp_credit_fallback_toggle(
-        &self,
-        view: &WarpAgentPageView,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
+    fn render_warp_credit_fallback_toggle(&self, app: &AppContext) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
 
-        let toggle = render_ai_setting_toggle::<CanUseWarpCreditsForFallback>(
+        let toggle = render_ai_setting_toggle(
             "Warp credit fallback",
             WarpAgentPageAction::ToggleCanUseWarpCreditsForFallback,
             *ai_settings.can_use_warp_credits_for_fallback,
             ai_settings.is_any_ai_enabled(app),
             self.can_use_warp_credits_for_fallback.clone(),
-            &view.local_only_icon_tooltip_states,
             app,
         );
 
@@ -5102,7 +5010,7 @@ impl SettingsWidget for ApiKeysWidget {
         // Warp credit fallback applies to member-provided API keys, not custom endpoints.
         if is_byo_enabled && show_provider_keys {
             column.add_child(
-                Container::new(self.render_warp_credit_fallback_toggle(view, app))
+                Container::new(self.render_warp_credit_fallback_toggle(app))
                     .with_margin_top(16.)
                     .finish(),
             );
@@ -5421,13 +5329,12 @@ impl AwsBedrockWidget {
 
         let mut column = Flex::column().with_spacing(16.).with_child(
             Flex::column()
-                .with_child(render_ai_setting_toggle::<AwsBedrockCredentialsEnabled>(
+                .with_child(render_ai_setting_toggle(
                     "Use AWS Bedrock credentials",
                     WarpAgentPageAction::ToggleAwsBedrockCredentialsEnabled,
                     are_credentials_enabled,
                     is_toggleable,
                     self.credentials_enabled_toggle.clone(),
-                    &RefCell::new(HashMap::new()),
                     app,
                 ))
                 .with_child(render_ai_setting_description(
@@ -5569,13 +5476,12 @@ impl AwsBedrockWidget {
 
         let auto_login_enabled = *AISettings::as_ref(app).aws_bedrock_auto_login.value();
 
-        let toggle = render_ai_setting_toggle::<AwsBedrockAutoLogin>(
+        let toggle = render_ai_setting_toggle(
             "Automatically run login command",
             WarpAgentPageAction::ToggleAwsBedrockAutoLogin,
             auto_login_enabled,
             is_usage_enabled,
             self.auto_login_toggle.clone(),
-            &RefCell::new(HashMap::new()),
             app,
         );
         let description = render_ai_setting_description(
@@ -5733,17 +5639,14 @@ impl GeminiEnterpriseWidget {
 
         let mut column = Flex::column().with_spacing(16.).with_child(
             Flex::column()
-                .with_child(
-                    render_ai_setting_toggle::<GeminiEnterpriseCredentialsEnabled>(
-                        "Use Gemini Enterprise credentials",
-                        WarpAgentPageAction::ToggleGeminiEnterpriseCredentialsEnabled,
-                        are_credentials_enabled,
-                        is_toggleable,
-                        self.credentials_enabled_toggle.clone(),
-                        &RefCell::new(HashMap::new()),
-                        app,
-                    ),
-                )
+                .with_child(render_ai_setting_toggle(
+                    "Use Gemini Enterprise credentials",
+                    WarpAgentPageAction::ToggleGeminiEnterpriseCredentialsEnabled,
+                    are_credentials_enabled,
+                    is_toggleable,
+                    self.credentials_enabled_toggle.clone(),
+                    app,
+                ))
                 .with_child(render_ai_setting_description(
                     toggle_description,
                     is_section_enabled,

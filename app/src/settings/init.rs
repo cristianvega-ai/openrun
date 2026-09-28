@@ -10,7 +10,6 @@ use warpui_extras::user_preferences;
 
 use super::app_icon::AppIconSettings;
 use super::app_installation_detection::UserAppInstallDetectionSettings;
-use super::cloud_preferences::CloudPreferencesSettings;
 use super::initializer::SettingsInitializer;
 use super::native_preference::NativePreferenceSettings;
 use super::{
@@ -37,7 +36,7 @@ use crate::terminal::session_settings::{SessionSettings, SessionSettingsChangedE
 use crate::terminal::settings::TerminalSettings;
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::undo_close::UndoCloseSettings;
-use crate::window_settings::{WindowSettings, stage_legacy_background_backdrop};
+use crate::window_settings::{WindowSettings, migrate_legacy_background_backdrop};
 use crate::workflows::aliases::WorkflowAliases;
 use crate::workspace::tab_settings::TabSettings;
 
@@ -80,7 +79,6 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     ThemeSettings::register(ctx);
     AccessibilitySettings::register(ctx);
     NativePreferenceSettings::register(ctx);
-    CloudPreferencesSettings::register(ctx);
     WarpDrivePrivacySettings::register(ctx);
     UserAppInstallDetectionSettings::register(ctx);
     AppIconSettings::register(ctx);
@@ -127,7 +125,7 @@ pub fn init(
     if needs_settings_file_migration(ctx) {
         migrate_native_settings_to_settings_file(ctx);
     }
-    stage_legacy_background_backdrop(ctx);
+    migrate_legacy_background_backdrop(ctx);
 
     let use_thin_strokes = *FontSettings::as_ref(ctx).use_thin_strokes;
 
@@ -416,7 +414,7 @@ fn migrate_native_settings_to_settings_file(ctx: &mut AppContext) {
     // and the TOML file are both updated correctly.
     SettingsManager::handle(ctx).update(ctx, |manager, ctx| {
         for (key, value) in values_to_migrate {
-            match manager.update_setting_with_storage_key(&key, value, false, ctx) {
+            match manager.update_setting_with_storage_key(&key, value, ctx) {
                 Ok(()) => migrated_count += 1,
                 Err(err) => {
                     log::warn!("Failed to migrate setting {key}: {err}");

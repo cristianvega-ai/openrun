@@ -83,30 +83,6 @@
 //! ]);
 //! ```
 //!
-//! ## Syncing a setting to the cloud.
-//!
-//! It's easy to declare a setting as being synced to the cloud by
-//! setting the sync_to_cloud field to either Global or PerPlatform.
-//! For either syncing option you can specify whether the setting
-//! should be synced regardless of the current state of
-//! CloudPreferencesSettings.
-//!
-//! ```
-//! # use settings::macros::*;
-//! # use settings::*;
-//! define_settings_group!(OverrideSettingsGroup, settings: [
-//!     to_override: ToOverride {
-//!         type: bool,
-//!         default: false,
-//!         supported_platforms: SupportedPlatforms::ALL,
-//!         sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-//!         surface: SettingSurfaces::ALL,
-//!         private: false,
-//!         toml_path: "example.to_override",
-//!     },
-//! ]);
-//! ```
-//!
 //! # Using settings
 //!
 //! Once you've defined a setting, usage is straightforward:
@@ -325,23 +301,6 @@ macro_rules! define_setting {
                 ctx.emit(<Self as $crate::SettingChangeEvent>::change_event(
                     $crate::ChangeEventReason::Clear,
                 ));
-                Ok(())
-            }
-
-            fn set_value_from_cloud_sync(
-                &mut self,
-                new_value: Self::Value,
-                ctx: &mut $crate::warpui_core::ModelContext<Self::Group>,
-            ) -> anyhow::Result<()> {
-                let changed_in_storage =
-                    Self::write_to_preferences(&new_value, Self::preferences_for_setting(ctx))?;
-                if self.value() != &new_value || changed_in_storage {
-                    self.inner = self.validate(new_value);
-                    self.is_explicitly_set = true;
-                    ctx.emit(<Self as $crate::SettingChangeEvent>::change_event(
-                        $crate::ChangeEventReason::CloudSync,
-                    ));
-                }
                 Ok(())
             }
 
@@ -610,22 +569,6 @@ macro_rules! implement_setting_for_enum {
                 Ok(())
             }
 
-            fn set_value_from_cloud_sync(
-                &mut self,
-                new_value: Self::Value,
-                ctx: &mut $crate::warpui_core::ModelContext<Self::Group>,
-            ) -> anyhow::Result<()> {
-                let changed_in_storage =
-                    Self::write_to_preferences(&new_value, Self::preferences_for_setting(ctx))?;
-                if self.value() != &new_value || changed_in_storage {
-                    *self = self.validate(new_value);
-                    ctx.emit(<Self as $crate::SettingChangeEvent>::change_event(
-                        $crate::ChangeEventReason::CloudSync,
-                    ));
-                }
-                Ok(())
-            }
-
             fn set_value(
                 &mut self,
                 new_value: Self::Value,
@@ -816,48 +759,22 @@ macro_rules! define_settings_group {
 }
 pub use define_settings_group;
 
-/// Registers listeners for settings events that get piped through the
-/// SettingsManager. These events allow for anyone to listen to settings
-/// changes based on storage key rather than individual settings models.
+/// Registers a setting with the SettingsManager so it can be updated,
+/// reloaded and validated by storage key rather than through its settings
+/// model.
 #[macro_export]
 macro_rules! register_settings_events {
     ( $group:ident, $var:ident, $setting:ident, $handle:expr, $ctx:expr ) => {{
-        // The callback bodies must expand here with the concrete setting type
-        // so an inherent method on the setting (for example
-        // `current_value_is_syncable`) can shadow the `Setting` trait default.
         $crate::registration::register_setting_events::<$setting, _>(
             $handle,
             $crate::registration::SettingCallbacks {
-                apply_set: |settings_group: &mut $group, value, from_cloud_sync, ctx| {
+                apply_set: |settings_group: &mut $group, value, ctx| {
                     use $crate::Setting as _;
-                    if from_cloud_sync {
-                        settings_group.$var.set_value_from_cloud_sync(value, ctx)
-                    } else {
-                        settings_group.$var.set_value(value, ctx)
-                    }
-                },
-                apply_clear: |settings_group: &mut $group, ctx| {
-                    use $crate::Setting as _;
-                    if settings_group
-                        .$var
-                        .is_setting_syncable_on_current_platform(true)
-                    {
-                        log::debug!(
-                            "Clearing cloud synced setting from local storage: {}",
-                            <$setting as $crate::Setting>::storage_key()
-                        );
-                        settings_group.$var.clear_value(ctx)
-                    } else {
-                        Ok(())
-                    }
+                    settings_group.$var.set_value(value, ctx)
                 },
                 apply_load: |settings_group: &mut $group, value, explicitly_set, ctx| {
                     use $crate::Setting as _;
                     settings_group.$var.load_value(value, explicitly_set, ctx)
-                },
-                current_value_is_syncable: |settings_group: &$group| {
-                    use $crate::Setting as _;
-                    settings_group.$var.current_value_is_syncable()
                 },
             },
             $ctx,

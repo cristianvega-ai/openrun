@@ -36,10 +36,7 @@ use super::settings_page::{
     MatchData, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
     TOGGLE_BUTTON_RIGHT_PADDING, render_body_item, render_separator,
 };
-use super::{
-    LocalOnlyIconState, SettingsAction, SettingsSection, ToggleSettingActionPair, ToggleState,
-    flags,
-};
+use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, ToggleState, flags};
 use crate::ai::persisted_workspace::{
     EnablementState, LspRepoStatus, PersistedWorkspace, PersistedWorkspaceEvent,
 };
@@ -1961,7 +1958,6 @@ impl SettingsWidget for CodeIndexingPageWidget {
         content.add_child(render_body_item::<CodeIndexingPageAction>(
             CODEBASE_INDEXING_LABEL.into(),
             None,
-            LocalOnlyIconState::Hidden,
             ToggleState::Enabled,
             appearance,
             toggle_element,
@@ -1975,7 +1971,6 @@ impl SettingsWidget for CodeIndexingPageWidget {
             content.add_child(render_body_item::<CodeIndexingPageAction>(
                 AUTO_INDEX_FEATURE_NAME.into(),
                 None,
-                LocalOnlyIconState::Hidden,
                 ToggleState::Enabled,
                 appearance,
                 ui_builder

@@ -39,7 +39,6 @@ use crate::server::server_api::auth::{
 };
 use crate::server::telemetry::AnonymousUserSignupEntrypoint;
 use crate::settings::PrivacySettings;
-use crate::settings::cloud_preferences_syncer::CloudPreferencesSyncer;
 use crate::settings::initializer::SettingsInitializer;
 use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::shared_session::manager::Manager as SharedSessionManager;
@@ -413,9 +412,9 @@ impl AuthManager {
                     initializer.handle_user_fetched(self.auth_state.clone(), ctx);
                 });
 
-                // Reset the initial-load condition so that any cloud preference
-                // sync waits for the *new* user's cloud objects rather than
-                // resolving immediately against stale data from a prior session.
+                // Reset the initial-load condition so that cloud object consumers
+                // wait for the *new* user's cloud objects rather than resolving
+                // immediately against stale data from a prior session.
                 // Only do this for non-refresh fetches (login/signup), not for
                 // token refreshes where the user identity hasn't changed.
                 if !from_refresh {
@@ -429,10 +428,6 @@ impl AuthManager {
                 // separate out-of-band refresh here.
                 TeamTesterStatus::handle(ctx).update(ctx, |model, ctx| {
                     model.initiate_data_pollers(false, ctx);
-                });
-
-                CloudPreferencesSyncer::handle(ctx).update(ctx, |model, ctx| {
-                    model.handle_user_fetched(self.auth_state.clone(), ctx)
                 });
 
                 AIRequestUsageModel::handle(ctx).update(ctx, |usage_model, ctx| {

@@ -1273,8 +1273,7 @@ define_settings_group!(AISettings, settings: [
         toml_path: "agents.profiles.agent_mode_coding_file_read_allowlist",
         description: "File paths the agent can read without asking for permission.",
     }
-    // The complete execution-profile collection. Cloud synchronization
-    // respects the user's settings-sync preference.
+    // The complete execution-profile collection.
     execution_profiles: ExecutionProfiles {
         type: ExecutionProfilesConfig,
         default: ExecutionProfilesConfig::default(),
