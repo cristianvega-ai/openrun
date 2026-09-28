@@ -32,11 +32,10 @@ Next, run the container:
 LOCAL_PATH="/Users/$USER/src"
 
 # Run the image as a container, bridging port 22 for SSH connections,
-# mounting the provided directory into the container as `/src`, mounting
+# mounting the provided directory into the container as `/src`, and mounting
 # your SSH key directory into the container (so you don't need to create a
-# new GitHub SSH key), and mounting gcloud configuration (and auth information,
-# so you can run SSH integration tests).
-docker run -dp 127.0.0.1:22:22/tcp -v $LOCAL_PATH:/src -v $HOME/.ssh:/home/dev/.ssh -v $HOME/.config/gcloud:/home/dev/.config/gcloud $CONTAINER_NAME
+# new GitHub SSH key).
+docker run -dp 127.0.0.1:22:22/tcp -v $LOCAL_PATH:/src -v $HOME/.ssh:/home/dev/.ssh $CONTAINER_NAME
 ```
 
 ## Usage
@@ -52,7 +51,7 @@ You should be able to SSH into the container and build and run warp without any 
 ```
 ssh dev@localhost
 cd /src
-cargo run --features fast_dev
+cargo run --bin warp-oss --features gui
 ```
 
 It's possible you'll run into some odd errors while trying to compile Warp; if so, just keep rerunning the cargo command and it should work eventually.
