@@ -43,6 +43,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Cloud-agent OpenTelemetry trace export](#cloud-agent-opentelemetry-trace-export) — removed the OTLP span exporter that cloud-agent processes sent traces to Warp with, its dispatch-token credential refresh and the `X-Warp-Traceparent` request header
 - [Agent build cache and harness usage crates](#agent-build-cache-and-harness-usage-crates) — deleted `crates/build_cache` (persistent build caches for sandboxed cloud agents) and `crates/warp_harness_usage` (usage accounting for third-party harness histories)
 - [Hosted web client ties to app.warp.dev](#hosted-web-client-ties-to-appwarpdev) — removed the web client's address-bar sync, open-in-desktop flows, host-page auth handoff and events, remote fonts and assets, and the desktop rewrite of Warp web links into app intents
+- [remote_tty websocket terminal transport](#remote_tty-websocket-terminal-transport) — deleted the web/dev-only PTY-over-websocket transport and its `remote_tty` Cargo feature
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1120,3 +1121,19 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - `uri::parse_url_paths` (Drive web links pasted into notebooks) is Drive code and stays for the DRV tasks.
 - Stored values of the removed web settings (`UserNativePreference`, `UserNativePreferenceDialogDismissed`, `UserAppInstallStatus`) are ignored. The desktop app never wrote them.
 - The `set_before_open_url` hook in `warpui_core` stays; the OSC 8 integration tests use it.
+
+## remote_tty websocket terminal transport
+**Why:** `remote_tty` was a web and dev-only terminal backend. It drove a PTY over a websocket to Warp's ssh-proxy-server (`127.0.0.1:3030` by default) and was off in every shipped build. The desktop app always uses `local_tty`.
+
+**Removed:**
+- `app/src/terminal/remote_tty/` — the event loop and terminal manager for the websocket transport.
+- The `remote_tty` Cargo feature in `app/Cargo.toml` and `crates/warp_terminal/Cargo.toml`.
+- The `cfg(feature = "remote_tty")` branches in `pane_group/mod.rs`, `terminal/mod.rs`, `terminal/local_tty/mod.rs`, `terminal/model/session.rs`, `terminal/model/session/command_executor.rs` and `terminal/view/docker_sandbox/mod.rs`.
+
+**Modified:**
+- Comments in `terminal/available_shells.rs` and `workspace/view.rs` that mentioned the remote transport were updated.
+
+**User-visible impact:** None.
+
+**Notes:**
+- `script/wasm/bundle` still names the feature; it is deleted with the web scripts in the next section.
