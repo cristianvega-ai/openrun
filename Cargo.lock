@@ -1815,28 +1815,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-extra"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45bf463831f5131b7d3c756525b305d40f1185b688565648a92e1392ca35713d"
-dependencies = [
- "axum",
- "axum-core",
- "bytes",
- "futures-util",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "mime",
- "pin-project-lite",
- "rustversion",
- "serde",
- "tower",
- "tower-layer",
- "tower-service",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5654,12 +5632,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-range-header"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ce4ef31cda248bbdb6e6820603b82dfcd9e833db65a43e997a0ccec777d11fe"
-
-[[package]]
 name = "http_client"
 version = "0.0.0"
 dependencies = [
@@ -6998,17 +6970,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "managed_secrets_wasm"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "warp_managed_secrets",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
 name = "mappings"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7067,15 +7028,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "matchers"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
-dependencies = [
- "regex-automata",
 ]
 
 [[package]]
@@ -7623,15 +7575,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8a3895c6391c39d7fe7ebc444a87eb2991b2a0bc718fdabd071eec617fc68e4"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "nu-ansi-term"
-version = "0.50.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
-dependencies = [
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -10697,20 +10640,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serve-wasm"
-version = "0.1.0"
-dependencies = [
- "axum",
- "axum-extra",
- "clap",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "session-sharing-protocol"
 version = "0.0.0"
 source = "git+https://github.com/warpdotdev/session-sharing-protocol.git?rev=f86afe16e65a56ecb9c062c961fcd91167192e9f#f86afe16e65a56ecb9c062c961fcd91167192e9f"
@@ -10810,15 +10739,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
  "digest 0.11.3",
-]
-
-[[package]]
-name = "sharded-slab"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
-dependencies = [
- "lazy_static",
 ]
 
 [[package]]
@@ -12252,19 +12172,13 @@ dependencies = [
  "http 1.4.0",
  "http-body 1.0.1",
  "http-body-util",
- "http-range-header",
- "httpdate",
  "iri-string",
- "mime",
- "mime_guess",
- "percent-encoding",
  "pin-project-lite",
  "tokio",
  "tokio-util",
  "tower",
  "tower-layer",
  "tower-service",
- "tracing",
 ]
 
 [[package]]
@@ -12309,7 +12223,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
- "valuable",
 ]
 
 [[package]]
@@ -12322,35 +12235,6 @@ dependencies = [
  "futures-task",
  "pin-project",
  "tracing",
-]
-
-[[package]]
-name = "tracing-log"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
-dependencies = [
- "log",
- "once_cell",
- "tracing-core",
-]
-
-[[package]]
-name = "tracing-subscriber"
-version = "0.3.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
-dependencies = [
- "matchers",
- "nu-ansi-term",
- "once_cell",
- "regex-automata",
- "sharded-slab",
- "smallvec",
- "thread_local",
- "tracing",
- "tracing-core",
- "tracing-log",
 ]
 
 [[package]]
@@ -12773,12 +12657,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "valuable"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
-
-[[package]]
 name = "variant_count"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13192,7 +13070,6 @@ dependencies = [
  "warp_server_client",
  "warp_terminal",
  "warp_util",
- "warp_web_event_bus",
  "warpui",
  "warpui_core",
  "warpui_extras",
@@ -13539,7 +13416,6 @@ dependencies = [
  "tempfile",
  "warp_core",
  "warp_errors",
- "warp_web_event_bus",
  "wasm-bindgen",
  "web-sys",
  "zip",
@@ -13839,17 +13715,6 @@ dependencies = [
  "warp_errors",
  "warpui_core",
  "windows 0.62.2",
-]
-
-[[package]]
-name = "warp_web_event_bus"
-version = "0.0.0"
-dependencies = [
- "js-sys",
- "log",
- "serde",
- "serde-wasm-bindgen",
- "wasm-bindgen",
 ]
 
 [[package]]

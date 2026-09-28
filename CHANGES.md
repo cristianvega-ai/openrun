@@ -44,6 +44,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Agent build cache and harness usage crates](#agent-build-cache-and-harness-usage-crates) — deleted `crates/build_cache` (persistent build caches for sandboxed cloud agents) and `crates/warp_harness_usage` (usage accounting for third-party harness histories)
 - [Hosted web client ties to app.warp.dev](#hosted-web-client-ties-to-appwarpdev) — removed the web client's address-bar sync, open-in-desktop flows, host-page auth handoff and events, remote fonts and assets, and the desktop rewrite of Warp web links into app intents
 - [remote_tty websocket terminal transport](#remote_tty-websocket-terminal-transport) — deleted the web/dev-only PTY-over-websocket transport and its `remote_tty` Cargo feature
+- [Web client crates, scripts and build profiles](#web-client-crates-scripts-and-build-profiles) — deleted the wasm bundle/serve scripts, the `serve-wasm`, `warp_web_event_bus` and `managed_secrets_wasm` crates, and the wasm Cargo profiles
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1137,3 +1138,26 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 
 **Notes:**
 - `script/wasm/bundle` still names the feature; it is deleted with the web scripts in the next section.
+
+## Web client crates, scripts and build profiles
+**Why:** The browser build of the client was a hosted product on app.warp.dev. With the web client's ties gone, nothing builds or serves it. The scripts also downloaded a prebuilt `wasm-split` binary from Sentry's GitHub releases.
+
+**Removed:**
+- `script/wasm/` — the wasm bundle, run and dependency-install scripts, and the dev index page. `install_build_deps` fetched `wasm-split` from `getsentry/symbolicator`.
+- `crates/serve-wasm` — a local axum server for the wasm bundle.
+- `crates/warp_web_event_bus` — the channel between the wasm app and its host page. It was a dependency of `app` and `warp_logging` on wasm only.
+- `crates/managed_secrets_wasm` — wasm bindings for the managed-secrets envelope encryption.
+- `tower` and `tower-http` from `[workspace.dependencies]`, which only `serve-wasm` used.
+- The `release-wasm`, `release-wasm-debug_assertions` and `dev-wasm` Cargo profiles.
+- `jq` and `brotli` from `script/linux/install_build_deps` and `jq` from `script/windows/bootstrap.ps1`. They existed to read the wasm-bindgen version and compress web bundles. The macOS bootstrap keeps `jq`, which `script/macos/run` uses.
+
+**Modified:**
+- `Cargo.toml`: the `default-members` comment no longer mentions `serve-wasm`, and the `release-cli` comment no longer refers to `release-wasm`.
+
+**User-visible impact:** None in the desktop app.
+
+**Notes:**
+- `wasm32-unknown-unknown` isn't installed on this machine, so the wasm-only dependency sections were edited without compiling them.
+- Doc comments in `crates/managed_secrets` that mention `managed_secrets_wasm` stay for AI-18, which deletes that crate.
+- `flake.nix` still lists `jq` and `brotli` in its build inputs; left as is.
+- The wasm-only dependencies of `app` and other crates (`js-sys`, `wasm-bindgen`, `gloo`, `web-sys`, `serde-wasm-bindgen`) and the `cfg(wasm)` branches are left for WASM-2.

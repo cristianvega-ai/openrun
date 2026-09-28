@@ -19,7 +19,7 @@ function Show-BootstrapPreview {
     Write-Output 'It will:'
     Write-Output '  - Check for Git for Windows.'
     Write-Output '  - Install Rust if cargo is unavailable.'
-    Write-Output '  - Install Visual Studio Build Tools, jq, CMake, Protobuf, LLVM, and InnoSetup as needed.'
+    Write-Output '  - Install Visual Studio Build Tools, CMake, Protobuf, LLVM, and InnoSetup as needed.'
     Write-Output '  - Install Cargo test dependencies.'
     Write-Output 'Run .\script\windows\bootstrap.ps1 -Help to see options.'
     Write-Output ''
@@ -152,9 +152,6 @@ if (-not $haveMsvcBuildTools) {
 
 # A bash executable should come with Git for Windows
 & "$gitBinDir\bash.exe" "$PWD\script\install_cargo_test_deps"
-
-# Needed in wasm compilation for parsing the version of wasm-bindgen
-winget install jqlang.jq
 
 # CMake is needed to build some native dependencies.
 winget install -e --id Kitware.CMake

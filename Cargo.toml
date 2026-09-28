@@ -5,9 +5,7 @@ members = [
 ]
 resolver = "2"
 
-# Include all members except serve-wasm (since it's a helper helper for serving
-# wasm binaries and not something we want to regularly compile or run
-# tests against) and integration (since it is only used for testing).
+# Include all members except integration (since it is only used for testing).
 default-members = [
   "app",
   "crates/channel_versions",
@@ -93,7 +91,6 @@ warp_server_auth = { path = "crates/warp_server_auth" }
 warp_server_client = { path = "crates/warp_server_client" }
 warp_terminal = { path = "crates/warp_terminal" }
 warp_util = { path = "crates/warp_util" }
-warp_web_event_bus = { path = "crates/warp_web_event_bus" }
 warpui = { path = "crates/warpui" }
 warpui_core = { path = "crates/warpui_core" }
 warpui_extras = { path = "crates/warpui_extras", default-features = false }
@@ -256,8 +253,6 @@ thiserror = "2.0.17"
 tokio = "1.47.1"
 tokio-util = { version = "0.7", features = ["io"] }
 toml_edit = "0.25.5"
-tower = "0.5.2"
-tower-http = "0.6.6"
 tracing = "0.1.40"
 tracing-futures = "0.2.5"
 arborium = { version = "2", default-features = false, features = [
@@ -460,8 +455,7 @@ inherits = "release-lto-debug_assertions"
 
 # A profile tuned for the `oz` CLI tarball. The CLI is shipped over the network
 # and run headlessly, so we trade some compile time and a small amount of
-# runtime perf for a smaller binary by mirroring the size-leaning settings used
-# by `release-wasm`.
+# runtime perf for a smaller binary.
 [profile.release-cli]
 inherits = "release-lto"
 opt-level = "s"
@@ -482,25 +476,11 @@ inherits = "release-cli"
 [profile.rclida]
 inherits = "release-cli-debug_assertions"
 
-[profile.release-wasm]
-inherits = "release"
-opt-level = "s"
-lto = true
-codegen-units = 1
-
-[profile.release-wasm-debug_assertions]
-inherits = "release-wasm"
-debug-assertions = true
-
 # A dev profile optimized for remote server deployment. Strips symbols to
 # reduce binary size and improve rsync delta transfer efficiency.
 [profile.dev-remote]
 inherits = "dev"
 strip = "symbols"
-
-[profile.dev-wasm]
-inherits = "dev"
-opt-level = "s"
 
 [patch.crates-io]
 # Pinned to the merge commit of servo/core-foundation-rs#746, which fixes a
