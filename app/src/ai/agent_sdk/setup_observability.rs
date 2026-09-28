@@ -85,30 +85,6 @@ impl SetupClientEventReporter {
         );
         value
     }
-    pub(crate) fn record_value_detached<T>(
-        &self,
-        step: SetupStep,
-        future: impl Future<Output = T> + Send + 'static,
-    ) where
-        T: Send + 'static,
-    {
-        let (step_name, span) = step.to_event_name_and_span();
-
-        let reporter = self.clone();
-        self.background
-            .spawn(async move {
-                let start_timestamp = Utc::now();
-                future.instrument(span).await;
-                let finish_timestamp = Utc::now();
-                reporter.post_setup_metric_event_best_effort(
-                    step_name,
-                    start_timestamp,
-                    finish_timestamp,
-                    false,
-                );
-            })
-            .detach();
-    }
 
     pub(crate) async fn post_timeline_event(&self, event: OzRunTimelineEvent) {
         let Some(run_id) = self.run_id else {
@@ -194,7 +170,6 @@ pub(crate) enum SetupStep {
     EnvironmentRepoClone,
     CacheSetup,
     EnvironmentSetupCommands,
-    EnvironmentCodebaseIndexing,
     FileBasedMcpDiscovery,
     FileBasedMcpReadiness,
     InitialGlobalMcpScan,
@@ -266,9 +241,6 @@ impl SetupStep {
             }
             Self::EnvironmentSetupCommands => {
                 span_and_name!("setup_environment_setup_commands")
-            }
-            Self::EnvironmentCodebaseIndexing => {
-                span_and_name!("setup_environment_codebase_indexing")
             }
             Self::FileBasedMcpDiscovery => {
                 span_and_name!("setup_file_based_mcp_discovery")

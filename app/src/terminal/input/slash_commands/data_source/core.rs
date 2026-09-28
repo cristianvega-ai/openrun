@@ -111,11 +111,7 @@ pub(super) fn subscribe_to_shared_dependencies<T>(
         }
     });
     ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), move |me, _, event, ctx| {
-        if matches!(
-            event,
-            UserWorkspacesEvent::CodebaseContextEnablementChanged
-                | UserWorkspacesEvent::TeamsChanged
-        ) {
+        if matches!(event, UserWorkspacesEvent::TeamsChanged) {
             recompute_active_commands(me, ctx);
         }
     });
@@ -349,10 +345,6 @@ pub trait SlashCommandDataSource {
             .is_agent_in_control()
         {
             availability |= Availability::NO_LRC_CONTROL;
-        }
-
-        if UserWorkspaces::as_ref(ctx).is_codebase_context_enabled(ctx) {
-            availability |= Availability::CODEBASE_CONTEXT;
         }
 
         if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {

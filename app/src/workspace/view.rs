@@ -41,7 +41,6 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ::settings::{Setting, ToggleableSetting};
-use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
 #[cfg(not(target_family = "wasm"))]
 use anyhow::Context as _;
 #[cfg(target_os = "macos")]
@@ -6116,66 +6115,8 @@ impl Workspace {
     }
 
     fn handle_ai_fact_view_event(&mut self, event: &AIFactViewEvent, ctx: &mut ViewContext<Self>) {
-        match event {
-            AIFactViewEvent::OpenSettings => {
-                self.show_settings_with_section(Some(SettingsSection::WarpAgent), ctx);
-            }
-            #[allow(unused_variables)]
-            AIFactViewEvent::OpenFile(location) => {
-                #[cfg(feature = "local_fs")]
-                {
-                    match location {
-                        LocalOrRemotePath::Local(path) => {
-                            let settings = EditorSettings::as_ref(ctx);
-                            let target = resolve_file_target_with_editor_choice(
-                                path,
-                                *settings.open_file_editor,
-                                *settings.prefer_markdown_viewer,
-                                *settings.open_file_layout,
-                                None,
-                            );
-                            self.open_file_with_target(
-                                path.clone(),
-                                target,
-                                None,
-                                CodeSource::ProjectRules {
-                                    location: location.clone(),
-                                },
-                                ctx,
-                            );
-                        }
-                        LocalOrRemotePath::Remote(_) => {
-                            self.open_code(
-                                CodeSource::ProjectRules {
-                                    location: location.clone(),
-                                },
-                                EditorLayout::SplitPane,
-                                None,
-                                false,
-                                &[],
-                                ctx,
-                            );
-                        }
-                    }
-                }
-            }
-            AIFactViewEvent::InitializeProject(path) => {
-                let active_terminal_view = self
-                    .active_tab_pane_group()
-                    .as_ref(ctx)
-                    .active_session_view(ctx);
-
-                if let Some(terminal_view) = active_terminal_view {
-                    terminal_view.update(ctx, |terminal_view, ctx| {
-                        terminal_view.open_repo_folder(
-                            path.to_string_lossy().to_string(),
-                            true,
-                            ctx,
-                        );
-                    });
-                }
-            }
-            _ => {}
+        if let AIFactViewEvent::OpenSettings = event {
+            self.show_settings_with_section(Some(SettingsSection::WarpAgent), ctx);
         }
     }
 
@@ -10558,8 +10499,7 @@ impl Workspace {
                     return;
                 };
                 // Register the chosen directory as a workspace so it appears in
-                // PersistedWorkspace (which is the data source for the repo picker
-                // and also triggers codebase indexing / project rules scanning).
+                // PersistedWorkspace, which is the data source for the repo picker.
                 let path_buf: PathBuf = path.clone().into();
                 PersistedWorkspace::handle(ctx).update(ctx, |persisted, ctx| {
                     persisted.user_added_workspace(path_buf.clone(), ctx);
@@ -12645,7 +12585,7 @@ impl Workspace {
         });
         self.add_tab_with_pane_layout(
             PanesLayout::SingleTerminal(Box::new(NewTerminalOptions {
-                initial_directory: Some(path_buf.clone()),
+                initial_directory: Some(path_buf),
                 hide_homepage: true,
                 ..Default::default()
             })),
@@ -12653,13 +12593,6 @@ impl Workspace {
             None,
             ctx,
         );
-        self.active_tab_pane_group().update(ctx, |tab, ctx| {
-            if let Some(active_terminal) = tab.active_session_view(ctx) {
-                active_terminal.update(ctx, |terminal, _| {
-                    terminal.maybe_set_pending_repo_init_path(path_buf);
-                });
-            }
-        });
     }
 
     /// Navigate to an existing AI conversation, focusing on its terminal view, if it's open anywhere.
@@ -14352,7 +14285,7 @@ impl Workspace {
 
                 if let Some(terminal_view) = active_terminal_view {
                     terminal_view.update(ctx, |terminal_view, ctx| {
-                        terminal_view.open_repo_folder(path.to_string(), false, ctx);
+                        terminal_view.open_repo_folder(path.to_string(), ctx);
                     });
                 }
             }
@@ -14624,23 +14557,6 @@ impl Workspace {
             }
             SettingsViewEvent::OpenLspLogs { log_path } => {
                 self.open_lsp_logs(log_path, ctx);
-            }
-            SettingsViewEvent::OpenProjectRulesPane { rule_paths } => {
-                #[cfg(feature = "local_fs")]
-                if let Some((first, rest)) = rule_paths.split_first() {
-                    self.open_code(
-                        CodeSource::ProjectRules {
-                            location: LocalOrRemotePath::Local(first.clone()),
-                        },
-                        EditorLayout::SplitPane,
-                        None,
-                        false,
-                        rest,
-                        ctx,
-                    );
-                }
-                #[cfg(not(feature = "local_fs"))]
-                let _ = rule_paths;
             }
             SettingsViewEvent::OpenCustomRouterFile(path) => {
                 #[cfg(feature = "local_fs")]
@@ -16890,34 +16806,25 @@ impl Workspace {
         match pane_group_handle.as_ref(ctx).active_session_view(ctx) {
             Some(terminal_handle) => {
                 #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
-                let (
-                    session,
-                    pwd_location,
-                    path_if_local,
-                    is_local,
-                    is_wsl_session,
-                    has_pending_ssh,
-                ) = terminal_handle.read(ctx, |terminal, ctx| {
-                    let active_session_id = terminal.active_block_session_id();
-                    let session = active_session_id
-                        .and_then(|id| terminal.sessions_model().as_ref(ctx).get(id));
-                    let pwd_location = terminal.pwd_as_local_or_remote(ctx);
-                    let path_if_local = terminal.active_session_path_if_local(ctx);
-                    let is_local = terminal.active_session_is_local(ctx);
-                    let is_wsl_session = session.as_ref().map(|s| s.is_wsl()).unwrap_or(false);
-                    let has_pending_ssh = terminal.has_pending_ssh_command();
-                    (
-                        session,
-                        pwd_location,
-                        path_if_local,
-                        is_local,
-                        is_wsl_session,
-                        has_pending_ssh,
-                    )
-                });
+                let (session, pwd_location, is_local, is_wsl_session, has_pending_ssh) =
+                    terminal_handle.read(ctx, |terminal, ctx| {
+                        let active_session_id = terminal.active_block_session_id();
+                        let session = active_session_id
+                            .and_then(|id| terminal.sessions_model().as_ref(ctx).get(id));
+                        let pwd_location = terminal.pwd_as_local_or_remote(ctx);
+                        let is_local = terminal.active_session_is_local(ctx);
+                        let is_wsl_session = session.as_ref().map(|s| s.is_wsl()).unwrap_or(false);
+                        let has_pending_ssh = terminal.has_pending_ssh_command();
+                        (
+                            session,
+                            pwd_location,
+                            is_local,
+                            is_wsl_session,
+                            has_pending_ssh,
+                        )
+                    });
 
                 let window_id = ctx.window_id();
-                let working_directory_clone = path_if_local.clone();
                 ActiveSession::handle(ctx).update(ctx, |active_session, ctx| {
                     active_session.set_session_state(
                         window_id,
@@ -16926,12 +16833,6 @@ impl Workspace {
                         Some(terminal_handle.id()),
                         ctx,
                     );
-                });
-
-                CodebaseIndexManager::handle(ctx).update(ctx, |manager, _ctx| {
-                    if let Some(working_directory) = working_directory_clone {
-                        manager.handle_active_session_changed(working_directory.as_path());
-                    }
                 });
 
                 let is_remote = matches!(is_local, Some(false));
@@ -22027,14 +21928,6 @@ impl Workspace {
 
         if *code_settings.code_as_default_editor.value() {
             context.set.insert(flags::CODE_AS_DEFAULT_EDITOR);
-        }
-
-        if *code_settings.codebase_context_enabled.value() {
-            context.set.insert(flags::IS_CODEBASE_INDEXING_ENABLED);
-        }
-
-        if *code_settings.auto_indexing_enabled.value() {
-            context.set.insert(flags::IS_AUTOINDEXING_ENABLED);
         }
 
         if *input_settings.show_hint_text.value() {

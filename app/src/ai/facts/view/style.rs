@@ -94,16 +94,3 @@ pub fn fact_row_text(appearance: &Appearance) -> UiComponentStyles {
         ..Default::default()
     }
 }
-
-pub fn fact_project_based_row_text(appearance: &Appearance) -> UiComponentStyles {
-    UiComponentStyles {
-        font_size: Some(TEXT_FONT_SIZE),
-        font_color: Some(
-            appearance
-                .theme()
-                .sub_text_color(appearance.theme().background())
-                .into(),
-        ),
-        ..Default::default()
-    }
-}

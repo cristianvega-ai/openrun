@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use chrono::{DateTime, Days, Utc};
+use chrono::{DateTime, Utc};
 
-/// Public-facing metadata persisted in SQLite
+/// Metadata for a known workspace, persisted in SQLite.
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceMetadata {
     pub path: PathBuf,
@@ -32,44 +32,13 @@ impl WorkspaceMetadata {
         }
     }
 
-    /// The most recent time this codebase index was navigated to, queried or modified.
+    /// The most recent time this workspace was navigated to, queried or modified.
     pub fn last_touched(&self) -> Option<DateTime<Utc>> {
-        let mut last_access_time: Option<DateTime<Utc>> = None;
-        if let Some(nav_ts) = self.navigated_ts {
-            last_access_time = last_access_time
-                .map(|old_time| old_time.max(nav_ts))
-                .or(Some(nav_ts));
-        }
-        if let Some(mod_ts) = self.modified_ts {
-            last_access_time = last_access_time
-                .map(|old_time| old_time.max(mod_ts))
-                .or(Some(mod_ts));
-        }
-        if let Some(query_ts) = self.queried_ts {
-            last_access_time = last_access_time
-                .map(|old_time| old_time.max(query_ts))
-                .or(Some(query_ts));
-        }
-        last_access_time
+        [self.navigated_ts, self.modified_ts, self.queried_ts]
+            .into_iter()
+            .flatten()
+            .max()
     }
-
-    pub fn is_expired(&self, current_time: DateTime<Utc>, shelf_life_days: u64) -> bool {
-        let Some(last_touch) = self.last_touched() else {
-            return true;
-        };
-        last_touch
-            .checked_add_days(Days::new(shelf_life_days))
-            .unwrap_or_default()
-            < current_time
-    }
-}
-
-/// An event to update the workspace metadata.
-#[derive(Debug, Clone, Copy)]
-pub enum WorkspaceMetadataEvent {
-    Queried,
-    Modified,
-    Created,
 }
 
 impl From<WorkspaceMetadata> for persistence::model::NewWorkspaceMetadata {

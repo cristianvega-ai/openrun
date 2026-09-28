@@ -2202,7 +2202,6 @@ impl AgentDriver {
                         HarnessKind::ThirdParty(_) | HarnessKind::Unsupported(_) => None,
                     };
 
-                    let harness = task.harness.harness();
                     let setup_events_for_environment = setup_events.clone();
                     let source_repos_for_prepare = source_repos;
                     let prepare_outcome = foreground
@@ -2212,7 +2211,6 @@ impl AgentDriver {
                                 environment::prepare_environment(
                                     working_dir,
                                     false, /* is_sandbox */
-                                    harness,
                                     environment::RepositoryPreparationOptions::new(
                                         source_repos_for_prepare,
                                         setup_commands,

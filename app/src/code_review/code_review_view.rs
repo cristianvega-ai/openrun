@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use ai::project_context::model::ProjectContextModel;
 use indexmap::IndexMap;
 use itertools::Itertools;
 #[cfg(feature = "local_fs")]
@@ -126,7 +125,7 @@ use crate::terminal::cli_agent::{
     build_selection_line_range_prompt, build_selection_substring_prompt,
 };
 use crate::terminal::input::MenuPositioning;
-use crate::terminal::view::{CliAgentRouting, InitProjectModel, TerminalAction, TerminalView};
+use crate::terminal::view::{CliAgentRouting, TerminalAction, TerminalView};
 use crate::themes::theme::WarpTheme;
 use crate::ui_components::blended_colors::{neutral_2, neutral_3};
 use crate::ui_components::buttons::icon_button_with_color;
@@ -341,7 +340,6 @@ pub enum CodeReviewAction {
     OpenCommentComposerFromHeader,
     ShowFindBar,
     FocusView,
-    InitProjectForCurrentDirectory,
     OpenRepository,
     OpenCommitDialog,
     ToggleGitOperationsMenu,
@@ -652,7 +650,6 @@ pub struct CodeReviewView {
 
     active_comment_model: Option<ModelHandle<ReviewCommentBatch>>,
 
-    init_project_button: ViewHandle<ActionButton>,
     #[cfg(not(target_family = "wasm"))]
     open_repository_button: ViewHandle<ActionButton>,
 
@@ -1282,21 +1279,11 @@ impl CodeReviewView {
         let ui_state_handles = UiStateHandles::default();
         let header = CodeReviewHeader::new();
 
-        let init_project_button = ctx.add_typed_action_view(|_ctx| {
-            ActionButton::new("Initialize codebase", NakedTheme)
-                .with_size(ButtonSize::Small)
-                .with_tooltip("Enables codebase indexing and WARP.md")
-                .with_tooltip_alignment(TooltipAlignment::Center)
-                .on_click(|ctx| {
-                    ctx.dispatch_typed_action(CodeReviewAction::InitProjectForCurrentDirectory)
-                })
-        });
-
         #[cfg(not(target_family = "wasm"))]
         let open_repository_button = ctx.add_typed_action_view(|_ctx| {
             ActionButton::new("Open repository", NakedTheme)
                 .with_size(ButtonSize::Small)
-                .with_tooltip("Navigate to a repo and initialize it for coding")
+                .with_tooltip("Navigate to a repo")
                 .with_tooltip_alignment(TooltipAlignment::Center)
                 .on_click(|ctx| ctx.dispatch_typed_action(CodeReviewAction::OpenRepository))
         });
@@ -1341,7 +1328,6 @@ impl CodeReviewView {
             pending_precise_scroll: None,
             pending_jump_to_comment: None,
             active_comment_model: None,
-            init_project_button,
             #[cfg(not(target_family = "wasm"))]
             open_repository_button,
             is_open: false,
@@ -3980,7 +3966,7 @@ impl CodeReviewView {
             .with_cross_axis_alignment(CrossAxisAlignment::Start)
             .with_main_axis_alignment(MainAxisAlignment::Start)
             .with_child(self.render_header(state, appearance, is_in_split_pane, app))
-            .with_child(self.render_content(state, appearance, app));
+            .with_child(self.render_content(state, appearance));
 
         let top_section_with_margin = ConstrainedBox::new(
             Container::new(Shrinkable::new(1., top_section.finish()).finish())
@@ -4020,11 +4006,7 @@ impl CodeReviewView {
     }
 
     /// Renders the state when there are no changes on the current branch.
-    fn render_no_changes_state(
-        &self,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
+    fn render_no_changes_state(&self, appearance: &Appearance) -> Box<dyn Element> {
         let theme = appearance.theme();
 
         let mut main_row = Flex::row()
@@ -4032,7 +4014,7 @@ impl CodeReviewView {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Max);
 
-        let mut zero_state_column = Flex::column()
+        let zero_state_column = Flex::column()
             .with_main_axis_alignment(MainAxisAlignment::Center)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_child(
@@ -4070,50 +4052,6 @@ impl CodeReviewView {
                 .with_margin_top(8.)
                 .finish(),
             );
-
-        let should_show_init = self
-            .repo_path()
-            .and_then(LocalOrRemotePath::to_local_path)
-            .map(|path| {
-                let has_steps = InitProjectModel::should_have_available_steps(path, app);
-                let is_terminal_in_correct_dir = self
-                    .focused_terminal(app)
-                    .and_then(|view| {
-                        view.read(app, |t, _| t.pwd().map(|pwd| pwd == path.to_string_lossy()))
-                    })
-                    .unwrap_or(false);
-                has_steps && is_terminal_in_correct_dir
-            })
-            .unwrap_or(false);
-
-        if should_show_init {
-            zero_state_column.add_child(
-                Container::new(ChildView::new(&self.init_project_button).finish())
-                    .with_margin_top(16.)
-                    .finish(),
-            );
-        } else if let Some(repo_path) = self.repo_path() {
-            // Check for initialized project-scoped rules.
-            if let Some(rules) =
-                ProjectContextModel::as_ref(app).find_applicable_project_rules(repo_path)
-                && let Some(first_rule) = rules.active_rules.first()
-                && let Some(file_name) = first_rule.path.file_name()
-            {
-                zero_state_column.add_child(
-                    Container::new(
-                        Text::new(
-                            format!("Repo is initialized with a {file_name} file."),
-                            appearance.ui_font_family(),
-                            12.,
-                        )
-                        .with_color(theme.sub_text_color(theme.surface_2()).into())
-                        .finish(),
-                    )
-                    .with_margin_top(8.)
-                    .finish(),
-                );
-            }
-        }
 
         let zero_state_content = Container::new(zero_state_column.finish()).finish();
 
@@ -4436,14 +4374,9 @@ impl CodeReviewView {
     }
 
     /// Renders the content area with all file diffs
-    fn render_content(
-        &self,
-        state: &LoadedState,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
+    fn render_content(&self, state: &LoadedState, appearance: &Appearance) -> Box<dyn Element> {
         if state.file_states.is_empty() {
-            return self.render_no_changes_state(appearance, app);
+            return self.render_no_changes_state(appearance);
         }
 
         let mut sidebar_and_diffs_row =
@@ -7460,13 +7393,6 @@ impl TypedActionView for CodeReviewView {
                 if let Some(terminal_view) = self.focused_terminal(ctx) {
                     terminal_view.update(ctx, |terminal, ctx| {
                         terminal.handle_action(&TerminalAction::PickRepoToOpen, ctx);
-                    });
-                }
-            }
-            CodeReviewAction::InitProjectForCurrentDirectory => {
-                if let Some(terminal_view) = self.focused_terminal(ctx) {
-                    terminal_view.update(ctx, |terminal, ctx| {
-                        terminal.handle_action(&TerminalAction::InitProject, ctx);
                     });
                 }
             }

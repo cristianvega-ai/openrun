@@ -43,7 +43,6 @@ use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::shared_session::manager::Manager as SharedSessionManager;
 #[cfg(target_family = "wasm")]
 use crate::uri::browser_url_handler::{parse_current_url, update_browser_url};
-use crate::workspace_metadata::PersistedWorkspace;
 use crate::workspaces::team_tester::TeamTesterStatus;
 use crate::{
     GlobalResourceHandlesProvider, TelemetryEvent, persistence, send_telemetry_from_ctx,
@@ -436,10 +435,6 @@ impl AuthManager {
 
                 LLMPreferences::handle(ctx).update(ctx, |prefs, ctx| {
                     prefs.update_feature_model_choices(Ok(llms), ctx);
-                });
-
-                PersistedWorkspace::handle(ctx).update(ctx, |index_manager_updater, ctx| {
-                    index_manager_updater.on_user_changed(ctx);
                 });
 
                 if !user.is_user_anonymous() {

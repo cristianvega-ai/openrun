@@ -628,7 +628,6 @@ impl BlocklistAIActionExecutor {
                 .update(ctx, |executor, ctx| executor.execute(input, ctx))
                 .into(),
             AIAgentActionType::InitProject => {
-                ctx.emit(BlocklistAIActionExecutorEvent::InitProject(action.id));
                 ActionExecution::<()>::Sync(AIAgentActionResultType::InitProject).into()
             }
             AIAgentActionType::OpenCodeReview => {
@@ -1019,7 +1018,6 @@ pub enum BlocklistAIActionExecutorEvent {
         cancellation_reason: Option<CancellationReason>,
     },
 
-    InitProject(AIAgentActionId),
     OpenCodeReview(AIAgentActionId),
     InsertCodeReviewComments {
         action_id: AIAgentActionId,

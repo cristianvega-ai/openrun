@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
 use chrono::Local;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -41,7 +40,7 @@ lazy_static! {
 
 // Returns the context to be attached to the AIAgentInput sent in a request.
 // If `is_user_query` is true, includes selected blocks, text, and images from the context model.
-// Always includes base context like current time, execution environment, and codebase info.
+// Always includes base context like current time and execution environment.
 pub(super) fn input_context_for_request(
     is_user_query: bool,
     context_model: &BlocklistAIContextModel,
@@ -51,11 +50,7 @@ pub(super) fn input_context_for_request(
     app: &AppContext,
 ) -> Arc<[AIAgentContext]> {
     let current_working_directory_location = active_session.current_working_directory_location(app);
-    let mut context = context_model.pending_context(
-        app,
-        is_user_query,
-        current_working_directory_location.as_ref(),
-    );
+    let mut context = context_model.pending_context(app, is_user_query);
 
     context.push(AIAgentContext::CurrentTime {
         current_time: Local::now(),
@@ -63,13 +58,6 @@ pub(super) fn input_context_for_request(
 
     if let Some(env) = active_session.ai_execution_environment(app) {
         context.push(AIAgentContext::ExecutionEnvironment(env));
-    }
-
-    if FeatureFlag::FullSourceCodeEmbedding.is_enabled()
-        && FeatureFlag::CrossRepoContext.is_enabled()
-        && !SessionContext::from_session(active_session, app).is_remote()
-    {
-        add_local_codebase_context(&mut context, app);
     }
 
     if FeatureFlag::ListSkills.is_enabled() {
@@ -89,27 +77,6 @@ pub(super) fn input_context_for_request(
     context.extend(additional_context);
 
     context.into()
-}
-
-fn add_local_codebase_context(context: &mut Vec<AIAgentContext>, app: &AppContext) {
-    for (codebase_path, status) in
-        CodebaseIndexManager::as_ref(app).get_codebase_index_statuses(app)
-    {
-        // TODO(daniel): We should figure out a mechanism for handling stale codebases.
-        if status.has_synced_version() {
-            // For now, we pass the name of the directory as the name of the
-            // codebase.
-            let codebase_name = codebase_path
-                .file_name()
-                .map(|name| name.to_string_lossy())
-                .unwrap_or_default();
-
-            context.push(AIAgentContext::Codebase {
-                name: codebase_name.into(),
-                path: codebase_path.to_string_lossy().into(),
-            })
-        }
-    }
 }
 
 /// Parses context reference strings like <block:123> from the user query and returns

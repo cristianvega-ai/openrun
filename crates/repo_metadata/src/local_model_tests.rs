@@ -789,55 +789,19 @@ fn test_lazy_loaded_path_registrations_are_refcounted() {
 
 #[cfg(feature = "local_fs")]
 #[test]
-fn test_lazy_loaded_path_does_not_build_standing_rule_results_below_shallow_tree() {
-    VirtualFS::test("lazy_loaded_path_standing_rules", |dirs, mut vfs| {
-        vfs.mkdir("workspace/src/deep")
-            .with_files(vec![Stub::FileWithContent(
-                "workspace/src/deep/WARP.md",
-                "project rules",
-            )]);
-
-        let workspace = dirs.tests().join("workspace");
-        App::test((), |mut app| async move {
-            let model_handle = app.add_model(|_| LocalRepoMetadataModel::new_for_test());
-            let workspace_path = StandardizedPath::from_local_canonicalized(&workspace).unwrap();
-            let rule_path =
-                StandardizedPath::try_from_local(&workspace.join("src/deep/WARP.md")).unwrap();
-
-            model_handle.update(&mut app, |model, ctx| {
-                model.index_lazy_loaded_path(&workspace_path, ctx).unwrap();
-            });
-            await_build_tasks_for_repo(&mut app, &model_handle, &workspace_path).await;
-
-            model_handle.read(&app, |model, _ctx| {
-                let results = model
-                    .standing_query_results(&workspace_path)
-                    .expect("lazy indexed paths should retain standing results");
-                assert!(
-                    !results
-                        .project_rules()
-                        .any(|content| content.path == rule_path)
-                );
-            });
-        });
-    });
-}
-
-#[cfg(feature = "local_fs")]
-#[test]
 fn test_lazy_loaded_path_discovers_force_included_skills_and_emits_watcher_delta() {
     VirtualFS::test("lazy_loaded_path_force_included_skills", |dirs, mut vfs| {
         vfs.mkdir("workspace/.agents/skills/review")
             .mkdir("workspace/src/deep")
             .with_files(vec![
                 Stub::FileWithContent("workspace/.agents/skills/review/SKILL.md", "name: review"),
-                Stub::FileWithContent("workspace/src/deep/WARP.md", "project rules"),
+                Stub::FileWithContent("workspace/src/deep/notes.md", "notes"),
             ]);
 
         let workspace = dirs.tests().join("workspace");
         let skill_path = workspace.join(".agents/skills/review/SKILL.md");
         let src_path = workspace.join("src");
-        let rule_path = workspace.join("src/deep/WARP.md");
+        let deep_file_path = workspace.join("src/deep/notes.md");
         App::test((), |mut app| async move {
             let model_handle = app.add_model(|_| {
                 let mut model = LocalRepoMetadataModel::new_for_test();
@@ -848,7 +812,7 @@ fn test_lazy_loaded_path_discovers_force_included_skills_and_emits_watcher_delta
             let workspace_path = StandardizedPath::from_local_canonicalized(&workspace).unwrap();
             let skill_path = StandardizedPath::try_from_local(&skill_path).unwrap();
             let src_path = StandardizedPath::try_from_local(&src_path).unwrap();
-            let rule_path = StandardizedPath::try_from_local(&rule_path).unwrap();
+            let deep_file_path = StandardizedPath::try_from_local(&deep_file_path).unwrap();
 
             model_handle.update(&mut app, |model, ctx| {
                 model.index_lazy_loaded_path(&workspace_path, ctx).unwrap();
@@ -865,7 +829,7 @@ fn test_lazy_loaded_path_discovers_force_included_skills_and_emits_watcher_delta
                 assert!(
                     matches!(state.entry.get(&src_path), Some(FileTreeEntryState::Directory(dir)) if !dir.loaded)
                 );
-                assert!(!state.entry.contains(&rule_path));
+                assert!(!state.entry.contains(&deep_file_path));
 
                 let results = model
                     .standing_query_results(&workspace_path)
@@ -873,9 +837,6 @@ fn test_lazy_loaded_path_discovers_force_included_skills_and_emits_watcher_delta
                 assert!(results
                     .project_skills()
                     .any(|content| content.path == skill_path && !content.is_directory));
-                assert!(!results
-                    .project_rules()
-                    .any(|content| content.path == rule_path));
             });
 
             let (tx, rx) = oneshot::channel();

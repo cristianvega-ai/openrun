@@ -31,7 +31,6 @@ pub enum SlashCommandRequest {
     CloneRepository {
         url: String,
     },
-    InitProjectRules,
     CreateEnvironment {
         repos: Vec<String>,
         use_current_dir: bool,
@@ -50,11 +49,6 @@ impl SlashCommandRequest {
     /// Parses user input into a SlashCommandRequest for slash commands that are handled
     /// via the AI query flow (as opposed to action-based slash commands handled in input.rs).
     pub fn from_query(query: &str) -> Option<SlashCommandRequest> {
-        // Check if this is an exact /init query and route it to InitProjectRules instead
-        if query == "/init" {
-            return Some(Self::InitProjectRules);
-        }
-
         // Check if query starts with /compact and route to summarize conversation
         if let Some(prompt) = query.strip_prefix(commands::COMPACT.name) {
             return Some(Self::Summarize {
@@ -250,10 +244,6 @@ impl SlashCommandRequest {
                     context,
                 }]
             }
-            SlashCommandRequest::InitProjectRules => vec![AIAgentInput::InitProjectRules {
-                context,
-                display_query: Some("/init".to_string()),
-            }],
             SlashCommandRequest::CreateEnvironment {
                 mut repos,
                 use_current_dir,
@@ -308,7 +298,6 @@ impl SlashCommandRequest {
     fn entrypoint(&self) -> EntrypointType {
         match self {
             SlashCommandRequest::CloneRepository { .. } => EntrypointType::CloneRepository,
-            SlashCommandRequest::InitProjectRules => EntrypointType::InitProjectRules,
             SlashCommandRequest::CreateNewProject { .. }
             | SlashCommandRequest::CreateEnvironment { .. }
             | SlashCommandRequest::Summarize { .. }

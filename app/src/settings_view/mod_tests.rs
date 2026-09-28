@@ -101,10 +101,7 @@ fn subpage_display_names_are_correct() {
         SettingsSection::ThirdPartyCLIAgents.to_string(),
         "Third party CLI agents"
     );
-    assert_eq!(
-        SettingsSection::CodeIndexing.to_string(),
-        "Indexing and projects"
-    );
+    assert_eq!(SettingsSection::Projects.to_string(), "Projects");
     assert_eq!(
         SettingsSection::EditorAndCodeReview.to_string(),
         "Editor and Code Review"
@@ -142,7 +139,7 @@ const ALL_SECTIONS: &[SettingsSection] = &[
     SettingsSection::AgentMCPServers,
     SettingsSection::Knowledge,
     SettingsSection::ThirdPartyCLIAgents,
-    SettingsSection::CodeIndexing,
+    SettingsSection::Projects,
     SettingsSection::EditorAndCodeReview,
     SettingsSection::CloudEnvironments,
     SettingsSection::WarpCloudAgentAPIKeys,
@@ -151,8 +148,10 @@ const ALL_SECTIONS: &[SettingsSection] = &[
 /// Sections whose user-facing Display label has deliberately diverged from the
 /// slug it was seeded from, because the slug is a stored contract that the
 /// rename must not follow.
-const SECTIONS_WITH_RENAMED_DISPLAY_LABELS: &[SettingsSection] =
-    &[SettingsSection::WarpCloudAgentAPIKeys];
+const SECTIONS_WITH_RENAMED_DISPLAY_LABELS: &[SettingsSection] = &[
+    SettingsSection::Projects,
+    SettingsSection::WarpCloudAgentAPIKeys,
+];
 
 #[test]
 fn all_sections_list_is_exhaustive() {
@@ -174,7 +173,7 @@ fn all_sections_list_is_exhaustive() {
             | SettingsSection::AgentMCPServers
             | SettingsSection::Knowledge
             | SettingsSection::ThirdPartyCLIAgents
-            | SettingsSection::CodeIndexing
+            | SettingsSection::Projects
             | SettingsSection::EditorAndCodeReview
             | SettingsSection::CloudEnvironments
             | SettingsSection::WarpCloudAgentAPIKeys => section,
@@ -238,6 +237,14 @@ fn renamed_sections_keep_the_slug_they_were_seeded_with() {
         SettingsSection::WarpCloudAgentAPIKeys.slug(),
         "Oz Cloud API Keys"
     );
+
+    // The section dropped "Indexing" from its label when codebase indexing was removed.
+    assert_eq!(SettingsSection::Projects.to_string(), "Projects");
+    assert_eq!(SettingsSection::Projects.slug(), "Indexing and projects");
+    assert_eq!(
+        SettingsSection::from_slug("Projects"),
+        Some(SettingsSection::Projects)
+    );
 }
 
 #[test]
@@ -268,7 +275,7 @@ fn from_slug_accepts_legacy_spellings() {
     );
     assert_eq!(
         SettingsSection::from_slug("CodeIndexing"),
-        Some(SettingsSection::CodeIndexing)
+        Some(SettingsSection::Projects)
     );
     assert_eq!(
         SettingsSection::from_slug("EditorAndCodeReview"),
@@ -300,7 +307,7 @@ fn from_slug_maps_superseded_page_names_to_the_page_that_replaced_them() {
     );
     assert_eq!(
         SettingsSection::from_slug("Code"),
-        Some(SettingsSection::CodeIndexing)
+        Some(SettingsSection::Projects)
     );
     assert_eq!(
         SettingsSection::from_slug("MCP Servers"),
@@ -342,7 +349,7 @@ fn realistic_nav_items() -> Vec<SettingsNavItem> {
         SettingsNavItem::Umbrella(SettingsUmbrella::new(
             "Code",
             vec![
-                SettingsSection::CodeIndexing,
+                SettingsSection::Projects,
                 SettingsSection::EditorAndCodeReview,
             ],
         )),
@@ -395,7 +402,7 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
         stops[3],
         NavStop::CollapsedUmbrella {
             nav_index: 3,
-            first_subpage: SettingsSection::CodeIndexing,
+            first_subpage: SettingsSection::Projects,
             last_subpage: SettingsSection::EditorAndCodeReview,
         }
     ));
@@ -706,15 +713,15 @@ fn arrow_down_across_adjacent_collapsed_umbrellas() {
         SettingsSection::BillingAndUsage,
         CycleDirection::Down,
     );
-    assert_eq!(next_after_billing, SettingsSection::CodeIndexing);
+    assert_eq!(next_after_billing, SettingsSection::Projects);
 
-    // From the Code umbrella stop (i.e. the user is "on" CodeIndexing which
+    // From the Code umbrella stop (i.e. the user is "on" Projects which
     // maps back to the collapsed umbrella), pressing Down again should land
     // on the Cloud platform umbrella's first subpage.
     let next_after_code = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::CodeIndexing,
+        SettingsSection::Projects,
         CycleDirection::Down,
     );
     assert_eq!(next_after_code, SettingsSection::CloudEnvironments);

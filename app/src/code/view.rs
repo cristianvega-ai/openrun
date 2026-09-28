@@ -500,13 +500,9 @@ impl CodeView {
                 ctx.emit(CodeViewEvent::Pane(PaneEvent::AppStateChanged));
             }
             LocalCodeEditorEvent::FailedToLoad { error: err } => {
-                // When code source is New, AIAction, or ProjectRules, it is possible that the
-                // passed in file path might not exist currently if the intention is to create a
-                // new file or if the project rules file doesn't exist yet.
-                if let CodeSource::AIAction { .. }
-                | CodeSource::New { .. }
-                | CodeSource::ProjectRules { .. } = me.source
-                {
+                // When code source is New or AIAction, it is possible that the passed in file path
+                // might not exist currently if the intention is to create a new file.
+                if let CodeSource::AIAction { .. } | CodeSource::New { .. } = me.source {
                     return;
                 }
                 log::warn!("Failed to load file. {err:?}");

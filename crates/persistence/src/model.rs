@@ -14,9 +14,9 @@ use super::schema::{
     code_review_panes, commands, current_user_information, env_var_collection_panes, folders,
     generic_string_objects, ignored_suggestions, mcp_environment_variables,
     mcp_server_installations, mcp_server_panes, notebook_panes, notebooks, object_actions,
-    object_metadata, object_permissions, pane_branches, pane_leaves, pane_nodes, panels,
-    project_rules, projects, settings_panes, tab_groups, tabs, team_members, team_settings, teams,
-    terminal_panes, user_profiles, windows, workflow_panes, workflows, workspace_language_server,
+    object_metadata, object_permissions, pane_branches, pane_leaves, pane_nodes, panels, projects,
+    settings_panes, tab_groups, tabs, team_members, team_settings, teams, terminal_panes,
+    user_profiles, windows, workflow_panes, workflows, workspace_language_server,
     workspace_metadata, workspace_teams, workspaces,
 };
 
@@ -173,21 +173,6 @@ pub struct TeamSetting {
 pub struct NewTeamSettings {
     pub team_id: i32,
     pub settings_json: String,
-}
-
-#[derive(Clone, Identifiable, Insertable, Queryable, AsChangeset)]
-#[diesel(table_name = project_rules)]
-pub struct ProjectRules {
-    pub id: i32,
-    pub path: String,
-    pub project_root: String,
-}
-
-#[derive(Clone, Debug, Insertable, AsChangeset)]
-#[diesel(table_name = project_rules)]
-pub struct NewProjectRules {
-    pub path: String,
-    pub project_root: String,
 }
 
 #[derive(Clone, Identifiable, Queryable, AsChangeset)]

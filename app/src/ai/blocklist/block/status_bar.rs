@@ -727,17 +727,10 @@ impl BlocklistAIStatusBar {
 
     fn update_agent_tip(&mut self, ctx: &mut ViewContext<Self>) {
         if FeatureFlag::AgentTips.is_enabled() && *InputSettings::as_ref(ctx).show_agent_tips {
-            let current_working_directory = self
-                .terminal_model
-                .lock()
-                .active_block_metadata()
-                .current_working_directory()
-                .map(|cwd| cwd.to_string());
-
             // Update the tip using the model's cooldown-based API
             let tip_model = AITipModel::<AgentTip>::handle(ctx);
             tip_model.update(ctx, |model, model_ctx| {
-                model.maybe_refresh_tip(current_working_directory.as_deref(), model_ctx);
+                model.maybe_refresh_tip(model_ctx);
             });
 
             // Get the current tip from the model

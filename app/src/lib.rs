@@ -118,12 +118,6 @@ pub mod settings_view;
 pub mod tab_configs;
 pub mod terminal;
 pub mod themes;
-use ::ai::index::DEFAULT_SYNC_REQUESTS_PER_MIN;
-use ::ai::index::full_source_code_embedding::SyncTask;
-use ::ai::index::full_source_code_embedding::manager::{
-    CodebaseIndexManager, CodebaseIndexManagerConfig,
-};
-use ::ai::project_context::model::ProjectContextModel;
 pub use ai::agent::todos::AIAgentTodoList;
 pub use ai::agent::{AIAgentActionResultType, FileEdit, TodoOperation};
 use ai::agent_conversations_model::AgentConversationsModel;
@@ -132,7 +126,6 @@ use ai::ambient_agents::scheduled::ScheduledAgentManager;
 use ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
 use ai::execution_profiles::editor::ExecutionProfileEditorManager;
 use ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use ai::metadata_project_rules::read_project_rule_contents;
 use auth::auth_manager::AuthManager;
 use auth::auth_state::{AuthState, AuthStateProvider};
 use code::editor_management::CodeManager;
@@ -431,16 +424,6 @@ impl LaunchMode {
                 _ => true,
             },
             LaunchMode::App { .. } | LaunchMode::Test { .. } => false,
-        }
-    }
-
-    /// Returns `true` if this process can build and sync codebase indices.
-    fn supports_indexing(&self) -> bool {
-        match self {
-            LaunchMode::CommandLine { command, .. } => {
-                matches!(command, CliCommand::Agent(AgentCommand::Run { .. }))
-            }
-            LaunchMode::App { .. } | LaunchMode::Test { .. } => true,
         }
     }
 
@@ -1186,7 +1169,6 @@ pub(crate) fn initialize_app(
         workspace_language_servers,
         multi_agent_conversations,
         persisted_projects,
-        persisted_project_rules,
         persisted_ignored_suggestions,
         persisted_mcp_server_installations,
         mcp_servers_to_restore,
@@ -1202,11 +1184,10 @@ pub(crate) fn initialize_app(
                 sqlite_data.time_of_next_force_object_refresh,
                 sqlite_data.object_actions,
                 sqlite_data.ai_queries,
-                sqlite_data.codebase_indices,
+                sqlite_data.workspace_metadata,
                 sqlite_data.workspace_language_servers,
                 sqlite_data.multi_agent_conversations,
                 sqlite_data.projects,
-                sqlite_data.project_rules,
                 sqlite_data.ignored_suggestions,
                 sqlite_data.mcp_server_installations,
                 sqlite_data.mcp_servers_to_restore,
@@ -1214,7 +1195,6 @@ pub(crate) fn initialize_app(
         })
         .unwrap_or_else(|| {
             (
-                Default::default(),
                 Default::default(),
                 Default::default(),
                 Default::default(),
@@ -1663,17 +1643,7 @@ pub(crate) fn initialize_app(
         ai::blocklist::orchestration_event_streamer::OrchestrationEventStreamer::new,
     );
 
-    if launch_mode.supports_indexing() {
-        ctx.add_singleton_model(RepoOutlines::new);
-    } else {
-        ctx.add_singleton_model(|ctx| RepoOutlines::new_with_indexing_enabled(false, ctx));
-    }
-    ctx.add_singleton_model(|ctx| {
-        warp_core::sync_queue::SyncQueue::<SyncTask>::new_with_rate_limit(
-            &ctx.background_executor(),
-            Some(DEFAULT_SYNC_REQUESTS_PER_MIN),
-        )
-    });
+    ctx.add_singleton_model(RepoOutlines::new);
 
     ctx.add_singleton_model(|_| UserProfiles::new(restored_user_profiles));
 
@@ -1902,39 +1872,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(|ctx| AIExecutionProfilesModel::new(launch_mode, ctx));
 
     ctx.add_singleton_model(DefaultTerminal::new);
-
-    ctx.add_singleton_model(|ctx| {
-        let should_restore_indices = launch_mode.supports_indexing()
-            && UserWorkspaces::as_ref(ctx).is_codebase_context_enabled(ctx);
-        let indices_to_restore = if should_restore_indices {
-            persisted_workspaces.clone()
-        } else {
-            vec![]
-        };
-
-        let codebase_limits = AIRequestUsageModel::as_ref(ctx).codebase_context_limits();
-        let codebase_index_config = CodebaseIndexManagerConfig::new(
-            indices_to_restore,
-            codebase_limits.max_indices_allowed,
-            codebase_limits.max_files_per_repo,
-            codebase_limits.embedding_generation_batch_size,
-            server_api_provider.as_ref(ctx).get(),
-            launch_mode.supports_indexing(),
-        );
-        CodebaseIndexManager::new_with_config(codebase_index_config, ctx)
-    });
-
-    ctx.add_singleton_model(|ctx| {
-        ProjectContextModel::new_from_persisted(
-            persisted_project_rules,
-            read_project_rule_contents,
-            ctx,
-        )
-    });
-
-    // Index global rules (e.g. ~/.agents/AGENTS.md) on a background task so
-    // they are available to subsequent agent queries.
-    ProjectContextModel::handle(ctx).update(ctx, |me, ctx| me.index_global_rules(ctx));
 
     ctx.add_singleton_model(|ctx| {
         PersistedWorkspace::new(

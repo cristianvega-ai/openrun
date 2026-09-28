@@ -728,7 +728,7 @@ pub enum InputSuggestionsMode {
         original_input_config: Option<InputConfig>,
     },
 
-    /// Indexed repos switcher menu mode.
+    /// Repos switcher menu mode.
     IndexedReposMenu,
 
     /// Plan menu mode for selecting among multiple AI document plans.
@@ -812,7 +812,7 @@ impl InputSuggestionsMode {
             InputSuggestionsMode::ProfileSelector => Some("Search profiles"),
             InputSuggestionsMode::SlashCommands => Some("Search commands"),
             InputSuggestionsMode::PromptsMenu => Some("Search prompts"),
-            InputSuggestionsMode::IndexedReposMenu => Some("Search indexed repos"),
+            InputSuggestionsMode::IndexedReposMenu => Some("Search repos"),
             InputSuggestionsMode::PlanMenu { .. } => Some("Search plans"),
             _ => None,
         }
@@ -1081,7 +1081,6 @@ pub enum Event {
     OpenConversationHistory,
     OpenViewMCPPane,
     OpenAddMCPPane,
-    OpenProjectRulesPane,
     OpenEnvironmentManagementPane,
     OpenFilesPalette {
         source: PaletteSource,
@@ -14316,7 +14315,7 @@ impl Input {
         let attachments: Vec<AgentAttachment> = self
             .ai_context_model
             .as_ref(ctx)
-            .pending_context(ctx, true, None)
+            .pending_context(ctx, true)
             .into_iter()
             .filter_map(|context| match context {
                 AIAgentContext::Block(block) => Some(AgentAttachment::BlockReference {

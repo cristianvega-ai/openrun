@@ -113,8 +113,6 @@ pub enum CodeSource {
     },
     /// Opened from an active AI agent conversation.
     AIAction { id: AIAgentActionId },
-    /// Opened from project rules (WARP.md) file.
-    ProjectRules { location: LocalOrRemotePath },
     /// Opened from file tree (local or remote).
     FileTree { location: LocalOrRemotePath },
     /// Opened from command palette file search (local or remote).
@@ -137,7 +135,6 @@ impl CodeSource {
             } => default_directory.as_ref(),
             Self::Link { .. }
             | Self::AIAction { .. }
-            | Self::ProjectRules { .. }
             | Self::FileTree { .. }
             | Self::CommandPalette { .. }
             | Self::Finder { .. }
@@ -155,9 +152,7 @@ impl CodeSource {
                 }
             }
             Self::Link { path, .. } | Self::Finder { path } => Some(path.clone()),
-            Self::ProjectRules { location } | Self::Skill { location, .. } => {
-                location.to_local_path().map(Path::to_path_buf)
-            }
+            Self::Skill { location, .. } => location.to_local_path().map(Path::to_path_buf),
         }
     }
 
@@ -183,9 +178,7 @@ impl CodeSource {
             Self::Link { path, .. } | Self::Finder { path } => {
                 Some(LocalOrRemotePath::Local(path.clone()))
             }
-            Self::ProjectRules { location } | Self::Skill { location, .. } => {
-                Some(location.clone())
-            }
+            Self::Skill { location, .. } => Some(location.clone()),
         }
     }
 
@@ -218,7 +211,6 @@ impl CodeSource {
             Self::New { .. } => "new",
             Self::Link { .. } => "link",
             Self::AIAction { .. } => "ai_action",
-            Self::ProjectRules { .. } => "project_rules",
             Self::FileTree {
                 location: LocalOrRemotePath::Remote(_),
             } => "remote_file_tree",
@@ -244,9 +236,6 @@ impl CodeSource {
                     location: LocalOrRemotePath::Remote(_),
                 }
                 | Self::CommandPalette {
-                    location: LocalOrRemotePath::Remote(_),
-                }
-                | Self::ProjectRules {
                     location: LocalOrRemotePath::Remote(_),
                 }
                 | Self::Skill {

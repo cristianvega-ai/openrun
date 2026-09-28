@@ -686,13 +686,11 @@ fn should_watch_repository(
             RepoDetectionSource::TerminalNavigation | RepoDetectionSource::CloudEnvironmentPrep => {
                 true
             }
-            RepoDetectionSource::ProjectRulesIndexing
-            | RepoDetectionSource::CodeReviewInitialization => false,
+            RepoDetectionSource::CodeReviewInitialization => false,
         },
         settings::SettingsMode::Tui => match source {
             RepoDetectionSource::TerminalNavigation => true,
-            RepoDetectionSource::ProjectRulesIndexing
-            | RepoDetectionSource::CodeReviewInitialization
+            RepoDetectionSource::CodeReviewInitialization
             | RepoDetectionSource::CloudEnvironmentPrep => false,
         },
     }

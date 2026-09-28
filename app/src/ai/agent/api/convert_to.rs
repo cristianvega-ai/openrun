@@ -101,14 +101,6 @@ pub(super) fn convert_input(
                     )),
                 });
             }
-            AIAgentInput::InitProjectRules { context, .. } => {
-                return Ok(api::request::Input {
-                    context: Some(convert_context(context.as_ref())),
-                    r#type: Some(api::request::input::Type::InitProjectRules(
-                        api::request::input::InitProjectRules {},
-                    )),
-                });
-            }
             AIAgentInput::CreateEnvironment {
                 context,
                 repo_paths,
@@ -496,7 +488,6 @@ fn convert_input_to_user_input(
             ),
         ),
         AIAgentInput::ResumeConversation { .. } => Err(ConvertToAPITypeError::Ignore),
-        AIAgentInput::InitProjectRules { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::CodeReview { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::CreateEnvironment { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::InvokeSkill { .. } => Err(ConvertToAPITypeError::Ignore),

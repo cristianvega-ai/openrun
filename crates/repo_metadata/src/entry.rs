@@ -69,8 +69,7 @@ pub enum BudgetExceededBehavior {
     /// tree, `@`-context, and skill discovery.
     StopAndLazyLoad,
     /// Abort the build and return [`BuildTreeError::ExceededMaxFileLimit`].
-    /// Use this for consumers that must not operate on a partial tree — e.g.
-    /// codebase embedding, where the file limit is an intentional cost cap.
+    /// Use this for consumers that must not operate on a partial tree.
     FailFast,
 }
 
@@ -588,7 +587,7 @@ fn evaluate_entry(
 ) -> Result<EvaluatedEntry, BuildTreeError> {
     let is_dir = curr_path.is_dir();
 
-    // Only ignore symlinks to directories. Symlinks to files are preserved (e.g. WARP.md).
+    // Only ignore symlinks to directories. Symlinks to files are preserved.
     if curr_path.is_symlink() && is_dir {
         return Err(BuildTreeError::Symlink);
     }

@@ -18,8 +18,6 @@ pub mod aws_credentials;
 pub(crate) mod bedrock_credentials;
 pub(crate) mod block_context;
 pub(crate) mod blocklist;
-#[cfg(any(feature = "local_fs", not(target_family = "wasm")))]
-pub(crate) mod codebase_auto_indexing;
 pub mod control_code_parser;
 pub(crate) mod conversation_details_panel;
 #[cfg(feature = "local_fs")]
@@ -41,7 +39,6 @@ pub mod harness_availability;
 pub(crate) mod harness_display;
 pub(crate) mod llms;
 pub(crate) mod local_harness_setup;
-pub(crate) mod metadata_project_rules;
 pub mod onboarding;
 pub(crate) mod orchestration;
 pub(crate) mod predict;
@@ -73,7 +70,6 @@ pub(crate) use ai::paths;
 pub fn init(app: &mut AppContext) {
     blocklist::keyboard_navigable_buttons::init(app);
     blocklist::block::number_shortcut_buttons::init(app);
-    blocklist::toggleable_items::init(app);
     blocklist::suggested_agent_mode_workflow_modal::init(app);
     blocklist::suggested_rule_modal::init(app);
     ai_document_view::init(app);

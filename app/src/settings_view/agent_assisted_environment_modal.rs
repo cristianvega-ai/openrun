@@ -5,17 +5,8 @@ use std::{
 };
 
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
-use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
-#[cfg(all(
-    feature = "local_fs",
-    not(target_family = "wasm"),
-    not(any(test, feature = "integration_tests"))
-))]
-use ai::index::full_source_code_embedding::manager::CodebaseIndexManagerEvent;
-#[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use git2::Repository as GitRepository;
 use pathfinder_color::ColorU;
-use warp_core::features::FeatureFlag;
 use warp_core::paths::home_relative_path;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::r#async::{SpawnedFutureHandle, Timer};
@@ -41,6 +32,8 @@ use crate::view_components::action_button::{
     ActionButton, ButtonSize, PrimaryTheme, SecondaryTheme,
 };
 use crate::workspace::ToastStack;
+#[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
+use crate::workspace_metadata::PersistedWorkspace;
 
 const DIALOG_WIDTH: f32 = 600.;
 const AVAILABLE_LIST_MAX_HEIGHT: f32 = 260.;
@@ -135,26 +128,22 @@ impl AgentAssistedEnvironmentModal {
             not(any(test, feature = "integration_tests"))
         ))]
         {
-            let index_manager = CodebaseIndexManager::handle(ctx);
-            ctx.subscribe_to_model(&index_manager, |me, _, event, ctx| {
+            use crate::workspace_metadata::PersistedWorkspaceEvent;
+
+            let persisted_workspace = PersistedWorkspace::handle(ctx);
+            ctx.subscribe_to_model(&persisted_workspace, |me, _, event, ctx| {
                 if !me.visible {
                     return;
                 }
 
-                match event {
-                    CodebaseIndexManagerEvent::SyncStateUpdated { .. }
-                    | CodebaseIndexManagerEvent::NewIndexCreated { .. }
-                    | CodebaseIndexManagerEvent::RemoveExpiredIndexMetadata { .. }
-                    | CodebaseIndexManagerEvent::IndexMetadataUpdated { .. } => {
-                        me.refresh_available_repos(ctx);
-                        if me.available_repos.is_empty() {
-                            me.maybe_start_available_repos_loading(ctx);
-                        } else {
-                            me.stop_available_repos_loading();
-                        }
-                        ctx.notify();
+                if let PersistedWorkspaceEvent::WorkspaceAdded { .. } = event {
+                    me.refresh_available_repos(ctx);
+                    if me.available_repos.is_empty() {
+                        me.maybe_start_available_repos_loading(ctx);
+                    } else {
+                        me.stop_available_repos_loading();
                     }
-                    _ => {}
+                    ctx.notify();
                 }
             });
         }
@@ -194,7 +183,7 @@ impl AgentAssistedEnvironmentModal {
     }
 
     fn refresh_available_repos(&mut self, ctx: &mut ViewContext<Self>) {
-        self.available_repos = available_indexed_repos(ctx);
+        self.available_repos = available_known_repos(ctx);
         self.available_row_mouse_states = self
             .available_repos
             .iter()
@@ -404,11 +393,8 @@ impl AgentAssistedEnvironmentModal {
             .with_main_axis_size(MainAxisSize::Max)
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_child(
-                Expanded::new(
-                    1.,
-                    self.render_section_title("Available indexed repos", appearance),
-                )
-                .finish(),
+                Expanded::new(1., self.render_section_title("Available repos", appearance))
+                    .finish(),
             )
             .with_child(
                 if cfg!(all(feature = "local_fs", not(target_family = "wasm"))) {
@@ -426,9 +412,9 @@ impl AgentAssistedEnvironmentModal {
         if self.available_repos.is_empty() {
             let text = if cfg!(all(feature = "local_fs", not(target_family = "wasm"))) {
                 if self.available_repos_loading {
-                    "Loading locally indexed repos…"
+                    "Loading local repos…"
                 } else {
-                    "No locally indexed repos found yet. Index a repo, then try again."
+                    "No local repos found yet. Add a repo, then try again."
                 }
             } else {
                 "Local repo selection is unavailable in this build."
@@ -501,7 +487,7 @@ impl AgentAssistedEnvironmentModal {
         if !has_any_available {
             col.add_child(
                 Text::new(
-                    "All locally indexed repos are already selected.",
+                    "All local repos are already selected.",
                     appearance.ui_font_family(),
                     appearance.ui_font_size() * 0.95,
                 )
@@ -605,12 +591,8 @@ impl AgentAssistedEnvironmentModal {
     }
 
     fn render_dialog(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
-        let description = if FeatureFlag::FullSourceCodeEmbedding.is_enabled() {
-            "Select locally indexed repos to provide context for the environment creation agent."
-        } else {
-            "Select repos to provide context for the environment creation agent."
-        }
-        .to_string();
+        let description =
+            "Select repos to provide context for the environment creation agent.".to_string();
 
         let close_button = icon_button(
             appearance,
@@ -731,23 +713,19 @@ impl View for AgentAssistedEnvironmentModal {
     }
 }
 
-fn available_indexed_repos(app: &AppContext) -> Vec<RepoEntry> {
+fn available_known_repos(app: &AppContext) -> Vec<RepoEntry> {
     #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
     {
-        let mut repos: Vec<RepoEntry> = CodebaseIndexManager::as_ref(app)
-            .get_codebase_index_statuses(app)
-            .filter_map(|(root, status)| {
-                status.has_synced_version().then(|| {
-                    let name = root
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .map(ToOwned::to_owned)
-                        .unwrap_or_else(|| root.to_string_lossy().into_owned());
-                    RepoEntry {
-                        name,
-                        path: root.clone(),
-                    }
-                })
+        let mut repos: Vec<RepoEntry> = PersistedWorkspace::as_ref(app)
+            .workspaces()
+            .map(|workspace| {
+                let root = workspace.path;
+                let name = root
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| root.to_string_lossy().into_owned());
+                RepoEntry { name, path: root }
             })
             .collect();
 

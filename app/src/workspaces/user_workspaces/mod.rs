@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use warp_core::features::FeatureFlag;
-use warp_core::settings::{ChangeEventReason, Setting};
+use warp_core::settings::ChangeEventReason;
 use warp_core::user_preferences::GetUserPreferences;
 use warp_errors::report_error;
 use warpui::{
@@ -33,9 +33,7 @@ use crate::server::server_api::team::TeamClient;
 use crate::server::server_api::workspace::{PurchaseAddonCreditsOutcome, WorkspaceClient};
 #[cfg(test)]
 use crate::server::server_api::{team::MockTeamClient, workspace::MockWorkspaceClient};
-use crate::settings::{
-    AISettings, AISettingsChangedEvent, CodeSettings, CodeSettingsChangedEvent, PrivacySettings,
-};
+use crate::settings::PrivacySettings;
 #[cfg(test)]
 use crate::workspaces::workspace::{
     AIAutonomyPolicy, AiAutonomySettings, BillingMetadata, CustomerType, SplitListSetting,
@@ -116,7 +114,6 @@ pub enum UserWorkspacesEvent {
     WindowTeamChanged {
         window_id: WindowId,
     },
-    CodebaseContextEnablementChanged,
     /// Fired when a service agreement's sunsetted_to_build_ts field is updated.
     SunsettedToBuildDataUpdated,
 }
@@ -217,23 +214,6 @@ impl UserWorkspaces {
         current_workspace_uid: Option<WorkspaceUid>,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
-        ctx.subscribe_to_model(
-            &CodeSettings::handle(ctx),
-            |_, _, code_settings_event, ctx| match code_settings_event {
-                CodeSettingsChangedEvent::CodebaseContextEnabled { .. }
-                | CodeSettingsChangedEvent::AutoIndexingEnabled { .. } => {
-                    ctx.emit(UserWorkspacesEvent::CodebaseContextEnablementChanged);
-                }
-                _ => {}
-            },
-        );
-
-        ctx.subscribe_to_model(&AISettings::handle(ctx), |_, _, ai_settings_event, ctx| {
-            if let AISettingsChangedEvent::IsAnyAIEnabled { .. } = ai_settings_event {
-                ctx.emit(UserWorkspacesEvent::CodebaseContextEnablementChanged);
-            }
-        });
-
         let mut me = Self {
             current_workspace_uid: current_workspace_uid.into(),
             workspaces: cached_workspaces.into(),
@@ -828,7 +808,6 @@ impl UserWorkspaces {
         });
 
         ctx.emit(UserWorkspacesEvent::TeamsChanged);
-        ctx.emit(UserWorkspacesEvent::CodebaseContextEnablementChanged);
         ctx.notify();
     }
 
@@ -1603,57 +1582,6 @@ impl UserWorkspaces {
         self.current_workspace()
             .map(|workspace| workspace.settings.is_discoverable)
             .unwrap_or(false)
-    }
-
-    /// Returns whether codebase context is enabled across all of the user's teams.
-    pub fn is_codebase_context_enabled(&self, app: &AppContext) -> bool {
-        let ai_globally_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
-        match self.teams_allow_codebase_context() {
-            AdminEnablementSetting::Enable => ai_globally_enabled,
-            AdminEnablementSetting::Disable => false,
-            AdminEnablementSetting::RespectUserSetting => {
-                ai_globally_enabled && *CodeSettings::as_ref(app).codebase_context_enabled.value()
-            }
-        }
-    }
-
-    pub fn teams_allow_codebase_context(&self) -> AdminEnablementSetting {
-        let mut team_settings = self
-            .workspaces
-            .iter()
-            .flat_map(|workspace| workspace.teams.iter())
-            .map(|team| &team.settings.codebase_context.value)
-            .peekable();
-
-        if team_settings.peek().is_none() {
-            return self
-                .current_workspace()
-                .map(|workspace| workspace.settings.codebase_context_settings.setting.clone())
-                .unwrap_or_default();
-        }
-
-        // TODO(isaiah): Enforce codebase-indexing policy per team and window.
-        let mut respects_user_setting = false;
-        for setting in team_settings {
-            match setting {
-                AdminEnablementSetting::Enable => {}
-                AdminEnablementSetting::Disable => return AdminEnablementSetting::Disable,
-                AdminEnablementSetting::RespectUserSetting => respects_user_setting = true,
-            }
-        }
-
-        if respects_user_setting {
-            AdminEnablementSetting::RespectUserSetting
-        } else {
-            AdminEnablementSetting::Enable
-        }
-    }
-
-    pub fn team_disabling_codebase_context(&self) -> Option<&Team> {
-        self.workspaces
-            .iter()
-            .flat_map(|workspace| workspace.teams.iter())
-            .find(|team| team.settings.codebase_context.value == AdminEnablementSetting::Disable)
     }
 
     /// Updates whether or not session sharing is enabled based on the current team's tier policy.

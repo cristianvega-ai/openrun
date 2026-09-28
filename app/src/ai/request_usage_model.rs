@@ -136,12 +136,6 @@ impl RequestLimitInfo {
     }
 }
 
-pub struct CodebaseContextUsageLimit {
-    pub max_files_per_repo: usize,
-    pub max_indices_allowed: Option<usize>,
-    pub embedding_generation_batch_size: usize,
-}
-
 /// Contains all usage-related information fetched from the server.
 pub struct RequestUsageInfo {
     pub request_limit_info: RequestLimitInfo,
@@ -662,23 +656,6 @@ impl AIRequestUsageModel {
 
     pub fn request_limit(&self) -> usize {
         self.request_limit_info.limit
-    }
-
-    /// Returns the number of indices the user's tier allows them to create and the number of files
-    /// the user's tier allows them to index. If the user is allowed unlimited indices, then the
-    /// max_indices_allowed is None.
-    pub fn codebase_context_limits(&self) -> CodebaseContextUsageLimit {
-        CodebaseContextUsageLimit {
-            max_files_per_repo: self.request_limit_info.max_files_per_repo,
-            max_indices_allowed: if self.request_limit_info.is_unlimited_codebase_indices {
-                None
-            } else {
-                Some(self.request_limit_info.max_codebase_indices)
-            },
-            embedding_generation_batch_size: self
-                .request_limit_info
-                .embedding_generation_batch_size,
-        }
     }
 
     pub fn next_refresh_time(&self) -> DateTime<Utc> {

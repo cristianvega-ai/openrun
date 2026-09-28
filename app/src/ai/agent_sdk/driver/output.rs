@@ -29,7 +29,6 @@ pub mod text {
             | AIAgentInput::AutoCodeDiffQuery { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
-            | AIAgentInput::InitProjectRules { .. }
             | AIAgentInput::CodeReview { .. }
             | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::SummarizeConversation { .. }
@@ -786,7 +785,6 @@ pub mod json {
                 | AIAgentInput::AutoCodeDiffQuery { .. }
                 | AIAgentInput::CreateNewProject { .. }
                 | AIAgentInput::CloneRepository { .. }
-                | AIAgentInput::InitProjectRules { .. }
                 | AIAgentInput::CodeReview { .. }
                 | AIAgentInput::CreateEnvironment { .. }
                 | AIAgentInput::SummarizeConversation { .. }
@@ -1335,9 +1333,6 @@ fn format_agent_text<W: Write>(text: &AIAgentText, w: &mut W) -> io::Result<()> 
                 }
 
                 match source {
-                    Some(CodeSource::ProjectRules { location }) => {
-                        writeln!(w, " rules_path={}", location.display_path())?;
-                    }
                     Some(CodeSource::Link {
                         path,
                         range_start,

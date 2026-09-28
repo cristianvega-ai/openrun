@@ -18,8 +18,6 @@ use crate::{DirectoryWatcher, Repository};
 pub enum RepoDetectionSource {
     /// User actively navigated to this repo in a terminal (via cd/pwd change).
     TerminalNavigation,
-    /// Repo was detected during project rules indexing.
-    ProjectRulesIndexing,
     /// Repo was detected for code review/diff state initialization.
     CodeReviewInitialization,
     /// Repo was cloned or discovered during cloud agent environment preparation.

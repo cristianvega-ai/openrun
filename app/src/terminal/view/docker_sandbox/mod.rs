@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::sync::mpsc::SyncSender;
 
 #[cfg(not(target_family = "wasm"))]
-use warp_cli::agent::Harness;
 #[cfg(any(feature = "local_tty", not(target_family = "wasm")))]
 use warp_errors::report_error;
 #[cfg(feature = "local_tty")]
@@ -290,7 +289,7 @@ impl TerminalView {
                     .map_err(|_| "view dropped")?
                     .ok_or("environment not found")?;
 
-                // Prepare the environment (clone repos, run setup commands, index codebases).
+                // Prepare the environment (clone repos, run setup commands).
                 let source_repos = environment.effective_repos();
                 let setup_commands = environment.setup_commands;
                 let prepare_future = spawner
@@ -298,7 +297,6 @@ impl TerminalView {
                         prepare_environment(
                             DOCKER_SANDBOX_HOME_DIR.into(),
                             true, /* is_sandbox */
-                            Harness::Oz,
                             RepositoryPreparationOptions::new(
                                 source_repos,
                                 setup_commands,

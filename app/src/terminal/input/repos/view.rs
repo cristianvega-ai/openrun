@@ -1,4 +1,4 @@
-//! Inline repos menu view for switching between indexed repos.
+//! Inline repos menu view for switching between known repos.
 
 #[cfg(feature = "local_fs")]
 use std::collections::HashMap;

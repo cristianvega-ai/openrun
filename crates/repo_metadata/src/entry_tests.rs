@@ -594,53 +594,6 @@ fn standing_queries_report_symlinked_skills_without_materializing_symlinked_dire
     );
 }
 #[test]
-fn standing_queries_do_not_report_rules_below_an_unloaded_shallow_directory() {
-    virtual_fs::VirtualFS::test("standing_queries_report_shallow_rules", |dirs, mut vfs| {
-        vfs.mkdir("repo/src/deep")
-            .with_files(vec![virtual_fs::Stub::FileWithContent(
-                "repo/src/deep/WARP.md",
-                "project rules",
-            )]);
-        let repo = dirs.tests().join("repo");
-
-        let mut files = Vec::new();
-        let mut gitignores = Vec::new();
-        let mut results = StandingQueryResults::default();
-        let tree = run(Entry::build_tree_with_standing_queries(
-            &repo,
-            &mut files,
-            &mut gitignores,
-            None,
-            super::BuildTreeOptions {
-                max_depth: 1,
-                current_depth: 0,
-                ignored_path_strategy: &IgnoredPathStrategy::IncludeLazy,
-                force_included_paths: &[],
-                budget_exceeded_behavior: super::BudgetExceededBehavior::StopAndLazyLoad,
-            },
-            false,
-            &mut results,
-            &StandingQueryDefinitions::default(),
-        ))
-        .unwrap();
-
-        let src = find_entry(&tree, &repo.join("src")).expect("src should be represented");
-        assert!(!src.loaded());
-        assert!(find_entry(&tree, &repo.join("src/deep/WARP.md")).is_none());
-
-        let rule_path = warp_util::standardized_path::StandardizedPath::try_from_local(
-            &repo.join("src/deep/WARP.md"),
-        )
-        .unwrap();
-        assert!(
-            !results
-                .project_rules()
-                .any(|content| content.path == rule_path)
-        );
-    });
-}
-
-#[test]
 fn shallow_tree_expands_force_included_skill_branch_only() {
     virtual_fs::VirtualFS::test("shallow_tree_force_included_skills", |dirs, mut vfs| {
         vfs.mkdir("workspace/.agents/skills/review")
@@ -650,11 +603,11 @@ fn shallow_tree_expands_force_included_skill_branch_only() {
                     "workspace/.agents/skills/review/SKILL.md",
                     "name: review",
                 ),
-                virtual_fs::Stub::FileWithContent("workspace/src/deep/WARP.md", "project rules"),
+                virtual_fs::Stub::FileWithContent("workspace/src/deep/notes.md", "notes"),
             ]);
         let workspace = dirs.tests().join("workspace");
         let skill_path = workspace.join(".agents/skills/review/SKILL.md");
-        let rule_path = workspace.join("src/deep/WARP.md");
+        let deep_file_path = workspace.join("src/deep/notes.md");
 
         let mut files = Vec::new();
         let mut gitignores = Vec::new();
@@ -687,21 +640,14 @@ fn shallow_tree_expands_force_included_skill_branch_only() {
         let src = find_entry(&tree, &workspace.join("src"))
             .expect("unrelated shallow directory should be represented");
         assert!(!src.loaded());
-        assert!(find_entry(&tree, &rule_path).is_none());
+        assert!(find_entry(&tree, &deep_file_path).is_none());
 
         let skill_path =
             warp_util::standardized_path::StandardizedPath::try_from_local(&skill_path).unwrap();
-        let rule_path =
-            warp_util::standardized_path::StandardizedPath::try_from_local(&rule_path).unwrap();
         assert!(
             results
                 .project_skills()
                 .any(|content| content.path == skill_path && !content.is_directory)
-        );
-        assert!(
-            !results
-                .project_rules()
-                .any(|content| content.path == rule_path)
         );
     });
 }

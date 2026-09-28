@@ -272,7 +272,7 @@ impl CreateEnvironmentArg {
         // Filter repos to accept either valid URLs or POSIX portable pathnames for security.
         //
         // Note: we also allow *absolute* POSIX paths (e.g., /Users/me/repo) as long as every
-        // component is portable. This is important for local indexed repos.
+        // component is portable. This is important for local repos.
         let safe_repos = self
             .repos
             .iter()

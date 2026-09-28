@@ -2917,11 +2917,6 @@ pub enum AIAgentInput {
         context: Arc<[AIAgentContext]>,
     },
 
-    InitProjectRules {
-        context: Arc<[AIAgentContext]>,
-        display_query: Option<String>,
-    },
-
     CreateEnvironment {
         context: Arc<[AIAgentContext]>,
         display_query: Option<String>,
@@ -3072,7 +3067,6 @@ impl Display for AIAgentInput {
             }
             Self::ActionResult { result, .. } => write!(f, "ActionResult: {result}"),
             Self::ResumeConversation { .. } => write!(f, "ResumeConversation"),
-            Self::InitProjectRules { .. } => write!(f, "InitProjectRules"),
             Self::CreateEnvironment { .. } => write!(f, "CreateEnvironment"),
             Self::TriggerPassiveSuggestion { .. } => write!(f, "TriggerSuggestPrompt"),
             Self::CreateNewProject { .. } => write!(f, "CreateNewProject"),
@@ -3122,8 +3116,7 @@ impl AIAgentInput {
                 clone_repo_url: url,
                 ..
             } => Some(url.query.clone()),
-            Self::InitProjectRules { display_query, .. }
-            | Self::CreateEnvironment { display_query, .. } => display_query.clone(),
+            Self::CreateEnvironment { display_query, .. } => display_query.clone(),
             Self::CodeReview { .. } => Some("Address these comments".to_string()),
             Self::InvokeSkill {
                 skill, user_query, ..
@@ -3255,7 +3248,6 @@ impl AIAgentInput {
             | Self::ActionResult { context, .. }
             | Self::AutoCodeDiffQuery { context, .. }
             | Self::ResumeConversation { context, .. }
-            | Self::InitProjectRules { context, .. }
             | Self::CreateEnvironment { context, .. }
             | Self::TriggerPassiveSuggestion { context, .. }
             | Self::CreateNewProject { context, .. }
@@ -3287,7 +3279,6 @@ impl AIAgentInput {
             Self::ActionResult { .. }
             | Self::AutoCodeDiffQuery { .. }
             | Self::ResumeConversation { .. }
-            | Self::InitProjectRules { .. }
             | Self::CreateEnvironment { .. }
             | Self::CreateNewProject { .. }
             | Self::CloneRepository { .. }
@@ -3311,9 +3302,7 @@ impl AIAgentInput {
     pub fn has_custom_display_query(&self) -> bool {
         matches!(
             self,
-            AIAgentInput::InitProjectRules { .. }
-                | AIAgentInput::CreateEnvironment { .. }
-                | AIAgentInput::InvokeSkill { .. }
+            AIAgentInput::CreateEnvironment { .. } | AIAgentInput::InvokeSkill { .. }
         )
     }
 }

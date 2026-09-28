@@ -389,46 +389,6 @@ pub const OPEN_CODE_REVIEW: StaticCommand = StaticCommand {
     argument: None,
 };
 
-pub const INDEX: StaticCommand = StaticCommand {
-    name: "/index",
-    description: "Index this codebase",
-    kind: SlashCommandKind::Index,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/find-all.svg",
-    },
-    availability: Availability::REPOSITORY
-        .union(Availability::CODEBASE_CONTEXT)
-        .union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const INIT: StaticCommand = StaticCommand {
-    name: "/init",
-    description: "Index this codebase and generate an AGENTS.md file",
-    kind: SlashCommandKind::Init,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/warp-2.svg",
-    },
-    availability: Availability::REPOSITORY
-        .union(Availability::AGENT_VIEW)
-        .union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: true,
-    argument: None,
-};
-
-pub const OPEN_PROJECT_RULES: StaticCommand = StaticCommand {
-    name: "/open-project-rules",
-    description: "Open the project rules file (AGENTS.md)",
-    kind: SlashCommandKind::OpenProjectRules,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/file-code-02.svg",
-    },
-    availability: Availability::REPOSITORY.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
 pub const OPEN_MCP_SERVERS: StaticCommand = StaticCommand {
     name: "/open-mcp-servers",
     description: "Open MCP servers",
@@ -482,7 +442,7 @@ pub static FEEDBACK: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
 
 pub const OPEN_REPO: StaticCommand = StaticCommand {
     name: "/open-repo",
-    description: "Switch to another indexed repository",
+    description: "Switch to another repository",
     kind: SlashCommandKind::OpenRepo,
     supported_surfaces: SlashCommandSurfaces::GuiOnly {
         icon_path: "bundled/svg/folder.svg",
@@ -953,15 +913,12 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
         COST,
         EXIT,
         FEEDBACK.clone(),
-        INDEX,
-        INIT,
         API_KEYS,
         CONNECT_GROK,
         UPGRADE,
         MANAGE_BILLING,
         LOGOUT,
         MCP,
-        OPEN_PROJECT_RULES,
         OPEN_MCP_SERVERS,
         OPEN_RULES,
         AGENT.clone(),

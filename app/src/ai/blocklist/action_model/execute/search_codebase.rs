@@ -354,8 +354,8 @@ impl SearchCodebaseExecutor {
         // Drop the waiting sender first so any late completion from the controller becomes a no-op.
         self.active_searches.remove(action_id);
         self.get_relevant_files_controller
-            .update(ctx, |controller, ctx| {
-                controller.cancel_request_for_action(action_id, ctx)
+            .update(ctx, |controller, _| {
+                controller.cancel_request_for_action(action_id)
             });
     }
 

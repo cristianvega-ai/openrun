@@ -9,19 +9,9 @@ use std::path::{Path, PathBuf};
 use warp_util::standardized_path::StandardizedPath;
 
 /// Repository-scoped standing query configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StandingQueryDefinitions {
     project_skill_provider_paths: Vec<PathBuf>,
-    project_rule_file_names: Vec<String>,
-}
-
-impl Default for StandingQueryDefinitions {
-    fn default() -> Self {
-        Self {
-            project_skill_provider_paths: Vec::new(),
-            project_rule_file_names: vec!["WARP.md".to_string(), "AGENTS.md".to_string()],
-        }
-    }
 }
 
 impl StandingQueryDefinitions {
@@ -55,16 +45,6 @@ impl StandingQueryDefinitions {
                 .and_then(Path::parent)
                 .is_some_and(|skills_root| self.is_project_skill_provider_directory(skills_root))
     }
-
-    fn is_project_rule_file(&self, path: &Path) -> bool {
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|file_name| {
-                self.project_rule_file_names
-                    .iter()
-                    .any(|rule_name| file_name.eq_ignore_ascii_case(rule_name))
-            })
-    }
 }
 
 /// A path retained by a standing query.
@@ -94,16 +74,11 @@ impl StandingQueryContent {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StandingQueryResults {
     project_skills: HashSet<StandingQueryContent>,
-    project_rules: HashSet<StandingQueryContent>,
 }
 
 impl StandingQueryResults {
     pub fn project_skills(&self) -> impl Iterator<Item = &StandingQueryContent> {
         self.project_skills.iter()
-    }
-
-    pub fn project_rules(&self) -> impl Iterator<Item = &StandingQueryContent> {
-        self.project_rules.iter()
     }
 
     /// Records a path encountered while traversing the repository.
@@ -120,10 +95,6 @@ impl StandingQueryResults {
         }
         if !is_directory && definitions.is_project_skill_file(path) {
             self.project_skills
-                .insert(StandingQueryContent::file(standardized.clone()));
-        }
-        if !is_directory && definitions.is_project_rule_file(path) {
-            self.project_rules
                 .insert(StandingQueryContent::file(standardized));
         }
     }
@@ -163,27 +134,18 @@ impl StandingQueryResults {
         self.project_skills.insert(content);
     }
 
-    pub fn insert_project_rule(&mut self, content: StandingQueryContent) {
-        self.project_rules.insert(content);
-    }
-
     pub fn apply_delta(&mut self, delta: &StandingQueryResultsDelta) {
         for removed in &delta.removed_project_skills {
             self.project_skills.remove(removed);
         }
-        for removed in &delta.removed_project_rules {
-            self.project_rules.remove(removed);
-        }
         self.project_skills
             .extend(delta.upserted_project_skills.iter().cloned());
-        self.project_rules
-            .extend(delta.upserted_project_rules.iter().cloned());
     }
 
     /// Replaces results beneath changed roots and returns the observable delta.
     ///
     /// Upserts are emitted even when a matching path already exists so consumers
-    /// reread modified skill and rules file contents.
+    /// reread modified skill file contents.
     pub fn replace_subtrees(
         &mut self,
         removed_roots: &[StandardizedPath],
@@ -197,21 +159,11 @@ impl StandingQueryResults {
                 .filter(|content| content.path.starts_with(root))
                 .cloned()
                 .collect::<Vec<_>>();
-            let removed_rules = self
-                .project_rules
-                .iter()
-                .filter(|content| content.path.starts_with(root))
-                .cloned()
-                .collect::<Vec<_>>();
             delta.removed_project_skills.extend(removed_skills);
-            delta.removed_project_rules.extend(removed_rules);
         }
         delta
             .upserted_project_skills
             .extend(discovered.project_skills);
-        delta
-            .upserted_project_rules
-            .extend(discovered.project_rules);
         self.apply_delta(&delta);
         delta
     }
@@ -220,8 +172,6 @@ impl StandingQueryResults {
         StandingQueryResultsDelta {
             upserted_project_skills: self.project_skills.iter().cloned().collect(),
             removed_project_skills: Vec::new(),
-            upserted_project_rules: self.project_rules.iter().cloned().collect(),
-            removed_project_rules: Vec::new(),
         }
     }
 }
@@ -231,24 +181,15 @@ impl StandingQueryResults {
 pub struct StandingQueryResultsDelta {
     pub upserted_project_skills: Vec<StandingQueryContent>,
     pub removed_project_skills: Vec<StandingQueryContent>,
-    pub upserted_project_rules: Vec<StandingQueryContent>,
-    pub removed_project_rules: Vec<StandingQueryContent>,
 }
 
 impl StandingQueryResultsDelta {
     pub fn is_empty(&self) -> bool {
-        self.upserted_project_skills.is_empty()
-            && self.removed_project_skills.is_empty()
-            && self.upserted_project_rules.is_empty()
-            && self.removed_project_rules.is_empty()
+        self.upserted_project_skills.is_empty() && self.removed_project_skills.is_empty()
     }
 
     pub fn project_skills_changed(&self) -> bool {
         !self.upserted_project_skills.is_empty() || !self.removed_project_skills.is_empty()
-    }
-
-    pub fn project_rules_changed(&self) -> bool {
-        !self.upserted_project_rules.is_empty() || !self.removed_project_rules.is_empty()
     }
 }
 

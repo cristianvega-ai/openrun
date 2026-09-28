@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -16,15 +16,11 @@ use repo_metadata::{
 };
 use settings::Setting as _;
 use warp_errors::report_error;
-use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity};
+use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 
 use super::OutlineStatus;
-use crate::settings::{
-    AISettings, AISettingsChangedEvent, CodeSettings, CodeSettingsChangedEvent, InputSettings,
-    InputSettingsChangedEvent,
-};
-use crate::workspace_metadata::all_working_directories;
-use crate::workspaces::user_workspaces::UserWorkspaces;
+use crate::settings::{InputSettings, InputSettingsChangedEvent};
+use crate::terminal::TerminalView;
 use crate::{TelemetryEvent, safe_info, safe_warn, send_telemetry_from_ctx};
 
 /// State for a repository outline, containing both the repository handle and the outline status.
@@ -52,37 +48,17 @@ pub struct RepoOutlines {
 
     /// An `AbortHandle` for the active outline computation task.
     active_outline_task: Option<AbortHandle>,
-
-    indexing_enabled: bool,
 }
 
 const REPO_WATCHER_DEBOUNCE_DURATION: Duration = Duration::from_secs(10);
 
 impl RepoOutlines {
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
-        Self::new_with_indexing_enabled(true, ctx)
-    }
-
-    pub fn new_with_indexing_enabled(indexing_enabled: bool, ctx: &mut ModelContext<Self>) -> Self {
-        ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| {
-            if let AISettingsChangedEvent::IsAnyAIEnabled { .. } = event {
-                Self::handle_setting_change_event(me, ctx);
-            }
-        });
-
-        ctx.subscribe_to_model(&CodeSettings::handle(ctx), |me, _, event, ctx| {
-            if let CodeSettingsChangedEvent::CodebaseContextEnabled { .. } = event {
-                Self::handle_setting_change_event(me, ctx);
-            }
-        });
-
-        if indexing_enabled
-            && !cfg!(any(
-                test,
-                feature = "fast_dev",
-                feature = "integration_tests"
-            ))
-        {
+        if !cfg!(any(
+            test,
+            feature = "fast_dev",
+            feature = "integration_tests"
+        )) {
             ctx.subscribe_to_model(&DetectedRepositories::handle(ctx), |me, _, event, ctx| {
                 let DetectedRepositoriesEvent::DetectedGitRepo {
                     repository,
@@ -103,7 +79,6 @@ impl RepoOutlines {
             outlines: Default::default(),
             outline_queue: Default::default(),
             active_outline_task: Default::default(),
-            indexing_enabled,
         }
     }
 
@@ -114,7 +89,6 @@ impl RepoOutlines {
             outlines: Default::default(),
             outline_queue: Default::default(),
             active_outline_task: Default::default(),
-            indexing_enabled: true,
         }
     }
 
@@ -135,14 +109,10 @@ impl RepoOutlines {
         }
     }
 
-    /// Check if outlines should be built based on if codebase context enabled OR
-    /// outline codebase symbols for @ context menu settings.
     fn should_build_outlines(&self, ctx: &ModelContext<Self>) -> bool {
-        self.indexing_enabled
-            && (UserWorkspaces::as_ref(ctx).is_codebase_context_enabled(ctx)
-                || *InputSettings::as_ref(ctx)
-                    .outline_codebase_symbols_for_at_context_menu
-                    .value())
+        *InputSettings::as_ref(ctx)
+            .outline_codebase_symbols_for_at_context_menu
+            .value()
     }
 
     fn handle_setting_change_event(me: &mut RepoOutlines, ctx: &mut ModelContext<Self>) {
@@ -418,6 +388,23 @@ impl Entity for RepoOutlines {
 }
 
 impl SingletonEntity for RepoOutlines {}
+
+fn all_working_directories(app: &AppContext) -> HashSet<PathBuf> {
+    let mut working_directories = HashSet::new();
+    for window_id in app.window_ids() {
+        for terminal_view in app
+            .views_of_type::<TerminalView>(window_id)
+            .into_iter()
+            .flatten()
+            .map(|handle| handle.as_ref(app))
+        {
+            if let Some(dir) = terminal_view.pwd() {
+                working_directories.insert(dir.into());
+            }
+        }
+    }
+    working_directories
+}
 
 struct OutlineRepositorySubscriber {
     repository_update_tx: Sender<RepositoryUpdate>,

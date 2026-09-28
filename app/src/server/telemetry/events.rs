@@ -972,7 +972,6 @@ pub enum AIAgentInput {
     UserQuery { query: String },
     AutoCodeDiffQuery { query: String },
     ResumeConversation,
-    InitProjectRules { display_query: Option<String> },
     CreateEnvironment { display_query: Option<String> },
     TriggerSuggestPrompt { trigger: PassiveSuggestionTrigger },
     ActionResult { action_id: AIAgentActionId },
@@ -994,9 +993,6 @@ impl From<FullAIAgentInput> for AIAgentInput {
             FullAIAgentInput::UserQuery { query, .. } => Self::UserQuery { query },
             FullAIAgentInput::AutoCodeDiffQuery { query, .. } => Self::AutoCodeDiffQuery { query },
             FullAIAgentInput::ResumeConversation { .. } => Self::ResumeConversation,
-            FullAIAgentInput::InitProjectRules { display_query, .. } => {
-                Self::InitProjectRules { display_query }
-            }
             FullAIAgentInput::CreateEnvironment { display_query, .. } => {
                 Self::CreateEnvironment { display_query }
             }
@@ -1112,7 +1108,6 @@ impl From<AgentViewEntryOrigin> for TelemetryAgentViewEntryOrigin {
             AgentViewEntryOrigin::ConversationListView => Self::ConversationListView,
             AgentViewEntryOrigin::Onboarding => Self::Onboarding,
             AgentViewEntryOrigin::Keybinding(_) => Self::Keybinding,
-            AgentViewEntryOrigin::SlashInit => Self::SlashInit,
             AgentViewEntryOrigin::CreateEnvironment => Self::CreateEnvironment,
             AgentViewEntryOrigin::ProjectEntry => Self::ProjectEntry,
             AgentViewEntryOrigin::ClearBuffer => Self::ClearBuffer,

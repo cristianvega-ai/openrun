@@ -6,7 +6,6 @@ use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, Once};
 use std::{fs, thread};
 
-use ai::project_context::model::ProjectRulePath;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::Utc;
 use cloud_object_models::folder::persistence as folder_persistence;
@@ -93,7 +92,7 @@ use crate::persistence::block_list::{
 };
 use crate::persistence::model::{
     CODE_REVIEW_PANE_KIND, GET_STARTED_PANE_KIND, NewPersistedObjectAction, NewTeamSettings,
-    ProjectRules, UserProfile,
+    UserProfile,
 };
 use crate::server::ids::{ClientId, HashableId, ServerId, SyncId};
 use crate::server::telemetry::TelemetryEvent;
@@ -105,7 +104,7 @@ use crate::terminal::history::PersistedCommand;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workflows::WorkflowId;
 use crate::workspace::tab_group::TabGroupId;
-use crate::workspace_metadata::EnablementState;
+use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
 use crate::workspaces::team::Team as TeamMetadata;
 use crate::workspaces::user_profiles::{UserProfileWithUID, user_profile_from_persistence};
 use crate::workspaces::workspace::{Workspace as WorkspaceMetadata, WorkspaceUid};
@@ -593,13 +592,9 @@ fn handle_model_event(event: ModelEvent, connection: &mut SqliteConnection) -> a
             server_creation_info,
         } => update_object_after_server_creation(connection, client_id, server_creation_info)
             .context("error executing object creation succeeded callback"),
-        ModelEvent::UpsertCodebaseIndexMetadata { index_metadata } => {
-            save_codebase_index_metadata(connection, *index_metadata)
-                .context("error upserting codebase index metadata")
-        }
-        ModelEvent::DeleteCodebaseIndexMetadata { repo_path } => {
-            delete_codebase_index_metadata(connection, &repo_path)
-                .context("error deleting codebase index metadata")
+        ModelEvent::UpsertWorkspaceMetadata { metadata } => {
+            save_workspace_metadata(connection, *metadata)
+                .context("error upserting workspace metadata")
         }
         ModelEvent::UpsertProject { project } => {
             save_project(connection, project).context("error upserting project")
@@ -685,13 +680,6 @@ fn handle_model_event(event: ModelEvent, connection: &mut SqliteConnection) -> a
             environment_variables,
         )
         .context("error upserting mcp server mcp_environment variables"),
-        ModelEvent::UpsertProjectRules { project_rule_paths } => {
-            upsert_project_rules(connection, project_rule_paths)
-                .context("error upserting project rules")
-        }
-        ModelEvent::DeleteProjectRules { path } => {
-            delete_project_rules(connection, path).context("error deleting project rules")
-        }
         ModelEvent::AddIgnoredSuggestion {
             suggestion,
             suggestion_type,
@@ -1406,13 +1394,13 @@ fn decode_path(bytes: Vec<u8>) -> PathBuf {
     }
 }
 
-fn save_codebase_index_metadata(
+fn save_workspace_metadata(
     conn: &mut SqliteConnection,
-    index_metadata: ai::workspace::WorkspaceMetadata,
+    metadata: CodeWorkspaceMetadata,
 ) -> Result<()> {
     use schema::workspace_metadata::dsl::*;
 
-    let new_metadata: NewWorkspaceMetadata = index_metadata.into();
+    let new_metadata: NewWorkspaceMetadata = metadata.into();
 
     diesel::insert_into(workspace_metadata)
         .values(new_metadata.clone())
@@ -1424,14 +1412,14 @@ fn save_codebase_index_metadata(
     Ok(())
 }
 
-fn get_all_codebase_index_metadata(
+fn get_all_workspace_metadata(
     conn: &mut SqliteConnection,
-) -> Result<Vec<ai::workspace::WorkspaceMetadata>, diesel::result::Error> {
+) -> Result<Vec<CodeWorkspaceMetadata>, diesel::result::Error> {
     use schema::workspace_metadata::dsl::*;
 
     Ok(workspace_metadata
         .load_iter::<WorkspaceMetadataModel, DefaultLoadingMode>(conn)?
-        .filter_map(|item| item.ok().map(ai::workspace::WorkspaceMetadata::from))
+        .filter_map(|item| item.ok().map(CodeWorkspaceMetadata::from))
         .collect_vec())
 }
 
@@ -1517,15 +1505,6 @@ fn upsert_workspace_language_server(
     Ok(())
 }
 
-fn delete_codebase_index_metadata(conn: &mut SqliteConnection, index_path: &Path) -> Result<()> {
-    use schema::workspace_metadata::dsl::*;
-
-    let target_path = index_path.to_string_lossy().to_string();
-    diesel::delete(workspace_metadata.filter(repo_path.eq(target_path))).execute(conn)?;
-
-    Ok(())
-}
-
 fn save_project(conn: &mut SqliteConnection, project: Project) -> Result<()> {
     use schema::projects::dsl::*;
 
@@ -1552,61 +1531,6 @@ fn delete_project(conn: &mut SqliteConnection, project_path: &str) -> Result<()>
     use schema::projects::dsl::*;
 
     diesel::delete(projects.filter(path.eq(project_path))).execute(conn)?;
-
-    Ok(())
-}
-
-fn get_all_project_rules(
-    conn: &mut SqliteConnection,
-) -> Result<Vec<ProjectRulePath>, diesel::result::Error> {
-    use schema::project_rules::dsl::*;
-
-    Ok(project_rules
-        .load_iter::<ProjectRules, DefaultLoadingMode>(conn)?
-        .filter_map(|item| match item {
-            Ok(rule) => Some(ProjectRulePath {
-                path: PathBuf::from(rule.path),
-                project_root: PathBuf::from(rule.project_root),
-            }),
-            Err(_) => None,
-        })
-        .collect_vec())
-}
-
-fn upsert_project_rules(
-    conn: &mut SqliteConnection,
-    new_project_rules: Vec<ProjectRulePath>,
-) -> Result<()> {
-    use schema::project_rules::dsl::*;
-
-    // SQLite doesn't support batch upserts, so we need to iterate
-    for rule in new_project_rules {
-        let new_rule = model::NewProjectRules {
-            path: rule.path.to_string_lossy().to_string(),
-            project_root: rule.project_root.to_string_lossy().to_string(),
-        };
-
-        diesel::insert_into(project_rules)
-            .values(&new_rule)
-            .on_conflict(path)
-            .do_update()
-            .set(&new_rule)
-            .execute(conn)?;
-    }
-
-    Ok(())
-}
-
-fn delete_project_rules(conn: &mut SqliteConnection, rules_paths: Vec<PathBuf>) -> Result<()> {
-    use schema::project_rules::dsl::*;
-
-    // Convert PathBuf to String for comparison
-    let path_strings: Vec<String> = rules_paths
-        .into_iter()
-        .map(|p| p.to_string_lossy().to_string())
-        .collect();
-
-    diesel::delete(project_rules.filter(path.eq_any(path_strings))).execute(conn)?;
 
     Ok(())
 }
@@ -2753,14 +2677,13 @@ fn read_sqlite_data(
     let recent_ai_queries = read_recent_ai_queries(conn)?;
     let ai_queries = process_ai_queries_for_uparrow_prompt(recent_ai_queries);
 
-    let codebase_indices = get_all_codebase_index_metadata(conn)?;
+    let workspace_metadata = get_all_workspace_metadata(conn)?;
     let workspace_language_servers = get_all_workspace_language_servers_by_workspace(conn)?;
     // Load conversation metadata only; task payloads are hydrated lazily
     // per-conversation via `read_agent_conversation_by_id`.
     let (multi_agent_conversations, conversation_summary_backfills) =
         read_agent_conversation_metadata(conn)?;
     let projects = get_all_projects(conn)?;
-    let project_rules = get_all_project_rules(conn)?;
     let ignored_suggestions = get_all_ignored_suggestions(conn)?;
     let mcp_server_installations = get_all_mcp_server_installations(conn)?;
     let mcp_servers_to_restore = get_mcp_servers_to_restore(conn)?;
@@ -2775,11 +2698,10 @@ fn read_sqlite_data(
         time_of_next_force_object_refresh,
         object_actions,
         ai_queries,
-        codebase_indices,
+        workspace_metadata,
         workspace_language_servers,
         multi_agent_conversations,
         projects,
-        project_rules,
         ignored_suggestions,
         mcp_server_installations,
         mcp_servers_to_restore,

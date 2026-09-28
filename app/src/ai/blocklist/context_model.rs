@@ -5,10 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use ai::project_context::model::ProjectContextModel;
 use parking_lot::FairMutex;
 use warp_core::features::FeatureFlag;
-use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::{
     AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle,
 };
@@ -20,9 +18,7 @@ use crate::ai::agent::conversation::{
     AIConversation, AIConversationAutoexecuteMode, AIConversationId, ConversationStatus,
 };
 use crate::ai::agent::todos::AIAgentTodoList;
-use crate::ai::agent::{
-    AIAgentAttachment, AIAgentContext, AnyFileContent, FileContext, ImageContext,
-};
+use crate::ai::agent::{AIAgentAttachment, AIAgentContext, ImageContext};
 use crate::ai::block_context::BlockContext;
 use crate::ai::document::ai_document_model::AIDocumentId;
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
@@ -34,7 +30,9 @@ use crate::terminal::model::block::{BlockId, BlockMetadata};
 use crate::terminal::model::session::Sessions;
 use crate::terminal::model_events::{ModelEvent, ModelEventDispatcher};
 use crate::util::git::{PrInfo, RepositoryInfo};
-use crate::workspaces::user_workspaces::{TeamContextResolver, UserWorkspaces};
+use crate::workspaces::user_workspaces::TeamContextResolver;
+#[cfg(test)]
+use crate::workspaces::user_workspaces::UserWorkspaces;
 
 /// A non-image file picked via the "attach file" button, stored until query submission.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -344,28 +342,15 @@ impl BlocklistAIContextModel {
     /// Returns `AIAgentContext` for the blocks to be included in the current AI query.
     /// If `is_user_query` is true, includes blocks, selected text, and images as context.
     /// If false, excludes these user-specific contexts but includes everything else.
-    pub fn pending_context(
-        &self,
-        app: &AppContext,
-        is_user_query: bool,
-        current_working_directory_location: Option<&LocalOrRemotePath>,
-    ) -> Vec<AIAgentContext> {
-        // `pwd` is the shell-reported path used for directory context and local indexing.
-        // The location is passed separately because it preserves remote host identity for rules.
+    pub fn pending_context(&self, app: &AppContext, is_user_query: bool) -> Vec<AIAgentContext> {
         let pwd = self.current_pwd();
         let is_pwd_indexed = if cfg!(feature = "agent_mode_evals") {
-            // In evals, we want to disable file outline based search. Full
-            // source code embedding based context is still available.
+            // In evals, we want to disable file outline based search.
             false
         } else {
-            UserWorkspaces::as_ref(app).is_codebase_context_enabled(app)
-                && pwd.as_ref().is_some_and(|pwd| {
-                    RepoOutlines::as_ref(app).is_directory_indexed(Path::new(&pwd))
-                })
+            pwd.as_ref()
+                .is_some_and(|pwd| RepoOutlines::as_ref(app).is_directory_indexed(Path::new(&pwd)))
         };
-
-        let project_rules = current_working_directory_location
-            .and_then(|pwd| ProjectContextModel::as_ref(app).find_applicable_rules(pwd));
 
         let mut context = Vec::new();
 
@@ -397,28 +382,6 @@ impl BlocklistAIContextModel {
         }
         if let Some(pull_request_context) = self.pull_request_context(app) {
             context.push(pull_request_context);
-        }
-
-        // Always include project rules if available
-        if let Some(rules) = project_rules {
-            context.push(AIAgentContext::ProjectRules {
-                root_path: rules.root_path.display_path(),
-                active_rules: rules
-                    .active_rules
-                    .into_iter()
-                    .map(|rule| {
-                        let line_count = rule.content.lines().count();
-                        FileContext {
-                            file_name: rule.path.display_path(),
-                            content: AnyFileContent::StringContent(rule.content.clone()),
-                            line_range: None,
-                            last_modified: None,
-                            line_count,
-                        }
-                    })
-                    .collect(),
-                additional_rule_paths: rules.additional_rule_paths,
-            });
         }
 
         // If this is a user query, add user-selected contexts

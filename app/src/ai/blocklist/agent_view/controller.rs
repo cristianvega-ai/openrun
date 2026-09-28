@@ -140,7 +140,6 @@ pub enum AgentViewEntryOrigin {
     SlashCommand {
         trigger: SlashCommandTrigger,
     },
-    SlashInit,
     CreateEnvironment,
     /// Entered agent view from the new-conversation keybinding.
     Keybinding(Keystroke),

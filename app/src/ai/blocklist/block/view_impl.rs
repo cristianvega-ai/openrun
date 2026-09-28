@@ -1377,7 +1377,6 @@ impl AIAgentInput {
             AIAgentInput::UserQuery { .. }
             | AIAgentInput::AutoCodeDiffQuery { .. }
             | AIAgentInput::ResumeConversation { .. }
-            | AIAgentInput::InitProjectRules { .. }
             | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::TriggerPassiveSuggestion { .. }
             | AIAgentInput::CreateNewProject { .. }

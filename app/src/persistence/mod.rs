@@ -22,8 +22,6 @@ use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
 
-use ai::project_context::model::ProjectRulePath;
-use ai::workspace::WorkspaceMetadata as CodeWorkspaceMetadata;
 use chrono::{DateTime, Local, Utc};
 use instant::Instant;
 use lsp::supported_servers::LSPServerType;
@@ -61,7 +59,7 @@ use crate::terminal::history::PersistedCommand;
 use crate::terminal::model::block::{SerializedAgentViewVisibility, SerializedBlock};
 use crate::terminal::model::session::SessionId;
 use crate::workflows::CloudWorkflow;
-use crate::workspace_metadata::EnablementState;
+use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
 use crate::workspaces::user_profiles::UserProfileWithUID;
 use crate::workspaces::workspace::{Workspace as WorkspaceMetadata, WorkspaceUid};
 
@@ -271,11 +269,10 @@ pub struct PersistedData {
     pub time_of_next_force_object_refresh: Option<DateTime<Utc>>,
     pub object_actions: Vec<ObjectAction>,
     pub ai_queries: Vec<PersistedAIInput>,
-    pub codebase_indices: Vec<CodeWorkspaceMetadata>,
+    pub workspace_metadata: Vec<CodeWorkspaceMetadata>,
     pub workspace_language_servers: HashMap<PathBuf, HashMap<LSPServerType, EnablementState>>,
     pub multi_agent_conversations: Vec<AgentConversation>,
     pub projects: Vec<Project>,
-    pub project_rules: Vec<ProjectRulePath>,
     pub ignored_suggestions: Vec<(String, SuggestionType)>,
     pub mcp_server_installations: HashMap<Uuid, TemplatableMCPServerInstallation>,
     pub mcp_servers_to_restore: Vec<Uuid>,
@@ -414,11 +411,8 @@ pub enum ModelEvent {
     UpsertCurrentUserInformation {
         user_information: PersistedCurrentUserInformation,
     },
-    UpsertCodebaseIndexMetadata {
-        index_metadata: Box<CodeWorkspaceMetadata>,
-    },
-    DeleteCodebaseIndexMetadata {
-        repo_path: PathBuf,
+    UpsertWorkspaceMetadata {
+        metadata: Box<CodeWorkspaceMetadata>,
     },
     UpsertProject {
         project: Project,
@@ -429,12 +423,6 @@ pub enum ModelEvent {
     UpsertMCPServerEnvironmentVariables {
         mcp_server_uuid: Vec<u8>,
         environment_variables: String,
-    },
-    UpsertProjectRules {
-        project_rule_paths: Vec<ProjectRulePath>,
-    },
-    DeleteProjectRules {
-        path: Vec<PathBuf>,
     },
     AddIgnoredSuggestion {
         suggestion: String,

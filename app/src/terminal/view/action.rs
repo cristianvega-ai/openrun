@@ -25,7 +25,6 @@ use super::{
 use crate::ai::agent::AIAgentExchangeId;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::codebase_index_speedbump_banner::CodebaseIndexSpeedbumpBannerAction;
 use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
 use crate::server::ids::SyncId;
 use crate::server::telemetry::{AgentModeRewindEntrypoint, PaletteSource, ToggleBlockFilterSource};
@@ -42,7 +41,6 @@ use crate::terminal::model::selection::{SelectAction, SelectionDirection};
 use crate::terminal::model::terminal_model::{BlockIndex, WithinModel};
 use crate::terminal::shared_session::SharedSessionActionSource;
 use crate::terminal::view::RichContentSecretTooltipInfo;
-use crate::terminal::view::inline_banner::AgentModeSetupSpeedbumpBannerAction;
 use crate::terminal::view::passive_suggestions::PromptSuggestionResolution;
 use crate::workflows::workflow::Workflow;
 
@@ -288,7 +286,6 @@ pub enum TerminalAction {
     ClearMarkedText,
     HideTelemetryBannerPermanently,
     ShowInitializationBlock,
-    GenerateCodebaseIndex,
     /// This is for debugging, dev only for now
     LoadAgentModeConversation,
     /// Removes a pending attachment (image or file) by index in the unified list.
@@ -300,12 +297,9 @@ pub enum TerminalAction {
     OpenAttachmentLightbox {
         index: usize,
     },
-    WriteCodebaseIndex,
     AttachFile,
     ToggleAutoexecuteMode,
     ToggleQueueNextPrompt,
-    CodebaseIndexSpeedbumpBanner(CodebaseIndexSpeedbumpBannerAction),
-    AgentModeSetupSpeedbumpBanner(AgentModeSetupSpeedbumpBannerAction),
     ResumeConversation,
     ForkConversationFromLastKnownGoodState,
     ToggleAIDocumentPane,
@@ -314,11 +308,8 @@ pub enum TerminalAction {
     ToggleCodeReviewPane {
         entrypoint: CodeReviewPaneEntrypoint,
     },
-    InitProject,
     SummarizeConversation,
-    IndexProjectSpeedbump,
     AddProjectAtCurrentDirectory,
-    OpenProjectRulesPane,
     OpenViewMCPPane,
     OpenAddMCPPane,
     OpenAddRulePane,
@@ -611,22 +602,14 @@ impl fmt::Debug for TerminalAction {
             ClearMarkedText => write!(f, "ClearMarkedText"),
             HideTelemetryBannerPermanently => write!(f, "HideTelemetryBannerPermanently"),
             ShowInitializationBlock => write!(f, "ShowInitializationBlock"),
-            GenerateCodebaseIndex => write!(f, "GenerateIndexForRepo"),
             LoadAgentModeConversation => write!(f, "LoadAgentModeConversation"),
             DeleteAttachment { index } => write!(f, "DeleteAttachment({index:?})"),
             OpenAttachmentLightbox { index } => {
                 write!(f, "OpenAttachmentLightbox({index:?})")
             }
-            WriteCodebaseIndex => write!(f, "PersistCodebaseIndex"),
             AttachFile => write!(f, "AttachFile"),
             ToggleAutoexecuteMode => write!(f, "ToggleAutoexecuteMode"),
             ToggleQueueNextPrompt => write!(f, "ToggleQueueNextPrompt"),
-            CodebaseIndexSpeedbumpBanner(action) => {
-                write!(f, "CodebaseIndexSpeedbumpBanner({action:?})")
-            }
-            AgentModeSetupSpeedbumpBanner(action) => {
-                write!(f, "AgentModeSetupSpeedbumpBanner({action:?})")
-            }
             ResumeConversation => write!(f, "ResumeConversation"),
             ForkConversationFromLastKnownGoodState => {
                 write!(f, "ForkConversationFromLastKnownGoodState")
@@ -635,10 +618,7 @@ impl fmt::Debug for TerminalAction {
             ToggleTodoPopup => write!(f, "ToggleTodoPopup"),
             CloseTodoPopup => write!(f, "CloseTodoPopup"),
             ToggleCodeReviewPane { .. } => write!(f, "ToggleCodeReviewPane"),
-            InitProject => write!(f, "InitProject"),
-            IndexProjectSpeedbump => write!(f, "IndexProject"),
             AddProjectAtCurrentDirectory => write!(f, "AddProjectAtCurrentDirectory"),
-            OpenProjectRulesPane => write!(f, "OpenProjectRulesPane"),
             OpenViewMCPPane => write!(f, "OpenViewMCPPane"),
             OpenAddMCPPane => write!(f, "OpenAddMCPPane"),
             OpenAddRulePane => write!(f, "OpenAddRulePane"),

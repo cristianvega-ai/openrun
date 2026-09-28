@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 lazy_static::lazy_static! {
     /// Shared Rayon pool for parsing files off the main thread.
-    pub static ref THREADPOOL: Option<rayon::ThreadPool> = create_thread_pool();
+    static ref THREADPOOL: Option<rayon::ThreadPool> = create_thread_pool();
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -31,7 +31,7 @@ fn create_thread_pool() -> Option<rayon::ThreadPool> {
         .unwrap_or(MAX_PARALLEL_THREADS);
 
     rayon::ThreadPoolBuilder::new()
-        .thread_name(|index| format!("warp-code-indexing-{index}"))
+        .thread_name(|index| format!("warp-code-outline-{index}"))
         .num_threads(num_threads)
         .build()
         .ok()

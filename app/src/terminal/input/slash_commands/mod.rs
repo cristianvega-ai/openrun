@@ -853,12 +853,6 @@ impl Input {
                     return true;
                 }
             }
-            SlashCommandKind::Index => {
-                ctx.dispatch_typed_action(&TerminalAction::IndexProjectSpeedbump);
-            }
-            SlashCommandKind::Init => {
-                ctx.dispatch_typed_action(&TerminalAction::InitProject);
-            }
             SlashCommandKind::Changelog => {
                 if !FeatureFlag::Changelog.is_enabled() {
                     return false;
@@ -881,9 +875,6 @@ impl Input {
                     return false;
                 }
                 ctx.dispatch_typed_action(&WorkspaceAction::OpenSettingsFile);
-            }
-            SlashCommandKind::OpenProjectRules => {
-                ctx.dispatch_typed_action(&TerminalAction::OpenProjectRulesPane);
             }
             SlashCommandKind::OpenRules => {
                 ctx.dispatch_typed_action(&TerminalAction::OpenRulesPane);

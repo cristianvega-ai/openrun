@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ai::workspace::WorkspaceMetadata;
 use chrono::Utc;
 use cloud_object_persistence::to_cloud_object_permissions;
 use diesel::connection::SimpleConnection;
@@ -12,8 +11,8 @@ use warp_graphql::scalars::time::ServerTimestamp;
 
 use super::{
     app_database_file_path, database_file_path_for_current_scope, database_file_path_for_scope,
-    decode_path, deduplicate_events, encode_path, get_all_codebase_index_metadata,
-    read_sqlite_data, save_app_state, save_codebase_index_metadata, setup_database, start_writer,
+    decode_path, deduplicate_events, encode_path, get_all_workspace_metadata, read_sqlite_data,
+    save_app_state, save_workspace_metadata, setup_database, start_writer,
 };
 use crate::app_state::{
     AppState, CodePaneSnapShot, CodePaneTabSnapshot, LeafContents, LeafSnapshot, PaneNodeSnapshot,
@@ -31,6 +30,7 @@ use crate::terminal::ShellLaunchData;
 use crate::terminal::model::block::SerializedBlock;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::tab_group::TabGroupId;
+use crate::workspace_metadata::WorkspaceMetadata;
 use crate::workspaces::team::{MembershipRole, Team, TeamMember};
 use crate::workspaces::workspace::Workspace;
 
@@ -54,7 +54,7 @@ fn database_path_for_current_scope_defaults_to_app_scope() {
     );
 }
 
-fn test_codebase_metadata(path: &str) -> WorkspaceMetadata {
+fn test_workspace_metadata(path: &str) -> WorkspaceMetadata {
     WorkspaceMetadata {
         path: PathBuf::from(path),
         navigated_ts: Some(Utc::now()),
@@ -64,7 +64,7 @@ fn test_codebase_metadata(path: &str) -> WorkspaceMetadata {
 }
 
 #[test]
-fn sqlite_read_restores_app_state_and_codebase_metadata() {
+fn sqlite_read_restores_app_state_and_workspace_metadata() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");
     let mut conn = setup_database(&database_path).expect("database should initialize");
@@ -77,33 +77,38 @@ fn sqlite_read_restores_app_state_and_codebase_metadata() {
     };
     save_app_state(&mut conn, &app_state).expect("app state should save");
 
-    let metadata = test_codebase_metadata("/tmp/remote-repo");
-    save_codebase_index_metadata(&mut conn, metadata.clone())
-        .expect("codebase index metadata should save");
+    let metadata = test_workspace_metadata("/tmp/repo");
+    save_workspace_metadata(&mut conn, metadata.clone()).expect("workspace metadata should save");
     let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
         .expect("persisted data should load");
     let restored_app_state = restored
         .app_state
         .expect("app state should be present for the full scope");
     assert_eq!(restored_app_state.windows.len(), 1);
-    assert_eq!(restored.codebase_indices.len(), 1);
-    assert_eq!(restored.codebase_indices[0].path, metadata.path);
+    assert_eq!(restored.workspace_metadata.len(), 1);
+    assert_eq!(restored.workspace_metadata[0].path, metadata.path);
 }
 
 #[test]
-fn sqlite_writer_reuses_codebase_index_metadata_events() {
+fn sqlite_writer_upserts_workspace_metadata_events() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");
     let conn = setup_database(&database_path).expect("database should initialize");
 
     let writer = start_writer(conn, database_path.clone()).expect("writer should start");
-    let metadata = test_codebase_metadata("/tmp/writer-repo");
-    writer
-        .sender
-        .send(ModelEvent::UpsertCodebaseIndexMetadata {
-            index_metadata: Box::new(metadata.clone()),
-        })
-        .expect("upsert event should send");
+    let metadata = test_workspace_metadata("/tmp/writer-repo");
+    let updated_metadata = WorkspaceMetadata {
+        modified_ts: Some(Utc::now()),
+        ..metadata.clone()
+    };
+    for metadata in [metadata.clone(), updated_metadata.clone()] {
+        writer
+            .sender
+            .send(ModelEvent::UpsertWorkspaceMetadata {
+                metadata: Box::new(metadata),
+            })
+            .expect("upsert event should send");
+    }
     writer
         .sender
         .send(ModelEvent::Terminate)
@@ -111,27 +116,12 @@ fn sqlite_writer_reuses_codebase_index_metadata_events() {
     writer.handle.join().expect("writer should terminate");
 
     let mut conn = setup_database(&database_path).expect("database should reopen");
-    let restored = get_all_codebase_index_metadata(&mut conn).expect("metadata should load");
+    let restored = get_all_workspace_metadata(&mut conn).expect("metadata should load");
     assert_eq!(restored.len(), 1);
     assert_eq!(restored[0].path, metadata.path);
-
-    let writer = start_writer(conn, database_path.clone()).expect("writer should restart");
-    writer
-        .sender
-        .send(ModelEvent::DeleteCodebaseIndexMetadata {
-            repo_path: metadata.path,
-        })
-        .expect("delete event should send");
-    writer
-        .sender
-        .send(ModelEvent::Terminate)
-        .expect("terminate event should send");
-    writer.handle.join().expect("writer should terminate");
-
-    let mut conn = setup_database(&database_path).expect("database should reopen");
-    let restored = get_all_codebase_index_metadata(&mut conn).expect("metadata should load");
-    assert!(restored.is_empty());
+    assert!(restored[0].modified_ts.is_some());
 }
+
 #[test]
 fn test_deduplicate_snapshots() {
     let local_notebook = CloudNotebook::new_local(

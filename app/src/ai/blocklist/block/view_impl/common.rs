@@ -3643,7 +3643,6 @@ pub(super) fn query_prefix_highlight_len(
             AIAgentInput::UserQuery { .. }
             | AIAgentInput::AutoCodeDiffQuery { .. }
             | AIAgentInput::ResumeConversation { .. }
-            | AIAgentInput::InitProjectRules { .. }
             | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::TriggerPassiveSuggestion { .. }
             | AIAgentInput::CreateNewProject { .. }

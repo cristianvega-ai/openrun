@@ -1,16 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ai::index::full_source_code_embedding::manager::{
-    CodebaseIndexManager, CodebaseIndexManagerEvent,
-};
 use chrono::Utc;
 use cloud_object_models::CodeForge;
-use futures::channel::oneshot;
-use futures::future::join_all;
 use repo_metadata::repositories::{DetectedRepositories, RepoDetectionSource};
 use uuid::Uuid;
 use warp_cli::agent::{RepositoryForge, RepositoryHeadRef, RepositoryPreparationOverride};
@@ -23,7 +17,7 @@ use warpui::{ModelContext, ModelSpawner, SingletonEntity};
 #[cfg(feature = "local_fs")]
 use super::cache_setup;
 use super::terminal::TerminalDriver;
-use super::{AgentDriverError, Harness, git_credentials};
+use super::{AgentDriverError, git_credentials};
 use crate::ai::agent_sdk::environment_snapshot::{
     EnvironmentSnapshot, EnvironmentSnapshotReporter, RepositoryRevision,
 };
@@ -32,7 +26,6 @@ use crate::ai::cloud_environments::SourceRepo;
 use crate::terminal::model::session::command_executor::shell_escape_single_quotes;
 use crate::terminal::shell::ShellType;
 
-const CODEBASE_INDEX_SYNC_TIMEOUT: Duration = Duration::from_secs(60);
 const ENVIRONMENT_SNAPSHOT_CAPTURE_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, thiserror::Error)]
@@ -235,22 +228,20 @@ pub(crate) fn validate_repository_preparation_overrides(
 
 /// Prepare a cloud agent environment within a terminal session. This will:
 /// 1. Materialize all repositories, enforcing server-provided HEAD overrides.
-/// 2. Begin codebase indexing for all repositories (Oz harness only).
-/// 3. Run any setup commands.
-/// 4. If there is only one repository, navigate into it.
+/// 2. Run any setup commands.
+/// 3. If there is only one repository, navigate into it.
 ///
 /// Returns the directory where the harness will run.
 ///
 /// `is_sandbox` tells the preparer that `working_dir` only exists inside a
 /// Docker sandbox container and therefore the host filesystem can't be used
-/// for repo detection or indexing. This is an explicit signal from the
+/// for repo detection. This is an explicit signal from the
 /// caller rather than a path-prefix inference, so non-sandbox callers that
 /// happen to pass a path like `/home/agent/...` don't silently flip into
 /// sandbox-only mode.
 pub(crate) fn prepare_environment(
     working_dir: PathBuf,
     is_sandbox: bool,
-    harness: Harness,
     repository_options: RepositoryPreparationOptions,
     setup_events: SetupClientEventReporter,
     environment_snapshot_reporter: EnvironmentSnapshotReporter,
@@ -268,17 +259,7 @@ pub(crate) fn prepare_environment(
             &source_repos,
             &repository_preparation_overrides,
         )?;
-        // Only index the codebase for the Oz harness; third-party harnesses (e.g. Claude)
-        // have their own methods for navigating a codebase.
-        let should_index_codebase = harness == Harness::Oz;
-        let should_subscribe_to_index_updates = should_index_codebase && !source_repos.is_empty();
-        let repo_channels = Arc::new(Mutex::new(HashMap::<PathBuf, oneshot::Sender<()>>::new()));
-
-        if should_subscribe_to_index_updates {
-            subscribe_to_codebase_index_events(&spawner, Arc::clone(&repo_channels)).await?;
-        }
-
-        let result = prepare_environment_impl(
+        prepare_environment_impl(
             &spawner,
             working_dir.as_path(),
             is_sandbox,
@@ -286,22 +267,10 @@ pub(crate) fn prepare_environment(
             &repository_preparation_overrides,
             remove_repository_origins,
             setup_commands,
-            should_index_codebase,
-            Arc::clone(&repo_channels),
             setup_events,
             environment_snapshot_reporter,
         )
-        .await;
-
-        if should_subscribe_to_index_updates && result.is_err() {
-            let _ = spawner
-                .spawn(|_, ctx| {
-                    ctx.unsubscribe_from_model(&CodebaseIndexManager::handle(ctx));
-                })
-                .await;
-        }
-
-        result
+        .await
     }
 }
 
@@ -395,8 +364,6 @@ async fn prepare_environment_impl(
     repository_preparation_overrides: &[RepositoryPreparationOverride],
     remove_repository_origins: bool,
     setup_commands: Vec<String>,
-    should_index_codebase: bool,
-    repo_channels: Arc<Mutex<HashMap<PathBuf, oneshot::Sender<()>>>>,
     setup_events: SetupClientEventReporter,
     environment_snapshot_reporter: EnvironmentSnapshotReporter,
 ) -> Result<PathBuf, PrepareEnvironmentError> {
@@ -412,7 +379,6 @@ async fn prepare_environment_impl(
             repo_name: working_dir_string,
         });
     }
-    let mut codebase_context_receivers = Vec::new();
     let repository_clone_requests = repository_clone_requests(
         source_repos,
         repository_preparation_overrides,
@@ -439,26 +405,6 @@ async fn prepare_environment_impl(
     if !repository_clone_requests.is_empty() {
         for request in &repository_clone_requests {
             register_cloned_repo(&request.checkout_name, working_dir, is_sandbox, spawner).await?;
-            if !is_sandbox && should_index_codebase {
-                let receiver = index_repo_codebase(
-                    &request.checkout_name,
-                    working_dir,
-                    Arc::clone(&repo_channels),
-                    spawner,
-                )
-                .await?;
-                if let Some(receiver) = receiver {
-                    codebase_context_receivers.push(receiver);
-                }
-            }
-        }
-
-        if should_index_codebase {
-            record_codebase_indexing(
-                setup_events.clone(),
-                spawner.clone(),
-                codebase_context_receivers,
-            );
         }
     }
 
@@ -525,13 +471,6 @@ async fn prepare_environment_impl(
                 Ok::<(), PrepareEnvironmentError>(())
             })
             .await
-    } else if should_index_codebase && source_repos.is_empty() {
-        let _ = spawner
-            .spawn(|_, ctx| {
-                ctx.unsubscribe_from_model(&CodebaseIndexManager::handle(ctx));
-            })
-            .await;
-        Ok(())
     } else {
         Ok(())
     };
@@ -558,10 +497,6 @@ async fn prepare_environment_impl(
     setup_result?;
     remove_origins_result?;
 
-    if should_index_codebase && source_repos.is_empty() {
-        log::info!("No repositories to index for codebase context");
-    }
-
     // If there's only one repo in the environment, start the agent in that repo.
     // This way, it doesn't have to locate the correct repo to work on.
     let harness_working_dir = if let Some(repo_name) = single_repo_name(source_repos) {
@@ -578,44 +513,6 @@ async fn prepare_environment_impl(
         working_dir.to_path_buf()
     };
     Ok(harness_working_dir)
-}
-
-fn record_codebase_indexing(
-    setup_events: SetupClientEventReporter,
-    spawner: ModelSpawner<TerminalDriver>,
-    codebase_context_receivers: Vec<oneshot::Receiver<()>>,
-) {
-    if codebase_context_receivers.is_empty() {
-        setup_events.record_value_detached(SetupStep::EnvironmentCodebaseIndexing, async move {
-            let _ = spawner
-                .spawn(|_, ctx| {
-                    ctx.unsubscribe_from_model(&CodebaseIndexManager::handle(ctx));
-                })
-                .await;
-        });
-        return;
-    }
-
-    setup_events.record_value_detached(SetupStep::EnvironmentCodebaseIndexing, async move {
-        let repos_indexed = join_all(codebase_context_receivers);
-        if repos_indexed
-            .with_timeout(CODEBASE_INDEX_SYNC_TIMEOUT)
-            .await
-            .is_err()
-        {
-            log::warn!(
-                "Timed out waiting for codebase index sync; continuing without guaranteed codebase context",
-            );
-            tracing::warn!(
-                "Timed out waiting for codebase index sync; continuing without guaranteed codebase context",
-            );
-        }
-        let _ = spawner
-            .spawn(|_, ctx| {
-                ctx.unsubscribe_from_model(&CodebaseIndexManager::handle(ctx));
-            })
-            .await;
-    });
 }
 
 // `None` covers both a repo-less container forge and one this client build
@@ -1216,17 +1113,13 @@ pub(super) async fn register_cloned_repo(
     // Register the repo with DetectedRepositories so that the skill watcher
     // and other repo-aware subsystems can discover it before the first query.
     //
-    // TODO(advait): When the remote code server lands for Docker sandboxes,
-    // sandbox-only working directories will be reachable from the host and
-    // we should register + index them here too (likely via a remote-aware
-    // path instead of `detect_possible_local_git_repo`/`index_directory`, which
-    // both assume a local filesystem). For now, skip so we don't try to
+    // Sandbox-only working directories aren't reachable from the host, so skip them rather than
     // stat paths that only exist inside the sandbox.
     if is_sandbox {
         safe_info!(
             safe: ("Skipping local repo detection for sandbox-only working directory"),
             full: (
-                "Skipping local repo detection and indexing for sandbox-only working directory {}",
+                "Skipping local repo detection for sandbox-only working directory {}",
                 working_dir.display()
             )
         );
@@ -1255,109 +1148,6 @@ pub(super) async fn register_cloned_repo(
     }
 
     Ok(())
-}
-
-async fn subscribe_to_codebase_index_events(
-    spawner: &ModelSpawner<TerminalDriver>,
-    repo_channels: Arc<Mutex<HashMap<PathBuf, oneshot::Sender<()>>>>,
-) -> Result<(), PrepareEnvironmentError> {
-    spawner
-        .spawn(move |_, ctx| {
-            let repo_channels = Arc::clone(&repo_channels);
-            ctx.subscribe_to_model(&CodebaseIndexManager::handle(ctx), move |_, _, event, ctx| {
-                    if !matches!(
-                        event,
-                        CodebaseIndexManagerEvent::SyncStateUpdated { .. }
-                    ) {
-                        return;
-                    }
-
-                    let manager = CodebaseIndexManager::as_ref(ctx);
-                    let mut repos_to_notify = Vec::new();
-                    let mut channels = repo_channels
-                        .lock()
-                        .expect("repo channel map lock should not be poisoned");
-
-                    for repo in channels.keys() {
-                        let Some(status) =
-                            manager.get_codebase_index_status_for_path(repo, ctx)
-                        else {
-                            continue;
-                        };
-
-                        if status.has_synced_version() {
-                            repos_to_notify.push(repo.clone());
-                            continue;
-                        }
-
-                        if !status.has_pending() && status.last_sync_successful() == Some(false) {
-                            safe_warn!(
-                                safe: ("Codebase index sync failed for a repo; unblocking environment setup"),
-                                full: ("Codebase index sync failed for {repo:?}; unblocking environment setup")
-                            );
-                            repos_to_notify.push(repo.clone());
-                        }
-                    }
-
-                    for repo in repos_to_notify {
-                        if let Some(tx) = channels.remove(&repo) {
-                            let _ = tx.send(());
-                        }
-                    }
-                });
-        })
-        .await
-        .map_err(|_| PrepareEnvironmentError::InvalidRuntimeState)
-}
-
-#[tracing::instrument(skip_all, err, fields(tags.cloud_agent = true, repo = %repo_name))]
-async fn index_repo_codebase(
-    repo_name: &str,
-    working_dir: &Path,
-    repo_channels: Arc<Mutex<HashMap<PathBuf, oneshot::Sender<()>>>>,
-    spawner: &ModelSpawner<TerminalDriver>,
-) -> Result<Option<oneshot::Receiver<()>>, PrepareEnvironmentError> {
-    let repo_path = working_dir.join(repo_name);
-
-    safe_info!(
-        safe: ("Trying to index repository for codebase context"),
-        full: ("Trying to index {:?} for codebase context", repo_path)
-    );
-
-    let repo_path_for_spawn = repo_path.clone();
-    spawner
-        .spawn(move |_, ctx| {
-            CodebaseIndexManager::handle(ctx).update(ctx, |manager, ctx| {
-                manager.index_directory(repo_path_for_spawn.clone(), ctx);
-            });
-
-            let status = CodebaseIndexManager::as_ref(ctx)
-                .get_codebase_index_status_for_path(&repo_path_for_spawn, ctx);
-
-            match status {
-                Some(status) if status.has_synced_version() => {
-                    safe_info!(
-                        safe: ("Not waiting on codebase index for repository; we have one already"),
-                        full: ("Not waiting on codebase index for {:?}, we have one already", repo_path_for_spawn)
-                    );
-                    None
-                }
-                _ => {
-                    safe_info!(
-                        safe: ("Waiting on codebase index for repository"),
-                        full: ("Waiting on codebase index for {:?}", repo_path_for_spawn)
-                    );
-                    let (tx, rx) = oneshot::channel::<()>();
-                    repo_channels
-                        .lock()
-                        .expect("repo channel map lock should not be poisoned")
-                        .insert(repo_path_for_spawn, tx);
-                    Some(rx)
-                }
-            }
-        })
-        .await
-        .map_err(|_| PrepareEnvironmentError::InvalidRuntimeState)
 }
 
 /// Execute a command in the context of a terminal session.

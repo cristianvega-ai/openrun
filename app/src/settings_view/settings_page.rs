@@ -33,7 +33,6 @@ use super::appearance_page::AppearanceSettingsPageView;
 use super::billing_and_usage_dispatch::BillingAndUsageDispatchView;
 use super::cli_agents_page::CLIAgentsPageView;
 use super::code_editor_review_page::EditorAndCodeReviewPageView;
-use super::code_indexing_page::CodeIndexingPageView;
 use super::environments_page::EnvironmentsPageView;
 use super::features_page::FeaturesPageView;
 use super::keybindings::KeybindingsView;
@@ -41,6 +40,7 @@ use super::knowledge_page::KnowledgePageView;
 use super::main_page::MainSettingsPageView;
 use super::mcp_servers_page::MCPServersSettingsPageView;
 use super::privacy_page::PrivacyPageView;
+use super::projects_page::ProjectsPageView;
 use super::scripting_page::ScriptingSettingsPageView;
 use super::teams_page::TeamsPageView;
 use super::warp_agent_page::WarpAgentPageView;
@@ -108,7 +108,7 @@ pub enum SettingsPageViewHandle {
     Features(ViewHandle<FeaturesPageView>),
     Keybindings(ViewHandle<KeybindingsView>),
     About(ViewHandle<AboutPageView>),
-    CodeIndexing(ViewHandle<CodeIndexingPageView>),
+    Projects(ViewHandle<ProjectsPageView>),
     EditorAndCodeReview(ViewHandle<EditorAndCodeReviewPageView>),
     Teams(ViewHandle<TeamsPageView>),
     WarpCloudAgentAPIKeys(ViewHandle<super::platform_page::PlatformPageView>),
@@ -134,7 +134,7 @@ impl SettingsPageViewHandle {
             Features(view_handle) => ChildView::new(view_handle).finish(),
             Keybindings(view_handle) => ChildView::new(view_handle).finish(),
             About(view_handle) => ChildView::new(view_handle).finish(),
-            CodeIndexing(view_handle) => ChildView::new(view_handle).finish(),
+            Projects(view_handle) => ChildView::new(view_handle).finish(),
             EditorAndCodeReview(view_handle) => ChildView::new(view_handle).finish(),
             Teams(view_handle) => ChildView::new(view_handle).finish(),
             WarpCloudAgentAPIKeys(view_handle) => ChildView::new(view_handle).finish(),

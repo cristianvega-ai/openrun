@@ -1,8 +1,6 @@
-use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
 use markdown_parser::FormattedTextFragment;
 use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::keymap::Keystroke;
@@ -21,7 +19,6 @@ use crate::workspace::WorkspaceAction;
 use crate::workspace::view::{
     TOGGLE_COMMAND_PALETTE_KEYBINDING_NAME, TOGGLE_RIGHT_PANEL_BINDING_NAME,
 };
-use crate::workspace_metadata::PersistedWorkspace;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
 /// Trait for tip implementations that can be displayed to users.
@@ -59,11 +56,7 @@ pub trait AITip: Clone {
 
     /// Checks if this tip is applicable in the current context.
     /// Default implementation returns true (tip is always applicable).
-    fn is_tip_applicable(
-        &self,
-        _current_working_directory: Option<&str>,
-        _app: &AppContext,
-    ) -> bool {
+    fn is_tip_applicable(&self, _app: &AppContext) -> bool {
         true
     }
 }
@@ -71,7 +64,6 @@ pub trait AITip: Clone {
 /// Kinds of agent tips for organizing and filtering.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AgentTipKind {
-    CodebaseContext,
     WarpDrive,
     General,
     Mcp,
@@ -145,13 +137,6 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             binding_name: Some(SELECT_PREVIOUS_BLOCK_ACTION_NAME),
             action: None,
             kind: AgentTipKind::Context,
-        },
-        AgentTip {
-            description: "`/init` to index the repo so the agent can understand your codebase.".to_string(),
-            link: Some("https://docs.warp.dev/agents/capabilities/codebase-context".to_string()),
-            binding_name: None,
-            action: None,
-            kind: AgentTipKind::CodebaseContext,
         },
         AgentTip {
             description: "Add agent profiles to customize permissions and models per session.".to_string(),
@@ -280,13 +265,6 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             kind: AgentTipKind::Context,
         },
         AgentTip {
-            description: "Use `AGENTS.md` or `CLAUDE.md` to apply project-scoped rules.".to_string(),
-            link: Some("https://docs.warp.dev/agents/capabilities/rules#project-rules-1".to_string()),
-            binding_name: None,
-            action: None,
-            kind: AgentTipKind::Context,
-        },
-        AgentTip {
             description: "Paste a URL to attach that webpage as context for the agent.".to_string(),
             link: Some("https://docs.warp.dev/agents/local-agents/agent-context/urls-as-context".to_string()),
             binding_name: None,
@@ -306,13 +284,6 @@ static DEFAULT_TIPS: LazyLock<Vec<AgentTip>> = LazyLock::new(|| {
             binding_name: None,
             action: None,
             kind: AgentTipKind::General,
-        },
-        AgentTip {
-            description: "`/init` to generate a `WARP.md` file and define project rules for the agent.".to_string(),
-            link: Some("https://docs.warp.dev/agents/capabilities/rules".to_string()),
-            binding_name: None,
-            action: None,
-            kind: AgentTipKind::SlashCommands,
         },
         AgentTip {
             description: "<keybinding> to auto-approve the agent's commands and diffs for the rest of the session.".to_string(),
@@ -407,20 +378,7 @@ impl AITip for AgentTip {
         fragments
     }
 
-    fn is_tip_applicable(&self, current_working_directory: Option<&str>, app: &AppContext) -> bool {
-        // Tips about indexing the repo are only applicable if the current directory is not already indexed.
-        if matches!(self.kind, AgentTipKind::CodebaseContext) {
-            let Some(cwd) = current_working_directory else {
-                return true;
-            };
-            let Some(root) = PersistedWorkspace::as_ref(app).root_for_workspace(Path::new(cwd))
-            else {
-                return true;
-            };
-            return CodebaseIndexManager::as_ref(app)
-                .get_codebase_index_status_for_path(root, app)
-                .is_none();
-        }
+    fn is_tip_applicable(&self, app: &AppContext) -> bool {
         // Handoff tips only apply when the feature is available and enabled.
         if matches!(self.kind, AgentTipKind::Handoff) {
             return AISettings::as_ref(app).is_cloud_handoff_enabled(app);
@@ -515,7 +473,7 @@ impl AITipModel<AgentTip> {
     pub fn new_for_agent_tips(ctx: &AppContext) -> Self {
         let tips = get_agent_tips(ctx);
         // Pick an applicable tip so we never show a raw "<keybinding>" placeholder on first render.
-        let current_tip = Self::pick_random_applicable_tip(&tips, None, ctx);
+        let current_tip = Self::pick_random_applicable_tip(&tips, ctx);
 
         Self {
             tips,
@@ -540,12 +498,12 @@ impl AITipModel<AgentTip> {
                     .iter()
                     .any(|tip| tip.description == current_tip.description);
 
-                !still_in_pool || !current_tip.is_tip_applicable(None, ctx)
+                !still_in_pool || !current_tip.is_tip_applicable(ctx)
             })
             .unwrap_or(true);
 
         if should_replace {
-            let new_tip = Self::pick_random_applicable_tip(&self.tips, None, ctx);
+            let new_tip = Self::pick_random_applicable_tip(&self.tips, ctx);
             if new_tip.is_some() || self.current_tip.is_some() {
                 self.current_tip = new_tip;
                 self.reset_cooldown(ctx);
@@ -554,14 +512,9 @@ impl AITipModel<AgentTip> {
         }
     }
 
-    /// Refreshes the current tip with a new random selection that is applicable
-    /// for the given working directory.
+    /// Refreshes the current tip with a new random applicable selection.
     /// Only updates if not in cooldown period (60 seconds).
-    pub fn maybe_refresh_tip(
-        &mut self,
-        current_working_directory: Option<&str>,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    pub fn maybe_refresh_tip(&mut self, ctx: &mut ModelContext<Self>) {
         // Don't update if cooldown is active
         if self.cooldown_handle.is_some() {
             return;
@@ -570,8 +523,7 @@ impl AITipModel<AgentTip> {
         // Rebuild tips from current settings so changes are picked up.
         self.tips = get_agent_tips(ctx);
 
-        self.current_tip =
-            Self::pick_random_applicable_tip(&self.tips, current_working_directory, ctx);
+        self.current_tip = Self::pick_random_applicable_tip(&self.tips, ctx);
 
         // Start 60-second cooldown
         let handle = ctx.spawn(
@@ -586,17 +538,13 @@ impl AITipModel<AgentTip> {
         ctx.notify();
     }
 
-    /// Picks a random applicable tip from the given pool, filtered by working directory.
+    /// Picks a random applicable tip from the given pool.
     /// Returns `None` if no tips are applicable.
-    fn pick_random_applicable_tip(
-        tips: &[AgentTip],
-        current_working_directory: Option<&str>,
-        ctx: &AppContext,
-    ) -> Option<AgentTip> {
+    fn pick_random_applicable_tip(tips: &[AgentTip], ctx: &AppContext) -> Option<AgentTip> {
         use rand::seq::SliceRandom;
         let available: Vec<&AgentTip> = tips
             .iter()
-            .filter(|tip| tip.is_tip_applicable(current_working_directory, ctx))
+            .filter(|tip| tip.is_tip_applicable(ctx))
             .collect();
         let mut rng = rand::thread_rng();
         available.choose(&mut rng).copied().cloned()

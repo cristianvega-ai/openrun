@@ -31,8 +31,6 @@ bitflags! {
         const NO_LRC_CONTROL = 1 << 4;
         /// Requires an active AI conversation.
         const ACTIVE_CONVERSATION = 1 << 5;
-        /// Requires codebase context to be enabled.
-        const CODEBASE_CONTEXT = 1 << 6;
         /// Requires AI to be globally enabled.
         const AI_ENABLED = 1 << 7;
         /// Requires a non-cloud-agent context.
@@ -81,9 +79,6 @@ pub enum SlashCommandKind {
     Fork,
     MoveToCloud,
     OpenCodeReview,
-    Index,
-    Init,
-    OpenProjectRules,
     OpenMcpServers,
     OpenSettingsFile,
     Changelog,

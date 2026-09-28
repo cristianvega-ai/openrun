@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use ai::index::full_source_code_embedding::manager::CodebaseIndexManager;
 use instant::Instant;
 use warp_core::ui::appearance::Appearance;
 use warpui::elements::Empty;
@@ -24,6 +23,7 @@ use crate::settings::PrivacySettings;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::terminal::view::init_environment::mode_selector::EnvironmentSetupModeSelector;
 use crate::test_util::settings::initialize_settings_for_tests;
+use crate::workspace_metadata::PersistedWorkspace;
 use crate::workspaces::team_tester::TeamTesterStatus;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
@@ -98,7 +98,7 @@ fn init_env_page_view_test_models(app: &mut App) {
     app.add_singleton_model(|_| Appearance::mock());
     app.add_singleton_model(CloudModel::mock);
 
-    // Some Environments page code paths consult org/user settings (e.g. codebase context enablement),
+    // Some Environments page code paths consult org/user settings,
     // even if the specific test isn't exercising them directly.
     app.add_singleton_model(UserWorkspaces::default_mock);
     app.add_singleton_model(PrivacySettings::mock);
@@ -110,11 +110,8 @@ fn init_env_page_view_test_models(app: &mut App) {
     app.add_singleton_model(|_| KeybindingChangedNotifier::new());
     app.add_singleton_model(|_| GitHubAuthNotifier::new());
 
-    // The agent-assisted modal reads locally indexed repos via CodebaseIndexManager.
-    // We register a test instance to avoid singleton lookup panics in unit tests.
-    app.add_singleton_model(|ctx| {
-        CodebaseIndexManager::new_for_test(ServerApiProvider::as_ref(ctx).get(), ctx)
-    });
+    // The agent-assisted modal lists known repos from PersistedWorkspace.
+    app.add_singleton_model(PersistedWorkspace::new_for_test);
 }
 
 type EmptyMouseStates = (

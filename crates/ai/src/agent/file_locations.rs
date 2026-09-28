@@ -102,10 +102,6 @@ impl From<&CodeContextLocation> for FileLocations {
                 name: path.to_string_lossy().to_string(),
                 lines: vec![],
             },
-            CodeContextLocation::Fragment(fragment) => Self {
-                name: fragment.path.to_string_lossy().to_string(),
-                lines: fragment.line_ranges.clone(),
-            },
         }
     }
 }
