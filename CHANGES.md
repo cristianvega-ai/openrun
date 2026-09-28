@@ -26,6 +26,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Referrals, rewards and referral-unlocked themes](#referrals-rewards-and-referral-unlocked-themes) — removed the Referrals page, invite entry points, the reward modal and the server referral client; the two reward themes are always available as "Nebula" and "Opal"
 - [Warp TUI front-end](#warp-tui-front-end) — deleted the login-gated "Warp Agent CLI" (`crates/warp_tui`), its app integration, settings, onboarding client and TUI skills
 - [TUI dev script](#tui-dev-script) — removed `script/run-tui` and the presubmit note about `warp_tui`
+- [Channel-config loader crate](#channel-config-loader-crate) — deleted `crates/warp_channel_config`, which only the removed channel and TUI binaries used
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -566,3 +567,15 @@ Each section below covers one removal (a single commit or a small group of relat
 **User-visible impact:** None for users. Contributors can no longer run the TUI.
 
 **Notes:** None.
+
+## Channel-config loader crate
+**Why:** `crates/warp_channel_config` loaded a per-channel `ChannelConfig` from Warp's private `warp-channel-config` generator (or from JSON embedded at build time). Its last users were the `warp_tui` channel binaries; the GUI channel binaries that also used it were removed earlier (see [Channel binaries and private config loader](#channel-binaries-and-private-config-loader)). `warp-oss` builds its config in code.
+
+**Removed:**
+- `crates/warp_channel_config` and its `[workspace.dependencies]` entry in the root `Cargo.toml`.
+
+**Modified:** None.
+
+**User-visible impact:** None.
+
+**Notes:** `rg warp_channel_config` found no other users before the deletion.

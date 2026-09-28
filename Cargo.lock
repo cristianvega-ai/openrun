@@ -14966,15 +14966,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "warp_channel_config"
-version = "0.0.0"
-dependencies = [
- "command",
- "serde_json",
- "warp_core",
-]
-
-[[package]]
 name = "warp_cli"
 version = "0.0.0"
 dependencies = [
