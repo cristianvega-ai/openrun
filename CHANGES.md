@@ -56,6 +56,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Rules, facts, memory and saved prompts](#rules-facts-memory-and-saved-prompts) — removed the AI Rules (Knowledge) pane and settings page, agent memory and rule suggestions, saved prompts (Agent Mode workflows) and their slash commands, menus, panes and modals
 - [CLI-agent footer split out of the agent footer](#cli-agent-footer-split-out-of-the-agent-footer) — the third-party CLI agent toolbar is now its own `CLIAgentFooter` view in `terminal/view/cli_agent_footer/`, with its own item type, layout editor and lenient stored-layout parsing
 - [MCP (Model Context Protocol)](#mcp-model-context-protocol) — deleted the `mcp` crate, the MCP server managers, gallery, OAuth and file-based discovery, the MCP settings page, Drive item and slash commands, the agent's MCP tool and resource actions, MCP execution-profile permissions and the Figma MCP prompt chip
+- [Launch, feature-intro and vertical-tabs intro modals](#launch-feature-intro-and-vertical-tabs-intro-modals) — deleted the Oz, OpenWarp, orchestration and Warp Agent CLI launch modals, the feature-intro popover and the vertical-tabs intro flow, with their one-time flags and debug actions
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1498,3 +1499,27 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Cargo features and `FeatureFlag` variants named for MCP (`McpServer`, `McpOauth`, `FileBasedMcp`, `McpDebuggingIds`, `MCPGroupedServerContext`, `McpJsonTreeView`, `WellKnownMcpIds`, `FactoryMcp`, `FigmaDetection`) stay for FLAGS-1.
 - Left for other tasks: `ToolCallStats::{read_mcp_resource_stats, call_mcp_tool_stats}` in `persistence::model` and the GraphQL usage query (AI-30/SRV-1); `mcp_servers` in `cloud_agent_config.rs` and `scheduled_ambient_agent.rs` (AI-18/AI-29); `mcp_servers_json` in the simple-integration GraphQL types and the schema files (SRV-1); the two MCP tips in `terminal/view/ambient_agent/tips.rs` (AI-17a); the `factory-files` and `claude-api` bundled skills that mention MCP (AI-11); the `.mcp.json` entry in the preview-config migration test (CFG-1); the MCP tables and columns in `persistence/schema.rs` and migrations (DB-1).
 - `simple_logger`'s rotation support was added for MCP server logs and no longer has a caller.
+## Launch, feature-intro and vertical-tabs intro modals
+**Why:** These were marketing and onboarding surfaces for Oz, orchestration, the Warp Agent CLI and the agent inbox, or announced Warp product launches. None applies to an offline terminal without Warp AI.
+
+**Removed:**
+- `workspace/view/{launch_modal, openwarp_launch_modal, orchestration_launch_modal, agent_cli_launch_modal, feature_intro_modal}/`: the Oz "Introducing Oz" tab and modal, the OpenWarp, orchestration and Warp Agent CLI launch modals, and the bottom-right feature-intro popover with its `FEATURE_INTROS` registry.
+- `workspace/hoa_onboarding/`: the vertical-tabs intro flow (welcome banner, vertical-tabs callout, agent-inbox callout, tab-config step) and its `HasCompletedHOAOnboarding` preference helpers.
+- `OneTimeModalModel` state, triggers and accessors for all of the above, so the model now tracks only the build-plan migration, auto-handoff sleep and free-AI-removal modals (later tasks delete those). Also removed `check_and_trigger_all_modals`, `mark_free_ai_removal_notice_seen` and the handoff-chip toolbar migration (with the `DidAddHandoffChipToToolbar` setting), which lost their only caller when the AuthManager subscription went with the login removal.
+- Settings: `did_check_to_trigger_agents_3_launch_modal`, `did_check_to_trigger_oz_launch_modal`, `did_check_to_trigger_orchestration_launch_modal`, `did_check_to_trigger_agent_cli_launch_modal`, `seen_feature_intro_ids` (all private one-time flags in `AISettings`) and `did_check_to_trigger_openwarp_launch_modal` (`GeneralSettings`).
+- Actions, debug bindings and context flags: `WorkspaceAction::{OpenOzLaunchModal, ResetOzLaunchModalState, OpenOpenWarpLaunchModal, ResetOpenWarpLaunchModalState, OpenOrchestrationLaunchModal, ResetOrchestrationLaunchModalState, OpenAgentCliLaunchModal, ResetAgentCliLaunchModalState, OpenFeatureIntroModal, ResetFeatureIntroModalState, DismissFeatureIntroModal, ShowHoaOnboardingFlow}`, the Escape binding for the feature-intro popover and `FEATURE_INTRO_MODAL_OPEN`.
+- The Workspace fields, focus helpers and render blocks for those modals, plus the `ModalWithTab` helper and the unused `update_toast_positioning`.
+- Telemetry enum leftovers: `CloudModeEntryPoint::OzLaunchModal` and `InputUXChangeOrigin::ADELaunchModal`.
+- Banner and promo images under `app/assets/async/png/` (`oz_*`) and `app/assets/async/png/onboarding/` (`openwarp_launch_banner`, `orchestration_launch_banner`, `agent_cli_launch_banner`, `custom_model_router_intro_banner`, `hoa_welcome_banner`).
+
+**Modified:**
+- The vertical-tabs panel now follows the `use_vertical_tabs` setting without the "keep open during HOA onboarding" exception, and the tab bar no longer has an onboarding-only always-visible rule.
+- `terminal/view.rs`, `workspace/util.rs`: dropped the Oz launch modal checks.
+- Three tests for the removed one-time modals were deleted from `one_time_modal_model_tests.rs`; the auto-handoff and free-AI-removal tests stay.
+
+**User-visible impact:** No launch or "what's new" modal appears at startup, no feature-intro popover appears, and the vertical-tabs intro tour is gone. Stored one-time flags are ignored.
+
+**Notes:**
+- `FeatureFlag::{OzLaunchModal, OpenWarpLaunchModal, OrchestrationLaunchModal, AgentCliLaunchModal, HOAOnboardingFlow}` and their Cargo features stay for FLAGS-1.
+- The build-plan migration, free-AI-removal and auto-handoff sleep modals are left to AI-16 and AI-17a. Nothing sets `has_completed_initial_modal_checks` any more, so the free-AI-removal notice can no longer open; AI-16 deletes it.
+- `FeatureFlag::CodeLaunchModal` gates the unrelated code-toolbelt tooltip and is untouched.

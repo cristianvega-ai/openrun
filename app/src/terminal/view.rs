@@ -12194,7 +12194,6 @@ impl TerminalView {
         let should_show_onboarding = FeatureFlag::AgentOnboarding.is_enabled()
             && !is_onboarded
             && !is_anonymous_or_logged_out;
-        let is_launch_modal_open = OneTimeModalModel::as_ref(ctx).is_oz_launch_modal_open();
 
         let has_plugin_instructions_block = self.rich_content_views.iter().any(|rc| {
             matches!(
@@ -12207,7 +12206,6 @@ impl TerminalView {
             && !self.model.lock().block_list().is_restored_session()
             && !should_show_onboarding
             && self.onboarding_callout_view.is_none()
-            && !is_launch_modal_open
             && !is_subshell_or_ssh
             && !has_plugin_instructions_block
         {

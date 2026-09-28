@@ -857,7 +857,6 @@ pub enum AgentModeCitation {
 pub enum InputUXChangeOrigin {
     #[default]
     Settings,
-    ADELaunchModal,
 }
 
 #[derive(Clone, Debug, Serialize)]

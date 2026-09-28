@@ -2,42 +2,26 @@ use std::future::Future;
 
 use ai::api_keys::ApiKeyManager;
 use settings::Setting as _;
-use warp_core::features::FeatureFlag;
 use warp_core::send_telemetry_from_ctx;
 use warp_util::sync::Condition;
-use warpui::{AppContext, Entity, ModelContext, SingletonEntity, WindowId};
+use warpui::{Entity, ModelContext, SingletonEntity, WindowId};
 
-use super::hoa_onboarding;
-use super::view::feature_intro_modal::{FEATURE_INTROS, FeatureIntroId};
 use super::view::free_ai_removal_modal::{
     FreeAiRemovalModalTelemetryEvent, FreeAiRemovalModalVariant,
 };
-use crate::ai::blocklist::agent_view::toolbar_item::AgentToolbarItemKind;
 use crate::ai::{AIRequestUsageModel, AIRequestUsageModelEvent};
 use crate::auth::AuthStateProvider;
 use crate::channel::{Channel, ChannelState};
 use crate::root_view::has_completed_local_onboarding;
-use crate::settings::{AISettings, CodeSettings};
+use crate::settings::AISettings;
 use crate::terminal::general_settings::GeneralSettings;
-use crate::terminal::session_settings::{AgentToolbarChipSelection, SessionSettings};
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::workspaces::workspace::CustomerType;
 
-/// A generic model for managing one-time modals that should be shown to users only once.
-///
-/// Initially implemented for the ADE launch modal, but designed to be extensible to support
-/// other types of one-time modals in the future. The model holds the canonical state of whether
-/// a modal is currently being shown and automatically triggers the modal when appropriate
-/// conditions are met (e.g., user becomes onboarded).
+/// Holds the canonical state of whether a one-time modal is currently being shown, and the
+/// window it is shown in.
 pub struct OneTimeModalModel {
     is_build_plan_migration_modal_open: bool,
-    /// Whether the Oz launch modal is currently being shown.
-    is_oz_launch_modal_open: bool,
-    /// Whether the OpenWarp launch modal is currently being shown.
-    is_openwarp_launch_modal_open: bool,
-    is_orchestration_launch_modal_open: bool,
-    /// Whether the Warp Agent CLI launch modal is currently being shown.
-    is_agent_cli_launch_modal_open: bool,
     /// Whether the auto-handoff sleep discoverability modal is currently being shown.
     is_auto_handoff_sleep_modal_open: bool,
     /// Set while the auto-handoff sleep modal is closed and reset while it is
@@ -47,13 +31,6 @@ pub struct OneTimeModalModel {
     auto_handoff_sleep_modal_closed: Condition,
     /// Whether the free-AI-removal notice modal is currently being shown.
     is_free_ai_removal_modal_open: bool,
-    /// Whether the HOA onboarding flow is currently being shown.
-    is_hoa_onboarding_open: bool,
-    /// The feature-intro popover currently being shown, if any. Unlike the other
-    /// one-time modals this is a non-blocking bottom-right popover, so it is
-    /// intentionally excluded from `is_any_modal_open` (which suppresses terminal
-    /// focus stealing) to keep the terminal usable while it is visible.
-    active_feature_intro: Option<FeatureIntroId>,
     /// Whether the initial one-time modal checks have run. Event-driven re-checks wait for them.
     has_completed_initial_modal_checks: bool,
     /// Whether `UserWorkspaces` has emitted `TeamsChanged`, meaning workspace billing
@@ -101,117 +78,18 @@ impl OneTimeModalModel {
 
         Self {
             is_build_plan_migration_modal_open: false,
-            is_oz_launch_modal_open: false,
-            is_openwarp_launch_modal_open: false,
-            is_orchestration_launch_modal_open: false,
-            is_agent_cli_launch_modal_open: false,
             is_auto_handoff_sleep_modal_open: false,
             auto_handoff_sleep_modal_closed,
             is_free_ai_removal_modal_open: false,
-            is_hoa_onboarding_open: false,
-            active_feature_intro: None,
             has_completed_initial_modal_checks: false,
             has_fetched_workspaces: false,
             target_window_id: None,
         }
     }
 
-    /// Returns whether the Oz launch modal is currently open.
-    pub fn is_oz_launch_modal_open(&self) -> bool {
-        self.is_oz_launch_modal_open && self.target_window_id.is_some()
-    }
-
     /// Returns the window ID where the currently open one-time modal should be displayed.
     pub fn target_window_id(&self) -> Option<WindowId> {
         self.target_window_id
-    }
-
-    pub fn mark_oz_launch_modal_dismissed(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_oz_launch_modal_open(false, ctx);
-    }
-
-    /// Returns whether the OpenWarp launch modal is currently open.
-    pub fn is_openwarp_launch_modal_open(&self) -> bool {
-        self.is_openwarp_launch_modal_open && self.target_window_id.is_some()
-    }
-
-    pub fn mark_openwarp_launch_modal_dismissed(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_openwarp_launch_modal_open(false, ctx);
-    }
-
-    pub fn is_orchestration_launch_modal_open(&self) -> bool {
-        self.is_orchestration_launch_modal_open && self.target_window_id.is_some()
-    }
-
-    pub fn mark_orchestration_launch_modal_dismissed(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_orchestration_launch_modal_open(false, ctx);
-    }
-
-    pub fn is_agent_cli_launch_modal_open(&self) -> bool {
-        self.is_agent_cli_launch_modal_open && self.target_window_id.is_some()
-    }
-
-    pub fn mark_agent_cli_launch_modal_dismissed(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_agent_cli_launch_modal_open(false, ctx);
-    }
-
-    /// Returns the feature-intro popover currently being shown, if any.
-    pub fn active_feature_intro(&self) -> Option<FeatureIntroId> {
-        if self.target_window_id.is_some() {
-            self.active_feature_intro
-        } else {
-            None
-        }
-    }
-
-    pub fn mark_feature_intro_dismissed(&mut self, ctx: &mut ModelContext<Self>) {
-        if !self.set_active_feature_intro(None, ctx) {
-            return;
-        }
-        // Feature intros sit ahead of HOA/build-plan in the startup queue and also
-        // suppress free-AI rechecks while open. Resume those deferred paths so
-        // lower-priority notices are not lost for the rest of the session.
-        self.resume_modal_checks_after_feature_intro(ctx);
-    }
-
-    fn resume_modal_checks_after_feature_intro(&mut self, ctx: &mut ModelContext<Self>) {
-        if self.check_and_trigger_free_ai_removal_modal(ctx) {
-            return;
-        }
-        if self.check_and_trigger_hoa_onboarding(ctx) {
-            return;
-        }
-        self.check_and_trigger_build_plan_migration_modal(ctx);
-    }
-
-    #[cfg(debug_assertions)]
-    pub fn force_open_feature_intro(&mut self, id: FeatureIntroId, ctx: &mut ModelContext<Self>) {
-        self.set_active_feature_intro(Some(id), ctx);
-    }
-
-    fn set_active_feature_intro(
-        &mut self,
-        intro: Option<FeatureIntroId>,
-        ctx: &mut ModelContext<Self>,
-    ) -> bool {
-        if self.active_feature_intro != intro {
-            self.active_feature_intro = intro;
-            // Bind the popover to the focused window as soon as it opens. The
-            // workspace only renders / populates the view when
-            // `target_window_id` matches, and `on_active_window_changed` may not
-            // have run yet when the startup modal queue fires.
-            if intro.is_some()
-                && self.target_window_id.is_none()
-                && let Some(window_id) = ctx.windows().active_window()
-            {
-                self.target_window_id = Some(window_id);
-            }
-            ctx.emit(OneTimeModalEvent::VisibilityChanged {
-                is_open: intro.is_some(),
-            });
-            return true;
-        }
-        false
     }
 
     /// Returns whether the auto-handoff sleep discoverability modal is currently open.
@@ -280,164 +158,23 @@ impl OneTimeModalModel {
         self.auto_handoff_sleep_modal_closed.wait()
     }
 
-    /// Returns whether the HOA onboarding flow is currently open.
-    pub fn is_hoa_onboarding_open(&self) -> bool {
-        self.is_hoa_onboarding_open && self.target_window_id.is_some()
-    }
-
-    pub fn mark_hoa_onboarding_dismissed(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_hoa_onboarding_open(false, ctx);
-    }
-
     /// Returns true if any one-time modal is currently open.
     pub fn is_any_modal_open(&self) -> bool {
-        (self.is_oz_launch_modal_open
-            || self.is_openwarp_launch_modal_open
-            || self.is_orchestration_launch_modal_open
-            || self.is_agent_cli_launch_modal_open
-            || self.is_auto_handoff_sleep_modal_open
+        (self.is_auto_handoff_sleep_modal_open
             || self.is_build_plan_migration_modal_open
-            || self.is_free_ai_removal_modal_open
-            || self.is_hoa_onboarding_open)
+            || self.is_free_ai_removal_modal_open)
             && self.target_window_id.is_some()
-    }
-
-    #[cfg(debug_assertions)]
-    pub fn force_open_oz_launch_modal(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_oz_launch_modal_open(true, ctx);
-    }
-
-    #[cfg(debug_assertions)]
-    pub fn force_open_openwarp_launch_modal(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_openwarp_launch_modal_open(true, ctx);
-    }
-
-    #[cfg(debug_assertions)]
-    pub fn force_open_orchestration_launch_modal(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_orchestration_launch_modal_open(true, ctx);
-    }
-
-    #[cfg(debug_assertions)]
-    pub fn force_open_agent_cli_launch_modal(&mut self, ctx: &mut ModelContext<Self>) {
-        self.set_agent_cli_launch_modal_open(true, ctx);
     }
 
     pub fn update_target_window_id(&mut self, window_id: WindowId, ctx: &mut ModelContext<Self>) {
         let was_any_modal_visible = self.is_any_modal_open();
-        // Feature intro is intentionally excluded from `is_any_modal_open`, so
-        // track it separately. Without this, activating a window after the
-        // startup queue already selected an intro never re-emits, and the
-        // workspace never calls `show_feature_intro_modal`.
-        let was_feature_intro_visible = self.active_feature_intro().is_some();
-        let previous_target = self.target_window_id;
         self.target_window_id = Some(window_id);
         let is_any_modal_visible = self.is_any_modal_open();
-        let is_feature_intro_visible = self.active_feature_intro().is_some();
-        if was_any_modal_visible != is_any_modal_visible
-            || was_feature_intro_visible != is_feature_intro_visible
-            || (is_feature_intro_visible && previous_target != Some(window_id))
-        {
+        if was_any_modal_visible != is_any_modal_visible {
             ctx.emit(OneTimeModalEvent::VisibilityChanged {
-                is_open: is_any_modal_visible || is_feature_intro_visible,
+                is_open: is_any_modal_visible,
             });
         }
-    }
-
-    fn set_oz_launch_modal_open(&mut self, is_open: bool, ctx: &mut ModelContext<Self>) -> bool {
-        if self.is_oz_launch_modal_open != is_open {
-            self.is_oz_launch_modal_open = is_open;
-            ctx.emit(OneTimeModalEvent::VisibilityChanged { is_open });
-            return true;
-        }
-        false
-    }
-
-    fn set_openwarp_launch_modal_open(
-        &mut self,
-        is_open: bool,
-        ctx: &mut ModelContext<Self>,
-    ) -> bool {
-        if self.is_openwarp_launch_modal_open != is_open {
-            self.is_openwarp_launch_modal_open = is_open;
-            ctx.emit(OneTimeModalEvent::VisibilityChanged { is_open });
-            return true;
-        }
-        false
-    }
-
-    fn set_orchestration_launch_modal_open(
-        &mut self,
-        is_open: bool,
-        ctx: &mut ModelContext<Self>,
-    ) -> bool {
-        if self.is_orchestration_launch_modal_open != is_open {
-            self.is_orchestration_launch_modal_open = is_open;
-            ctx.emit(OneTimeModalEvent::VisibilityChanged { is_open });
-            return true;
-        }
-        false
-    }
-
-    fn set_agent_cli_launch_modal_open(
-        &mut self,
-        is_open: bool,
-        ctx: &mut ModelContext<Self>,
-    ) -> bool {
-        if self.is_agent_cli_launch_modal_open != is_open {
-            self.is_agent_cli_launch_modal_open = is_open;
-            ctx.emit(OneTimeModalEvent::VisibilityChanged { is_open });
-            return true;
-        }
-        false
-    }
-
-    fn check_and_trigger_all_modals(&mut self, ctx: &mut ModelContext<Self>) {
-        // Never show one-time modals on WASM.
-        if cfg!(target_family = "wasm") {
-            return;
-        }
-
-        // Existing users should never see the code toolbelt new feature popup.
-        CodeSettings::handle(ctx).update(ctx, |settings, ctx| {
-            if let Err(e) = settings
-                .dismissed_code_toolbelt_new_feature_popup
-                .set_value(true, ctx)
-            {
-                log::warn!("Failed to mark code toolbelt new feature popup as dismissed: {e}");
-            }
-        });
-
-        // The OpenWarp launch modal takes priority over the Oz launch modal
-        // when both are enabled.
-        if self.check_and_trigger_openwarp_launch_modal(ctx) {
-            return;
-        }
-
-        if self.check_and_trigger_oz_launch_modal(ctx) {
-            return;
-        }
-
-        if self.check_and_trigger_orchestration_launch_modal(ctx) {
-            return;
-        }
-
-        if self.check_and_trigger_agent_cli_launch_modal(ctx) {
-            return;
-        }
-
-        if self.check_and_trigger_free_ai_removal_modal(ctx) {
-            return;
-        }
-
-        if self.check_and_trigger_feature_intro_modal(ctx) {
-            return;
-        }
-
-        if self.check_and_trigger_hoa_onboarding(ctx) {
-            return;
-        }
-
-        self.check_and_trigger_build_plan_migration_modal(ctx);
     }
 
     /// Returns whether the free-AI-removal notice modal is currently open.
@@ -470,10 +207,7 @@ impl OneTimeModalModel {
     /// Re-evaluates the free-AI-removal notice outside the initial startup check, e.g.
     /// when workspace billing data arrives after startup.
     fn maybe_recheck_free_ai_removal_modal(&mut self, ctx: &mut ModelContext<Self>) {
-        if !self.has_completed_initial_modal_checks
-            || self.is_any_modal_open()
-            || self.active_feature_intro.is_some()
-        {
+        if !self.has_completed_initial_modal_checks || self.is_any_modal_open() {
             return;
         }
         self.check_and_trigger_free_ai_removal_modal(ctx);
@@ -481,9 +215,8 @@ impl OneTimeModalModel {
 
     fn check_and_trigger_free_ai_removal_modal(&mut self, ctx: &mut ModelContext<Self>) -> bool {
         // Never show one-time modals on WASM. `check_and_trigger_all_modals` already
-        // guards its own call, but `maybe_recheck_free_ai_removal_modal` and
-        // `resume_modal_checks_after_feature_intro` call this directly (e.g. from an
-        // async billing/usage update), so the guard belongs here too.
+        // guards its own call, but `maybe_recheck_free_ai_removal_modal` calls
+        // this directly (e.g. from an async billing/usage update), so the guard belongs here too.
         if cfg!(target_family = "wasm") {
             return false;
         }
@@ -544,169 +277,6 @@ impl OneTimeModalModel {
             );
         }
         self.set_free_ai_removal_modal_open(should_show, ctx);
-        should_show
-    }
-
-    fn set_hoa_onboarding_open(&mut self, is_open: bool, ctx: &mut ModelContext<Self>) -> bool {
-        if self.is_hoa_onboarding_open != is_open {
-            self.is_hoa_onboarding_open = is_open;
-            ctx.emit(OneTimeModalEvent::VisibilityChanged { is_open });
-            return true;
-        }
-        false
-    }
-
-    fn check_and_trigger_hoa_onboarding(&mut self, ctx: &mut ModelContext<Self>) -> bool {
-        if !FeatureFlag::HOAOnboardingFlow.is_enabled() {
-            return false;
-        }
-
-        if hoa_onboarding::has_completed_hoa_onboarding(ctx) {
-            return false;
-        }
-
-        // All required dependent feature flags must be enabled.
-        if !FeatureFlag::VerticalTabs.is_enabled()
-            || !FeatureFlag::HOANotifications.is_enabled()
-            || !FeatureFlag::TabConfigs.is_enabled()
-        {
-            return false;
-        }
-
-        self.set_hoa_onboarding_open(true, ctx)
-    }
-
-    fn check_and_trigger_oz_launch_modal(&mut self, ctx: &mut ModelContext<Self>) -> bool {
-        // Only show if the feature flag is enabled.
-        if !FeatureFlag::OzLaunchModal.is_enabled() {
-            return false;
-        }
-
-        let ai_settings = AISettings::as_ref(ctx);
-        let oz_modal_shown = *ai_settings.did_check_to_trigger_oz_launch_modal;
-
-        // If Oz modal has already been shown, don't show anything.
-        if oz_modal_shown {
-            return false;
-        }
-
-        AISettings::handle(ctx).update(ctx, |settings, ctx| {
-            if let Err(e) = settings
-                .did_check_to_trigger_oz_launch_modal
-                .set_value(true, ctx)
-            {
-                log::warn!("Failed to mark Oz launch modal as dismissed: {e}");
-            }
-        });
-
-        let should_show_oz_modal = !matches!(ChannelState::channel(), Channel::Integration);
-        self.set_oz_launch_modal_open(should_show_oz_modal, ctx);
-        should_show_oz_modal
-    }
-
-    fn check_and_trigger_openwarp_launch_modal(&mut self, ctx: &mut ModelContext<Self>) -> bool {
-        // Only show if the feature flag is enabled.
-        if !FeatureFlag::OpenWarpLaunchModal.is_enabled() {
-            return false;
-        }
-
-        let general_settings = GeneralSettings::as_ref(ctx);
-        let openwarp_modal_shown = *general_settings
-            .did_check_to_trigger_openwarp_launch_modal
-            .value();
-
-        if openwarp_modal_shown {
-            return false;
-        }
-
-        GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
-            if let Err(e) = settings
-                .did_check_to_trigger_openwarp_launch_modal
-                .set_value(true, ctx)
-            {
-                log::warn!("Failed to mark OpenWarp launch modal as dismissed: {e}");
-            }
-        });
-
-        let should_show_openwarp_modal = !matches!(ChannelState::channel(), Channel::Integration);
-        self.set_openwarp_launch_modal_open(should_show_openwarp_modal, ctx);
-        should_show_openwarp_modal
-    }
-
-    fn check_and_trigger_orchestration_launch_modal(
-        &mut self,
-        ctx: &mut ModelContext<Self>,
-    ) -> bool {
-        if !FeatureFlag::OrchestrationLaunchModal.is_enabled() {
-            return false;
-        }
-
-        let ai_settings = AISettings::as_ref(ctx);
-        if *ai_settings.did_check_to_trigger_orchestration_launch_modal {
-            return false;
-        }
-
-        AISettings::handle(ctx).update(ctx, |settings, ctx| {
-            if let Err(e) = settings
-                .did_check_to_trigger_orchestration_launch_modal
-                .set_value(true, ctx)
-            {
-                log::warn!("Failed to mark orchestration launch modal as dismissed: {e}");
-            }
-        });
-
-        let should_show = !matches!(ChannelState::channel(), Channel::Integration);
-        self.set_orchestration_launch_modal_open(should_show, ctx);
-        should_show
-    }
-
-    fn check_and_trigger_agent_cli_launch_modal(&mut self, ctx: &mut ModelContext<Self>) -> bool {
-        if !FeatureFlag::AgentCliLaunchModal.is_enabled() {
-            return false;
-        }
-
-        let ai_settings = AISettings::as_ref(ctx);
-        if *ai_settings.did_check_to_trigger_agent_cli_launch_modal {
-            return false;
-        }
-
-        AISettings::handle(ctx).update(ctx, |settings, ctx| {
-            if let Err(e) = settings
-                .did_check_to_trigger_agent_cli_launch_modal
-                .set_value(true, ctx)
-            {
-                log::warn!("Failed to mark Warp Agent CLI launch modal as dismissed: {e}");
-            }
-        });
-
-        let should_show = !matches!(ChannelState::channel(), Channel::Integration);
-        self.set_agent_cli_launch_modal_open(should_show, ctx);
-        should_show
-    }
-
-    fn check_and_trigger_feature_intro_modal(&mut self, ctx: &mut ModelContext<Self>) -> bool {
-        if !AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
-            return false;
-        }
-        // Show the first registered feature intro that the user hasn't seen yet
-        // (see `FEATURE_INTROS`).
-        let next_id = FEATURE_INTROS
-            .iter()
-            .find(|intro| !AISettings::as_ref(ctx).is_feature_intro_seen(intro.id.as_key()))
-            .map(|intro| intro.id);
-        let Some(id) = next_id else {
-            return false;
-        };
-
-        // Mark it seen up front so it shows at most once, even if suppressed below.
-        AISettings::handle(ctx).update(ctx, |settings, ctx| {
-            settings.mark_feature_intro_seen(id.as_key(), ctx);
-        });
-
-        let should_show = !matches!(ChannelState::channel(), Channel::Integration);
-        if should_show {
-            self.set_active_feature_intro(Some(id), ctx);
-        }
         should_show
     }
 
@@ -793,70 +363,6 @@ impl OneTimeModalModel {
         self.target_window_id = Some(target_window_id);
         self.set_build_plan_migration_modal_open(true, ctx)
     }
-}
-
-/// One-time migration: if the user has a custom agent toolbar layout that
-/// predates the handoff-to-cloud chip, append the chip so they get the
-/// new feature without losing their customization.
-///
-/// Users on `Default` already see the chip via `AgentToolbarItemKind::default_right()`.
-fn maybe_ensure_handoff_chip_in_toolbar(ctx: &mut ModelContext<OneTimeModalModel>) {
-    if !FeatureFlag::OzHandoff.is_enabled()
-        || !FeatureFlag::HandoffLocalCloud.is_enabled()
-        || !cfg!(all(feature = "local_fs", not(target_family = "wasm")))
-    {
-        return;
-    }
-
-    let session_settings = SessionSettings::as_ref(ctx);
-    if *session_settings.did_add_handoff_chip_to_toolbar {
-        return;
-    }
-
-    // Mark as done so future app starts skip this path.
-    SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
-        if let Err(e) = settings
-            .did_add_handoff_chip_to_toolbar
-            .set_value(true, ctx)
-        {
-            log::warn!("Failed to mark handoff chip toolbar migration as done: {e}");
-        }
-    });
-
-    // `Default` already includes the chip — nothing to do.
-    let selection = SessionSettings::as_ref(ctx)
-        .agent_footer_chip_selection
-        .clone();
-    let AgentToolbarChipSelection::Custom { mut left, right } = selection else {
-        return;
-    };
-
-    let handoff = AgentToolbarItemKind::HandoffToCloud;
-    if left.contains(&handoff) || right.contains(&handoff) {
-        return;
-    }
-
-    left.push(handoff);
-    SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
-        if let Err(e) = settings
-            .agent_footer_chip_selection
-            .set_value(AgentToolbarChipSelection::Custom { left, right }, ctx)
-        {
-            log::warn!("Failed to add handoff chip to toolbar: {e}");
-        }
-    });
-}
-
-/// Marks the free-AI-removal notice as seen without showing it.
-pub fn mark_free_ai_removal_notice_seen(app: &mut AppContext) {
-    AISettings::handle(app).update(app, |settings, ctx| {
-        if let Err(e) = settings
-            .did_check_to_trigger_free_ai_removal_modal
-            .set_value(true, ctx)
-        {
-            log::warn!("Failed to mark free AI removal notice as seen: {e}");
-        }
-    });
 }
 
 /// The outcome of evaluating the free-AI-removal notice conditions.
