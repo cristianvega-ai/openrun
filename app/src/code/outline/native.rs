@@ -2,9 +2,9 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use ai::index::build_outline;
 use anyhow::Context as _;
 use async_channel::Sender;
+use code_outline::build_outline;
 use futures::stream::AbortHandle;
 use instant::Instant;
 use repo_metadata::repositories::{DetectedRepositories, DetectedRepositoriesEvent};

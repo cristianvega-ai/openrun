@@ -7,7 +7,7 @@ use std::path::PathBuf;
 #[cfg(not(target_family = "wasm"))]
 use std::time::Duration;
 
-use ai::index::Symbol;
+use code_outline::Symbol;
 use fuzzy_match::FuzzyMatchResult;
 #[cfg(not(target_family = "wasm"))]
 use instant::Instant;
@@ -26,7 +26,7 @@ use warpui::SingletonEntity;
 #[cfg(not(target_family = "wasm"))]
 use super::search_item::CodeSearchItem;
 #[cfg(not(target_family = "wasm"))]
-use crate::ai::outline::{OutlineStatus, RepoOutlines, RepoOutlinesEvent};
+use crate::code::outline::{OutlineStatus, RepoOutlines, RepoOutlinesEvent};
 #[cfg(not(target_family = "wasm"))]
 use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
 #[cfg(not(target_family = "wasm"))]

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
+use code_outline::THREADPOOL;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use repo_metadata::entry::is_file_parsable;
@@ -18,7 +19,6 @@ use super::hash::MerkleHash;
 use super::serialized_tree::{SerializedFilesystemInfo, SerializedMerkleNode};
 use super::tree::UpdateFileResult;
 use super::{ContentHash, DirEntryOrFragment, NodeHash};
-use crate::index::THREADPOOL;
 use crate::index::full_source_code_embedding::Error;
 use crate::index::full_source_code_embedding::chunker::chunk_code;
 use crate::index::full_source_code_embedding::fragment_metadata::{

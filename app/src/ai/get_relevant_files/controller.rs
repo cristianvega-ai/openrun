@@ -19,7 +19,7 @@ use crate::ai::agent::SearchCodebaseFailureReason;
 use crate::ai::agent::{AIAgentActionId, SearchCodebaseResult};
 use crate::ai::blocklist::SessionContext;
 use crate::ai::get_relevant_files::api::{FileContext as FileContextRequest, GetRelevantFiles};
-use crate::ai::outline::{OutlineStatus, RepoOutlines};
+use crate::code::outline::{OutlineStatus, RepoOutlines};
 use crate::server::server_api::{AIApiError, ServerApiProvider};
 use crate::server::team_scope::RequestTeamScope;
 use crate::{TelemetryEvent, send_telemetry_from_ctx};

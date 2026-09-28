@@ -122,6 +122,7 @@ mod icon;
 
 pub mod active_file;
 pub mod opened_files;
+pub mod outline;
 pub use icon::icon_from_file_path;
 
 #[cfg_attr(not(target_family = "wasm"), path = "view.rs")]

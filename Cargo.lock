@@ -174,6 +174,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "chrono",
+ "code_outline",
  "computer_use",
  "derivative",
  "dirs 6.0.0",
@@ -210,12 +211,10 @@ dependencies = [
  "settings_value",
  "sha2 0.10.9",
  "shellexpand",
- "streaming-iterator",
  "string-offset",
  "strsim 0.11.1",
  "strum 0.27.1",
  "strum_macros 0.27.1",
- "syntax_tree",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
@@ -2965,6 +2964,30 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-graphics-types 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "objc",
+]
+
+[[package]]
+name = "code_outline"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arborium",
+ "cfg-if",
+ "futures",
+ "ignore",
+ "itertools 0.14.0",
+ "languages",
+ "lazy_static",
+ "log",
+ "nix 0.26.4",
+ "rayon",
+ "repo_metadata",
+ "serde",
+ "streaming-iterator",
+ "syntax_tree",
+ "tempfile",
+ "warp_errors",
+ "warp_util",
 ]
 
 [[package]]
@@ -14701,6 +14724,7 @@ dependencies = [
  "cloud_object_persistence",
  "cloud_objects",
  "cocoa 0.26.0",
+ "code_outline",
  "comfy-table",
  "command",
  "command-corrections",

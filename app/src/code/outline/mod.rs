@@ -1,4 +1,4 @@
-use ai::index::Outline;
+use code_outline::Outline;
 
 cfg_if::cfg_if! {
     if #[cfg(target_family = "wasm")] {

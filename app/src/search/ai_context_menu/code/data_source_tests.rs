@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use ai::index::Symbol;
+use code_outline::Symbol;
 
 #[cfg(test)]
 use super::*;

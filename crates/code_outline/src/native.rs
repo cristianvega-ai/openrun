@@ -10,20 +10,13 @@ use ignore::gitignore::Gitignore;
 use itertools::Itertools;
 use rayon::prelude::*;
 use repo_metadata::entry::{BudgetExceededBehavior, IgnoredPathStrategy, is_file_parsable};
-use repo_metadata::{Entry, FileId, FileMetadata, RepositoryUpdate};
+use repo_metadata::{Entry, FileId, FileMetadata, RepositoryUpdate, matches_gitignores};
 use streaming_iterator::StreamingIterator;
 use syntax_tree::TextSlice;
 use warp_errors::report_error;
 use warp_util::standardized_path::StandardizedPath;
 
-use crate::index::THREADPOOL;
-use crate::index::file_outline::{FileOutline, Outline, Symbol};
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "local_fs")] {
-        use repo_metadata::matches_gitignores;
-    }
-}
+use crate::{FileOutline, Outline, Symbol, THREADPOOL};
 
 /// Given a repo path, try to build its outline. An outline is a list of all its files and the symbols
 /// of interest from each file.

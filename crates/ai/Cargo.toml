@@ -28,7 +28,6 @@ string-offset.workspace = true
 typed-path.workspace = true
 anyhow.workspace = true
 base16ct = "0.2.0"
-streaming-iterator.workspace = true
 instant.workspace = true
 itertools.workspace = true
 indexmap = { version = "2.0.2", features = ["serde"] }
@@ -61,6 +60,7 @@ warp_errors.workspace = true
 warp_terminal.workspace = true
 warp_util.workspace = true
 chrono.workspace = true
+code_outline.workspace = true
 persistence.workspace = true
 priority-queue = "2.3.1"
 repo_metadata.workspace = true
@@ -79,7 +79,6 @@ http_client.workspace = true
 languages.workspace = true
 rand.workspace = true
 serde_urlencoded.workspace = true
-syntax_tree.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 watcher.workspace = true
 notify-debouncer-full.workspace = true

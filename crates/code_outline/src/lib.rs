@@ -1,3 +1,4 @@
+//! Code-symbol outlines of repositories, built by parsing source files with tree-sitter.
 #![cfg_attr(target_arch = "wasm32", allow(dead_code))]
 
 cfg_if::cfg_if! {
@@ -15,6 +16,31 @@ use ignore::gitignore::Gitignore;
 use itertools::Itertools;
 use repo_metadata::{Entry, FileId};
 use serde::{Deserialize, Serialize};
+
+lazy_static::lazy_static! {
+    /// Shared Rayon pool for parsing files off the main thread.
+    pub static ref THREADPOOL: Option<rayon::ThreadPool> = create_thread_pool();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn create_thread_pool() -> Option<rayon::ThreadPool> {
+    const MAX_PARALLEL_THREADS: usize = 2;
+
+    let num_threads = std::thread::available_parallelism()
+        .map(|parallelism| (parallelism.get() / 2).clamp(1, MAX_PARALLEL_THREADS))
+        .unwrap_or(MAX_PARALLEL_THREADS);
+
+    rayon::ThreadPoolBuilder::new()
+        .thread_name(|index| format!("warp-code-indexing-{index}"))
+        .num_threads(num_threads)
+        .build()
+        .ok()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn create_thread_pool() -> Option<rayon::ThreadPool> {
+    None
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FileSymbols {
