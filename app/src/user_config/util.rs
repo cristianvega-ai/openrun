@@ -159,8 +159,30 @@ pub(super) fn parse_single_theme_dir_entry(item: &DirEntry) -> Option<(ThemeKind
     })
 }
 
+/// One document of a workflow file. A document that isn't a supported workflow (for example one
+/// written for a workflow type that no longer exists) is skipped without affecting the other
+/// documents in the file.
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum WorkflowDocument {
+    Supported(Workflow),
+    Unsupported(serde::de::IgnoredAny),
+}
+
 pub(super) fn parse_multi_workflow_dir_entry(item: &DirEntry) -> Option<Vec<Workflow>> {
-    parse_multi_item_file(item, |_, workflow| workflow)
+    let documents = parse_multi_item_file(item, |_, document| document)?;
+    Some(
+        documents
+            .into_iter()
+            .filter_map(|document| match document {
+                WorkflowDocument::Supported(workflow) => Some(workflow),
+                WorkflowDocument::Unsupported(_) => {
+                    log::warn!("Skipping an unsupported workflow in {:?}", item.file_name());
+                    None
+                }
+            })
+            .collect(),
+    )
 }
 
 pub(super) fn parse_multi_launch_config_dir_entry(item: &DirEntry) -> Option<Vec<LaunchConfig>> {

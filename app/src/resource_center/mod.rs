@@ -226,7 +226,7 @@ pub fn mark_feature_used_and_write_to_user_defaults(
             report_if_error!(
                 general_settings
                     .welcome_tips_features_used
-                    .set_value(tips_completed.features_used.clone(), ctx)
+                    .set_value(tips_completed.features_used.clone().into(), ctx)
             );
 
             if tips_completed.skipped_or_completed {

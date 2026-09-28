@@ -1,5 +1,4 @@
-use std::collections::HashSet;
-
+use settings_value::LenientSet;
 use warp_core::settings::macros::define_settings_group;
 use warp_core::settings::{RespectUserSyncSetting, SupportedPlatforms, SyncToCloud};
 use warpui::{AppContext, SingletonEntity as _};
@@ -80,8 +79,8 @@ define_settings_group!(GeneralSettings, settings: [
         description: "Whether to show a tooltip when hovering over links.",
     },
     welcome_tips_features_used: WelcomeTipsFeaturesUsed {
-        type: HashSet<Tip>,
-        default: HashSet::new(),
+        type: LenientSet<Tip>,
+        default: LenientSet::default(),
         supported_platforms: SupportedPlatforms::ALL,
         sync_to_cloud: SyncToCloud::Never,
         surface: settings::SettingSurfaces::GUI,
@@ -189,3 +188,7 @@ impl GeneralSettings {
             .cloned()
     }
 }
+
+#[cfg(test)]
+#[path = "general_settings_tests.rs"]
+mod tests;

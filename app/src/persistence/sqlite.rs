@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Once};
 use std::{fs, thread};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow};
 use cloud_object_models::folder::persistence as folder_persistence;
 use cloud_object_models::folder::persistence::upsert_folders;
 use cloud_object_models::json_model::persistence::{
@@ -697,6 +697,7 @@ fn save_app_state(conn: &mut SqliteConnection, app_state: &AppState) -> Result<(
         diesel::delete(schema::settings_panes::dsl::settings_panes).execute(conn)?;
         diesel::delete(schema::ai_memory_panes::dsl::ai_memory_panes).execute(conn)?;
         diesel::delete(schema::ai_document_panes::dsl::ai_document_panes).execute(conn)?;
+        diesel::delete(schema::mcp_server_panes::dsl::mcp_server_panes).execute(conn)?;
         diesel::delete(schema::code_review_panes::dsl::code_review_panes).execute(conn)?;
         diesel::delete(schema::ambient_agent_panes::dsl::ambient_agent_panes).execute(conn)?;
         diesel::delete(schema::pane_leaves::dsl::pane_leaves).execute(conn)?;
@@ -1657,7 +1658,12 @@ fn parse_conversation_ids(ids_json: &Option<String>) -> Vec<AIConversationId> {
         })
 }
 
-fn read_root_node(conn: &mut SqliteConnection, tab_id_val: i32) -> Result<PaneNodeSnapshot> {
+/// Reads a tab's pane tree. Returns `None` if every pane in the tab is of a kind that
+/// can no longer be restored.
+fn read_root_node(
+    conn: &mut SqliteConnection,
+    tab_id_val: i32,
+) -> Result<Option<PaneNodeSnapshot>> {
     use schema::pane_nodes::dsl::*;
 
     let pane_node: model::PaneNode = schema::pane_nodes::dsl::pane_nodes
@@ -1668,7 +1674,15 @@ fn read_root_node(conn: &mut SqliteConnection, tab_id_val: i32) -> Result<PaneNo
 }
 
 /// Reads a saved node back into a snapshot.
-fn read_node(conn: &mut SqliteConnection, node: model::PaneNode) -> Result<PaneNodeSnapshot> {
+///
+/// A leaf whose kind is no longer recognized (a pane type that has been removed) is skipped
+/// so it doesn't take the rest of the tab down with it. A branch keeps its remaining children
+/// and collapses into its only child when a single one is left. Returns `None` when nothing
+/// restorable is left under the node.
+fn read_node(
+    conn: &mut SqliteConnection,
+    node: model::PaneNode,
+) -> Result<Option<PaneNodeSnapshot>> {
     match node.is_leaf {
         true => {
             let pane = schema::pane_leaves::dsl::pane_leaves
@@ -1722,7 +1736,8 @@ fn read_node(conn: &mut SqliteConnection, node: model::PaneNode) -> Result<PaneN
                     // Rows without a local path belong to cloud notebook panes, which no longer
                     // exist.
                     let Some(local_path) = notebook_pane.local_path else {
-                        bail!("Cloud notebook panes are no longer supported");
+                        log::warn!("Skipping cloud notebook pane");
+                        return Ok(None);
                     };
 
                     LeafContents::Notebook(NotebookPaneSnapshot::LocalFileNotebook {
@@ -1810,14 +1825,17 @@ fn read_node(conn: &mut SqliteConnection, node: model::PaneNode) -> Result<PaneN
                         }
                     }
                 }
-                other => bail!("Unrecognized pane kind: {other}"),
+                other => {
+                    log::warn!("Skipping pane with unrecognized kind: {other}");
+                    return Ok(None);
+                }
             };
 
-            Ok(PaneNodeSnapshot::Leaf(LeafSnapshot {
+            Ok(Some(PaneNodeSnapshot::Leaf(LeafSnapshot {
                 is_focused: pane.is_focused,
                 custom_vertical_tabs_title: pane.custom_vertical_tabs_title,
                 contents,
-            }))
+            })))
         }
         false => {
             let pane_branch = schema::pane_branches::dsl::pane_branches
@@ -1831,20 +1849,24 @@ fn read_node(conn: &mut SqliteConnection, node: model::PaneNode) -> Result<PaneN
 
             let mut children = Vec::new();
             for child_node in child_nodes {
-                children.push((
-                    PaneFlex(child_node.flex.unwrap_or(1.)),
-                    read_node(conn, child_node)?,
-                ));
+                let flex = PaneFlex(child_node.flex.unwrap_or(1.));
+                if let Some(child) = read_node(conn, child_node)? {
+                    children.push((flex, child));
+                }
             }
 
             let direction = match pane_branch.horizontal {
                 true => SplitDirection::Horizontal,
                 false => SplitDirection::Vertical,
             };
-            Ok(PaneNodeSnapshot::Branch(BranchSnapshot {
-                direction,
-                children,
-            }))
+            match children.len() {
+                0 => Ok(None),
+                1 => Ok(children.pop().map(|(_, child)| child)),
+                _ => Ok(Some(PaneNodeSnapshot::Branch(BranchSnapshot {
+                    direction,
+                    children,
+                }))),
+            }
         }
     }
 }
@@ -1932,10 +1954,21 @@ fn read_sqlite_data(
                             pinned: group.pinned,
                         });
                     }
+                    // Tabs whose panes can't be restored are dropped, which shifts the
+                    // position of the tabs after them.
+                    let requested_active_tab_index: usize =
+                        window.active_tab_index.try_into().unwrap_or(0);
+                    let mut dropped_before_active_tab = 0;
                     let saved_tabs: Vec<_> = tabs_for_window
                         .into_iter()
-                        .filter_map(|tab| {
-                            let root = read_root_node(conn, tab.id).ok()?;
+                        .enumerate()
+                        .filter_map(|(position, tab)| {
+                            let Some(root) = read_root_node(conn, tab.id).ok().flatten() else {
+                                if position < requested_active_tab_index {
+                                    dropped_before_active_tab += 1;
+                                }
+                                return None;
+                            };
                             let panel = db_panels.get(&tab.id);
 
                             let left_panel = panel
@@ -1982,8 +2015,9 @@ fn read_sqlite_data(
                         active_window_index = Some(idx);
                     }
 
-                    // Default active tab index to 0 if we overflow when converting.
-                    let tab_index: usize = window.active_tab_index.try_into().unwrap_or(0);
+                    let tab_index = requested_active_tab_index
+                        .saturating_sub(dropped_before_active_tab)
+                        .min(saved_tabs.len().saturating_sub(1));
 
                     let fullscreen_state_val =
                         FullscreenState::from_i32(window.fullscreen_state).unwrap_or_default();

@@ -1,4 +1,5 @@
 use serde_json::Value;
+use settings_value::SettingsValue as _;
 use warpui::{App, SingletonEntity};
 
 use super::Prompt;
@@ -64,6 +65,62 @@ fn test_prompt_config_after_nomalization() {
         normalized.chip_kinds(),
         vec![ContextChipKind::ShellGitBranch]
     );
+}
+
+fn saved_kinds() -> Vec<ContextChipKind> {
+    vec![
+        ContextChipKind::WorkingDirectory,
+        ContextChipKind::ShellGitBranch,
+    ]
+}
+
+fn saved_config() -> PromptConfiguration {
+    PromptConfiguration::from_chips(saved_kinds(), false, WarpPromptSeparator::None)
+}
+
+fn insert_chip_entry(stored: &mut Value, index: usize, entry: Value) {
+    stored
+        .get_mut("chips")
+        .and_then(Value::as_array_mut)
+        .expect("chips should be a list")
+        .insert(index, entry);
+}
+
+#[test]
+fn test_prompt_config_skips_removed_chip_kinds_in_settings_file() {
+    let mut stored = saved_config().to_file_value();
+    insert_chip_entry(
+        &mut stored,
+        1,
+        serde_json::json!({ "chip": "agent_plan_and_todo_list", "config": {} }),
+    );
+
+    let config = PromptConfiguration::from_file_value(&stored)
+        .expect("a removed chip kind must not discard the whole prompt");
+    assert_eq!(config.chip_kinds(), saved_kinds());
+
+    let selection = PromptSelection::from_file_value(&serde_json::json!({
+        "custom_chip_selection": stored
+    }))
+    .expect("a removed chip kind must not discard the prompt selection");
+    let PromptSelection::CustomChipSelection(config) = selection else {
+        panic!("expected a custom prompt");
+    };
+    assert_eq!(config.chip_kinds(), saved_kinds());
+}
+
+#[test]
+fn test_prompt_config_skips_removed_chip_kinds_in_stored_json() {
+    let mut stored = serde_json::to_value(saved_config()).expect("serialize prompt config");
+    insert_chip_entry(
+        &mut stored,
+        1,
+        serde_json::json!({ "chip": "AgentPlanAndTodoList", "config": {} }),
+    );
+
+    let config: PromptConfiguration =
+        serde_json::from_value(stored).expect("a removed chip kind must not fail the parse");
+    assert_eq!(config.chip_kinds(), saved_kinds());
 }
 
 #[test]

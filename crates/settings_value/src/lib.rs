@@ -205,6 +205,153 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// Collections that skip entries which no longer parse
+// ---------------------------------------------------------------------------
+
+/// A list whose entries that fail to parse are dropped instead of failing the whole value.
+///
+/// Use it for settings that store lists of enum values, so that a variant removed in a later
+/// version doesn't discard the rest of the list (and, for the settings file, block writes to
+/// the setting). Both the serde path and the settings-file path skip such entries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct LenientVec<T>(pub Vec<T>);
+
+impl<T> Default for LenientVec<T> {
+    fn default() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl<T> From<Vec<T>> for LenientVec<T> {
+    fn from(entries: Vec<T>) -> Self {
+        Self(entries)
+    }
+}
+
+impl<T> std::ops::Deref for LenientVec<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Vec<T> {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for LenientVec<T> {
+    fn deref_mut(&mut self) -> &mut Vec<T> {
+        &mut self.0
+    }
+}
+
+impl<'de, T: DeserializeOwned> serde::Deserialize<'de> for LenientVec<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let entries = Vec::<Value>::deserialize(deserializer)?;
+        Ok(Self(
+            entries
+                .into_iter()
+                .filter_map(|entry| serde_json::from_value(entry).ok())
+                .collect(),
+        ))
+    }
+}
+
+impl<T: SettingsValue> SettingsValue for LenientVec<T> {
+    fn to_file_value(&self) -> Value {
+        self.0.to_file_value()
+    }
+
+    fn from_file_value(value: &Value) -> Option<Self> {
+        Some(Self(
+            value
+                .as_array()?
+                .iter()
+                .filter_map(T::from_file_value)
+                .collect(),
+        ))
+    }
+}
+
+impl<T: schemars::JsonSchema> schemars::JsonSchema for LenientVec<T> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        Vec::<T>::schema_name()
+    }
+
+    fn json_schema(sgen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        Vec::<T>::json_schema(sgen)
+    }
+}
+
+/// A set whose entries that fail to parse are dropped instead of failing the whole value.
+/// See [`LenientVec`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct LenientSet<T: Eq + Hash>(pub HashSet<T>);
+
+impl<T: Eq + Hash> Default for LenientSet<T> {
+    fn default() -> Self {
+        Self(HashSet::new())
+    }
+}
+
+impl<T: Eq + Hash> From<HashSet<T>> for LenientSet<T> {
+    fn from(entries: HashSet<T>) -> Self {
+        Self(entries)
+    }
+}
+
+impl<T: Eq + Hash> std::ops::Deref for LenientSet<T> {
+    type Target = HashSet<T>;
+
+    fn deref(&self) -> &HashSet<T> {
+        &self.0
+    }
+}
+
+impl<T: Eq + Hash> std::ops::DerefMut for LenientSet<T> {
+    fn deref_mut(&mut self) -> &mut HashSet<T> {
+        &mut self.0
+    }
+}
+
+impl<'de, T: DeserializeOwned + Eq + Hash> serde::Deserialize<'de> for LenientSet<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let entries = Vec::<Value>::deserialize(deserializer)?;
+        Ok(Self(
+            entries
+                .into_iter()
+                .filter_map(|entry| serde_json::from_value(entry).ok())
+                .collect(),
+        ))
+    }
+}
+
+impl<T: SettingsValue + Eq + Hash> SettingsValue for LenientSet<T> {
+    fn to_file_value(&self) -> Value {
+        self.0.to_file_value()
+    }
+
+    fn from_file_value(value: &Value) -> Option<Self> {
+        Some(Self(
+            value
+                .as_array()?
+                .iter()
+                .filter_map(T::from_file_value)
+                .collect(),
+        ))
+    }
+}
+
+impl<T: schemars::JsonSchema + Eq + Hash> schemars::JsonSchema for LenientSet<T> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        HashSet::<T>::schema_name()
+    }
+
+    fn json_schema(sgen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        HashSet::<T>::json_schema(sgen)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Duration — serialize as integer seconds
 // ---------------------------------------------------------------------------
 

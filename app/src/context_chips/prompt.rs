@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use settings::Setting as _;
+use settings_value::LenientVec;
 use warpui::{
     Entity, GetSingletonModelHandle, ModelContext, ModelHandle, SingletonEntity, UpdateModel,
 };
@@ -61,19 +62,6 @@ impl PromptChip {
     }
 }
 
-/// Deserialize prompt chips, silently dropping any with unrecognized chip kinds.
-/// This ensures saved prompt configs remain intact when chip kinds are removed.
-fn deserialize_prompt_chips<'de, D>(deserializer: D) -> Result<Vec<PromptChip>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let values: Vec<serde_json::Value> = serde::Deserialize::deserialize(deserializer)?;
-    Ok(values
-        .into_iter()
-        .filter_map(|value| serde_json::from_value::<PromptChip>(value).ok())
-        .collect())
-}
-
 /// Serializable configuration for the current prompt.
 #[derive(
     Clone,
@@ -88,9 +76,10 @@ where
 )]
 #[schemars(description = "Prompt layout configuration.")]
 pub struct PromptConfiguration {
-    #[serde(default, deserialize_with = "deserialize_prompt_chips")]
+    /// Chips of a kind that no longer exists are dropped when the configuration is read.
+    #[serde(default)]
     #[schemars(description = "Ordered list of chips to display in the prompt.")]
-    chips: Vec<PromptChip>,
+    chips: LenientVec<PromptChip>,
     #[serde(default)]
     #[schemars(description = "Whether git diff stats have been separated into their own chip.")]
     did_separate_git_diff_stats: bool,
@@ -356,7 +345,8 @@ impl PromptConfiguration {
             chips: chips
                 .into_iter()
                 .map(|chip| PromptChip::new(chip, Default::default()))
-                .collect(),
+                .collect::<Vec<_>>()
+                .into(),
             did_separate_git_diff_stats: true,
             same_line_prompt_enabled,
             separator,

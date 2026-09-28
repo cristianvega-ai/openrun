@@ -15,7 +15,8 @@ use super::{
     save_app_state, save_workspace_metadata, setup_database, start_writer,
 };
 use crate::app_state::{
-    AppState, CodePaneSnapShot, CodePaneTabSnapshot, LeafContents, LeafSnapshot, PaneNodeSnapshot,
+    AppState, BranchSnapshot, CodePaneSnapShot, CodePaneTabSnapshot, LeafContents, LeafSnapshot,
+    NotebookPaneSnapshot, PaneFlex, PaneNodeSnapshot, SettingsPaneSnapshot, SplitDirection,
     TabGroupSnapshot, TabSnapshot, TerminalPaneSnapshot, WindowSnapshot,
 };
 use crate::auth::UserUid;
@@ -25,6 +26,7 @@ use crate::code::editor_management::CodeSource;
 use crate::persistence::model::ObjectPermissions;
 use crate::persistence::{BlockCompleted, ModelEvent, PersistedDataScope, PersistenceScope};
 use crate::server::ids::{ClientId, ServerId};
+use crate::settings_view::SettingsSection;
 use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
 use crate::terminal::model::block::SerializedBlock;
@@ -975,4 +977,217 @@ fn team_member_is_disabled_round_trips_through_sqlite_cache() {
         .expect("disabled member should be present");
     assert!(!active_member.is_disabled);
     assert!(disabled_member.is_disabled);
+}
+
+fn terminal_leaf(uuid_byte: u8) -> PaneNodeSnapshot {
+    let mut window = test_terminal_window_snapshot(false);
+    let PaneNodeSnapshot::Leaf(mut leaf) = window.tabs.remove(0).root else {
+        unreachable!("the test window has a single leaf");
+    };
+    let LeafContents::Terminal(terminal) = &mut leaf.contents else {
+        unreachable!("the test leaf is a terminal");
+    };
+    terminal.uuid = vec![uuid_byte];
+    terminal.is_active = false;
+    leaf.is_focused = false;
+    PaneNodeSnapshot::Leaf(leaf)
+}
+
+/// A settings pane, which the tests below rewrite into a pane kind that no longer exists.
+fn settings_leaf() -> PaneNodeSnapshot {
+    PaneNodeSnapshot::Leaf(LeafSnapshot {
+        is_focused: false,
+        custom_vertical_tabs_title: None,
+        contents: LeafContents::Settings(SettingsPaneSnapshot::Local {
+            current_page: SettingsSection::default(),
+            search_query: None,
+        }),
+    })
+}
+
+fn tab_with_root(root: PaneNodeSnapshot) -> TabSnapshot {
+    let mut tab = test_terminal_window_snapshot(false).tabs.remove(0);
+    tab.root = root;
+    tab
+}
+
+fn window_with_tabs(tabs: Vec<TabSnapshot>, active_tab_index: usize) -> WindowSnapshot {
+    let mut window = test_terminal_window_snapshot(false);
+    window.tabs = tabs;
+    window.active_tab_index = active_tab_index;
+    window
+}
+
+fn terminal_uuid(node: &PaneNodeSnapshot) -> Vec<u8> {
+    let PaneNodeSnapshot::Leaf(LeafSnapshot {
+        contents: LeafContents::Terminal(terminal),
+        ..
+    }) = node
+    else {
+        panic!("expected a terminal leaf, got {node:?}");
+    };
+    terminal.uuid.clone()
+}
+
+/// Rewrites every saved settings pane into a pane of `kind`, as if it had been saved by a
+/// version that still had that pane type.
+fn rewrite_settings_panes_as_kind(conn: &mut diesel::SqliteConnection, kind: &str) {
+    conn.batch_execute(&format!(
+        "PRAGMA foreign_keys = OFF;
+         DELETE FROM settings_panes;
+         UPDATE pane_leaves SET kind = '{kind}' WHERE kind = 'settings';
+         PRAGMA foreign_keys = ON;"
+    ))
+    .expect("panes should be rewritten");
+}
+
+#[test]
+fn test_sqlite_restore_skips_removed_pane_kinds_without_losing_the_tab() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let split_with_removed_pane = tab_with_root(PaneNodeSnapshot::Branch(BranchSnapshot {
+        direction: SplitDirection::Horizontal,
+        children: vec![
+            (PaneFlex(0.5), terminal_leaf(2)),
+            (PaneFlex(0.5), settings_leaf()),
+        ],
+    }));
+    let app_state = AppState {
+        windows: vec![
+            window_with_tabs(
+                vec![
+                    tab_with_root(settings_leaf()),
+                    tab_with_root(terminal_leaf(1)),
+                    split_with_removed_pane.clone(),
+                    tab_with_root(settings_leaf()),
+                ],
+                2,
+            ),
+            window_with_tabs(vec![tab_with_root(settings_leaf())], 0),
+            window_with_tabs(
+                vec![
+                    tab_with_root(terminal_leaf(3)),
+                    tab_with_root(settings_leaf()),
+                ],
+                1,
+            ),
+        ],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+    rewrite_settings_panes_as_kind(&mut conn, "get_started");
+
+    let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
+        .expect("stale pane kinds must not fail the whole read")
+        .app_state
+        .expect("app state should be present for the full scope");
+
+    assert_eq!(restored.windows.len(), 3, "no window is lost");
+
+    let first = &restored.windows[0];
+    assert_eq!(
+        first.tabs.len(),
+        2,
+        "tabs holding only removed panes are dropped"
+    );
+    assert_eq!(terminal_uuid(&first.tabs[0].root), vec![1]);
+    assert_eq!(
+        terminal_uuid(&first.tabs[1].root),
+        vec![2],
+        "the surviving pane of a split replaces the split"
+    );
+    assert_eq!(
+        first.active_tab_index, 1,
+        "the active tab keeps pointing at the same tab after the tab before it was dropped"
+    );
+
+    let second = &restored.windows[1];
+    assert!(second.tabs.is_empty());
+    assert_eq!(second.active_tab_index, 0);
+
+    let third = &restored.windows[2];
+    assert_eq!(third.tabs.len(), 1);
+    assert_eq!(terminal_uuid(&third.tabs[0].root), vec![3]);
+    assert_eq!(
+        third.active_tab_index, 0,
+        "an active index past the last surviving tab is clamped"
+    );
+}
+
+#[test]
+fn test_sqlite_save_succeeds_over_stale_mcp_server_pane_rows() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let app_state = AppState {
+        windows: vec![window_with_tabs(
+            vec![tab_with_root(PaneNodeSnapshot::Branch(BranchSnapshot {
+                direction: SplitDirection::Vertical,
+                children: vec![
+                    (PaneFlex(0.5), terminal_leaf(1)),
+                    (PaneFlex(0.5), settings_leaf()),
+                ],
+            }))],
+            0,
+        )],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+    rewrite_settings_panes_as_kind(&mut conn, "mcp_server");
+    conn.batch_execute(
+        "INSERT INTO mcp_server_panes (id, kind)
+         SELECT pane_node_id, kind FROM pane_leaves WHERE kind = 'mcp_server';",
+    )
+    .expect("stale mcp_server pane row should be inserted");
+
+    let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
+        .expect("stale pane rows must not fail the read")
+        .app_state
+        .expect("app state should be present for the full scope");
+    assert_eq!(terminal_uuid(&restored.windows[0].tabs[0].root), vec![1]);
+
+    save_app_state(&mut conn, &app_state)
+        .expect("saving must not trip over the stale mcp_server pane rows");
+}
+
+#[test]
+fn test_sqlite_restore_skips_cloud_notebook_pane_without_losing_the_tab() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    // A notebook row with no local path is what a cloud notebook pane left behind.
+    let cloud_notebook_leaf = PaneNodeSnapshot::Leaf(LeafSnapshot {
+        is_focused: false,
+        custom_vertical_tabs_title: None,
+        contents: LeafContents::Notebook(NotebookPaneSnapshot::LocalFileNotebook { path: None }),
+    });
+    let app_state = AppState {
+        windows: vec![window_with_tabs(
+            vec![tab_with_root(PaneNodeSnapshot::Branch(BranchSnapshot {
+                direction: SplitDirection::Horizontal,
+                children: vec![
+                    (PaneFlex(0.5), cloud_notebook_leaf),
+                    (PaneFlex(0.5), terminal_leaf(7)),
+                ],
+            }))],
+            0,
+        )],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+
+    let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
+        .expect("a cloud notebook pane must not fail the read")
+        .app_state
+        .expect("app state should be present for the full scope");
+
+    assert_eq!(restored.windows[0].tabs.len(), 1);
+    assert_eq!(terminal_uuid(&restored.windows[0].tabs[0].root), vec![7]);
 }

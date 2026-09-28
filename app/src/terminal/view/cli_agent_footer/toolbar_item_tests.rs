@@ -74,3 +74,30 @@ fn custom_selection_with_stale_items_still_loads() {
         }
     );
 }
+
+#[test]
+fn layout_skips_context_chips_of_a_removed_kind() {
+    let stored = json!([
+        { "ContextChip": "AgentPlanAndTodoList" },
+        { "ContextChip": "GitDiffStats" },
+    ]);
+    let items: CLIAgentToolbarItems = serde_json::from_value(stored).unwrap();
+    assert_eq!(
+        items.to_vec(),
+        vec![CLIAgentToolbarItemKind::ContextChip(
+            ContextChipKind::GitDiffStats
+        )]
+    );
+
+    let file_layout = json!([
+        { "context_chip": "agent_plan_and_todo_list" },
+        { "context_chip": "git_diff_stats" },
+    ]);
+    let items = CLIAgentToolbarItems::from_file_value(&file_layout).unwrap();
+    assert_eq!(
+        items.to_vec(),
+        vec![CLIAgentToolbarItemKind::ContextChip(
+            ContextChipKind::GitDiffStats
+        )]
+    );
+}

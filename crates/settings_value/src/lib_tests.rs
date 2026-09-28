@@ -63,3 +63,53 @@ fn hashmap_round_trip() {
     let back = HashMap::<String, u32>::from_file_value(&file_val).unwrap();
     assert_eq!(back, m);
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, serde::Deserialize)]
+enum Kind {
+    A,
+    B,
+}
+
+impl SettingsValue for Kind {
+    fn to_file_value(&self) -> Value {
+        Value::String(format!("{self:?}").to_lowercase())
+    }
+
+    fn from_file_value(value: &Value) -> Option<Self> {
+        match value.as_str()? {
+            "a" => Some(Kind::A),
+            "b" => Some(Kind::B),
+            _ => None,
+        }
+    }
+}
+
+#[test]
+fn lenient_vec_skips_unknown_entries_from_serde() {
+    let parsed: LenientVec<Kind> = serde_json::from_str(r#"["A", "Removed", "B", 3]"#).unwrap();
+    assert_eq!(parsed.0, vec![Kind::A, Kind::B]);
+}
+
+#[test]
+fn lenient_vec_skips_unknown_entries_from_file_value() {
+    let file_val = serde_json::json!(["a", "removed", "b"]);
+    let parsed = LenientVec::<Kind>::from_file_value(&file_val).unwrap();
+    assert_eq!(parsed.0, vec![Kind::A, Kind::B]);
+    assert_eq!(parsed.to_file_value(), serde_json::json!(["a", "b"]));
+}
+
+#[test]
+fn lenient_vec_rejects_non_lists() {
+    assert!(serde_json::from_str::<LenientVec<Kind>>(r#"{"A": 1}"#).is_err());
+    assert!(LenientVec::<Kind>::from_file_value(&serde_json::json!("a")).is_none());
+}
+
+#[test]
+fn lenient_set_skips_unknown_entries() {
+    let parsed: LenientSet<Kind> = serde_json::from_str(r#"["Removed", "B", "B"]"#).unwrap();
+    assert_eq!(parsed.0, HashSet::from([Kind::B]));
+
+    let file_val = serde_json::json!(["removed", "a"]);
+    let parsed = LenientSet::<Kind>::from_file_value(&file_val).unwrap();
+    assert_eq!(parsed.0, HashSet::from([Kind::A]));
+}

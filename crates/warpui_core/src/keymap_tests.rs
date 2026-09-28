@@ -253,6 +253,39 @@ fn test_binding_description_preserves_case() {
 }
 
 #[test]
+fn test_custom_trigger_for_unregistered_binding_is_ignored() {
+    #[derive(Debug)]
+    enum TypedAction {
+        First,
+    }
+
+    let mut map = Keymap::default();
+    map.register_editable_bindings([EditableBinding::new(
+        "first",
+        "First editable binding",
+        TypedAction::First,
+    )
+    .with_key_binding("cmd-1")]);
+
+    map.update_custom_trigger(
+        "removed_action",
+        Some(Trigger::Keystrokes(vec![
+            Keystroke::parse("cmd-a").unwrap(),
+        ])),
+    );
+
+    let mut bindings = map.bindings();
+    let first = bindings.next().unwrap();
+    assert!(bindings.next().is_none());
+    match first.trigger {
+        Trigger::Keystrokes(keystrokes) => {
+            assert_eq!(keystrokes, &[Keystroke::parse("cmd-1").unwrap()]);
+        }
+        _ => panic!("Expected keystroke trigger"),
+    }
+}
+
+#[test]
 fn test_custom_triggers() {
     #[derive(Debug)]
     enum TypedAction {

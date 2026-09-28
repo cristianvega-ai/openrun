@@ -77,3 +77,22 @@ fn test_unparsable_persisted_trigger() {
 
     assert!(keybinding.is_err());
 }
+
+#[test]
+fn test_keybindings_file_naming_a_removed_action_still_parses() -> Result<()> {
+    let file = r#"
+"workspace:toggle_ai_assistant": cmd-shift-A
+"workspace:toggle_command_palette": ctrl-p
+"editor:some_removed_action": none
+"#;
+
+    let keybindings: std::collections::HashMap<String, PersistedTrigger> =
+        serde_yaml::from_str(file)?;
+
+    assert_eq!(keybindings.len(), 3);
+    assert_eq!(
+        UserDefinedKeybinding::try_from(keybindings["workspace:toggle_command_palette"].clone())?,
+        UserDefinedKeybinding::Keystrokes(vec1![Keystroke::parse("ctrl-p").unwrap()])
+    );
+    Ok(())
+}
