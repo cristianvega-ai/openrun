@@ -793,13 +793,7 @@ fn complete_drain_of_edited_command_restores_text_in_shell_mode() {
         let conversation_id = terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("should enter agent view")
             })
         });
@@ -839,13 +833,7 @@ fn error_drain_of_command_restores_text_in_shell_mode() {
         let conversation_id = terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("should enter agent view")
             })
         });

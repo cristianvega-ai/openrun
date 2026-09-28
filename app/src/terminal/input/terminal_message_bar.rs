@@ -21,7 +21,6 @@ use crate::ai::pricing_promotion::{
 };
 use crate::appearance::Appearance;
 use crate::search::slash_command_menu::static_commands::commands;
-use crate::terminal::input::SET_INPUT_MODE_TERMINAL_ACTION_NAME;
 use crate::terminal::input::inline_history::{AcceptHistoryItem, HistoryTab};
 use crate::terminal::input::inline_menu::{InlineMenuModel, InlineMenuModelEvent};
 use crate::terminal::input::message_bar::MessageTransformer;
@@ -35,7 +34,6 @@ use crate::util::bindings::keybinding_name_to_keystroke;
 /// Renders contextual hint text at the bottom of the terminal input.
 pub struct TerminalInputMessageBar {
     terminal_model: Arc<FairMutex<TerminalModel>>,
-    ai_input_model: ModelHandle<BlocklistAIInputModel>,
     input_buffer_model: ModelHandle<InputBufferModel>,
     context_model: ModelHandle<BlocklistAIContextModel>,
     suggestions_mode_model: ModelHandle<InputSuggestionsModeModel>,
@@ -88,7 +86,6 @@ impl TerminalInputMessageBar {
         });
         Self {
             terminal_model,
-            ai_input_model,
             input_buffer_model,
             context_model,
             suggestions_mode_model,
@@ -122,13 +119,11 @@ impl View for TerminalInputMessageBar {
         let terminal_model = self.terminal_model.lock();
         let current_buffer = self.input_buffer_model.as_ref(app).current_value();
         let context_model = self.context_model.as_ref(app);
-        let input_model = self.ai_input_model.as_ref(app);
 
         let args = TerminalMessageArgs {
             current_input: current_buffer,
             terminal_model: &terminal_model,
             context_model,
-            input_model,
             app,
             promotion_close_mouse_state: &self.promotion_close_mouse_state,
         };
@@ -141,10 +136,9 @@ impl View for TerminalInputMessageBar {
             .or_else(|| DefaultMessageProducer.produce_message(args))
             .unwrap_or_default();
 
-        let transformers: [Box<dyn MessageTransformer<TerminalMessageArgs<'_>>>; 3] = [
+        let transformers: [Box<dyn MessageTransformer<TerminalMessageArgs<'_>>>; 2] = [
             Box::new(AttachedBlocksMessageTransformer),
             Box::new(AttachedTextSelectionMessageTransformer),
-            Box::new(AutodetectedPromptMessageTransformer),
         ];
 
         for transformer in transformers {
@@ -163,17 +157,8 @@ pub struct TerminalMessageArgs<'a> {
     current_input: &'a str,
     terminal_model: &'a TerminalModel,
     context_model: &'a BlocklistAIContextModel,
-    input_model: &'a BlocklistAIInputModel,
     app: &'a AppContext,
     promotion_close_mouse_state: &'a MouseStateHandle,
-}
-
-impl<'a> TerminalMessageArgs<'a> {
-    fn is_input_ai_detected(&self) -> bool {
-        !self.current_input.is_empty()
-            && self.input_model.is_ai_input_enabled()
-            && !self.input_model.is_input_type_locked()
-    }
 }
 
 struct ErroredBlockMessageProducer;
@@ -239,14 +224,13 @@ impl MessageProvider<TerminalMessageArgs<'_>> for PlanMessageProducer {
 
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
-        let is_input_ai_detected = args.is_input_ai_detected();
 
         Some(
             Message::new(vec![
                 MessageItem::keystroke(Keystroke {
-                    cmd: !is_input_ai_detected && cfg!(target_os = "macos"),
-                    ctrl: !is_input_ai_detected && !cfg!(target_os = "macos"),
-                    shift: !is_input_ai_detected && !cfg!(target_os = "macos"),
+                    cmd: cfg!(target_os = "macos"),
+                    ctrl: !cfg!(target_os = "macos"),
+                    shift: !cfg!(target_os = "macos"),
                     key: "enter".to_owned(),
                     ..Default::default()
                 }),
@@ -342,19 +326,12 @@ mod internal {
 struct DefaultMessageProducer;
 impl MessageProvider<TerminalMessageArgs<'_>> for DefaultMessageProducer {
     fn produce_message(&self, args: TerminalMessageArgs<'_>) -> Option<Message> {
-        let is_input_ai_detected = args.is_input_ai_detected();
-
-        let keystroke = if is_input_ai_detected {
-            Some(Keystroke {
-                key: "enter".to_owned(),
-                ..Default::default()
-            })
-        } else if let Some(keystroke) = keybinding_name_to_keystroke(commands::AGENT.name, args.app)
-        {
-            Some(keystroke)
-        } else {
-            keybinding_name_to_keystroke(commands::NEW.name, args.app)
-        };
+        let keystroke =
+            if let Some(keystroke) = keybinding_name_to_keystroke(commands::AGENT.name, args.app) {
+                Some(keystroke)
+            } else {
+                keybinding_name_to_keystroke(commands::NEW.name, args.app)
+            };
 
         if let Some(keystroke) = keystroke {
             let promotion_message = PricingPromotionState::as_ref(args.app)
@@ -422,39 +399,6 @@ impl MessageProvider<Option<&AcceptHistoryItem>> for InlineHistoryMessageProduce
             }
         };
         Some(Message::new(items))
-    }
-}
-
-struct AutodetectedPromptMessageTransformer;
-impl MessageTransformer<TerminalMessageArgs<'_>> for AutodetectedPromptMessageTransformer {
-    fn transform_message(&self, message: &mut Message, args: TerminalMessageArgs<'_>) -> bool {
-        if !args.is_input_ai_detected()
-            || args.current_input.starts_with(commands::AGENT.name)
-            || args.current_input.starts_with(commands::NEW.name)
-        {
-            return false;
-        }
-
-        // Don't append this message if there is attached context, just cause its
-        // too much text and overwhelming.
-        if args.context_model.pending_context_block_ids().is_empty()
-            && args.context_model.pending_context_selected_text().is_none()
-        {
-            let set_terminal_mode_keystroke =
-                keybinding_name_to_keystroke(SET_INPUT_MODE_TERMINAL_ACTION_NAME, args.app)
-                    .unwrap_or_else(|| Keystroke {
-                        key: "escape".to_owned(),
-                        ..Default::default()
-                    });
-
-            message.items.extend([
-                MessageItem::text(" (autodetected) "),
-                MessageItem::keystroke(set_terminal_mode_keystroke),
-                MessageItem::text(" to override"),
-            ]);
-        }
-        message.set_color(message_magenta(Appearance::as_ref(args.app).theme()));
-        true
     }
 }
 

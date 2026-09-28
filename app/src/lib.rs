@@ -34,7 +34,6 @@ mod external_secrets;
 mod font_fallback;
 mod global_resource_handles;
 mod gpu_state;
-mod input_classifier;
 mod interval_timer;
 mod linear;
 #[cfg(feature = "local_fs")]
@@ -1197,7 +1196,6 @@ pub(crate) fn initialize_app(
         time_of_next_force_object_refresh,
         object_actions,
         ai_queries,
-        nld_prompts,
         persisted_workspaces,
         workspace_language_servers,
         multi_agent_conversations,
@@ -1218,7 +1216,6 @@ pub(crate) fn initialize_app(
                 sqlite_data.time_of_next_force_object_refresh,
                 sqlite_data.object_actions,
                 sqlite_data.ai_queries,
-                sqlite_data.nld_prompts,
                 sqlite_data.codebase_indices,
                 sqlite_data.workspace_language_servers,
                 sqlite_data.multi_agent_conversations,
@@ -1231,7 +1228,6 @@ pub(crate) fn initialize_app(
         })
         .unwrap_or_else(|| {
             (
-                Default::default(),
                 Default::default(),
                 Default::default(),
                 Default::default(),
@@ -1649,16 +1645,7 @@ pub(crate) fn initialize_app(
         .collect();
     {
         let conversations = &multi_agent_conversations;
-        ctx.add_singleton_model(move |_| {
-            // Only wire NLD prompt history when the feature is enabled; disabled
-            // (stable/preview) builds skip this so they don't retain the prompt snapshot.
-            let nld_prompts = if FeatureFlag::NldPromptHistoryMatch.is_enabled() {
-                nld_prompts
-            } else {
-                Vec::new()
-            };
-            BlocklistAIHistoryModel::new(ai_queries, nld_prompts, conversations)
-        });
+        ctx.add_singleton_model(move |_| BlocklistAIHistoryModel::new(ai_queries, conversations));
     }
     // Per-conversation queued prompts. Registered after the history model
     // since it subscribes to history events for cleanup.
@@ -1989,8 +1976,6 @@ pub(crate) fn initialize_app(
         )
     });
     ctx.add_singleton_model(move |_| persistence_writer);
-
-    ctx.add_singleton_model(input_classifier::InputClassifierModel::new);
 
     ctx.add_singleton_model(move |_| IgnoredSuggestionsModel::new(persisted_ignored_suggestions));
 

@@ -655,8 +655,7 @@ fn live_request_input(
 fn exchange_without_any_request_messages_is_not_eligible() {
     App::test((), |mut app| async move {
         initialize_history_persistence_for_tests(&mut app);
-        let history_model =
-            app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], vec![], &[]));
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
         let terminal_surface_id = EntityId::new();
 
         let mut conversation = AIConversation::new(false, false);
@@ -800,8 +799,7 @@ fn exchange_without_any_request_messages_is_not_eligible() {
 #[test]
 fn records_resolve_after_a_summarization_move() {
     App::test((), |mut app| async move {
-        let history_model =
-            app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], vec![], &[]));
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
 
         let mut messages = turn_messages("req-1", 1_000);
         messages.extend(turn_messages("req-2", 2_000));

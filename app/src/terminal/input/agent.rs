@@ -204,9 +204,7 @@ impl Input {
         } else if !self.ai_input_model.as_ref(app).is_ai_input_enabled()
             && !self.suggestions_mode_model.as_ref(app).is_slash_commands()
             && !self.slash_command_model.as_ref(app).state().is_detected_command()
-            // If NLD, don't color the border if the input is empty, because the current
-            // classification is necessarily stale (intentionally inherited from the last
-            // classification prior to clearing the input)
+            // Don't color the border for an empty, unlocked input.
             && (!self.editor.as_ref(app).is_empty(app)
                 || self.ai_input_model.as_ref(app).is_input_type_locked())
         {

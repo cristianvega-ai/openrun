@@ -11,12 +11,11 @@ use warp_core::ui::theme::Fill;
 use warp_core::ui::theme::phenomenon::PhenomenonStyle;
 use warpui_core::elements::{
     Border, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, DropShadow, Flex,
-    MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius, Rect,
+    MainAxisAlignment, MainAxisSize, ParentElement, Radius, Rect,
 };
 use warpui_core::fonts::Weight;
 use warpui_core::keymap::Keystroke;
 use warpui_core::prelude::*;
-use warpui_core::ui_components::checkbox::Checkbox as WarpCheckbox;
 use warpui_core::ui_components::components::{UiComponent as _, UiComponentStyles};
 
 const CALLOUT_WIDTH: f32 = 480.;
@@ -102,18 +101,10 @@ impl Button {
     }
 }
 
-/// A checkbox with a label and click handler.
-pub struct Checkbox {
-    pub label: Cow<'static, str>,
-    pub checked: bool,
-    pub handler: MouseEventHandler,
-}
-
 #[derive(Default)]
 pub struct OnboardingCallout {
     right_button: ButtonComponent,
     left_button: ButtonComponent,
-    checkbox_mouse_state: MouseStateHandle,
 }
 
 pub struct Params {
@@ -135,16 +126,11 @@ impl ui_components::Params for Params {
 pub struct Options {
     /// Optional left button, typically "Skip".
     pub left_button: Option<Button>,
-    /// Optional checkbox for toggling settings.
-    pub checkbox: Option<Checkbox>,
 }
 
 impl ui_components::Options for Options {
     fn default(_appearance: &Appearance) -> Self {
-        Self {
-            left_button: None,
-            checkbox: None,
-        }
+        Self { left_button: None }
     }
 }
 
@@ -162,12 +148,6 @@ impl Component for OnboardingCallout {
 
         let header = self.render_header(appearance, &title);
         let body = self.render_body(appearance, &text);
-        // Take checkbox out before passing options to render_actions
-        let mut options = options;
-        let checkbox = options
-            .checkbox
-            .take()
-            .map(|cb| self.render_checkbox(appearance, cb));
         let actions = self.render_actions(step, right_button, options, appearance);
 
         let mut content = Flex::column()
@@ -176,9 +156,6 @@ impl Component for OnboardingCallout {
 
         content.add_child(header);
         content.add_child(body);
-        if let Some(checkbox_element) = checkbox {
-            content.add_child(checkbox_element);
-        }
         content.add_child(actions);
 
         let content = content.finish();
@@ -239,64 +216,6 @@ impl OnboardingCallout {
                 ..Default::default()
             })
             .build()
-            .finish()
-    }
-
-    fn render_checkbox(&self, appearance: &Appearance, checkbox: Checkbox) -> Box<dyn Element> {
-        let checkbox_size = Some(12.);
-        let corner_radius = CornerRadius::with_all(Radius::Pixels(2.));
-        let foreground_color = PhenomenonStyle::foreground();
-        let subtle_border = Fill::Solid(PhenomenonStyle::subtle_border());
-
-        let checkbox_element = WarpCheckbox::new(
-            self.checkbox_mouse_state.clone(),
-            UiComponentStyles {
-                font_size: checkbox_size,
-                border_color: Some(Fill::Solid(foreground_color).into()),
-                font_color: Some(foreground_color),
-                border_width: Some(1.),
-                border_radius: Some(corner_radius),
-                ..Default::default()
-            },
-            None,
-            Some(UiComponentStyles {
-                font_size: checkbox_size,
-                background: Some(Fill::Solid(foreground_color).into()),
-                border_color: Some(Fill::Solid(foreground_color).into()),
-                font_color: Some(PhenomenonStyle::background()),
-                border_radius: Some(corner_radius),
-                ..Default::default()
-            }),
-            Some(UiComponentStyles {
-                font_size: checkbox_size,
-                border_color: Some(subtle_border.into()),
-                font_color: Some(PhenomenonStyle::subtle_border()),
-                border_width: Some(1.),
-                border_radius: Some(corner_radius),
-                ..Default::default()
-            }),
-        )
-        .check(checkbox.checked)
-        .build()
-        .on_click(checkbox.handler)
-        .finish();
-
-        let label = appearance
-            .ui_builder()
-            .paragraph(checkbox.label.to_string())
-            .with_style(UiComponentStyles {
-                font_color: Some(PhenomenonStyle::label_text()),
-                font_size: Some(12.),
-                ..Default::default()
-            })
-            .build()
-            .finish();
-
-        Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_spacing(8.)
-            .with_child(checkbox_element)
-            .with_child(label)
             .finish()
     }
 

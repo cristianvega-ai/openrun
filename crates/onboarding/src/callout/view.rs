@@ -37,19 +37,12 @@ struct CalloutOptions {
     right_button: ButtonOptions,
     /// Optional left button (e.g., "Skip", "Back to terminal")
     left_button: Option<ButtonOptions>,
-    /// Optional checkbox for natural language detection
-    checkbox: Option<CheckboxOptions>,
 }
 
 struct ButtonOptions {
     text: &'static str,
     action: OnboardingCalloutViewAction,
     keystroke: Option<Keystroke>,
-}
-
-struct CheckboxOptions {
-    label: &'static str,
-    checked: bool,
 }
 
 fn get_universal_input_callout_options(
@@ -61,7 +54,7 @@ fn get_universal_input_callout_options(
         UniversalInputCalloutState::MeetInput => Some(CalloutOptions {
             title: "Meet the Warp input",
             text: format!(
-                "Your terminal input accepts both terminal commands and agent prompts and automatically detects which you're using. Use {} to lock the input to Agent mode (natural language) or Terminal mode (commands).",
+                "Your terminal input accepts both terminal commands and agent prompts. Use {} to switch between Agent mode (natural language) and Terminal mode (commands).",
                 keybindings.toggle_input_mode
             ),
             step: StepStatus::new(0, 2),
@@ -71,7 +64,6 @@ fn get_universal_input_callout_options(
                 action: OnboardingCalloutViewAction::NextClicked,
                 keystroke: Some(Keystroke::parse("enter").unwrap_or_default()),
             },
-            checkbox: None,
         }),
         UniversalInputCalloutState::TalkToAgent => Some(CalloutOptions {
             title: "Talk to the agent",
@@ -91,7 +83,6 @@ fn get_universal_input_callout_options(
                 action: OnboardingCalloutViewAction::NextClicked,
                 keystroke: Some(Keystroke::parse("enter").unwrap_or_default()),
             },
-            checkbox: None,
         }),
         UniversalInputCalloutState::Off | UniversalInputCalloutState::Complete(_) => None,
     }
@@ -101,8 +92,6 @@ fn get_agent_modality_callout_options(
     state: AgentModalityCalloutState,
     intention: OnboardingIntention,
     has_project: bool,
-    initial_natural_language_detection_enabled: bool,
-    natural_language_detection_enabled: bool,
     keybindings: &OnboardingKeybindings,
 ) -> Option<CalloutOptions> {
     let total_steps = match intention {
@@ -113,45 +102,20 @@ fn get_agent_modality_callout_options(
     match state {
         AgentModalityCalloutState::TerminalMode => {
             let is_final_step = intention == OnboardingIntention::Terminal;
-            // Show different callout content based on initial NL detection state
-            if initial_natural_language_detection_enabled {
-                // NL detection was already enabled - show simpler "overrides" callout without checkbox
-                Some(CalloutOptions {
-                    title: "Welcome to terminal mode",
-                    text: format!(
-                        "Run commands here, just like a regular terminal. If you type a question or task using natural language, Warp can suggest opening it in agent mode. You can always override using {}.",
-                        keybindings.toggle_input_mode
-                    ),
-                    step: StepStatus::new(0, total_steps),
-                    left_button: None,
-                    right_button: ButtonOptions {
-                        text: if is_final_step { "Finish" } else { "Next" },
-                        action: OnboardingCalloutViewAction::NextClicked,
-                        keystroke: Some(Keystroke::parse("enter").unwrap_or_default()),
-                    },
-                    checkbox: None,
-                })
-            } else {
-                // NL detection was disabled - show full explanation with checkbox to enable
-                Some(CalloutOptions {
-                    title: "You’re in terminal mode",
-                    text: format!(
-                        "Run commands here, just like a regular terminal. If you type a question or task using natural language, Warp can suggest opening it in agent mode. You can always override using {}.",
-                        keybindings.toggle_input_mode
-                    ),
-                    step: StepStatus::new(0, total_steps),
-                    left_button: None,
-                    right_button: ButtonOptions {
-                        text: if is_final_step { "Finish" } else { "Next" },
-                        action: OnboardingCalloutViewAction::NextClicked,
-                        keystroke: Some(Keystroke::parse("enter").unwrap_or_default()),
-                    },
-                    checkbox: Some(CheckboxOptions {
-                        label: "Enable Natural Language Detection",
-                        checked: natural_language_detection_enabled,
-                    }),
-                })
-            }
+            Some(CalloutOptions {
+                title: "You're in terminal mode",
+                text: format!(
+                    "Run commands here, just like a regular terminal. Use {} to switch to agent mode.",
+                    keybindings.toggle_input_mode
+                ),
+                step: StepStatus::new(0, total_steps),
+                left_button: None,
+                right_button: ButtonOptions {
+                    text: if is_final_step { "Finish" } else { "Next" },
+                    action: OnboardingCalloutViewAction::NextClicked,
+                    keystroke: Some(Keystroke::parse("enter").unwrap_or_default()),
+                },
+            })
         }
         AgentModalityCalloutState::AgentMode => {
             if has_project {
@@ -169,7 +133,6 @@ fn get_agent_modality_callout_options(
                         action: OnboardingCalloutViewAction::NextClicked,
                         keystroke: Some(Keystroke::parse("enter").unwrap_or_default()),
                     },
-                    checkbox: None,
                 })
             } else {
                 Some(CalloutOptions {
@@ -189,7 +152,6 @@ fn get_agent_modality_callout_options(
                         action: OnboardingCalloutViewAction::NextClicked,
                         keystroke: Some(Keystroke::parse("enter").unwrap_or_default()),
                     },
-                    checkbox: None,
                 })
             }
         }
@@ -202,7 +164,6 @@ pub enum OnboardingCalloutViewAction {
     NextClicked,
     SkipClicked,
     BackToTerminalClicked,
-    ToggleCheckbox,
 }
 
 pub fn init(app: &mut AppContext) {
@@ -238,8 +199,6 @@ pub enum OnboardingCalloutViewEvent {
     },
     /// Signals that the terminal should enter agent modality (agent view).
     EnterAgentModality,
-    /// Emitted when the user toggles the natural language detection checkbox.
-    NaturalLanguageDetectionToggled(bool),
 }
 
 /// A view that renders the onboarding callout UI component based on the current model state
@@ -256,16 +215,10 @@ impl OnboardingCalloutView {
     /// Create a new view for the UniversalInput onboarding flow.
     pub fn new_universal_input(
         has_project: bool,
-        initial_natural_language_detection_enabled: bool,
         keybindings: OnboardingKeybindings,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        let model = ctx.add_model(|_ctx| {
-            OnboardingCalloutModel::new_universal_input(
-                has_project,
-                initial_natural_language_detection_enabled,
-            )
-        });
+        let model = ctx.add_model(|_ctx| OnboardingCalloutModel::new_universal_input(has_project));
         Self::with_model(model, keybindings, ctx)
     }
 
@@ -273,17 +226,11 @@ impl OnboardingCalloutView {
     pub fn new_agent_modality(
         has_project: bool,
         intention: OnboardingIntention,
-        initial_natural_language_detection_enabled: bool,
         keybindings: OnboardingKeybindings,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        let model = ctx.add_model(|_ctx| {
-            OnboardingCalloutModel::new_agent_modality(
-                has_project,
-                intention,
-                initial_natural_language_detection_enabled,
-            )
-        });
+        let model = ctx
+            .add_model(|_ctx| OnboardingCalloutModel::new_agent_modality(has_project, intention));
         Self::with_model(model, keybindings, ctx)
     }
 
@@ -306,12 +253,6 @@ impl OnboardingCalloutView {
             }
             OnboardingCalloutModelEvent::EnterAgentModality => {
                 ctx.emit(OnboardingCalloutViewEvent::EnterAgentModality);
-                ctx.notify();
-            }
-            OnboardingCalloutModelEvent::NaturalLanguageDetectionToggled(enabled) => {
-                ctx.emit(OnboardingCalloutViewEvent::NaturalLanguageDetectionToggled(
-                    *enabled,
-                ));
                 ctx.notify();
             }
         });
@@ -365,8 +306,6 @@ impl OnboardingCalloutView {
                 state,
                 model.intention(),
                 model.has_project(),
-                model.initial_natural_language_detection_enabled(),
-                model.natural_language_detection_enabled(),
                 &self.keybindings,
             ),
         }
@@ -415,16 +354,6 @@ impl View for OnboardingCalloutView {
             }),
         });
 
-        let checkbox = options
-            .checkbox
-            .map(|checkbox_opts| onboarding_callout::Checkbox {
-                label: checkbox_opts.label.into(),
-                checked: checkbox_opts.checked,
-                handler: Box::new(|ctx: &mut EventContext, _app_ctx: &AppContext, _pos| {
-                    ctx.dispatch_typed_action(OnboardingCalloutViewAction::ToggleCheckbox);
-                }),
-            });
-
         // Render the callout component with data from the model state
         self.callout_component.render(
             appearance,
@@ -433,10 +362,7 @@ impl View for OnboardingCalloutView {
                 text: options.text.into(),
                 step: options.step,
                 right_button,
-                options: onboarding_callout::Options {
-                    left_button,
-                    checkbox,
-                },
+                options: onboarding_callout::Options { left_button },
             },
         )
     }
@@ -471,12 +397,6 @@ impl TypedActionView for OnboardingCalloutView {
             OnboardingCalloutViewAction::BackToTerminalClicked => {
                 self.model.update(ctx, |model, ctx| {
                     model.back_to_terminal(ctx);
-                });
-                ctx.notify();
-            }
-            OnboardingCalloutViewAction::ToggleCheckbox => {
-                self.model.update(ctx, |model, ctx| {
-                    model.toggle_natural_language_detection(ctx);
                 });
                 ctx.notify();
             }

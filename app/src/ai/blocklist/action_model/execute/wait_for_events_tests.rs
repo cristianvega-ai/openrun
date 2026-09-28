@@ -88,8 +88,7 @@ fn execute_invokes_parent_registration_for_child_conversations() {
     // and the wait still flips the conversation into WaitingForEvents.
     App::test((), |mut app| async move {
         let terminal_view_id = EntityId::new();
-        let history_model =
-            app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], vec![], &[]));
+        let history_model = app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
 
         // The registration fetch must be issued for the child (the old code
         // short-circuited children entirely, i.e. zero fetches). At least

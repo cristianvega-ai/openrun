@@ -1,10 +1,9 @@
 use ai::skills::SkillReference;
-use input_classifier::InputType;
 use settings::Setting as _;
 use warp_search_core::inline_menu::InputDrivenInlineMenuLifecycle;
 use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 
-use crate::ai::blocklist::{BlocklistAIInputModel, InputTypeAutoDetectionSource};
+use crate::ai::blocklist::{BlocklistAIInputModel, InputType};
 use crate::search::slash_command_menu::StaticCommand;
 use crate::settings::InputSettings;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
@@ -263,11 +262,7 @@ impl SlashCommandModel {
 
                 if detected_command.command.auto_enter_ai_mode {
                     self.ai_input_model.update(ctx, |input_model, ctx| {
-                        input_model.set_input_type(
-                            InputType::AI,
-                            Some(InputTypeAutoDetectionSource::SlashCommand),
-                            ctx,
-                        );
+                        input_model.set_input_type(InputType::AI, ctx);
                     });
                 }
                 self.state = SlashCommandEntryState::SlashCommand(detected_command);
@@ -281,11 +276,7 @@ impl SlashCommandModel {
 
                 // Skill commands always require AI mode
                 self.ai_input_model.update(ctx, |input_model, ctx| {
-                    input_model.set_input_type(
-                        InputType::AI,
-                        Some(InputTypeAutoDetectionSource::SlashCommand),
-                        ctx,
-                    );
+                    input_model.set_input_type(InputType::AI, ctx);
                 });
                 self.state = SlashCommandEntryState::SkillCommand(detected_skill);
             }

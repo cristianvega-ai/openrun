@@ -101,9 +101,7 @@ impl PendingConfirmation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentViewEntryOrigin {
     /// Entered agent view from user input (e.g. /agent or cmd-enter keypress).
-    Input {
-        was_prompt_autodetected: bool,
-    },
+    Input,
     PromptChip,
     /// Entered agent view by selecting a conversation (e.g. selector).
     ConversationSelector,
@@ -215,9 +213,6 @@ impl AgentViewEntryOrigin {
 
     pub fn should_autotrigger_request(&self) -> AutoTriggerBehavior {
         match self {
-            AgentViewEntryOrigin::Input {
-                was_prompt_autodetected,
-            } if *was_prompt_autodetected => AutoTriggerBehavior::Always,
             AgentViewEntryOrigin::SlashCommand { trigger } if !trigger.is_keybinding() => {
                 AutoTriggerBehavior::Always
             }

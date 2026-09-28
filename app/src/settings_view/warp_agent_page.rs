@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use std::ops::Not;
 #[cfg(feature = "local_fs")]
 use std::path::PathBuf;
-use std::sync::LazyLock;
 
 use ::ai::api_keys::{ApiKeyManager, ApiKeyManagerEvent, ApiKeys, CustomEndpointParams};
 #[cfg(not(target_family = "wasm"))]
@@ -47,9 +46,8 @@ use warpui::{
 };
 
 use super::ai_shared::{
-    render_ai_feature_switch, render_ai_setting_description, render_ai_setting_label,
-    render_ai_setting_toggle, render_toolbar_layout_editor, styles,
-    update_editor_interaction_state,
+    render_ai_feature_switch, render_ai_setting_description, render_ai_setting_toggle,
+    render_toolbar_layout_editor, styles, update_editor_interaction_state,
 };
 use super::custom_inference_modal::{
     CustomEndpointModal, CustomEndpointModalEvent, CustomEndpointModalViewState,
@@ -81,24 +79,21 @@ use crate::ai::llms::{LLMId, LLMPreferences, LLMProvider, is_using_api_key_for_p
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::auth::AuthStateProvider;
 use crate::editor::{
-    EditorOptions, EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys,
-    SingleLineEditorOptions, TextColors, TextOptions,
+    EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, SingleLineEditorOptions,
+    TextColors, TextOptions,
 };
 use crate::modal::{Modal, ModalEvent, ModalViewState};
-use crate::server::telemetry::{
-    AgentModeAutoDetectionSettingOrigin, ToggleCodeSuggestionsSettingSource,
-};
+use crate::server::telemetry::ToggleCodeSuggestionsSettingSource;
 use crate::settings::{
-    AIAutoDetectionEnabled, AICommandDenylist, AISettings, AISettingsChangedEvent,
-    AgentModeQuerySuggestionsEnabled, AutoApproveBypassesCommandDenylist, AwsBedrockAutoLogin,
-    AwsBedrockCredentialsEnabled, CanUseWarpCreditsForFallback, GeminiEnterpriseCredentialsEnabled,
-    GitOperationsAutogenEnabled, IncludeAgentCommandsInHistory, InputSettings,
-    IntelligentAutosuggestionsEnabled, LongRunningCommandSubmissionMode, NLDInTerminalEnabled,
-    NaturalLanguageAutosuggestionsEnabled, OrchestrationMessageDisplayMode, PromptSubmissionMode,
-    SharedBlockTitleGenerationEnabled, ShouldRenderUseAgentToolbarForUserCommands,
-    ShouldShowOzUpdatesInZeroState, ShowAgentTips, ShowConversationHistory, ShowHintText,
-    ThinkingDisplayMode, VOICE_INPUT_LANGUAGES, VoiceInputEnabled, VoiceInputLanguage,
-    VoiceInputToggleKey,
+    AISettings, AISettingsChangedEvent, AgentModeQuerySuggestionsEnabled,
+    AutoApproveBypassesCommandDenylist, AwsBedrockAutoLogin, AwsBedrockCredentialsEnabled,
+    CanUseWarpCreditsForFallback, GeminiEnterpriseCredentialsEnabled, GitOperationsAutogenEnabled,
+    IncludeAgentCommandsInHistory, InputSettings, IntelligentAutosuggestionsEnabled,
+    LongRunningCommandSubmissionMode, NaturalLanguageAutosuggestionsEnabled,
+    OrchestrationMessageDisplayMode, PromptSubmissionMode, SharedBlockTitleGenerationEnabled,
+    ShouldRenderUseAgentToolbarForUserCommands, ShouldShowOzUpdatesInZeroState, ShowAgentTips,
+    ShowConversationHistory, ShowHintText, ThinkingDisplayMode, VOICE_INPUT_LANGUAGES,
+    VoiceInputEnabled, VoiceInputLanguage, VoiceInputToggleKey,
 };
 use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
@@ -164,35 +159,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         app,
     );
 
-    ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
-        vec![
-            ToggleSettingActionPair::new(
-                "terminal command autodetection in agent input",
-                builder(SettingsAction::WarpAgent(
-                    WarpAgentPageAction::ToggleAIInputAutoDetection,
-                )),
-                &(context.clone() & id!(flags::IS_ANY_AI_ENABLED)),
-                flags::AI_INPUT_AUTODETECTION_FLAG,
-            )
-            .with_group(bindings::BindingGroup::WarpAi)
-            .with_enabled(|| FeatureFlag::AgentMode.is_enabled()),
-        ],
-        app,
-    );
-    ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
-        vec![
-            ToggleSettingActionPair::new(
-                "agent prompt autodetection in terminal input",
-                builder(SettingsAction::WarpAgent(
-                    WarpAgentPageAction::ToggleNLDInTerminal,
-                )),
-                &(context.clone() & id!(flags::IS_ANY_AI_ENABLED)),
-                flags::NLD_IN_TERMINAL_FLAG,
-            )
-            .with_group(bindings::BindingGroup::WarpAi),
-        ],
-        app,
-    );
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
         vec![
             ToggleSettingActionPair::new(
@@ -622,7 +588,6 @@ pub struct WarpAgentPageView {
     voice_input_toggle_key_dropdown: ViewHandle<Dropdown<WarpAgentPageAction>>,
     voice_input_language_dropdown: ViewHandle<FilterableDropdown<WarpAgentPageAction>>,
     local_only_icon_tooltip_states: RefCell<HashMap<String, MouseStateHandle>>,
-    autodetection_denylist_editor: ViewHandle<EditorView>,
     agent_toolbar_inline_editor: ViewHandle<AgentToolbarInlineEditor>,
 
     thinking_display_mode_dropdown: ViewHandle<Dropdown<WarpAgentPageAction>>,
@@ -785,44 +750,6 @@ impl WarpAgentPageView {
             });
         }
 
-        let autodetection_denylist_editor = ctx.add_typed_action_view(|ctx| {
-            let appearance = Appearance::as_ref(ctx);
-            let options = EditorOptions {
-                autogrow: true,
-                soft_wrap: true,
-                text: TextOptions {
-                    font_size_override: Some(appearance.ui_font_size()),
-                    font_family_override: Some(appearance.monospace_font_family()),
-                    text_colors_override: Some(TextColors {
-                        default_color: appearance.theme().active_ui_text_color(),
-                        disabled_color: appearance.theme().disabled_ui_text_color(),
-                        hint_color: appearance.theme().disabled_ui_text_color(),
-                    }),
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
-            let mut editor = EditorView::new(options, ctx);
-
-            editor.set_placeholder_text("Commands, comma separated", ctx);
-
-            let current_value = AISettings::as_ref(ctx)
-                .autodetection_command_denylist
-                .value()
-                .clone();
-            editor.set_buffer_text(current_value.as_str(), ctx);
-            editor
-        });
-        update_editor_interaction_state(
-            autodetection_denylist_editor.clone(),
-            is_any_ai_enabled,
-            ctx,
-        );
-
-        ctx.subscribe_to_view(&autodetection_denylist_editor, move |me, _, event, ctx| {
-            me.handle_detection_denylist_editor_event(event, ctx);
-        });
-
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |me, _handle, _event, ctx| {
             // Re-render if teams-related data changed that may affect whether features such as voice input are enabled.
             me.sync_custom_endpoint_buttons(ctx);
@@ -841,24 +768,7 @@ impl WarpAgentPageView {
 
         ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| {
             match event {
-                AISettingsChangedEvent::AICommandDenylist { .. } => {
-                    me.autodetection_denylist_editor.update(ctx, |editor, ctx| {
-                        let denylist_value = &AISettings::as_ref(ctx)
-                            .autodetection_command_denylist
-                            .value()
-                            .clone();
-                        editor.set_buffer_text(denylist_value, ctx);
-                    });
-                }
                 AISettingsChangedEvent::IsAnyAIEnabled { .. } => {
-                    let is_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
-
-                    update_editor_interaction_state(
-                        me.autodetection_denylist_editor.clone(),
-                        is_enabled,
-                        ctx,
-                    );
-
                     me.update_voice_input_dropdown_enablement(ctx);
                     me.sync_custom_endpoint_buttons(ctx);
                 }
@@ -1145,7 +1055,6 @@ impl WarpAgentPageView {
             self_handle,
             voice_input_toggle_key_dropdown,
             voice_input_language_dropdown,
-            autodetection_denylist_editor,
             local_only_icon_tooltip_states: Default::default(),
             agent_toolbar_inline_editor,
             thinking_display_mode_dropdown,
@@ -2089,7 +1998,6 @@ impl WarpAgentPageView {
         categories.push(Category::new(
             "Input",
             vec![
-                Box::new(NaturalLanguageDetectionWidget::default()),
                 Box::new(ShowInputHintTextWidget::default()),
                 Box::new(ShowAgentTipsWidget::default()),
                 Box::new(IncludeAgentCommandsInHistoryWidget::default()),
@@ -2193,31 +2101,6 @@ impl WarpAgentPageView {
         )
     }
 
-    fn handle_detection_denylist_editor_event(
-        &mut self,
-        event: &EditorEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            EditorEvent::Blurred | EditorEvent::Enter => {
-                let buffer_text = self
-                    .autodetection_denylist_editor
-                    .as_ref(ctx)
-                    .buffer_text(ctx);
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    if let Err(e) = settings
-                        .autodetection_command_denylist
-                        .set_value(buffer_text, ctx)
-                    {
-                        log::warn!("Failed to set AI autodetection blacklist commands: {e:?}");
-                    }
-                })
-            }
-            EditorEvent::Escape => ctx.emit(WarpAgentPageEvent::FocusModal),
-            _ => {}
-        }
-    }
-
     #[cfg(feature = "local_fs")]
     fn create_router_views(
         ctx: &mut ViewContext<Self>,
@@ -2275,7 +2158,6 @@ impl View for WarpAgentPageView {
 
 #[allow(clippy::large_enum_variant)]
 pub enum WarpAgentPageEvent {
-    FocusModal,
     #[cfg(feature = "local_fs")]
     OpenCustomRouterEditor(Option<crate::ai::custom_model_routers::CustomModelRouter>),
     #[cfg(feature = "local_fs")]
@@ -2302,8 +2184,6 @@ pub enum WarpAgentPageAction {
     ToggleNaturalLanguageAutosuggestions,
     ToggleSharedTitleGeneration,
     ToggleGitOperationsAutogen,
-    ToggleAIInputAutoDetection,
-    ToggleNLDInTerminal,
     ToggleUseAgentToolbar,
     ToggleVoiceInput,
     ToggleCanUseWarpCreditsForFallback,
@@ -2536,40 +2416,6 @@ impl TypedActionView for WarpAgentPageView {
                     }
                     Err(e) => {
                         log::warn!("Failed to set value for Git Operations Autogen setting: {e:?}");
-                    }
-                }
-                ctx.notify();
-            }
-            WarpAgentPageAction::ToggleAIInputAutoDetection => {
-                match AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    settings
-                        .ai_autodetection_enabled_internal
-                        .toggle_and_save_value(ctx)
-                }) {
-                    Ok(new_value) => {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::AgentModeToggleAutoDetectionSetting {
-                                is_autodetection_enabled: new_value,
-                                origin: AgentModeAutoDetectionSettingOrigin::SettingsPage
-                            },
-                            ctx
-                        );
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to set value for Input Auto-detection: {e:?}");
-                    }
-                }
-                ctx.notify();
-            }
-            WarpAgentPageAction::ToggleNLDInTerminal => {
-                match AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                    settings
-                        .nld_in_terminal_enabled_internal
-                        .toggle_and_save_value(ctx)
-                }) {
-                    Ok(_new_value) => {}
-                    Err(e) => {
-                        log::warn!("Failed to set value for NLD in Terminal: {e:?}");
                     }
                 }
                 ctx.notify();
@@ -3376,39 +3222,6 @@ impl SettingsWidget for GitOperationsAutogenWidget {
 }
 
 #[derive(Default)]
-struct NaturalLanguageDetectionWidget {
-    incorrect_autodetection_highlight_index: HighlightedHyperlink,
-    autodetection_toggle: SwitchStateHandle,
-    nld_in_terminal_toggle: SwitchStateHandle,
-}
-
-impl SettingsWidget for NaturalLanguageDetectionWidget {
-    type View = WarpAgentPageView;
-
-    fn search_terms(&self) -> &str {
-        "oz agent ai natural language detection autodetection prompt terminal command denylist permissions"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ai_settings = AISettings::as_ref(app);
-        Self::render_natural_language_detection_section(
-            self.incorrect_autodetection_highlight_index.clone(),
-            self.autodetection_toggle.clone(),
-            self.nld_in_terminal_toggle.clone(),
-            view,
-            ai_settings,
-            appearance,
-            app,
-        )
-    }
-}
-
-#[derive(Default)]
 struct ShowInputHintTextWidget {
     toggle: SwitchStateHandle,
 }
@@ -3615,112 +3428,6 @@ impl SettingsWidget for PromptSubmissionModeWidget {
         }
 
         column.finish()
-    }
-}
-
-impl NaturalLanguageDetectionWidget {
-    fn render_natural_language_detection_section(
-        incorrect_autodetection_highlight_index: HighlightedHyperlink,
-        autodetection_toggle: SwitchStateHandle,
-        nld_in_terminal_toggle: SwitchStateHandle,
-        view: &WarpAgentPageView,
-        ai_settings: &AISettings,
-        appearance: &Appearance,
-        app: &warpui::AppContext,
-    ) -> Box<dyn warpui::Element> {
-        let is_toggleable = ai_settings.is_any_ai_enabled(app);
-        let is_nld_enabled = *ai_settings.ai_autodetection_enabled_internal.value();
-
-        let autodetection_denylist_input_field = appearance
-            .ui_builder()
-            .text_input(view.autodetection_denylist_editor.clone())
-            .with_style(UiComponentStyles {
-                width: Some(280.),
-                padding: Some(Coords {
-                    top: 4.,
-                    bottom: 4.,
-                    left: 6.,
-                    right: 6.,
-                }),
-                background: Some(appearance.theme().surface_2().into()),
-                ..Default::default()
-            })
-            .build()
-            .finish();
-
-        let mut section = Flex::column();
-
-        static AUTODETECTION_DESCRIPTION_FRAGMENTS: LazyLock<Vec<FormattedTextFragment>> =
-            LazyLock::new(|| {
-                vec![
-                    FormattedTextFragment::plain_text("Encountered an incorrect detection? "),
-                    FormattedTextFragment::hyperlink(
-                        "Let us know",
-                        "https://warpdotdev.typeform.com/to/offrTIpq",
-                    ),
-                ]
-            });
-
-        section.add_children([
-            render_ai_setting_toggle::<NLDInTerminalEnabled>(
-                "Autodetect agent prompts in terminal input",
-                WarpAgentPageAction::ToggleNLDInTerminal,
-                ai_settings.is_nld_in_terminal_enabled(app),
-                is_toggleable,
-                nld_in_terminal_toggle,
-                &view.local_only_icon_tooltip_states,
-                app,
-            ),
-            render_ai_setting_toggle::<AIAutoDetectionEnabled>(
-                "Autodetect terminal commands in agent input",
-                WarpAgentPageAction::ToggleAIInputAutoDetection,
-                is_nld_enabled,
-                is_toggleable,
-                autodetection_toggle,
-                &view.local_only_icon_tooltip_states,
-                app,
-            ),
-            Container::new(
-                FormattedTextElement::new(
-                    FormattedText::new([FormattedTextLine::Line(
-                        (*AUTODETECTION_DESCRIPTION_FRAGMENTS).clone(),
-                    )]),
-                    CONTENT_FONT_SIZE,
-                    appearance.ui_font_family(),
-                    appearance.ui_font_family(),
-                    styles::description_font_color(is_toggleable, app).into(),
-                    incorrect_autodetection_highlight_index,
-                )
-                .with_hyperlink_font_color(appearance.theme().accent().into_solid())
-                .register_default_click_handlers(|url, ctx, _| {
-                    ctx.dispatch_typed_action(WarpAgentPageAction::HyperlinkClick(url));
-                })
-                .finish(),
-            )
-            .with_margin_top(styles::DESCRIPTION_NEGATIVE_MARGIN_OFFSET)
-            .with_margin_bottom(styles::DESCRIPTION_MARGIN_BOTTOM)
-            .with_margin_right(styles::TOGGLE_WIDTH_MARGIN)
-            .finish(),
-        ]);
-
-        section
-            .with_child(render_ai_setting_label::<AICommandDenylist>(
-                "Natural language denylist".to_owned(),
-                is_toggleable,
-                &view.local_only_icon_tooltip_states,
-                app,
-            ))
-            .with_child(render_ai_setting_description(
-                "Commands listed here will never trigger natural language detection.",
-                is_toggleable,
-                app,
-            ))
-            .with_child(
-                Container::new(autodetection_denylist_input_field)
-                    .with_margin_bottom(styles::DESCRIPTION_MARGIN_BOTTOM)
-                    .finish(),
-            )
-            .finish()
     }
 }
 

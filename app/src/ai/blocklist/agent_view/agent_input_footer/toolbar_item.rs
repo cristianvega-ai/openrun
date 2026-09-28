@@ -50,6 +50,7 @@ pub enum AgentToolbarItemKind {
     ContextChip(ContextChipKind),
     // Agent view only
     ModelSelector,
+    /// No longer shown; kept so stored toolbar layouts that list it still load.
     NLDToggle,
     ContextWindowUsage,
     /// Trigger for the "Conversation" usage popover. Gated on
@@ -185,6 +186,7 @@ impl AgentToolbarItemKind {
     pub fn is_available(&self, app: &warpui::AppContext) -> bool {
         match self {
             Self::HandoffToCloud => AISettings::as_ref(app).is_cloud_handoff_enabled(app),
+            Self::NLDToggle => false,
             // Drops the item from the toolbar editor once the flag goes off. The render
             // path does not consult this method, so it repeats the check itself.
             Self::UsageSummary => FeatureFlag::PricingTransparency.is_enabled(),
@@ -221,7 +223,6 @@ impl AgentToolbarItemKind {
         if FeatureFlag::GithubPrPromptChip.is_enabled() {
             items.push(Self::ContextChip(ContextChipKind::GithubPullRequest));
         }
-        items.push(Self::NLDToggle);
         items
     }
 
@@ -259,7 +260,6 @@ impl AgentToolbarItemKind {
             .collect();
         items.extend([
             Self::ModelSelector,
-            Self::NLDToggle,
             Self::VoiceInput,
             Self::FileAttach,
             Self::ContextWindowUsage,

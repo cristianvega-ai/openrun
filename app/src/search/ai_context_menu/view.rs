@@ -204,8 +204,8 @@ struct AIContextMenuState {
     selected_category_index: usize,
     /// Current query for filtering categories in main menu
     main_menu_query: String,
-    /// Whether we're in AI/autodetect mode (true) or locked in terminal mode (false)
-    is_ai_or_autodetect_mode: bool,
+    /// Whether we're in AI mode (true) or terminal mode (false)
+    is_ai_mode: bool,
     /// Whether this terminal is viewing a shared session
     is_shared_session_viewer: bool,
     /// Whether this terminal is in an ambient agent session
@@ -364,10 +364,10 @@ lazy_static::lazy_static! {
 }
 impl AIContextMenu {
     /// Get the appropriate categories based on the current input mode
-    /// If is_ai_or_autodetect_mode is true, return all AI categories
+    /// If is_ai_mode is true, return all AI categories
     /// If false (locked in terminal mode), return only Files category
     pub(crate) fn get_categories_for_mode(
-        is_ai_or_autodetect_mode: bool,
+        is_ai_mode: bool,
         is_shared_session_viewer: bool,
         is_in_ambient_agent: bool,
         is_cli_agent_input: bool,
@@ -433,7 +433,7 @@ impl AIContextMenu {
             return categories;
         }
 
-        if is_ai_or_autodetect_mode {
+        if is_ai_mode {
             let mut categories = vec![];
 
             // Hide file options for shared session viewers
@@ -503,9 +503,9 @@ impl AIContextMenu {
     }
 
     /// Set the input mode and update the menu state accordingly
-    pub fn set_input_mode(&mut self, is_ai_or_autodetect_mode: bool, ctx: &mut ViewContext<Self>) {
-        if self.state.is_ai_or_autodetect_mode != is_ai_or_autodetect_mode {
-            self.state.is_ai_or_autodetect_mode = is_ai_or_autodetect_mode;
+    pub fn set_input_mode(&mut self, is_ai_mode: bool, ctx: &mut ViewContext<Self>) {
+        if self.state.is_ai_mode != is_ai_mode {
+            self.state.is_ai_mode = is_ai_mode;
             self.refresh_categories_state(ctx);
         }
     }
@@ -513,7 +513,7 @@ impl AIContextMenu {
     /// Recompute category-dependent state when repository availability changes.
     fn refresh_categories_state(&mut self, ctx: &mut ViewContext<Self>) {
         let categories = Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
@@ -650,7 +650,7 @@ impl AIContextMenu {
                     .collect(),
                 selected_category_index: 0,
                 main_menu_query: String::new(),
-                is_ai_or_autodetect_mode: true,  // Default to AI mode
+                is_ai_mode: true,                // Default to AI mode
                 is_shared_session_viewer: false, // Will be updated by set_is_shared_session_viewer if needed
                 is_in_ambient_agent: false, // Will be updated by set_is_in_ambient_agent if needed
                 is_cli_agent_input: false,  // Will be updated by set_is_cli_agent_input if needed
@@ -723,7 +723,7 @@ impl AIContextMenu {
         let query_length = self.query(ctx).len();
         let item_count = self.item_count(ctx);
         let categories = Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
@@ -742,7 +742,7 @@ impl AIContextMenu {
     /// Reset the menu to the main menu state only if there are more than 1 available categories.
     pub fn reset_menu_state(&mut self, ctx: &mut ViewContext<Self>) {
         let categories = Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
@@ -1062,7 +1062,7 @@ impl AIContextMenu {
 
         // Add all available data sources
         let categories = Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
@@ -1180,7 +1180,7 @@ impl AIContextMenu {
         });
 
         let categories = Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
@@ -1209,7 +1209,7 @@ impl AIContextMenu {
     /// Get the list of categories that match the current query filter
     fn get_filtered_categories(&self, app: &AppContext) -> Vec<AIContextMenuCategory> {
         let categories = Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
@@ -1315,7 +1315,7 @@ impl AIContextMenu {
 
             // Find the original index of this category in current categories for hover state
             let categories = Self::get_categories_for_mode(
-                self.state.is_ai_or_autodetect_mode,
+                self.state.is_ai_mode,
                 self.state.is_shared_session_viewer,
                 self.state.is_in_ambient_agent,
                 self.state.is_cli_agent_input,
@@ -1490,7 +1490,7 @@ impl AIContextMenu {
     #[cfg(not(target_family = "wasm"))]
     pub fn should_render(&self, app: &AppContext) -> bool {
         !Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
@@ -1569,7 +1569,7 @@ impl AIContextMenu {
 
         // Only show the title if there are multiple categories
         let categories = Self::get_categories_for_mode(
-            self.state.is_ai_or_autodetect_mode,
+            self.state.is_ai_mode,
             self.state.is_shared_session_viewer,
             self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,

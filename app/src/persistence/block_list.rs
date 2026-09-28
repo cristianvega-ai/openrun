@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, Local, NaiveDateTime, TimeZone};
+use chrono::{Local, NaiveDateTime, TimeZone};
 use diesel::prelude::*;
 use diesel::result::Error;
 use diesel::sqlite::SqliteConnection;
@@ -11,7 +11,7 @@ use itertools::Itertools;
 
 use super::model::Block;
 use super::{model, schema};
-use crate::ai::blocklist::{PersistedAIInput, PersistedAIInputType, SerializedBlockListItem};
+use crate::ai::blocklist::{PersistedAIInput, SerializedBlockListItem};
 use crate::app_state::PaneUuid;
 use crate::persistence::schema::ai_queries;
 use crate::terminal::model::block::{SerializedAgentViewVisibility, SerializedBlock};
@@ -94,9 +94,6 @@ const MAX_AI_QUERIES_READ_LIMIT: i64 = 2000;
 /// TODO(alokedesai): Consider loading all AI queries by paginating the SQL query.
 const MAX_AI_QUERIES_FOR_UPARROW: usize = 100;
 
-/// Maximum number of recent AI queries scanned for NLD prompt-history matching.
-const MAX_AI_QUERIES_FOR_NLD: usize = 2000;
-
 /// Reads the most recent [`MAX_AI_QUERIES_READ_LIMIT`] AI queries from the `ai_queries` table,
 /// oldest-first (ascending by submission).
 pub(super) fn read_recent_ai_queries(
@@ -124,28 +121,6 @@ pub(super) fn process_ai_queries_for_uparrow_prompt(
         .len()
         .saturating_sub(MAX_AI_QUERIES_FOR_UPARROW);
     recent_ai_queries.split_off(start)
-}
-
-/// Extracts NLD prompt-history candidates (prompt text and submission time) from the newest
-/// [`MAX_AI_QUERIES_FOR_NLD`] of `recent_ai_queries` (ordered oldest-first)
-pub(super) fn process_ai_queries_for_nld_history_match(
-    recent_ai_queries: &[PersistedAIInput],
-) -> Vec<(String, DateTime<Local>)> {
-    let start = recent_ai_queries
-        .len()
-        .saturating_sub(MAX_AI_QUERIES_FOR_NLD);
-    recent_ai_queries[start..]
-        .iter()
-        .filter_map(|query| {
-            let text = query.inputs.first().map(|input| match input {
-                PersistedAIInputType::Query { text, .. } => text.clone(),
-            })?;
-            if text.trim().is_empty() {
-                return None;
-            }
-            Some((text, query.start_ts))
-        })
-        .collect_vec()
 }
 
 const AI_QUERIES_COUNT_LIMIT: i64 = 10_000;

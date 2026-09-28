@@ -1044,7 +1044,7 @@ fn register_input_mode_bindings(app: &mut AppContext) {
     // A context predicate that is active when the user could switch input to shell mode.
     // This matches when in AI mode AND either:
     // - In an active agent view, OR
-    // - Input is unlocked (autodetected) (implying the input is autodetected as AI in terminal mode)
+    // - Input is unlocked
     let terminal_mode_predicate = base_context.clone()
         & id!(flags::AGENT_MODE_INPUT)
         & (id!(flags::ACTIVE_AGENT_VIEW)

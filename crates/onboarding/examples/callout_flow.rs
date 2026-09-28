@@ -55,7 +55,6 @@ impl OnboardingExampleView {
             OnboardingCalloutView::new_agent_modality(
                 true, // has_project
                 OnboardingIntention::AgentDrivenDevelopment,
-                false, // initial_natural_language_detection_enabled
                 keybindings,
                 ctx,
             )

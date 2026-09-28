@@ -38,8 +38,8 @@ use crate::ai::blocklist::agent_view::{
 #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use crate::ai::blocklist::handoff::PendingCloudLaunch;
 use crate::ai::blocklist::{
-    BlocklistAIHistoryModel, InputTypeAutoDetectionSource, PendingAttachment, QueuedQuery,
-    QueuedQueryId, QueuedQueryModel, QueuedQueryOrigin, SlashCommandRequest,
+    BlocklistAIHistoryModel, PendingAttachment, QueuedQuery, QueuedQueryId, QueuedQueryModel,
+    QueuedQueryOrigin, SlashCommandRequest,
 };
 use crate::ai::conversation_rename::rename_conversation;
 use crate::cloud_object::model::persistence::CloudModel;
@@ -326,7 +326,7 @@ impl Input {
                 }
 
                 if detected_command.command.auto_enter_ai_mode {
-                    self.enter_ai_mode(Some(InputTypeAutoDetectionSource::SlashCommand), ctx);
+                    self.enter_ai_mode(ctx);
                 }
 
                 if detected_command.command.kind == SlashCommandKind::Edit
@@ -353,7 +353,7 @@ impl Input {
                 }
 
                 // Skill commands always require AI mode
-                self.enter_ai_mode(Some(InputTypeAutoDetectionSource::SlashCommand), ctx);
+                self.enter_ai_mode(ctx);
             }
         }
     }
@@ -1299,7 +1299,6 @@ impl Input {
             | SlashCommandKind::ManageBilling
             | SlashCommandKind::ViewLogs
             | SlashCommandKind::Voice
-            | SlashCommandKind::NaturalLanguageDetection
             | SlashCommandKind::Theme
             | SlashCommandKind::VimMode
             | SlashCommandKind::Exit

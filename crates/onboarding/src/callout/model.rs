@@ -47,8 +47,6 @@ pub(super) enum OnboardingCalloutModelEvent {
     StateUpdated,
     Completed(FinalState),
     EnterAgentModality,
-    /// Emitted when the user toggles the natural language detection checkbox.
-    NaturalLanguageDetectionToggled(bool),
 }
 
 /// State for the UniversalInput onboarding flow (non-AgentModality).
@@ -84,40 +82,24 @@ pub(super) struct OnboardingCalloutModel {
     state: OnboardingCalloutState,
     intention: OnboardingIntention,
     has_project: bool,
-    /// The initial value of natural language detection when onboarding started.
-    /// Used to determine which callout variant to show.
-    initial_natural_language_detection_enabled: bool,
-    /// The current value of natural language detection (may change via checkbox toggle).
-    natural_language_detection_enabled: bool,
 }
 
 impl OnboardingCalloutModel {
     /// Create a new model for UniversalInput onboarding flow.
-    pub fn new_universal_input(
-        has_project: bool,
-        initial_natural_language_detection_enabled: bool,
-    ) -> Self {
+    pub fn new_universal_input(has_project: bool) -> Self {
         Self {
             state: OnboardingCalloutState::UniversalInput(UniversalInputCalloutState::default()),
             intention: OnboardingIntention::AgentDrivenDevelopment,
             has_project,
-            initial_natural_language_detection_enabled,
-            natural_language_detection_enabled: initial_natural_language_detection_enabled,
         }
     }
 
     /// Create a new model for AgentModality onboarding flow.
-    pub fn new_agent_modality(
-        has_project: bool,
-        intention: OnboardingIntention,
-        initial_natural_language_detection_enabled: bool,
-    ) -> Self {
+    pub fn new_agent_modality(has_project: bool, intention: OnboardingIntention) -> Self {
         Self {
             state: OnboardingCalloutState::AgentModality(AgentModalityCalloutState::default()),
             intention,
             has_project,
-            initial_natural_language_detection_enabled,
-            natural_language_detection_enabled: initial_natural_language_detection_enabled,
         }
     }
 
@@ -127,25 +109,6 @@ impl OnboardingCalloutModel {
 
     pub fn intention(&self) -> OnboardingIntention {
         self.intention
-    }
-
-    pub fn initial_natural_language_detection_enabled(&self) -> bool {
-        self.initial_natural_language_detection_enabled
-    }
-
-    pub fn natural_language_detection_enabled(&self) -> bool {
-        self.natural_language_detection_enabled
-    }
-
-    pub fn toggle_natural_language_detection(&mut self, ctx: &mut ModelContext<Self>) {
-        self.natural_language_detection_enabled = !self.natural_language_detection_enabled;
-        ctx.emit(
-            OnboardingCalloutModelEvent::NaturalLanguageDetectionToggled(
-                self.natural_language_detection_enabled,
-            ),
-        );
-        ctx.emit(OnboardingCalloutModelEvent::StateUpdated);
-        ctx.notify();
     }
 
     pub fn next(&mut self, ctx: &mut ModelContext<Self>) {

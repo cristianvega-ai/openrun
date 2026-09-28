@@ -85,9 +85,7 @@ pub(crate) use history_model::{
     PRE_REWIND_PREFIX,
 };
 pub(crate) use input_model::BlocklistAIInputEvent;
-pub use input_model::{
-    BlocklistAIInputModel, InputConfig, InputType, InputTypeAutoDetectionSource,
-};
+pub use input_model::{BlocklistAIInputModel, InputConfig, InputType};
 pub(crate) use passive_suggestions::{
     LegacyPassiveSuggestionsEvent, LegacyPassiveSuggestionsModel, MaaPassiveSuggestionsEvent,
     MaaPassiveSuggestionsModel, PassiveSuggestionsModels,
@@ -95,7 +93,7 @@ pub(crate) use passive_suggestions::{
 #[cfg(test)]
 pub(crate) use permissions::is_agent_mode_autonomy_allowed;
 pub use permissions::{BlocklistAIPermissions, CommandExecutionPermissionAllowedReason};
-#[cfg_attr(target_family = "wasm", allow(unused))]
+#[cfg(test)]
 pub(crate) use persistence::PersistedAIInputType;
 #[cfg_attr(target_family = "wasm", allow(unused))]
 pub use persistence::maybe_build_ai_query_upsert_event;

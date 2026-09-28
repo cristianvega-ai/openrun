@@ -44,9 +44,9 @@ use crate::network::NetworkStatus;
 #[cfg(not(target_family = "wasm"))]
 use crate::search::ai_context_menu::view::AIContextMenu;
 use crate::server::ids::ServerId;
+use crate::settings::AISettings;
 #[cfg(not(target_family = "wasm"))]
 use crate::settings::InputSettings;
-use crate::settings::{AISettings, AISettingsChangedEvent};
 use crate::settings_view::SettingsSection;
 use crate::terminal::input::MenuPositioningProvider;
 use crate::terminal::keys::TerminalKeybindings;
@@ -221,7 +221,6 @@ fn calculate_profile_model_selector_threshold(
 pub enum InputToggleMode {
     Terminal,
     AgentMode,
-    AutoDetection,
 }
 
 /// Custom disabled theme for UDI buttons that preserves background but changes font color
@@ -245,13 +244,9 @@ impl ActionButtonTheme for UDIDisabledButtonTheme {
 
 impl From<&BlocklistAIInputModel> for InputToggleMode {
     fn from(input_model: &BlocklistAIInputModel) -> Self {
-        if input_model.is_input_type_locked() {
-            match input_model.input_type() {
-                InputType::Shell => InputToggleMode::Terminal,
-                InputType::AI => InputToggleMode::AgentMode,
-            }
-        } else {
-            InputToggleMode::AutoDetection
+        match input_model.input_type() {
+            InputType::Shell => InputToggleMode::Terminal,
+            InputType::AI => InputToggleMode::AgentMode,
         }
     }
 }
@@ -302,7 +297,6 @@ pub enum UniversalDeveloperInputButtonBarEvent {
     #[cfg(feature = "voice_input")]
     ToggleVoiceInput(voice_input::VoiceInputToggledFrom),
     InputTypeSelected(InputType),
-    EnableAutoDetection,
     SelectFile,
     SetAIContextMenuOpen(bool),
     PromptAlert(PromptAlertEvent),
@@ -418,19 +412,8 @@ impl UniversalDeveloperInputButtonBar {
             me.handle_profile_model_selector_event(event, ctx);
         });
 
-        // Create segmented control options based on auto-detection setting
-        let ai_settings = AISettings::as_ref(ctx);
-        let is_autodetection_enabled = ai_settings.is_ai_autodetection_enabled(ctx);
-
-        let mut options = vec![InputToggleMode::Terminal, InputToggleMode::AgentMode];
-
-        let mut default_option = input_model.as_ref(ctx).into();
-        if is_autodetection_enabled {
-            options.push(InputToggleMode::AutoDetection);
-        } else if default_option == InputToggleMode::AutoDetection {
-            // Don't set the default to auto-detection if it's not enabled.
-            default_option = InputToggleMode::Terminal;
-        }
+        let options = vec![InputToggleMode::Terminal, InputToggleMode::AgentMode];
+        let default_option = input_model.as_ref(ctx).into();
 
         let cached_ui_state = Rc::new(RefCell::new(CachedUIState {
             is_input_empty: true,
@@ -470,9 +453,6 @@ impl UniversalDeveloperInputButtonBar {
                         InputType::AI,
                     ));
                 }
-                InputToggleMode::AutoDetection => {
-                    ctx.emit(UniversalDeveloperInputButtonBarEvent::EnableAutoDetection);
-                }
             },
         });
 
@@ -483,30 +463,8 @@ impl UniversalDeveloperInputButtonBar {
             ctx.notify();
         });
 
-        ctx.subscribe_to_model(&AISettings::handle(ctx), |me, ai_settings, event, ctx| {
-            // Re-render when AI settings change (like voice input enabled/disabled)
-            // Also update segmented control options when auto-detection setting changes
-            if let AISettingsChangedEvent::AIAutoDetectionEnabled { .. } = event {
-                let is_autodection_enabled =
-                    ai_settings.as_ref(ctx).is_ai_autodetection_enabled(ctx);
-                me.segmented_control.update(ctx, |segmented_control, ctx| {
-                    if is_autodection_enabled {
-                        segmented_control.update_options(
-                            vec![
-                                InputToggleMode::Terminal,
-                                InputToggleMode::AgentMode,
-                                InputToggleMode::AutoDetection,
-                            ],
-                            ctx,
-                        );
-                    } else {
-                        segmented_control.update_options(
-                            vec![InputToggleMode::Terminal, InputToggleMode::AgentMode],
-                            ctx,
-                        );
-                    }
-                });
-            }
+        // Re-render when AI settings change (like voice input enabled/disabled).
+        ctx.subscribe_to_model(&AISettings::handle(ctx), |_, _, _, ctx| {
             ctx.notify();
         });
 
@@ -611,7 +569,7 @@ impl UniversalDeveloperInputButtonBar {
         });
     }
 
-    /// Update the input empty state and refresh the autodetection label
+    /// Update the input empty state
     pub fn update_input_empty_state(&mut self, is_empty: bool, ctx: &mut ViewContext<Self>) {
         if self.cached_ui_state.borrow().is_input_empty == is_empty {
             return;
@@ -1005,11 +963,6 @@ fn build_renderable_option_config(
                 )),
                 background: bg_color.into(),
             }
-        }
-        InputToggleMode::AutoDetection => {
-            // Should not actually render anything, when using the new two-option
-            // UDI control.
-            return None;
         }
     };
 

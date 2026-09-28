@@ -181,13 +181,7 @@ fn agent_view_lifecycle_updates_input_mode() {
         terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("agent view entry should succeed");
             });
         });
@@ -1540,13 +1534,7 @@ fn enter_agent_view_for_navigation(
 ) -> AIConversationId {
     view.agent_view_controller().update(ctx, |controller, ctx| {
         controller
-            .try_enter_agent_view(
-                None,
-                AgentViewEntryOrigin::Input {
-                    was_prompt_autodetected: false,
-                },
-                ctx,
-            )
+            .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
             .expect("agent view entry should succeed")
     })
 }
@@ -2312,7 +2300,6 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
                             is_locked: false,
                         },
                         true,
-                        None,
                         ctx,
                     );
                 });
@@ -2380,7 +2367,6 @@ fn unregister_cli_agent_session_restores_unlocked_input_config() {
                             is_locked: false,
                         },
                         true,
-                        None,
                         ctx,
                     );
                 });
@@ -2446,13 +2432,7 @@ fn clear_buffer_action_in_fullscreen_agent_view_starts_new_conversation() {
         let original_conversation_id = terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view")
             })
         });
@@ -3118,13 +3098,7 @@ fn escape_does_not_exit_local_agent_view_with_long_running_command() {
         let terminal = add_window_with_terminal(&mut app, None);
 
         terminal.update(&mut app, |view, ctx| {
-            view.enter_agent_view_for_new_conversation(
-                None,
-                AgentViewEntryOrigin::Input {
-                    was_prompt_autodetected: false,
-                },
-                ctx,
-            );
+            view.enter_agent_view_for_new_conversation(None, AgentViewEntryOrigin::Input, ctx);
             view.model
                 .lock()
                 .simulate_long_running_block("sleep 10", "running");
@@ -3252,7 +3226,6 @@ fn cloud_mode_v1_agent_prefixed_query_spawns_cloud_agent() {
                         is_locked: false,
                     },
                     true,
-                    None,
                     ctx,
                 );
             });
@@ -3607,13 +3580,7 @@ fn cloud_mode_followup_input_uses_explicit_submit_event_even_when_view_pending()
             // the input AI-capable and gives the routing its active-conversation context.
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("agent view entry should succeed");
             });
 
@@ -6943,13 +6910,7 @@ fn test_prompt_context_menu_items_in_agent_view() {
         terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view");
             });
         });
@@ -6975,13 +6936,7 @@ fn agent_footer_updates_chip_groups_when_side_assignment_changes() {
         terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view");
             });
         });
@@ -7805,13 +7760,7 @@ fn exiting_agent_view_removes_empty_conversations() {
         let conversation_id = terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view")
             })
         });
@@ -7849,13 +7798,7 @@ fn ctrl_c_exit_agent_view_requires_confirmation() {
         terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view")
             })
         });
@@ -7895,13 +7838,7 @@ fn ctrl_c_buffer_clear_then_exit_requires_three_presses_in_agent_view() {
         terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view")
             })
         });
@@ -7952,13 +7889,7 @@ fn terminal_action_ctrl_c_exit_agent_view_requires_confirmation() {
         terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view")
             })
         });
@@ -8242,7 +8173,6 @@ fn cli_agent_rich_input_shell_mode_uses_run_commands_hint_text() {
                             is_locked: true,
                         },
                         true,
-                        None,
                         ctx,
                     );
                 });
@@ -9554,13 +9484,7 @@ fn linear_deeplink_does_not_auto_submit_when_already_in_agent_view() {
         let original_conversation_id = terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view")
             })
         });
@@ -9631,13 +9555,7 @@ fn linear_deeplink_via_default_entrypoint_does_not_auto_submit_in_fullscreen() {
         terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("Should be able to enter agent view")
             });
         });
@@ -9944,13 +9862,7 @@ fn cmd_k_in_agent_view_clears_active_block_not_full_buffer_when_agent_driving_co
         let conversation_id = terminal.update(&mut app, |view, ctx| {
             let conversation_id = view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("should enter agent view")
             });
 
@@ -10012,13 +9924,7 @@ fn cmd_k_in_agent_view_cancels_in_progress_conversation_and_starts_new_one() {
         let old_conversation_id = terminal.update(&mut app, |view, ctx| {
             view.agent_view_controller().update(ctx, |controller, ctx| {
                 controller
-                    .try_enter_agent_view(
-                        None,
-                        AgentViewEntryOrigin::Input {
-                            was_prompt_autodetected: false,
-                        },
-                        ctx,
-                    )
+                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
                     .expect("should enter agent view")
             })
         });

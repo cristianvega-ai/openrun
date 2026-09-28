@@ -60,7 +60,9 @@ use crate::ai::blocklist::history_model::CloudConversationData;
 use crate::ai::blocklist::inline_action::code_diff_view::CodeDiffView;
 use crate::ai::blocklist::suggested_agent_mode_workflow_modal::SuggestedAgentModeWorkflowAndId;
 use crate::ai::blocklist::suggested_rule_modal::SuggestedRuleAndId;
-use crate::ai::blocklist::{BlocklistAIHistoryModel, InputConfig, SerializedBlockListItem};
+use crate::ai::blocklist::{
+    BlocklistAIHistoryModel, InputConfig, InputType, SerializedBlockListItem,
+};
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentModel, AIDocumentVersion};
 use crate::ai::execution_profiles::ExecutionProfileId;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
@@ -1410,9 +1412,7 @@ impl PaneGroup {
                         view.update(ctx, |terminal_view, ctx| {
                             terminal_view.enter_agent_view_for_new_conversation(
                                 None,
-                                AgentViewEntryOrigin::Input {
-                                    was_prompt_autodetected: false,
-                                },
+                                AgentViewEntryOrigin::Input,
                                 ctx,
                             );
                         });
@@ -2164,7 +2164,10 @@ impl PaneGroup {
                             is_active: visible_leaf_is_active_session,
                             is_read_only: false,
                             shell_launch_data: None,
-                            input_config: Some(InputConfig::new(app)),
+                            input_config: Some(InputConfig {
+                                input_type: InputType::Shell,
+                                is_locked: true,
+                            }),
                             llm_model_override: None,
                             active_profile_id: None,
                             conversation_ids_to_restore: Vec::new(),
@@ -7977,9 +7980,7 @@ impl PaneGroup {
                     // TODO(zachbai): This is just a placeholder origin - I'm not even sure
                     // if this is called in live codepaths beyond the create-environment deep
                     // link flow.
-                    AgentViewEntryOrigin::Input {
-                        was_prompt_autodetected: false,
-                    },
+                    AgentViewEntryOrigin::Input,
                     terminal_view_ctx,
                 );
 

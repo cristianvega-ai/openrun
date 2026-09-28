@@ -28,8 +28,7 @@ use crate::ai::agent_management::notifications::NotificationSourceAgent;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::{
-    AIBlockResponseRating, CommandExecutionPermissionAllowedReason, InputType,
-    InputTypeAutoDetectionSource, QueuedQueryOrigin,
+    AIBlockResponseRating, CommandExecutionPermissionAllowedReason, InputType, QueuedQueryOrigin,
 };
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::ai::mcp::TemplateVariable;
@@ -1035,7 +1034,7 @@ impl From<FullAIAgentInput> for AIAgentInput {
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TelemetryAgentViewEntryOrigin {
-    Input { was_prompt_autodetected: bool },
+    Input,
     ConversationSelector,
     AgentModeHomepage,
     AgentViewBlock,
@@ -1080,11 +1079,7 @@ pub enum TelemetryAgentViewEntryOrigin {
 impl From<AgentViewEntryOrigin> for TelemetryAgentViewEntryOrigin {
     fn from(origin: AgentViewEntryOrigin) -> Self {
         match origin {
-            AgentViewEntryOrigin::Input {
-                was_prompt_autodetected,
-            } => Self::Input {
-                was_prompt_autodetected,
-            },
+            AgentViewEntryOrigin::Input => Self::Input,
             AgentViewEntryOrigin::ConversationSelector => Self::ConversationSelector,
             AgentViewEntryOrigin::AgentModeHomepage => Self::AgentModeHomepage,
             AgentViewEntryOrigin::AgentViewBlock => Self::AgentViewBlock,
@@ -2452,9 +2447,8 @@ pub enum TelemetryEvent {
         action: AgentModeSetupCreateEnvironmentActionType,
     },
     InputBufferSubmitted {
-        input_type: input_classifier::InputType,
+        input_type: InputType,
         is_locked: bool,
-        input_type_decision_source: Option<InputTypeAutoDetectionSource>,
         was_lock_set_with_empty_buffer: bool,
         block_id: BlockId,
     },
@@ -4052,13 +4046,11 @@ impl TelemetryEvent {
             TelemetryEvent::InputBufferSubmitted {
                 input_type,
                 is_locked,
-                input_type_decision_source,
                 was_lock_set_with_empty_buffer,
                 block_id,
             } => Some(json!({
                 "input_type": input_type,
                 "is_locked": is_locked,
-                "input_type_decision_source": input_type_decision_source,
                 "was_lock_set_with_empty_buffer": was_lock_set_with_empty_buffer,
                 "block_id": block_id,
             })),

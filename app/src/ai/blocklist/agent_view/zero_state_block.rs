@@ -744,9 +744,7 @@ fn render_body(props: ZeroStateBodyProps<'_>, app: &AppContext) -> Vec<Box<dyn E
                         ],
                         |ctx| {
                             ctx.dispatch_typed_action(TerminalAction::StartNewAgentConversation {
-                                origin: AgentViewEntryOrigin::Input {
-                                    was_prompt_autodetected: false,
-                                },
+                                origin: AgentViewEntryOrigin::Input,
                             });
                         },
                         state_handles.start_new_conversation.clone(),

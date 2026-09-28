@@ -257,13 +257,12 @@ use crate::ai::blocklist::{
     BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
     BlocklistAIControllerEvent, BlocklistAIHistoryEvent, BlocklistAIHistoryModel,
     BlocklistAIInputEvent, BlocklistAIInputModel, ClientIdentifiers, ConversationSelection,
-    ConversationStatusUpdate, InputConfig, InputType, InputTypeAutoDetectionSource,
-    LegacyPassiveSuggestionsEvent, LegacyPassiveSuggestionsModel, MaaPassiveSuggestionsEvent,
-    MaaPassiveSuggestionsModel, PRE_REWIND_PREFIX, PassiveSuggestionsModels, PendingAttachment,
-    PendingQueryState, QueuedQuery, QueuedQueryId, QueuedQueryModel, QueuedQueryOrigin,
-    RequestFileEditsFormatKind, ShellCommandExecutor, ShellCommandExecutorEvent,
-    SlashCommandRequest, StartAgentExecutor, StartAgentExecutorEvent, StartAgentRequest,
-    ai_brand_color, block_context_from_terminal_model,
+    ConversationStatusUpdate, InputConfig, InputType, LegacyPassiveSuggestionsEvent,
+    LegacyPassiveSuggestionsModel, MaaPassiveSuggestionsEvent, MaaPassiveSuggestionsModel,
+    PRE_REWIND_PREFIX, PassiveSuggestionsModels, PendingAttachment, PendingQueryState, QueuedQuery,
+    QueuedQueryId, QueuedQueryModel, QueuedQueryOrigin, RequestFileEditsFormatKind,
+    ShellCommandExecutor, ShellCommandExecutorEvent, SlashCommandRequest, StartAgentExecutor,
+    StartAgentExecutorEvent, StartAgentRequest, ai_brand_color, block_context_from_terminal_model,
     get_ai_block_overflow_menu_element_position_id, get_attached_blocks_chip_element_position_id,
     is_lrc_auto_queue_active,
 };
@@ -405,8 +404,8 @@ use crate::terminal::input::inline_menu::InlineMenuPositioner;
 #[cfg(not(target_family = "wasm"))]
 use crate::terminal::input::slash_commands::fork_button_action;
 use crate::terminal::input::{
-    CommandExecutionSource, InputAction, InputEmptyStateChangeReason, InputState, MenuPositioning,
-    MenuPositioningProvider, ShellWidgetApplyMode,
+    CommandExecutionSource, InputAction, InputState, MenuPositioning, MenuPositioningProvider,
+    ShellWidgetApplyMode,
 };
 use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::ligature_settings::{LigatureSettings, should_use_ligature_rendering};
@@ -3476,24 +3475,19 @@ impl TerminalView {
         let ai_input_model = ctx.add_model(|ctx| {
             let policy = Rc::new(GuiInputModePolicy::new(
                 conversation_selection.clone(),
-                ai_context_model.clone(),
                 terminal_view_id,
             ));
             let mut model = BlocklistAIInputModel::new(
                 model.clone(),
                 conversation_selection.clone(),
-                ai_context_model.clone(),
                 policy,
                 terminal_view_id,
                 ctx,
             );
 
-            // If NLD is disabled, restore any input config that was saved.
-            if !model.is_autodetection_enabled_for_current_context(ctx)
-                && let Some(input_config) = initial_input_config
-            {
+            if let Some(input_config) = initial_input_config {
                 let is_input_buffer_empty = true;
-                model.set_input_config(input_config, is_input_buffer_empty, None, ctx);
+                model.set_input_config(input_config.locked(), is_input_buffer_empty, ctx);
             }
             model
         });
@@ -7093,10 +7087,7 @@ impl TerminalView {
         self.input.update(ctx, |input, ctx| {
             // Remove the @-trigger text (e.g. "@uncom") that was used to open the context menu.
             input.replace_at_symbol_with_text(&attachment_reference, ctx);
-            input.ensure_agent_mode_for_ai_features(
-                Some(InputTypeAutoDetectionSource::AttachmentForcedAi),
-                ctx,
-            );
+            input.ensure_agent_mode_for_ai_features(ctx);
         });
 
         // Load the diff data asynchronously and complete the attachment when done
@@ -12152,9 +12143,7 @@ impl TerminalView {
                             self.enter_agent_view_after_pending_commands = false;
                             self.enter_agent_view_for_new_conversation(
                                 None,
-                                AgentViewEntryOrigin::Input {
-                                    was_prompt_autodetected: false,
-                                },
+                                AgentViewEntryOrigin::Input,
                                 ctx,
                             );
                         }
@@ -14321,31 +14310,17 @@ impl TerminalView {
 
             match version {
                 AgentOnboardingVersion::UniversalInput { has_project } => {
-                    let initial_natural_language_detection_enabled = AISettings::handle(ctx)
-                        .as_ref(ctx)
-                        .is_nld_in_terminal_enabled(ctx);
-                    OnboardingCalloutView::new_universal_input(
-                        has_project,
-                        initial_natural_language_detection_enabled,
-                        keybindings,
-                        ctx,
-                    )
+                    OnboardingCalloutView::new_universal_input(has_project, keybindings, ctx)
                 }
                 AgentOnboardingVersion::AgentModality {
                     has_project,
                     intention,
-                } => {
-                    let initial_natural_language_detection_enabled = AISettings::handle(ctx)
-                        .as_ref(ctx)
-                        .is_nld_in_terminal_enabled(ctx);
-                    OnboardingCalloutView::new_agent_modality(
-                        has_project,
-                        intention,
-                        initial_natural_language_detection_enabled,
-                        keybindings,
-                        ctx,
-                    )
-                }
+                } => OnboardingCalloutView::new_agent_modality(
+                    has_project,
+                    intention,
+                    keybindings,
+                    ctx,
+                ),
             }
         });
 
@@ -14437,25 +14412,7 @@ impl TerminalView {
                 self.focus_onboarding_callout_if_active(ctx);
                 ctx.notify();
             }
-            OnboardingCalloutViewEvent::NaturalLanguageDetectionToggled(enabled) => {
-                // Apply the setting immediately when the user toggles the checkbox
-                self.apply_natural_language_detection_setting(*enabled, ctx);
-            }
         }
-    }
-
-    fn apply_natural_language_detection_setting(
-        &mut self,
-        enable: bool,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        AISettings::handle(ctx).update(ctx, |settings, ctx| {
-            report_if_error!(
-                settings
-                    .nld_in_terminal_enabled_internal
-                    .set_value(enable, ctx)
-            );
-        });
     }
 
     fn maybe_render_onboarding_callout(
@@ -14528,10 +14485,7 @@ impl TerminalView {
                 OnboardingQuery::AgentPrompt(text) => {
                     input.replace_buffer_content(text, ctx);
                     // Force agent mode, overriding any shell lock
-                    input.ensure_agent_mode_for_ai_features(
-                        Some(InputTypeAutoDetectionSource::OnboardingAgentPrompt),
-                        ctx,
-                    );
+                    input.ensure_agent_mode_for_ai_features(ctx);
                 }
                 _ => {}
             }
@@ -18918,7 +18872,6 @@ impl TerminalView {
                     is_locked: true,
                 },
                 query.is_none(),
-                Some(InputTypeAutoDetectionSource::AskAi),
                 ctx,
             );
         });
@@ -20986,9 +20939,7 @@ impl TerminalView {
                 self.create_and_push_docker_sandbox(ctx);
             }
             InputEvent::ExitCloudModeAndStartLocalAgent { initial_prompt } => {
-                let origin = AgentViewEntryOrigin::Input {
-                    was_prompt_autodetected: false,
-                };
+                let origin = AgentViewEntryOrigin::Input;
                 let initial_prompt = initial_prompt.clone();
 
                 match self.pane_stack.as_ref().and_then(|h| h.upgrade(ctx)) {
@@ -21099,7 +21050,7 @@ impl TerminalView {
                 ctx.emit(Event::Escape)
             }
             InputEvent::InputStateChanged(_) => {}
-            InputEvent::InputEmptyStateChanged { is_empty, reason } => {
+            InputEvent::InputEmptyStateChanged { is_empty, .. } => {
                 // Update the universal developer input button bar with the new empty state
                 let universal_developer_input_button_bar = self
                     .input
@@ -21109,33 +21060,6 @@ impl TerminalView {
                 universal_developer_input_button_bar.update(ctx, |button_bar, ctx| {
                     button_bar.update_input_empty_state(*is_empty, ctx);
                 });
-
-                // When the buffer is cleared, reset the input type based on whether there's an
-                // active agent view. Skip for cloud mode v2
-                // where the input is always AI.
-                if *is_empty
-                    && !self.input.as_ref(ctx).is_cloud_mode_input_v2_composing(ctx)
-                    && self
-                        .ai_input_model
-                        .as_ref(ctx)
-                        .should_run_input_autodetection(ctx)
-                {
-                    let is_agent_view_active = self.agent_view_controller.as_ref(ctx).is_active();
-                    let input_type = match reason {
-                        InputEmptyStateChangeReason::UserCommandCompleted => InputType::Shell,
-                        InputEmptyStateChangeReason::Edited => {
-                            if is_agent_view_active {
-                                InputType::AI
-                            } else {
-                                InputType::Shell
-                            }
-                        }
-                    };
-
-                    self.ai_input_model.update(ctx, |model, ctx| {
-                        model.enable_autodetection(input_type, ctx);
-                    });
-                }
             }
             InputEvent::SyncInput(input) => {
                 if !SyncedInputState::as_ref(ctx).is_syncing_any_inputs(ctx.window_id()) {
@@ -22546,17 +22470,15 @@ impl TerminalView {
                 ctx,
             );
         } else {
-            // In general, user has expressed intent to "enter agent mode" by sending the inline review.
-            // When NLD is on, this means unlocking any status locks similar to other agent mode queries.
-            // When NLD is off, we override the input mode to AI.
+            // The user has expressed intent to "enter agent mode" by sending the inline review,
+            // so we override the input mode to AI.
             self.ai_input_model.update(ctx, |input_model, ctx| {
                 input_model.set_input_config(
                     input_model
                         .input_config()
                         .with_input_type(InputType::AI)
-                        .unlocked_if_autodetection_enabled(false, ctx),
+                        .locked(),
                     true,
-                    Some(InputTypeAutoDetectionSource::InlineCodeReviewSend),
                     ctx,
                 );
             });
@@ -22716,7 +22638,7 @@ impl TerminalView {
             Some(block) => block,
         };
 
-        let mut prompt = if block.honor_ps1() {
+        if block.honor_ps1() {
             block.prompt_contents_to_string(false)
         } else if block.prompt_snapshot().is_some() {
             // Note that we're checking not only for the flag being enabled but also ensuring the
@@ -22755,15 +22677,7 @@ impl TerminalView {
                     .git_branch()
                     .map_or_else(String::new, |b| format!(" git:({b})")),
             )
-        };
-
-        // On Local and Dev channels, append an indicator when NLD was overridden.
-        // Skip the honor_ps1 case since there's no good place to display the extra text.
-        if !block.honor_ps1() && block.nld_overridden() && ChannelState::enable_debug_features() {
-            prompt.push_str(" (nld overridden)");
         }
-
-        prompt
     }
 
     /// Returns the duration as an std::time::Duration struct

@@ -31,6 +31,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [App-installation detection and the local HTTP server](#app-installation-detection-and-the-local-http-server) — the GUI no longer listens on `127.0.0.1:9277+n`; the jemalloc heap profile is written to a local file instead of served over HTTP
 - [Legacy Warp AI assistant and AI command search](#legacy-warp-ai-assistant-and-ai-command-search) — deleted the Warp AI side panel, every "Ask Warp AI" entry point, AI command search (`#`) and its server endpoints
 - [SSH remote server](#ssh-remote-server) — removed the SSH extension daemon (downloaded from Warp's CDN, authenticated with Warp credentials) and every remote file, diff, git, search, indexing and agent-context backend it powered; plain SSH, SSH Warpify and blocks and completions over SSH stay
+- [Natural-language detection and input auto-detection](#natural-language-detection-and-input-auto-detection) — deleted the `input_classifier` and `natural_language_detection` crates, the classifier singleton, input auto-detection and its settings, toolbar toggle and slash command
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -711,3 +712,33 @@ Each section below covers one removal (a single commit or a small group of relat
 - `FeatureFlag::{SshRemoteServer, RemoteCodebaseIndexing, RemoteCodeReview}` stay for FLAGS-1; all code they gated is deleted.
 - `SessionType` and `BootstrapSessionType` are now identical enums.
 - The only protos were in `crates/remote_server`, which is deleted whole, so no `reserved` field numbers were needed.
+
+## Natural-language detection and input auto-detection
+**Why:** Natural-language detection (NLD) classified what the user typed as a shell command or an agent prompt and switched the input mode on its own. It exists only to route input to Warp's built-in agent, which the offline fork removes. Its ONNX classifier was also embedded from Git LFS at build time, and its `ort` backend pulled in a runtime-download stack (`ureq`, `native-tls`, `openssl`).
+
+**Removed:**
+- `crates/input_classifier` (the heuristic and BERT-tiny ONNX classifiers, the Git LFS model files and the `evaluate` binary) and `crates/natural_language_detection` (word lists and stemmer), with their `[workspace.dependencies]` entries. `app/src/input_classifier.rs` and the `InputClassifierModel` singleton.
+- Auto-detection in `ai/blocklist/input_model.rs`: `InputTypeAutoDetectionSource` and every decision-source argument, `detect_and_set_input_type` with its history and prompt-history matching (`most_recent_close_match`, `resolve_history_match`), `should_run_input_autodetection`, `enable_autodetection`, the detection abort handle and suppression window, `last_ai_autodetection_{ts,source}`, `InputConfig::{new, unlocked_if_autodetection_enabled}`, and the policy's `is_autodetection_enabled`, `config_on_ai_settings_changed` and `PolicyConfigUpdate`.
+- Auto-detection in the terminal input: the `with_ai_input_detection` background job in `terminal/input/decorations.rs`, the re-detection on edits, settings changes, inline-menu close and command completion, the "re-enable autodetection" paths, `enable_auto_detection`, `set_input_mode_natural_language_detection`, `InputAction::{EnableAutoDetection, ToggleInputAutoDetection}` with the `input:enable_auto_detection` binding, the `AI_Input_Autodetection` / `NLD_In_Terminal` keymap flags, the unused `input:set_mode_unlocked_{agent,terminal}` keybinding caches, the "(autodetected) … to override" message-bar hint, the auto-detection false-positive telemetry, the UDI auto-detection segment (`InputToggleMode::AutoDetection`) and the dogfood "(nld overridden)" block-prompt marker.
+- Settings: `AIAutoDetectionEnabled` (`agents.warp_agent.input.ai_auto_detection_enabled`), `NLDInTerminalEnabled` (`agents.warp_agent.input.nld_in_terminal_enabled`) and `AICommandDenylist` (`agents.warp_agent.input.ai_command_denylist`), with the one-time NLD migration in `settings/initializer.rs`, the Warp Agent page's natural-language-detection section, denylist editor and toggle bindings, and the terminal zero-state "autodetect agent prompts" checkbox.
+- The agent-footer NLD toggle button, `/natural-language-detection`, and the NLD checkbox in the onboarding callout (with the callout's now-unused checkbox support).
+- The NLD prompt-history snapshot: `BlocklistAIHistoryModel`'s prompt-history candidates, the `nld_prompts` startup read (`process_ai_queries_for_nld_history_match`) and its plumbing through `PersistedData` and `lib.rs`.
+- `EmptyCompletionContext` (only detection used it) and the unused `difflib` dependency.
+
+**Modified:**
+- `InputType` now lives in `ai/blocklist/input_model.rs`, with the same variants and serde form.
+- The input behaves as it did for users with NLD off (the default): the default config is shell and locked, restored pane configs load locked, `!` and Escape lock the mode explicitly, and nothing switches modes on its own. The input-mode policy only gates locked AI input and reacts to agent-view entry and exit.
+- `AgentViewEntryOrigin::Input` no longer carries `was_prompt_autodetected`, so entering the agent view from input never auto-submits the prompt. `TelemetryAgentViewEntryOrigin::Input` and `InputBufferSubmitted` drop the matching fields (compile fixes).
+- `AgentToolbarItemKind::NLDToggle` stays so stored toolbar layouts that list it still load (the layout parser is strict), but it is never shown or offered.
+- `.gitattributes` no longer lists the deleted model paths. `app/Cargo.toml` keeps the `nld_*` features as empty entries for AI-32.
+- Tests: removed the auto-detection tests (history-match matrix, auto-detection toggles, decision sources, the NLD prompt-history seed, the NLD settings defaults and the TUI `/natural-language-detection` tests) and the ones that relied on autodetected input (`test_agent_mode_set_when_block_attached`, `test_terminal_only_ai_enter_enters_agent_view_and_clears_buffer`). `input_tests::initialize_app` no longer turns NLD on, and the tests that forced NLD on or off run without it.
+
+**User-visible impact:** Terminal input never switches between shell and agent mode on its own; the mode changes only on explicit user action. The "Natural language detection" settings section, its toggles and the command denylist are gone, as are the agent-footer auto-detection button, the zero-state and onboarding checkboxes and `/natural-language-detection`. Existing values for the three settings are ignored.
+
+**Notes:**
+- Git LFS: no build input is an LFS asset any more. The only LFS-tracked files left are the Windows `*.pdb` debug symbols in `app/assets/windows`, which neither `build.rs` nor the bundle scripts read, so the `lfs: true` checkouts in `ci.yml` are no longer needed (CI not edited).
+- Left for AI-32: the `NldPromptHistoryMatch` and other NLD feature flags, the empty `nld_*` Cargo features and their use in `script/{macos,linux}/bundle` and `script/windows/bundle.ps1`.
+- Left for AI-08 / AI-27: delete `AgentToolbarItemKind::NLDToggle` once stored layouts skip unknown items.
+- Left for TEL-4: the NLD telemetry variants in `server/telemetry/events.rs` (`AgentModeChangedInputType`, `AgentModePotentialAutoDetectionFalsePositive`, `AgentModeToggleAutoDetectionSetting` and their payload types).
+- Left for AI-26: the `is_locked` flag of `InputConfig` now only records explicit locks. AI code still derives `is_autodetected_user_query` from it (always `false` in practice).
+- `rg 'autodetect'` outside `app/src/ai` still matches unrelated code: URL autodetection (`crates/editor`, `crates/markdown_parser`, the `osc8` integration test), prompt-plugin detection in `crates/warp_terminal`, the web-intent redirect in `wasm_nux_dialog.rs`, and telemetry in `events.rs`.

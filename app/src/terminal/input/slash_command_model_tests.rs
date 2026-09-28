@@ -200,7 +200,6 @@ fn test_disabled_until_empty_buffer_ignores_non_slash_edits() {
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
 
         input.update(&mut app, |input, ctx| {
-            input.set_input_mode_natural_language_detection(ctx);
             input.user_insert("echo hello", ctx);
         });
         input.update(&mut app, |input, ctx| {
@@ -249,7 +248,6 @@ fn test_disabled_until_empty_buffer_reevaluates_when_slash_is_added_to_start() {
         });
 
         input.update(&mut app, |input, ctx| {
-            input.set_input_mode_natural_language_detection(ctx);
             input.user_insert("echo hello", ctx);
         });
         input.update(&mut app, |input, ctx| {
@@ -287,7 +285,6 @@ fn test_second_slash_in_command_token_sets_state_to_none() {
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
 
         input.update(&mut app, |input, ctx| {
-            input.set_input_mode_natural_language_detection(ctx);
             input.user_insert("/foo/bar", ctx);
         });
 
@@ -399,7 +396,6 @@ fn test_detect_command_matches_buffer_driven_detection() {
 
         // Type the command into the buffer so the buffer-driven model processes it.
         input.update(&mut app, |input, ctx| {
-            input.set_input_mode_natural_language_detection(ctx);
             input.user_insert(&command_name, ctx);
         });
 
@@ -478,11 +474,6 @@ fn test_submit_queued_prompt_routes_plain_text_to_conversation() {
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
 
-        // Set up AI input mode so the input can interact with the AI controller.
-        input.update(&mut app, |input, ctx| {
-            input.set_input_mode_natural_language_detection(ctx);
-        });
-
         // submit_queued_prompt with plain text should not panic or crash.
         // It routes through detect_command (returning None) and falls through
         // to send_user_query_in_new_conversation.
@@ -510,10 +501,6 @@ fn test_submit_queued_prompt_detects_slash_command() {
 
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        input.update(&mut app, |input, ctx| {
-            input.set_input_mode_natural_language_detection(ctx);
-        });
 
         // Verify that submit_queued_prompt correctly detects slash commands.
         // Find a command that exists and has an optional argument.

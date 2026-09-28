@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use ai::api_keys::{ApiKeyManager, ApiKeyManagerEvent};
 use indexmap::IndexMap;
-use instant::{Duration, Instant};
 use parking_lot::FairMutex;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
@@ -69,7 +68,6 @@ use crate::workspace::WorkspaceAction;
 use crate::workspaces::user_workspaces::{ResolvedTeamScope, TeamContext, UserWorkspaces};
 
 const MENU_WIDTH: f32 = 280.;
-const NEW_MODEL_CHOICES_POPUP_DELAY: Duration = Duration::from_millis(500);
 const BLURRED_OPACITY: Opacity = 50;
 const SEPARATOR_WIDTH: f32 = 1.0;
 const CORNER_RADIUS: f32 = 4.0;
@@ -172,7 +170,6 @@ pub struct ProfileModelSelector {
     menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
     is_blurred: bool,
     new_model_popup: ViewHandle<FeaturePopup>,
-    input_model: ModelHandle<BlocklistAIInputModel>,
     ambient_agent_view_model: Option<ModelHandle<AmbientAgentViewModel>>,
     render_compact: bool,
     hovered_llm_info: Option<LLMInfo>,
@@ -436,13 +433,6 @@ impl ProfileModelSelector {
                 if config.is_locked && !config.input_type.is_ai() {
                     let llm_preferences = LLMPreferences::as_ref(ctx);
                     llm_preferences.hide_llm_popup(terminal_view_id);
-                } else if config.input_type.is_ai() {
-                    ctx.spawn(
-                        warpui::r#async::Timer::after(NEW_MODEL_CHOICES_POPUP_DELAY),
-                        |_, _, ctx| {
-                            ctx.notify();
-                        },
-                    );
                 }
                 ctx.notify();
             }
@@ -553,7 +543,6 @@ impl ProfileModelSelector {
             menu_positioning_provider,
             is_blurred: false,
             new_model_popup,
-            input_model,
             ambient_agent_view_model: None,
             render_compact: false,
             hovered_llm_info: None,
@@ -2359,22 +2348,10 @@ impl View for ProfileModelSelector {
             }
         }
 
-        let is_udi_enabled =
-            crate::settings::InputSettings::as_ref(app).is_universal_developer_input_enabled(app);
-
         // The popup overflows the viewport on wasm mobile.
         let is_wasm_mobile = warpui::platform::is_mobile_device();
 
-        if !is_wasm_mobile
-            && (is_udi_enabled
-                || self
-                    .input_model
-                    .as_ref(app)
-                    .last_ai_autodetection_ts()
-                    .is_none_or(|ts| {
-                        Instant::now().duration_since(ts) > NEW_MODEL_CHOICES_POPUP_DELAY
-                    }))
-        {
+        if !is_wasm_mobile {
             let llm_preferences = LLMPreferences::as_ref(app);
             match (
                 llm_preferences.should_show_new_choices_popup(self.terminal_view_id),
