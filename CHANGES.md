@@ -47,6 +47,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Web client crates, scripts and build profiles](#web-client-crates-scripts-and-build-profiles) — deleted the wasm bundle/serve scripts, the `serve-wasm`, `warp_web_event_bus` and `managed_secrets_wasm` crates, and the wasm Cargo profiles
 - [Warp Drive: panel, menus, actions and deep links](#warp-drive-panel-menus-actions-and-deep-links) — removed the Drive panel and index, its left-panel tab, menu, create/import actions, palette source, settings page, `warp://drive` links and web intents; local workflows now always show in command search
 - [Warp Drive: sharing, export and cloud-object dialogs](#warp-drive-sharing-export-and-cloud-object-dialogs) — removed the sharing/guest/link-sharing dialog and pane-header share button, Drive export, the grab-edit-access modal, cloud-object activity toasts and the shared-object limit banner settings
+- [Language server downloads are opt-in](#language-server-downloads-are-opt-in) — the LSP crates can only download with a permit built from the new `allow_language_server_downloads` setting (default off); missing servers show a manual install hint instead of an install button
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1227,3 +1228,21 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - Dead code left for its owners: `terminal/view/shared_session/adapter.rs` `started_at` (SS-2); the `UpdateManager` permission, guest and leave operations and `ObjectOperationResult::num_objects` (DRV-5); `CloudModel::get_all_exportable_object_ids` and `CloudModelType::can_export` (DRV-5); `workflows/export_workflow.rs` (DRV-4).
 - `integration_testing/cloud_object` stays for the cloud notebook and workflow integration tests (DRV-3, DRV-4).
 - `app/src/ai/blocklist/mod.rs` already has an unused re-export of `render_ai_follow_up_icon` on `offline-terminal`, left by the AI input change; it is not part of this change.
+
+## Language server downloads are opt-in
+**Why:** The code editor's language servers were installed on demand from upstream sources: GitHub releases (`rust-analyzer`, `clangd`), the Go module proxy (`gopls`), the npm registry (`pyright`, `typescript-language-server`) and nodejs.org (a private Node.js when none was installed). An offline enterprise build must not reach those hosts unless the user allows it, and the `lsp` crate took its HTTP client from the Warp server API provider.
+
+**Removed:**
+- The `http_client` dependency of `crates/lsp` and the client held by every server candidate and by `LspServerConfig`.
+- The unconditional "Install {server}" behavior: the "+" install button in Settings, the footer's install button and the install path in `PersistedWorkspace::handle_install_lsp` no longer run while downloads are off.
+
+**Modified:**
+- `crates/node_runtime` defines `DownloadPermit` (only constructor: `from_setting(bool) -> Option<Self>`) and `Downloader` (a plain `http_client::Client` plus a permit). `install_npm` and `fetch_npm_package_version` take a `&Downloader`, and `node_runtime::manual_install_hint()` names the Node.js version needed. `crates/lsp` re-exports `DownloadPermit` and `Downloader`.
+- `crates/lsp`: `LanguageServerCandidate::{install, fetch_latest_server_metadata}` and the GitHub helpers in `install.rs` take a `&Downloader`, so no download path compiles without a permit, including `go install` for `gopls`. `LSPServerType::candidate()` and `is_working_on_path` take no client; local detection needs none. New `LSPServerType::{manual_install_hint, requires_node_runtime}` give static install instructions.
+- New setting `CodeSettings::allow_language_server_downloads` (`code.language_servers.allow_downloads`, default false, never synced). Settings > Code > Projects starts with its toggle, and the command palette has "Enable/Disable language server downloads" (`AllowLanguageServerDownloads` context flag). The deep link slug is `language_server_downloads`.
+- With downloads off, a missing server appears in Settings as "Not installed" with its manual install command (and the Node.js hint for npm-based servers) and no "+" button. The editor footer shows "{binary} not installed" with the same instructions as a tooltip, an "Enable downloads in Settings" button and a "Re-check" button (`PersistedWorkspace::recheck_lsp_installation`). An install attempted anyway shows the toast "Automatic downloads are disabled" with an "Open settings" link.
+- `PersistedWorkspace` builds the `Downloader` from the setting in `handle_install_lsp`, and the installation check behind `detect_lsp_workspace_status` is shared with the re-check.
+
+**User-visible impact:** Language servers found on `PATH`, or downloaded earlier into the data directory, keep working. Nothing new is downloaded until the user turns on the setting.
+
+**Notes:** Committed as one commit rather than the planned crate and app pair, because the crate change alone leaves the app unbuildable. The new setting has no telemetry.

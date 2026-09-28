@@ -126,6 +126,8 @@ pub use features_page::FeaturesPageAction;
 pub use privacy_page::PrivacyPageAction;
 use projects_page::ProjectsPageEvent;
 pub use projects_page::ProjectsPageView;
+pub(crate) use projects_page::open_language_server_download_settings_action;
+use projects_page::{ProjectsPageAction, language_server_downloads_widget_id};
 pub use settings_page::{
     AdditionalInfo, InputListItem, ToggleState, render_body_item_label, render_info_icon,
     render_input_list, render_separator,
@@ -438,6 +440,10 @@ pub fn settings_widget_deeplink_target(slug: &str) -> Option<(SettingsSection, &
             SettingsSection::Features,
             features_page::global_hotkey_widget_id(),
         )),
+        "language_server_downloads" => Some((
+            SettingsSection::Projects,
+            language_server_downloads_widget_id(),
+        )),
         "custom_router" => Some((SettingsSection::WarpAgent, custom_model_routers_widget_id())),
         #[cfg(not(target_family = "wasm"))]
         "cli_agents" => Some((
@@ -639,6 +645,7 @@ pub mod flags {
     pub const SHOW_PROJECT_EXPLORER: &str = "ShowProjectExplorer";
     pub const SHOW_GLOBAL_SEARCH: &str = "ShowGlobalSearch";
     pub const SHOW_HIDDEN_FILES: &str = "ShowHiddenFiles";
+    pub const ALLOW_LANGUAGE_SERVER_DOWNLOADS: &str = "AllowLanguageServerDownloads";
 }
 
 pub fn init_actions_from_parent_view<T: Action + Clone>(
@@ -655,6 +662,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     knowledge_page::init_actions_from_parent_view(app, context, builder);
     cli_agents_page::init_actions_from_parent_view(app, context, builder);
     code_editor_review_page::init_actions_from_parent_view(app, context, builder);
+    projects_page::init_actions_from_parent_view(app, context, builder);
 
     if ChannelState::enable_debug_features() || cfg!(windows) {
         ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
@@ -961,6 +969,7 @@ pub enum SettingsAction {
     Knowledge(KnowledgePageAction),
     CLIAgents(CLIAgentsPageAction),
     EditorAndCodeReview(EditorAndCodeReviewPageAction),
+    Projects(ProjectsPageAction),
     WarpifyPageToggle(WarpifyPageAction),
     Tab,
     Split(Direction),
@@ -2681,6 +2690,15 @@ impl TypedActionView for SettingsView {
             SettingsAction::EditorAndCodeReview(action) => {
                 if let Some(page) = self.settings_page(SettingsSection::EditorAndCodeReview)
                     && let SettingsPageViewHandle::EditorAndCodeReview(view) = &page.view_handle
+                {
+                    view.update(ctx, |view, ctx| {
+                        view.handle_action(action, ctx);
+                    })
+                }
+            }
+            SettingsAction::Projects(action) => {
+                if let Some(page) = self.settings_page(SettingsSection::Projects)
+                    && let SettingsPageViewHandle::Projects(view) = &page.view_handle
                 {
                     view.update(ctx, |view, ctx| {
                         view.handle_action(action, ctx);

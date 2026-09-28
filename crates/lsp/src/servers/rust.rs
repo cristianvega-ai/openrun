@@ -1,17 +1,13 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::CommandBuilder;
 #[cfg(feature = "local_fs")]
 use crate::install::{AssetKind, fetch_latest_metadata_from_github, install_from_github};
 use crate::language_server_candidate::{LanguageServerCandidate, LanguageServerMetadata};
+use crate::{CommandBuilder, Downloader};
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
-pub struct RustAnalyzerCandidate {
-    client: Arc<http_client::Client>,
-}
+pub struct RustAnalyzerCandidate;
 
 /// Returns the rust-analyzer asset name for the current platform.
 ///
@@ -60,10 +56,6 @@ fn asset_name() -> &'static str {
 const SERVER_NAME: &str = "rust-analyzer";
 
 impl RustAnalyzerCandidate {
-    pub fn new(client: Arc<http_client::Client>) -> Self {
-        Self { client }
-    }
-
     /// Finds the path to an installed rust-analyzer binary in the data directory.
     ///
     /// Returns the path to the first working binary found (verified by running `--help`).
@@ -136,6 +128,7 @@ impl LanguageServerCandidate for RustAnalyzerCandidate {
         &self,
         metadata: LanguageServerMetadata,
         _executor: &CommandBuilder,
+        downloader: &Downloader,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
             !cfg!(target_os = "freebsd"),
@@ -147,18 +140,21 @@ impl LanguageServerCandidate for RustAnalyzerCandidate {
         let asset_kind = AssetKind::from_filename(asset_name()).ok_or_else(|| {
             anyhow::anyhow!("Unsupported archive format for asset: {}", asset_name())
         })?;
-        install_from_github(&self.client, &metadata, SERVER_NAME, asset_kind, None).await?;
+        install_from_github(downloader, &metadata, SERVER_NAME, asset_kind, None).await?;
         Ok(())
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         anyhow::ensure!(
             !cfg!(target_os = "freebsd"),
             "rust-analyzer release metadata is unavailable on FreeBSD: \
              upstream GitHub releases publish no FreeBSD asset."
         );
         fetch_latest_metadata_from_github(
-            &self.client,
+            downloader,
             "rust-lang",
             "rust-analyzer",
             Some(asset_name()),
@@ -186,11 +182,15 @@ impl LanguageServerCandidate for RustAnalyzerCandidate {
         &self,
         _metadata: LanguageServerMetadata,
         _executor: &CommandBuilder,
+        _downloader: &Downloader,
     ) -> anyhow::Result<()> {
         todo!()
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        _downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         todo!()
     }
 }

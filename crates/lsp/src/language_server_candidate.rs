@@ -2,7 +2,7 @@ use std::path::Path;
 
 use async_trait::async_trait;
 
-use crate::CommandBuilder;
+use crate::{CommandBuilder, Downloader};
 
 /// Defines the detection and installation for a specific Language Server.
 ///
@@ -49,9 +49,13 @@ pub trait LanguageServerCandidate: Send + Sync {
         &self,
         metadata: LanguageServerMetadata,
         executor: &CommandBuilder,
+        downloader: &Downloader,
     ) -> anyhow::Result<()>;
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata>;
+    async fn fetch_latest_server_metadata(
+        &self,
+        downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata>;
 }
 
 pub struct LanguageServerMetadata {

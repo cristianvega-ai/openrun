@@ -1,6 +1,5 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
-use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use command::r#async::Command;
@@ -118,12 +117,8 @@ impl LSPServerType {
     /// Delegates to each server's candidate implementation.
     /// Returns true only if the binary executes successfully with exit code 0.
     #[cfg(not(target_arch = "wasm32"))]
-    pub async fn is_working_on_path(
-        &self,
-        executor: &CommandBuilder,
-        client: Arc<http_client::Client>,
-    ) -> bool {
-        self.candidate(client).is_installed_on_path(executor).await
+    pub async fn is_working_on_path(&self, executor: &CommandBuilder) -> bool {
+        self.candidate().is_installed_on_path(executor).await
     }
 
     pub fn binary_name(&self) -> &'static str {
@@ -197,15 +192,43 @@ impl LSPServerType {
         }
     }
 
-    pub fn candidate(&self, client: Arc<http_client::Client>) -> Box<dyn LanguageServerCandidate> {
+    pub fn candidate(&self) -> Box<dyn LanguageServerCandidate> {
         match self {
-            LSPServerType::RustAnalyzer => Box::new(RustAnalyzerCandidate::new(client)),
-            LSPServerType::GoPls => Box::new(GoPlsCandidate::new(client)),
-            LSPServerType::Pyright => Box::new(PyrightCandidate::new(client)),
+            LSPServerType::RustAnalyzer => Box::new(RustAnalyzerCandidate),
+            LSPServerType::GoPls => Box::new(GoPlsCandidate),
+            LSPServerType::Pyright => Box::new(PyrightCandidate),
+            LSPServerType::TypeScriptLanguageServer => Box::new(TypeScriptLanguageServerCandidate),
+            LSPServerType::Clangd => Box::new(ClangdCandidate),
+        }
+    }
+
+    /// A command the user can run to install this server without Warp downloading it.
+    pub fn manual_install_hint(&self) -> &'static str {
+        match self {
+            LSPServerType::RustAnalyzer => "rustup component add rust-analyzer",
+            LSPServerType::GoPls => "go install golang.org/x/tools/gopls@latest",
+            LSPServerType::Pyright => "npm install -g pyright",
             LSPServerType::TypeScriptLanguageServer => {
-                Box::new(TypeScriptLanguageServerCandidate::new(client))
+                "npm install -g typescript-language-server typescript"
             }
-            LSPServerType::Clangd => Box::new(ClangdCandidate::new(client)),
+            LSPServerType::Clangd => {
+                if cfg!(target_os = "macos") {
+                    "xcode-select --install"
+                } else if cfg!(windows) {
+                    "winget install LLVM.LLVM"
+                } else {
+                    "Install the clangd package with your system package manager (for example: sudo apt install clangd)"
+                }
+            }
+        }
+    }
+
+    /// Whether this server runs on Node.js, which the user must also install (see
+    /// [`node_runtime::manual_install_hint`]) when Warp may not download it.
+    pub fn requires_node_runtime(&self) -> bool {
+        match self {
+            LSPServerType::Pyright | LSPServerType::TypeScriptLanguageServer => true,
+            LSPServerType::RustAnalyzer | LSPServerType::GoPls | LSPServerType::Clangd => false,
         }
     }
 
@@ -213,3 +236,7 @@ impl LSPServerType {
         LSPServerType::iter()
     }
 }
+
+#[cfg(test)]
+#[path = "supported_servers_tests.rs"]
+mod tests;

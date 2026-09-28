@@ -10,7 +10,7 @@ use lsp::LanguageId;
 use lsp::LspEvent;
 use lsp::supported_servers::LSPServerType;
 #[cfg(feature = "local_fs")]
-use lsp::{LspManagerModel, LspServerConfig};
+use lsp::{DownloadPermit, Downloader, LspManagerModel, LspServerConfig};
 #[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
 use serde::{Deserialize, Serialize};
@@ -31,11 +31,14 @@ use crate::persistence::ModelEvent;
 #[cfg(feature = "local_fs")]
 use crate::send_telemetry_from_ctx;
 #[cfg(feature = "local_fs")]
-use crate::server::server_api::ServerApiProvider;
+use crate::settings::CodeSettings;
 #[cfg(feature = "local_fs")]
 use crate::terminal::local_shell::LocalShellState;
 #[cfg(feature = "local_fs")]
-use crate::{view_components::DismissibleToast, workspace::ToastStack};
+use crate::{
+    view_components::{DismissibleToast, ToastLink},
+    workspace::ToastStack,
+};
 
 mod metadata;
 
@@ -449,7 +452,6 @@ impl PersistedWorkspace {
         let path_future = LocalShellState::handle(ctx).update(ctx, |shell_state, ctx| {
             shell_state.get_interactive_path_env_var(ctx)
         });
-        let http_client = ServerApiProvider::as_ref(ctx).get_http_client();
 
         ctx.spawn(
             async move {
@@ -460,7 +462,7 @@ impl PersistedWorkspace {
                 for workspace_path in paths_to_scan {
                     let mut suggested = Vec::new();
                     for server_type in LSPServerType::all() {
-                        let candidate = server_type.candidate(http_client.clone());
+                        let candidate = server_type.candidate();
                         if candidate
                             .should_suggest_for_repo(&workspace_path, &executor)
                             .await
@@ -636,6 +638,20 @@ impl PersistedWorkspace {
             return;
         }
 
+        let Some(permit) = DownloadPermit::from_setting(
+            *CodeSettings::as_ref(ctx).allow_language_server_downloads,
+        ) else {
+            self.lsp_installation_status
+                .insert(server_type, LSPInstallationStatus::NotInstalled);
+            ctx.emit(PersistedWorkspaceEvent::InstallStatusUpdate {
+                server_type,
+                status: LSPInstallationStatus::NotInstalled,
+            });
+            Self::show_downloads_disabled_toast(ctx);
+            return;
+        };
+        let downloader = Downloader::new(permit);
+
         // Set Installing state before spawning async installation
         self.lsp_installation_status
             .insert(server_type, LSPInstallationStatus::Installing);
@@ -647,12 +663,11 @@ impl PersistedWorkspace {
         let repo_root_clone = repo_root.clone();
         let file_path_clone = file_path.clone();
         let executor = lsp::CommandBuilder::new(path_env_var);
-        let http_client = ServerApiProvider::as_ref(ctx).get_http_client();
         ctx.spawn(
             async move {
-                let candidate = server_type.candidate(http_client);
-                let metadata = candidate.fetch_latest_server_metadata().await?;
-                candidate.install(metadata, &executor).await?;
+                let candidate = server_type.candidate();
+                let metadata = candidate.fetch_latest_server_metadata(&downloader).await?;
+                candidate.install(metadata, &executor, &downloader).await?;
                 Ok::<_, anyhow::Error>(())
             },
             move |me, result, ctx| match result {
@@ -772,13 +787,11 @@ impl PersistedWorkspace {
             );
             let log_relative_path =
                 crate::code::lsp_logs::relative_log_path(server, &workspace_root);
-            let http_client = ServerApiProvider::as_ref(ctx).get_http_client();
             let config = LspServerConfig::new(
                 server,
                 workspace_root.clone(),
                 path_env_var.clone(),
                 ChannelState::app_id().application_name().to_string(),
-                http_client,
             )
             .with_log_relative_path(log_relative_path);
 
@@ -920,41 +933,84 @@ impl PersistedWorkspace {
             Some(LSPInstallationStatus::Checking) => LspRepoStatus::CheckingForInstallation,
             Some(LSPInstallationStatus::Installing) => LspRepoStatus::Installing { server_type },
             None => {
-                // Mark as checking and start async detection with interactive PATH
-                self.lsp_installation_status
-                    .insert(server_type, LSPInstallationStatus::Checking);
-
-                // Get a future for the interactive PATH
-                let path_future = LocalShellState::handle(ctx).update(ctx, |shell_state, ctx| {
-                    shell_state.get_interactive_path_env_var(ctx)
-                });
-
-                let http_client = ServerApiProvider::as_ref(ctx).get_http_client();
-                ctx.spawn(
-                    async move {
-                        // Wait for interactive PATH, then check installation
-                        let path_env_var = path_future.await;
-                        let executor = lsp::CommandBuilder::new(path_env_var);
-                        let candidate = server_type.candidate(http_client);
-                        candidate.is_installed(&executor).await
-                    },
-                    move |me, is_installed, ctx| {
-                        let status = if is_installed {
-                            LSPInstallationStatus::Installed
-                        } else {
-                            LSPInstallationStatus::NotInstalled
-                        };
-                        me.lsp_installation_status.insert(server_type, status);
-                        ctx.emit(PersistedWorkspaceEvent::InstallStatusUpdate {
-                            server_type,
-                            status,
-                        });
-                    },
-                );
-
+                self.start_lsp_installation_check(server_type, ctx);
                 LspRepoStatus::CheckingForInstallation
             }
         }
+    }
+
+    /// Discards the cached installation status for `server_type` and detects it again, so a
+    /// server the user installed since the last check is picked up.
+    #[cfg(feature = "local_fs")]
+    pub fn recheck_lsp_installation(
+        &mut self,
+        server_type: LSPServerType,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.lsp_installation_status.get(&server_type)
+            == Some(&LSPInstallationStatus::Installing)
+        {
+            return;
+        }
+        self.start_lsp_installation_check(server_type, ctx);
+        ctx.emit(PersistedWorkspaceEvent::InstallStatusUpdate {
+            server_type,
+            status: LSPInstallationStatus::Checking,
+        });
+    }
+
+    /// Marks `server_type` as `Checking` and detects it asynchronously with the interactive
+    /// shell PATH, so tools in user-specific locations (like `~/go/bin`) are found.
+    #[cfg(feature = "local_fs")]
+    fn start_lsp_installation_check(
+        &mut self,
+        server_type: LSPServerType,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        self.lsp_installation_status
+            .insert(server_type, LSPInstallationStatus::Checking);
+
+        let path_future = LocalShellState::handle(ctx).update(ctx, |shell_state, ctx| {
+            shell_state.get_interactive_path_env_var(ctx)
+        });
+
+        ctx.spawn(
+            async move {
+                let path_env_var = path_future.await;
+                let executor = lsp::CommandBuilder::new(path_env_var);
+                server_type.candidate().is_installed(&executor).await
+            },
+            move |me, is_installed, ctx| {
+                let status = if is_installed {
+                    LSPInstallationStatus::Installed
+                } else {
+                    LSPInstallationStatus::NotInstalled
+                };
+                me.lsp_installation_status.insert(server_type, status);
+                ctx.emit(PersistedWorkspaceEvent::InstallStatusUpdate {
+                    server_type,
+                    status,
+                });
+            },
+        );
+    }
+
+    #[cfg(feature = "local_fs")]
+    fn show_downloads_disabled_toast(ctx: &mut ModelContext<Self>) {
+        let Some(window_id) = WindowManager::as_ref(ctx).active_window() else {
+            return;
+        };
+        ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+            toast_stack.add_ephemeral_toast(
+                DismissibleToast::error("Automatic downloads are disabled".to_string()).with_link(
+                    ToastLink::new("Open settings".to_string()).with_onclick_action(
+                        crate::settings_view::open_language_server_download_settings_action(),
+                    ),
+                ),
+                window_id,
+                ctx,
+            );
+        });
     }
 }
 

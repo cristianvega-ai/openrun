@@ -4,10 +4,12 @@ use std::sync::mpsc::{Receiver, sync_channel};
 
 use chrono::{TimeZone, Utc};
 use lsp::supported_servers::LSPServerType;
-use warpui::App;
+use warpui::{App, SingletonEntity};
 
 use super::{EnablementState, LSPEnablementResultForFile, PersistedWorkspace, WorkspaceMetadata};
 use crate::persistence::ModelEvent;
+use crate::settings::CodeSettings;
+use crate::test_util::settings::initialize_settings_for_tests;
 
 fn metadata(path: &str, navigated_secs: Option<i64>) -> WorkspaceMetadata {
     WorkspaceMetadata {
@@ -196,4 +198,70 @@ fn last_touched_is_the_latest_timestamp() {
         Some(Utc.timestamp_opt(30, 0).unwrap())
     );
     assert_eq!(metadata("/repo", None).last_touched(), None);
+}
+
+#[test]
+fn language_server_downloads_are_disabled_by_default() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+
+        CodeSettings::handle(&app).read(&app, |settings, _| {
+            assert!(!*settings.allow_language_server_downloads);
+        });
+    })
+}
+
+#[cfg(feature = "local_fs")]
+#[test]
+fn install_is_refused_while_language_server_downloads_are_disabled() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use super::{LSPInstallationStatus, PersistedWorkspaceEvent};
+    use crate::workspace::ToastStack;
+
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        app.add_singleton_model(|_| ToastStack);
+        let handle =
+            app.add_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
+
+        let statuses = Rc::new(RefCell::new(Vec::new()));
+        app.update(|ctx| {
+            let statuses = statuses.clone();
+            ctx.subscribe_to_model(&handle, move |_, event, _| {
+                if let PersistedWorkspaceEvent::InstallStatusUpdate { status, .. } = event {
+                    statuses.borrow_mut().push(*status);
+                }
+            });
+        });
+
+        handle.update(&mut app, |workspace, ctx| {
+            workspace.handle_install_lsp(
+                PathBuf::from("/repo/src/main.rs"),
+                PathBuf::from("/repo"),
+                LSPServerType::RustAnalyzer,
+                None,
+                ctx,
+            );
+        });
+
+        assert_eq!(
+            *statuses.borrow(),
+            vec![LSPInstallationStatus::NotInstalled]
+        );
+        handle.read(&app, |workspace, _| {
+            assert_eq!(
+                workspace
+                    .lsp_installation_status
+                    .get(&LSPServerType::RustAnalyzer),
+                Some(&LSPInstallationStatus::NotInstalled)
+            );
+            assert!(
+                workspace
+                    .enabled_lsp_servers(Path::new("/repo"))
+                    .is_none_or(|mut servers| servers.next().is_none())
+            );
+        });
+    })
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use itertools::Itertools as _;
 use lsp::supported_servers::LSPServerType;
 use lsp::{
     LanguageId, LanguageServerId, LspManagerModel, LspManagerModelEvent, LspServerModel,
@@ -31,7 +32,7 @@ use warpui::{
 };
 
 use crate::code::lsp_telemetry::{LspControlActionType, LspEnablementSource, LspTelemetryEvent};
-use crate::settings::AISettings;
+use crate::settings::{AISettings, CodeSettings};
 use crate::ui_components::blended_colors;
 #[cfg(feature = "local_fs")]
 use crate::user_config::is_tab_config_toml;
@@ -93,39 +94,60 @@ impl FooterMode {
         }
     }
 
-    /// Returns all CTA-worthy `LspRepoStatus` entries (i.e. those that need user action).
-    /// For SingleFile, returns at most one. For Workspace, returns all
-    /// `DisabledAndInstalled` or `DisabledAndNotInstalled` entries.
-    fn cta_lsp_repo_statuses(&self) -> Vec<&LspRepoStatus> {
+    fn repo_statuses(&self) -> Vec<&LspRepoStatus> {
         match self {
             FooterMode::TabConfig { .. } => vec![],
             FooterMode::SingleFile {
                 lsp_repo_status, ..
-            } => {
-                if matches!(
-                    lsp_repo_status,
-                    LspRepoStatus::DisabledAndInstalled { .. }
-                        | LspRepoStatus::DisabledAndNotInstalled { .. }
-                ) {
-                    vec![lsp_repo_status]
-                } else {
-                    vec![]
-                }
-            }
+            } => vec![lsp_repo_status],
             FooterMode::Workspace {
                 lsp_repo_statuses, ..
-            } => lsp_repo_statuses
-                .values()
-                .filter(|s| {
-                    matches!(
-                        s,
-                        LspRepoStatus::DisabledAndInstalled { .. }
-                            | LspRepoStatus::DisabledAndNotInstalled { .. }
-                    )
-                })
-                .collect(),
+            } => lsp_repo_statuses.values().collect(),
         }
     }
+
+    /// Returns all CTA-worthy `LspRepoStatus` entries (i.e. those that need user action).
+    /// For SingleFile, returns at most one. For Workspace, returns all
+    /// `DisabledAndInstalled` entries, plus `DisabledAndNotInstalled` ones when the server
+    /// may be downloaded.
+    fn cta_lsp_repo_statuses(&self, downloads_allowed: bool) -> Vec<&LspRepoStatus> {
+        self.repo_statuses()
+            .into_iter()
+            .filter(|status| match status {
+                LspRepoStatus::DisabledAndInstalled { .. } => true,
+                LspRepoStatus::DisabledAndNotInstalled { .. } => downloads_allowed,
+                _ => false,
+            })
+            .collect()
+    }
+
+    /// Servers that are not installed and that Warp may not download, so the user has to
+    /// install them. Sorted by binary name for a stable message.
+    fn missing_server_types(&self, downloads_allowed: bool) -> Vec<LSPServerType> {
+        if downloads_allowed {
+            return Vec::new();
+        }
+        let mut missing: Vec<LSPServerType> = self
+            .repo_statuses()
+            .into_iter()
+            .filter_map(|status| match status {
+                LspRepoStatus::DisabledAndNotInstalled { server_type } => Some(*server_type),
+                _ => None,
+            })
+            .collect();
+        missing.sort_by_key(|server_type| server_type.binary_name());
+        missing
+    }
+}
+
+/// The action offered next to the footer's status message.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FooterCta {
+    None,
+    /// Enable (and, when downloads are allowed, install) the detected servers.
+    Enable,
+    /// Servers are missing and downloads are off: point at the settings and offer a re-check.
+    MissingServers,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -134,6 +156,8 @@ pub enum CodeFooterViewAction {
     #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     ToggleMenu,
     EnableLSP,
+    OpenLanguageServerDownloadSettings,
+    RecheckInstallation,
     RunTabConfigSkill,
     #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     OpenLogs,
@@ -205,9 +229,44 @@ pub struct CodeFooterView {
     lsp_status_button: ViewHandle<ActionButton>,
     enable_lsp_button: Option<ViewHandle<ActionButton>>,
     tab_config_skill_button: Option<ViewHandle<ActionButton>>,
+    missing_server_controls: MissingServerControls,
     is_lsp_menu_open: bool,
     /// Whether to render the top border. Disabled for code review footer.
     show_border: bool,
+}
+
+/// What the footer shows when a language server is not installed and downloads are disabled.
+struct MissingServerControls {
+    hint_mouse_state: MouseStateHandle,
+    open_settings_button: ViewHandle<ActionButton>,
+    recheck_button: ViewHandle<ActionButton>,
+}
+
+impl MissingServerControls {
+    fn new<V: View>(ctx: &mut ViewContext<V>) -> Self {
+        let open_settings_button = ctx.add_typed_action_view(|_| {
+            ActionButton::new("Enable downloads in Settings", NakedTheme)
+                .with_size(ButtonSize::Small)
+                .on_click(|ctx| {
+                    ctx.dispatch_typed_action(
+                        CodeFooterViewAction::OpenLanguageServerDownloadSettings,
+                    );
+                })
+        });
+        let recheck_button = ctx.add_typed_action_view(|_| {
+            ActionButton::new("Re-check", NakedTheme)
+                .with_icon(Icon::RefreshCcw)
+                .with_size(ButtonSize::Small)
+                .on_click(|ctx| {
+                    ctx.dispatch_typed_action(CodeFooterViewAction::RecheckInstallation);
+                })
+        });
+        Self {
+            hint_mouse_state: MouseStateHandle::default(),
+            open_settings_button,
+            recheck_button,
+        }
+    }
 }
 
 /// Wraps the per-server-type status map and enforces a single invariant on
@@ -349,6 +408,7 @@ impl CodeFooterView {
                 lsp_status_button,
                 enable_lsp_button: None,
                 tab_config_skill_button: Some(tab_config_skill_button),
+                missing_server_controls: MissingServerControls::new(ctx),
                 is_lsp_menu_open: false,
                 show_border: true,
             };
@@ -381,7 +441,10 @@ impl CodeFooterView {
 
             // Update button label based on initial status (handles cached results)
             if let Some(enable_button) = &enable_lsp_button
-                && let Some(label) = Self::button_label_for_status(&status)
+                && let Some(label) = Self::button_label_for_status(
+                    &status,
+                    *CodeSettings::as_ref(ctx).allow_language_server_downloads,
+                )
             {
                 enable_button.update(ctx, |button, ctx| {
                     button.set_label(label, ctx);
@@ -434,7 +497,7 @@ impl CodeFooterView {
         #[cfg(not(feature = "local_fs"))]
         let initial_status = LspRepoStatus::CheckingForInstallation;
 
-        Self {
+        let footer = Self {
             mode: FooterMode::SingleFile {
                 path,
                 mouse_states: SingleFileMouseStates::default(),
@@ -446,8 +509,14 @@ impl CodeFooterView {
             lsp_status_button,
             enable_lsp_button,
             tab_config_skill_button: None,
+            missing_server_controls: MissingServerControls::new(ctx),
             show_border: true,
-        }
+        };
+        ctx.subscribe_to_model(&CodeSettings::handle(ctx), |me, _, _, ctx| {
+            me.update_enable_button_label(ctx);
+            ctx.notify();
+        });
+        footer
     }
 
     /// Creates a footer in workspace mode that tracks all LSP servers for a repo root.
@@ -522,8 +591,12 @@ impl CodeFooterView {
                         }
 
                         // Create enable button for all CTA-worthy servers
-                        let cta_statuses = me.mode.cta_lsp_repo_statuses();
-                        if let Some(label) = Self::button_label_for_cta_statuses(&cta_statuses) {
+                        let downloads_allowed =
+                            *CodeSettings::as_ref(ctx).allow_language_server_downloads;
+                        let cta_statuses = me.mode.cta_lsp_repo_statuses(downloads_allowed);
+                        if let Some(label) =
+                            Self::button_label_for_cta_statuses(&cta_statuses, downloads_allowed)
+                        {
                             me.enable_lsp_button = Some(ctx.add_typed_action_view(|_ctx| {
                                 ActionButton::new(label, NakedTheme)
                                     .with_size(ButtonSize::Small)
@@ -580,8 +653,14 @@ impl CodeFooterView {
             lsp_status_button,
             enable_lsp_button: None,
             tab_config_skill_button: None,
+            missing_server_controls: MissingServerControls::new(ctx),
             show_border: false,
         };
+
+        ctx.subscribe_to_model(&CodeSettings::handle(ctx), |me, _, _, ctx| {
+            me.update_enable_button_label(ctx);
+            ctx.notify();
+        });
 
         // Populate initial servers from the manager
         view.refresh_workspace_servers(ctx);
@@ -648,9 +727,9 @@ impl CodeFooterView {
 
     /// Returns the appropriate button label for the given LSP repo status.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    fn button_label_for_status(status: &LspRepoStatus) -> Option<String> {
+    fn button_label_for_status(status: &LspRepoStatus, downloads_allowed: bool) -> Option<String> {
         match status {
-            LspRepoStatus::DisabledAndNotInstalled { server_type } => {
+            LspRepoStatus::DisabledAndNotInstalled { server_type } if downloads_allowed => {
                 Some(format!("Install {}", server_type.binary_name()))
             }
             LspRepoStatus::DisabledAndInstalled { server_type } => {
@@ -664,10 +743,13 @@ impl CodeFooterView {
     /// When multiple servers need action, uses plural labels
     /// ("Enable servers" / "Install servers").
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    fn button_label_for_cta_statuses(statuses: &[&LspRepoStatus]) -> Option<String> {
+    fn button_label_for_cta_statuses(
+        statuses: &[&LspRepoStatus],
+        downloads_allowed: bool,
+    ) -> Option<String> {
         match statuses.len() {
             0 => None,
-            1 => Self::button_label_for_status(statuses[0]),
+            1 => Self::button_label_for_status(statuses[0], downloads_allowed),
             _ => {
                 let any_needs_install = statuses
                     .iter()
@@ -712,8 +794,10 @@ impl CodeFooterView {
     /// Hides the button when no CTAs remain.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn update_enable_button_label(&mut self, ctx: &mut ViewContext<Self>) {
-        let cta_statuses = self.mode.cta_lsp_repo_statuses();
-        let Some(label) = Self::button_label_for_cta_statuses(&cta_statuses) else {
+        let downloads_allowed = *CodeSettings::as_ref(ctx).allow_language_server_downloads;
+        let cta_statuses = self.mode.cta_lsp_repo_statuses(downloads_allowed);
+        let Some(label) = Self::button_label_for_cta_statuses(&cta_statuses, downloads_allowed)
+        else {
             // No CTA-worthy statuses remain — hide the button.
             self.enable_lsp_button = None;
             return;
@@ -1445,6 +1529,39 @@ impl CodeFooterView {
         element.finish()
     }
 
+    /// Shows the manual install instructions for the missing servers while `status_text` is hovered.
+    fn with_missing_servers_tooltip(
+        &self,
+        status_text: Box<dyn Element>,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let downloads_allowed = *CodeSettings::as_ref(app).allow_language_server_downloads;
+        let missing = self.mode.missing_server_types(downloads_allowed);
+        let hint = Self::missing_servers_hint(&missing);
+        let ui_builder = appearance.ui_builder().clone();
+
+        Hoverable::new(
+            self.missing_server_controls.hint_mouse_state.clone(),
+            move |state| {
+                let mut stack = Stack::new().with_child(status_text);
+                if state.is_hovered() {
+                    stack.add_positioned_overlay_child(
+                        ui_builder.tool_tip(hint.clone()).build().finish(),
+                        OffsetPositioning::offset_from_parent(
+                            vec2f(0., -4.),
+                            ParentOffsetBounds::WindowByPosition,
+                            ParentAnchor::TopLeft,
+                            ChildAnchor::BottomLeft,
+                        ),
+                    );
+                }
+                stack.finish()
+            },
+        )
+        .finish()
+    }
+
     fn render_status_text(
         theme: &WarpTheme,
         appearance: &Appearance,
@@ -1484,10 +1601,10 @@ impl CodeFooterView {
         }
     }
 
-    /// Returns the CTA message and button flag for workspace mode if any servers
-    /// are disabled and need user action. Returns `None` if not in workspace mode
-    /// or no CTA is needed.
-    fn workspace_cta_message(&self) -> Option<(Option<String>, bool)> {
+    /// Returns the CTA message and action for workspace mode if any servers are disabled and
+    /// need user action, or are missing and cannot be downloaded. Returns `None` if not in
+    /// workspace mode or no CTA is needed.
+    fn workspace_cta_message(&self, app: &AppContext) -> Option<(Option<String>, FooterCta)> {
         let FooterMode::Workspace {
             root_path,
             lsp_repo_statuses,
@@ -1501,35 +1618,59 @@ impl CodeFooterView {
             return None;
         }
 
-        let has_cta = lsp_repo_statuses.values().any(|s| {
-            matches!(
-                s,
-                LspRepoStatus::DisabledAndInstalled { .. }
-                    | LspRepoStatus::DisabledAndNotInstalled { .. }
-            )
-        });
-
-        if has_cta {
+        let downloads_allowed = *CodeSettings::as_ref(app).allow_language_server_downloads;
+        if !self
+            .mode
+            .cta_lsp_repo_statuses(downloads_allowed)
+            .is_empty()
+        {
             let root_name = root_path
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("this workspace");
-            Some((
+            return Some((
                 Some(format!(
                     "Language support is not currently enabled for {root_name}"
                 )),
-                true,
-            ))
-        } else {
-            None
+                FooterCta::Enable,
+            ));
         }
+
+        let missing = self.mode.missing_server_types(downloads_allowed);
+        if missing.is_empty() {
+            None
+        } else {
+            Some((
+                Some(Self::missing_servers_message(&missing)),
+                FooterCta::MissingServers,
+            ))
+        }
+    }
+
+    fn missing_servers_message(missing: &[LSPServerType]) -> String {
+        format!(
+            "{} not installed",
+            missing.iter().map(|s| s.binary_name()).join(", ")
+        )
+    }
+
+    /// The manual install instructions shown as a tooltip on the "not installed" message.
+    fn missing_servers_hint(missing: &[LSPServerType]) -> String {
+        let mut lines: Vec<String> = missing
+            .iter()
+            .map(|s| format!("{}: {}", s.binary_name(), s.manual_install_hint()))
+            .collect();
+        if missing.iter().any(|s| s.requires_node_runtime()) {
+            lines.push(lsp::node_manual_install_hint().to_string());
+        }
+        lines.join("\n")
     }
 
     /// Computes the aggregated status message across all servers.
     /// Priority: failed error > starting/progress text > stopped text.
-    fn compute_status_message(&self, app: &AppContext) -> (Option<String>, bool) {
+    fn compute_status_message(&self, app: &AppContext) -> (Option<String>, FooterCta) {
         if self.is_tab_config_footer() {
-            return (None, false);
+            return (None, FooterCta::None);
         }
         let live = self.live_servers(app);
         if !live.is_empty() {
@@ -1539,7 +1680,7 @@ impl CodeFooterView {
                 if let LspModelState::Failed { error } = server_ref.state() {
                     return (
                         Some(format!("{}: {error}", server_ref.server_name())),
-                        false,
+                        FooterCta::None,
                     );
                 }
             }
@@ -1552,7 +1693,7 @@ impl CodeFooterView {
                         LspModelState::Starting | LspModelState::Available { .. }
                     )
                 {
-                    return (Some(msg), false);
+                    return (Some(msg), FooterCta::None);
                 }
             }
             // Then check stopped
@@ -1564,21 +1705,21 @@ impl CodeFooterView {
                 ) {
                     return (
                         Some(format!("{}: stopped", server_ref.server_name())),
-                        false,
+                        FooterCta::None,
                     );
                 }
             }
             // All servers are available with no progress — but in workspace mode,
             // there may still be disabled servers that need a CTA.
-            if let Some(cta) = self.workspace_cta_message() {
+            if let Some(cta) = self.workspace_cta_message(app) {
                 return cta;
             }
-            return (None, false);
+            return (None, FooterCta::None);
         }
 
         // No servers — show enablement CTA based on mode
         match &self.mode {
-            FooterMode::TabConfig { .. } => (None, false),
+            FooterMode::TabConfig { .. } => (None, FooterCta::None),
             FooterMode::SingleFile {
                 path,
                 lsp_repo_status,
@@ -1586,7 +1727,7 @@ impl CodeFooterView {
             } => match PersistedWorkspace::as_ref(app).has_enabled_lsp_server_for_file_path(path) {
                 LSPEnablementResultForFile::UnsupportedLanguage => (
                     Some("Language support is unavailable for this file type".to_string()),
-                    false,
+                    FooterCta::None,
                 ),
                 LSPEnablementResultForFile::LSPNotEnabled { root_name } => match lsp_repo_status {
                     LspRepoStatus::CheckingForInstallation => (
@@ -1594,26 +1735,34 @@ impl CodeFooterView {
                             "Language support is not currently enabled for {}",
                             root_name.unwrap_or("this codebase".to_string())
                         )),
-                        false,
+                        FooterCta::None,
                     ),
                     LspRepoStatus::Ready | LspRepoStatus::Enabled => (
                         Some("Language server is unavailable for this codebase".to_string()),
-                        false,
+                        FooterCta::None,
                     ),
+                    LspRepoStatus::DisabledAndNotInstalled { server_type }
+                        if !*CodeSettings::as_ref(app).allow_language_server_downloads =>
+                    {
+                        (
+                            Some(Self::missing_servers_message(&[*server_type])),
+                            FooterCta::MissingServers,
+                        )
+                    }
                     LspRepoStatus::DisabledAndNotInstalled { .. }
                     | LspRepoStatus::DisabledAndInstalled { .. } => (
                         Some(format!(
                             "Language support is not currently enabled for {}",
                             root_name.unwrap_or("this codebase".to_string())
                         )),
-                        true,
+                        FooterCta::Enable,
                     ),
                     LspRepoStatus::Installing { server_type } => (
                         Some(format!("Installing {}...", server_type.binary_name())),
-                        false,
+                        FooterCta::None,
                     ),
                 },
-                LSPEnablementResultForFile::Enabled => (None, false),
+                LSPEnablementResultForFile::Enabled => (None, FooterCta::None),
             },
             FooterMode::Workspace {
                 root_path,
@@ -1622,7 +1771,7 @@ impl CodeFooterView {
             } => {
                 if lsp_repo_statuses.is_empty() {
                     // Still waiting for async detection
-                    return (None, false);
+                    return (None, FooterCta::None);
                 }
 
                 let root_name = root_path
@@ -1631,7 +1780,7 @@ impl CodeFooterView {
                     .unwrap_or("this workspace");
 
                 // Check if any server has a CTA-worthy status
-                if let Some(cta) = self.workspace_cta_message() {
+                if let Some(cta) = self.workspace_cta_message(app) {
                     return cta;
                 }
 
@@ -1640,7 +1789,7 @@ impl CodeFooterView {
                     if let LspRepoStatus::Installing { server_type } = status {
                         return (
                             Some(format!("Installing {}...", server_type.binary_name())),
-                            false,
+                            FooterCta::None,
                         );
                     }
                 }
@@ -1650,13 +1799,13 @@ impl CodeFooterView {
                     .values()
                     .all(|s| matches!(s, LspRepoStatus::CheckingForInstallation));
                 if all_checking {
-                    return (None, false);
+                    return (None, FooterCta::None);
                 }
 
                 // All servers are enabled/ready but no live servers — unavailable
                 (
                     Some(format!("Language support is unavailable for {root_name}")),
-                    false,
+                    FooterCta::None,
                 )
             }
         }
@@ -1742,19 +1891,32 @@ impl View for CodeFooterView {
         } else {
             footer_content.add_child(self.render_lsp_icon(appearance, app));
 
-            let (status_message, should_show_enable_button) = self.compute_status_message(app);
+            let (status_message, cta) = self.compute_status_message(app);
 
             if let Some(status_message) = status_message {
-                footer_content.add_child(
-                    Shrinkable::new(
-                        1.,
-                        Self::render_status_text(theme, appearance, status_message),
-                    )
-                    .finish(),
-                );
+                let status_text = Self::render_status_text(theme, appearance, status_message);
+                let status_text = if cta == FooterCta::MissingServers {
+                    self.with_missing_servers_tooltip(status_text, appearance, app)
+                } else {
+                    status_text
+                };
+                footer_content.add_child(Shrinkable::new(1., status_text).finish());
             }
 
-            if should_show_enable_button && let Some(enable_lsp) = &self.enable_lsp_button {
+            if cta == FooterCta::MissingServers {
+                let controls = &self.missing_server_controls;
+                for button in [&controls.open_settings_button, &controls.recheck_button] {
+                    footer_content.add_child(
+                        Container::new(ChildView::new(button).finish())
+                            .with_margin_left(ICON_MARGIN)
+                            .finish(),
+                    );
+                }
+            }
+
+            if cta == FooterCta::Enable
+                && let Some(enable_lsp) = &self.enable_lsp_button
+            {
                 // Left margin only to separate from status text; right margin removed
                 // to tighten padding between elements
                 footer_content.add_child(
@@ -1799,6 +1961,22 @@ impl TypedActionView for CodeFooterView {
                 self.is_lsp_menu_open = false;
                 ctx.notify();
             }
+            CodeFooterViewAction::OpenLanguageServerDownloadSettings => {
+                ctx.dispatch_typed_action_deferred(
+                    crate::settings_view::open_language_server_download_settings_action(),
+                );
+            }
+            CodeFooterViewAction::RecheckInstallation => {
+                #[cfg(feature = "local_fs")]
+                {
+                    let missing = self.mode.missing_server_types(false);
+                    PersistedWorkspace::handle(ctx).update(ctx, |workspace, ctx| {
+                        for server_type in missing {
+                            workspace.recheck_lsp_installation(server_type, ctx);
+                        }
+                    });
+                }
+            }
             CodeFooterViewAction::RunTabConfigSkill => {
                 let FooterMode::TabConfig { path } = &self.mode else {
                     return;
@@ -1807,9 +1985,10 @@ impl TypedActionView for CodeFooterView {
             }
             CodeFooterViewAction::EnableLSP => {
                 let path = self.mode.path().to_path_buf();
+                let downloads_allowed = *CodeSettings::as_ref(ctx).allow_language_server_downloads;
                 let cta_statuses: Vec<LspRepoStatus> = self
                     .mode
-                    .cta_lsp_repo_statuses()
+                    .cta_lsp_repo_statuses(downloads_allowed)
                     .into_iter()
                     .cloned()
                     .collect();

@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::Arc;
 
 #[cfg(feature = "local_fs")]
 use anyhow::Context;
@@ -7,15 +6,12 @@ use async_trait::async_trait;
 #[cfg(feature = "local_fs")]
 use command::r#async::Command;
 
-use crate::CommandBuilder;
 use crate::language_server_candidate::{LanguageServerCandidate, LanguageServerMetadata};
 #[cfg(feature = "local_fs")]
 use crate::supported_servers::CustomBinaryConfig;
+use crate::{CommandBuilder, Downloader};
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
-pub struct TypeScriptLanguageServerCandidate {
-    client: Arc<http_client::Client>,
-}
+pub struct TypeScriptLanguageServerCandidate;
 
 impl TypeScriptLanguageServerCandidate {
     /// Path to the new langserver JS file (v4.0.0+) relative to the install directory.
@@ -25,10 +21,6 @@ impl TypeScriptLanguageServerCandidate {
     /// Path to the old langserver JS file (pre-4.0.0) relative to the install directory.
     #[cfg(feature = "local_fs")]
     const OLD_SERVER_PATH: &str = "node_modules/typescript-language-server/lib/cli.js";
-
-    pub fn new(client: Arc<http_client::Client>) -> Self {
-        Self { client }
-    }
 
     /// Finds the configuration for running typescript-language-server from our custom installation.
     ///
@@ -134,6 +126,7 @@ impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
         &self,
         metadata: LanguageServerMetadata,
         executor: &CommandBuilder,
+        downloader: &Downloader,
     ) -> anyhow::Result<()> {
         log::info!(
             "Installing typescript-language-server version {}",
@@ -158,7 +151,7 @@ impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
             None
         } else {
             log::info!("System Node.js not found or too old, installing custom Node.js");
-            node_runtime::install_npm(&self.client).await?;
+            node_runtime::install_npm(downloader).await?;
             Some((
                 node_runtime::node_binary_path()?,
                 node_runtime::npm_binary_path()?,
@@ -203,9 +196,12 @@ impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
         Ok(())
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         let version =
-            node_runtime::fetch_npm_package_version(&self.client, "typescript-language-server")
+            node_runtime::fetch_npm_package_version(downloader, "typescript-language-server")
                 .await
                 .context("Failed to fetch typescript-language-server version from npm registry")?;
 
@@ -236,11 +232,15 @@ impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
         &self,
         _metadata: LanguageServerMetadata,
         _executor: &CommandBuilder,
+        _downloader: &Downloader,
     ) -> anyhow::Result<()> {
         todo!()
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        _downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         todo!()
     }
 }

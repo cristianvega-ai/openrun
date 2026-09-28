@@ -1,23 +1,13 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::CommandBuilder;
 #[cfg(feature = "local_fs")]
 use crate::install::fetch_latest_metadata_from_github;
 use crate::language_server_candidate::{LanguageServerCandidate, LanguageServerMetadata};
+use crate::{CommandBuilder, Downloader};
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
-pub struct GoPlsCandidate {
-    client: Arc<http_client::Client>,
-}
-
-impl GoPlsCandidate {
-    pub fn new(client: Arc<http_client::Client>) -> Self {
-        Self { client }
-    }
-}
+pub struct GoPlsCandidate;
 
 #[async_trait]
 #[cfg(feature = "local_fs")]
@@ -56,6 +46,9 @@ impl LanguageServerCandidate for GoPlsCandidate {
         &self,
         _metadata: LanguageServerMetadata,
         executor: &CommandBuilder,
+        // `go install` fetches gopls through the Go module proxy rather than this client, but it
+        // is still a download and needs the permit the `Downloader` carries.
+        _downloader: &Downloader,
     ) -> anyhow::Result<()> {
         let output = executor
             .command("go")
@@ -71,9 +64,12 @@ impl LanguageServerCandidate for GoPlsCandidate {
         Ok(())
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         // gopls doesn't provide prebuilt binaries; it must be installed via `go install`
-        fetch_latest_metadata_from_github(&self.client, "golang", "tools", None).await
+        fetch_latest_metadata_from_github(downloader, "golang", "tools", None).await
     }
 }
 
@@ -96,11 +92,15 @@ impl LanguageServerCandidate for GoPlsCandidate {
         &self,
         _metadata: LanguageServerMetadata,
         _executor: &CommandBuilder,
+        _downloader: &Downloader,
     ) -> anyhow::Result<()> {
         todo!()
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        _downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         todo!()
     }
 }

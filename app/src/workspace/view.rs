@@ -22714,6 +22714,9 @@ impl View for Workspace {
         if *CodeSettings::as_ref(app).show_hidden_files {
             context.set.insert(flags::SHOW_HIDDEN_FILES);
         }
+        if *CodeSettings::as_ref(app).allow_language_server_downloads {
+            context.set.insert(flags::ALLOW_LANGUAGE_SERVER_DOWNLOADS);
+        }
 
         if self.auth_state.is_anonymous_or_logged_out() {
             context.set.insert("IsAnonymousUser");

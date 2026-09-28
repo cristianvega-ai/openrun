@@ -7,32 +7,38 @@ use std::path::{Path, PathBuf};
 use lsp::supported_servers::LSPServerType;
 use lsp::{LspManagerModel, LspManagerModelEvent, LspServerModel, LspState};
 use pathfinder_color::ColorU;
+use warp_core::settings::ToggleableSetting as _;
 use warp_core::ui::theme::AnsiColorIdentifier;
+use warp_errors::report_if_error;
 use warp_util::path::user_friendly_path;
 use warpui::elements::{
     Container, CornerRadius, CrossAxisAlignment, Element, Expanded, Fill, Flex, MainAxisAlignment,
     MainAxisSize, MouseStateHandle, ParentElement, Radius, Shrinkable,
 };
 use warpui::fonts::Weight;
+use warpui::keymap::ContextPredicate;
 use warpui::platform::Cursor;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::ui_components::switch::SwitchStateHandle;
 use warpui::{
-    AppContext, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
+    Action, AppContext, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
     ViewHandle,
 };
 
-use super::SettingsSection;
 use super::settings_page::{
-    MatchData, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
+    MatchData, PageTitle, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
+    render_body_item,
 };
+use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, ToggleState, flags};
 use crate::appearance::Appearance;
 use crate::code::lsp_telemetry::{LspControlActionType, LspEnablementSource, LspTelemetryEvent};
 use crate::send_telemetry_from_ctx;
+use crate::settings::CodeSettings;
 use crate::ui_components::avatar::{Avatar, AvatarContent, StatusElementTypes};
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons::Icon;
+use crate::workspace::WorkspaceAction;
 use crate::workspace_metadata::{
     EnablementState, LspRepoStatus, PersistedWorkspace, PersistedWorkspaceEvent, WorkspaceMetadata,
 };
@@ -44,6 +50,9 @@ const LSP_STATUS_INDICATOR_SIZE: f32 = 8.;
 const PAGE_TITLE: &str = "Projects";
 const PAGE_DESCRIPTION: &str = "Language servers for the repositories Warp knows about. Enable a server to get diagnostics, hover, go-to-definition and formatting in the code editor.";
 const NO_PROJECTS_TEXT: &str = "No projects yet. A repository appears here once a language server is available or enabled for it.";
+
+const DOWNLOADS_LABEL: &str = "Download missing language servers automatically";
+const DOWNLOADS_DESCRIPTION: &str = "When off, only language servers already installed on this machine are used. When on, missing servers and the Node.js runtime they need may be downloaded from GitHub releases, nodejs.org, the npm registry and the Go module proxy.";
 
 #[derive(Clone, Default)]
 struct LspServerRowMouseStates {
@@ -81,6 +90,8 @@ impl ProjectsPageView {
                 }
             },
         );
+
+        ctx.subscribe_to_model(&CodeSettings::handle(ctx), |_, _, _, ctx| ctx.notify());
 
         // PersistedWorkspace::new() kicks off suggested-server detection at startup and emits
         // AvailableServersDetected for each workspace, so this page doesn't scan on its own.
@@ -129,7 +140,13 @@ impl ProjectsPageView {
         );
 
         Self {
-            page: PageType::new_monolith(ProjectsWidget, Some(PAGE_TITLE), true),
+            page: PageType::new_uncategorized(
+                vec![
+                    Box::new(LanguageServerDownloadsWidget::default()),
+                    Box::new(ProjectsWidget),
+                ],
+                Some(PageTitle::new(PAGE_TITLE)),
+            ),
             lsp_row_mouse_states: (0..lsp_server_count).map(|_| Default::default()).collect(),
             suggested_server_statuses: HashMap::new(),
         }
@@ -165,6 +182,7 @@ pub enum ProjectsPageEvent {
 
 #[derive(Debug, Clone)]
 pub enum ProjectsPageAction {
+    ToggleAllowLanguageServerDownloads,
     /// Toggle an LSP server on/off for a workspace.
     ToggleLspServer {
         workspace_path: PathBuf,
@@ -194,6 +212,16 @@ impl TypedActionView for ProjectsPageView {
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
         match action {
+            ProjectsPageAction::ToggleAllowLanguageServerDownloads => {
+                CodeSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(
+                        settings
+                            .allow_language_server_downloads
+                            .toggle_and_save_value(ctx)
+                    );
+                });
+                ctx.notify();
+            }
             ProjectsPageAction::ToggleLspServer {
                 workspace_path,
                 server_type,
@@ -322,6 +350,76 @@ impl TypedActionView for ProjectsPageView {
             }
         }
     }
+}
+
+#[derive(Default)]
+struct LanguageServerDownloadsWidget {
+    switch_state: SwitchStateHandle,
+}
+
+impl SettingsWidget for LanguageServerDownloadsWidget {
+    type View = ProjectsPageView;
+
+    fn search_terms(&self) -> &str {
+        "language server downloads download install automatically node nodejs npm lsp offline"
+    }
+
+    fn render(
+        &self,
+        _view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        render_body_item::<ProjectsPageAction>(
+            DOWNLOADS_LABEL.into(),
+            None,
+            ToggleState::Enabled,
+            appearance,
+            appearance
+                .ui_builder()
+                .switch(self.switch_state.clone())
+                .check(*CodeSettings::as_ref(app).allow_language_server_downloads)
+                .build()
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(
+                        ProjectsPageAction::ToggleAllowLanguageServerDownloads,
+                    );
+                })
+                .finish(),
+            Some(DOWNLOADS_DESCRIPTION.into()),
+        )
+    }
+}
+
+/// Stable id of the language-server downloads toggle, used to scroll the settings page to it.
+pub(crate) fn language_server_downloads_widget_id() -> &'static str {
+    LanguageServerDownloadsWidget::static_widget_id()
+}
+
+/// The action that opens the settings page at the language-server downloads toggle.
+pub(crate) fn open_language_server_download_settings_action() -> WorkspaceAction {
+    WorkspaceAction::ScrollToSettingsWidget {
+        page: SettingsSection::Projects,
+        widget_id: language_server_downloads_widget_id(),
+    }
+}
+
+pub fn init_actions_from_parent_view<T: Action + Clone>(
+    app: &mut AppContext,
+    context: &ContextPredicate,
+    builder: fn(SettingsAction) -> T,
+) {
+    ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(
+        vec![ToggleSettingActionPair::new(
+            "language server downloads",
+            builder(SettingsAction::Projects(
+                ProjectsPageAction::ToggleAllowLanguageServerDownloads,
+            )),
+            context,
+            flags::ALLOW_LANGUAGE_SERVER_DOWNLOADS,
+        )],
+        app,
+    );
 }
 
 struct ProjectsWidget;
@@ -548,6 +646,7 @@ impl ProjectsWidget {
                     workspace_path,
                     *server_type,
                     repo_status,
+                    *CodeSettings::as_ref(app).allow_language_server_downloads,
                     mouse_states,
                     appearance,
                 ));
@@ -576,12 +675,15 @@ impl ProjectsWidget {
         content.finish()
     }
 
-    /// Renders a suggested LSP server row with "+" install/enable button.
+    /// Renders a suggested LSP server row with "+" install/enable button. When downloads are
+    /// disabled and the server is missing, the button is replaced by manual install hints.
+    #[allow(clippy::too_many_arguments)]
     fn render_suggested_lsp_server_row(
         &self,
         workspace_path: &Path,
         server_type: LSPServerType,
         repo_status: Option<LspRepoStatus>,
+        downloads_allowed: bool,
         mouse_states: LspServerRowMouseStates,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
@@ -634,10 +736,16 @@ impl ProjectsWidget {
                 .finish(),
         );
 
+        let needs_install = matches!(
+            &repo_status,
+            None | Some(LspRepoStatus::DisabledAndNotInstalled { .. })
+        );
+        let blocked_by_setting = needs_install && !downloads_allowed;
         let (description, is_installing) = match &repo_status {
             Some(LspRepoStatus::DisabledAndInstalled { .. }) => ("Installed", false),
             Some(LspRepoStatus::Installing { .. }) => ("Installing...", true),
             Some(LspRepoStatus::CheckingForInstallation) => ("Checking...", true),
+            _ if blocked_by_setting => ("Not installed", false),
             _ => ("Available for download", false),
         };
 
@@ -653,16 +761,39 @@ impl ProjectsWidget {
                 .finish(),
         );
 
-        left_content.add_child(name_desc_column.finish());
-        row.add_child(left_content.finish());
+        if blocked_by_setting {
+            let hint_style = UiComponentStyles {
+                font_color: Some(theme.disabled_ui_text_color().into()),
+                font_size: Some(12.),
+                ..Default::default()
+            };
+            name_desc_column.add_child(
+                ui_builder
+                    .paragraph(format!(
+                        "Install manually: {}",
+                        server_type.manual_install_hint()
+                    ))
+                    .with_style(hint_style)
+                    .build()
+                    .finish(),
+            );
+            if server_type.requires_node_runtime() {
+                name_desc_column.add_child(
+                    ui_builder
+                        .paragraph(lsp::node_manual_install_hint())
+                        .with_style(hint_style)
+                        .build()
+                        .finish(),
+                );
+            }
+        }
+
+        left_content.add_child(Shrinkable::new(1., name_desc_column.finish()).finish());
+        row.add_child(Shrinkable::new(1., left_content.finish()).finish());
 
         // Right side: "+" button to install/enable
-        if !is_installing {
+        if !is_installing && !blocked_by_setting {
             let workspace_path_clone = workspace_path.to_path_buf();
-            let needs_install = matches!(
-                &repo_status,
-                None | Some(LspRepoStatus::DisabledAndNotInstalled { .. })
-            );
             let install_button = icon_button(appearance, Icon::Plus, false, mouse_states.install)
                 .with_style(UiComponentStyles {
                     border_width: Some(1.),

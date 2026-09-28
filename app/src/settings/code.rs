@@ -78,4 +78,15 @@ define_settings_group!(CodeSettings, settings: [
         toml_path: "code.editor.auto_save",
         description: "Whether the Warp text editor automatically saves changes as you type and when the editor loses focus.",
     },
+    // Gates every download of a missing language server or the Node.js runtime it needs.
+    allow_language_server_downloads: AllowLanguageServerDownloads {
+        type: bool,
+        default: false,
+        supported_platforms: SupportedPlatforms::DESKTOP,
+        sync_to_cloud: SyncToCloud::Never,
+        surface: settings::SettingSurfaces::GUI,
+        private: false,
+        toml_path: "code.language_servers.allow_downloads",
+        description: "Whether missing language servers and the Node.js runtime they need may be downloaded from their upstream sources (GitHub releases, nodejs.org, the npm registry, the Go module proxy). When off, only language servers already installed on this machine are used.",
+    },
 ]);

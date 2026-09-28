@@ -10,6 +10,7 @@ cfg_if::cfg_if! {
     }
 }
 
+use crate::Downloader;
 use crate::language_server_candidate::LanguageServerMetadata;
 
 const GITHUB_API_URL: &str = "https://api.github.com";
@@ -46,7 +47,7 @@ fn resolve_asset(
 }
 
 async fn fetch_latest_release_from_github(
-    client: &http_client::Client,
+    downloader: &Downloader,
     repo_owner: &str,
     repo_name: &str,
 ) -> Result<GithubRelease> {
@@ -55,7 +56,8 @@ async fn fetch_latest_release_from_github(
         GITHUB_API_URL, repo_owner, repo_name
     );
 
-    let response = client
+    let response = downloader
+        .client()
         .get(&url)
         // GitHub API recommends specifying these parameters in the header.
         // See: https://docs.github.com/en/rest/using-the-rest-api/getting-started-with-the-rest-api#user-agent
@@ -82,7 +84,7 @@ async fn fetch_latest_release_from_github(
 /// Fetches the latest release metadata from a GitHub repository.
 ///
 /// # Arguments
-/// * `client` - The HTTP client to use for the request
+/// * `downloader` - The client to use for the request
 /// * `repo_owner` - The owner of the GitHub repository (e.g. "rust-lang")
 /// * `repo_name` - The name of the GitHub repository (e.g. "rust-analyzer")
 /// * `asset_name` - The name of the asset to find in the release. If None, no asset
@@ -92,12 +94,12 @@ async fn fetch_latest_release_from_github(
 /// # Returns
 /// A `LanguageServerMetadata` containing the version, optional download URL, and optional SHA256 digest.
 pub async fn fetch_latest_metadata_from_github(
-    client: &http_client::Client,
+    downloader: &Downloader,
     repo_owner: &str,
     repo_name: &str,
     asset_name: Option<&str>,
 ) -> Result<LanguageServerMetadata> {
-    let release = fetch_latest_release_from_github(client, repo_owner, repo_name).await?;
+    let release = fetch_latest_release_from_github(downloader, repo_owner, repo_name).await?;
 
     // If an asset name is provided, look up the asset details
     let (download_url, digest) = if let Some(asset_name) = asset_name {
@@ -120,7 +122,7 @@ pub async fn fetch_latest_metadata_from_github(
 /// This is useful for projects where asset names include the tag itself, e.g.
 /// `clangd-mac-v21.0.0.zip`.
 pub async fn fetch_latest_metadata_from_github_dynamic_asset<F>(
-    client: &http_client::Client,
+    downloader: &Downloader,
     repo_owner: &str,
     repo_name: &str,
     asset_name_for_tag: F,
@@ -128,7 +130,7 @@ pub async fn fetch_latest_metadata_from_github_dynamic_asset<F>(
 where
     F: FnOnce(&str) -> String,
 {
-    let release = fetch_latest_release_from_github(client, repo_owner, repo_name).await?;
+    let release = fetch_latest_release_from_github(downloader, repo_owner, repo_name).await?;
     let asset_name = asset_name_for_tag(&release.tag_name);
     let (url, digest) = resolve_asset(release.assets, &asset_name)?;
 
@@ -172,7 +174,7 @@ impl AssetKind {
 /// 4. Makes the binary executable (on Unix systems)
 ///
 /// # Arguments
-/// * `client` - The HTTP client to use for downloading
+/// * `downloader` - The client to use for downloading
 /// * `metadata` - The server metadata containing version, URL, and optional digest
 /// * `server_name` - The name of the server (e.g., "rust-analyzer") used for the destination path
 /// * `asset_kind` - The type of archive (Gz or Zip)
@@ -185,7 +187,7 @@ impl AssetKind {
 /// The path to the installed binary on success.
 #[cfg(feature = "local_fs")]
 pub async fn install_from_github(
-    client: &http_client::Client,
+    downloader: &Downloader,
     metadata: &LanguageServerMetadata,
     server_name: &str,
     asset_kind: AssetKind,
@@ -224,7 +226,8 @@ pub async fn install_from_github(
 
     // Download the file
     log::info!("Downloading {server_name} from {url}");
-    let response = client
+    let response = downloader
+        .client()
         .get(url)
         .send()
         .await

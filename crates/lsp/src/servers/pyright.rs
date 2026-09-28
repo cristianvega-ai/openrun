@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::Arc;
 
 #[cfg(feature = "local_fs")]
 use anyhow::Context;
@@ -7,15 +6,12 @@ use async_trait::async_trait;
 #[cfg(feature = "local_fs")]
 use command::r#async::Command;
 
-use crate::CommandBuilder;
 use crate::language_server_candidate::{LanguageServerCandidate, LanguageServerMetadata};
 #[cfg(feature = "local_fs")]
 use crate::supported_servers::CustomBinaryConfig;
+use crate::{CommandBuilder, Downloader};
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
-pub struct PyrightCandidate {
-    client: Arc<http_client::Client>,
-}
+pub struct PyrightCandidate;
 
 impl PyrightCandidate {
     /// Path to the langserver JS file relative to the pyright install directory.
@@ -25,10 +21,6 @@ impl PyrightCandidate {
     /// Path to the pyright CLI JS file (used for version checks).
     #[cfg(feature = "local_fs")]
     const PYRIGHT_CLI_PATH: &str = "node_modules/pyright/dist/pyright.js";
-
-    pub fn new(client: Arc<http_client::Client>) -> Self {
-        Self { client }
-    }
 
     /// Finds the configuration for running pyright from our custom installation.
     ///
@@ -134,6 +126,7 @@ impl LanguageServerCandidate for PyrightCandidate {
         &self,
         metadata: LanguageServerMetadata,
         executor: &CommandBuilder,
+        downloader: &Downloader,
     ) -> anyhow::Result<()> {
         log::info!("Installing pyright version {}", metadata.version);
 
@@ -155,7 +148,7 @@ impl LanguageServerCandidate for PyrightCandidate {
             None
         } else {
             log::info!("System Node.js not found or too old, installing custom Node.js");
-            node_runtime::install_npm(&self.client).await?;
+            node_runtime::install_npm(downloader).await?;
             Some((
                 node_runtime::node_binary_path()?,
                 node_runtime::npm_binary_path()?,
@@ -192,8 +185,11 @@ impl LanguageServerCandidate for PyrightCandidate {
         Ok(())
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
-        let version = node_runtime::fetch_npm_package_version(&self.client, "pyright")
+    async fn fetch_latest_server_metadata(
+        &self,
+        downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
+        let version = node_runtime::fetch_npm_package_version(downloader, "pyright")
             .await
             .context("Failed to fetch pyright version from npm registry")?;
 
@@ -224,11 +220,15 @@ impl LanguageServerCandidate for PyrightCandidate {
         &self,
         _metadata: LanguageServerMetadata,
         _executor: &CommandBuilder,
+        _downloader: &Downloader,
     ) -> anyhow::Result<()> {
         todo!()
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        _downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         todo!()
     }
 }

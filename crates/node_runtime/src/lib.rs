@@ -39,6 +39,43 @@ cfg_if::cfg_if! {
     }
 }
 
+/// Proof that the user allowed Warp to download language servers and the runtimes they need from
+/// their upstream sources. [`DownloadPermit::from_setting`] is the only way to obtain one.
+#[derive(Clone, Copy, Debug)]
+pub struct DownloadPermit(());
+
+impl DownloadPermit {
+    /// Returns a permit only when downloads are `enabled`.
+    pub fn from_setting(enabled: bool) -> Option<Self> {
+        enabled.then_some(Self(()))
+    }
+}
+
+/// The HTTP client used to fetch language servers and runtimes. Building one requires a
+/// [`DownloadPermit`], and every function here that reaches the network takes a `Downloader`.
+pub struct Downloader {
+    client: http_client::Client,
+    _permit: DownloadPermit,
+}
+
+impl Downloader {
+    pub fn new(permit: DownloadPermit) -> Self {
+        Self {
+            client: http_client::Client::new(),
+            _permit: permit,
+        }
+    }
+
+    pub fn client(&self) -> &http_client::Client {
+        &self.client
+    }
+}
+
+/// How to install Node.js and npm without Warp's help.
+pub fn manual_install_hint() -> &'static str {
+    "Install Node.js 20 or newer (it includes npm) with your system package manager or from nodejs.org."
+}
+
 /// Information about an npm package from the npm registry.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -168,7 +205,7 @@ pub fn npm_binary_path() -> Result<PathBuf> {
 /// - Network errors occur during download
 /// - Extraction fails
 #[cfg(feature = "local_fs")]
-pub async fn install_npm(client: &http_client::Client) -> Result<PathBuf> {
+pub async fn install_npm(downloader: &Downloader) -> Result<PathBuf> {
     log::info!("Node.js runtime install_npm called");
 
     let dist = NodeDistribution::current()?;
@@ -205,7 +242,8 @@ pub async fn install_npm(client: &http_client::Client) -> Result<PathBuf> {
     let url = dist.download_url(version);
     log::info!("Downloading Node.js from {}", url);
 
-    let response = client
+    let response = downloader
+        .client()
         .get(&url)
         .send()
         .await
@@ -498,18 +536,19 @@ pub async fn detect_system_node(path_env_var: impl AsRef<OsStr>) -> Result<()> {
 /// Fetches the latest version of an npm package.
 ///
 /// # Arguments
-/// * `client` - The HTTP client to use for the request
+/// * `downloader` - The client to use for the request
 /// * `package_name` - The name of the npm package
 ///
 /// # Returns
 /// Returns the latest version string on success.
 pub async fn fetch_npm_package_version(
-    client: &http_client::Client,
+    downloader: &Downloader,
     package_name: &str,
 ) -> Result<String> {
     let url = format!("https://registry.npmjs.org/{}", package_name);
 
-    let response = client
+    let response = downloader
+        .client()
         .get(&url)
         .header("Accept", "application/json")
         .send()
@@ -533,3 +572,7 @@ pub async fn fetch_npm_package_version(
         .map(|s| s.to_string())
         .with_context(|| format!("No version found for npm package {}", package_name))
 }
+
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

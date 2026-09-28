@@ -1,6 +1,5 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::Result;
 #[cfg(not(target_arch = "wasm32"))]
@@ -98,8 +97,6 @@ pub struct LspServerConfig {
     /// TODO(kevin): This might not be sufficient for all cases (e.g. user might remove LSP from PATH).
     path_env_var: Option<String>,
     client_name: String,
-    /// Shared HTTP client used for LSP installation checks and downloads.
-    client: Arc<http_client::Client>,
     /// Optional path relative to the LSP log namespace for server stderr output.
     log_relative_path: Option<PathBuf>,
 }
@@ -122,14 +119,12 @@ impl LspServerConfig {
         initial_workspace: PathBuf,
         path_env_var: Option<String>,
         client_name: String,
-        client: Arc<http_client::Client>,
     ) -> Self {
         Self {
             server_type,
             initial_workspace,
             path_env_var,
             client_name,
-            client,
             log_relative_path: None,
         }
     }
@@ -165,10 +160,7 @@ impl LspServerConfig {
     pub(crate) async fn command_and_params(self) -> Result<ResolvedLspCommand> {
         // PATH takes precedence - only use custom installation if not working on PATH
         let executor = crate::CommandBuilder::new(self.path_env_var.clone());
-        let is_working_on_path = self
-            .server_type
-            .is_working_on_path(&executor, self.client.clone())
-            .await;
+        let is_working_on_path = self.server_type.is_working_on_path(&executor).await;
         let custom_binary_config = if is_working_on_path {
             // Binary works on PATH, don't use custom installation
             None

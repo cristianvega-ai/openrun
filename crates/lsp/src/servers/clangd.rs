@@ -1,32 +1,24 @@
 use std::path::Path;
 #[cfg(feature = "local_fs")]
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 #[cfg(feature = "local_fs")]
 use command::r#async::Command;
 
-use crate::CommandBuilder;
 #[cfg(feature = "local_fs")]
 use crate::install::{
     AssetKind, fetch_latest_metadata_from_github_dynamic_asset, install_from_github,
 };
 use crate::language_server_candidate::{LanguageServerCandidate, LanguageServerMetadata};
+use crate::{CommandBuilder, Downloader};
 
 #[cfg(feature = "local_fs")]
 const SERVER_NAME: &str = "clangd";
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
-pub struct ClangdCandidate {
-    client: Arc<http_client::Client>,
-}
+pub struct ClangdCandidate;
 
 impl ClangdCandidate {
-    pub fn new(client: Arc<http_client::Client>) -> Self {
-        Self { client }
-    }
-
     #[cfg(feature = "local_fs")]
     pub async fn find_installed_binary_in_data_dir() -> Option<PathBuf> {
         let install_root = warp_core::paths::data_dir().join(SERVER_NAME);
@@ -180,9 +172,10 @@ impl LanguageServerCandidate for ClangdCandidate {
         &self,
         metadata: LanguageServerMetadata,
         _executor: &CommandBuilder,
+        downloader: &Downloader,
     ) -> anyhow::Result<()> {
         let binary_path = install_from_github(
-            &self.client,
+            downloader,
             &metadata,
             SERVER_NAME,
             AssetKind::Zip,
@@ -201,11 +194,14 @@ impl LanguageServerCandidate for ClangdCandidate {
         Ok(())
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         let os_suffix = asset_os_suffix()?;
 
         fetch_latest_metadata_from_github_dynamic_asset(
-            &self.client,
+            downloader,
             "clangd",
             "clangd",
             move |tag| format!("clangd-{os_suffix}-{tag}.zip"),
@@ -233,11 +229,15 @@ impl LanguageServerCandidate for ClangdCandidate {
         &self,
         _metadata: LanguageServerMetadata,
         _executor: &CommandBuilder,
+        _downloader: &Downloader,
     ) -> anyhow::Result<()> {
         todo!()
     }
 
-    async fn fetch_latest_server_metadata(&self) -> anyhow::Result<LanguageServerMetadata> {
+    async fn fetch_latest_server_metadata(
+        &self,
+        _downloader: &Downloader,
+    ) -> anyhow::Result<LanguageServerMetadata> {
         todo!()
     }
 }
