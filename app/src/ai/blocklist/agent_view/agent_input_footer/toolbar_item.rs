@@ -4,7 +4,7 @@ use warpui::SingletonEntity;
 use crate::chip_configurator::ConfigurableToolbarItem;
 use crate::context_chips::{ContextChipKind, available_chips};
 use crate::features::FeatureFlag;
-use crate::settings::{AISettings, CodeSettings};
+use crate::settings::CodeSettings;
 use crate::ui_components::icons::Icon;
 
 /// A configurable item in the agent view footer.
@@ -52,7 +52,7 @@ pub enum AgentToolbarItemKind {
     // Shows fast-forward (auto-approve) toggle in the footer
     FastForwardToggle,
 
-    // "Hand off to cloud" chip.
+    /// No longer rendered or offered; kept so stored toolbar layouts that list it still load.
     HandoffToCloud,
 }
 
@@ -69,7 +69,7 @@ impl AgentToolbarItemKind {
             Self::FileExplorer => "File Explorer",
             Self::ShareSession => "/remote-control",
             Self::FastForwardToggle => "Fast Forward",
-            Self::HandoffToCloud => "Hand off to cloud",
+            Self::HandoffToCloud => "Unavailable",
         }
     }
 
@@ -85,29 +85,7 @@ impl AgentToolbarItemKind {
             Self::FileExplorer => Some(Icon::FileCopy),
             Self::ShareSession => Some(Icon::Phone01),
             Self::FastForwardToggle => Some(Icon::FastForward),
-            // The bundled `upload-cloud-01.svg` (cloud-with-upward-arrow) is the
-            // closest fit among the existing icons for V0; design may swap it later.
-            Self::HandoffToCloud => Some(Icon::UploadCloud),
-        }
-    }
-
-    /// Whether this item should remain visible during `&` handoff-compose mode.
-    /// Only items relevant to composing a cloud run are shown.
-    pub(super) fn is_available_during_handoff_compose(&self) -> bool {
-        match self {
-            Self::ContextChip(
-                ContextChipKind::ShellGitBranch | ContextChipKind::GitBranchStatus,
-            ) => true,
-            Self::ModelSelector | Self::FileAttach => true,
-            Self::ContextChip(_)
-            | Self::NLDToggle
-            | Self::ContextWindowUsage
-            | Self::UsageSummary
-            | Self::FastForwardToggle
-            | Self::HandoffToCloud
-            | Self::ShareSession
-            | Self::VoiceInput
-            | Self::FileExplorer => false,
+            Self::HandoffToCloud => None,
         }
     }
 
@@ -116,8 +94,7 @@ impl AgentToolbarItemKind {
     /// handles runtime conditions that depend on user settings or workspace state.
     pub fn is_available(&self, app: &warpui::AppContext) -> bool {
         match self {
-            Self::HandoffToCloud => AISettings::as_ref(app).is_cloud_handoff_enabled(app),
-            Self::NLDToggle | Self::VoiceInput => false,
+            Self::NLDToggle | Self::HandoffToCloud => false,
             // Drops the item from the toolbar editor once the flag goes off. The render
             // path does not consult this method, so it repeats the check itself.
             Self::UsageSummary => FeatureFlag::PricingTransparency.is_enabled(),
@@ -164,12 +141,6 @@ impl AgentToolbarItemKind {
             items.push(Self::UsageSummary);
         }
         items.push(Self::ModelSelector);
-        if FeatureFlag::OzHandoff.is_enabled()
-            && FeatureFlag::HandoffLocalCloud.is_enabled()
-            && cfg!(all(feature = "local_fs", not(target_family = "wasm")))
-        {
-            items.push(Self::HandoffToCloud);
-        }
         items.push(Self::FileAttach);
         items
     }
@@ -192,12 +163,6 @@ impl AgentToolbarItemKind {
         }
         if FeatureFlag::FastForwardAutoexecuteButton.is_enabled() {
             items.push(Self::FastForwardToggle);
-        }
-        if FeatureFlag::OzHandoff.is_enabled()
-            && FeatureFlag::HandoffLocalCloud.is_enabled()
-            && cfg!(all(feature = "local_fs", not(target_family = "wasm")))
-        {
-            items.push(Self::HandoffToCloud);
         }
         items
     }

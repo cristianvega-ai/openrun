@@ -36,12 +36,8 @@ impl SyncDataSource for GuiZeroStateDataSource {
         }
 
         let source = self.slash_command_data_source.as_ref(app);
-        let is_cloud_mode_v2 = source.is_cloud_mode_v2();
         let results = source.ordered_zero_state_commands(app);
 
-        Ok(results
-            .into_iter()
-            .map(|item| item.with_compact_layout(is_cloud_mode_v2).into())
-            .collect())
+        Ok(results.into_iter().map(Into::into).collect())
     }
 }

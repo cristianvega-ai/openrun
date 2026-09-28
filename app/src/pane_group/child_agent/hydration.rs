@@ -60,7 +60,7 @@ impl PaneGroup {
                 return;
             }
             self.pending_child_hydrations.insert(task_id, child_id);
-            self.ensure_pending_ambient_restoration_subscription(ctx);
+            self.ensure_child_task_update_subscription(ctx);
             return;
         };
 
@@ -113,7 +113,7 @@ impl PaneGroup {
                     );
                 }
                 self.pending_child_hydrations.insert(task_id, child_id);
-                self.ensure_pending_ambient_restoration_subscription(ctx);
+                self.ensure_child_task_update_subscription(ctx);
             }
         }
     }

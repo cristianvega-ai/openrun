@@ -52,9 +52,7 @@ use crate::ai::blocklist::telemetry::{
 use crate::ai::connected_self_hosted_workers::{
     ConnectedSelfHostedWorkersEvent, ConnectedSelfHostedWorkersModel,
 };
-use crate::ai::harness_availability::{
-    AuthSecretFetchState, HarnessAvailabilityEvent, HarnessAvailabilityModel,
-};
+use crate::ai::harness_availability::{HarnessAvailabilityEvent, HarnessAvailabilityModel};
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::appearance::Appearance;
 use crate::features::FeatureFlag;
@@ -260,9 +258,6 @@ pub struct RunAgentsCardView {
     entered_event_emitted: bool,
     /// Guards the terminal decision event against double-fires.
     decision_event_emitted: bool,
-    /// One-shot guard: cancelling the auto-popped modal must not re-pop.
-    /// Reset on harness / execution-mode change.
-    has_auto_opened_create_modal: bool,
     /// Runners fetched via `getRunners` for the Runner picker: (uid, name).
     /// Runners aren't cached client-side, so we fetch them lazily.
     runners: Vec<(String, String)>,
@@ -432,7 +427,6 @@ impl RunAgentsCardView {
                 // finalized with the requested runner.
                 me.resync_runner_selection(ctx);
                 me.refresh_accept_button_state(ctx);
-                me.maybe_auto_open_create_modal(ctx);
                 if let Some(conversation_id) = me.block_model.conversation_id(ctx) {
                     me.emit_orchestration_entered_once(conversation_id, ctx);
                 }
@@ -495,7 +489,6 @@ impl RunAgentsCardView {
                         ctx,
                     );
                     me.refresh_accept_button_state(ctx);
-                    me.maybe_auto_open_create_modal(ctx);
                     ctx.notify();
                 }
                 HarnessAvailabilityEvent::AuthSecretCreationFailed { .. }
@@ -576,7 +569,6 @@ impl RunAgentsCardView {
             original_tool_call_request,
             entered_event_emitted: false,
             decision_event_emitted: false,
-            has_auto_opened_create_modal: false,
             runners: Vec::new(),
             runners_loading: false,
             team_context_resolver: UserWorkspaces::team_context_resolver(ctx.handle()),
@@ -586,7 +578,6 @@ impl RunAgentsCardView {
         view.refresh_accept_button_state(ctx);
         // No-ops if secrets are still in flight; the `AuthSecretsChanged`
         // subscription will retry once they resolve.
-        view.maybe_auto_open_create_modal(ctx);
 
         view
     }
@@ -703,14 +694,12 @@ impl RunAgentsCardView {
                     &self.handles.pickers,
                     ctx,
                 );
-                self.has_auto_opened_create_modal = false;
             }
             // Re-apply the runner selection: a streamed update can finalize
             // the requested `runner_id` after the runner options have loaded,
             // and the shared picker sync does not cover the runner picker.
             self.resync_runner_selection(ctx);
             self.refresh_accept_button_state(ctx);
-            self.maybe_auto_open_create_modal(ctx);
             ctx.notify();
         }
     }
@@ -781,67 +770,6 @@ impl RunAgentsCardView {
         send_telemetry_from_ctx!(
             BlocklistOrchestrationTelemetryEvent::RunAgentsCardDecision(event),
             ctx
-        );
-    }
-
-    /// Auto-pops the create-key modal once per card per harness/mode
-    /// change when the harness has no loaded secrets and selection is
-    /// `Unset`. Cancelling leaves the picker on "+ New API key…"; the
-    /// user can reopen the modal by clicking that item.
-    fn maybe_auto_open_create_modal(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.has_auto_opened_create_modal {
-            return;
-        }
-        // Skip non-interactive card states (render short-circuits to a
-        // status-only card; the user can't act on a popped modal).
-        if self.spawning.is_some() {
-            return;
-        }
-        if self.block_model.is_restored() {
-            return;
-        }
-        if matches!(
-            self.action_model
-                .as_ref(ctx)
-                .get_action_status(&self.action_id),
-            Some(AIActionStatus::Finished(_)) | Some(AIActionStatus::RunningAsync)
-        ) {
-            return;
-        }
-        if !oc::should_show_auth_secret_picker(
-            &self.orchestration_edit_state.orchestration_config_state,
-        ) {
-            return;
-        }
-        if !matches!(
-            self.orchestration_edit_state
-                .orchestration_config_state
-                .auth_secret_selection,
-            AuthSecretSelection::Unset
-        ) {
-            return;
-        }
-        let Some(harness) = ai::harness::Harness::parse_orchestration_harness(
-            &self
-                .orchestration_edit_state
-                .orchestration_config_state
-                .harness_type,
-        ) else {
-            return;
-        };
-        // Only auto-open on `Loaded([])`. Other fetch states are
-        // ambiguous; the `AuthSecretsChanged` subscription will retry.
-        let team_scope = UserWorkspaces::as_ref(ctx).team_context_for_operation(ctx);
-        let has_zero_loaded = matches!(
-            HarnessAvailabilityModel::as_ref(ctx).auth_secrets_for(&team_scope, harness),
-            AuthSecretFetchState::Loaded(secrets) if secrets.is_empty()
-        );
-        if !has_zero_loaded {
-            return;
-        }
-        self.has_auto_opened_create_modal = true;
-        ctx.dispatch_typed_action(
-            &crate::workspace::WorkspaceAction::OpenCreateAuthSecretModal { harness },
         );
     }
 
@@ -1377,9 +1305,7 @@ impl TypedActionView for RunAgentsCardView {
                 self.ensure_runner_picker(ctx);
                 // Mode change can newly reveal the auth picker (Local
                 // → Cloud) — give the user a fresh auto-open prompt.
-                self.has_auto_opened_create_modal = false;
                 self.refresh_accept_button_state(ctx);
-                self.maybe_auto_open_create_modal(ctx);
                 ctx.notify();
             }
             RunAgentsCardViewAction::ModelChanged { model_id } => {
@@ -1400,9 +1326,7 @@ impl TypedActionView for RunAgentsCardView {
                 );
                 // Harness change resets per-harness selection state, so
                 // give the new harness a fresh auto-open prompt.
-                self.has_auto_opened_create_modal = false;
                 self.refresh_accept_button_state(ctx);
-                self.maybe_auto_open_create_modal(ctx);
                 ctx.notify();
             }
             RunAgentsCardViewAction::EnvironmentChanged { environment_id } => {
@@ -1453,16 +1377,6 @@ impl TypedActionView for RunAgentsCardView {
                     &mut self.orchestration_edit_state.orchestration_config_state,
                     ctx,
                 );
-                if let Some(harness) = ai::harness::Harness::parse_orchestration_harness(
-                    &self
-                        .orchestration_edit_state
-                        .orchestration_config_state
-                        .harness_type,
-                ) {
-                    ctx.dispatch_typed_action(
-                        &crate::workspace::WorkspaceAction::OpenCreateAuthSecretModal { harness },
-                    );
-                }
                 self.refresh_accept_button_state(ctx);
                 ctx.notify();
             }

@@ -194,8 +194,6 @@ struct AIContextMenuState {
     main_menu_query: String,
     /// Whether we're in AI mode (true) or terminal mode (false)
     is_ai_mode: bool,
-    /// Whether this terminal is in an ambient agent session
-    is_in_ambient_agent: bool,
     /// Whether this is a CLI agent rich input (restricts categories to files/folders + code)
     is_cli_agent_input: bool,
 }
@@ -224,13 +222,6 @@ pub struct AIContextMenu {
 }
 
 impl AIContextMenu {
-    pub fn set_is_in_ambient_agent(&mut self, is_ambient: bool, ctx: &mut ViewContext<Self>) {
-        if self.state.is_in_ambient_agent != is_ambient {
-            self.state.is_in_ambient_agent = is_ambient;
-            self.refresh_categories_state(ctx);
-        }
-    }
-
     pub fn set_is_cli_agent_input(
         &mut self,
         is_cli_agent_input: bool,
@@ -347,7 +338,6 @@ impl AIContextMenu {
     /// If false (locked in terminal mode), return only Files category
     pub(crate) fn get_categories_for_mode(
         is_ai_mode: bool,
-        is_in_ambient_agent: bool,
         is_cli_agent_input: bool,
         app: &AppContext,
     ) -> Vec<AIContextMenuCategory> {
@@ -390,11 +380,6 @@ impl AIContextMenu {
                 categories.push(AIContextMenuCategory::Code);
             }
             return categories;
-        }
-
-        // For ambient agent sessions, only show limited categories
-        if is_in_ambient_agent {
-            return vec![];
         }
 
         if is_ai_mode {
@@ -459,7 +444,6 @@ impl AIContextMenu {
     fn refresh_categories_state(&mut self, ctx: &mut ViewContext<Self>) {
         let categories = Self::get_categories_for_mode(
             self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
             ctx,
         );
@@ -551,7 +535,7 @@ impl AIContextMenu {
         );
 
         // Get initial categories for proper initialization
-        let initial_categories = Self::get_categories_for_mode(true, false, false, ctx); // Default to AI mode, not ambient agent, not CLI agent input
+        let initial_categories = Self::get_categories_for_mode(true, false, ctx); // Default to AI mode, not CLI agent input
 
         #[cfg(not(target_family = "wasm"))]
         let code_symbol_cache = ctx.add_model(CodeSymbolCache::new);
@@ -594,9 +578,8 @@ impl AIContextMenu {
                     .collect(),
                 selected_category_index: 0,
                 main_menu_query: String::new(),
-                is_ai_mode: true,           // Default to AI mode
-                is_in_ambient_agent: false, // Will be updated by set_is_in_ambient_agent if needed
-                is_cli_agent_input: false,  // Will be updated by set_is_cli_agent_input if needed
+                is_ai_mode: true,          // Default to AI mode
+                is_cli_agent_input: false, // Will be updated by set_is_cli_agent_input if needed
             },
             handle: ctx.handle(),
             search_debounce_tx,
@@ -667,7 +650,6 @@ impl AIContextMenu {
         let item_count = self.item_count(ctx);
         let categories = Self::get_categories_for_mode(
             self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
             ctx,
         );
@@ -685,7 +667,6 @@ impl AIContextMenu {
     pub fn reset_menu_state(&mut self, ctx: &mut ViewContext<Self>) {
         let categories = Self::get_categories_for_mode(
             self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
             ctx,
         );
@@ -962,7 +943,6 @@ impl AIContextMenu {
         // Add all available data sources
         let categories = Self::get_categories_for_mode(
             self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
             ctx,
         );
@@ -1061,7 +1041,6 @@ impl AIContextMenu {
 
         let categories = Self::get_categories_for_mode(
             self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
             ctx,
         );
@@ -1089,7 +1068,6 @@ impl AIContextMenu {
     fn get_filtered_categories(&self, app: &AppContext) -> Vec<AIContextMenuCategory> {
         let categories = Self::get_categories_for_mode(
             self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
             app,
         );
@@ -1194,7 +1172,6 @@ impl AIContextMenu {
             // Find the original index of this category in current categories for hover state
             let categories = Self::get_categories_for_mode(
                 self.state.is_ai_mode,
-                self.state.is_in_ambient_agent,
                 self.state.is_cli_agent_input,
                 app,
             );
@@ -1366,13 +1343,8 @@ impl AIContextMenu {
     /// Whether the AI context menu should render.
     #[cfg(not(target_family = "wasm"))]
     pub fn should_render(&self, app: &AppContext) -> bool {
-        !Self::get_categories_for_mode(
-            self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
-            self.state.is_cli_agent_input,
-            app,
-        )
-        .is_empty()
+        !Self::get_categories_for_mode(self.state.is_ai_mode, self.state.is_cli_agent_input, app)
+            .is_empty()
     }
 
     #[cfg(target_family = "wasm")]
@@ -1446,7 +1418,6 @@ impl AIContextMenu {
         // Only show the title if there are multiple categories
         let categories = Self::get_categories_for_mode(
             self.state.is_ai_mode,
-            self.state.is_in_ambient_agent,
             self.state.is_cli_agent_input,
             app,
         );

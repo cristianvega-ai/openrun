@@ -813,32 +813,6 @@ impl QueuedQueryModel {
         Some(removed)
     }
 
-    /// Removes the locked initial Cloud Mode row from `conversation_id`'s queue, if it is still
-    /// at the queue head.
-    pub fn remove_initial_cloud_mode_row(
-        &mut self,
-        conversation_id: AIConversationId,
-        ctx: &mut ModelContext<Self>,
-    ) -> Option<QueuedQuery> {
-        let state = self.queues.get_mut(&conversation_id)?;
-        if !state
-            .queue
-            .first()
-            .is_some_and(|row| row.origin == QueuedQueryOrigin::InitialCloudMode)
-        {
-            return None;
-        }
-        let removed = state.queue.remove(0);
-        if state.editing == Some(removed.id) {
-            state.editing = None;
-        }
-        ctx.emit(QueuedQueryEvent::Removed {
-            conversation_id,
-            query_id: removed.id,
-        });
-        Some(removed)
-    }
-
     /// Moves the row identified by `source_id` to position `target_index` within
     /// `conversation_id`'s queue. `target_index` is interpreted as the index in the post-removal
     /// list and is clamped to the queue length. No-ops when the source row is locked

@@ -9,13 +9,12 @@ use warp_multi_agent_api::response_event::stream_finished;
 use warp_multi_agent_api::{self as api};
 
 use super::schema::{
-    agent_conversations, agent_tasks, ambient_agent_panes, app, blocks, cloud_objects_refreshes,
-    code_pane_tabs, code_panes, code_review_panes, commands, folders, generic_string_objects,
-    ignored_suggestions, notebook_panes, notebooks, object_actions, object_metadata,
-    object_permissions, pane_branches, pane_leaves, pane_nodes, panels, projects, settings_panes,
-    tab_groups, tabs, team_members, team_settings, teams, terminal_panes, user_profiles, windows,
-    workflow_panes, workflows, workspace_language_server, workspace_metadata, workspace_teams,
-    workspaces,
+    agent_conversations, agent_tasks, app, blocks, cloud_objects_refreshes, code_pane_tabs,
+    code_panes, code_review_panes, commands, folders, generic_string_objects, ignored_suggestions,
+    notebook_panes, notebooks, object_actions, object_metadata, object_permissions, pane_branches,
+    pane_leaves, pane_nodes, panels, projects, settings_panes, tab_groups, tabs, team_members,
+    team_settings, teams, terminal_panes, user_profiles, windows, workflow_panes, workflows,
+    workspace_language_server, workspace_metadata, workspace_teams, workspaces,
 };
 
 #[derive(Insertable)]
@@ -541,9 +540,6 @@ pub const CODE_REVIEW_PANE_KIND: &str = "code_review";
 /// The [`pane_leaves::kind`] value for execution profile editor panes.
 pub const EXECUTION_PROFILE_EDITOR_PANE_KIND: &str = "execution_profile_editor";
 
-/// The [`pane_leaves::kind`] value for ambient agent (cloud mode) panes.
-pub const AMBIENT_AGENT_PANE_KIND: &str = "ambient_agent";
-
 #[derive(Insertable)]
 #[diesel(table_name = terminal_panes)]
 pub struct NewTerminalPane {
@@ -607,24 +603,6 @@ pub struct NewCodeReviewPane {
 pub struct NewSettingsPane {
     pub id: i32,
     pub current_page: String,
-}
-
-#[derive(Identifiable, Queryable, Selectable)]
-#[diesel(table_name = ambient_agent_panes)]
-#[diesel(primary_key(id))]
-pub struct AmbientAgentPane {
-    pub id: i32,
-    pub kind: String,
-    pub uuid: Vec<u8>,
-    pub task_id: Option<String>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = ambient_agent_panes)]
-pub struct NewAmbientAgentPane {
-    pub id: i32,
-    pub uuid: Vec<u8>,
-    pub task_id: Option<String>,
 }
 
 #[derive(Insertable)]

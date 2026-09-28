@@ -41,9 +41,6 @@ use crate::ai::agent_conversations_model::{
     ConversationUpdateKind, CreatedOnFilter, CreatorFilter, EnvironmentFilter, HarnessFilter,
     OwnerFilter, SessionStatus, SourceFilter, StatusFilter,
 };
-use crate::ai::agent_management::agent_type_selector::{
-    AgentType, AgentTypeSelector, AgentTypeSelectorEvent,
-};
 use crate::ai::agent_management::cloud_setup_guide_view::{
     CloudSetupGuideEvent, CloudSetupGuideView,
 };
@@ -188,9 +185,6 @@ pub struct AgentManagementView {
     view_agents_button: ViewHandle<ActionButton>,
 
     /// Agent type selector modal
-    agent_type_selector: ViewHandle<AgentTypeSelector>,
-    is_agent_type_selector_open: bool,
-
     cloud_setup_guide_view: ViewHandle<CloudSetupGuideView>,
 
     all_filter_button: ViewHandle<ActionButton>,
@@ -361,14 +355,11 @@ impl AgentManagementView {
             "New agent".to_string(),
             None,
             ButtonSize::Small,
-            AgentManagementViewAction::ShowAgentTypeSelector,
+            AgentManagementViewAction::NewLocalAgent,
             Icon::Plus,
             Arc::new(PrimaryTheme),
             ctx,
         );
-
-        let agent_type_selector = ctx.add_typed_action_view(AgentTypeSelector::new);
-        ctx.subscribe_to_view(&agent_type_selector, Self::handle_agent_type_selector_event);
 
         let has_dismissed_setup_guide = *AISettings::as_ref(ctx).did_dismiss_cloud_setup_guide;
 
@@ -407,8 +398,6 @@ impl AgentManagementView {
             clear_all_filters_button,
             no_filter_results_button,
             new_agent_button,
-            agent_type_selector,
-            is_agent_type_selector_open: false,
             details_panel,
             selected_item_id: None,
         };
@@ -1447,42 +1436,6 @@ impl AgentManagementView {
         }
     }
 
-    fn handle_agent_type_selector_event(
-        &mut self,
-        _view: ViewHandle<AgentTypeSelector>,
-        event: &AgentTypeSelectorEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            AgentTypeSelectorEvent::Selected(agent_type) => {
-                self.is_agent_type_selector_open = false;
-                match agent_type {
-                    AgentType::Cloud => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::SpawnNewCloudAgent,
-                            ctx
-                        );
-                        ctx.dispatch_typed_action(&WorkspaceAction::AddAmbientAgentTab);
-                    }
-                    AgentType::Local => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::SpawnNewLocalAgent,
-                            ctx
-                        );
-                        ctx.dispatch_typed_action(&WorkspaceAction::NewTabInAgentMode {
-                            entrypoint: AgentModeEntrypoint::AgentManagementView,
-                        });
-                    }
-                }
-                ctx.notify();
-            }
-            AgentTypeSelectorEvent::Dismissed => {
-                self.is_agent_type_selector_open = false;
-                ctx.notify();
-            }
-        }
-    }
-
     fn build_avatar(name: &str, appearance: &Appearance) -> Container {
         let theme = appearance.theme();
         // Use a hash function for a range of colors in the IDs
@@ -2256,14 +2209,7 @@ impl View for AgentManagementView {
             main_view
         };
 
-        if self.is_agent_type_selector_open {
-            Stack::new()
-                .with_child(base_view)
-                .with_child(ChildView::new(&self.agent_type_selector).finish())
-                .finish()
-        } else {
-            base_view
-        }
+        base_view
     }
 }
 
@@ -2279,7 +2225,7 @@ pub enum AgentManagementViewAction {
     SetHarnessFilter(HarnessFilter),
     ClearFilters,
     ToggleSetupGuide,
-    ShowAgentTypeSelector,
+    NewLocalAgent,
     OpenSession { item_id: ManagementCardItemId },
     FocusSearch,
 }
@@ -2403,13 +2349,11 @@ impl TypedActionView for AgentManagementView {
                 }
                 ctx.notify();
             }
-            AgentManagementViewAction::ShowAgentTypeSelector => {
-                send_telemetry_from_ctx!(
-                    AgentManagementTelemetryEvent::AgentTypeSelectorOpened,
-                    ctx
-                );
-                self.is_agent_type_selector_open = true;
-                ctx.focus(&self.agent_type_selector);
+            AgentManagementViewAction::NewLocalAgent => {
+                send_telemetry_from_ctx!(AgentManagementTelemetryEvent::SpawnNewLocalAgent, ctx);
+                ctx.dispatch_typed_action(&WorkspaceAction::NewTabInAgentMode {
+                    entrypoint: AgentModeEntrypoint::AgentManagementView,
+                });
                 ctx.notify();
             }
             AgentManagementViewAction::OpenSession { item_id } => {

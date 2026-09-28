@@ -57,8 +57,6 @@ fn split_command_and_argument(buffer: &str) -> (&str, Option<&str>) {
 /// they are computed once per recompute and shared by both surfaces.
 pub struct CommonCommandGates {
     is_orchestration_enabled: bool,
-    is_cloud_handoff_enabled: bool,
-    has_default_host: bool,
     is_cli_agent_input: bool,
 }
 
@@ -87,11 +85,7 @@ pub(super) fn subscribe_to_shared_dependencies<T>(
         }
     });
     ctx.subscribe_to_model(&AISettings::handle(ctx), move |me, _, event, ctx| {
-        if matches!(
-            event,
-            AISettingsChangedEvent::IsAnyAIEnabled { .. }
-                | AISettingsChangedEvent::ShouldForceDisableCloudHandoff { .. }
-        ) {
+        if matches!(event, AISettingsChangedEvent::IsAnyAIEnabled { .. }) {
             recompute_active_commands(me, ctx);
         }
     });
@@ -377,13 +371,6 @@ pub trait SlashCommandDataSource {
         if command.name == commands::ORCHESTRATE_NAME && !gates.is_orchestration_enabled {
             return false;
         }
-        if command.name == commands::MOVE_TO_CLOUD.name && !gates.is_cloud_handoff_enabled {
-            return false;
-        }
-        // /host is only useful when a default self-hosted host is configured.
-        if command.name == commands::HOST.name && !gates.has_default_host {
-            return false;
-        }
         // When CLI agent input is open, restrict to the explicit allowlist.
         if gates.is_cli_agent_input && !CLI_AGENT_INPUT_ALLOWED_COMMANDS.contains(&command.name) {
             return false;
@@ -393,19 +380,8 @@ pub trait SlashCommandDataSource {
 
     fn common_command_gates(&self, ctx: &AppContext) -> CommonCommandGates {
         let ai_settings = AISettings::as_ref(ctx);
-        // Hide /host when no default host is configured (env var or the window's own team
-        // setting), matching the host the command itself resolves when it runs.
-        let has_default_host = std::env::var("WARP_CLOUD_MODE_DEFAULT_HOST")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .is_some()
-            || UserWorkspaces::as_ref(ctx)
-                .default_host_slug(&self.team_context(ctx))
-                .is_some();
         CommonCommandGates {
             is_orchestration_enabled: ai_settings.is_orchestration_enabled(ctx),
-            is_cloud_handoff_enabled: ai_settings.is_cloud_handoff_enabled(ctx),
-            has_default_host,
             is_cli_agent_input: self.is_cli_agent_input_open(ctx),
         }
     }
@@ -539,7 +515,6 @@ pub struct InlineItem {
     pub name_match_result: Option<FuzzyMatchResult>,
     pub description_match_result: Option<FuzzyMatchResult>,
     pub score: OrderedFloat<f64>,
-    pub compact_layout: bool,
 }
 
 impl InlineItem {
@@ -558,7 +533,6 @@ impl InlineItem {
             name_match_result: None,
             description_match_result: None,
             score: OrderedFloat(f64::MIN),
-            compact_layout: false,
         }
     }
 
@@ -574,11 +548,6 @@ impl InlineItem {
 
     fn with_score(mut self, score: OrderedFloat<f64>) -> Self {
         self.score = score;
-        self
-    }
-
-    pub(crate) fn with_compact_layout(mut self, compact: bool) -> Self {
-        self.compact_layout = compact;
         self
     }
 }

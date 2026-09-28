@@ -324,7 +324,6 @@ pub struct InlineMenuView<A: InlineMenuAction, T: 'static + Send + Sync = ()> {
     banner_fn: Option<BannerFn>,
     resize_handle: DragResizeHandle,
     drag_indicator_mouse_state: MouseStateHandle,
-    compact_layout: bool,
     dismiss_on_row_click: bool,
 }
 
@@ -517,18 +516,12 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> InlineMenuView<A, T> {
             banner_fn: None,
             resize_handle: drag_resize_handle(),
             drag_indicator_mouse_state: MouseStateHandle::default(),
-            compact_layout: false,
             dismiss_on_row_click: false,
         }
     }
 
     pub fn with_header_config(mut self, config: InlineMenuHeaderConfig) -> Self {
         self.header_config = config;
-        self
-    }
-
-    pub fn with_compact_layout(mut self) -> Self {
-        self.compact_layout = true;
         self
     }
 
@@ -943,11 +936,8 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> InlineMenuView<A, T> {
             .positioner
             .as_ref(app)
             .should_render_results_in_reverse(app);
-        let horizontal_padding = if self.compact_layout {
-            0.
-        } else {
-            *terminal::view::PADDING_LEFT - QUERY_RESULT_RENDERER_STYLES.result_horizontal_padding
-        };
+        let horizontal_padding =
+            *terminal::view::PADDING_LEFT - QUERY_RESULT_RENDERER_STYLES.result_horizontal_padding;
         let results = self.render_results_only(should_reverse, horizontal_padding, app);
 
         match self.banner_fn.as_ref().and_then(|f| f(app)) {
@@ -1109,10 +1099,6 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> View for InlineMenuView<A, T
                     content = results_list;
                 }
             }
-        }
-
-        if self.compact_layout {
-            return Clipped::new(content).finish();
         }
 
         let aligned_content = if is_rendering_below_input {

@@ -4,14 +4,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use itertools::Itertools as _;
-use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine, parse_markdown};
+use markdown_parser::parse_markdown;
 use parking_lot::FairMutex;
 use pathfinder_color::ColorU;
-use warp_core::features::FeatureFlag;
 use warpui::elements::{
     Container, CornerRadius, CrossAxisAlignment, DispatchEventResult, EventHandler, Flex,
-    FormattedTextElement, HighlightedHyperlink, MainAxisSize, MouseStateHandle, ParentElement,
-    Radius, Text,
+    FormattedTextElement, MainAxisSize, MouseStateHandle, ParentElement, Radius, Text,
 };
 use warpui::fonts::{Properties, Weight};
 use warpui::keymap::Keystroke;
@@ -27,7 +25,6 @@ use crate::ai::active_agent_views_model::{ActiveAgentViewsModel, ConversationOrT
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::agent_view::{
     AgentViewController, AgentViewEntryOrigin, ENTER_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE,
-    ENTER_CLOUD_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE,
 };
 use crate::ai::blocklist::history_model::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 use crate::ai::conversation_navigation::ConversationNavigationData;
@@ -39,21 +36,17 @@ use crate::terminal::model::blocks::BlockHeightItem;
 use crate::terminal::model::session::{BootstrapSessionType, Session, SessionType, Sessions};
 use crate::terminal::model_events::{AnsiHandlerEvent, ModelEvent, ModelEventDispatcher};
 use crate::terminal::view::TerminalAction;
-use crate::terminal::view::ambient_agent::{AmbientAgentViewModel, AmbientAgentViewModelEvent};
 use crate::terminal::{self, TerminalModel, prompt};
 use crate::ui_components::icon_with_status::{
     CIRCLE_RATIO, IconWithStatusVariant, render_icon_with_status,
 };
 use crate::util::time_format::format_approx_duration_from_now_utc;
 
-const CLOUD_AGENT_DOCS_URL: &str = "https://docs.warp.dev/platform/";
-
 const MAX_RECENT_CONVERSATION_COUNT: usize = 3;
 
 #[derive(Default)]
 struct StateHandles {
     start_new_conversation: MouseStateHandle,
-    start_cloud_conversation: MouseStateHandle,
     switch_model: MouseStateHandle,
     exit: MouseStateHandle,
     recent_conversations: [MouseStateHandle; MAX_RECENT_CONVERSATION_COUNT],
@@ -62,14 +55,12 @@ struct StateHandles {
 /// Zero state view shown when agent view is active but the conversation has no exchanges yet.
 pub struct AgentViewZeroStateBlock {
     conversation_id: AIConversationId,
-    origin: AgentViewEntryOrigin,
     agent_view_controller: ModelHandle<AgentViewController>,
     sessions: ModelHandle<Sessions>,
     terminal_model: Arc<FairMutex<TerminalModel>>,
     current_working_directory: Option<String>,
     cached_recent_conversations: Vec<ConversationNavigationData>,
     should_hide: bool,
-    has_parent_terminal: bool,
     state_handles: StateHandles,
 }
 
@@ -80,13 +71,10 @@ impl AgentViewZeroStateBlock {
         origin: AgentViewEntryOrigin,
         agent_view_controller: ModelHandle<AgentViewController>,
         sessions: &ModelHandle<Sessions>,
-        cloud_agent_view_model: Option<&ModelHandle<AmbientAgentViewModel>>,
         terminal_model: Arc<FairMutex<TerminalModel>>,
         model_events_dispatcher: &ModelHandle<ModelEventDispatcher>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        let cloud_agent_view_model_clone = cloud_agent_view_model.cloned();
-
         let model_events_clone = model_events_dispatcher.clone();
         ctx.subscribe_to_model(
             &BlocklistAIHistoryModel::handle(ctx),
@@ -99,9 +87,6 @@ impl AgentViewZeroStateBlock {
                     me.should_hide = true;
                     ctx.unsubscribe_to_model(&model_events_clone);
                     ctx.unsubscribe_to_model(&history_model);
-                    if let Some(cloud_agent_view_model) = cloud_agent_view_model_clone.as_ref() {
-                        ctx.unsubscribe_to_model(cloud_agent_view_model);
-                    }
                     ctx.notify();
                     return;
                 }
@@ -124,7 +109,6 @@ impl AgentViewZeroStateBlock {
             ctx.notify();
         });
 
-        let cloud_agent_view_model_clone = cloud_agent_view_model.cloned();
         ctx.subscribe_to_model(
             model_events_dispatcher,
             move |me, model_events_dispatcher, event, ctx| {
@@ -136,11 +120,6 @@ impl AgentViewZeroStateBlock {
                             me.should_hide = true;
                             ctx.unsubscribe_to_model(&model_events_dispatcher);
                             ctx.unsubscribe_to_model(&BlocklistAIHistoryModel::handle(ctx));
-                            if let Some(cloud_agent_view_model) =
-                                cloud_agent_view_model_clone.as_ref()
-                            {
-                                ctx.unsubscribe_to_model(cloud_agent_view_model);
-                            }
                             ctx.notify();
                         }
                     }
@@ -154,46 +133,6 @@ impl AgentViewZeroStateBlock {
             },
         );
 
-        if let Some(cloud_agent_view_model) = cloud_agent_view_model {
-            let model_events_clone = model_events_dispatcher.clone();
-            ctx.subscribe_to_model(cloud_agent_view_model, move |me, model, event, ctx| {
-                if me.should_hide {
-                    return;
-                }
-
-                // Hide the zero state when this pane becomes a local-to-cloud handoff
-                // pane (REMOTE-1486). The fresh cloud-mode banner is suppressed because
-                // the pane is actually pre-loaded with a forked source conversation, not
-                // a brand-new one.
-                if matches!(event, AmbientAgentViewModelEvent::PendingHandoffChanged)
-                    && model.as_ref(ctx).is_local_to_cloud_handoff()
-                {
-                    me.should_hide = true;
-                } else if FeatureFlag::CloudModeSetupV2.is_enabled() {
-                    if matches!(
-                        event,
-                        AmbientAgentViewModelEvent::DispatchedAgent
-                            | AmbientAgentViewModelEvent::Cancelled
-                    ) {
-                        me.should_hide = true;
-                    }
-                } else if model.as_ref(ctx).should_show_status_footer() {
-                    me.should_hide = true;
-                }
-
-                if me.should_hide {
-                    ctx.unsubscribe_to_model(&model);
-                    ctx.unsubscribe_to_model(&model_events_clone);
-                    ctx.unsubscribe_to_model(&BlocklistAIHistoryModel::handle(ctx));
-                    ctx.notify();
-                }
-            });
-        }
-
-        let has_parent_terminal =
-            cloud_agent_view_model.is_none_or(|model| !model.as_ref(ctx).is_ambient_agent());
-        let is_local_to_cloud_handoff = cloud_agent_view_model
-            .is_some_and(|model| model.as_ref(ctx).is_local_to_cloud_handoff());
         let state_handles = StateHandles::default();
         let current_working_directory = {
             let terminal_model = terminal_model.lock();
@@ -205,19 +144,16 @@ impl AgentViewZeroStateBlock {
                 Self::recent_conversations_for_working_directory(current_working_directory, ctx)
             })
             .unwrap_or_default();
-        let should_hide = matches!(origin, AgentViewEntryOrigin::AcceptedPassiveCodeDiff)
-            || is_local_to_cloud_handoff;
+        let should_hide = matches!(origin, AgentViewEntryOrigin::AcceptedPassiveCodeDiff);
 
         Self {
             conversation_id,
-            origin,
             agent_view_controller,
             sessions: sessions.clone(),
             terminal_model,
             current_working_directory,
             cached_recent_conversations,
             should_hide,
-            has_parent_terminal,
             state_handles,
         }
     }
@@ -346,34 +282,22 @@ impl View for AgentViewZeroStateBlock {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
 
-        let header_props = if self.origin.is_cloud_agent() {
-            HeaderProps {
-                title: "New cloud agent conversation".into(),
-                description: AgentViewDescription::CloudModeWithDocsLink,
-                icon: IconWithStatusVariant::OzAgent {
-                    status: None,
-                    is_ambient: true,
-                },
-            }
-        } else {
-            let mut local_description =
-                "Send a prompt below to start a new conversation".to_owned();
-            let active_session = self.active_session(app);
-            let location_label = active_session.as_deref().and_then(|session| {
-                format_session_location(session, self.current_working_directory.as_deref())
-            });
-            if let Some(location_label) = location_label {
-                local_description += &format!(" in `{location_label}`");
-            }
+        let mut local_description = "Send a prompt below to start a new conversation".to_owned();
+        let active_session = self.active_session(app);
+        let location_label = active_session.as_deref().and_then(|session| {
+            format_session_location(session, self.current_working_directory.as_deref())
+        });
+        if let Some(location_label) = location_label {
+            local_description += &format!(" in `{location_label}`");
+        }
 
-            HeaderProps {
-                title: "New Warp Agent conversation".into(),
-                description: AgentViewDescription::PlainText(vec![local_description.into()]),
-                icon: IconWithStatusVariant::OzAgent {
-                    status: None,
-                    is_ambient: false,
-                },
-            }
+        let header_props = HeaderProps {
+            title: "New Warp Agent conversation".into(),
+            description: vec![local_description.into()],
+            icon: IconWithStatusVariant::OzAgent {
+                status: None,
+                is_ambient: false,
+            },
         };
 
         let mut content = Flex::column()
@@ -383,8 +307,6 @@ impl View for AgentViewZeroStateBlock {
         let active_session = self.active_session(app);
         let body = render_body(
             ZeroStateBodyProps {
-                origin: self.origin.clone(),
-                has_parent_terminal: self.has_parent_terminal,
                 recent_conversations: &self.cached_recent_conversations,
                 active_session: active_session.as_deref(),
                 current_working_directory: self.current_working_directory.as_deref(),
@@ -402,13 +324,12 @@ impl View for AgentViewZeroStateBlock {
         }));
         let content = content.finish();
 
-        let show_bottom_border = !self.origin.is_cloud_agent();
         let content = Container::new(content)
             .with_horizontal_padding(*terminal::view::PADDING_LEFT)
             .with_vertical_padding(styles::CONTAINER_VERTICAL_PADDING)
             .with_border(
                 Border::new(1.)
-                    .with_sides(true, false, show_bottom_border, false)
+                    .with_sides(true, false, true, false)
                     .with_border_fill(theme.outline()),
             )
             .finish();
@@ -476,17 +397,9 @@ fn current_working_directory_for_zero_state(terminal_model: &TerminalModel) -> O
         })
 }
 
-/// Describes the description content for the header.
-enum AgentViewDescription {
-    /// Plain text descriptions (used for local agent mode).
-    PlainText(Vec<Cow<'static, str>>),
-    /// Cloud mode description with "Visit docs" hyperlink.
-    CloudModeWithDocsLink,
-}
-
 struct HeaderProps {
     title: Cow<'static, str>,
-    description: AgentViewDescription,
+    description: Vec<Cow<'static, str>>,
     icon: IconWithStatusVariant,
 }
 
@@ -534,78 +447,28 @@ fn render_title_and_description(props: HeaderProps, app: &AppContext) -> Vec<Box
     let sub_text_color = theme.sub_text_color(bg).into_solid();
     let main_text_color = theme.main_text_color(bg).into_solid();
 
-    match description {
-        AgentViewDescription::PlainText(text_items) => {
-            let description_items = text_items.into_iter().map(|description_item| {
-                FormattedTextElement::new(
-                    parse_markdown(&description_item).expect("is valid markdown"),
-                    appearance.monospace_font_size(),
-                    appearance.ui_font_family(),
-                    appearance.ui_font_family(),
-                    sub_text_color,
-                    Default::default(),
-                )
-                .with_inline_code_properties(Some(main_text_color), None)
-                .finish()
-            });
-            items.extend(description_items.map(|rendered_item| {
-                Container::new(rendered_item)
-                    .with_margin_bottom(styles::TITLE_MARGIN_BOTTOM)
-                    .finish()
-            }));
-        }
-        AgentViewDescription::CloudModeWithDocsLink => {
-            // First line: plain text.
-            items.push(
-                Container::new(
-                    Text::new(
-                        "Run your agent task in an isolated cloud environment.",
-                        appearance.ui_font_family(),
-                        appearance.monospace_font_size(),
-                    )
-                    .with_color(sub_text_color)
-                    .finish(),
-                )
-                .with_margin_bottom(styles::DESCRIPTION_LINE_MARGIN_BOTTOM)
-                .finish(),
-            );
-
-            // Second line: text with "Visit docs" hyperlink.
-            let description_with_link = FormattedText::new([FormattedTextLine::Line(vec![
-                FormattedTextFragment::plain_text(
-                    "Use cloud agents to run parallel agents, build agents that run autonomously, and check in on your agents from anywhere. ",
-                ),
-                FormattedTextFragment::hyperlink("Visit docs", CLOUD_AGENT_DOCS_URL),
-            ])]);
-
-            items.push(
-                Container::new(
-                    FormattedTextElement::new(
-                        description_with_link,
-                        appearance.monospace_font_size(),
-                        appearance.ui_font_family(),
-                        appearance.monospace_font_family(),
-                        sub_text_color,
-                        HighlightedHyperlink::default(),
-                    )
-                    .with_hyperlink_font_color(theme.accent().into_solid())
-                    .register_default_click_handlers(|url, _, ctx| {
-                        ctx.open_url(&url.url);
-                    })
-                    .finish(),
-                )
-                .with_margin_bottom(-12.)
-                .finish(),
-            );
-        }
-    }
+    let description_items = description.into_iter().map(|description_item| {
+        FormattedTextElement::new(
+            parse_markdown(&description_item).expect("is valid markdown"),
+            appearance.monospace_font_size(),
+            appearance.ui_font_family(),
+            appearance.ui_font_family(),
+            sub_text_color,
+            Default::default(),
+        )
+        .with_inline_code_properties(Some(main_text_color), None)
+        .finish()
+    });
+    items.extend(description_items.map(|rendered_item| {
+        Container::new(rendered_item)
+            .with_margin_bottom(styles::TITLE_MARGIN_BOTTOM)
+            .finish()
+    }));
 
     items
 }
 
 struct ZeroStateBodyProps<'a> {
-    origin: AgentViewEntryOrigin,
-    has_parent_terminal: bool,
     recent_conversations: &'a [ConversationNavigationData],
     active_session: Option<&'a Session>,
     current_working_directory: Option<&'a str>,
@@ -614,18 +477,12 @@ struct ZeroStateBodyProps<'a> {
 
 fn render_body(props: ZeroStateBodyProps<'_>, app: &AppContext) -> Vec<Box<dyn Element>> {
     let ZeroStateBodyProps {
-        origin,
-        has_parent_terminal,
         recent_conversations,
         active_session,
         current_working_directory,
         state_handles,
     } = props;
 
-    // Cloud agent mode doesn't show keyboard shortcuts.
-    if origin.is_cloud_agent() {
-        return vec![];
-    }
     match render_recent_conversations_section(
         RecentConversationProps {
             recent_conversations,
@@ -660,21 +517,6 @@ fn render_body(props: ZeroStateBodyProps<'_>, app: &AppContext) -> Vec<Box<dyn E
                 render_standard_message(
                     Message::new(vec![MessageItem::clickable(
                         vec![
-                            MessageItem::keystroke(
-                                ENTER_CLOUD_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE.clone(),
-                            ),
-                            MessageItem::text("start a new cloud agent conversation"),
-                        ],
-                        |ctx| {
-                            ctx.dispatch_typed_action(TerminalAction::EnterCloudAgentView);
-                        },
-                        state_handles.start_cloud_conversation.clone(),
-                    )]),
-                    app,
-                ),
-                render_standard_message(
-                    Message::new(vec![MessageItem::clickable(
-                        vec![
                             MessageItem::keystroke(Keystroke {
                                 key: "/model".to_owned(),
                                 ..Default::default()
@@ -690,25 +532,22 @@ fn render_body(props: ZeroStateBodyProps<'_>, app: &AppContext) -> Vec<Box<dyn E
                 ),
             ];
 
-            // Only show "escape to go back" if there's a parent terminal
-            if has_parent_terminal {
-                body_items.push(render_standard_message(
-                    Message::new(vec![MessageItem::clickable(
-                        vec![
-                            MessageItem::keystroke(Keystroke {
-                                key: "escape".to_owned(),
-                                ..Default::default()
-                            }),
-                            MessageItem::text("go back to terminal"),
-                        ],
-                        |ctx| {
-                            ctx.dispatch_typed_action(TerminalAction::ExitAgentView);
-                        },
-                        state_handles.exit.clone(),
-                    )]),
-                    app,
-                ));
-            }
+            body_items.push(render_standard_message(
+                Message::new(vec![MessageItem::clickable(
+                    vec![
+                        MessageItem::keystroke(Keystroke {
+                            key: "escape".to_owned(),
+                            ..Default::default()
+                        }),
+                        MessageItem::text("go back to terminal"),
+                    ],
+                    |ctx| {
+                        ctx.dispatch_typed_action(TerminalAction::ExitAgentView);
+                    },
+                    state_handles.exit.clone(),
+                )]),
+                app,
+            ));
 
             body_items
         }
@@ -959,7 +798,6 @@ mod styles {
     pub const CONTAINER_VERTICAL_PADDING: f32 = 16.;
     pub const TITLE_MARGIN_BOTTOM: f32 = 8.;
     pub const SECTION_HEADER_MARGIN_BOTTOM: f32 = 8.;
-    pub const DESCRIPTION_LINE_MARGIN_BOTTOM: f32 = 6.;
     pub const CREDITS_BANNER_FONT_SIZE: f32 = 12.;
 
     pub fn title_font_size(appearance: &Appearance) -> f32 {

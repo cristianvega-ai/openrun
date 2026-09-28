@@ -64,10 +64,6 @@ pub enum AgentManagementTelemetryEvent {
     DismissSetupGuide,
     /// User spawned a new local agent
     SpawnNewLocalAgent,
-    /// User spawned a new cloud agent
-    SpawnNewCloudAgent,
-    /// User opened the agent type selector modal
-    AgentTypeSelectorOpened,
     /// User ran a workflow step from the setup guide
     SetupGuideStepRun { step: SetupGuideStep },
     /// User copied a workflow step from the setup guide
@@ -128,8 +124,6 @@ impl TelemetryEvent for AgentManagementTelemetryEvent {
             AgentManagementTelemetryEvent::OpenSetupGuide => None,
             AgentManagementTelemetryEvent::DismissSetupGuide => None,
             AgentManagementTelemetryEvent::SpawnNewLocalAgent => None,
-            AgentManagementTelemetryEvent::SpawnNewCloudAgent => None,
-            AgentManagementTelemetryEvent::AgentTypeSelectorOpened => None,
             AgentManagementTelemetryEvent::SetupGuideStepRun { step } => {
                 Some(json!({ "step": step }))
             }
@@ -217,8 +211,6 @@ impl TelemetryEventDesc for AgentManagementTelemetryEventDiscriminants {
             Self::OpenSetupGuide => "AgentManagement.OpenSetupGuide",
             Self::DismissSetupGuide => "AgentManagement.DismissSetupGuide",
             Self::SpawnNewLocalAgent => "AgentManagement.SpawnNewLocalAgent",
-            Self::SpawnNewCloudAgent => "AgentManagement.SpawnNewCloudAgent",
-            Self::AgentTypeSelectorOpened => "AgentManagement.AgentTypeSelectorOpened",
             Self::SetupGuideStepRun => "AgentManagement.SetupGuideStepRun",
             Self::SetupGuideStepCopy => "AgentManagement.SetupGuideStepCopy",
             Self::SetupGuideDocsLink => "AgentManagement.SetupGuideDocsLink",
@@ -244,10 +236,6 @@ impl TelemetryEventDesc for AgentManagementTelemetryEventDiscriminants {
             Self::OpenSetupGuide => "User opened the ambient agent setup guide",
             Self::DismissSetupGuide => "User dismissed the ambient agent setup guide",
             Self::SpawnNewLocalAgent => "User spawned a new local agent from agent management",
-            Self::SpawnNewCloudAgent => "User spawned a new cloud agent from agent management",
-            Self::AgentTypeSelectorOpened => {
-                "User opened the agent type selector from agent management"
-            }
             Self::SetupGuideStepRun => "User ran a workflow step from the setup guide",
             Self::SetupGuideStepCopy => "User copied a workflow step from the setup guide",
             Self::SetupGuideDocsLink => "User clicked a docs URL in the setup guide",

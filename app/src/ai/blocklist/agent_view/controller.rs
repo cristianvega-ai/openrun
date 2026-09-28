@@ -35,8 +35,6 @@ pub enum ExitAgentViewError {
     LongRunningCommand,
     #[error("Cannot exit conversation as a viewer.")]
     ConversationViewer,
-    #[error("Cannot exit cloud agent.")]
-    AmbientAgent,
 }
 
 /// The display mode for an active agent view.
@@ -438,10 +436,7 @@ impl AgentViewController {
                 .active_block()
                 .is_active_and_long_running();
 
-        // Cloud agent panes do not have the same underlying terminal ownership
-        // constraint (no local shell process), so long-running third party agent
-        // commands should not trap the user in agent view.
-        if is_fullscreen_with_long_running && !model.is_dummy_cloud_mode_session() {
+        if is_fullscreen_with_long_running {
             return Err(ExitAgentViewError::LongRunningCommand);
         }
 
@@ -869,7 +864,7 @@ impl AgentViewController {
         );
     }
 
-    /// Exits the active agent view without any confirmation.
+    #[cfg(test)]
     pub(crate) fn exit_agent_view_without_confirmation(&mut self, ctx: &mut ModelContext<Self>) {
         self.exit_agent_view_internal(
             ExitAgentViewOptions {

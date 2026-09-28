@@ -6,7 +6,7 @@ use chrono::Utc;
 use instant::Instant;
 use mockito::Matcher;
 use pathfinder_geometry::rect::RectF;
-use persistence::model::{AgentConversation, ConversationUsageMetadata};
+use persistence::model::AgentConversation;
 #[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
@@ -30,11 +30,7 @@ use super::*;
 use crate::ai::AIRequestUsageModel;
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::StartAgentExecutionMode;
-use crate::ai::agent::api::ServerConversationToken;
-use crate::ai::agent::conversation::{
-    AIAgentHarness, AIConversation, AIConversationId, ConversationStatus,
-    ServerAIConversationMetadata,
-};
+use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent_conversations_model::AgentConversationsModel;
 use crate::ai::ambient_agents::github_auth_notifier::GitHubAuthNotifier;
 use crate::ai::ambient_agents::task::TaskPrincipalInfo;
@@ -42,7 +38,6 @@ use crate::ai::ambient_agents::{
     AgentSource, AmbientAgentTask, AmbientAgentTaskId, AmbientAgentTaskState,
 };
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::history_model::CloudConversationData;
 use crate::ai::blocklist::local_agent_task_sync_model::LocalAgentTaskSyncModel;
 use crate::ai::blocklist::orchestration_event_streamer::OrchestrationEventStreamer;
 use crate::ai::blocklist::orchestration_events::OrchestrationEventService;
@@ -61,7 +56,6 @@ use crate::auth::AuthStateProvider;
 use crate::auth::auth_manager::AuthManager;
 use crate::auth::user::TEST_USER_UID;
 use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{Owner, Revision, ServerMetadata, ServerPermissions};
 use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
 use crate::network::NetworkStatus;
@@ -87,7 +81,6 @@ use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::history::History;
 use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::local_tty::spawner::PtySpawner;
-use crate::terminal::model::terminal_model::ConversationTranscriptViewerStatus;
 use crate::terminal::resizable_data::ResizableData;
 use crate::terminal::view::Event as TerminalViewEvent;
 use crate::test_util::assert_eventually;
@@ -446,65 +439,6 @@ fn ambient_agent_task_for_current_user(task_id: AmbientAgentTaskId) -> AmbientAg
         debug_agent_available: false,
         scope: None,
     }
-}
-
-fn mock_server_metadata() -> ServerMetadata {
-    ServerMetadata {
-        uid: ServerId::default(),
-        revision: Revision::now(),
-        metadata_last_updated_ts: Utc::now().into(),
-        trashed_ts: None,
-        folder_id: None,
-        is_welcome_object: false,
-        creator_uid: None,
-        last_editor_uid: None,
-        current_editor_uid: None,
-    }
-}
-
-fn mock_server_permissions() -> ServerPermissions {
-    ServerPermissions {
-        space: Owner::mock_current_user(),
-        guests: Vec::new(),
-        anyone_link_sharing: None,
-        permissions_last_updated_ts: Utc::now().into(),
-    }
-}
-
-fn test_server_conversation_metadata(
-    task_id: Option<AmbientAgentTaskId>,
-) -> ServerAIConversationMetadata {
-    ServerAIConversationMetadata {
-        title: "Restored cloud conversation".to_string(),
-        working_directory: None,
-        harness: AIAgentHarness::Oz,
-        usage: ConversationUsageMetadata {
-            was_summarized: false,
-            context_window_usage: 0.0,
-            credits_spent: 0.0,
-            platform_credits_spent: 0.0,
-            total_provider_cost_in_cents: None,
-            credits_spent_for_last_block: None,
-            charged_usage_for_last_block: None,
-            total_charged_usage: None,
-            token_usage: vec![],
-            tool_usage_metadata: Default::default(),
-            context_window_segments: Vec::new(),
-        },
-        metadata: mock_server_metadata(),
-        creator: None,
-        permissions: mock_server_permissions(),
-        ambient_agent_task_id: task_id,
-        server_conversation_token: ServerConversationToken::new("test-server-token".to_string()),
-        artifacts: Vec::new(),
-    }
-}
-
-fn cloud_conversation_with_ambient_task(task_id: AmbientAgentTaskId) -> CloudConversationData {
-    let mut conversation = AIConversation::new(false, false);
-    conversation.set_task_id(task_id);
-    conversation.set_server_metadata(test_server_conversation_metadata(Some(task_id)));
-    CloudConversationData::Oz(Box::new(conversation))
 }
 
 fn start_parent_conversation(
@@ -893,30 +827,6 @@ fn test_swapping_to_child_agent_from_maximized_pane_keeps_maximized_state() {
     });
 }
 #[test]
-fn test_insert_hidden_ambient_child_agent_pane_suppresses_details_auto_open() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let pane_group = mock_pane_group(&mut app, Default::default());
-
-        pane_group.update(&mut app, |panes, ctx| {
-            let parent_pane_id = get_newly_created_pane_id(panes, &[]);
-            let child_pane_id =
-                panes.insert_ambient_agent_pane_hidden_for_child_agent(parent_pane_id, ctx);
-
-            let terminal_view = panes
-                .terminal_view_from_pane_id(child_pane_id, ctx)
-                .expect("hidden ambient child pane should have a terminal view");
-            assert!(
-                terminal_view
-                    .as_ref(ctx)
-                    .is_initial_conversation_details_panel_auto_open_suppressed_for_test(),
-                "hidden ambient child panes opened from the parent orchestration UI should not \
-                 auto-open details during environment setup or session readiness"
-            );
-        });
-    });
-}
-#[test]
 fn test_hidden_child_creation_applies_ambient_task_id_to_controller() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
@@ -987,199 +897,6 @@ fn test_restored_hidden_child_pane_reapplies_ambient_task_id_to_controller() {
             assert_eq!(
                 request_ambient_agent_task_id_for_hidden_child(panes, child_pane_id, ctx,),
                 Some(task_id)
-            );
-        });
-    });
-}
-
-/// When task data for a restored remote child is NOT yet cached at
-/// `create_hidden_child_agent_pane` time, the unified dispatch resolves to
-/// `Pending`: the hidden pane is still created and registered in
-/// `child_agent_panes` keyed by its local AIConversationId (so the pill can
-/// reveal it), using a passive loading transcript vehicle with no live attach.
-/// The tracker re-drives materialization on the next lifecycle /
-/// session-linked event.
-#[test]
-fn test_restored_remote_hidden_child_pane_pending_when_task_data_unavailable() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let pane_group = mock_pane_group(&mut app, Default::default());
-
-        pane_group.update(&mut app, |panes, ctx| {
-            let parent_pane_id = get_newly_created_pane_id(panes, &[]);
-            let parent_conversation_id = start_parent_conversation(panes, parent_pane_id, ctx);
-            let task_id = new_ambient_agent_task_id();
-
-            // Deliberately do NOT inject a task into AgentConversationsModel.
-            // `get_or_async_fetch_task_data` returns `None`, so the unified
-            // dispatch resolves to `Pending`: the hidden passive loading pane
-            // is created and tracked so the pill can reveal it.
-            // A later TasksUpdated re-drives the retained pending hydration.
-
-            let mut child_conversation = AIConversation::new(false, false);
-            child_conversation.set_parent_conversation_id(parent_conversation_id);
-            child_conversation.set_task_id(task_id);
-            child_conversation.mark_as_remote_child();
-            let child_conversation_id = child_conversation.id();
-
-            panes.create_hidden_child_agent_pane(child_conversation, parent_pane_id, ctx);
-
-            let child_pane_id = panes
-                .child_agent_panes
-                .get(&child_conversation_id)
-                .copied()
-                .expect("remote child pane must be registered even when task data unavailable");
-
-            // The placeholder local AIConversationId remains the canonical key.
-            assert!(
-                panes.child_agent_panes.contains_key(&child_conversation_id),
-                "placeholder AIConversationId must stay the child_agent_panes key in fallback path",
-            );
-
-            // Pending uses the passive loading presentation: no ambient
-            // composer is exposed before task metadata can select live or
-            // transcript materialization.
-            let terminal_view = panes
-                .terminal_view_from_pane_id(child_pane_id, ctx)
-                .expect("pending child pane has a terminal view");
-            let view = terminal_view.as_ref(ctx);
-            assert!(view.ambient_agent_view_model().is_none());
-            assert!(
-                !view.has_agent_view_zero_state_for_test(),
-                "pending child must not expose the cloud composition zero state",
-            );
-            assert_eq!(
-                view.active_conversation_id(ctx),
-                Some(child_conversation_id)
-            );
-            let model = view.model.lock();
-            assert!(model.is_conversation_transcript_viewer());
-            assert!(model.is_read_only());
-            assert_eq!(
-                model.conversation_transcript_viewer_status(),
-                Some(&ConversationTranscriptViewerStatus::Loading),
-            );
-        });
-    });
-}
-
-/// A terminal owner remote child (`Succeeded` run with a server
-/// `conversation_id`, no live session) resolves to `LoadTranscript`: the
-/// unified dispatch materializes a hidden loading pane keyed by the
-/// placeholder's local id, into which the cloud transcript merges
-/// asynchronously.
-#[test]
-fn test_restored_remote_hidden_child_pane_terminal_owner_loads_transcript() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let pane_group = mock_pane_group(&mut app, Default::default());
-
-        pane_group.update(&mut app, |panes, ctx| {
-            let parent_pane_id = get_newly_created_pane_id(panes, &[]);
-            let parent_conversation_id = start_parent_conversation(panes, parent_pane_id, ctx);
-            let task_id = new_ambient_agent_task_id();
-
-            // Terminal task + server conversation id -> LoadTranscript.
-            let mut task = ambient_agent_task_for_current_user(task_id);
-            task.state = AmbientAgentTaskState::Succeeded;
-            task.is_sandbox_running = false;
-            task.conversation_id = Some("owner-child-server-token".to_string());
-            AgentConversationsModel::handle(ctx).update(ctx, |model, _| {
-                model.insert_task_for_test(task);
-            });
-
-            let mut child_conversation = AIConversation::new(false, false);
-            child_conversation.set_parent_conversation_id(parent_conversation_id);
-            child_conversation.set_task_id(task_id);
-            child_conversation.mark_as_remote_child();
-            let child_conversation_id = child_conversation.id();
-
-            panes.create_hidden_child_agent_pane(child_conversation, parent_pane_id, ctx);
-
-            let child_pane_id = panes
-                .child_agent_panes
-                .get(&child_conversation_id)
-                .copied()
-                .expect("terminal owner remote child must materialize a transcript loading pane");
-            let terminal_view = panes
-                .terminal_view_from_pane_id(child_pane_id, ctx)
-                .expect("terminal owner remote child pane should have a terminal view");
-            let view = terminal_view.as_ref(ctx);
-            assert_eq!(
-                view.active_conversation_id(ctx),
-                Some(child_conversation_id)
-            );
-            assert!(view.ambient_agent_view_model().is_none());
-            let model = view.model.lock();
-            assert!(model.is_conversation_transcript_viewer());
-            assert!(model.is_read_only());
-            assert_eq!(
-                model.conversation_transcript_viewer_status(),
-                Some(&ConversationTranscriptViewerStatus::Loading),
-            );
-        });
-    });
-}
-
-/// A terminal *viewer* child (`is_viewing_shared_session`, `Succeeded` run
-/// with a server `conversation_id`, no live session) resolves to
-/// `LoadTranscript` in a passive transcript pane. It must not expose the
-/// ambient cloud-composition model or its new-conversation zero state while
-/// the transcript fetch is in flight.
-#[test]
-fn test_restored_viewer_hidden_child_pane_terminal_loads_transcript() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let pane_group = mock_pane_group(&mut app, Default::default());
-
-        pane_group.update(&mut app, |panes, ctx| {
-            let parent_pane_id = get_newly_created_pane_id(panes, &[]);
-            let parent_conversation_id = start_parent_conversation(panes, parent_pane_id, ctx);
-            let task_id = new_ambient_agent_task_id();
-
-            let mut task = ambient_agent_task_for_current_user(task_id);
-            task.state = AmbientAgentTaskState::Succeeded;
-            task.is_sandbox_running = false;
-            task.conversation_id = Some("viewer-child-server-token".to_string());
-            AgentConversationsModel::handle(ctx).update(ctx, |model, _| {
-                model.insert_task_for_test(task);
-            });
-
-            let mut child_conversation = AIConversation::new(false, false);
-            child_conversation.set_parent_conversation_id(parent_conversation_id);
-            child_conversation.set_task_id(task_id);
-            child_conversation.set_is_viewing_shared_session(true);
-            let child_conversation_id = child_conversation.id();
-
-            panes.create_hidden_child_agent_pane(child_conversation, parent_pane_id, ctx);
-
-            let child_pane_id = panes
-                .child_agent_panes
-                .get(&child_conversation_id)
-                .copied()
-                .expect("terminal viewer child must materialize a transcript pane");
-            let terminal_view = panes
-                .terminal_view_from_pane_id(child_pane_id, ctx)
-                .expect("terminal viewer child pane has a terminal view");
-            let view = terminal_view.as_ref(ctx);
-            assert_eq!(
-                view.active_conversation_id(ctx),
-                Some(child_conversation_id),
-            );
-            assert!(
-                view.ambient_agent_view_model().is_none(),
-                "passive viewer transcripts must not retain a configuring cloud-agent model",
-            );
-            assert!(
-                !view.has_agent_view_zero_state_for_test(),
-                "viewer child placeholders must not insert new-cloud composition zero state",
-            );
-            let model = view.model.lock();
-            assert!(model.is_conversation_transcript_viewer());
-            assert!(model.is_read_only());
-            assert_eq!(
-                model.conversation_transcript_viewer_status(),
-                Some(&ConversationTranscriptViewerStatus::Loading),
             );
         });
     });
@@ -1693,89 +1410,6 @@ fn finish_seed_child_conversations_from_task_gives_up_when_parent_has_no_termina
                     .contains_key(&parent_task_id),
                 "a parent with no terminal surface to seed into must not stay pending forever \
                  and be re-listed on every future re-drive",
-            );
-        });
-    });
-}
-
-#[test]
-fn test_ambient_transcript_restore_creates_cloud_mode_pane_when_handoff_enabled() {
-    let _cloud_mode = FeatureFlag::CloudMode.override_enabled(true);
-    let _setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
-    let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let pane_group = mock_pane_group(&mut app, Default::default());
-        let task_id = new_ambient_agent_task_id();
-
-        pane_group.update(&mut app, |panes, ctx| {
-            AgentConversationsModel::handle(ctx).update(ctx, |model, _| {
-                model.insert_task_for_test(ambient_agent_task_for_current_user(task_id));
-            });
-            panes.load_data_into_conversation_transcript_viewer(
-                cloud_conversation_with_ambient_task(task_id),
-                Some(task_id),
-                ctx,
-            );
-        });
-
-        pane_group.read(&app, |panes, ctx| {
-            let terminal_view = panes
-                .active_session_view(ctx)
-                .expect("restored pane should have an active terminal view");
-            let view = terminal_view.as_ref(ctx);
-            let ambient_model = view
-                .ambient_agent_view_model()
-                .expect("ambient restore should create a Cloud Mode view")
-                .as_ref(ctx);
-
-            assert_eq!(ambient_model.task_id(), Some(task_id));
-            assert!(ambient_model.is_agent_running());
-            assert_eq!(
-                view.ambient_agent_task_id_for_details_panel(ctx),
-                Some(task_id)
-            );
-            assert!(view.active_conversation_id(ctx).is_some());
-
-            let model = view.model.lock();
-            assert!(!model.is_conversation_transcript_viewer());
-            assert!(!model.is_read_only());
-        });
-    });
-}
-
-#[test]
-fn test_ambient_transcript_restore_uses_generic_viewer_when_handoff_disabled() {
-    let _handoff = FeatureFlag::HandoffCloudCloud.override_enabled(false);
-    let _setup_v2 = FeatureFlag::CloudModeSetupV2.override_enabled(true);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let pane_group = mock_pane_group(&mut app, Default::default());
-        let task_id = new_ambient_agent_task_id();
-
-        pane_group.update(&mut app, |panes, ctx| {
-            panes.load_data_into_conversation_transcript_viewer(
-                cloud_conversation_with_ambient_task(task_id),
-                Some(task_id),
-                ctx,
-            );
-        });
-
-        pane_group.read(&app, |panes, ctx| {
-            let terminal_view = panes
-                .active_session_view(ctx)
-                .expect("fallback viewer should have an active terminal view");
-            let view = terminal_view.as_ref(ctx);
-            assert!(view.ambient_agent_view_model().is_none());
-
-            let model = view.model.lock();
-            assert!(model.is_conversation_transcript_viewer());
-            assert!(model.is_read_only());
-            assert_eq!(
-                model.conversation_transcript_viewer_status(),
-                Some(&ConversationTranscriptViewerStatus::ViewingAmbientConversation(task_id))
             );
         });
     });

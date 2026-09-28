@@ -132,43 +132,6 @@ fn pop_front_no_ops_when_head_is_locked() {
 }
 
 #[test]
-fn remove_initial_cloud_mode_row_only_removes_the_locked_head() {
-    with_model(|mut app, model, events| {
-        let conv = AIConversationId::new();
-        let initial_id = model.update(&mut app, |model, ctx| {
-            model.append(conv, initial_cloud_mode_query("initial"), ctx)
-        });
-        append_user(&model, &mut app, conv, "follow up");
-        events.borrow_mut().clear();
-
-        let removed = model.update(&mut app, |model, ctx| {
-            model.remove_initial_cloud_mode_row(conv, ctx)
-        });
-        assert_eq!(
-            removed.map(|query| query.text().to_owned()),
-            Some("initial".to_owned())
-        );
-
-        let removed_again = model.update(&mut app, |model, ctx| {
-            model.remove_initial_cloud_mode_row(conv, ctx)
-        });
-        assert!(removed_again.is_none());
-
-        let action = model.read(&app, |model, _| model.peek_autofire(conv));
-        match action {
-            Some(AutofireAction::Submit { text, .. }) => assert_eq!(text, "follow up"),
-            other => panic!("expected Submit, got {other:?}"),
-        }
-
-        let evts = events.borrow();
-        assert!(matches!(
-            evts.first(),
-            Some(QueuedQueryEvent::Removed { query_id, .. }) if *query_id == initial_id
-        ));
-    });
-}
-
-#[test]
 fn append_preserves_fifo_order() {
     with_model(|mut app, model, _events| {
         let conv = AIConversationId::new();

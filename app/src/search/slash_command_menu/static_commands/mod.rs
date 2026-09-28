@@ -33,15 +33,6 @@ bitflags! {
         const ACTIVE_CONVERSATION = 1 << 5;
         /// Requires AI to be globally enabled.
         const AI_ENABLED = 1 << 7;
-        /// Requires a non-cloud-agent context.
-        const NOT_CLOUD_AGENT = 1 << 8;
-        /// Requires a cloud-agent context.
-        const CLOUD_AGENT = 1 << 9;
-        /// Set on the session context iff the slash command data source was constructed via
-        /// `SlashCommandDataSource::for_cloud_mode_v2` *and* `FeatureFlag::CloudModeInputV2`
-        /// is enabled. Commands that require this bit are hidden everywhere except the V2
-        /// cloud-mode composing input.
-        const CLOUD_MODE_V2_COMPOSER = 1 << 10;
     }
 }
 /// Stable identity for a static slash command.
@@ -50,7 +41,6 @@ bitflags! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SlashCommandKind {
     Agent,
-    CloudAgent,
     ApiKeys,
     ConnectGrok,
     Upgrade,
@@ -69,7 +59,6 @@ pub enum SlashCommandKind {
     RenameConversation,
     SetTabColor,
     Fork,
-    MoveToCloud,
     OpenCodeReview,
     OpenSettingsFile,
     Feedback,
@@ -78,9 +67,6 @@ pub enum SlashCommandKind {
     Clear,
     Model,
     Team,
-    Host,
-    Harness,
-    Environment,
     Profile,
     Plan,
     Orchestrate,
@@ -89,7 +75,6 @@ pub enum SlashCommandKind {
     Queue,
     ForkAndCompact,
     ForkFrom,
-    ContinueLocally,
     Usage,
     Cost,
     Conversations,

@@ -108,7 +108,6 @@ use crate::settings::AISettings;
 use crate::settings_view::SettingsSection;
 use crate::terminal::ShellLaunchData;
 #[cfg(not(target_family = "wasm"))]
-use crate::terminal::input::slash_commands::fork_button_action;
 use crate::ui_components::blended_colors;
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons::Icon;
@@ -162,8 +161,6 @@ pub(crate) struct Props<'a> {
     pub(super) is_turn_panel_expanded: bool,
     pub(super) terminal_view_id: EntityId,
     pub(super) is_conversation_transcript_viewer: bool,
-    #[cfg(not(target_family = "wasm"))]
-    pub(super) is_cloud_agent_context: bool,
     pub(super) aws_bedrock_credentials_error_view:
         Option<&'a ViewHandle<AwsBedrockCredentialsErrorView>>,
     pub(super) gemini_enterprise_credentials_error_view:
@@ -184,9 +181,6 @@ pub(crate) struct Props<'a> {
     pub(super) thinking_display_mode: crate::settings::ThinkingDisplayMode,
     pub(super) conversation_has_imported_comments: bool,
     pub(super) ask_user_question_view: Option<&'a ViewHandle<AskUserQuestionView>>,
-    /// `true` when this block belongs to a cloud agent pane that is still in its setup phase
-    /// (running environment startup commands before the first agent turn).
-    pub(super) is_cloud_agent_pre_first_exchange: bool,
 }
 
 pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
@@ -245,7 +239,6 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                         && !is_output_for_static_prompt_suggestions
                         && !is_conversation_in_progress
                         && request_type.is_active()
-                        && !props.is_cloud_agent_pre_first_exchange
                         && !status
                             .error()
                             .map(|e| e.is_invalid_api_key())
@@ -2743,12 +2736,7 @@ fn render_response_footer(props: Props, app: &AppContext) -> Option<Box<dyn Elem
 
     #[cfg(not(target_family = "wasm"))]
     if !props.is_conversation_transcript_viewer {
-        let fork_button_tooltip = fork_button_action(
-            props.model.conversation_id(app),
-            props.is_cloud_agent_context,
-            app,
-        )
-        .tooltip;
+        let fork_button_tooltip = "Fork conversation";
 
         let ui_builder = appearance.ui_builder().clone();
         let fork_button = icon_button(

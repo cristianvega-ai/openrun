@@ -1,5 +1,4 @@
 use std::fs;
-use std::sync::Arc;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::{DateTime, Local};
@@ -8,14 +7,11 @@ use warp_completer::completer::MatchedSuggestion;
 use warp_core::command::ExitCode;
 use warp_core::features::FeatureFlag;
 use warp_terminal::model::ansi::ClearMode;
-use warpui::r#async::executor::Background;
 use warpui::text::{SelectionType, str_to_byte_vec};
 
 use super::*;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::terminal::color;
 use crate::terminal::event_listener::ChannelEventListener;
-use crate::terminal::model::ObfuscateSecrets;
 use crate::terminal::model::ansi::{CompletionMetadata, Handler};
 use crate::terminal::model::block::{BlockId, SerializedBlock};
 use crate::terminal::model::bootstrap::BootstrapStage;
@@ -23,7 +19,6 @@ use crate::terminal::model::grid::Dimensions as _;
 use crate::terminal::model::image_map::StoredImageMetadata;
 use crate::terminal::model::index::Side;
 use crate::terminal::model::selection::ExpandedSelectionRange;
-use crate::terminal::model::test_utils::block_size;
 
 /// Helper function to create a SerializedBlock with default values,
 /// including the new is_local field.
@@ -106,48 +101,6 @@ fn take_typeahead_for_input_is_none_when_typeahead_is_empty() {
     model.finish_block();
 
     assert_eq!(model.take_typeahead_for_input(), None);
-}
-#[test]
-fn cloud_mode_terminal_model_is_dummy_session() {
-    let mut model = TerminalModel::new_for_cloud_mode(
-        block_size(),
-        color::List::from(&color::Colors::default()),
-        ChannelEventListener::new_for_test(),
-        Arc::new(Background::default()),
-        false,
-        false,
-        false,
-        ObfuscateSecrets::No,
-    );
-
-    assert!(model.is_dummy_cloud_mode_session());
-    assert!(
-        !model
-            .block_list()
-            .is_executing_oz_environment_startup_commands()
-    );
-
-    let restored_block = SerializedBlock {
-        id: BlockId::new(),
-        stylized_command: str_to_byte_vec("setup-looking-command"),
-        stylized_output: str_to_byte_vec("output"),
-        did_execute: true,
-        start_ts: Some(Local::now()),
-        completed_ts: Some(Local::now()),
-        ..Default::default()
-    };
-    model
-        .block_list_mut()
-        .insert_restored_block(&restored_block);
-
-    let restored_command_block = model
-        .block_list()
-        .blocks()
-        .iter()
-        .find(|block| block.command_to_string() == "setup-looking-command")
-        .expect("restored command block should exist");
-    assert!(!restored_command_block.is_hidden());
-    assert!(!restored_command_block.is_oz_environment_startup_command());
 }
 
 #[test]

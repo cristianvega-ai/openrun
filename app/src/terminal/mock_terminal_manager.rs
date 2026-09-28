@@ -7,18 +7,15 @@ use settings::Setting as _;
 use warpui::{AppContext, ModelHandle, SingletonEntity, ViewHandle, WindowId};
 
 use super::event_listener::ChannelEventListener;
-use super::model::ObfuscateSecrets;
 use super::model::session::Sessions;
 use super::model_events::ModelEventDispatcher;
-use super::session_settings::SessionSettings;
-use super::terminal_manager::{BlockSpacing, compute_block_size, terminal_colors_list};
+use super::terminal_manager::BlockSpacing;
 use super::{ShellLaunchState, TerminalManager, TerminalModel, TerminalView};
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::blocklist::SerializedBlockListItem;
 use crate::context_chips::prompt_type::PromptType;
 use crate::pane_group::TerminalViewResources;
 use crate::pane_group::pane::DetachType;
-use crate::settings::{InputModeSettings, WarpPromptSeparator};
 use crate::terminal::view::ConversationRestorationInNewPaneType;
 
 pub struct MockTerminalManager {
@@ -85,7 +82,6 @@ impl MockTerminalManager {
                 // into the web view.
                 conversation_restoration,
                 None, // inactive_pty_reads_rx
-                false,
                 ctx,
             )
         });
@@ -112,97 +108,6 @@ impl MockTerminalManager {
             view: terminal_view,
         }
     }
-
-    /// Creates the terminal model and view for a cloud mode pane. The pane has no local shell
-    /// process; it hosts the input used to compose an ambient agent prompt.
-    pub fn create_cloud_mode_model(
-        resources: TerminalViewResources,
-        initial_size: Vector2F,
-        window_id: WindowId,
-        ctx: &mut AppContext,
-    ) -> MockTerminalManagerInit {
-        let (wakeups_tx, wakeups_rx) = async_channel::unbounded();
-        let (events_tx, events_rx) = async_channel::unbounded();
-        let (pty_reads_tx, _pty_reads_rx) = async_broadcast::broadcast(1);
-        let (executor_command_tx, _executor_command_rx) = async_channel::unbounded();
-        let channel_event_proxy = ChannelEventListener::new(wakeups_tx, events_tx, pty_reads_tx);
-
-        let block_spacing = BlockSpacing::for_gui(ctx);
-        let show_memory_stats = block_spacing.show_memory_stats;
-        let honor_ps1 = *SessionSettings::as_ref(ctx).honor_ps1;
-        let input_mode = *InputModeSettings::as_ref(ctx).input_mode.value();
-        let sizes = compute_block_size(initial_size, &block_spacing, ctx);
-        let model = TerminalModel::new_for_cloud_mode(
-            sizes,
-            terminal_colors_list(ctx),
-            channel_event_proxy,
-            ctx.background_executor().clone(),
-            show_memory_stats,
-            honor_ps1,
-            input_mode.is_inverted_blocklist(),
-            ObfuscateSecrets::No,
-        );
-        let colors = model.colors();
-        let model = Arc::new(FairMutex::new(model));
-
-        let sessions: ModelHandle<Sessions> =
-            ctx.add_model(|ctx| Sessions::new(executor_command_tx, ctx));
-        let model_events_dispatcher =
-            ctx.add_model(|ctx| ModelEventDispatcher::new(events_rx, sessions.clone(), ctx));
-        let prompt_type =
-            ctx.add_model(|_| PromptType::new_static(vec![], false, WarpPromptSeparator::None));
-
-        let cloned_model = model.clone();
-        let view = ctx.add_typed_action_view(window_id, |ctx| {
-            let size_info = cloned_model.lock().block_list().size().to_owned();
-            TerminalView::new(
-                resources,
-                wakeups_rx,
-                model_events_dispatcher.clone(),
-                cloned_model,
-                sessions.clone(),
-                size_info,
-                colors,
-                None,
-                prompt_type,
-                None,
-                None,
-                None, // inactive_pty_reads_rx
-                true, // is_ambient_agent
-                ctx,
-            )
-        });
-
-        // Keep the model event dispatcher alive for as long as the view lives.
-        view.update(ctx, |_view, ctx| {
-            ctx.spawn(futures::future::pending::<()>(), move |_, _, _| {
-                std::mem::drop(model_events_dispatcher);
-            });
-        });
-
-        let terminal_view_id = view.id();
-        let agent_view_controller = view.as_ref(ctx).agent_view_controller().clone();
-        let active_session = view.as_ref(ctx).active_session().clone();
-        ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
-            model.register_agent_view_controller(
-                &agent_view_controller,
-                &active_session,
-                terminal_view_id,
-                ctx,
-            );
-        });
-
-        let terminal_view = view.clone();
-        let terminal_manager = Self { model, view };
-        let manager_model = ctx.add_model(|_ctx| {
-            let manager: Box<dyn TerminalManager> = Box::new(terminal_manager);
-            manager
-        });
-        MockTerminalManagerInit {
-            manager: manager_model,
-            view: terminal_view,
-        }
-    }
 }
 
 impl TerminalManager for MockTerminalManager {
@@ -210,18 +115,7 @@ impl TerminalManager for MockTerminalManager {
         self.model.clone()
     }
 
-    fn on_view_detached(&self, detach_type: DetachType, app: &mut AppContext) {
-        if self.model.lock().is_dummy_cloud_mode_session() {
-            if matches!(detach_type, DetachType::Closed) {
-                let terminal_view_id = self.view.id();
-                ActiveAgentViewsModel::handle(app).update(app, |model, ctx| {
-                    model.unregister_agent_view_controller(terminal_view_id, ctx);
-                    model.unregister_ambient_session(terminal_view_id, ctx);
-                });
-            }
-            return;
-        }
-
+    fn on_view_detached(&self, _detach_type: DetachType, app: &mut AppContext) {
         // If this is a conversation transcript viewer, unregister the ambient session.
         if self.model.lock().is_conversation_transcript_viewer() {
             let terminal_view_id = self.view.id();

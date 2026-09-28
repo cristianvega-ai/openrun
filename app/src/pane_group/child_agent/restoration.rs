@@ -154,7 +154,7 @@ impl PaneGroup {
                 in_flight_fetch_started_at: None,
                 retry_handle: None,
             });
-        self.ensure_pending_ambient_restoration_subscription(ctx);
+        self.ensure_child_task_update_subscription(ctx);
 
         self.spawn_ancestor_list_fetch_if_needed(parent_task_id, ctx);
     }

@@ -274,7 +274,6 @@ pub struct BillingAndUsagePageView {
     auto_reload_switch: SwitchStateHandle,
     buy_button: MouseStateHandle,
     // Ambient agent trial widget buttons.
-    ambient_trial_new_agent_button: MouseStateHandle,
     ambient_trial_buy_more_button: MouseStateHandle,
     ambient_trial_dismiss_button: MouseStateHandle,
 }
@@ -422,7 +421,6 @@ impl BillingAndUsagePageView {
             edit_monthly_limit: MouseStateHandle::default(),
             auto_reload_switch: SwitchStateHandle::default(),
             buy_button: MouseStateHandle::default(),
-            ambient_trial_new_agent_button: MouseStateHandle::default(),
             ambient_trial_buy_more_button: MouseStateHandle::default(),
             ambient_trial_dismiss_button: MouseStateHandle::default(),
         };
@@ -1120,7 +1118,7 @@ impl BillingAndUsagePageView {
 
         let theme = appearance.theme();
         let ui_builder = appearance.ui_builder();
-        let fg = theme.foreground().into_solid();
+        let _fg = theme.foreground().into_solid();
         let bg = theme.background().into_solid();
 
         let title = Text::new_inline(AMBIENT_AGENT_TRIAL_TITLE, appearance.ui_font_family(), 14.)
@@ -1147,39 +1145,6 @@ impl BillingAndUsagePageView {
             .finish();
 
         let mut right_side = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
-
-        // Only show "New agent" button if credits >= threshold.
-        if credits_remaining >= AMBIENT_AGENT_TRIAL_CREDIT_THRESHOLD {
-            let new_agent_button = ui_builder
-                .button(
-                    ButtonVariant::Secondary,
-                    self.ambient_trial_new_agent_button.clone(),
-                )
-                .with_text_label("New agent".to_string())
-                .with_style(UiComponentStyles {
-                    font_color: Some(bg),
-                    background: Some(fg.into()),
-                    font_size: Some(14.),
-                    font_weight: Some(Weight::Semibold),
-                    padding: Some(Coords {
-                        top: 7.,
-                        bottom: 7.,
-                        left: 12.,
-                        right: 12.,
-                    }),
-                    ..Default::default()
-                })
-                .build()
-                .on_click(|ctx, _, _| {
-                    ctx.dispatch_typed_action(WorkspaceAction::AddAmbientAgentTab);
-                })
-                .finish();
-            right_side.add_child(
-                Container::new(new_agent_button)
-                    .with_margin_right(8.)
-                    .finish(),
-            );
-        }
 
         // Only show "Buy more" button for users not on a paid plan.
         let is_on_paid_plan = UserWorkspaces::as_ref(app)

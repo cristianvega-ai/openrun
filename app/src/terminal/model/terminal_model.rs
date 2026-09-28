@@ -71,7 +71,7 @@ use crate::terminal::model::index::VisibleRow;
 use crate::terminal::model::iterm_image::{ITermImage, ITermImageMetadata};
 use crate::terminal::model::secrets::ObfuscateSecrets;
 use crate::terminal::model::session::SessionInfo;
-use crate::terminal::shell::{ShellName, ShellType};
+use crate::terminal::shell::ShellType;
 use crate::terminal::ssh::util::{InteractiveSshCommand, SshLoginState};
 use crate::terminal::{
     BlockPadding, ShellHost, ShellLaunchData, ShellLaunchState, SizeUpdate, color, ssh,
@@ -461,10 +461,6 @@ pub struct TerminalModel {
 
     /// Whether or not to respect secrets that are obfuscated, respecting the Safe Mode/Secret Redaction setting.
     obfuscate_secrets: ObfuscateSecrets,
-
-    /// Whether this terminal model was created as a cloud mode dummy session
-    /// (no local shell process).
-    is_dummy_cloud_mode_session: bool,
 
     /// If Some, this terminal is displaying a read-only conversation transcript.
     /// Tracks both the loading state and the type of conversation being viewed.
@@ -956,7 +952,7 @@ impl TerminalModel {
             session_startup_path,
             ShellLaunchState::ShellSpawned {
                 available_shell: None,
-                display_name: ShellName::blank(),
+                display_name: crate::terminal::shell::ShellName::blank(),
                 shell_type: ShellType::Zsh,
             },
         );
@@ -1011,7 +1007,6 @@ impl TerminalModel {
         is_ai_ugc_telemetry_enabled: bool,
         session_startup_path: Option<PathBuf>,
         shell_state: ShellLaunchState,
-        is_dummy_cloud_mode_session: bool,
     ) -> Self {
         let alt_screen = AltScreen::new(
             sizes.size,
@@ -1061,7 +1056,6 @@ impl TerminalModel {
             handled_exit: false,
             shell_launch_state: shell_state,
             obfuscate_secrets,
-            is_dummy_cloud_mode_session,
             conversation_transcript_viewer_status: None,
             notify_on_end_of_ssh_login: None,
             is_receiving_hook: IsReceivingHook::No,
@@ -1106,52 +1100,7 @@ impl TerminalModel {
             is_ai_ugc_telemetry_enabled,
             session_startup_path,
             shell_state,
-            false,
         )
-    }
-
-    /// Creates a terminal model for a cloud mode pane, which has no local shell process.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_for_cloud_mode(
-        sizes: BlockSize,
-        colors: color::List,
-        event_proxy: ChannelEventListener,
-        background_executor: Arc<Background>,
-        show_memory_stats: bool,
-        honor_ps1: bool,
-        is_inverted: bool,
-        obfuscate_secrets: ObfuscateSecrets,
-    ) -> Self {
-        Self::new_internal(
-            None,
-            sizes,
-            colors,
-            event_proxy,
-            background_executor,
-            false,
-            false,
-            show_memory_stats,
-            honor_ps1,
-            is_inverted,
-            obfuscate_secrets,
-            false,
-            None,
-            ShellLaunchState::ShellSpawned {
-                available_shell: None,
-                display_name: ShellName::blank(),
-                shell_type: ShellType::Zsh,
-            },
-            true,
-        )
-    }
-
-    pub fn is_dummy_cloud_mode_session(&self) -> bool {
-        self.is_dummy_cloud_mode_session
-    }
-
-    #[cfg(test)]
-    pub fn set_is_dummy_cloud_mode_session(&mut self, value: bool) {
-        self.is_dummy_cloud_mode_session = value;
     }
 
     pub fn ambient_agent_task_id(&self) -> Option<AmbientAgentTaskId> {

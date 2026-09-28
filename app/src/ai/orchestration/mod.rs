@@ -15,7 +15,6 @@ mod validation;
 
 pub use config_state::{AuthSecretSelection, OrchestrationConfigState};
 pub use edit_state::OrchestrationEditState;
-pub use providers::resolve_default_environment_id;
 pub use providers::{
     ORCHESTRATION_WARP_WORKER_HOST, persist_environment_selection, persist_host_selection,
     resolve_auth_secret_selection_for_harness, resolve_default_host_slug,
@@ -23,12 +22,6 @@ pub use providers::{
 pub(crate) use providers::{
     can_execute_with_auth_secret, persist_auth_secret_selection,
     populate_default_auth_secret_for_execution,
-};
-pub(crate) use remote_child::should_disable_snapshot;
-pub use remote_child::{
-    CloudAgentStartupAuthFlow, CloudAgentStartupBlocker, CloudAgentStartupFailure,
-    CloudAgentStartupIssue, CloudAgentStartupPresentation, RemoteChildLaunchConfig,
-    classify_cloud_agent_startup_error, prepare_remote_child_launch,
 };
 pub(crate) use snapshots::AUTH_SECRET_INHERIT_LABEL;
 pub use snapshots::{

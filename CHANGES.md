@@ -68,6 +68,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Session-sharing protocol dependency](#session-sharing-protocol-dependency) — dropped the `session-sharing-protocol` crate and its patch entry, so no crate can build the relay wire types
 - [Warp-distributed CLI-agent plugins](#warp-distributed-cli-agent-plugins) — removed the install/update flows, the "Enable notifications" chips, the manual-instructions pane and the OpenCode debug actions for the `claude-code-warp`, `codex-warp`, `gemini-cli-warp` and `opencode-warp` plugins; the OSC 777/9 listener stays
 - [Agent tips](#agent-tips) — removed the rotating "Tip:" line under the agent warping indicator and the cloud-mode loading screen, the Show agent tips setting and its toggle
+- [Cloud mode, ambient-agent terminal UI and handoff](#cloud-mode-ambient-agent-terminal-ui-and-handoff) — removed the cloud-agent terminal (setup, follow-up input, tombstones, queued cloud prompts), local-to-cloud and cloud-to-cloud handoff, auto-handoff on sleep, the cloud environment and host selectors and the cloud slash commands, tab types, panes and settings
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1787,3 +1788,34 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 **Notes:**
 - `TelemetryEvent::{AgentTipShown, AgentTipClicked, ToggleShowAgentTips}` stay in `server/telemetry/events.rs` for TEL-4.
 - `FeatureFlag::AgentTips` and its Cargo feature stay for FLAGS-1. The `resource_center` tips (`TipsCompleted`) are the unrelated "Welcome tips" checklist and are unchanged.
+## Cloud mode, ambient-agent terminal UI and handoff
+**Why:** Cloud mode drove a terminal view as the front end of a Warp-hosted cloud agent run: it spawned the run on Warp's servers, joined the run's shared session as a viewer, showed setup progress, took follow-up prompts, inserted "conversation ended" tombstones and handed local conversations over to a cloud VM. An offline fork has no cloud agents to spawn or join (ai.md AI-17a, master decisions 1 and 9).
+
+**Removed:**
+- `app/src/terminal/view/ambient_agent/` (the `AmbientAgentViewModel`, its status/progress/loading/harness/setup UI, cancel and error handling, the first-time cloud setup and team-required views and the cloud tips in `tips.rs`, which also carried the Sentry mention), and every `ambient_agent_view_model` field, parameter and event across `TerminalView`, `Input`, the agent footer, blocks, context chips, model and profile selectors, the pane group and the shared-session viewer.
+- The handoff pipeline: `ai/blocklist/handoff/` (snapshot upload, launch and touched-file collection), `workspace/auto_handoff.rs`, `Input`'s `&` handoff compose mode (`handoff_compose.rs`, `InputPrefixMode::CloudHandoff`, `InputAction::ActivateCloudHandoff`), the footer handoff chip and its toolbar-migration setting, `TerminalAction::{EnterCloudAgentView, CancelAmbientAgentTask}` and the `Workspace` actions `OpenLocalToCloudHandoffPane`, `AutoHandoffActiveAgentToCloud`, `AddAmbientAgentTab` and the debug handoff/sleep actions.
+- Modals: the auto-handoff-on-sleep modal, the cloud-agent capacity modal, the auth-secret create/confirm dialogs and the "create environment" modals opened from the cloud composer.
+- Composer and footer: `cloud_mode_v2_history_menu.rs`, `cloud_mode_v2_view.rs`, the cloud-mode-V2 rendering in `terminal/input/agent.rs`, `agent_input_footer/environment_selector.rs`, the host, harness and auth-secret selectors, the cloud model picker, the "Cloud Agent" entry in the new-tab menu and the `agent_management` agent-type selector.
+- Shared-session continuation: `cloud_conversation_continuation*.rs` and `conversation_ended_tombstone_view*.rs`.
+- Slash commands `/cloud-agent`, `/handoff`, `/host`, `/harness`, `/environment` and `/continue-locally`, their `SlashCommandKind` variants and the `NOT_CLOUD_AGENT`, `CLOUD_AGENT` and `CLOUD_MODE_V2_COMPOSER` availability bits.
+- Pane and tab types: `LeafContents::AmbientAgent` and `AmbientAgentPaneSnapshot`, `pane_group/ambient_pane_restoration.rs`, `PanesLayout::AmbientAgent`, `PaneMode::Cloud` in launch configs and `TabConfigPaneType::Cloud`. The persistence model structs `AmbientAgentPane` and `NewAmbientAgentPane` are gone; the `ambient_agent_panes` table is left for DB-1 and is still cleared on save.
+- Settings: `DefaultSessionMode::CloudAgent`, `ShouldForceDisableCloudHandoff`, `ShouldForceDisableAmpersandHandoff`, `AutoHandoffOnSleepEnabled`, `DidShowAutoHandoffSleepModal`, `did_add_handoff_chip_to_toolbar` and the "Cloud handoff" category of Settings > Warp Agent.
+- URIs: `NewCloudAgentConversation`, `FocusCloudMode` and `AutoHandoffToCloud` (the `warp://` and `warpdev://` actions and their query parsing).
+- Telemetry: `SpawnNewCloudAgent`, `AgentTypeSelectorOpened` and the cloud dispatch events of the launch modal.
+- The "New agent" trial buttons on the billing pages and `submit_to_cloud_agent` in the onboarding callout.
+- Tests for all of the above; `TerminalView::new_for_test_with_cloud_mode`, `TerminalModel::new_for_cloud_mode_shared_session_viewer` and `is_dummy_cloud_mode_session`, and the Oz-environment-startup-command hiding of blocks (`is_oz_environment_startup_command` and its `BlockList` state).
+
+**Modified:**
+- `TerminalView::is_cloud_agent_session` looks only at the model; `TerminalView::new` and `Input::new` lost their ambient parameters.
+- A remote `StartAgent` child launch now creates a child conversation in an error state ("Remote child agents are not supported."). Completed remote children always restore as a passive transcript.
+- `AgentToolbarItemKind::HandoffToCloud` stays as a load-only variant so saved toolbar layouts still deserialize; it is never offered or rendered. `DefaultSessionMode` values of `cloud_agent` in settings files no longer parse and fall back to the default.
+- The orchestration "create environment" modal (`settings_view/handoff_environment_creation_modal.rs`) keeps only its orchestration entry point. Orchestration run cards no longer auto-open the create-secret modal.
+- `render_agent_shortcuts_view` lost its cloud parameter; `InlineMenuView` lost `compact_layout`.
+
+**User-visible impact:** No cloud-agent tab, pane, slash command, footer chip or `&` prefix; nothing to hand a conversation off to, and no sleep or capacity prompts. A tab config with `type = "cloud"` and a launch configuration with a cloud pane no longer load; a saved window whose pane was a cloud agent restores as an empty terminal.
+
+**Notes:**
+- Also resolves two STATUS leftovers: the handoff that spawned without a workspace snapshot went with the whole pipeline, and the Sentry mention in the ambient-agent tips went with `ambient_agent/tips.rs` (which also held the two MCP tips left there by the MCP removal).
+- Pieces that belonged to AI-17b and had to go here to compile: `LeafContents::AmbientAgent` and its persistence, `ambient_pane_restoration`, the remote child launch and the ambient handling in `hydration.rs`.
+- Left for AI-17b: `ai/ambient_agents/` and `AmbientAgentTaskId` plumbing (`TerminalView::ambient_agent_task_id`, `TerminalModel` task ids, `ConversationRestorationInNewPaneType::Historical.ambient_agent_task_id`), the cloud-load path of `agent_conversations_model.rs`, `AgentViewEntryOrigin::{CloudAgent, ThirdPartyCloudAgent}`, `OpenCloudAgentSetupGuide`, the `Tombstone*` and `SlashCommandContinueLocally` telemetry variants, `server_api` spawn structs and `presigned_upload.rs`.
+- Left for the task that deletes `QueuedQueryModel`: `QueuedQueryOrigin::InitialCloudMode` and its locked-row handling in the queued-prompts panel. Left for AI-18: `harness_availability`, `auth_secret_types`, the auth-secret and environment pages. Left for AI-19: `ai/orchestration/remote_child.rs`. Left for FLAGS-1: the `CloudMode`, `CloudModeSetupV2`, `CloudModeInputV2`, `HandoffCloudCloud`, `HandoffLocalCloud` and `OzHandoff` feature flags. Left for DB-1: the `ambient_agent_panes` table.
