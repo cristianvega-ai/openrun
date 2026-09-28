@@ -7,7 +7,7 @@ This file provides guidance when working with code in this repository.
 ### Build and Run
 - `cargo run` / `./script/run` - Build and run the GUI desktop app locally
 - `./script/run-tui` - Build and run the headless TUI front-end (`crates/warp_tui`)
-- `cargo bundle --bin warp` - Bundle the main (GUI) app
+- `cargo bundle --bin warp-oss` - Bundle the main (GUI) app
 
 ### Running with local warp-server
 To connect Warp client to a local warp-server instance:
