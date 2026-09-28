@@ -30,11 +30,6 @@ use warpui::{
     ViewHandle, WeakModelHandle,
 };
 
-#[cfg(feature = "local_fs")]
-use crate::ai::persisted_workspace::PersistedWorkspaceEvent;
-use crate::ai::persisted_workspace::{
-    LSPEnablementResultForFile, LspRepoStatus, PersistedWorkspace,
-};
 use crate::code::lsp_telemetry::{LspControlActionType, LspEnablementSource, LspTelemetryEvent};
 use crate::settings::AISettings;
 use crate::ui_components::blended_colors;
@@ -43,6 +38,9 @@ use crate::user_config::is_tab_config_toml;
 use crate::view_components::action_button::{
     ActionButton, ButtonSize, NakedTheme, PaneHeaderTheme,
 };
+#[cfg(feature = "local_fs")]
+use crate::workspace_metadata::PersistedWorkspaceEvent;
+use crate::workspace_metadata::{LSPEnablementResultForFile, LspRepoStatus, PersistedWorkspace};
 
 const FOOTER_HEIGHT: f32 = 24.;
 /// Margin around the LSP icon container

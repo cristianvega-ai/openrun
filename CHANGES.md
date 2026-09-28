@@ -34,6 +34,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Natural-language detection and input auto-detection](#natural-language-detection-and-input-auto-detection) — deleted the `input_classifier` and `natural_language_detection` crates, the classifier singleton, input auto-detection and its settings, toolbar toggle and slash command
 - [Session sharing: sharer side and entry points](#session-sharing-sharer-side-and-entry-points) — removed sharing a session and every share entry point (menus, keybindings, palette, `/remote-control`, tab indicator, quit and close warnings); viewing stays until SS-2
 - [Settings cloud sync](#settings-cloud-sync) — removed the Warp Drive settings syncer, the "Settings sync" switch, the "not synced" icons and the cloud-sync APIs of the settings crate; settings are local only
+- [Workspace LSP metadata moved out of the AI module](#workspace-lsp-metadata-moved-out-of-the-ai-module) — `PersistedWorkspace` (known repos and per-repo language-server enablement) now lives in `app/src/workspace_metadata/`
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -840,3 +841,16 @@ Each section below covers one removal (a single commit or a small group of relat
 - Data left on disk: the private preference `SettingsFileLastSyncedHash` and any `Preference` rows in SQLite (DB-1).
 - Logged-out users never get the default secret-redaction regexes. This predates the change: they were only ever initialized after a login. AUTH-1 may want to run `initialize_default_regexes_once` at startup.
 - The login slide still says "sync settings across devices" (AUTH-1).
+
+## Workspace LSP metadata moved out of the AI module
+**Why:** `PersistedWorkspace` holds the list of known repos and which language servers are enabled for each one (`LspTask`, `enable_lsp_server_for_path`, the `workspace_language_server` rows). The code editor, code review, the repo pickers and the settings page depend on it, and the LSP stays in the offline build. It lived under `app/src/ai/`, which is being deleted.
+
+**Removed:**
+- `app/src/ai/persisted_workspace_tests.rs` — an empty file that no module included.
+
+**Modified:**
+- `app/src/ai/persisted_workspace.rs` moved to `app/src/workspace_metadata/mod.rs`, unchanged. Every `crate::ai::persisted_workspace` import now points at `crate::workspace_metadata`.
+
+**User-visible impact:** None.
+
+**Notes:** The codebase-indexing and project-rules parts of the model are removed in the next section.

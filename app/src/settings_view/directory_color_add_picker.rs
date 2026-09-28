@@ -15,7 +15,6 @@ use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
 
-use crate::ai::persisted_workspace::{PersistedWorkspace, PersistedWorkspaceEvent};
 use crate::appearance::Appearance;
 use crate::ui_components::icons;
 use crate::view_components::action_button::{ActionButton, SecondaryTheme};
@@ -24,6 +23,7 @@ use crate::workspace::tab_settings::{
     DirectoryTabColor, DirectoryTabColors, TabSettings, TabSettingsChangedEvent,
     canonical_directory_key,
 };
+use crate::workspace_metadata::{PersistedWorkspace, PersistedWorkspaceEvent};
 
 const ADD_DIRECTORY_LABEL: &str = "+ Add directory…";
 const BUTTON_LABEL: &str = "Add directory color";

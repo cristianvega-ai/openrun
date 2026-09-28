@@ -19,11 +19,11 @@ use warp_errors::report_error;
 use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity};
 
 use super::OutlineStatus;
-use crate::ai::persisted_workspace::all_working_directories;
 use crate::settings::{
     AISettings, AISettingsChangedEvent, CodeSettings, CodeSettingsChangedEvent, InputSettings,
     InputSettingsChangedEvent,
 };
+use crate::workspace_metadata::all_working_directories;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{TelemetryEvent, safe_info, safe_warn, send_telemetry_from_ctx};
 
