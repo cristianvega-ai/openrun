@@ -142,9 +142,6 @@ use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::get_relevant_files::controller::{
     GetRelevantFilesController, GetRelevantFilesControllerEvent,
 };
-#[cfg(feature = "local_fs")]
-use crate::ai::skills::SkillOpenOrigin;
-use crate::ai::skills::{SkillManager, SkillTelemetryEvent};
 use crate::ai::{AIRequestUsageModel, AIRequestUsageModelEvent};
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::code::editor::comment_editor::create_readonly_comment_markdown_editor;
@@ -480,11 +477,6 @@ pub(super) struct AIBlockStateHandles {
 
     /// Mouse state handle for AI document created block
     ai_document_handle: MouseStateHandle,
-
-    /// Per-action mouse state handles for the 'open skill' button shown on
-    /// ReadSkill and ReadFiles action banners. Keyed by action id so that
-    /// multiple skill banners in the same block don't share hover/click state.
-    skill_button_handles: HashMap<AIAgentActionId, MouseStateHandle>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -1975,16 +1967,6 @@ impl AIBlock {
                 );
             }
 
-            if matches!(
-                &action.action,
-                AIAgentActionType::ReadSkill(_) | AIAgentActionType::ReadFiles(_)
-            ) {
-                self.state_handles
-                    .skill_button_handles
-                    .entry(action.id.clone())
-                    .or_default();
-            }
-
             if let AIAgentActionType::RunAgents(req) = &action.action {
                 self.ensure_run_agents_card_view(&action.id, req, ctx);
             }
@@ -2387,7 +2369,6 @@ impl AIBlock {
                 | AIAgentOutputMessageType::CommentsAddressed { .. }
                 | AIAgentOutputMessageType::DebugOutput { .. }
                 | AIAgentOutputMessageType::ArtifactCreated(_)
-                | AIAgentOutputMessageType::SkillInvoked(_)
                 | AIAgentOutputMessageType::EventsFromAgents { .. } => {}
             }
         }
@@ -3101,24 +3082,6 @@ impl AIBlock {
                 CodeDiffViewEvent::LoadedDiffs => {
                     if me.model.request_type(ctx).is_passive_code_diff() {
                         ctx.emit(AIBlockEvent::PassiveCodeDiffLoaded);
-                    }
-                }
-                #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
-                CodeDiffViewEvent::OpenSkill { reference, path } => {
-                    #[cfg(feature = "local_fs")]
-                    {
-                        ctx.emit(AIBlockEvent::OpenCodeInWarp {
-                            source: CodeSource::Skill {
-                                reference: reference.clone(),
-                                location: path.clone(),
-                                origin: SkillOpenOrigin::EditFiles,
-                            },
-                            layout: *crate::util::file::external_editor::EditorSettings::as_ref(
-                                ctx,
-                            )
-                            .open_file_layout
-                            .value(),
-                        });
                     }
                 }
                 _ => (),
@@ -6417,31 +6380,6 @@ impl TypedActionView for AIBlock {
                 #[cfg_attr(not(feature = "local_fs"), allow(unused))]
                 source,
             } => {
-                // Resets the interaction states of ReadSkill and ReadFiles tool call banners before opening a new code pane
-                // Avoids an immediate re-hover (and stuck tooltip) while the new code pane is being created
-                for handle in self.state_handles.skill_button_handles.values() {
-                    if let Ok(mut state) = handle.lock() {
-                        state.reset_interaction_state();
-                    }
-                }
-
-                // Sends a telemetry event when a skill is opened from an 'open skill' button
-                if let CodeSource::Skill {
-                    reference, origin, ..
-                } = source
-                {
-                    send_telemetry_from_ctx!(
-                        SkillTelemetryEvent::Opened {
-                            reference: reference.clone(),
-                            name: SkillManager::as_ref(ctx)
-                                .skill_by_reference(reference)
-                                .map(|skill| skill.name.clone()),
-                            origin: *origin,
-                        },
-                        ctx
-                    );
-                }
-
                 #[cfg(feature = "local_fs")]
                 {
                     let layout = *crate::util::file::external_editor::EditorSettings::as_ref(ctx)

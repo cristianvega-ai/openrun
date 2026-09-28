@@ -15,5 +15,4 @@ pub mod document;
 pub mod gfm_table;
 pub mod index;
 pub mod paths;
-pub mod skills;
 mod telemetry;

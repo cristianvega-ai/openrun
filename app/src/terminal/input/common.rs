@@ -237,8 +237,6 @@ pub(super) fn add_input_suggestions_overlays(
         InputSuggestionsMode::ModelSelector => {}
         // Profile selector is rendered separately via inline_profile_selector_view
         InputSuggestionsMode::ProfileSelector => {}
-        // Skill menu is rendered separately via inline_skill_selector_view
-        InputSuggestionsMode::SkillMenu => {}
         // User query menu is rendered separately via user_query_menu_view
         InputSuggestionsMode::UserQueryMenu { .. } => {}
         // Inline history menu is rendered separately via inline_history_menu_view

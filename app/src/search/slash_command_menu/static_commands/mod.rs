@@ -65,8 +65,6 @@ pub enum SlashCommandKind {
     Logout,
     CreateEnvironment,
     CreateNewProject,
-    EditSkill,
-    InvokeSkill,
     Edit,
     RenameTab,
     RenameConversation,

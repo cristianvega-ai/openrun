@@ -1,5 +1,4 @@
 use ai::agent::action::AskUserQuestionType;
-use ai::skills::SkillPathOrigin;
 use warp_multi_agent_api as api;
 
 use super::{
@@ -158,7 +157,6 @@ fn converts_upload_artifact_tool_call_to_action() {
             task_id: &task_id,
             current_todo_list: None,
             active_code_review: None,
-            skill_path_origin: &SkillPathOrigin::Local,
         })
         .expect("conversion should succeed");
 
@@ -182,7 +180,6 @@ fn converts_file_artifact_created_message_with_filename() {
             task_id: &task_id,
             current_todo_list: None,
             active_code_review: None,
-            skill_path_origin: &SkillPathOrigin::Local,
         })
         .expect("conversion should succeed");
 
@@ -226,7 +223,6 @@ fn transfer_control_tool_call_converts_to_action_message() {
             task_id: &task_id,
             current_todo_list: None,
             active_code_review: None,
-            skill_path_origin: &SkillPathOrigin::Local,
         })
         .expect("transfer-control conversion should succeed");
 

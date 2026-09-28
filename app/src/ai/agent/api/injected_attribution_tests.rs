@@ -2,20 +2,14 @@
 //! the request the client sends, without being re-stamped as the current user's.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use ai::skills::{ParsedSkill, SkillProvider, SkillScope};
 use warp_multi_agent_api as api;
-use warp_util::local_or_remote_path::LocalOrRemotePath;
 
 use super::convert_conversation::ConvertToExchanges;
 use super::convert_from::user_inputs_from_messages;
 use super::convert_to::convert_input;
-use crate::ai::agent::base_user_query::warp_client_origin;
-use crate::ai::agent::{
-    AIAgentInput, BaseUserQuery, InvokeSkillUserQuery, RunningCommand, UserQueryMode,
-};
+use crate::ai::agent::{AIAgentInput, BaseUserQuery, RunningCommand, UserQueryMode};
 use crate::ai::blocklist::PersistedAIInputType;
 use crate::terminal::model::block::BlockId;
 
@@ -121,87 +115,6 @@ fn cli_subagent_query_retains_the_original_author() {
         panic!("expected CLI input")
     };
     assert_echo(&query, &cli.user_query.unwrap());
-}
-
-fn skill() -> ParsedSkill {
-    ParsedSkill {
-        path: LocalOrRemotePath::Local(PathBuf::from("/tmp/skill/SKILL.md")),
-        name: "skill".into(),
-        description: "Test skill".into(),
-        content: "instructions".into(),
-        line_range: None,
-        provider: SkillProvider::Agents,
-        scope: SkillScope::Project,
-    }
-}
-
-fn skill_query_input(query: &api::message::UserQuery, base: Option<BaseUserQuery>) -> AIAgentInput {
-    AIAgentInput::InvokeSkill {
-        context: Arc::new([]),
-        skill: skill(),
-        user_query: Some(InvokeSkillUserQuery {
-            query: query.query.clone(),
-            referenced_attachments: HashMap::new(),
-            base,
-        }),
-    }
-}
-
-fn converted_skill_query(input: AIAgentInput) -> api::request::input::UserQuery {
-    let Some(api::request::input::Type::InvokeSkill(actual)) =
-        convert_input(vec![input]).unwrap().r#type
-    else {
-        panic!("expected invoke-skill input")
-    };
-    actual.user_query.unwrap()
-}
-
-#[test]
-fn a_locally_typed_skill_query_carries_the_fresh_marker() {
-    let query = converted_skill_query(skill_query_input(&api::message::UserQuery::default(), None));
-    assert_eq!(query.origin, Some(warp_client_origin()));
-    assert!(query.author.is_none());
-}
-
-#[test]
-fn invoke_skill_query_keeps_attribution_through_send_live_echo_and_restore() {
-    let query = attributed_query("external-author");
-    assert_echo(
-        &query,
-        &converted_skill_query(skill_query_input(
-            &query,
-            BaseUserQuery::from_message(&query),
-        )),
-    );
-    let message = api::Message {
-        id: "message".into(),
-        task_id: "task".into(),
-        request_id: "request".into(),
-        message: Some(api::message::Message::InvokeSkill(
-            api::message::InvokeSkill {
-                skill: Some(skill().into()),
-                user_query: Some(query.clone()),
-            },
-        )),
-        ..Default::default()
-    };
-    let live = user_inputs_from_messages(std::slice::from_ref(&message));
-    let task = api::Task {
-        id: "task".into(),
-        messages: vec![message],
-        ..Default::default()
-    };
-    let restored = task.into_exchanges();
-    for input in [&live[0], &restored[0].input[0]] {
-        let AIAgentInput::InvokeSkill {
-            user_query: Some(actual),
-            ..
-        } = input
-        else {
-            panic!("expected invoke-skill input")
-        };
-        assert_eq!(actual.base, BaseUserQuery::from_message(&query));
-    }
 }
 
 #[test]

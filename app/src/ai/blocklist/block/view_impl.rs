@@ -1072,7 +1072,6 @@ impl View for AIBlock {
                 state_handles: &self.state_handles,
                 action_buttons: &self.action_buttons,
                 action_model: &self.action_model,
-                active_session: &self.active_session,
                 editor_views: &self.code_editor_views,
                 current_working_directory: self.current_working_directory.as_ref(),
                 shell_launch_data: self.shell_launch_data.as_ref(),
@@ -1366,7 +1365,6 @@ impl AIAgentInput {
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::SummarizeConversation { .. }
-            | AIAgentInput::InvokeSkill { .. }
             | AIAgentInput::StartFromAmbientRunPrompt { .. }
             | AIAgentInput::ActionResult { .. }
             | AIAgentInput::MessagesReceivedFromAgents { .. }

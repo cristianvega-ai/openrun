@@ -189,8 +189,7 @@ pub(crate) fn redact_inputs(inputs: &mut [AIAgentInput]) {
                     | AIAgentActionResultType::FileGlob(_)
                     | AIAgentActionResultType::FileGlobV2(_) => {}
 
-                    AIAgentActionResultType::ReadSkill { .. }
-                    | AIAgentActionResultType::SuggestPrompt { .. }
+                    AIAgentActionResultType::SuggestPrompt { .. }
                     | AIAgentActionResultType::ReadDocuments(_)
                     | AIAgentActionResultType::EditDocuments(_)
                     | AIAgentActionResultType::CreateDocuments(_) => {}
@@ -224,20 +223,6 @@ pub(crate) fn redact_inputs(inputs: &mut [AIAgentInput]) {
                     // strings only; no user-provided text to redact.
                     AIAgentActionResultType::RunAgents(_)
                     | AIAgentActionResultType::WaitForEvents(_) => {}
-                }
-            }
-            AIAgentInput::InvokeSkill {
-                context,
-                skill,
-                user_query,
-            } => {
-                redact_context(Arc::make_mut(context));
-                redact_secrets(&mut skill.content);
-                if let Some(user_query) = user_query {
-                    redact_secrets(&mut user_query.query);
-                    for attachment in user_query.referenced_attachments.values_mut() {
-                        redact_attachment(attachment);
-                    }
                 }
             }
         }
@@ -278,8 +263,7 @@ fn redact_context(context: &mut [AIAgentContext]) {
             | AIAgentContext::Git { .. }
             | AIAgentContext::Repository { .. }
             | AIAgentContext::PullRequest { .. }
-            | AIAgentContext::File(_)
-            | AIAgentContext::Skills { .. } => {}
+            | AIAgentContext::File(_) => {}
         }
     }
 }

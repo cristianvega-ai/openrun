@@ -182,9 +182,6 @@ pub enum QueryFilter {
 
     StaticSlashCommands,
 
-    /// Filter results for skills (used for browsing skills).
-    Skills,
-
     /// Filter results for base agent models in the inline model selector.
     BaseModels,
 
@@ -223,7 +220,6 @@ impl QueryFilter {
             QueryFilter::Repos => "Search code repos",
             QueryFilter::DiffSets => "Search diff sets",
             QueryFilter::StaticSlashCommands => "Search static slash commands",
-            QueryFilter::Skills => "Search skills",
             QueryFilter::BaseModels => "Search base models",
             QueryFilter::FullTerminalUseModels => "Search full terminal use models",
             QueryFilter::CurrentDirectoryConversations => {
@@ -253,7 +249,6 @@ impl QueryFilter {
             QueryFilter::Repos => &REPOS_FILTER_ATOM,
             QueryFilter::DiffSets => &DIFFSETS_FILTER_ATOM,
             QueryFilter::StaticSlashCommands => &STATIC_SLASH_COMMANDS_FILTER_ATOM,
-            QueryFilter::Skills => &NO_FILTER_ATOM,
             QueryFilter::BaseModels => &NO_FILTER_ATOM,
             QueryFilter::FullTerminalUseModels => &NO_FILTER_ATOM,
             QueryFilter::CurrentDirectoryConversations => &NO_FILTER_ATOM,
@@ -281,7 +276,6 @@ impl QueryFilter {
             QueryFilter::Repos => "repos",
             QueryFilter::DiffSets => "diff sets",
             QueryFilter::StaticSlashCommands => "slash commands",
-            QueryFilter::Skills => "skills",
             QueryFilter::BaseModels => "base models",
             QueryFilter::FullTerminalUseModels => "full terminal use models",
             QueryFilter::CurrentDirectoryConversations => "current directory conversations",
@@ -309,7 +303,6 @@ impl QueryFilter {
             QueryFilter::Repos => Some("bundled/svg/folder.svg"),
             QueryFilter::DiffSets => Some("bundled/svg/diff.svg"),
             QueryFilter::StaticSlashCommands => None,
-            QueryFilter::Skills => None,
             QueryFilter::BaseModels => None,
             QueryFilter::FullTerminalUseModels => None,
             QueryFilter::CurrentDirectoryConversations => None,

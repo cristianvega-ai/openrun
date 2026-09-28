@@ -66,7 +66,6 @@ impl From<FormattedTextElement> for FormattedTextOrElement {
 /// Configuration for rendering a requested action component using the builder pattern.
 pub struct RenderableAction {
     body: FormattedTextOrElement,
-    action_button: Option<Box<dyn Element>>,
     pub icon: Option<Box<dyn Element>>,
     pub header: Option<HeaderConfig>,
     pub footer: Option<Box<dyn Element>>,
@@ -86,7 +85,6 @@ impl RenderableAction {
             icon: None,
             header: None,
             footer: None,
-            action_button: None,
             background_color: neutral_2(theme),
             should_highlight_border: false,
             should_override_with_content_item_spacing: false,
@@ -101,7 +99,6 @@ impl RenderableAction {
             icon: None,
             header: None,
             footer: None,
-            action_button: None,
             background_color: neutral_2(theme),
             should_highlight_border: false,
             should_override_with_content_item_spacing: false,
@@ -116,7 +113,6 @@ impl RenderableAction {
             icon: None,
             header: None,
             footer: None,
-            action_button: None,
             background_color: neutral_2(theme),
             should_highlight_border: false,
             should_override_with_content_item_spacing: false,
@@ -156,11 +152,6 @@ impl RenderableAction {
         self
     }
 
-    pub fn with_action_button(mut self, button: Box<dyn Element>) -> Self {
-        self.action_button = Some(button);
-        self
-    }
-
     pub fn with_content_item_spacing(mut self) -> Self {
         self.should_override_with_content_item_spacing = true;
         self
@@ -181,12 +172,7 @@ impl RenderableAction {
         }
 
         content.add_child(render_requested_action_row(
-            self.body,
-            self.icon,
-            self.action_button,
-            true,
-            has_header,
-            app,
+            self.body, self.icon, None, true, has_header, app,
         ));
 
         if let Some(footer) = self.footer {

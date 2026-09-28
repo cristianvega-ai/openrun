@@ -1,4 +1,3 @@
-use ai::skills::SkillReference;
 use warpui::elements::ChildView;
 use warpui::{AppContext, Element, Entity, ModelHandle, View, ViewContext, ViewHandle};
 
@@ -6,7 +5,7 @@ use crate::ai::blocklist::agent_view::AgentViewController;
 use crate::search::slash_command_menu::SlashCommandId;
 use crate::terminal::input::buffer_model::InputBufferModel;
 use crate::terminal::input::inline_menu::{InlineMenuEvent, InlineMenuPositioner, InlineMenuView};
-use crate::terminal::input::slash_command_model::{SlashCommandEntryState, SlashCommandModel};
+use crate::terminal::input::slash_command_model::SlashCommandModel;
 use crate::terminal::input::slash_commands::{
     AcceptSlashMenuItem, GuiSlashCommandDataSource, GuiZeroStateDataSource, SlashCommandMixer,
     UpdatedActiveCommands, build_slash_command_mixer, slash_command_query,
@@ -39,12 +38,6 @@ pub enum SlashCommandsEvent {
     SelectedStaticCommand {
         id: SlashCommandId,
         cmd_or_ctrl_enter: bool,
-    },
-    /// A skill was selected from the menu. Contains the skill name (for buffer insertion)
-    /// and path/bundled_skill_id (for execution context).
-    SelectedSkill {
-        reference: SkillReference,
-        name: String,
     },
 }
 
@@ -117,23 +110,16 @@ impl InlineSlashCommandView {
             InlineMenuEvent::SelectedItem { .. } | InlineMenuEvent::TabChanged => (),
         });
 
-        ctx.subscribe_to_model(slash_command_model, |me, model, _, ctx| {
+        ctx.subscribe_to_model(slash_command_model, |me, _, _, ctx| {
             // If the inline menu isn't open, don't keep re-running search as the user types.
             //
-            // This prevents expensive searching (e.g. skills) when the menu has been
+            // This prevents expensive searching when the menu has been
             // closed (such as after selecting a command and typing an argument).
             if !me.suggestions_mode_model.as_ref(ctx).is_slash_commands() {
                 return;
             }
 
-            match model.as_ref(ctx).state().clone() {
-                SlashCommandEntryState::None
-                | SlashCommandEntryState::Composing { .. }
-                | SlashCommandEntryState::SlashCommand(_) => {
-                    me.run_query_for_current_slash_filter(ctx);
-                }
-                _ => (),
-            }
+            me.run_query_for_current_slash_filter(ctx);
         });
 
         ctx.subscribe_to_model(&suggestions_mode_model, |me, _, event, ctx| {
@@ -190,12 +176,6 @@ impl InlineSlashCommandView {
                 ctx.emit(SlashCommandsEvent::SelectedStaticCommand {
                     id: *id,
                     cmd_or_ctrl_enter,
-                });
-            }
-            AcceptSlashMenuItem::Skill { name, reference } => {
-                ctx.emit(SlashCommandsEvent::SelectedSkill {
-                    reference: reference.clone(),
-                    name: name.clone(),
                 });
             }
         }

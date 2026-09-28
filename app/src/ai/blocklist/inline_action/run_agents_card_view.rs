@@ -8,7 +8,6 @@ use std::rc::Rc;
 use ai::agent::action::{RunAgentsAgentRunConfig, RunAgentsExecutionMode, RunAgentsRequest};
 use ai::agent::action_result::{RunAgentsAgentOutcomeKind, RunAgentsResult};
 use ai::agent::orchestration_config::{OrchestrationConfig, OrchestrationConfigStatus};
-use ai::skills::SkillReference;
 use pathfinder_geometry::vector::vec2f;
 use warp_core::send_telemetry_from_ctx;
 use warp_errors::report_error;
@@ -107,8 +106,6 @@ pub struct RunAgentsCardFields {
     pub agent_run_configs: Vec<RunAgentsAgentRunConfig>,
     pub base_prompt: String,
     pub summary: String,
-    /// Run-wide skills propagated to each child at dispatch.
-    pub skills: Vec<SkillReference>,
     /// The plan that this RunAgents call is executing for.
     pub plan_id: String,
 }
@@ -141,7 +138,6 @@ impl RunAgentsEditState {
                 agent_run_configs: req.agent_run_configs.clone(),
                 base_prompt: req.base_prompt.clone(),
                 summary: req.summary.clone(),
-                skills: req.skills.clone(),
                 plan_id: req.plan_id.clone(),
             },
         }
@@ -151,7 +147,6 @@ impl RunAgentsEditState {
         RunAgentsRequest {
             summary: self.card.summary.clone(),
             base_prompt: self.card.base_prompt.clone(),
-            skills: self.card.skills.clone(),
             model_id: self.orchestration_config_state.model_id.clone(),
             harness_type: self.orchestration_config_state.harness_type.clone(),
             execution_mode: self.orchestration_config_state.execution_mode.clone(),

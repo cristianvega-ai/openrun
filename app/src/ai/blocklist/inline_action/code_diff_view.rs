@@ -65,10 +65,6 @@ use crate::ai::blocklist::inline_action::inline_action_icons::{
 };
 use crate::ai::blocklist::model::{AIBlockModel, AIBlockModelHelper};
 use crate::ai::paths::host_native_absolute_path;
-use crate::ai::skills::{
-    SkillManager, SkillOpenOrigin, SkillReference, SkillTelemetryEvent,
-    icon_override_for_skill_name, render_skill_button, skill_path_from_location,
-};
 use crate::code::diff_viewer::{DiffViewer, DisplayMode};
 use crate::code::editor::view::{CodeEditorEvent, CodeEditorRenderOptions, CodeEditorView};
 use crate::code::editor::{add_color, remove_color};
@@ -196,7 +192,6 @@ pub fn init(app: &mut AppContext) {
 struct CodeDiffViewMouseStates {
     show_hide_button: MouseStateHandle,
     scroll_icon_button: MouseStateHandle,
-    skill_button_handle: MouseStateHandle,
     stats_badge_button: MouseStateHandle,
 }
 
@@ -226,11 +221,6 @@ pub enum CodeDiffViewEvent {
     /// Emitted when candidate diffs are loaded and ready to display.
     /// Used to trigger AIBlock height recalculation for passive code diffs.
     LoadedDiffs,
-    /// Emitted when the user opens a skill file from a code diff
-    OpenSkill {
-        reference: SkillReference,
-        path: LocalOrRemotePath,
-    },
 }
 
 #[derive(Clone, Debug)]
@@ -290,11 +280,6 @@ pub enum CodeDiffViewAction {
     ToggleAcceptMenu,
     OpenCodeReviewPane,
     RevertChanges,
-    OpenSkill {
-        reference: SkillReference,
-        path: LocalOrRemotePath,
-        mouse_state: MouseStateHandle,
-    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1425,56 +1410,6 @@ impl CodeDiffView {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Min);
 
-        let file_locations: Vec<LocalOrRemotePath> = self
-            .pending_diffs
-            .iter()
-            .filter_map(|diff| {
-                self.location_for_standardized_path(diff.diff_view.as_ref(app).file_path()?)
-            })
-            .collect();
-
-        // Renders the 'open skill' button only if every edited file lives in the same skill directory.
-        let skill_paths = file_locations
-            .iter()
-            .map(skill_path_from_location)
-            .collect::<Option<Vec<_>>>();
-        let skill = skill_paths.and_then(|skill_paths| {
-            let first_path = skill_paths.first()?;
-            skill_paths
-                .iter()
-                .all(|path| path == first_path)
-                .then(|| SkillManager::as_ref(app).skill_by_path(first_path))
-                .flatten()
-        });
-        if let Some(skill) = skill {
-            let skill_path = skill.path.clone();
-            let skill_reference = SkillManager::handle(app)
-                .as_ref(app)
-                .reference_for_skill_path(&skill_path);
-            let skill_button_handle = self.button_mouse_states.skill_button_handle.clone();
-
-            let skill_icon_override = icon_override_for_skill_name(&skill.name);
-            let skill_button = render_skill_button(
-                format!("/{}", skill.name).as_str(),
-                skill_button_handle.clone(),
-                appearance,
-                skill.provider,
-                skill_icon_override,
-                move |ctx| {
-                    ctx.dispatch_typed_action(CodeDiffViewAction::OpenSkill {
-                        reference: skill_reference.clone(),
-                        path: skill_path.clone(),
-                        mouse_state: skill_button_handle.clone(),
-                    });
-                },
-            );
-            right_side_row.add_child(
-                Container::new(skill_button)
-                    .with_margin_right(HEADER_MARGIN)
-                    .finish(),
-            );
-        }
-
         if matches!(self.state, CodeDiffState::WaitingForUser) {
             right_side_row.add_child(action_buttons);
         } else {
@@ -2416,33 +2351,6 @@ impl TypedActionView for CodeDiffView {
             }
             CodeDiffViewAction::RevertChanges => {
                 self.revert_changes(ctx);
-            }
-            CodeDiffViewAction::OpenSkill {
-                reference,
-                path,
-                mouse_state,
-            } => {
-                // Sends a telemetry event when a skill is opened from a code diff view
-                send_telemetry_from_ctx!(
-                    SkillTelemetryEvent::Opened {
-                        reference: reference.clone(),
-                        name: SkillManager::as_ref(ctx)
-                            .skill_by_reference(reference)
-                            .map(|skill| skill.name.clone()),
-                        origin: SkillOpenOrigin::EditFiles,
-                    },
-                    ctx
-                );
-
-                // Resets the interaction state of the skill button to avoid an immediate re-hover
-                if let Ok(mut state) = mouse_state.lock() {
-                    state.reset_interaction_state();
-                }
-
-                ctx.emit(CodeDiffViewEvent::OpenSkill {
-                    reference: reference.clone(),
-                    path: path.clone(),
-                });
             }
         }
     }

@@ -388,7 +388,6 @@ fn extract_action_paths(
         | AIAgentActionType::ReadDocuments(_)
         | AIAgentActionType::EditDocuments(_)
         | AIAgentActionType::CreateDocuments(_)
-        | AIAgentActionType::ReadSkill(_)
         | AIAgentActionType::FetchConversation { .. }
         | AIAgentActionType::SendMessageToAgent { .. }
         | AIAgentActionType::TransferShellCommandControlToUser { .. }

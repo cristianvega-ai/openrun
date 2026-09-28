@@ -67,10 +67,6 @@ pub(crate) enum CloudRoutingIndicator {
 }
 
 impl AIQueryRouting {
-    pub(crate) fn is_local(&self) -> bool {
-        matches!(self, Self::Local)
-    }
-
     /// Live-VM requires an ambient task id so shared local session viewers stay unmarked.
     pub(crate) fn cloud_routing_indicator(&self) -> Option<CloudRoutingIndicator> {
         match self {

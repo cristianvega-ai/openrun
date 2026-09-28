@@ -4,17 +4,14 @@ use std::sync::Arc;
 use chrono::Local;
 use lazy_static::lazy_static;
 use regex::Regex;
-use warp_core::features::FeatureFlag;
 use warpui::{AppContext, SingletonEntity};
 
-use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::{
     AIAgentAttachment, AIAgentContext, DocumentContentAttachmentSource, DriveObjectPayload,
 };
 use crate::ai::block_context::BlockContext;
-use crate::ai::blocklist::{BlocklistAIContextModel, SessionContext};
+use crate::ai::blocklist::BlocklistAIContextModel;
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentModel};
-use crate::ai::skills::list_skills_if_changed;
 use crate::cloud_object::ObjectType;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::terminal::TerminalView;
@@ -40,11 +37,9 @@ pub(super) fn input_context_for_request(
     is_user_query: bool,
     context_model: &BlocklistAIContextModel,
     active_session: &ActiveSession,
-    conversation_id: Option<AIConversationId>,
     additional_context: Vec<AIAgentContext>,
     app: &AppContext,
 ) -> Arc<[AIAgentContext]> {
-    let current_working_directory_location = active_session.current_working_directory_location(app);
     let mut context = context_model.pending_context(app, is_user_query);
 
     context.push(AIAgentContext::CurrentTime {
@@ -53,20 +48,6 @@ pub(super) fn input_context_for_request(
 
     if let Some(env) = active_session.ai_execution_environment(app) {
         context.push(AIAgentContext::ExecutionEnvironment(env));
-    }
-
-    if FeatureFlag::ListSkills.is_enabled() {
-        let path_origin = SessionContext::from_session(active_session, app).skill_path_origin();
-        let skills = list_skills_if_changed(
-            current_working_directory_location.as_ref(),
-            &path_origin,
-            conversation_id,
-            app,
-        );
-
-        if let Some(skills) = skills {
-            context.push(AIAgentContext::Skills { skills });
-        }
     }
 
     context.extend(additional_context);

@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use ai::skills::SkillReference;
 use serde::{Deserialize, Serialize};
 use warp_util::path::LineAndColumnArg;
 use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity, ViewHandle, WindowId};
@@ -10,7 +9,6 @@ use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity, ViewHa
 use super::buffer_location::LocalOrRemotePath;
 use super::view::CodeView;
 use crate::ai::agent::AIAgentActionId;
-use crate::ai::skills::SkillOpenOrigin;
 use crate::code_review::code_review_view::CodeReviewView;
 use crate::pane_group::{PaneGroup, PaneId};
 use crate::workspace::PaneViewLocator;
@@ -119,12 +117,6 @@ pub enum CodeSource {
     CommandPalette { location: LocalOrRemotePath },
     /// Opened from macOS Finder via "Open With".
     Finder { path: PathBuf },
-    /// Opened from a skill.
-    Skill {
-        reference: SkillReference,
-        location: LocalOrRemotePath,
-        origin: SkillOpenOrigin,
-    },
 }
 
 impl CodeSource {
@@ -137,8 +129,7 @@ impl CodeSource {
             | Self::AIAction { .. }
             | Self::FileTree { .. }
             | Self::CommandPalette { .. }
-            | Self::Finder { .. }
-            | Self::Skill { .. } => None,
+            | Self::Finder { .. } => None,
         }
     }
 
@@ -152,7 +143,6 @@ impl CodeSource {
                 }
             }
             Self::Link { path, .. } | Self::Finder { path } => Some(path.clone()),
-            Self::Skill { location, .. } => location.to_local_path().map(Path::to_path_buf),
         }
     }
 
@@ -178,19 +168,7 @@ impl CodeSource {
             Self::Link { path, .. } | Self::Finder { path } => {
                 Some(LocalOrRemotePath::Local(path.clone()))
             }
-            Self::Skill { location, .. } => Some(location.clone()),
         }
-    }
-
-    /// Returns true if this is a bundled skill that should be read-only.
-    pub fn is_bundled_skill(&self) -> bool {
-        matches!(
-            self,
-            Self::Skill {
-                reference: SkillReference::BundledSkillId(_),
-                ..
-            }
-        )
     }
 
     pub fn omit_line_col(&self) -> CodeSource {
@@ -220,7 +198,6 @@ impl CodeSource {
             } => "remote_command_palette",
             Self::CommandPalette { .. } => "command_palette",
             Self::Finder { .. } => "finder",
-            Self::Skill { .. } => "skill",
         }
     }
 
@@ -237,10 +214,6 @@ impl CodeSource {
                 }
                 | Self::CommandPalette {
                     location: LocalOrRemotePath::Remote(_),
-                }
-                | Self::Skill {
-                    location: LocalOrRemotePath::Remote(_),
-                    ..
                 }
         )
     }

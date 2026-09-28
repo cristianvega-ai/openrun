@@ -32,13 +32,9 @@ use warpui::{
 };
 
 use crate::code::lsp_telemetry::{LspControlActionType, LspEnablementSource, LspTelemetryEvent};
-use crate::settings::{AISettings, CodeSettings};
+use crate::settings::CodeSettings;
 use crate::ui_components::blended_colors;
-#[cfg(feature = "local_fs")]
-use crate::user_config::is_tab_config_toml;
-use crate::view_components::action_button::{
-    ActionButton, ButtonSize, NakedTheme, PaneHeaderTheme,
-};
+use crate::view_components::action_button::{ActionButton, ButtonSize, NakedTheme};
 #[cfg(feature = "local_fs")]
 use crate::workspace_metadata::PersistedWorkspaceEvent;
 use crate::workspace_metadata::{LSPEnablementResultForFile, LspRepoStatus, PersistedWorkspace};
@@ -67,8 +63,6 @@ struct WorkspaceMouseStates {
 
 /// Determines the operating mode of the footer.
 enum FooterMode {
-    /// Tab config editor — shows a skill CTA instead of LSP details.
-    TabConfig { path: PathBuf },
     /// Single file editor — tracks one server for one file path.
     SingleFile {
         path: PathBuf,
@@ -88,7 +82,6 @@ enum FooterMode {
 impl FooterMode {
     fn path(&self) -> &Path {
         match self {
-            FooterMode::TabConfig { path } => path,
             FooterMode::SingleFile { path, .. } => path,
             FooterMode::Workspace { root_path, .. } => root_path,
         }
@@ -96,7 +89,6 @@ impl FooterMode {
 
     fn repo_statuses(&self) -> Vec<&LspRepoStatus> {
         match self {
-            FooterMode::TabConfig { .. } => vec![],
             FooterMode::SingleFile {
                 lsp_repo_status, ..
             } => vec![lsp_repo_status],
@@ -158,7 +150,6 @@ pub enum CodeFooterViewAction {
     EnableLSP,
     OpenLanguageServerDownloadSettings,
     RecheckInstallation,
-    RunTabConfigSkill,
     #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     OpenLogs,
     #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
@@ -228,7 +219,6 @@ pub struct CodeFooterView {
     subscribed_server_ids: Vec<LanguageServerId>,
     lsp_status_button: ViewHandle<ActionButton>,
     enable_lsp_button: Option<ViewHandle<ActionButton>>,
-    tab_config_skill_button: Option<ViewHandle<ActionButton>>,
     missing_server_controls: MissingServerControls,
     is_lsp_menu_open: bool,
     /// Whether to render the top border. Disabled for code review footer.
@@ -319,64 +309,6 @@ impl LspRepoStatuses {
 }
 
 impl CodeFooterView {
-    #[cfg(feature = "local_fs")]
-    fn is_tab_config_path(path: &Path) -> bool {
-        is_tab_config_toml(path)
-    }
-
-    #[cfg(not(feature = "local_fs"))]
-    fn is_tab_config_path(_path: &Path) -> bool {
-        false
-    }
-    fn create_tab_config_skill_button(ctx: &mut ViewContext<Self>) -> ViewHandle<ActionButton> {
-        ctx.add_typed_action_view(|_ctx| {
-            ActionButton::new("/update-tab-config", NakedTheme)
-                .with_icon(Icon::Agent)
-                .with_size(ButtonSize::Small)
-                .with_disabled_theme(PaneHeaderTheme)
-                .on_click(|ctx| {
-                    ctx.dispatch_typed_action(CodeFooterViewAction::RunTabConfigSkill);
-                })
-        })
-    }
-
-    fn render_tab_config_info_icon(theme: &WarpTheme) -> Box<dyn Element> {
-        Container::new(
-            ConstrainedBox::new(
-                Icon::Info
-                    .to_warpui_icon(theme.active_ui_text_color())
-                    .finish(),
-            )
-            .with_width(12.)
-            .with_height(12.)
-            .finish(),
-        )
-        .with_margin_left(ICON_MARGIN)
-        .finish()
-    }
-
-    fn is_tab_config_footer(&self) -> bool {
-        matches!(self.mode, FooterMode::TabConfig { .. })
-    }
-
-    fn sync_tab_config_skill_button(&mut self, ctx: &mut ViewContext<Self>) {
-        let Some(button) = &self.tab_config_skill_button else {
-            return;
-        };
-
-        let is_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
-        button.update(ctx, |button, ctx| {
-            button.set_disabled(!is_ai_enabled, ctx);
-            button.set_tooltip(
-                Some(if is_ai_enabled {
-                    "Open agent input with the /update-tab-config skill"
-                } else {
-                    "Enable AI to use the /update-tab-config skill"
-                }),
-                ctx,
-            );
-        });
-    }
     fn create_lsp_status_button(
         disabled: bool,
         ctx: &mut ViewContext<Self>,
@@ -399,26 +331,6 @@ impl CodeFooterView {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub fn new(path: PathBuf, ctx: &mut ViewContext<Self>) -> Self {
         let lsp_status_button = Self::create_lsp_status_button(true, ctx);
-        if Self::is_tab_config_path(&path) {
-            let tab_config_skill_button = Self::create_tab_config_skill_button(ctx);
-            let mut footer = Self {
-                mode: FooterMode::TabConfig { path },
-                lsp_servers: Vec::new(),
-                subscribed_server_ids: Vec::new(),
-                lsp_status_button,
-                enable_lsp_button: None,
-                tab_config_skill_button: Some(tab_config_skill_button),
-                missing_server_controls: MissingServerControls::new(ctx),
-                is_lsp_menu_open: false,
-                show_border: true,
-            };
-            footer.sync_tab_config_skill_button(ctx);
-            ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, _, ctx| {
-                me.sync_tab_config_skill_button(ctx);
-            });
-            return footer;
-        }
-
         let server_type = LanguageId::from_path(&path).map(|id| id.server_type());
 
         // Create a button that dispatches EnableLSP action
@@ -508,7 +420,6 @@ impl CodeFooterView {
             is_lsp_menu_open: false,
             lsp_status_button,
             enable_lsp_button,
-            tab_config_skill_button: None,
             missing_server_controls: MissingServerControls::new(ctx),
             show_border: true,
         };
@@ -652,7 +563,6 @@ impl CodeFooterView {
             is_lsp_menu_open: false,
             lsp_status_button,
             enable_lsp_button: None,
-            tab_config_skill_button: None,
             missing_server_controls: MissingServerControls::new(ctx),
             show_border: false,
         };
@@ -1490,9 +1400,6 @@ impl CodeFooterView {
     }
 
     fn render_lsp_icon(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
-        if self.is_tab_config_footer() {
-            return Empty::new().finish();
-        }
         let theme = appearance.theme();
         let lsp_icon = ChildView::new(&self.lsp_status_button).finish();
         let background_color = theme.background().into_solid();
@@ -1506,7 +1413,6 @@ impl CodeFooterView {
         }
 
         let menu = match &self.mode {
-            FooterMode::TabConfig { .. } => return indicator,
             FooterMode::SingleFile { mouse_states, .. } => {
                 let server = live[0].as_ref(app);
                 self.render_single_server_menu(server, mouse_states, appearance, app)
@@ -1669,9 +1575,6 @@ impl CodeFooterView {
     /// Computes the aggregated status message across all servers.
     /// Priority: failed error > starting/progress text > stopped text.
     fn compute_status_message(&self, app: &AppContext) -> (Option<String>, FooterCta) {
-        if self.is_tab_config_footer() {
-            return (None, FooterCta::None);
-        }
         let live = self.live_servers(app);
         if !live.is_empty() {
             // Check for any failed server first
@@ -1719,7 +1622,6 @@ impl CodeFooterView {
 
         // No servers — show enablement CTA based on mode
         match &self.mode {
-            FooterMode::TabConfig { .. } => (None, FooterCta::None),
             FooterMode::SingleFile {
                 path,
                 lsp_repo_status,
@@ -1815,9 +1717,6 @@ impl CodeFooterView {
 #[derive(Clone)]
 #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 pub enum CodeFooterViewEvent {
-    RunTabConfigSkill {
-        path: PathBuf,
-    },
     EnableLSP {
         path: PathBuf,
         server_type: Option<LSPServerType>,
@@ -1868,63 +1767,41 @@ impl View for CodeFooterView {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Max);
 
-        if self.is_tab_config_footer() {
-            footer_content.add_child(Self::render_tab_config_info_icon(theme));
+        footer_content.add_child(self.render_lsp_icon(appearance, app));
+
+        let (status_message, cta) = self.compute_status_message(app);
+
+        if let Some(status_message) = status_message {
+            let status_text = Self::render_status_text(theme, appearance, status_message);
+            let status_text = if cta == FooterCta::MissingServers {
+                self.with_missing_servers_tooltip(status_text, appearance, app)
+            } else {
+                status_text
+            };
+            footer_content.add_child(Shrinkable::new(1., status_text).finish());
+        }
+
+        if cta == FooterCta::MissingServers {
+            let controls = &self.missing_server_controls;
+            for button in [&controls.open_settings_button, &controls.recheck_button] {
+                footer_content.add_child(
+                    Container::new(ChildView::new(button).finish())
+                        .with_margin_left(ICON_MARGIN)
+                        .finish(),
+                );
+            }
+        }
+
+        if cta == FooterCta::Enable
+            && let Some(enable_lsp) = &self.enable_lsp_button
+        {
+            // Left margin only to separate from status text; right margin removed
+            // to tighten padding between elements
             footer_content.add_child(
-                Shrinkable::new(
-                    1.,
-                    Self::render_status_text(
-                        theme,
-                        appearance,
-                        "Use the Warp Agent to update this config".to_string(),
-                    ),
-                )
-                .finish(),
+                Container::new(ChildView::new(enable_lsp).finish())
+                    .with_margin_left(ICON_MARGIN)
+                    .finish(),
             );
-            if let Some(tab_config_skill_button) = &self.tab_config_skill_button {
-                footer_content.add_child(
-                    Container::new(ChildView::new(tab_config_skill_button).finish())
-                        .with_margin_left(ICON_MARGIN)
-                        .finish(),
-                );
-            }
-        } else {
-            footer_content.add_child(self.render_lsp_icon(appearance, app));
-
-            let (status_message, cta) = self.compute_status_message(app);
-
-            if let Some(status_message) = status_message {
-                let status_text = Self::render_status_text(theme, appearance, status_message);
-                let status_text = if cta == FooterCta::MissingServers {
-                    self.with_missing_servers_tooltip(status_text, appearance, app)
-                } else {
-                    status_text
-                };
-                footer_content.add_child(Shrinkable::new(1., status_text).finish());
-            }
-
-            if cta == FooterCta::MissingServers {
-                let controls = &self.missing_server_controls;
-                for button in [&controls.open_settings_button, &controls.recheck_button] {
-                    footer_content.add_child(
-                        Container::new(ChildView::new(button).finish())
-                            .with_margin_left(ICON_MARGIN)
-                            .finish(),
-                    );
-                }
-            }
-
-            if cta == FooterCta::Enable
-                && let Some(enable_lsp) = &self.enable_lsp_button
-            {
-                // Left margin only to separate from status text; right margin removed
-                // to tighten padding between elements
-                footer_content.add_child(
-                    Container::new(ChildView::new(enable_lsp).finish())
-                        .with_margin_left(ICON_MARGIN)
-                        .finish(),
-                );
-            }
         }
 
         let mut container = Container::new(
@@ -1976,12 +1853,6 @@ impl TypedActionView for CodeFooterView {
                         }
                     });
                 }
-            }
-            CodeFooterViewAction::RunTabConfigSkill => {
-                let FooterMode::TabConfig { path } = &self.mode else {
-                    return;
-                };
-                ctx.emit(CodeFooterViewEvent::RunTabConfigSkill { path: path.clone() });
             }
             CodeFooterViewAction::EnableLSP => {
                 let path = self.mode.path().to_path_buf();

@@ -114,7 +114,6 @@ impl DocumentActionPresentation {
                 | AIAgentActionType::ReadDocuments(_)
                 | AIAgentActionType::ReadShellCommandOutput { .. }
                 | AIAgentActionType::InsertCodeReviewComments { .. }
-                | AIAgentActionType::ReadSkill(_)
                 | AIAgentActionType::FetchConversation { .. }
                 | AIAgentActionType::SendMessageToAgent { .. }
                 | AIAgentActionType::TransferShellCommandControlToUser { .. }

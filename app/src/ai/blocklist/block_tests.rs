@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 use ai::agent::action::{RunAgentsAgentRunConfig, RunAgentsExecutionMode};
-use ai::skills::SkillReference;
 use settings::Setting;
-use warp_util::local_or_remote_path::LocalOrRemotePath;
 #[cfg(feature = "local_fs")]
 use warp_util::path::LineAndColumnArg;
 use warpui::{App, SingletonEntity};
@@ -140,25 +138,19 @@ fn open_code_action_routes_links_to_configured_editor_and_non_links_to_warp() {
         } if absolute_path.as_path() == std::path::Path::new("/workspace/project/src/main.rs")
     ));
 
-    let skill_source = CodeSource::Skill {
-        reference: SkillReference::Path(LocalOrRemotePath::Local(PathBuf::from(
-            "/workspace/project/.warp/skills/example/SKILL.md",
-        ))),
-        location: LocalOrRemotePath::Local(PathBuf::from(
-            "/workspace/project/.warp/skills/example/SKILL.md",
-        )),
-        origin: crate::ai::skills::SkillOpenOrigin::ReadSkill,
+    let finder_source = CodeSource::Finder {
+        path: PathBuf::from("/workspace/project/notes.md"),
     };
 
     assert!(matches!(
         open_code_action_event(
-            &skill_source,
+            &finder_source,
             crate::util::file::external_editor::settings::EditorLayout::NewTab,
         ),
         AIBlockEvent::OpenCodeInWarp {
             source,
             layout: crate::util::file::external_editor::settings::EditorLayout::NewTab,
-        } if source == skill_source
+        } if source == finder_source
     ));
 }
 #[test]
@@ -412,13 +404,7 @@ fn agent_cfg() -> RunAgentsAgentRunConfig {
 }
 
 #[test]
-fn remote_arm_propagates_skills_into_skill_references() {
-    let skills = vec![
-        SkillReference::BundledSkillId("writing-pr-descriptions".to_string()),
-        SkillReference::Path(LocalOrRemotePath::Local(PathBuf::from(
-            "/tmp/skill/SKILL.md",
-        ))),
-    ];
+fn remote_arm_propagates_run_fields() {
     let mode = run_agents_to_start_agent_mode(
         &RunAgentsExecutionMode::Remote {
             environment_id: "env-1".to_string(),
@@ -427,13 +413,11 @@ fn remote_arm_propagates_skills_into_skill_references() {
         },
         "oz",
         "auto",
-        &skills,
         None,
         &agent_cfg(),
     )
     .expect("Remote+oz must convert");
     let StartAgentExecutionMode::Remote {
-        skill_references,
         environment_id,
         worker_host,
         harness_type,
@@ -446,7 +430,6 @@ fn remote_arm_propagates_skills_into_skill_references() {
     else {
         panic!("expected Remote start-agent mode");
     };
-    assert_eq!(skill_references, skills);
     assert_eq!(environment_id, "env-1");
     assert_eq!(worker_host, "warp");
     assert_eq!(harness_type, "oz");
@@ -468,7 +451,6 @@ fn remote_arm_propagates_agent_identity_uid() {
         },
         "oz",
         "auto",
-        &[],
         None,
         &cfg,
     )
@@ -486,34 +468,9 @@ fn remote_arm_propagates_agent_identity_uid() {
 fn local_arm_rejects_agent_identity_uid() {
     let mut cfg = agent_cfg();
     cfg.agent_identity_uid = "sa-uid-1".to_string();
-    let err =
-        run_agents_to_start_agent_mode(&RunAgentsExecutionMode::Local, "", "", &[], None, &cfg)
-            .expect_err("Local + agent_identity_uid must be rejected");
+    let err = run_agents_to_start_agent_mode(&RunAgentsExecutionMode::Local, "", "", None, &cfg)
+        .expect_err("Local + agent_identity_uid must be rejected");
     assert!(err.contains("agent_identity_uid requires remote execution"));
-}
-
-#[test]
-fn remote_arm_with_empty_skills_propagates_empty_vec() {
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Remote {
-            environment_id: "env-1".to_string(),
-            worker_host: "warp".to_string(),
-            runner_id: String::new(),
-        },
-        "claude",
-        "auto",
-        &[],
-        None,
-        &agent_cfg(),
-    )
-    .expect("Remote+claude must convert");
-    let StartAgentExecutionMode::Remote {
-        skill_references, ..
-    } = mode
-    else {
-        panic!("expected Remote start-agent mode");
-    };
-    assert!(skill_references.is_empty());
 }
 
 #[test]
@@ -526,7 +483,6 @@ fn remote_arm_rejects_opencode() {
         },
         "opencode",
         "auto",
-        &[],
         None,
         &agent_cfg(),
     )
@@ -540,7 +496,6 @@ fn local_arm_rejects_disabled_codex() {
         &RunAgentsExecutionMode::Local,
         "codex",
         "auto",
-        &[],
         None,
         &agent_cfg(),
     )
@@ -554,7 +509,6 @@ fn local_arm_allows_claude() {
         &RunAgentsExecutionMode::Local,
         "claude",
         "auto",
-        &[],
         None,
         &agent_cfg(),
     )
@@ -578,7 +532,6 @@ fn remote_arm_propagates_claude_auth_secret_into_mode() {
         },
         "claude",
         "auto",
-        &[],
         Some("my-claude-key"),
         &agent_cfg(),
     )
@@ -602,7 +555,6 @@ fn remote_arm_filters_whitespace_auth_secret_name_to_none() {
         },
         "codex",
         "auto",
-        &[],
         Some("   "),
         &agent_cfg(),
     )
@@ -622,7 +574,6 @@ fn local_arm_ignores_auth_secret_name() {
         &RunAgentsExecutionMode::Local,
         "claude",
         "auto",
-        &[],
         Some("my-claude-key"),
         &agent_cfg(),
     )

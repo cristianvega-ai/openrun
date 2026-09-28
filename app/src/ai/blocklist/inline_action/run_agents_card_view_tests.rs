@@ -1,29 +1,16 @@
-use std::path::PathBuf;
-
 use ai::agent::action::{RunAgentsAgentRunConfig, RunAgentsExecutionMode, RunAgentsRequest};
 use ai::agent::action_result::{
     RunAgentsAgentOutcome, RunAgentsAgentOutcomeKind, RunAgentsLaunchedExecutionMode,
     RunAgentsResult,
 };
-use ai::skills::SkillReference;
-use warp_util::local_or_remote_path::LocalOrRemotePath;
 
 use super::{RunAgentsCardFields, RunAgentsEditState};
 use crate::ai::blocklist::inline_action::orchestration_controls::OrchestrationConfigState;
 
 fn make_request(harness: &str, mode: RunAgentsExecutionMode) -> RunAgentsRequest {
-    make_request_with_skills(harness, mode, Vec::new())
-}
-
-fn make_request_with_skills(
-    harness: &str,
-    mode: RunAgentsExecutionMode,
-    skills: Vec<SkillReference>,
-) -> RunAgentsRequest {
     RunAgentsRequest {
         summary: "summary".to_string(),
         base_prompt: "base".to_string(),
-        skills,
         model_id: "auto".to_string(),
         harness_type: harness.to_string(),
         execution_mode: mode,
@@ -54,7 +41,6 @@ fn make_config_state_with_orch_fields(
             agent_run_configs: request.agent_run_configs,
             base_prompt: request.base_prompt,
             summary: request.summary,
-            skills: request.skills,
             plan_id: request.plan_id,
         },
     }
@@ -287,19 +273,13 @@ fn set_runner_id_no_op_in_local_mode() {
 
 #[test]
 fn to_request_round_trips_request_fields() {
-    let mut req = make_request_with_skills(
+    let mut req = make_request(
         "claude",
         RunAgentsExecutionMode::Remote {
             environment_id: "env-2".to_string(),
             worker_host: "warp".to_string(),
             runner_id: String::new(),
         },
-        vec![
-            SkillReference::BundledSkillId("writing-pr-descriptions".to_string()),
-            SkillReference::Path(LocalOrRemotePath::Local(PathBuf::from(
-                "/tmp/skill/SKILL.md",
-            ))),
-        ],
     );
     req.plan_id = "plan-1".to_string();
     let state = RunAgentsEditState::from_request(&req);
@@ -310,7 +290,6 @@ fn to_request_round_trips_request_fields() {
     assert_eq!(round_tripped.harness_type, req.harness_type);
     assert_eq!(round_tripped.execution_mode, req.execution_mode);
     assert_eq!(round_tripped.agent_run_configs, req.agent_run_configs);
-    assert_eq!(round_tripped.skills, req.skills);
     assert_eq!(round_tripped.plan_id, req.plan_id);
 }
 

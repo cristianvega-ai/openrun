@@ -20,8 +20,6 @@ pub enum ToolToAIAgentActionError {
     SuggestPromptError(String),
     #[error("Received unexpected tool")]
     UnexpectedTool,
-    #[error("Missing required reference for read skill tool call")]
-    MissingSkillReference,
     #[error("Missing required file reference for upload artifact tool call")]
     MissingUploadArtifactFileReference,
 }

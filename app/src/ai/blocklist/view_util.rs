@@ -4,15 +4,8 @@ use pathfinder_color::ColorU;
 use thousands::Separable;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::Appearance;
-use warpui::elements::{
-    ConstrainedBox, Container, CrossAxisAlignment, Flex, MainAxisAlignment, MainAxisSize,
-    MouseStateHandle, ParentElement,
-};
-use warpui::fonts::Weight;
-use warpui::ui_components::button::ButtonVariant;
-use warpui::ui_components::components::{UiComponent, UiComponentStyles};
-use warpui::ui_components::text::Span;
-use warpui::{AppContext, Element, EntityId, EventContext, SingletonEntity};
+use warpui::elements::{ConstrainedBox, Container};
+use warpui::{AppContext, Element, EntityId, SingletonEntity};
 
 use crate::ai::AIRequestUsageModel;
 use crate::ai::agent::RenderableAIError;
@@ -21,8 +14,6 @@ use crate::themes::theme::{AnsiColorIdentifier, Fill, WarpTheme};
 use crate::ui_components::icons::Icon;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
-const PROVIDER_BUTTON_ICON_SIZE: f32 = 14.;
-const PROVIDER_BUTTON_ICON_TEXT_GAP: f32 = 8.;
 const ERROR_APOLOGY_TEXT: &str = "I'm sorry, I couldn't complete that request.";
 const INTERNAL_WARP_ERROR: &str = "Internal Warp error.";
 pub const FAILED_OUTPUT_USAGE_NOTICE_TEXT: &str = "This response won't count towards your usage.";
@@ -337,66 +328,6 @@ pub fn usage_label(
         UsageLabelKind::Plain | UsageLabelKind::DetailsPanel => "",
     };
     format!("{base}{suffix}")
-}
-
-/// Renders a secondary button with a skill provider icon and a text label.
-pub(crate) fn render_provider_icon_button<F>(
-    button_label: &str,
-    button_handle: MouseStateHandle,
-    appearance: &Appearance,
-    icon: Icon,
-    color: Fill,
-    on_click: F,
-) -> Box<dyn Element>
-where
-    F: FnMut(&mut EventContext) + 'static,
-{
-    let theme = appearance.theme();
-    let font_color = theme.foreground().into_solid();
-    let mut label_children = vec![
-        ConstrainedBox::new(icon.to_warpui_icon(color).finish())
-            .with_width(PROVIDER_BUTTON_ICON_SIZE)
-            .with_height(PROVIDER_BUTTON_ICON_SIZE)
-            .finish(),
-    ];
-    label_children.push(
-        Container::new(
-            Span::new(
-                button_label.to_string(),
-                UiComponentStyles {
-                    font_family_id: Some(appearance.ui_font_family()),
-                    font_size: Some(appearance.ui_font_size()),
-                    font_weight: Some(Weight::Semibold),
-                    font_color: Some(font_color),
-                    ..Default::default()
-                },
-            )
-            .build()
-            .finish(),
-        )
-        .with_padding_left(PROVIDER_BUTTON_ICON_TEXT_GAP)
-        .finish(),
-    );
-    let label = Flex::row()
-        .with_children(label_children)
-        .with_cross_axis_alignment(CrossAxisAlignment::Center)
-        .with_main_axis_alignment(MainAxisAlignment::Center)
-        .with_main_axis_size(MainAxisSize::Min)
-        .finish();
-    let mut on_click = on_click;
-    appearance
-        .ui_builder()
-        .button(ButtonVariant::Secondary, button_handle)
-        .with_custom_label(label)
-        .with_style(UiComponentStyles {
-            font_weight: Some(Weight::Semibold),
-            ..Default::default()
-        })
-        .build()
-        .on_click(move |ctx, _, _| {
-            on_click(ctx);
-        })
-        .finish()
 }
 
 #[cfg(test)]

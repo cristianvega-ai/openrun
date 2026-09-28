@@ -441,7 +441,6 @@ fn ai_agent_context_round_trips_tagged_variants() {
             base_branch: "main".to_string(),
             url: "https://github.com/warpdotdev/warp/pull/42".to_string(),
         },
-        AIAgentContext::Skills { skills: vec![] },
     ];
     for context in contexts {
         let json = serde_json::to_value(&context).unwrap();

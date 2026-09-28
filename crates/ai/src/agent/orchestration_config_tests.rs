@@ -21,7 +21,6 @@ fn make_request(model: &str, harness: &str, remote: bool) -> RunAgentsRequest {
     RunAgentsRequest {
         summary: "test".to_string(),
         base_prompt: "prompt".to_string(),
-        skills: vec![],
         model_id: model.to_string(),
         harness_type: harness.to_string(),
         execution_mode: if remote {

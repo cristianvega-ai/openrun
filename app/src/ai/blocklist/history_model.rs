@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use ai::harness::Harness;
-use ai::skills::SkillPathOrigin;
 use anyhow::anyhow;
 use chrono::{DateTime, Local, NaiveDateTime};
 #[cfg(feature = "local_fs")]
@@ -1929,7 +1928,6 @@ impl BlocklistAIHistoryModel {
         client_actions: Vec<warp_multi_agent_api::ClientAction>,
         conversation_id: AIConversationId,
         terminal_surface_id: EntityId,
-        skill_path_origin: &SkillPathOrigin,
         ctx: &mut ModelContext<Self>,
     ) -> Result<(), UpdateHistoryError> {
         let mut current_conversation_id = conversation_id;
@@ -1958,7 +1956,6 @@ impl BlocklistAIHistoryModel {
                         response_stream_id,
                         terminal_surface_id,
                         action,
-                        skill_path_origin,
                         ctx,
                     )?;
                 }

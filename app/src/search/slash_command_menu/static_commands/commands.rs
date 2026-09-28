@@ -197,30 +197,6 @@ pub static CREATE_NEW_PROJECT: LazyLock<StaticCommand> = LazyLock::new(|| Static
     argument: Some(Argument::required().with_hint_text("<describe what you want to build>")),
 });
 
-pub static EDIT_SKILL: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/open-skill",
-    description: "Open a skill's markdown file in Warp's built-in editor",
-    kind: SlashCommandKind::EditSkill,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/file-code-02.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-});
-
-pub static INVOKE_SKILL: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/skills",
-    description: "Invoke a skill",
-    kind: SlashCommandKind::InvokeSkill,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/stars-01.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-});
-
 pub static EDIT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
     name: "/open-file",
     description: "Open a file in Warp's code editor",
@@ -865,11 +841,6 @@ fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
 
     if !cfg!(target_family = "wasm") {
         commands.extend([EDIT.clone(), EXPORT_TO_FILE.clone()]);
-    }
-
-    if FeatureFlag::ListSkills.is_enabled() && !cfg!(target_family = "wasm") {
-        commands.push(EDIT_SKILL.clone());
-        commands.push(INVOKE_SKILL.clone());
     }
 
     if FeatureFlag::CloudMode.is_enabled() && FeatureFlag::CloudModeFromLocalSession.is_enabled() {

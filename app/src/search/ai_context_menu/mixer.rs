@@ -35,8 +35,4 @@ pub enum AIContextMenuSearchableAction {
         /// The conversation identifier to insert as <convo:{id}>.
         conversation_id: String,
     },
-    InsertSkill {
-        /// The skill name to insert as /{name} into the buffer.
-        name: String,
-    },
 }

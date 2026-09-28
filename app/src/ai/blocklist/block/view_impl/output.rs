@@ -12,7 +12,6 @@ use std::sync::Arc;
 use ai::agent::action::{SuggestPromptRequest, UploadArtifactRequest};
 use ai::agent::document_action_presentation::DocumentActionPresentation;
 use ai::agent::file_locations::group_file_contexts_for_display;
-use ai::skills::{ParsedSkill, SkillReference};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};
@@ -21,7 +20,6 @@ use pathfinder_geometry::vector::vec2f;
 use warp_core::channel::ChannelState;
 use warp_core::ui::theme::color::internal_colors;
 use warp_errors::report_error;
-use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::elements::new_scrollable::SingleAxisConfig;
 use warpui::elements::{
     Align, Border, ChildAnchor, ChildView, ConstrainedBox, Container, CornerRadius,
@@ -105,10 +103,6 @@ use crate::ai::blocklist::view_util::{
 };
 use crate::ai::blocklist::{AIBlockResponseRating, BlocklistAIActionModel};
 use crate::ai::paths::shell_native_absolute_path;
-use crate::ai::skills::{
-    SkillManager, SkillOpenOrigin, icon_override_for_skill_name, render_skill_button,
-    skill_path_from_location,
-};
 use crate::appearance::Appearance;
 use crate::code::diff_viewer::DisplayMode;
 use crate::code::editor_management::CodeSource;
@@ -117,7 +111,6 @@ use crate::settings_view::SettingsSection;
 use crate::terminal::ShellLaunchData;
 #[cfg(not(target_family = "wasm"))]
 use crate::terminal::input::slash_commands::fork_button_action;
-use crate::terminal::model::session::active_session::ActiveSession;
 use crate::terminal::shared_session::SharedSessionStatus;
 use crate::ui_components::blended_colors;
 use crate::ui_components::buttons::icon_button;
@@ -141,7 +134,6 @@ pub(crate) struct Props<'a> {
     pub(super) state_handles: &'a AIBlockStateHandles,
     pub(super) action_buttons: &'a HashMap<AIAgentActionId, ActionButtons>,
     pub(crate) action_model: &'a ModelHandle<BlocklistAIActionModel>,
-    pub(crate) active_session: &'a ModelHandle<ActiveSession>,
     pub(super) editor_views: &'a [EmbeddedCodeEditorView],
     pub(super) current_working_directory: Option<&'a String>,
     pub(super) shell_launch_data: Option<&'a ShellLaunchData>,
@@ -491,29 +483,11 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                                     ),
                                 };
 
-                                let file_locations = files
-                                    .iter()
-                                    .map(|file| {
-                                        let path = shell_native_absolute_path(
-                                            &file.name,
-                                            props.shell_launch_data,
-                                            props.current_working_directory,
-                                        );
-                                        props
-                                            .active_session
-                                            .as_ref(app)
-                                            .location_for_path(&path, app)
-                                    })
-                                    .collect::<Option<Vec<_>>>();
-                                let skill = file_locations.and_then(|file_locations| {
-                                    parsed_skill_for_common_locations(file_locations, app)
-                                });
                                 output_items.add_child(render_read_files(
                                     props,
                                     id,
                                     file_names.iter(),
                                     app,
-                                    skill,
                                     action_index,
                                     &result_failed_files,
                                 ));
@@ -675,19 +649,6 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                             if let Some(document) = maybe_render_document(props, id, action, app) {
                                 output_items.add_child(document);
                             }
-                        }
-                        AIAgentOutputMessageType::Action(AIAgentAction {
-                            action: AIAgentActionType::ReadSkill(request),
-                            id,
-                            ..
-                        }) => {
-                            should_render_footer = false;
-                            output_items.add_child(render_read_skill(
-                                props,
-                                id,
-                                &request.skill,
-                                app,
-                            ));
                         }
                         AIAgentOutputMessageType::Action(AIAgentAction {
                             action: AIAgentActionType::UploadArtifact(request),
@@ -1430,25 +1391,12 @@ fn render_search_codebase(
                                 .render(app)
                                 .finish()
                             } else {
-                                let file_locations = files
-                                    .iter()
-                                    .map(|file| {
-                                        props
-                                            .active_session
-                                            .as_ref(app)
-                                            .location_for_path(&file.file_name, app)
-                                    })
-                                    .collect::<Option<Vec<_>>>();
-                                let skill = file_locations.and_then(|file_locations| {
-                                    parsed_skill_for_common_locations(file_locations, app)
-                                });
                                 let grouped = group_file_contexts_for_display(files, None, None);
                                 return Some(render_read_files(
                                     props,
                                     id,
                                     grouped.iter(),
                                     app,
-                                    skill,
                                     0,
                                     &[],
                                 ));
@@ -1656,121 +1604,23 @@ pub fn render_read_files_text<A: Action>(
     formatted_files
 }
 
-/// Returns the display text for a `read_skill` action.
-///
-/// When the skill is found in the manager, formats it as a slash command
-/// (e.g. `/hello-world`). When the skill is unknown, falls back to the
-/// raw reference string (e.g. the path) **without** prepending an extra
-/// `/`, which would otherwise produce paths like `//home/user/…`.
-fn read_skill_display_text(
-    skill: Option<&ParsedSkill>,
-    skill_reference: &SkillReference,
-) -> String {
-    skill
-        .map(|s| format!("/{}", s.name))
-        .unwrap_or_else(|| skill_reference.display_label())
-}
-
-fn render_read_skill(
-    props: Props,
-    id: &AIAgentActionId,
-    skill_reference: &SkillReference,
-    app: &AppContext,
-) -> Box<dyn Element> {
-    let appearance = Appearance::as_ref(app);
-    let skill = SkillManager::as_ref(app).skill_by_reference(skill_reference);
-
-    let formatted_text = render_requested_action_body_text(
-        read_skill_display_text(skill, skill_reference).into(),
-        appearance.monospace_font_family(),
-        app,
-    );
-
-    let mut renderable_action = RenderableAction::new_with_formatted_text(formatted_text, app);
-    renderable_action =
-        renderable_action.with_icon(action_icon(id, props.action_model, props.model, app).finish());
-
-    // Renders the 'open skill' button for known, non-bundled skills.
-    if let Some(skill) = skill
-        && !skill.is_bundled()
-        && let Some(button_handle) = props.state_handles.skill_button_handles.get(id).cloned()
-    {
-        let source = CodeSource::Skill {
-            reference: skill_reference.clone(),
-            location: skill.path.clone(),
-            origin: SkillOpenOrigin::ReadSkill,
-        };
-
-        let skill_icon_override = icon_override_for_skill_name(&skill.name);
-        let open_button = render_skill_button(
-            "Open skill",
-            button_handle,
-            appearance,
-            skill.provider,
-            skill_icon_override,
-            move |ctx| {
-                ctx.dispatch_typed_action(AIBlockAction::OpenCodeInWarp {
-                    source: source.clone(),
-                });
-            },
-        );
-
-        renderable_action = renderable_action.with_action_button(open_button);
-    }
-
-    renderable_action.render(app).finish()
-}
-
 /// Renders successful and failed file reads as separate sections in one widget.
 fn render_read_files_partial(
     props: Props,
-    id: &AIAgentActionId,
     file_names: impl IntoIterator<Item = impl AsRef<str>>,
     failed_files: &[ReadFilesFailedFile],
     app: &AppContext,
-    parsed_skill: Option<&ai::skills::ParsedSkill>,
     action_index: usize,
 ) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(app);
     let theme = appearance.theme();
-
-    let skill_button = parsed_skill.and_then(|skill| {
-        props
-            .state_handles
-            .skill_button_handles
-            .get(id)
-            .cloned()
-            .map(|button_handle| {
-                let reference = SkillManager::handle(app)
-                    .as_ref(app)
-                    .reference_for_skill_path(&skill.path);
-                let source = CodeSource::Skill {
-                    reference,
-                    location: skill.path.clone(),
-                    origin: SkillOpenOrigin::ReadFiles,
-                };
-                let skill_icon_override = icon_override_for_skill_name(&skill.name);
-                render_skill_button(
-                    &format!("/{}", skill.name),
-                    button_handle,
-                    appearance,
-                    skill.provider,
-                    skill_icon_override,
-                    move |ctx| {
-                        ctx.dispatch_typed_action(AIBlockAction::OpenCodeInWarp {
-                            source: source.clone(),
-                        });
-                    },
-                )
-            })
-    });
 
     let success_text =
         render_read_files_text(props.into(), file_names, app, appearance, action_index);
     let success_row = render_requested_action_row(
         FormattedTextOrElement::FormattedText(Box::new(success_text)),
         Some(inline_action_icons::green_check_icon(appearance).finish()),
-        skill_button,
+        None,
         true,
         false,
         app,
@@ -1814,7 +1664,6 @@ fn render_read_files(
     id: &AIAgentActionId,
     file_names: impl IntoIterator<Item = impl AsRef<str>>,
     app: &AppContext,
-    parsed_skill: Option<&ai::skills::ParsedSkill>,
     action_index: usize,
     failed_files: &[ReadFilesFailedFile],
 ) -> Box<dyn Element> {
@@ -1824,15 +1673,7 @@ fn render_read_files(
     // For partial reads (some files succeeded, some failed) show a two-section
     // layout once the action is done.
     if !failed_files.is_empty() && status.as_ref().is_some_and(|s| s.is_done()) {
-        return render_read_files_partial(
-            props,
-            id,
-            file_names,
-            failed_files,
-            app,
-            parsed_skill,
-            action_index,
-        );
+        return render_read_files_partial(props, file_names, failed_files, app, action_index);
     }
 
     let formatted_files =
@@ -1898,51 +1739,7 @@ fn render_read_files(
         _ => (),
     };
 
-    // Renders the 'open skill' button if all files belong to the same skill directory.
-    if let Some(skill) = parsed_skill
-        && let Some(button_handle) = props.state_handles.skill_button_handles.get(id).cloned()
-    {
-        let reference = SkillManager::handle(app)
-            .as_ref(app)
-            .reference_for_skill_path(&skill.path);
-        let source = CodeSource::Skill {
-            reference,
-            location: skill.path.clone(),
-            origin: SkillOpenOrigin::ReadFiles,
-        };
-        let skill_icon_override = icon_override_for_skill_name(&skill.name);
-        let open_button = render_skill_button(
-            &format!("/{}", skill.name),
-            button_handle,
-            appearance,
-            skill.provider,
-            skill_icon_override,
-            move |ctx| {
-                ctx.dispatch_typed_action(AIBlockAction::OpenCodeInWarp {
-                    source: source.clone(),
-                });
-            },
-        );
-        renderable_action = renderable_action.with_action_button(open_button);
-    }
-
     renderable_action.render(app).finish()
-}
-
-fn parsed_skill_for_common_locations(
-    file_locations: impl IntoIterator<Item = LocalOrRemotePath>,
-    app: &AppContext,
-) -> Option<&ai::skills::ParsedSkill> {
-    let skill_paths = file_locations
-        .into_iter()
-        .map(|location| skill_path_from_location(&location))
-        .collect::<Option<Vec<_>>>()?;
-    let first_skill_path = skill_paths.first()?;
-    skill_paths
-        .iter()
-        .all(|skill_path| skill_path == first_skill_path)
-        .then(|| SkillManager::as_ref(app).skill_by_path(first_skill_path))
-        .flatten()
 }
 
 fn maybe_render_document(

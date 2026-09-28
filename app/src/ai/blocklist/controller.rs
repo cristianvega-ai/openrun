@@ -13,7 +13,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
-use ai::skills::{ParsedSkill, SkillPathOrigin, SkillReference};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use input_context::{input_context_for_request, parse_context_attachments};
@@ -54,7 +53,6 @@ use crate::ai::document::ai_document_model::{
     AIDocumentId, AIDocumentModel, AIDocumentUserEditStatus,
 };
 use crate::ai::llms::{LLMId, LLMPreferences};
-use crate::ai::skills::{ActiveSkillLookupError, SkillManager};
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::global_resource_handles::GlobalResourceHandlesProvider;
 use crate::network::NetworkStatus;
@@ -108,13 +106,6 @@ impl SessionContext {
     /// Returns `true` if this is a remote session.
     pub fn is_remote(&self) -> bool {
         matches!(self.session_type, Some(SessionType::WarpifiedRemote))
-    }
-
-    pub fn skill_path_origin(&self) -> SkillPathOrigin {
-        match &self.session_type {
-            Some(SessionType::WarpifiedRemote) => SkillPathOrigin::Unavailable,
-            Some(SessionType::Local) | None => SkillPathOrigin::Local,
-        }
     }
 
     #[cfg(test)]
@@ -365,11 +356,6 @@ impl InputQuery {
 }
 
 impl BlocklistAIController {
-    /// Returns the bundled-skill catalog origin for this controller's active session.
-    pub fn skill_path_origin(&self, ctx: &AppContext) -> SkillPathOrigin {
-        SessionContext::from_session(self.active_session.as_ref(ctx), ctx).skill_path_origin()
-    }
-
     pub(crate) fn team_context<'a>(&self, app: &'a AppContext) -> TeamContext<'a> {
         (self.team_context_resolver)(app)
     }
@@ -691,7 +677,6 @@ impl BlocklistAIController {
             false,
             self.context_model.as_ref(ctx),
             self.active_session.as_ref(ctx),
-            Some(conversation_id),
             vec![],
             ctx,
         );
@@ -1321,48 +1306,6 @@ impl BlocklistAIController {
         self.send_slash_command_request(SlashCommandRequest::CreateNewProject { query }, ctx);
     }
 
-    /// Resolves a skill reference against this controller's active execution host.
-    pub(crate) fn resolve_skill_for_invocation(
-        &self,
-        reference: &SkillReference,
-        ctx: &AppContext,
-    ) -> Result<ParsedSkill, ActiveSkillLookupError> {
-        let path_origin = self.skill_path_origin(ctx);
-        SkillManager::handle(ctx)
-            .as_ref(ctx)
-            .active_skill_by_reference_with_origin(reference, &path_origin, ctx)
-            .cloned()
-    }
-
-    /// Sends an already-resolved skill invocation through the shared slash-command request path.
-    pub(crate) fn send_resolved_skill_invocation(
-        &mut self,
-        skill: ParsedSkill,
-        user_query: Option<String>,
-        queued_query_id: Option<QueuedQueryId>,
-        conversation_id: Option<AIConversationId>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let request = SlashCommandRequest::InvokeSkill { skill, user_query };
-        if let Some(query_id) = queued_query_id {
-            self.send_queued_slash_command_request(request, query_id, conversation_id, ctx);
-        } else {
-            self.send_slash_command_request(request, ctx);
-        }
-    }
-
-    /// Resolves and sends a skill invocation for surfaces that do not need intermediate UI work.
-    pub fn send_invoke_skill_request(
-        &mut self,
-        reference: SkillReference,
-        user_query: Option<String>,
-        ctx: &mut ModelContext<Self>,
-    ) -> Result<(), ActiveSkillLookupError> {
-        let skill = self.resolve_skill_for_invocation(&reference, ctx)?;
-        self.send_resolved_skill_invocation(skill, user_query, None, None, ctx);
-        Ok(())
-    }
-
     /// Same as [`Self::send_slash_command_request`] but marks the emitted `SentRequest`
     /// event as a queued prompt submission so UI subscribers (e.g. the input editor)
     /// don't clear the input buffer on the auto-send.
@@ -1421,7 +1364,6 @@ impl BlocklistAIController {
             false,
             self.context_model.as_ref(ctx),
             self.active_session.as_ref(ctx),
-            None,
             vec![],
             ctx,
         );
@@ -1556,7 +1498,6 @@ impl BlocklistAIController {
             false,
             self.context_model.as_ref(ctx),
             self.active_session.as_ref(ctx),
-            Some(conversation_id),
             vec![],
             ctx,
         );
@@ -1823,7 +1764,6 @@ impl BlocklistAIController {
             false,
             self.context_model.as_ref(ctx),
             self.active_session.as_ref(ctx),
-            Some(conversation_id),
             additional_context,
             ctx,
         );
@@ -2523,11 +2463,6 @@ impl BlocklistAIController {
                             }
                             warp_multi_agent_api::response_event::Type::ClientActions(actions) => {
                                 let client_actions = actions.actions;
-                                let skill_path_origin = SessionContext::from_session(
-                                    self.active_session.as_ref(ctx),
-                                    ctx,
-                                )
-                                .skill_path_origin();
                                 let apply_result =
                                     history_model.update(ctx, |history_model, ctx| {
                                         history_model.apply_client_actions(
@@ -2535,7 +2470,6 @@ impl BlocklistAIController {
                                             client_actions,
                                             conversation_id,
                                             self.terminal_surface_id,
-                                            &skill_path_origin,
                                             ctx,
                                         )
                                     });
@@ -3047,14 +2981,8 @@ fn input_for_query(
         }
     }
 
-    let context = input_context_for_request(
-        true,
-        context_model,
-        active_session,
-        Some(conversation_id),
-        image_context,
-        app,
-    );
+    let context =
+        input_context_for_request(true, context_model, active_session, image_context, app);
     let task_intended_agent = BlocklistAIHistoryModel::as_ref(app)
         .conversation(&conversation_id)
         .and_then(|c| c.get_task(task_id))

@@ -1,4 +1,3 @@
-use ai::skills::SkillPathOrigin;
 use prost_types::FieldMask;
 use warp_multi_agent_api as api;
 
@@ -502,7 +501,6 @@ fn message_context() -> TaskMessageContext<'static> {
     TaskMessageContext {
         current_todo_list: None,
         active_code_review: None,
-        skill_path_origin: &SkillPathOrigin::Unavailable,
     }
 }
 

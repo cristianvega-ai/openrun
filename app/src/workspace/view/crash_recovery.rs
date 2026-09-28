@@ -19,11 +19,9 @@ pub fn banner_metadata(ctx: &AppContext) -> Option<WorkspaceBannerFields> {
                 settings to use Xwayland for windowing. This can result in blurry text if you \
                 are using fractional scaling."
                 .to_owned(),
-            secondary_button: None,
             button: Some(super::WorkspaceBannerButtonDetails {
                 text: "Learn More".to_owned(),
                 action: super::WorkspaceAction::DismissWaylandCrashRecoveryBannerAndOpenLink,
-                variant: super::BannerButtonVariant::Outlined,
                 icon: None,
             }),
         }),

@@ -2,7 +2,6 @@ use std::fmt;
 use std::ops::Range;
 use std::path::PathBuf;
 
-use ai::skills::SkillReference;
 use command_corrections::Correction;
 use pathfinder_geometry::vector::Vector2F;
 use session_sharing_protocol::common::Role;
@@ -286,9 +285,6 @@ pub enum TerminalAction {
     },
     SummarizeConversation,
     AddProjectAtCurrentDirectory,
-    OpenEditSkillPane {
-        skill_reference: SkillReference,
-    },
     OpenBillingAndUsagePane,
     OpenConversationsPalette,
     PickRepoToOpen,
@@ -584,7 +580,6 @@ impl fmt::Debug for TerminalAction {
             CloseTodoPopup => write!(f, "CloseTodoPopup"),
             ToggleCodeReviewPane { .. } => write!(f, "ToggleCodeReviewPane"),
             AddProjectAtCurrentDirectory => write!(f, "AddProjectAtCurrentDirectory"),
-            OpenEditSkillPane { .. } => write!(f, "OpenEditSkillPane"),
             OpenBillingAndUsagePane => write!(f, "OpenBillingAndUsagePane"),
             OpenConversationsPalette => write!(f, "OpenConversationsPalette"),
             PickRepoToOpen => write!(f, "PickRepoToOpen"),

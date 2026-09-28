@@ -16,7 +16,6 @@ pub mod plans;
 pub mod profiles;
 pub mod repos;
 pub mod rewind;
-pub mod skills;
 pub mod slash_command_model;
 pub mod slash_commands;
 mod suggestions_mode_menu;
@@ -36,7 +35,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ai::harness::Harness;
-use ai::skills::SkillReference;
 use async_channel::Sender;
 use base64::Engine as _;
 #[cfg(feature = "local_fs")]
@@ -186,7 +184,6 @@ use crate::ai::harness_availability::{
     CloudAgentStartBlocker, HarnessAvailabilityModel, cloud_agent_start_blocker,
 };
 use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
-use crate::ai::skills::{SkillOpenOrigin, SkillTelemetryEvent};
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::channel::{Channel, ChannelState};
 use crate::cloud_object::model::actions::ObjectActionType;
@@ -274,9 +271,6 @@ use crate::terminal::input::plans::{InlinePlanMenuEvent, InlinePlanMenuView};
 use crate::terminal::input::profiles::{InlineProfileSelectorEvent, InlineProfileSelectorView};
 use crate::terminal::input::repos::{InlineReposMenuEvent, InlineReposMenuView};
 use crate::terminal::input::rewind::{RewindMenuEvent, RewindMenuView};
-use crate::terminal::input::skills::{
-    InlineSkillSelectorEvent, InlineSkillSelectorView, LOCAL_SKILLS_REMOTE_EXECUTION_ERROR_MESSAGE,
-};
 use crate::terminal::input::slash_command_model::{SlashCommandEntryState, SlashCommandModel};
 use crate::terminal::input::slash_commands::{
     CloudModeV2SlashCommandView, GuiSlashCommandDataSource, InlineSlashCommandView,
@@ -546,7 +540,6 @@ pub enum TelemetryInputSuggestionsMode {
     ConversationMenu,
     ModelSelector,
     ProfileSelector,
-    SkillMenu,
     InlineHistoryMenu,
     IndexedReposMenu,
     PlanMenu,
@@ -685,9 +678,6 @@ pub enum InputSuggestionsMode {
     /// Profile selector mode for selecting an execution profile.
     ProfileSelector,
 
-    /// Skill menu mode for /open-skill command.
-    SkillMenu,
-
     /// User query menu mode for selecting a query point (e.g., fork-from, rewind).
     UserQueryMenu {
         action: UserQueryMenuAction,
@@ -746,7 +736,6 @@ impl InputSuggestionsMode {
                 | Self::IndexedReposMenu
         ) || (FeatureFlag::InlineProfileSelector.is_enabled()
             && matches!(self, Self::ProfileSelector))
-            || (FeatureFlag::ListSkills.is_enabled() && matches!(self, Self::SkillMenu))
     }
 
     /// Whether this mode should snapshot the input buffer on open and restore it on dismiss.
@@ -777,7 +766,6 @@ impl InputSuggestionsMode {
                 ..
             } => Some("Search queries to rewind to"),
             InputSuggestionsMode::ConversationMenu => Some("Search conversations"),
-            InputSuggestionsMode::SkillMenu => Some("Search skills"),
             InputSuggestionsMode::ModelSelector => Some("Search models"),
             InputSuggestionsMode::ProfileSelector => Some("Search profiles"),
             InputSuggestionsMode::SlashCommands => Some("Search commands"),
@@ -815,7 +803,6 @@ impl InputSuggestionsMode {
             }
             InputSuggestionsMode::ModelSelector => TelemetryInputSuggestionsMode::ModelSelector,
             InputSuggestionsMode::ProfileSelector => TelemetryInputSuggestionsMode::ProfileSelector,
-            InputSuggestionsMode::SkillMenu => TelemetryInputSuggestionsMode::SkillMenu,
             InputSuggestionsMode::UserQueryMenu { .. } => {
                 TelemetryInputSuggestionsMode::ConversationMenu
             }
@@ -1721,12 +1708,6 @@ pub struct Input {
     /// Inline profile selector for choosing the active execution profile.
     inline_profile_selector_view: ViewHandle<InlineProfileSelectorView>,
 
-    /// Inline skill selector for /open-skill command.
-    inline_skill_selector_view: ViewHandle<InlineSkillSelectorView>,
-
-    /// Whether the skill selector should invoke (true) or open (false) the skill.
-    skill_selector_should_invoke: bool,
-
     /// Inline menu for selecting a query point when forking a conversation.
     user_query_menu_view: ViewHandle<UserQueryMenuView>,
 
@@ -2545,12 +2526,6 @@ impl Input {
         self.inline_model_selector_view.update(ctx, |view, ctx| {
             view.set_ambient_agent_view_model(model_selector_model, ctx);
         });
-        // The /skills selector hides skills on a disconnected cloud follow-up composer (skills run
-        // locally and must not be shown when a follow-up should start a new cloud VM instead).
-        let skill_selector_model = view_model.clone();
-        self.inline_skill_selector_view.update(ctx, |view, ctx| {
-            view.set_ambient_agent_view_model(skill_selector_model, ctx);
-        });
         // NOTE: This method is the SINGLE point that wires a (lazily- or eagerly-created) ambient
         // view model into the input tree. Both `Input::new` (eager/composer) and the shared-session
         // viewer's `SessionJoined` path (lazy) funnel through here, so any component that captures
@@ -2559,7 +2534,7 @@ impl Input {
         // paths drift. Currently propagated: input subscription, harness selector, agent input
         // footer (which forwards to its environment selector, model/harness selector, V2 model
         // selector, and display-chip config), agent status bar, slash-command data sources, the
-        // inline model-selector data source, and the inline skill-selector data source.
+        // inline model-selector data source.
         // Intentionally NOT wired here (verified safe): the UDI button bar's selectors (not rendered
         // in agent view, so unreachable for a cloud viewer) and per-exchange AI blocks / ambient
         // setup-command blocks (created after the model exists).
@@ -3634,23 +3609,6 @@ impl Input {
             me.handle_inline_profile_selector_event(event, ctx);
         });
 
-        let inline_skill_selector_view = ctx.add_view(|ctx| {
-            InlineSkillSelectorView::new(
-                suggestions_mode_model.clone(),
-                agent_view_controller.clone(),
-                &buffer_model,
-                &inline_terminal_menu_positioner,
-                active_session,
-                terminal_view_id,
-                // Wired post-construction via `attach_ambient_agent_view_model`.
-                None,
-                ctx,
-            )
-        });
-        ctx.subscribe_to_view(&inline_skill_selector_view, |me, _, event, ctx| {
-            me.handle_inline_skill_selector_event(event, ctx);
-        });
-
         let user_query_menu_view = ctx.add_view(|ctx| {
             UserQueryMenuView::new(
                 AIConversationId::default(),
@@ -3888,8 +3846,6 @@ impl Input {
             inline_repos_menu_view,
             inline_model_selector_view,
             inline_profile_selector_view,
-            inline_skill_selector_view,
-            skill_selector_should_invoke: false,
             user_query_menu_view,
             rewind_menu_view,
             inline_history_menu_view,
@@ -5253,62 +5209,6 @@ impl Input {
         self.focus_input_box(ctx);
     }
 
-    fn handle_inline_skill_selector_event(
-        &mut self,
-        event: &InlineSkillSelectorEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let InlineSkillSelectorEvent::SelectedSkill {
-            skill_name,
-            skill_reference,
-        } = event;
-
-        if self.skill_selector_should_invoke {
-            // Insert the skill invocation into the buffer using the CLI agent's
-            // native prefix (e.g. "/" for most agents, "$" for Codex).
-            let prefix = CLIAgentSessionsModel::as_ref(ctx)
-                .session(self.terminal_view_id)
-                .map(|s| s.agent.skill_command_prefix())
-                .unwrap_or("/");
-            self.editor.update(ctx, |editor, ctx| {
-                editor.set_buffer_text(format!("{prefix}{skill_name} ").as_str(), ctx);
-            });
-
-            // Close the menu but keep input focused so user can press Enter
-            if self.suggestions_mode_model.as_ref(ctx).is_skill_menu() {
-                self.suggestions_mode_model.update(ctx, |model, ctx| {
-                    model.set_mode(InputSuggestionsMode::Closed, ctx);
-                });
-                ctx.notify();
-            }
-            self.focus_input_box(ctx);
-        } else {
-            // Open the skill file in editor (from /open-skill command)
-            send_telemetry_from_ctx!(
-                SkillTelemetryEvent::Opened {
-                    reference: skill_reference.clone(),
-                    name: Some(skill_name.clone()),
-                    origin: SkillOpenOrigin::OpenSkillCommand,
-                },
-                ctx
-            );
-
-            ctx.dispatch_typed_action(&TerminalAction::OpenEditSkillPane {
-                skill_reference: skill_reference.clone(),
-            });
-
-            // Close the skill selector menu and clear the buffer
-            if self.suggestions_mode_model.as_ref(ctx).is_skill_menu() {
-                self.suggestions_mode_model.update(ctx, |model, ctx| {
-                    model.set_mode(InputSuggestionsMode::Closed, ctx);
-                });
-                ctx.notify();
-            }
-            self.clear_buffer_and_reset_undo_stack(ctx);
-            self.focus_input_box(ctx);
-        }
-    }
-
     fn toggle_inline_model_selector_from_chip(
         &mut self,
         initial_tab: InlineModelSelectorTab,
@@ -5386,38 +5286,6 @@ impl Input {
 
         self.suggestions_mode_model.update(ctx, |model, ctx| {
             model.set_mode(InputSuggestionsMode::ProfileSelector, ctx);
-        });
-
-        ctx.notify();
-    }
-
-    fn open_skill_selector(&mut self, ctx: &mut ViewContext<Self>) {
-        if !FeatureFlag::ListSkills.is_enabled() {
-            return;
-        }
-
-        self.skill_selector_should_invoke = false;
-        self.inline_skill_selector_view.update(ctx, |view, ctx| {
-            view.set_include_bundled(false, ctx);
-        });
-        self.suggestions_mode_model.update(ctx, |model, ctx| {
-            model.set_mode(InputSuggestionsMode::SkillMenu, ctx);
-        });
-
-        ctx.notify();
-    }
-
-    fn open_invoke_skill_selector(&mut self, ctx: &mut ViewContext<Self>) {
-        if !FeatureFlag::ListSkills.is_enabled() {
-            return;
-        }
-
-        self.skill_selector_should_invoke = true;
-        self.inline_skill_selector_view.update(ctx, |view, ctx| {
-            view.set_include_bundled(true, ctx);
-        });
-        self.suggestions_mode_model.update(ctx, |model, ctx| {
-            model.set_mode(InputSuggestionsMode::SkillMenu, ctx);
         });
 
         ctx.notify();
@@ -5866,106 +5734,6 @@ impl Input {
         });
 
         ctx.notify();
-    }
-
-    /// Executes a skill command.
-    ///
-    /// This enters AI mode, resolves the skill from SkillManager, and submits it.
-    ///
-    /// When `queued_query_id` is `Some`, this is the first send of a previously queued prompt:
-    /// the input buffer is left alone (the user may have typed new input while the agent was
-    /// busy) and the emitted `SentRequest` event is tagged as a queued-prompt submission so
-    /// other UI subscribers also skip their user-submission side effects.
-    ///
-    /// Returns `true` if execution was handled.
-    fn execute_skill_command(
-        &mut self,
-        reference: SkillReference,
-        user_query: Option<String>,
-        queued_query_id: Option<QueuedQueryId>,
-        // The conversation a fired queued skill was queued on, used to route the send and resolve
-        // the row's attachments instead of re-deriving from the current UI selection. `None` for
-        // direct (non-queued) skill invocations.
-        conversation_id_override: Option<AIConversationId>,
-        ctx: &mut ViewContext<Self>,
-    ) -> bool {
-        // The skills menu should be hiding skills that are not available in the remote context.
-        // This is a safety net to prevent invoking skills locally when follow ups are not supposed to run locally, in case some skills are showing up in the menu.
-        // Currently skills are populated by the local machine's state and are always run locally below.
-        // TODO: consider populating the skills menu with skills in the remote machine, and forward to the remote machine.
-        let ai_query_routing = resolve_ai_query_routing(
-            self.terminal_view_id,
-            self.ambient_agent_view_model(),
-            &self.model.lock(),
-            ctx,
-        );
-        if !ai_query_routing.is_local() {
-            let window_id = ctx.window_id();
-            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                toast_stack.add_ephemeral_toast(
-                    DismissibleToast::default(
-                        LOCAL_SKILLS_REMOTE_EXECUTION_ERROR_MESSAGE.to_owned(),
-                    ),
-                    window_id,
-                    ctx,
-                );
-            });
-            return true;
-        }
-
-        let is_queued_prompt = queued_query_id.is_some();
-        let skill = match self
-            .ai_controller
-            .as_ref(ctx)
-            .resolve_skill_for_invocation(&reference, ctx)
-        {
-            Ok(skill) => skill,
-            Err(error) => {
-                // Show error toast if skill not found
-                let window_id = ctx.window_id();
-                ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                    toast_stack.add_ephemeral_toast(
-                        DismissibleToast::error(error.to_string()),
-                        window_id,
-                        ctx,
-                    );
-                });
-                return true;
-            }
-        };
-
-        // Clear the buffer (unless this is a queued-prompt auto-send, in which case
-        // the buffer may contain new input the user has started typing).
-        if !is_queued_prompt {
-            self.editor.update(ctx, |editor, ctx| {
-                editor.clear_buffer(ctx);
-            });
-        }
-
-        // Enter agent view if not already active
-        if !self.agent_view_controller.as_ref(ctx).is_active() {
-            self.agent_view_controller.update(ctx, |controller, ctx| {
-                let _ = controller.try_enter_agent_view(
-                    None,
-                    AgentViewEntryOrigin::SlashCommand {
-                        trigger: SlashCommandTrigger::input(),
-                    },
-                    ctx,
-                );
-            });
-        }
-
-        self.ai_controller.update(ctx, move |controller, ctx| {
-            controller.send_resolved_skill_invocation(
-                skill,
-                user_query,
-                queued_query_id,
-                conversation_id_override,
-                ctx,
-            );
-        });
-
-        true
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -8311,9 +8079,6 @@ impl Input {
                         // Profile selector selection is handled separately.
                         // This shouldn't be reached since profile selector doesn't use InputSuggestions
                     }
-                    InputSuggestionsMode::SkillMenu => {
-                        // Skill menu selection is handled via InlineSkillSelectorView
-                    }
                     InputSuggestionsMode::UserQueryMenu { .. } => {
                         // User query menu selection is handled separately
                     }
@@ -8469,10 +8234,6 @@ impl Input {
             }
             InputSuggestionsMode::ProfileSelector => {
                 // Profile selector selection is handled separately
-                false
-            }
-            InputSuggestionsMode::SkillMenu => {
-                // Skill menu selection is handled via InlineSkillSelectorView
                 false
             }
             InputSuggestionsMode::UserQueryMenu { .. } => {
@@ -8738,12 +8499,6 @@ impl Input {
             }
             InputSuggestionsMode::ProfileSelector => {
                 self.inline_profile_selector_view.update(ctx, |view, ctx| {
-                    view.select_up(ctx);
-                });
-                true
-            }
-            InputSuggestionsMode::SkillMenu => {
-                self.inline_skill_selector_view.update(ctx, |view, ctx| {
                     view.select_up(ctx);
                 });
                 true
@@ -9038,12 +8793,6 @@ impl Input {
             }
             InputSuggestionsMode::ProfileSelector => {
                 self.inline_profile_selector_view.update(ctx, |view, ctx| {
-                    view.select_down(ctx);
-                });
-                true
-            }
-            InputSuggestionsMode::SkillMenu => {
-                self.inline_skill_selector_view.update(ctx, |view, ctx| {
                     view.select_down(ctx);
                 });
                 true
@@ -10024,9 +9773,6 @@ impl Input {
                     InputSuggestionsMode::ProfileSelector => {
                         // Profile selector handles its own state
                     }
-                    InputSuggestionsMode::SkillMenu => {
-                        // Skill menu handles its own state
-                    }
                     InputSuggestionsMode::UserQueryMenu { .. } => {
                         // User query menu handles its own state
                     }
@@ -10154,9 +9900,6 @@ impl Input {
                         }
                         InputSuggestionsMode::ProfileSelector => {
                             // Profile selector handles its own selection state
-                        }
-                        InputSuggestionsMode::SkillMenu => {
-                            // Skill menu handles its own selection state
                         }
                         InputSuggestionsMode::UserQueryMenu { .. } => {
                             // User query menu handles its own selection state
@@ -10491,9 +10234,6 @@ impl Input {
                         ctx.emit(Event::AttachDiffSetContext {
                             diff_mode: diff_mode.clone(),
                         });
-                    }
-                    AIContextMenuSearchableAction::InsertSkill { name } => {
-                        self.replace_at_symbol_with_text(&format!("/{name}"), ctx);
                     }
                 }
                 self.close_ai_context_menu(ctx);
@@ -12536,17 +12276,10 @@ impl Input {
                 return;
             }
 
-            // If the skill selector menu is open, Enter selects the highlighted skill.
-            if self.suggestions_mode_model.as_ref(ctx).is_skill_menu() {
-                self.inline_skill_selector_view
-                    .update(ctx, |view, ctx| view.accept_selected_item(ctx));
-                return;
-            }
-
-            // If the slash commands menu is open, accept the selected item
-            // (e.g. /prompts or /skills). However, don't intercept detected
-            // slash/skill commands in the buffer — those should be submitted
-            // directly to the CLI agent so it can handle them natively.
+            // If the slash commands menu is open, accept the selected item.
+            // However, don't intercept detected slash commands in the buffer —
+            // those should be submitted directly to the CLI agent so it can
+            // handle them natively.
             if matches!(
                 self.suggestions_mode_model.as_ref(ctx).mode(),
                 InputSuggestionsMode::SlashCommands
@@ -12615,10 +12348,6 @@ impl Input {
             .is_conversation_menu()
         {
             self.inline_conversation_menu_view
-                .update(ctx, |view, ctx| view.accept_selected_item(ctx));
-            return;
-        } else if self.suggestions_mode_model.as_ref(ctx).is_skill_menu() {
-            self.inline_skill_selector_view
                 .update(ctx, |view, ctx| view.accept_selected_item(ctx));
             return;
         } else if self.suggestions_mode_model.as_ref(ctx).is_user_query_menu() {
@@ -12994,10 +12723,10 @@ impl Input {
         }
     }
 
-    /// Re-submits a queued prompt through the correct handler (slash, skill, or regular AI query),
+    /// Re-submits a queued prompt through the correct handler (slash or regular AI query),
     /// without touching the input buffer or triggering NLD / autosuggestion side-effects.
     ///
-    /// Cancels the in-flight stream first so slash/skill paths don't trip the in-flight assertion.
+    /// Cancels the in-flight stream first so slash paths don't trip the in-flight assertion.
     /// `is_for_same_conversation: true` keeps the conversation status `InProgress` so the warping
     /// indicator stays visible.
     pub(crate) fn submit_queued_prompt(
@@ -13032,7 +12761,7 @@ impl Input {
             .as_ref(ctx)
             .detect_command(&prompt, ctx);
 
-        // Try slash command or skill command first. Some slash commands
+        // Try slash command first. Some slash commands
         // (e.g. /plan, /compact) return false to indicate the full text
         // should be sent as a regular AI query — fall through in that case.
         let handled = match detected {
@@ -13047,13 +12776,6 @@ impl Input {
                     ctx,
                 )
             }
-            SlashCommandEntryState::SkillCommand(detected_skill) => self.execute_skill_command(
-                detected_skill.reference,
-                detected_skill.argument,
-                Some(query_id),
-                Some(conversation_id),
-                ctx,
-            ),
             _ => false,
         };
 

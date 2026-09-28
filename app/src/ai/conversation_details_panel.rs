@@ -1,11 +1,9 @@
 //! A reusable side panel component for displaying conversation metadata.
 
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use ai::harness::Harness;
-use ai::skills::SkillSpec;
 use chrono::{DateTime, Duration, Local};
 use instant::Instant;
 use parking_lot::RwLock;
@@ -145,8 +143,6 @@ struct PanelMouseStates {
     copy_error: MouseStateHandle,
     copy_setup_commands: MouseStateHandle,
     copy_initial_query: MouseStateHandle,
-    skill_link: MouseStateHandle,
-    skill_source_link: MouseStateHandle,
     executor_agent_link: MouseStateHandle,
     status_chip: MouseStateHandle,
 }
@@ -254,8 +250,6 @@ pub struct ConversationDetailsData {
     source_prompt: Option<String>,
     /// Copy link URL (session link if sandbox running, otherwise conversation link).
     copy_link_url: Option<String>,
-    /// Parsed skill spec referenced by the task configuration.
-    skill_spec: Option<SkillSpec>,
     /// Execution harness for this conversation/task.
     harness: Option<Harness>,
     /// Error details displayed when the API call to fetch run data failed.
@@ -380,7 +374,6 @@ impl ConversationDetailsData {
             open_action: None,
             source_prompt: conversation.initial_query(),
             copy_link_url,
-            skill_spec: None,
             harness,
             fetch_error: None,
         }
@@ -409,12 +402,6 @@ impl ConversationDetailsData {
             .and_then(|config| config.runner_id.clone());
 
         let credits = task.credits_used();
-
-        let skill_spec = task
-            .agent_config_snapshot
-            .as_ref()
-            .and_then(|config| config.skill_spec.as_ref())
-            .and_then(|spec_str| SkillSpec::from_str(spec_str).ok());
 
         let harness = task.agent_config_snapshot.as_ref().and_then(|config| {
             config
@@ -452,7 +439,6 @@ impl ConversationDetailsData {
             executor: task.executor.as_ref().map(PrincipalInfo::from),
             source_prompt: Some(task.prompt.clone()),
             copy_link_url,
-            skill_spec,
             harness,
             fetch_error: None,
         }
@@ -499,11 +485,6 @@ impl ConversationDetailsData {
             let cost_in_cents = task
                 .and_then(AmbientAgentTask::cost_in_cents)
                 .or(entry.display.cost_in_cents);
-            let skill_spec = task
-                .and_then(|task| task.agent_config_snapshot.as_ref())
-                .and_then(|config| config.skill_spec.as_ref())
-                .and_then(|spec_str| SkillSpec::from_str(spec_str).ok());
-
             return ConversationDetailsData {
                 mode: PanelMode::Task {
                     task_id: Some(task_id),
@@ -532,7 +513,6 @@ impl ConversationDetailsData {
                 open_action,
                 source_prompt,
                 copy_link_url,
-                skill_spec,
                 harness,
                 fetch_error: None,
             };
@@ -561,7 +541,6 @@ impl ConversationDetailsData {
             open_action,
             source_prompt,
             copy_link_url,
-            skill_spec: None,
             harness,
             fetch_error: None,
         }
@@ -595,7 +574,6 @@ impl ConversationDetailsData {
             open_action: None,
             source_prompt: None,
             copy_link_url: None,
-            skill_spec: None,
             harness: None,
             fetch_error,
         }
@@ -639,7 +617,6 @@ impl ConversationDetailsData {
             artifacts,
             source_prompt: initial_query,
             copy_link_url,
-            skill_spec: None,
             harness,
             fetch_error: None,
         }
@@ -1550,86 +1527,6 @@ impl ConversationDetailsPanel {
         )
     }
 
-    /// Renders the primary skill that this conversation ran.
-    fn render_skill_section(&self, appearance: &Appearance) -> Option<Box<dyn Element>> {
-        let skill_spec = self.data.skill_spec.as_ref()?;
-        let skill_name = skill_spec.skill_name();
-        let theme = appearance.theme();
-        let ui_font_size = appearance.ui_font_size();
-        let sub_color = blended_colors::text_sub(theme, theme.surface_1());
-
-        let icon = ConstrainedBox::new(Icon::Warp.to_warpui_icon(theme.foreground()).finish())
-            .with_width(20.)
-            .with_height(20.)
-            .finish();
-
-        let skill_name_text = Text::new(
-            format!("/{skill_name}"),
-            appearance.ui_font_family(),
-            ui_font_size,
-        )
-        .with_color(sub_color)
-        .with_selectable(true)
-        .finish();
-
-        let oz_root_url = ChannelState::oz_root_url();
-        let encoded_skill_name = urlencoding::encode(&skill_name);
-        let skill_url = format!("{oz_root_url}/skills/{encoded_skill_name}");
-
-        let oz_link = appearance
-            .ui_builder()
-            .link(
-                "Open in Oz".to_string(),
-                Some(skill_url),
-                None,
-                self.mouse_states.skill_link.clone(),
-            )
-            .build()
-            .finish();
-
-        let separator = || {
-            Container::new(
-                Text::new("•".to_string(), appearance.ui_font_family(), ui_font_size)
-                    .with_color(sub_color)
-                    .finish(),
-            )
-            .with_margin_left(4.)
-            .with_margin_right(4.)
-            .finish()
-        };
-
-        let mut row = Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_child(Container::new(icon).with_margin_right(4.).finish())
-            .with_child(Shrinkable::new(1., skill_name_text).finish())
-            .with_child(separator())
-            .with_child(Shrinkable::new(1., oz_link).finish());
-
-        // Add GitHub source link if we have enough info to construct it.
-        if let (Some(org), Some(repo)) = (&skill_spec.org, &skill_spec.repo)
-            && skill_spec.is_full_path()
-        {
-            let github_url = format!(
-                "https://github.com/{}/{}/blob/-/{}",
-                org, repo, skill_spec.skill_identifier
-            );
-            let source_link = appearance
-                .ui_builder()
-                .link(
-                    "Open in GitHub".to_string(),
-                    Some(github_url),
-                    None,
-                    self.mouse_states.skill_source_link.clone(),
-                )
-                .build()
-                .finish();
-            row.add_child(separator());
-            row.add_child(Shrinkable::new(1., source_link).finish());
-        }
-
-        Some(row.finish())
-    }
-
     fn render_source_section(
         &self,
         appearance: &Appearance,
@@ -2114,12 +2011,6 @@ impl View for ConversationDetailsPanel {
         // Title
         let ui_font_size = appearance.ui_font_size();
         let title_font_size = ui_font_size + 2.;
-        let skill_section = self.render_skill_section(appearance);
-        let title_margin = if skill_section.is_some() {
-            LABEL_VALUE_GAP
-        } else {
-            HEADER_SPACING
-        };
         let title = Text::new(
             self.data.title.clone(),
             appearance.ui_font_family(),
@@ -2130,18 +2021,9 @@ impl View for ConversationDetailsPanel {
         .finish();
         content.add_child(
             Container::new(title)
-                .with_margin_bottom(title_margin)
+                .with_margin_bottom(HEADER_SPACING)
                 .finish(),
         );
-
-        // Skill section
-        if let Some(skill_section) = skill_section {
-            content.add_child(
-                Container::new(skill_section)
-                    .with_margin_bottom(HEADER_SPACING)
-                    .finish(),
-            );
-        }
 
         // Creator section
         if let Some(creator_section) = self.render_creator_section(appearance) {

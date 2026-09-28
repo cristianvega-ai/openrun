@@ -8,7 +8,6 @@ pub mod mixer;
 mod notebooks;
 pub mod search;
 #[cfg(not(target_family = "wasm"))]
-mod skills;
 mod styles;
 pub mod view;
 mod workflows;

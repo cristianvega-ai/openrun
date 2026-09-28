@@ -11,7 +11,6 @@ fn request() -> RunAgentsRequest {
     RunAgentsRequest {
         summary: "summary".to_string(),
         base_prompt: "base".to_string(),
-        skills: Vec::new(),
         model_id: "auto".to_string(),
         harness_type: "oz".to_string(),
         execution_mode: RunAgentsExecutionMode::Local,

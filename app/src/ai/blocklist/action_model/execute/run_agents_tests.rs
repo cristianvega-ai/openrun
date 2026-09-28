@@ -270,7 +270,6 @@ fn remote_run_agents_action(harness_type: &str) -> AIAgentAction {
         action: AIAgentActionType::RunAgents(RunAgentsRequest {
             summary: "Run child agent".to_string(),
             base_prompt: "Help".to_string(),
-            skills: vec![],
             model_id: String::new(),
             harness_type: harness_type.to_string(),
             execution_mode: RunAgentsExecutionMode::Remote {
@@ -310,15 +309,9 @@ fn local_codex_run_agents_maps_to_local_harness_mode_when_flag_enabled() {
         model_id: String::new(),
     };
 
-    let mode = run_agents_to_start_agent_mode(
-        &RunAgentsExecutionMode::Local,
-        "codex",
-        "",
-        &[],
-        None,
-        &cfg,
-    )
-    .expect("local Codex should be accepted when the feature flag is enabled");
+    let mode =
+        run_agents_to_start_agent_mode(&RunAgentsExecutionMode::Local, "codex", "", None, &cfg)
+            .expect("local Codex should be accepted when the feature flag is enabled");
 
     assert_eq!(
         mode,

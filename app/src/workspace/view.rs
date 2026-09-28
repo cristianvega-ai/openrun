@@ -739,20 +739,9 @@ pub enum BannerSeverity {
     Error,
 }
 
-/// Visual style for an individual banner action button.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum BannerButtonVariant {
-    /// No fill, no border, just text (and optional icon). Used for the primary
-    /// action in the Figma design (e.g. "Fix with Warp Agent").
-    Naked,
-    /// Border-only, no fill (e.g. "Open file").
-    Outlined,
-}
-
 struct WorkspaceBannerButtonDetails {
     text: String,
     action: WorkspaceAction,
-    variant: BannerButtonVariant,
     /// Optional leading icon shown before the label.
     icon: Option<Icon>,
 }
@@ -764,7 +753,6 @@ struct WorkspaceBannerFields {
     heading: Option<String>,
     /// Main description text (regular weight).
     description: String,
-    secondary_button: Option<WorkspaceBannerButtonDetails>,
     button: Option<WorkspaceBannerButtonDetails>,
 }
 
@@ -13384,9 +13372,6 @@ impl Workspace {
             pane_group::Event::OpenDirectoryInNewTab { path } => {
                 self.open_directory_in_new_tab(path.clone(), ctx);
             }
-            pane_group::Event::RunTabConfigSkill { path } => {
-                self.run_tab_config_skill(path, ctx);
-            }
             pane_group::Event::OpenCodeReviewPane(arg) => {
                 self.open_code_review_panel_from_arg(arg, pane_group.clone(), ctx);
             }
@@ -14637,34 +14622,6 @@ impl Workspace {
             },
             ctx,
         );
-    }
-
-    fn run_tab_config_skill(&mut self, path: &Path, ctx: &mut ViewContext<Self>) {
-        if !AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
-            return;
-        }
-
-        let Some(terminal_view_handle) =
-            self.focus_terminal_input(None, TerminalSessionFallbackBehavior::OpenIfNeeded, ctx)
-        else {
-            return;
-        };
-
-        let prefix = CLIAgentSessionsModel::as_ref(ctx)
-            .session(terminal_view_handle.id())
-            .map(|session| session.agent.skill_command_prefix())
-            .unwrap_or("/");
-        let prompt = format!("{prefix}update-tab-config Update {} to...", path.display());
-
-        terminal_view_handle.update(ctx, |terminal_view, ctx| {
-            terminal_view.input().update(ctx, |input, ctx| {
-                input.clear_buffer_and_reset_undo_stack(ctx);
-                input.set_input_mode_agent(true, ctx);
-                input.ensure_agent_mode_for_ai_features(ctx);
-                input.replace_buffer_content(&prompt, ctx);
-                input.focus_input_box(ctx);
-            });
-        });
     }
 
     /// Runs a workflow in whichever terminal input is currently active.
@@ -17799,10 +17756,11 @@ impl Workspace {
     // Allow let and return because of the conditional linux compilation (otherwise we get a clippy
     // warning on mac)
     #[allow(clippy::let_and_return)]
+    #[cfg_attr(not(enable_crash_recovery), allow(unused_variables))]
     fn banner_fields(&self, app: &AppContext) -> Option<WorkspaceBannerFields> {
         // It's more important that users are notified their settings file is broken than that
         // they continue to see the crash recovery banner.
-        let banner_fields = self.render_settings_error_banner(app);
+        let banner_fields = self.render_settings_error_banner();
 
         #[cfg(enable_crash_recovery)]
         let banner_fields = banner_fields.or_else(|| crash_recovery::banner_metadata(app));
@@ -17810,33 +17768,20 @@ impl Workspace {
         banner_fields
     }
 
-    fn render_settings_error_banner(&self, app: &AppContext) -> Option<WorkspaceBannerFields> {
+    fn render_settings_error_banner(&self) -> Option<WorkspaceBannerFields> {
         if self.settings_error_banner_dismissed {
             return None;
         }
         let error = self.settings_file_error.as_ref()?;
         let (heading, description) = error.heading_and_description();
-        let secondary_button =
-            AISettings::as_ref(app)
-                .is_any_ai_enabled(app)
-                .then(|| WorkspaceBannerButtonDetails {
-                    text: "Fix with Warp Agent".to_owned(),
-                    action: WorkspaceAction::FixSettingsWithOz {
-                        error_description: error.to_string(),
-                    },
-                    variant: BannerButtonVariant::Naked,
-                    icon: Some(Icon::Agent),
-                });
         Some(WorkspaceBannerFields {
             banner_type: WorkspaceBanner::InvalidSettings,
             severity: BannerSeverity::Warning,
             heading: Some(heading),
             description,
-            secondary_button,
             button: Some(WorkspaceBannerButtonDetails {
                 text: "Open file".to_owned(),
                 action: WorkspaceAction::OpenSettingsFile,
-                variant: BannerButtonVariant::Outlined,
                 icon: None,
             }),
         })
@@ -17906,19 +17851,6 @@ impl Workspace {
             // otherwise overflow.
             .with_child(Expanded::new(1., text.finish()).finish());
 
-        if let Some(secondary_button) = fields.secondary_button {
-            banner.add_child(
-                Container::new(self.render_banner_action_button(
-                    secondary_button,
-                    self.mouse_states.banner_secondary_button.clone(),
-                    text_color,
-                    appearance,
-                ))
-                .with_margin_left(4.)
-                .finish(),
-            );
-        }
-
         if let Some(button) = fields.button {
             banner.add_child(
                 Container::new(self.render_banner_action_button(
@@ -17982,8 +17914,7 @@ impl Workspace {
         .finish()
     }
 
-    /// Renders a single banner action button using the Figma-spec'd Naked or
-    /// Secondary variants: no fill by default, optional 1px border, text and
+    /// Renders a single banner action button: no fill by default, a 1px border, text and
     /// icon tinted with the banner's contrast-safe text color.
     fn render_banner_action_button(
         &self,
@@ -17993,11 +17924,7 @@ impl Workspace {
         appearance: &Appearance,
     ) -> Box<dyn Element> {
         let WorkspaceBannerButtonDetails {
-            text,
-            action,
-            variant,
-            icon,
-            ..
+            text, action, icon, ..
         } = details;
         let ui_font_family = appearance.ui_font_family();
         Hoverable::new(mouse_state, move |state| {
@@ -18029,10 +17956,8 @@ impl Workspace {
 
             let mut container = Container::new(row.finish())
                 .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
-                .with_horizontal_padding(8.);
-            if matches!(variant, BannerButtonVariant::Outlined) {
-                container = container.with_border(Border::all(1.).with_border_color(text_color));
-            }
+                .with_horizontal_padding(8.)
+                .with_border(Border::all(1.).with_border_color(text_color));
             if state.is_hovered() {
                 container = container.with_background_color(coloru_with_opacity(text_color, 20));
             }
@@ -19465,52 +19390,6 @@ impl TypedActionView for Workspace {
             }
             OpenNetworkLogPane => {
                 self.open_network_log_pane(ctx);
-            }
-            FixSettingsWithOz { error_description } => {
-                use crate::ai::skills::SkillManager;
-                let modify_settings_skill = SkillManager::as_ref(ctx)
-                    .active_local_bundled_skill("modify-settings", ctx)
-                    .cloned();
-                let query = format!(
-                    "My settings.toml file has an error: {error_description}. Please fix it."
-                );
-                self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-                    pane_group.add_terminal_pane_in_agent_mode(None, ctx);
-                    if let Some(terminal_view) = pane_group.focused_session_view(ctx) {
-                        terminal_view.update(ctx, |terminal_view, terminal_view_ctx| {
-                            // The modify-settings skill should always be available for
-                            // production builds.
-                            if let Some(skill) = modify_settings_skill {
-                                terminal_view.ai_controller().update(
-                                    terminal_view_ctx,
-                                    |controller, ctx| {
-                                        controller.send_slash_command_request(
-                                            SlashCommandRequest::InvokeSkill {
-                                                skill,
-                                                user_query: Some(query),
-                                            },
-                                            ctx,
-                                        );
-                                    },
-                                );
-                            } else if let Some(conversation_id) =
-                                terminal_view.active_conversation_id(terminal_view_ctx)
-                            {
-                                terminal_view.ai_controller().update(
-                                    terminal_view_ctx,
-                                    |controller, ctx| {
-                                        controller.send_user_query_in_conversation(
-                                            query,
-                                            conversation_id,
-                                            None,
-                                            ctx,
-                                        );
-                                    },
-                                );
-                            }
-                        });
-                    }
-                });
             }
             OpenWorktreeInRepo { repo_path } => {
                 self.open_worktree_in_repo(repo_path.clone(), ctx);

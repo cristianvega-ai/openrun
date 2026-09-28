@@ -58,6 +58,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [MCP (Model Context Protocol)](#mcp-model-context-protocol) — deleted the `mcp` crate, the MCP server managers, gallery, OAuth and file-based discovery, the MCP settings page, Drive item and slash commands, the agent's MCP tool and resource actions, MCP execution-profile permissions and the Figma MCP prompt chip
 - [Launch, feature-intro and vertical-tabs intro modals](#launch-feature-intro-and-vertical-tabs-intro-modals) — deleted the Oz, OpenWarp, orchestration and Warp Agent CLI launch modals, the feature-intro popover and the vertical-tabs intro flow, with their one-time flags and debug actions
 - [Onboarding: AI slides, callout tutorial and Get Started](#onboarding-ai-slides-callout-tutorial-and-get-started) — onboarding is now four slides (welcome, customize, CLI agents, theme); removed the agent-intention flow, the AI-access and offer slides, the in-terminal callout tutorial that started an agent, the Get Started pane and coding entrypoints
+- [Skills](#skills) — deleted the skills feature (`SKILL.md` discovery, the `/skills` and `/open-skill` commands, the `@`-menu skills category, the `read_skill` tool, bundled and channel-gated skill files) and the "Fix with Warp Agent" and tab-config-editor agent buttons that invoked bundled skills
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -1553,3 +1554,36 @@ The desktop app also rewrote clicked Warp web links into in-app intents. Offline
 - `terminal/view/block_onboarding/onboarding_prompt_block.rs` has no AI content (it is the prompt-style chooser used by settings import), so it stays.
 - `crates/onboarding/src/bin/main.rs` still builds as a demo of the four slides.
 - `FeatureFlag::AgentOnboarding` still gates showing the slides at startup. `GetStartedTab`, `HOAOnboardingFlow` and `AccountFirstOnboarding` are no longer read. FLAGS-1 removes all four.
+## Skills
+**Why:** Skills are Markdown instruction files (`SKILL.md`) that Warp discovered on disk (`.agents/skills`, `.claude/skills`, `.codex/skills` and similar provider folders), bundled into the app, and handed to the built-in agent. They exist only to steer Warp's agent, which this fork does not ship. The third-party CLI agents keep handling their own `/skill` commands, so the slash-menu skill list for the CLI Rich Input is dropped too (decision D3).
+
+**Removed:**
+- `crates/ai/src/skills/` (skill parsing, providers, references, specs) and `app/src/ai/skills/` (`SkillManager`, its file watchers, bundled-skill loading, `resolve_skill_spec`, skill telemetry).
+- `terminal/input/skills/` (the `/skills` and `/open-skill` inline selector) and `search/ai_context_menu/skills/` (the `@`-menu skills category), with `InputSuggestionsMode::SkillMenu`, `InlineMenuType::SkillMenu`, `QueryFilter::Skills` and `AIContextMenuSearchableAction::InsertSkill`.
+- The `/skills` and `/open-skill` slash commands (`SlashCommandKind::{InvokeSkill, EditSkill}`) and skill-command detection while typing (`DetectedSkillCommand`, `SlashCommandEntryState::SkillCommand`).
+- The agent's `read_skill` tool and executor (`AIAgentActionType::ReadSkill`, `ReadSkillResult`, `ReadSkillExecutor`), the `InvokeSkill` agent input, the `SkillInvoked` output message, the `Skills` agent context, and the skills field of `run_agents` requests and remote child launches.
+- `CodeSource::Skill` and `SkillOpenOrigin` (`code/editor_management.rs`), the "Open skill" buttons on read-file and edit-file action rows, and the conversation details panel's skill section.
+- The `RunTabConfigSkill` chain (code footer, code view, pane group, workspace): the tab-config editor footer with its `/update-tab-config` button, and its `FooterMode::TabConfig`.
+- `WorkspaceAction::FixSettingsWithOz` and the "Fix with Warp Agent" buttons on the settings-file error banner and the settings sidebar alert, which invoked the bundled `modify-settings` skill. With them went the banner's secondary-button slot and `BannerButtonVariant`.
+- The skill-provider force-included repository paths registered at startup and in test setup, `warp_core::paths::warp_home_skills_dir`, and the `~/.warp/skills` watch in `WarpManagedPathsWatcher` (with `filter_repository_update*`).
+- `CLIAgent::supported_skill_providers` and `skill_command_prefix` (`terminal/cli_agent.rs`), the last `ai::skills` import outside the AI module.
+- `resources/bundled/skills/` (thirteen bundled skills, including `claude-api`, `oz-platform`, `warpctrl` and `factory-files`), `resources/channel-gated-skills/` (dogfood-only skills such as `test-warp-ui`, which documented `--bin warp` and `--api-key`), and `script/copy_conditional_skills`.
+- `is_tab_config_toml`, `AIQueryRouting::is_local` and `render_provider_icon_button`, which only the skill paths still used, and the `warp_managed_paths_watcher` tests (they covered only the skill-directory helpers).
+
+**Modified:**
+- `script/prepare_bundled_resources`, `script/windows/prepare_bundled_resources.ps1` and `flake.nix` no longer copy channel-gated skills or list the `claude-api` license. The channel argument is still accepted.
+- Cloud-mode slash menu (`slash_commands/cloud_mode_v2_view.rs`): the Skills section is gone, leaving Commands as the only section; `apply_v2_slash_section_filter` and the originating-command reselection went with it (AI-17a deletes the rest).
+- `input_context_for_request` no longer takes a conversation id (it only fed the skills-changed check). `SlashCommandRequest` no longer carries `InvokeSkill`.
+- `app/resources/tab_configs/new_tab_config_template.toml` no longer suggests asking Oz to update the config.
+- `TelemetryEvent`'s `AIAgentInput` mirror lost its `InvokeSkill` variant.
+- Tests: deleted the skill-only suites and the `SkillManager` singleton from the test setup helpers; the remaining tests dropped their skill arguments.
+
+**User-visible impact:** `/skills` and `/open-skill` are gone, as is the `@` menu's Skills entry. The Rich Input no longer lists skills for the running CLI agent; type the agent's own skill command. Settings-file errors show only "Open file". The tab-config editor has no agent button. A stored per-menu height for the skills menu is ignored (its key was `skill_menu`).
+
+**Notes:**
+- Left for AI-12/AI-17b/server API removal: `SpawnAgentRequest::{skill, runtime_skills}` and the task filter's `skill_spec` in `server_api/ai.rs`, and the `skill_spec` fields in `crates/cloud_object_models` (`cloud_agent_config.rs`, `scheduled_ambient_agent.rs`).
+- Left for AUTH/SRV: `global_skills` in `warp_server_auth::User` and the GraphQL `get_user` query.
+- Left for FLAGS-1: the `PRCommentsSkill`, `ListSkills`, `OzPlatformSkills`, `BundledSkills` and `SkillArguments` flags and their Cargo features; `impl.rs` now sends `supports_bundled_skills: false`.
+- Left for the multi-agent API cleanup (AI-29): the proto-facing `ReadSkill`/`InvokeSkill` message and tool handling in `agent/api/convert_*`, `task/helper.rs` and `conversation_yaml.rs`. They are wire types from `warp_multi_agent_api`; nothing maps them to client actions any more.
+- Left for a `repo_metadata` cleanup: the standing-query and force-included-path machinery in `crates/repo_metadata` (`standing_queries.rs`, `Entry::build_tree_with_standing_queries`, `register_force_included_paths`, `set_project_skill_provider_paths`, `RepoMetadataEvent::StandingQueryResultsUpdated`) existed for skill discovery and now has no callers.
+- Left for SWP: the launch modals' copy mentioning skills (`oz_launch.rs`, `openwarp_launch_modal`), and dev-workflow docs in `AGENTS.md`, `CONTRIBUTING.md` and `FAQ.md` about coding-agent skills.

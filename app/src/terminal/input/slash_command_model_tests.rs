@@ -24,7 +24,7 @@ fn test_parse_input_requires_slash_at_start() {
         let slash_command_data_source =
             input.read(&app, |input, _| input.slash_command_data_source.clone());
 
-        slash_command_data_source.read(&app, |data_source, ctx| {
+        slash_command_data_source.read(&app, |data_source, _| {
             let command_name = data_source
                 .active_commands()
                 .next()
@@ -33,7 +33,7 @@ fn test_parse_input_requires_slash_at_start() {
             let input = format!("  {command_name}");
 
             assert!(matches!(
-                data_source.parse_input(&input, ctx),
+                data_source.parse_input(&input),
                 ParsedSlashCommandInput::None
             ));
         });

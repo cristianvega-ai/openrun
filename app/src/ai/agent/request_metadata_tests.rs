@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use ai::skills::SkillPathOrigin;
 use chrono::Local;
 use warp_multi_agent_api as api;
 use warp_multi_agent_api::client_action::{
@@ -707,7 +706,6 @@ fn exchange_without_any_request_messages_is_not_eligible() {
                     Action::CreateTask(CreateTask {
                         task: Some(create_api_task("root", vec![])),
                     }),
-                    &SkillPathOrigin::Unavailable,
                     ctx,
                 )
                 .expect("create task should apply");
@@ -719,7 +717,6 @@ fn exchange_without_any_request_messages_is_not_eligible() {
                         task_id: "root".to_string(),
                         messages: turn_messages("req-1", 1_000),
                     }),
-                    &SkillPathOrigin::Unavailable,
                     ctx,
                 )
                 .expect("add messages should apply");
@@ -841,7 +838,6 @@ fn records_resolve_after_a_summarization_move() {
                     &ResponseStreamId::new_for_test(),
                     EntityId::new(),
                     action,
-                    &SkillPathOrigin::Unavailable,
                     ctx,
                 )
                 .expect("move should apply");

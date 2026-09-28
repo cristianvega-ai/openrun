@@ -25,7 +25,6 @@ pub use ai::agent::action::*;
 pub use ai::agent::action_result::*;
 use ai::agent::orchestration_config::{OrchestrationConfig, OrchestrationConfigStatus};
 pub use ai::agent::{AIAgentCitation, FileLocations};
-use ai::skills::ParsedSkill;
 pub use ai_types::{AIAgentActionId, EntrypointType};
 use chrono::{DateTime, Local, TimeDelta};
 use comment::ReviewComment;
@@ -49,7 +48,6 @@ use crate::TelemetryEvent;
 use crate::ai::block_context::BlockContext;
 use crate::ai::blocklist::block::view_impl::output::are_all_text_sections_empty;
 use crate::ai::execution_context::WarpAiExecutionContext;
-use crate::ai::skills::SkillDescriptor;
 use crate::code::editor_management::CodeSource;
 use crate::code_review::comments::AgentReviewCommentBatch;
 use crate::code_review::diff_set::{CurrentHead, DiffBase, DiffSetHunk};
@@ -68,15 +66,6 @@ impl std::fmt::Display for ServerOutputId {
         // Display only the inner UUID string without the wrapper
         write!(f, "{}", self.0)
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct InvokeSkillUserQuery {
-    pub query: String,
-    pub referenced_attachments: HashMap<String, AIAgentAttachment>,
-    /// Attribution carried over from the message this invocation was restored from, so a
-    /// resent skill query keeps its original author; `None` for a locally typed one.
-    pub base: Option<BaseUserQuery>,
 }
 
 impl ServerOutputId {
@@ -649,7 +638,6 @@ impl AIAgentOutput {
                     last_was_action = false;
                 }
                 AIAgentOutputMessageType::ArtifactCreated(_) => continue,
-                AIAgentOutputMessageType::SkillInvoked(_) => continue,
                 AIAgentOutputMessageType::MessagesReceivedFromAgents { messages } => {
                     result.push(format!("Received {} messages", messages.len()));
                     last_was_action = false;
@@ -1764,11 +1752,6 @@ impl Display for SubagentCall {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct InvokedSkill {
-    pub name: String,
-}
-
 /// Data for a single received message, used for rendering in the UI.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReceivedMessageDisplay {
@@ -1777,12 +1760,6 @@ pub struct ReceivedMessageDisplay {
     pub addresses: Vec<String>,
     pub subject: String,
     pub message_body: String,
-}
-
-impl Display for InvokedSkill {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "InvokedSkill: {}", self.name)
-    }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -1820,7 +1797,6 @@ pub enum AIAgentOutputMessageType {
     },
     /// Notification that an artifact was created (e.g. a PR).
     ArtifactCreated(ArtifactCreatedData),
-    SkillInvoked(InvokedSkill),
     /// Messages received from other agent conversations.
     MessagesReceivedFromAgents {
         messages: Vec<ReceivedMessageDisplay>,
@@ -2015,9 +1991,6 @@ impl Display for AIAgentOutputMessage {
                     "File artifact uploaded: {filepath} (artifact: {artifact_uid})"
                 )?,
             },
-            AIAgentOutputMessageType::SkillInvoked(invoked_skill) => {
-                write!(f, "Skill Invoked: {}", invoked_skill.name)?
-            }
             AIAgentOutputMessageType::MessagesReceivedFromAgents { messages } => {
                 write!(f, "Received {} messages", messages.len())?
             }
@@ -2144,14 +2117,6 @@ impl AIAgentOutputMessage {
         Self { citations, ..self }
     }
 
-    pub fn skill_invoked(id: MessageId, invoked_skill: InvokedSkill) -> Self {
-        Self {
-            id,
-            message: AIAgentOutputMessageType::SkillInvoked(invoked_skill),
-            citations: vec![],
-        }
-    }
-
     pub fn messages_received_from_agents(
         id: MessageId,
         messages: Vec<ReceivedMessageDisplay>,
@@ -2247,12 +2212,6 @@ pub enum AIAgentContext {
         url: String,
     },
 
-    /// List of available skills is provided to the agent during initialization
-    /// or when updated.
-    Skills {
-        skills: Vec<SkillDescriptor>,
-    },
-
     #[serde(untagged)]
     Block(Box<BlockContext>),
 }
@@ -2303,9 +2262,6 @@ enum AIAgentContextTagged {
         base_branch: String,
         #[serde(default)]
         url: String,
-    },
-    Skills {
-        skills: Vec<SkillDescriptor>,
     },
 }
 
@@ -2359,7 +2315,6 @@ impl From<AIAgentContextTagged> for AIAgentContext {
                 base_branch,
                 url,
             },
-            AIAgentContextTagged::Skills { skills } => AIAgentContext::Skills { skills },
         }
     }
 }
@@ -2773,22 +2728,11 @@ pub enum AIAgentInput {
         context: Arc<[AIAgentContext]>,
     },
 
-    /// Invoke a skill. The skill content is passed as instructions to the agent.
-    InvokeSkill {
-        context: Arc<[AIAgentContext]>,
-        skill: ParsedSkill,
-        user_query: Option<InvokeSkillUserQuery>,
-    },
-
     /// Start a conversation using the prompt stored for an ambient agent run.
     /// The server resolves the prompt from the run's latest known prompt.
-    /// If runtime_skill is provided, the server will create an InvokeSkill message. The skill
-    /// instructions are sent to the LLM but not displayed in the UI query bubble.
     StartFromAmbientRunPrompt {
         ambient_run_id: String,
         context: Arc<[AIAgentContext]>,
-        /// Optional skill to use as base context (content hidden from user in UI).
-        runtime_skill: Option<ai::skills::ParsedSkill>,
         /// Optional directory path where the client downloaded task attachments.
         /// Passed to the server so it can construct correct file paths for the LLM.
         attachments_dir: Option<String>,
@@ -2872,19 +2816,6 @@ impl Display for AIAgentInput {
             Self::CloneRepository { .. } => write!(f, "CloneRepository"),
             Self::CodeReview { .. } => write!(f, "CodeReview"),
             Self::SummarizeConversation { .. } => write!(f, "SummarizeConversation"),
-            Self::InvokeSkill {
-                skill, user_query, ..
-            } => {
-                if let Some(user_query) = user_query {
-                    if user_query.query.is_empty() {
-                        write!(f, "InvokeSkill: {}", skill.name)
-                    } else {
-                        write!(f, "InvokeSkill: {} {}", skill.name, user_query.query)
-                    }
-                } else {
-                    write!(f, "InvokeSkill: {}", skill.name)
-                }
-            }
             Self::StartFromAmbientRunPrompt { .. } => write!(f, "StartFromAmbientRunPrompt"),
             Self::MessagesReceivedFromAgents { messages } => {
                 write!(f, "MessagesReceivedFromAgents({} messages)", messages.len())
@@ -2899,7 +2830,7 @@ impl Display for AIAgentInput {
 
 impl AIAgentInput {
     /// Display text for any input that surfaces a prompt-like query in the UI
-    /// (typed queries, slash commands, skill invocations, etc.). Unlike
+    /// (typed queries, slash commands, etc.). Unlike
     /// [`Self::is_user_query`], which strictly matches the `UserQuery` variant,
     /// this returns `Some` for several input variants.
     pub fn display_query(&self) -> Option<String> {
@@ -2916,19 +2847,6 @@ impl AIAgentInput {
             } => Some(url.query.clone()),
             Self::CreateEnvironment { display_query, .. } => display_query.clone(),
             Self::CodeReview { .. } => Some("Address these comments".to_string()),
-            Self::InvokeSkill {
-                skill, user_query, ..
-            } => {
-                if let Some(user_query) = user_query {
-                    if user_query.query.is_empty() {
-                        Some(format!("/{}", skill.name))
-                    } else {
-                        Some(format!("/{} {}", skill.name, user_query.query))
-                    }
-                } else {
-                    Some(format!("/{}", skill.name))
-                }
-            }
             Self::ActionResult {
                 result:
                     AIAgentActionResult {
@@ -3030,7 +2948,6 @@ impl AIAgentInput {
             | Self::CreateNewProject { context, .. }
             | Self::CloneRepository { context, .. }
             | Self::CodeReview { context, .. }
-            | Self::InvokeSkill { context, .. }
             | Self::StartFromAmbientRunPrompt { context, .. } => Some(context),
             Self::SummarizeConversation { context, .. } => Some(context),
             Self::MessagesReceivedFromAgents { .. }
@@ -3059,7 +2976,6 @@ impl AIAgentInput {
             | Self::CloneRepository { .. }
             | Self::CodeReview { .. }
             | Self::SummarizeConversation { .. }
-            | Self::InvokeSkill { .. }
             | Self::StartFromAmbientRunPrompt { .. }
             | Self::MessagesReceivedFromAgents { .. }
             | Self::EventsFromAgents { .. }
@@ -3074,10 +2990,7 @@ impl AIAgentInput {
     /// Returns true if this input type provides its own display query that should be preserved
     /// without prepending "/agent".
     pub fn has_custom_display_query(&self) -> bool {
-        matches!(
-            self,
-            AIAgentInput::CreateEnvironment { .. } | AIAgentInput::InvokeSkill { .. }
-        )
+        matches!(self, AIAgentInput::CreateEnvironment { .. })
     }
 }
 

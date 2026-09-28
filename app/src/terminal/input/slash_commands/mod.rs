@@ -9,8 +9,7 @@ use std::path::PathBuf;
 
 #[cfg(not(target_family = "wasm"))]
 use ai::harness::Harness;
-use ai::skills::SkillReference;
-pub use cloud_mode_v2_view::{CloudModeV2SlashCommandView, Section as CloudModeV2Section};
+pub use cloud_mode_v2_view::CloudModeV2SlashCommandView;
 pub use data_source::*;
 pub use mixer::{SlashCommandMixer, build_slash_command_mixer, slash_command_query};
 pub use view::{CloseReason, InlineSlashCommandView, SlashCommandsEvent};
@@ -70,14 +69,7 @@ use crate::workspace::{ForkedConversationDestination, ToastStack, WorkspaceActio
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AcceptSlashMenuItem {
-    SlashCommand {
-        id: SlashCommandId,
-    },
-    /// A skill selected from browse or search. Contains name (for display/insertion) and path/bundled_skill_id (for execution).
-    Skill {
-        reference: SkillReference,
-        name: String,
-    },
+    SlashCommand { id: SlashCommandId },
 }
 impl InlineMenuAction for AcceptSlashMenuItem {
     const MENU_TYPE: InlineMenuType = InlineMenuType::SlashCommands;
@@ -107,7 +99,7 @@ pub fn slash_command_selection_behavior(command: &StaticCommand) -> SlashCommand
 }
 
 /// Whether an already-open slash command menu should close after the input becomes an exact
-/// static-command or skill match.
+/// static-command match.
 ///
 /// This preserves the GUI's existing behavior: exact input stays visible while multiple prior
 /// results remain, but a unique match or the start of argument entry closes the menu.
@@ -322,22 +314,6 @@ impl Input {
                     self.open_completion_suggestions(CompletionsTrigger::SlashCommandAutoOpen, ctx);
                 }
             }
-            SlashCommandEntryState::SkillCommand(detected_skill) => {
-                // Hide the menu once the user has started typing the prompt
-                if self.suggestions_mode_model.as_ref(ctx).is_slash_commands()
-                    && should_close_slash_command_menu_for_exact_match(
-                        self.inline_slash_commands_view
-                            .as_ref(ctx)
-                            .result_count(ctx),
-                        detected_skill.argument.is_some(),
-                    )
-                {
-                    self.close_slash_commands_menu(ctx);
-                }
-
-                // Skill commands always require AI mode
-                self.enter_ai_mode(ctx);
-            }
         }
     }
 
@@ -373,13 +349,6 @@ impl Input {
                     },
                     ctx,
                 );
-            }
-            SlashCommandsEvent::SelectedSkill { name, reference: _ } => {
-                // Insert /{skill-name} into the buffer
-                self.editor.update(ctx, |editor, ctx| {
-                    editor.set_buffer_text(format!("/{name} ").as_str(), ctx);
-                });
-                self.close_slash_commands_menu(ctx);
             }
         }
     }
@@ -821,24 +790,6 @@ impl Input {
                     return false;
                 }
                 ctx.dispatch_typed_action(&WorkspaceAction::OpenSettingsFile);
-            }
-            SlashCommandKind::EditSkill => {
-                if !FeatureFlag::ListSkills.is_enabled() {
-                    return false;
-                }
-                // Open the skill selector menu - user will select a skill from the inline menu
-                self.open_skill_selector(ctx);
-            }
-            SlashCommandKind::InvokeSkill => {
-                if !FeatureFlag::ListSkills.is_enabled() {
-                    return false;
-                }
-                if self.is_cloud_mode_input_v2_composing(ctx) {
-                    self.apply_v2_slash_section_filter(CloudModeV2Section::Skills, ctx);
-                    return true;
-                }
-                // Open the skill selector menu for invocation - skill command will be inserted into buffer
-                self.open_invoke_skill_selector(ctx);
             }
             SlashCommandKind::Host => {
                 if !self.is_cloud_mode_input_v2_composing(ctx) {
@@ -1300,32 +1251,7 @@ impl Input {
                     ctx,
                 )
             }
-            SlashCommandEntryState::SkillCommand(_)
-                if self.is_cloud_mode_input_v2_composing(ctx) =>
-            {
-                false
-            }
-            SlashCommandEntryState::SkillCommand(detected_skill) => {
-                let reference = detected_skill.reference.clone();
-                let user_query = detected_skill.argument.clone();
-                self.execute_skill_command(reference, user_query, None, None, ctx)
-            }
             SlashCommandEntryState::None | SlashCommandEntryState::Composing { .. } => false,
-        }
-    }
-
-    fn apply_v2_slash_section_filter(
-        &mut self,
-        section: CloudModeV2Section,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.editor.update(ctx, |editor, ctx| {
-            editor.set_buffer_text("/", ctx);
-        });
-        if let Some(view) = self.cloud_mode_v2_slash_commands_view.clone() {
-            view.update(ctx, |v, ctx| {
-                v.set_section_filter(Some(section), ctx);
-            });
         }
     }
 
@@ -1398,16 +1324,6 @@ impl Input {
                     None,
                     ctx,
                 )
-            }
-            SlashCommandEntryState::SkillCommand(_)
-                if self.is_cloud_mode_input_v2_composing(ctx) =>
-            {
-                false
-            }
-            SlashCommandEntryState::SkillCommand(detected_skill) => {
-                let reference = detected_skill.reference.clone();
-                let user_query = detected_skill.argument.clone();
-                self.execute_skill_command(reference, user_query, None, None, ctx)
             }
             SlashCommandEntryState::None | SlashCommandEntryState::Composing { .. } => false,
         }

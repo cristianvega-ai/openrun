@@ -1335,7 +1335,6 @@ fn dispatch_start_agent_conversation(
         }
         StartAgentExecutionMode::Remote {
             environment_id,
-            skill_references,
             model_id,
             worker_host,
             harness_type,
@@ -1345,19 +1344,12 @@ fn dispatch_start_agent_conversation(
             agent_identity_uid,
         } => {
             let request_team_scope = request.request_team_scope;
-            let working_dir = group
-                .terminal_view_from_pane_id(parent_pane_id, ctx)
-                .and_then(|view| view.as_ref(ctx).pwd_if_local(ctx))
-                .map(std::path::PathBuf::from)
-                .unwrap_or_default();
             launch_remote_child(
                 group,
                 parent_pane_id,
                 request,
                 RemoteChildLaunchConfig {
                     environment_id,
-                    skill_references,
-                    working_dir,
                     model_id,
                     worker_host,
                     harness_type,
@@ -1500,8 +1492,7 @@ fn launch_local_no_harness_child(
 }
 
 /// Sets up a hidden ambient-agent pane for a Remote child agent: creates the
-/// child conversation, marks it as remote, resolves runtime skills (silently
-/// bailing with a status update on resolution failure), constructs the
+/// child conversation, marks it as remote, constructs the
 /// `SpawnAgentRequest`, enters the agent view, and kicks off the spawn via
 /// the ambient agent view model. Returns the freshly-created
 /// `AIConversationId` on success.

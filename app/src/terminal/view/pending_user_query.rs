@@ -140,7 +140,7 @@ impl TerminalView {
     /// Removes the pending block and immediately submits the queued prompt.
     ///
     /// The plain-text submission path cancels any in-flight stream itself (via
-    /// `send_query` -> `cancel_conversation_progress`), but slash- and skill-command
+    /// `send_query` -> `cancel_conversation_progress`), but slash-command
     /// submissions route through `send_request_input` directly without cancelling,
     /// which trips the in-flight-request assertion when the agent is still streaming.
     ///
@@ -174,7 +174,7 @@ impl TerminalView {
     /// Shows a pending user query indicator and queues the query to be sent after
     /// the current conversation finishes. If the conversation completes successfully,
     /// the queued prompt is re-submitted through the normal input flow (so slash
-    /// commands, skill commands, and session sharing are all handled correctly).
+    /// commands and session sharing are all handled correctly).
     /// The pending indicator is removed regardless of the finish reason.
     ///
     /// `show_close_button` controls whether a dismiss ("X") button appears on the pending

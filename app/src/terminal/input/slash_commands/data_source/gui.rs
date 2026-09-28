@@ -129,7 +129,7 @@ impl GuiSlashCommandDataSource {
 
     /// Attaches an ambient agent view model after construction. Used on the shared-session viewer
     /// path where the model is created lazily at `SessionJoined`, after the data source was built
-    /// with `None`. Keeps cloud-mode command and skill gating correct for a link-join viewer.
+    /// with `None`. Keeps cloud-mode command gating correct for a link-join viewer.
     /// Idempotent: a no-op when a model is already set.
     pub fn set_ambient_agent_view_model(
         &mut self,
@@ -334,12 +334,7 @@ impl SyncDataSource for GuiSlashCommandDataSource {
         }
 
         let query_text = query.text.trim().to_lowercase();
-        let mut results = self.match_active_commands(&query_text, app);
-        // Skills invoke locally, so they're hidden on any cloud pane (live viewer,
-        // disconnected follow-up, or read-only tombstone).
-        if !self.is_cloud_mode(app) {
-            results.extend(self.match_skills(&query_text, app));
-        }
+        let results = self.match_active_commands(&query_text, app);
 
         Ok(results
             .into_iter()

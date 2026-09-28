@@ -19638,7 +19638,6 @@ impl TerminalView {
         let request = RunAgentsRequest {
             summary: summary.clone(),
             base_prompt: "Shared instructions for every child agent.".to_owned(),
-            skills: vec![],
             model_id: "auto".to_owned(),
             harness_type: "oz".to_owned(),
             execution_mode: RunAgentsExecutionMode::Local,
@@ -23108,7 +23107,6 @@ impl TypedActionView for TerminalView {
             | CloseTodoPopup
             | ToggleCodeReviewPane { .. }
             | OpenBillingAndUsagePane
-            | OpenEditSkillPane { .. }
             | AddProjectAtCurrentDirectory
             | SetupCloudEnvironment(_)
             | SetupCloudEnvironmentAndStart(_)
@@ -23903,55 +23901,6 @@ impl TypedActionView for TerminalView {
             }
             OpenBillingAndUsagePane => {
                 ctx.emit(Event::OpenSettings(SettingsSection::BillingAndUsage));
-            }
-            OpenEditSkillPane { skill_reference } => {
-                #[cfg(feature = "local_fs")]
-                {
-                    use ai::skills::SkillReference;
-
-                    match skill_reference {
-                        SkillReference::Path(path) => {
-                            ctx.emit(Event::OpenCodeInWarp {
-                                source: CodeSource::Skill {
-                                    reference: skill_reference.clone(),
-                                    location: path.clone(),
-                                    origin: crate::ai::skills::SkillOpenOrigin::OpenSkillCommand,
-                                },
-                                layout:
-                                    *crate::util::file::external_editor::EditorSettings::as_ref(ctx)
-                                        .open_file_layout
-                                        .value(),
-                            });
-                        }
-                        SkillReference::BundledSkillId(_) => {
-                            let window_id = ctx.window_id();
-                            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                                toast_stack.add_ephemeral_toast(
-                                    DismissibleToast::error(
-                                        "Bundled skills cannot be edited".to_string(),
-                                    ),
-                                    window_id,
-                                    ctx,
-                                );
-                            });
-                        }
-                    }
-                }
-
-                #[cfg(not(feature = "local_fs"))]
-                {
-                    let _ = skill_reference;
-                    let window_id = ctx.window_id();
-                    ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                        toast_stack.add_ephemeral_toast(
-                            DismissibleToast::error(
-                                "Editing skills is not supported in this build".to_string(),
-                            ),
-                            window_id,
-                            ctx,
-                        );
-                    });
-                }
             }
             PickRepoToOpen => {
                 ctx.dispatch_typed_action(&WorkspaceAction::OpenRepository { path: None });

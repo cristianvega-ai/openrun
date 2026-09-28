@@ -1,4 +1,3 @@
-use ai::skills::SkillReference;
 use settings::Setting as _;
 use warp_search_core::inline_menu::InputDrivenInlineMenuLifecycle;
 use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
@@ -29,33 +28,18 @@ pub struct DetectedCommand {
     pub argument: Option<String>,
 }
 
-/// A detected skill command in the input buffer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DetectedSkillCommand {
-    /// Either a path or a bundled_skill_id which uniquely identifies the skill
-    pub reference: SkillReference,
-
-    /// The skill name (without the leading '/').
-    pub name: String,
-
-    /// The space-delimited argument to the skill command (the user's prompt).
-    pub argument: Option<String>,
-}
-
 /// Surface-neutral classification of the current slash command input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParsedSlashCommandInput {
     /// The input is not slash command composition.
     None,
-    /// A slash command or skill is being searched for.
+    /// A slash command is being searched for.
     Composing {
         /// The suffix in the input after '/'.
         filter: String,
     },
     /// A valid static slash command is entered in the input.
     SlashCommand(DetectedCommand),
-    /// A valid skill command is entered in the input.
-    SkillCommand(DetectedSkillCommand),
 }
 
 #[derive(Debug, Clone)]
@@ -69,8 +53,6 @@ pub enum SlashCommandEntryState {
     },
     /// A valid slash command is entered in the input.
     SlashCommand(DetectedCommand),
-    /// A valid skill command is entered in the input.
-    SkillCommand(DetectedSkillCommand),
 }
 
 impl SlashCommandEntryState {
@@ -88,26 +70,13 @@ impl SlashCommandEntryState {
         matches!(self, Self::SlashCommand(_))
     }
 
-    /// Returns `true` if a slash command or skill command has been detected.
-    pub fn is_detected_command_or_skill(&self) -> bool {
-        matches!(self, Self::SlashCommand(_) | Self::SkillCommand(_))
-    }
-
     /// Returns the byte length of the command prefix that should be highlighted
-    /// in the input buffer, or `None` if no command/skill is detected.
+    /// in the input buffer, or `None` if no command is detected.
     pub fn command_prefix_highlight_len(&self, buffer_text: &str) -> Option<usize> {
         match self {
             SlashCommandEntryState::SlashCommand(detected) => buffer_text
                 .starts_with(detected.command.name)
                 .then_some(detected.command.name.len()),
-            SlashCommandEntryState::SkillCommand(detected) => {
-                // Skill name doesn't include the leading '/', so we prefix it for matching.
-                let prefix_len = 1 + detected.name.len();
-                buffer_text
-                    .get(..prefix_len)
-                    .is_some_and(|p| p.starts_with('/') && p[1..] == *detected.name)
-                    .then_some(prefix_len)
-            }
             SlashCommandEntryState::None | SlashCommandEntryState::Composing { .. } => None,
         }
     }
@@ -202,14 +171,11 @@ impl SlashCommandModel {
     /// Parses `text` into a `SlashCommandEntryState` without mutating the
     /// model or emitting events.
     /// Use this when you have a prompt string and need to know whether it is
-    /// a slash command, skill command, or plain text.
+    /// a slash command or plain text.
     pub fn detect_command(&self, text: &str, ctx: &AppContext) -> SlashCommandEntryState {
-        match self.data_source.as_ref(ctx).parse_input(text, ctx) {
+        match self.data_source.as_ref(ctx).parse_input(text) {
             ParsedSlashCommandInput::SlashCommand(detected) => {
                 SlashCommandEntryState::SlashCommand(detected)
-            }
-            ParsedSlashCommandInput::SkillCommand(detected) => {
-                SlashCommandEntryState::SkillCommand(detected)
             }
             ParsedSlashCommandInput::None | ParsedSlashCommandInput::Composing { .. } => {
                 SlashCommandEntryState::None
@@ -252,7 +218,7 @@ impl SlashCommandModel {
         }
 
         let old_state = self.state.clone();
-        match self.data_source.as_ref(ctx).parse_input(new, ctx) {
+        match self.data_source.as_ref(ctx).parse_input(new) {
             ParsedSlashCommandInput::SlashCommand(detected_command) => {
                 if let SlashCommandEntryState::SlashCommand(old_detected_command) = &self.state
                     && *old_detected_command == detected_command
@@ -266,19 +232,6 @@ impl SlashCommandModel {
                     });
                 }
                 self.state = SlashCommandEntryState::SlashCommand(detected_command);
-            }
-            ParsedSlashCommandInput::SkillCommand(detected_skill) => {
-                if let SlashCommandEntryState::SkillCommand(old_detected_skill) = &self.state
-                    && *old_detected_skill == detected_skill
-                {
-                    return;
-                }
-
-                // Skill commands always require AI mode
-                self.ai_input_model.update(ctx, |input_model, ctx| {
-                    input_model.set_input_type(InputType::AI, ctx);
-                });
-                self.state = SlashCommandEntryState::SkillCommand(detected_skill);
             }
             ParsedSlashCommandInput::Composing {
                 filter: pending_command,

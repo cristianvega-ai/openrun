@@ -107,7 +107,6 @@ impl FilterChipRenderer for QueryFilter {
             | QueryFilter::Repos
             | QueryFilter::DiffSets
             | QueryFilter::StaticSlashCommands
-            | QueryFilter::Skills
             | QueryFilter::BaseModels
             | QueryFilter::FullTerminalUseModels
             | QueryFilter::CurrentDirectoryConversations => appearance

@@ -6,20 +6,16 @@ use warpui::{AppContext, ModelContext, SingletonEntity};
 
 use super::response_stream::RecoveryBudget;
 use super::{
-    BlocklistAIController, BlocklistAIControllerEvent, RequestInput, add_pending_file_attachments,
-    input_context_for_request, parse_context_attachments,
+    BlocklistAIController, BlocklistAIControllerEvent, RequestInput, input_context_for_request,
 };
 use crate::BlocklistAIHistoryModel;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::{
     AIAgentContext, AIAgentInput, CancellationReason, CloneRepositoryURL, EntrypointType,
-    InvokeSkillUserQuery, RequestMetadata,
+    RequestMetadata,
 };
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::context_model::{
-    BlocklistAIContextModel, PendingAttachment, PendingFile,
-};
-use crate::ai::blocklist::queued_query::{QueuedQueryId, QueuedQueryModel};
+use crate::ai::blocklist::queued_query::QueuedQueryId;
 use crate::search::slash_command_menu::static_commands::commands;
 use crate::terminal::input::slash_commands::SlashCommandTrigger;
 use crate::workspaces::user_workspaces::ResolvedTeamScope;
@@ -37,11 +33,6 @@ pub enum SlashCommandRequest {
     },
     Summarize {
         prompt: Option<String>,
-    },
-    /// Invoke a skill.
-    InvokeSkill {
-        skill: ai::skills::ParsedSkill,
-        user_query: Option<String>,
     },
 }
 
@@ -72,51 +63,16 @@ impl SlashCommandRequest {
         // conversation the user navigated to). Falls back to the selection for direct sends.
         let conversation_id =
             conversation_id_override.or_else(|| self.conversation_id(controller, ctx));
-        // For skill invocations, include user-attached context (images, blocks, and selected
-        // text) so the skill's agent sees the same attachments a non-slash-command user query
-        // would. Other slash commands continue to pass `false` to preserve existing behavior.
-        let is_invoke_skill = matches!(self, Self::InvokeSkill { .. });
-        let prompt_attachments = if is_invoke_skill {
-            match (queued_query_id, conversation_id) {
-                (Some(query_id), Some(conversation_id)) => QueuedQueryModel::as_ref(ctx)
-                    .attachments_for(conversation_id, query_id)
-                    .to_vec(),
-                (Some(_), None) => vec![],
-                (None, _) => controller
-                    .context_model
-                    .as_ref(ctx)
-                    .pending_attachments()
-                    .to_vec(),
-            }
-        } else {
-            vec![]
-        };
-        let mut image_context = Vec::new();
-        let mut prompt_files = Vec::new();
-        for attachment in prompt_attachments {
-            match attachment {
-                PendingAttachment::Image(image) => {
-                    image_context.push(AIAgentContext::Image(image));
-                }
-                PendingAttachment::File(file) => prompt_files.push(file),
-            }
-        }
         let context = input_context_for_request(
-            is_invoke_skill,
+            false,
             controller.context_model.as_ref(ctx),
             controller.active_session.as_ref(ctx),
-            conversation_id,
-            image_context,
+            Vec::new(),
             ctx,
         );
         let entrypoint = self.entrypoint();
         let is_summarize = matches!(self, Self::Summarize { .. });
-        let inputs = self.input(
-            context,
-            prompt_files,
-            controller.context_model.as_ref(ctx),
-            ctx,
-        );
+        let inputs = self.input(context);
         if inputs.is_empty() {
             return;
         }
@@ -190,13 +146,6 @@ impl SlashCommandRequest {
             ctx,
         ) {
             Ok((_, stream_id)) => {
-                // Direct skills consume live pending context; queued skills consume row-owned
-                // context and must not clear a new draft's staged attachments.
-                if is_invoke_skill && !is_queued_prompt {
-                    controller.context_model.update(ctx, |context_model, ctx| {
-                        context_model.reset_context_to_default(ctx);
-                    });
-                }
                 // Emit SentRequest event to trigger buffer clearing
                 if is_summarize {
                     ctx.emit(BlocklistAIControllerEvent::SentRequest {
@@ -217,23 +166,15 @@ impl SlashCommandRequest {
         app: &AppContext,
     ) -> Option<AIConversationId> {
         match self {
-            Self::Summarize { .. } | Self::CreateEnvironment { .. } | Self::InvokeSkill { .. } => {
-                controller
-                    .context_model
-                    .as_ref(app)
-                    .selected_conversation_id(app)
-            }
+            Self::Summarize { .. } | Self::CreateEnvironment { .. } => controller
+                .context_model
+                .as_ref(app)
+                .selected_conversation_id(app),
             _ => None,
         }
     }
 
-    fn input(
-        self,
-        context: Arc<[AIAgentContext]>,
-        prompt_files: Vec<PendingFile>,
-        context_model: &BlocklistAIContextModel,
-        app: &AppContext,
-    ) -> Vec<AIAgentInput> {
+    fn input(self, context: Arc<[AIAgentContext]>) -> Vec<AIAgentInput> {
         match self {
             SlashCommandRequest::CreateNewProject { query } => {
                 vec![AIAgentInput::CreateNewProject { query, context }]
@@ -268,30 +209,6 @@ impl SlashCommandRequest {
             SlashCommandRequest::Summarize { prompt, .. } => {
                 vec![AIAgentInput::SummarizeConversation { prompt, context }]
             }
-            SlashCommandRequest::InvokeSkill { skill, user_query } => {
-                let user_query = if FeatureFlag::SkillArguments.is_enabled() {
-                    let query = user_query
-                        .map(|query| query.trim().to_string())
-                        .unwrap_or_default();
-                    (!query.is_empty() || !prompt_files.is_empty()).then(|| {
-                        let mut referenced_attachments =
-                            parse_context_attachments(&query, context_model, app);
-                        add_pending_file_attachments(&mut referenced_attachments, prompt_files);
-                        InvokeSkillUserQuery {
-                            referenced_attachments,
-                            query,
-                            base: None,
-                        }
-                    })
-                } else {
-                    None
-                };
-                vec![AIAgentInput::InvokeSkill {
-                    skill,
-                    user_query,
-                    context,
-                }]
-            }
         }
     }
 
@@ -300,8 +217,7 @@ impl SlashCommandRequest {
             SlashCommandRequest::CloneRepository { .. } => EntrypointType::CloneRepository,
             SlashCommandRequest::CreateNewProject { .. }
             | SlashCommandRequest::CreateEnvironment { .. }
-            | SlashCommandRequest::Summarize { .. }
-            | SlashCommandRequest::InvokeSkill { .. } => EntrypointType::UserInitiated,
+            | SlashCommandRequest::Summarize { .. } => EntrypointType::UserInitiated,
         }
     }
 }

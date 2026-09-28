@@ -8,8 +8,6 @@ use warp_util::hashed::Hashed;
 use super::task::helper::{MessageExt, ToolCallExt};
 use super::task::{Task, TaskId};
 use super::{AIAgentExchange, AIAgentExchangeId, AIAgentOutputMessageType, MessageId};
-use crate::ai::agent::{AIAgentContext, AIAgentInput};
-use crate::ai::skills::SkillDescriptor;
 
 #[derive(Debug, Clone)]
 struct ExchangeRef {
@@ -252,37 +250,6 @@ impl TaskStore {
         }
 
         result
-    }
-
-    pub fn latest_skills(&self) -> Option<Vec<SkillDescriptor>> {
-        self.exchanges.values().rev().find_map(|exchange_ref| {
-            let exchange = self.lookup_exchange(exchange_ref);
-
-            if let Some(exchange) = exchange {
-                let skills = exchange.input.iter().find_map(|input| {
-                    let context = match input {
-                        AIAgentInput::UserQuery { context, .. } => Some(context),
-                        AIAgentInput::ResumeConversation { context, .. } => Some(context),
-                        AIAgentInput::ActionResult { context, .. } => Some(context),
-                        _ => None,
-                    };
-
-                    context.and_then(|ctx| {
-                        ctx.iter().find_map(|context| {
-                            if let AIAgentContext::Skills { skills } = context {
-                                Some(skills)
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                });
-
-                skills.cloned()
-            } else {
-                None
-            }
-        })
     }
 
     /// Returns all messages in linearized DFS order, interleaving subtask messages

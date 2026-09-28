@@ -36,7 +36,7 @@ impl AuthSecretSelection {
 
 /// Run-wide configuration fields shared between the confirmation card
 /// editor and the plan-card config block. Card-specific fields
-/// (agent_run_configs, base_prompt, summary, skills)
+/// (agent_run_configs, base_prompt, summary)
 /// remain on the per-view state structs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrchestrationConfigState {

@@ -45,7 +45,6 @@ use crate::search::ai_context_menu::mixer::{AIContextMenuMixer, AIContextMenuSea
 use crate::search::ai_context_menu::notebooks::data_source::NotebookDataSource;
 #[cfg(not(target_family = "wasm"))]
 #[cfg(not(target_family = "wasm"))]
-use crate::search::ai_context_menu::skills::data_source::SkillsDataSource;
 #[cfg(not(target_family = "wasm"))]
 use crate::search::ai_context_menu::workflows::data_source::WorkflowDataSource;
 use crate::search::data_source::{Query, QueryFilter, QueryResult};
@@ -95,7 +94,6 @@ pub enum AIContextMenuCategory {
     Code,
     DiffSet,
     Conversations,
-    Skills,
 }
 
 impl AIContextMenuCategory {
@@ -119,7 +117,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::Code => "Code",
             AIContextMenuCategory::DiffSet => "Diff sets",
             AIContextMenuCategory::Conversations => "Conversations",
-            AIContextMenuCategory::Skills => "Skills",
         }
     }
 
@@ -143,7 +140,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::Code => "bundled/svg/code-02.svg",
             AIContextMenuCategory::DiffSet => "bundled/svg/diff.svg",
             AIContextMenuCategory::Conversations => "bundled/svg/conversation.svg",
-            AIContextMenuCategory::Skills => "bundled/svg/stars-01.svg",
         }
     }
 }
@@ -451,7 +447,6 @@ impl AIContextMenu {
             if FeatureFlag::ConversationsAsContext.is_enabled() {
                 categories.push(AIContextMenuCategory::Conversations);
             }
-            categories.push(AIContextMenuCategory::Skills);
             categories
         } else if !is_shared_session_viewer {
             // Terminal mode: show Files and Code categories (when enabled)
@@ -967,20 +962,6 @@ impl AIContextMenu {
                     );
                 });
             }
-            #[cfg(not(target_family = "wasm"))]
-            NavigationState::Category(AIContextMenuCategory::Skills) => {
-                let skills_data_source = ctx.add_model(|_| SkillsDataSource::new());
-                self.mixer.update(ctx, |mixer, ctx| {
-                    mixer.add_sync_source(skills_data_source, [QueryFilter::Skills]);
-                    mixer.run_query(
-                        Query {
-                            text: "".into(),
-                            filters: HashSet::new(),
-                        },
-                        ctx,
-                    );
-                });
-            }
             NavigationState::Category(_) => {
                 // TODO: Add other data sources
             }
@@ -1103,12 +1084,6 @@ impl AIContextMenu {
                             conversation_data_source,
                             [QueryFilter::Conversations],
                         );
-                    });
-                }
-                AIContextMenuCategory::Skills => {
-                    let skills_data_source = ctx.add_model(|_| SkillsDataSource::new());
-                    self.mixer.update(ctx, |mixer, _ctx| {
-                        mixer.add_sync_source(skills_data_source, [QueryFilter::Skills]);
                     });
                 }
                 _ => {

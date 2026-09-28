@@ -43,9 +43,6 @@ pub enum AIAgentActionResultType {
     /// The output of a file glob V2 action.
     FileGlobV2(FileGlobV2Result),
 
-    /// The output of reading a skill.
-    ReadSkill(ReadSkillResult),
-
     /// The output of suggesting a new conversation.
     SuggestNewConversation(SuggestNewConversationResult),
 
@@ -142,7 +139,6 @@ impl Display for AIAgentActionResultType {
             AIAgentActionResultType::Grep(result) => result.fmt(f),
             AIAgentActionResultType::FileGlob(result) => result.fmt(f),
             AIAgentActionResultType::FileGlobV2(result) => result.fmt(f),
-            AIAgentActionResultType::ReadSkill(result) => result.fmt(f),
             AIAgentActionResultType::SuggestNewConversation(result) => result.fmt(f),
             AIAgentActionResultType::SuggestPrompt(result) => result.fmt(f),
             AIAgentActionResultType::ReadDocuments(result) => result.fmt(f),
@@ -799,7 +795,6 @@ impl AIAgentActionResultType {
             AIAgentActionResultType::Grep(_) => "The results of the grep operation",
             AIAgentActionResultType::FileGlob(_) => "The results of the file glob operation",
             AIAgentActionResultType::FileGlobV2(_) => "The results of the file glob operation",
-            AIAgentActionResultType::ReadSkill(_) => "The results of reading a skill from file",
             AIAgentActionResultType::SuggestNewConversation(_) => {
                 "Your decision on whether to start a new conversation"
             }
@@ -849,7 +844,6 @@ impl AIAgentActionResultType {
             )
             | Self::InsertReviewComments(InsertReviewCommentsResult::Success { .. })
             | Self::OpenCodeReview
-            | Self::ReadSkill(ReadSkillResult::Success { .. })
             | Self::FetchConversation(FetchConversationResult::Success { .. })
             | Self::SendMessageToAgent(SendMessageToAgentResult::Success { .. })
             | Self::TransferShellCommandControlToUser(
@@ -923,7 +917,6 @@ impl AIAgentActionResultType {
             | Self::WriteToLongRunningShellCommand(
                 WriteToLongRunningShellCommandResult::Cancelled,
             )
-            | Self::ReadSkill(ReadSkillResult::Cancelled)
             | Self::FetchConversation(FetchConversationResult::Cancelled)
             | Self::SendMessageToAgent(SendMessageToAgentResult::Cancelled)
             // SkippedByAutoApprove is intentionally excluded: the agent should continue.
@@ -1085,25 +1078,6 @@ pub struct FileGlobV2Match {
 impl Display for FileGlobV2Match {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.file_path)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ReadSkillResult {
-    Success { content: FileContext },
-    Error(String),
-    Cancelled,
-}
-
-impl Display for ReadSkillResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReadSkillResult::Success { content } => {
-                write!(f, "Skill read successfully: {}", content.file_name)
-            }
-            ReadSkillResult::Error(error) => write!(f, "Skill read error: {error}"),
-            ReadSkillResult::Cancelled => write!(f, "Skill read cancelled"),
-        }
     }
 }
 

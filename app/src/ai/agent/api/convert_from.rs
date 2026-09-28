@@ -1,15 +1,9 @@
 //! Conversions from MAA API types to application types.
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 use ai::agent::UnknownCitationTypeError;
-use ai::agent::action::ReadSkillRequest;
 use ai::agent::convert::ToolToAIAgentActionError;
-use ai::skills::{
-    ParsedSkill, SkillPathOrigin, skill_reference_from_api_skill_ref,
-    skill_reference_from_read_skill_ref,
-};
 use api::ask_user_question::question::QuestionType;
 use warp_core::channel::ChannelState;
 use warp_multi_agent_api as api;
@@ -24,10 +18,9 @@ use crate::ai::agent::util::parse_markdown_into_text_and_code_sections;
 use crate::ai::agent::{
     AIAgentAction, AIAgentActionType, AIAgentAttachment, AIAgentCitation, AIAgentInput,
     AIAgentOutputMessage, AIAgentText, AIAgentTodo, ArtifactCreatedData, BaseUserQuery,
-    CloneRepositoryURL, InvokeSkillUserQuery, MessageId, RunAgentsAgentRunConfig,
-    RunAgentsExecutionMode, RunAgentsRequest, SubagentCall, SubagentType,
-    SuggestedAgentModeWorkflow, SuggestedRule, Suggestions, SummarizationType, TodoOperation,
-    UserQueryMode, WebFetchStatus, WebSearchStatus,
+    CloneRepositoryURL, MessageId, RunAgentsAgentRunConfig, RunAgentsExecutionMode,
+    RunAgentsRequest, SubagentCall, SubagentType, SuggestedAgentModeWorkflow, SuggestedRule,
+    Suggestions, SummarizationType, TodoOperation, UserQueryMode, WebFetchStatus, WebSearchStatus,
 };
 use crate::ai::artifact_download::sanitized_basename;
 use crate::ai::document::ai_document_model::{AIDocumentId, AIDocumentVersion};
@@ -52,18 +45,6 @@ impl TryFrom<api::Attachment> for AIAgentAttachment {
             _ => anyhow::bail!("Unsupported attachment type for conversion"),
         }
     }
-}
-
-fn convert_read_skill(
-    read_skill: api::message::tool_call::ReadSkill,
-    skill_path_origin: &SkillPathOrigin,
-) -> Result<AIAgentActionType, ToolToAIAgentActionError> {
-    let Some(reference) = read_skill.skill_reference else {
-        return Err(ToolToAIAgentActionError::MissingSkillReference);
-    };
-    let skill = skill_reference_from_read_skill_ref(reference, skill_path_origin)
-        .map_err(|_| ToolToAIAgentActionError::MissingSkillReference)?;
-    Ok(AIAgentActionType::ReadSkill(ReadSkillRequest { skill }))
 }
 
 /// Converts proto UserQueryMode to the internal UserQueryMode type
@@ -110,14 +91,11 @@ fn convert_run_agents_execution_mode(
     }
 }
 
-fn convert_run_agents(
-    run_agents: api::RunAgents,
-    skill_path_origin: &SkillPathOrigin,
-) -> AIAgentActionType {
+fn convert_run_agents(run_agents: api::RunAgents) -> AIAgentActionType {
     let api::RunAgents {
         summary,
         base_prompt,
-        skills,
+        skills: _,
         model_id,
         harness,
         agent_run_configs,
@@ -127,10 +105,6 @@ fn convert_run_agents(
     AIAgentActionType::RunAgents(RunAgentsRequest {
         summary,
         base_prompt,
-        skills: skills
-            .into_iter()
-            .filter_map(|skill| skill_reference_from_api_skill_ref(skill, skill_path_origin))
-            .collect(),
         model_id,
         harness_type: convert_run_agents_harness(harness.as_ref()).unwrap_or_default(),
         execution_mode: convert_run_agents_execution_mode(execution_mode),
@@ -186,7 +160,6 @@ pub struct ConversionParams<'a> {
     pub task_id: &'a TaskId,
     pub current_todo_list: Option<&'a AIAgentTodoList>,
     pub active_code_review: Option<&'a CodeReview>,
-    pub skill_path_origin: &'a SkillPathOrigin,
 }
 
 /// Trait for converting an [`api::Message`] to an [`AIAgentOutputMessage`].
@@ -744,7 +717,7 @@ impl ConvertAPIToolCallToAIAgentAction for api::message::ToolCall {
                 }))
             }
             api::message::tool_call::Tool::RunAgents(orchestrate) => {
-                create_standard_action(convert_run_agents(orchestrate, params.skill_path_origin))
+                create_standard_action(convert_run_agents(orchestrate))
             }
             api::message::tool_call::Tool::SendMessageToAgent(send_message) => {
                 create_standard_action(AIAgentActionType::SendMessageToAgent {
@@ -755,9 +728,6 @@ impl ConvertAPIToolCallToAIAgentAction for api::message::ToolCall {
             }
             api::message::tool_call::Tool::InsertReviewComments(insert_review_comments) => {
                 create_standard_action(insert_review_comments.into())
-            }
-            api::message::tool_call::Tool::ReadSkill(read_skill) => {
-                create_standard_action(convert_read_skill(read_skill, params.skill_path_origin)?)
             }
             api::message::tool_call::Tool::FetchConversation(fetch_conversation) => {
                 create_standard_action(fetch_conversation.into())
@@ -876,34 +846,6 @@ pub fn user_inputs_from_messages(messages: &[api::Message]) -> Vec<AIAgentInput>
                         }
                         _ => {}
                     }
-                }
-            }
-            api::message::Message::InvokeSkill(invoke_skill) => {
-                if let Some(skill) = invoke_skill.skill.clone()
-                    && let Ok(skill) = ParsedSkill::try_from_api_with_origin(
-                        skill,
-                        &SkillPathOrigin::RestoredDisplayOnly,
-                    )
-                {
-                    inputs.push(AIAgentInput::InvokeSkill {
-                        context: Arc::new([]),
-                        skill,
-                        user_query: invoke_skill.user_query.as_ref().map(|query| {
-                            InvokeSkillUserQuery {
-                                query: query.query.clone(),
-                                referenced_attachments: query
-                                    .referenced_attachments
-                                    .iter()
-                                    .filter_map(|(key, attachment)| {
-                                        AIAgentAttachment::try_from(attachment.clone())
-                                            .ok()
-                                            .map(|attachment| (key.clone(), attachment))
-                                    })
-                                    .collect(),
-                                base: BaseUserQuery::from_message(query),
-                            }
-                        }),
-                    });
                 }
             }
             api::message::Message::ToolCallResult(tcr) => {

@@ -20,15 +20,14 @@ use crate::agent::action_result::{
     AIAgentActionResultType, AskUserQuestionResult, CreateDocumentsResult, EditDocumentsResult,
     FetchConversationResult, FileGlobResult, FileGlobV2Result, GrepResult,
     InsertReviewCommentsResult, ReadDocumentsResult, ReadFilesResult, ReadShellCommandOutputResult,
-    ReadSkillResult, RequestCommandOutputResult, RequestFileEditsResult, RunAgentsResult,
-    SearchCodebaseResult, SendMessageToAgentResult, SuggestNewConversationResult,
-    SuggestPromptResult, TransferShellCommandControlToUserResult, UploadArtifactResult,
-    WaitForEventsResult, WriteToLongRunningShellCommandResult,
+    RequestCommandOutputResult, RequestFileEditsResult, RunAgentsResult, SearchCodebaseResult,
+    SendMessageToAgentResult, SuggestNewConversationResult, SuggestPromptResult,
+    TransferShellCommandControlToUserResult, UploadArtifactResult, WaitForEventsResult,
+    WriteToLongRunningShellCommandResult,
 };
 use crate::agent::{AIAgentCitation, FileLocations};
 use crate::diff_validation::ParsedDiff;
 use crate::document::AIDocumentId;
-use crate::skills::SkillReference;
 
 #[derive(Debug, Clone, Eq, PartialEq, EnumDiscriminants)]
 pub enum AIAgentActionType {
@@ -119,9 +118,6 @@ pub enum AIAgentActionType {
         base_branch: Option<String>,
     },
 
-    // AI requested to read a skill.
-    ReadSkill(ReadSkillRequest),
-
     FetchConversation {
         conversation_id: String,
     },
@@ -171,7 +167,6 @@ pub enum AIAgentActionType {
 pub struct RunAgentsRequest {
     pub summary: String,
     pub base_prompt: String,
-    pub skills: Vec<SkillReference>,
     pub model_id: String,
     pub harness_type: String,
     pub execution_mode: RunAgentsExecutionMode,
@@ -231,7 +226,6 @@ pub enum StartAgentExecutionMode {
     },
     Remote {
         environment_id: String,
-        skill_references: Vec<SkillReference>,
         model_id: String,
         worker_host: String,
         harness_type: String,
@@ -324,7 +318,6 @@ impl AIAgentActionType {
             Self::InsertCodeReviewComments { .. } => {
                 AIAgentActionResultType::InsertReviewComments(InsertReviewCommentsResult::Cancelled)
             }
-            Self::ReadSkill(_) => AIAgentActionResultType::ReadSkill(ReadSkillResult::Cancelled),
             Self::FetchConversation { .. } => {
                 AIAgentActionResultType::FetchConversation(FetchConversationResult::Cancelled)
             }
@@ -374,7 +367,6 @@ impl AIAgentActionType {
             Self::InsertCodeReviewComments { comments, .. } => {
                 format!("Insert {} code review comments", comments.len())
             }
-            Self::ReadSkill(_) => "Read skill".to_string(),
             Self::FetchConversation { .. } => "Fetch conversation".to_string(),
             Self::SendMessageToAgent { subject, .. } => format!("Send message: {subject}"),
             Self::TransferShellCommandControlToUser { .. } => {
@@ -505,9 +497,6 @@ impl Display for AIAgentActionType {
                     comments.len(),
                     file_paths
                 )
-            }
-            AIAgentActionType::ReadSkill(req) => {
-                write!(f, "ReadSkill: {}", req.skill)
             }
             AIAgentActionType::FetchConversation { conversation_id } => {
                 write!(f, "FetchConversation: {conversation_id}")
@@ -671,11 +660,6 @@ pub struct DocumentToCreate {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CreateDocumentsRequest {
     pub documents: Vec<DocumentToCreate>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ReadSkillRequest {
-    pub skill: SkillReference,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

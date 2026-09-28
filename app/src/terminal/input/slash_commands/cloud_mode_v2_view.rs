@@ -20,10 +20,9 @@ use crate::search::data_source::QueryFilter;
 use crate::search::item::SearchItemDetail;
 use crate::search::mixer::{SearchMixer, SearchMixerEvent};
 use crate::search::result_renderer::{QueryResultRenderer, QueryResultRendererStyles};
-use crate::search::slash_command_menu::static_commands::commands::COMMAND_REGISTRY;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
 use crate::terminal::input::inline_menu::{QueryResultRendererExt as _, styles as inline_styles};
-use crate::terminal::input::slash_command_model::{SlashCommandEntryState, SlashCommandModel};
+use crate::terminal::input::slash_command_model::SlashCommandModel;
 use crate::terminal::input::slash_commands::view::CloseReason;
 use crate::terminal::input::slash_commands::{
     AcceptSlashMenuItem, GuiSlashCommandDataSource, GuiZeroStateDataSource, SlashCommandsEvent,
@@ -102,23 +101,20 @@ static QUERY_RESULT_RENDERER_STYLES: LazyLock<QueryResultRendererStyles> =
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Section {
     Commands,
-    Skills,
 }
 
 impl Section {
-    const RENDER_ORDER: [Self; 2] = [Self::Commands, Self::Skills];
+    const RENDER_ORDER: [Self; 1] = [Self::Commands];
 
     fn header(self) -> &'static str {
         match self {
             Self::Commands => "Commands",
-            Self::Skills => "Skills",
         }
     }
 
     fn for_action(action: &AcceptSlashMenuItem) -> Self {
         match action {
             AcceptSlashMenuItem::SlashCommand { .. } => Self::Commands,
-            AcceptSlashMenuItem::Skill { .. } => Self::Skills,
         }
     }
 }
@@ -241,18 +237,11 @@ impl CloudModeV2SlashCommandView {
             }
         });
 
-        ctx.subscribe_to_model(slash_command_model, |me, model, _, ctx| {
+        ctx.subscribe_to_model(slash_command_model, |me, _, _, ctx| {
             if !me.suggestions_mode_model.as_ref(ctx).is_slash_commands() {
                 return;
             }
-            match model.as_ref(ctx).state().clone() {
-                SlashCommandEntryState::None
-                | SlashCommandEntryState::Composing { .. }
-                | SlashCommandEntryState::SlashCommand(_) => {
-                    me.run_query_for_current_slash_filter(ctx);
-                }
-                _ => (),
-            }
+            me.run_query_for_current_slash_filter(ctx);
         });
 
         ctx.subscribe_to_model(
@@ -291,7 +280,6 @@ impl CloudModeV2SlashCommandView {
     }
 
     pub fn set_section_filter(&mut self, filter: Option<Section>, ctx: &mut ViewContext<Self>) {
-        let previous = self.section_filter;
         self.section_filter = filter;
         if let MenuState::NoSearchActive {
             sections,
@@ -301,13 +289,7 @@ impl CloudModeV2SlashCommandView {
         } = &mut self.menu_state
         {
             let rows = browsing_rows_filtered(sections, expanded_sections, self.section_filter);
-            *selected_idx = match (filter, previous) {
-                (None, Some(prev)) => rows
-                    .iter()
-                    .position(|r| matches_originating_command(r, sections, prev))
-                    .or_else(|| rows.iter().position(|r| r.is_selectable())),
-                _ => rows.iter().position(|r| r.is_selectable()),
-            };
+            *selected_idx = rows.iter().position(|r| r.is_selectable());
         }
         ctx.notify();
     }
@@ -522,12 +504,6 @@ impl CloudModeV2SlashCommandView {
                     cmd_or_ctrl_enter,
                 });
             }
-            AcceptSlashMenuItem::Skill { name, reference } => {
-                ctx.emit(SlashCommandsEvent::SelectedSkill {
-                    reference: reference.clone(),
-                    name: name.clone(),
-                });
-            }
         }
     }
 
@@ -672,36 +648,6 @@ fn initialize_browsing_selection(state: &mut MenuState) {
         let rows = browsing_rows(sections, expanded_sections);
         *selected_idx = rows.iter().position(|r| r.is_selectable());
     }
-}
-
-fn matches_originating_command(
-    row: &NoSearchActiveRow,
-    sections: &[RenderedSection],
-    previous_filter: Section,
-) -> bool {
-    let target_name = match previous_filter {
-        Section::Skills => "/skills",
-        Section::Commands => return false,
-    };
-    let NoSearchActiveRow::Item { section, item_idx } = *row else {
-        return false;
-    };
-    if section != Section::Commands {
-        return false;
-    }
-    let Some(item) = sections
-        .iter()
-        .find(|s| s.section == Section::Commands)
-        .and_then(|s| s.items.get(item_idx))
-    else {
-        return false;
-    };
-    let AcceptSlashMenuItem::SlashCommand { id } = item.search_result.accept_result() else {
-        return false;
-    };
-    COMMAND_REGISTRY
-        .get_command(&id)
-        .is_some_and(|cmd| cmd.name == target_name)
 }
 
 fn initialize_search_selection(state: &mut MenuState) {

@@ -186,40 +186,9 @@ pub(super) fn convert_input(
                     )),
                 });
             }
-            AIAgentInput::InvokeSkill {
-                context,
-                skill,
-                user_query,
-            } => {
-                return Ok(api::request::Input {
-                    context: Some(convert_context(context.as_ref())),
-                    r#type: Some(api::request::input::Type::InvokeSkill(
-                        api::request::input::InvokeSkill {
-                            skill: Some(skill.into()),
-                            user_query: user_query.map(|user_query| {
-                                let attribution = attribution_fields(user_query.base.as_ref());
-                                api::request::input::UserQuery {
-                                    query: user_query.query,
-                                    referenced_attachments: user_query
-                                        .referenced_attachments
-                                        .into_iter()
-                                        .map(|(k, attachment)| (k, attachment.into()))
-                                        .collect(),
-                                    mode: None,
-                                    intended_agent: Default::default(),
-                                    origin: attribution.origin,
-                                    author: attribution.author,
-                                    source_message: attribution.source_message,
-                                }
-                            }),
-                        },
-                    )),
-                });
-            }
             AIAgentInput::StartFromAmbientRunPrompt {
                 ambient_run_id,
                 context,
-                runtime_skill,
                 attachments_dir,
             } => {
                 return Ok(api::request::Input {
@@ -229,8 +198,7 @@ pub(super) fn convert_input(
                             ambient_run_id,
                             // Deprecated, we always resolve base_prompt from the stored task config.
                             runtime_base_prompt: String::new(),
-
-                            runtime_skill: runtime_skill.map(|skill| skill.into()),
+                            runtime_skill: None,
                             attachments_dir: attachments_dir.unwrap_or_default(),
                         },
                     )),
@@ -305,14 +273,6 @@ fn mark_fresh_local(base: Option<&BaseUserQuery>, query: &mut api::request::inpu
     if base.is_none() && query.origin.is_none() {
         query.origin = Some(warp_client_origin());
     }
-}
-
-/// The attribution fields for a query built outside `user_query_proto` (skill invocations): the
-/// base metadata when there is any, otherwise the fresh-local marker.
-fn attribution_fields(base: Option<&BaseUserQuery>) -> api::request::input::UserQuery {
-    let mut fields = base.map(BaseUserQuery::to_proto).unwrap_or_default();
-    mark_fresh_local(base, &mut fields);
-    fields
 }
 
 fn convert_input_to_user_input(
@@ -421,7 +381,6 @@ fn convert_input_to_user_input(
         AIAgentInput::ResumeConversation { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::CodeReview { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::CreateEnvironment { .. } => Err(ConvertToAPITypeError::Ignore),
-        AIAgentInput::InvokeSkill { .. } => Err(ConvertToAPITypeError::Ignore),
         invalid_input => Err(anyhow!(
             "Cannot convert non user query or action result input into API UserInput: {invalid_input:?}"
         ).into()),
@@ -579,9 +538,6 @@ impl TryFrom<AIAgentActionResult> for api::request::input::user_inputs::user_inp
             }
             AIAgentActionResultType::FileGlobV2(file_glob_result) => {
                 Some(file_glob_result.try_into()?)
-            }
-            AIAgentActionResultType::ReadSkill(read_skill_result) => {
-                Some(read_skill_result.try_into()?)
             }
             AIAgentActionResultType::SuggestNewConversation(suggest_new_conversation_result) => {
                 Some(suggest_new_conversation_result.try_into()?)
@@ -766,20 +722,6 @@ fn convert_context(context: &[AIAgentContext]) -> api::InputContext {
                 let api_git_context =
                     git_context.get_or_insert_with(api::input_context::Git::default);
                 api_git_context.pull_request = Some(pull_request);
-            }
-            AIAgentContext::Skills { skills } => {
-                api_context.updated_skills_context = Some(api::input_context::SkillsContext {
-                    available_skills: skills
-                        .into_iter()
-                        .map(|skill| api::SkillDescriptor {
-                            skill_reference: Some(skill.reference.into()),
-                            name: skill.name,
-                            description: skill.description,
-                            provider: Some(skill.provider.into()),
-                            scope: Some(skill.scope.into()),
-                        })
-                        .collect(),
-                });
             }
         }
     }

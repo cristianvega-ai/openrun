@@ -1,11 +1,8 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use ai::skills::{ParsedSkill, SkillProvider, SkillScope};
 use itertools::Itertools;
 use ui_components::lightbox::{LightboxImage, LightboxImageSource};
-use warp_util::local_or_remote_path::LocalOrRemotePath;
 #[cfg(feature = "local_fs")]
 use warpui::assets::asset_cache::AssetSource;
 use warpui::elements::{Empty, MouseStateHandle};
@@ -28,28 +25,6 @@ use crate::ai::agent::{
 };
 use crate::features::FeatureFlag;
 use crate::search::slash_command_menu::static_commands::commands;
-
-#[test]
-fn query_prefix_highlight_len_highlights_invoke_skill_inputs() {
-    let input = AIAgentInput::InvokeSkill {
-        context: Arc::new([]),
-        skill: ParsedSkill {
-            path: LocalOrRemotePath::Local(PathBuf::from("/tmp/.agents/skills/review-pr/SKILL.md")),
-            name: "review-pr".to_string(),
-            description: "Review a pull request.".to_string(),
-            content: String::new(),
-            line_range: None,
-            provider: SkillProvider::Agents,
-            scope: SkillScope::Project,
-        },
-        user_query: None,
-    };
-
-    assert_eq!(
-        query_prefix_highlight_len(&input, "/review-pr tighten the summary"),
-        Some("/review-pr".len())
-    );
-}
 
 #[test]
 fn query_prefix_highlight_len_does_not_guess_from_plain_user_query_text() {

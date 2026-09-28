@@ -1,6 +1,4 @@
 #[cfg(feature = "local_fs")]
-use ai::skills::SKILL_PROVIDER_DEFINITIONS;
-#[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
@@ -32,7 +30,6 @@ use crate::ai::harness_availability::HarnessAvailabilityModel;
 use crate::ai::llms::LLMPreferences;
 use crate::ai::pricing_promotion::PricingPromotionState;
 use crate::ai::restored_conversations::RestoredAgentConversations;
-use crate::ai::skills::SkillManager;
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_manager::AuthManager;
 use crate::cloud_object::model::persistence::CloudModel;
@@ -130,28 +127,12 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
     app.add_singleton_model(DirectoryWatcher::new);
     app.add_singleton_model(|_| DetectedRepositories::default());
     #[cfg(feature = "local_fs")]
-    app.add_singleton_model(|ctx| {
-        let model = RepoMetadataModel::new(ctx);
-        model.register_force_included_paths(
-            SKILL_PROVIDER_DEFINITIONS
-                .iter()
-                .map(|provider| provider.skills_path.clone()),
-            ctx,
-        );
-        model.set_project_skill_provider_paths(
-            SKILL_PROVIDER_DEFINITIONS
-                .iter()
-                .map(|provider| provider.skills_path.clone()),
-            ctx,
-        );
-        model
-    });
+    app.add_singleton_model(RepoMetadataModel::new);
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(|_| GitRepoModels::new());
     app.add_singleton_model(RepoOutlines::new_for_test);
     app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
     app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
-    app.add_singleton_model(SkillManager::new);
     app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
     #[cfg(feature = "voice_input")]
     app.add_singleton_model(voice_input::VoiceInput::new);

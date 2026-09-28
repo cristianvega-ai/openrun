@@ -78,7 +78,7 @@ impl Input {
         *InputSettings::as_ref(ctx).error_underlining.value()
     }
 
-    /// Applies background highlighting to slash command and skill command prefixes that should be
+    /// Applies background highlighting to slash command prefixes that should be
     /// syntax highlighted.
     fn apply_slash_command_prefix_highlighting(
         &mut self,
@@ -127,7 +127,7 @@ impl Input {
                 .slash_command_model
                 .as_ref(ctx)
                 .state()
-                .is_detected_command_or_skill()
+                .is_detected_command()
         {
             self.clear_decorations(ctx);
             self.apply_slash_command_prefix_highlighting(&buffer_text, ctx);

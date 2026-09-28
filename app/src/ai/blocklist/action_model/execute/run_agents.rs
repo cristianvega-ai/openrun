@@ -12,7 +12,6 @@ use ai::agent::action_result::{
 };
 use ai::agent::orchestration_config::OrchestrationConfig;
 use ai::harness::Harness;
-use ai::skills::SkillReference;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use warp_core::{send_telemetry_from_app_ctx, send_telemetry_from_ctx};
@@ -252,7 +251,6 @@ impl RunAgentsExecutor {
             execution_mode: run_execution_mode,
             harness_type,
             model_id,
-            skills,
             agent_run_configs,
             base_prompt,
             harness_auth_secret_name,
@@ -266,7 +264,6 @@ impl RunAgentsExecutor {
                 &run_execution_mode,
                 &harness_type,
                 &model_id,
-                &skills,
                 harness_auth_secret_name.as_deref(),
                 cfg,
             ) {
@@ -744,7 +741,6 @@ pub fn run_agents_to_start_agent_mode(
     run_execution_mode: &RunAgentsExecutionMode,
     run_harness_type: &str,
     run_model_id: &str,
-    run_skills: &[SkillReference],
     run_auth_secret_name: Option<&str>,
     cfg: &RunAgentsAgentRunConfig,
 ) -> Result<StartAgentExecutionMode, String> {
@@ -803,7 +799,6 @@ pub fn run_agents_to_start_agent_mode(
             };
             Ok(StartAgentExecutionMode::Remote {
                 environment_id: environment_id.clone(),
-                skill_references: run_skills.to_vec(),
                 model_id: effective_model_id,
                 worker_host: worker_host.clone(),
                 harness_type: run_harness_type.to_string(),

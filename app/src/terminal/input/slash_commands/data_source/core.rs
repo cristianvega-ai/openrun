@@ -1,13 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use ai::skills::SkillProvider;
 use fuzzy_match::FuzzyMatchResult;
 use ordered_float::OrderedFloat;
 #[cfg(not(target_family = "wasm"))]
 use repo_metadata::repositories::DetectedRepositories;
-use warp_core::features::FeatureFlag;
-use warp_core::ui::Icon as WarpIcon;
 use warp_core::ui::appearance::Appearance;
 #[cfg(not(target_family = "wasm"))]
 use warp_util::local_or_remote_path::LocalOrRemotePath;
@@ -17,19 +14,15 @@ use warpui::{AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonE
 use crate::ai::agent_conversations_model::{AgentConversationsModel, AgentConversationsModelEvent};
 use crate::ai::blocklist::block::cli_controller::{CLISubagentController, CLISubagentEvent};
 use crate::ai::blocklist::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
-use crate::ai::skills::{SkillDescriptor, SkillManager};
 use crate::search::slash_command_menu::fuzzy_match::SlashCommandFuzzyMatchResult;
 use crate::search::slash_command_menu::static_commands::{Availability, commands};
 use crate::search::slash_command_menu::{SlashCommandId, StaticCommand};
 use crate::settings::{
     AISettings, AISettingsChangedEvent, PrivacySettings, PrivacySettingsChangedEvent,
 };
-use crate::terminal::cli_agent_sessions::{
-    CLIAgentInputState, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
-};
+use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, CLIAgentSessionsModelEvent};
 use crate::terminal::input::slash_command_model::{
-    DetectedCommand, DetectedSkillCommand, ParsedSlashCommandInput,
-    slash_command_composition_filter,
+    DetectedCommand, ParsedSlashCommandInput, slash_command_composition_filter,
 };
 use crate::terminal::input::slash_commands::AcceptSlashMenuItem;
 use crate::terminal::model::session::SessionType;
@@ -48,7 +41,7 @@ const SCORE_MULTIPLIER: OrderedFloat<f64> = OrderedFloat(1000.0);
 /// Slash commands that are available in CLI agent rich input mode.
 /// Add command names here to make them accessible when composing prompts
 /// for a running CLI agent (Claude Code, Codex, etc.).
-const CLI_AGENT_INPUT_ALLOWED_COMMANDS: &[&str] = &["/skills"];
+const CLI_AGENT_INPUT_ALLOWED_COMMANDS: &[&str] = &[];
 
 fn split_command_and_argument(buffer: &str) -> (&str, Option<&str>) {
     buffer
@@ -220,15 +213,12 @@ pub trait SlashCommandDataSource {
     }
 
     /// Classifies slash command input consistently across surfaces.
-    fn parse_input(&self, buffer: &str, ctx: &AppContext) -> ParsedSlashCommandInput {
+    fn parse_input(&self, buffer: &str) -> ParsedSlashCommandInput {
         if !buffer.starts_with('/') {
             return ParsedSlashCommandInput::None;
         }
         if let Some(detected) = self.parse_slash_command(buffer) {
             return ParsedSlashCommandInput::SlashCommand(detected);
-        }
-        if let Some(detected) = self.parse_skill_command(buffer, ctx) {
-            return ParsedSlashCommandInput::SkillCommand(detected);
         }
         match slash_command_composition_filter(buffer) {
             Some(filter) => ParsedSlashCommandInput::Composing {
@@ -260,27 +250,6 @@ pub trait SlashCommandDataSource {
 
         Some(DetectedCommand {
             command: matched_command,
-            argument: possible_argument.map(str::to_owned),
-        })
-    }
-
-    /// Matches `buffer` against skills available for the active working directory, returning the
-    /// detected skill and space-delimited argument, if provided.
-    fn parse_skill_command(&self, buffer: &str, ctx: &AppContext) -> Option<DetectedSkillCommand> {
-        let (possible_command, possible_argument) = split_command_and_argument(buffer);
-        let skill_name = possible_command.strip_prefix('/')?;
-
-        let active_session = self.active_session().as_ref(ctx);
-        let cwd_path = active_session.current_working_directory_location(ctx);
-        let matched_skill = SkillManager::handle(ctx)
-            .as_ref(ctx)
-            .get_skills_for_working_directory(cwd_path.as_ref(), ctx)
-            .into_iter()
-            .find(|skill| skill.name == skill_name)?;
-
-        Some(DetectedSkillCommand {
-            reference: matched_skill.reference,
-            name: matched_skill.name,
             argument: possible_argument.map(str::to_owned),
         })
     }
@@ -455,18 +424,6 @@ pub trait SlashCommandDataSource {
         CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id())
     }
 
-    /// Returns the supported skill providers for the active CLI agent, or `None` if
-    /// CLI agent input is not open (meaning no filtering should be applied).
-    fn active_cli_agent_providers(
-        &self,
-        ctx: &AppContext,
-    ) -> Option<&'static [ai::skills::SkillProvider]> {
-        CLIAgentSessionsModel::as_ref(ctx)
-            .session(self.terminal_view_id())
-            .filter(|s| matches!(s.input_state, CLIAgentInputState::Open { .. }))
-            .map(|s| s.agent.supported_skill_providers())
-    }
-
     /// Fuzzy-match the active commands against `query_text`. Returns scored [`InlineItem`]s with
     /// compact layout left unset; the caller applies any surface-specific presentation.
     fn match_active_commands(&self, query_text: &str, app: &AppContext) -> Vec<InlineItem> {
@@ -497,64 +454,6 @@ pub trait SlashCommandDataSource {
                             // Boost commands with shorter names, if match result is otherwise
                             // equal.
                             + OrderedFloat(1. / command.name.len() as f64),
-                    ),
-            );
-        }
-        results
-    }
-
-    /// Fuzzy-match skills for the current working directory against `query_text`. Returns an empty
-    /// vector when skills are globally unavailable. The caller decides whether skills apply for its
-    /// surface (e.g. GUI hides them in cloud mode).
-    fn match_skills(&self, query_text: &str, app: &AppContext) -> Vec<InlineItem> {
-        if !FeatureFlag::ListSkills.is_enabled() || !AISettings::as_ref(app).is_any_ai_enabled(app)
-        {
-            return Vec::new();
-        }
-
-        let cli_agent_providers = self.active_cli_agent_providers(app);
-        let active_session = self.active_session().as_ref(app);
-        let cwd_path = active_session.current_working_directory_location(app);
-        let skills = SkillManager::handle(app)
-            .as_ref(app)
-            .get_skills_for_working_directory(cwd_path.as_ref(), app);
-
-        let skill_manager = SkillManager::as_ref(app);
-        let mut results = Vec::new();
-        for mut skill in skills {
-            // In CLI agent input mode, only show skills that exist in a supported
-            // provider folder. We check all paths (not just the deduplicated
-            // provider) because deduplication may have picked a higher-priority
-            // provider even when the skill also exists in the CLI agent's folder.
-            if let Some(providers) = &cli_agent_providers {
-                if !skill_manager.skill_exists_for_any_provider(&skill, providers) {
-                    continue;
-                }
-                // Re-map the provider to the best supported one so the icon
-                // reflects the active CLI agent's native provider.
-                skill.provider = skill_manager.best_supported_provider(&skill, providers);
-            }
-            let Some(fuzzy_result) = SlashCommandFuzzyMatchResult::try_match(
-                query_text,
-                &skill.name,
-                Some(&skill.description),
-            ) else {
-                continue;
-            };
-            let score = fuzzy_result.score();
-            // Only include results with score > 25 once the user has started typing a query
-            if query_text.len() > 1 && score <= 25.0 {
-                continue;
-            }
-            let prefix_boost = prefix_match_bonus(query_text, &skill.name);
-            results.push(
-                InlineItem::from_skill(&skill, app)
-                    .with_name_match_result(fuzzy_result.name_match_result)
-                    .with_description_match_result(fuzzy_result.description_match_result)
-                    .with_score(
-                        OrderedFloat(score) * SCORE_MULTIPLIER
-                            + OrderedFloat(prefix_boost) * SCORE_MULTIPLIER
-                            + OrderedFloat(1. / skill.name.len() as f64),
                     ),
             );
         }
@@ -655,39 +554,6 @@ impl InlineItem {
             icon_path: command.supported_surfaces.gui_icon_path(),
             name: command.name.to_owned(),
             description: Some(command.description.to_owned()),
-            font_family: appearance.monospace_font_family(),
-            name_match_result: None,
-            description_match_result: None,
-            score: OrderedFloat(f64::MIN),
-            compact_layout: false,
-        }
-    }
-
-    pub(super) fn from_skill(skill: &SkillDescriptor, app: &AppContext) -> Self {
-        let appearance = Appearance::handle(app).as_ref(app);
-        // Use icon_override if set (e.g. Figma skills), otherwise derive from provider.
-        let icon = if let Some(override_icon) = skill.icon_override {
-            override_icon
-        } else {
-            match skill.provider {
-                SkillProvider::Warp => WarpIcon::Warp,
-                SkillProvider::Claude => WarpIcon::ClaudeLogo,
-                SkillProvider::Codex => WarpIcon::OpenAILogo,
-                SkillProvider::Gemini => WarpIcon::GeminiLogo,
-                SkillProvider::Droid => WarpIcon::DroidLogo,
-                SkillProvider::OpenCode => WarpIcon::OpenCodeLogo,
-                _ => WarpIcon::Warp,
-            }
-        };
-
-        Self {
-            action: AcceptSlashMenuItem::Skill {
-                reference: skill.reference.clone(),
-                name: skill.name.clone(),
-            },
-            icon_path: Some(icon.into()),
-            name: format!("/{}", &skill.name),
-            description: Some(skill.description.clone()),
             font_family: appearance.monospace_font_family(),
             name_match_result: None,
             description_match_result: None,

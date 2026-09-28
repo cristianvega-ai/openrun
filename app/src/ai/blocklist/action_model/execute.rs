@@ -7,7 +7,6 @@ pub(super) mod grep;
 pub(super) mod lrc_activity;
 pub(super) mod read_documents;
 pub(super) mod read_files;
-pub(super) mod read_skill;
 pub(super) mod request_file_edits;
 pub(super) mod run_agents;
 pub(super) mod search_codebase;
@@ -40,7 +39,6 @@ use mime_guess::from_path;
 use parking_lot::FairMutex;
 use read_documents::ReadDocumentsExecutor;
 pub(super) use read_files::ReadFilesExecutor;
-use read_skill::ReadSkillExecutor;
 pub(crate) use request_file_edits::MalformedFinalLineProxyEvent;
 pub use request_file_edits::{
     EditAcceptAndContinueClickedEvent, EditAcceptClickedEvent, EditResolvedEvent, EditStats,
@@ -250,7 +248,6 @@ pub struct BlocklistAIActionExecutor {
     read_documents_executor: ModelHandle<ReadDocumentsExecutor>,
     edit_documents_executor: ModelHandle<EditDocumentsExecutor>,
     create_documents_executor: ModelHandle<CreateDocumentsExecutor>,
-    read_skill_executor: ModelHandle<ReadSkillExecutor>,
     fetch_conversation_executor: ModelHandle<FetchConversationExecutor>,
     start_agent_executor: ModelHandle<StartAgentExecutor>,
     run_agents_executor: ModelHandle<RunAgentsExecutor>,
@@ -311,7 +308,6 @@ impl BlocklistAIActionExecutor {
         let edit_documents_executor = ctx.add_model(|_| EditDocumentsExecutor::new());
         let create_documents_executor = ctx
             .add_model(|_| CreateDocumentsExecutor::new(active_session.clone(), terminal_view_id));
-        let read_skill_executor = ctx.add_model(|_| ReadSkillExecutor::new(active_session.clone()));
         let fetch_conversation_executor = ctx.add_model(|_| FetchConversationExecutor::new());
         let start_agent_executor = ctx.add_model(StartAgentExecutor::new);
         let team_context_resolver_for_run_agents = team_context_resolver.clone();
@@ -343,7 +339,6 @@ impl BlocklistAIActionExecutor {
             async_executing_actions: Default::default(),
             terminal_model,
             team_context_resolver,
-            read_skill_executor,
             fetch_conversation_executor,
             start_agent_executor,
             run_agents_executor,
@@ -414,9 +409,7 @@ impl BlocklistAIActionExecutor {
 
     pub fn action_phase(&self, action: &AIAgentAction, ctx: &AppContext) -> RunningActionPhase {
         match &action.action {
-            AIAgentActionType::ReadFiles(..)
-            | AIAgentActionType::SearchCodebase(..)
-            | AIAgentActionType::ReadSkill(_) => {
+            AIAgentActionType::ReadFiles(..) | AIAgentActionType::SearchCodebase(..) => {
                 RunningActionPhase::Parallel(ParallelExecutionPolicy::ReadOnlyLocalContext)
             }
             AIAgentActionType::Grep { .. }
@@ -512,9 +505,6 @@ impl BlocklistAIActionExecutor {
                 .update(ctx, |executor, ctx| executor.preprocess_action(input, ctx)),
             AIAgentActionType::CreateDocuments(_) => self
                 .create_documents_executor
-                .update(ctx, |executor, ctx| executor.preprocess_action(input, ctx)),
-            AIAgentActionType::ReadSkill(_) => self
-                .read_skill_executor
                 .update(ctx, |executor, ctx| executor.preprocess_action(input, ctx)),
             AIAgentActionType::FetchConversation { .. } => self
                 .fetch_conversation_executor
@@ -649,10 +639,6 @@ impl BlocklistAIActionExecutor {
                 .update(ctx, |executor, ctx| {
                     executor.execute(input, conversation_id, ctx)
                 })
-                .into(),
-            AIAgentActionType::ReadSkill(_) => self
-                .read_skill_executor
-                .update(ctx, |executor, ctx| executor.execute(input, ctx))
                 .into(),
             AIAgentActionType::FetchConversation { .. } => self
                 .fetch_conversation_executor
@@ -906,9 +892,6 @@ impl BlocklistAIActionExecutor {
                 .update(ctx, |executor, ctx| executor.should_autoexecute(input, ctx)),
             AIAgentActionType::CreateDocuments(_) => self
                 .create_documents_executor
-                .update(ctx, |executor, ctx| executor.should_autoexecute(input, ctx)),
-            AIAgentActionType::ReadSkill(_) => self
-                .read_skill_executor
                 .update(ctx, |executor, ctx| executor.should_autoexecute(input, ctx)),
             AIAgentActionType::FetchConversation { .. } => self
                 .fetch_conversation_executor

@@ -8,10 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ai::agent::action_result::{
-    AskUserQuestionAnswerItem, AskUserQuestionResult, FetchConversationResult, ReadSkillResult,
+    AskUserQuestionAnswerItem, AskUserQuestionResult, FetchConversationResult,
     SendMessageToAgentResult,
 };
-use ai::skills::{ParsedSkill, SkillPathOrigin};
 use chrono::{DateTime, Local, TimeZone};
 use persistence::model::AgentConversationData;
 use warp_core::command::ExitCode;
@@ -461,33 +460,6 @@ impl ConvertToExchanges for &api::Task {
 
                     false
                 }
-                api::message::Message::InvokeSkill(invoke_skill) => {
-                    if let Some(api_skill) = invoke_skill.skill.clone()
-                        && let Ok(parsed_skill) = ParsedSkill::try_from_api_with_origin(
-                            api_skill,
-                            &SkillPathOrigin::RestoredDisplayOnly,
-                        ) {
-                            let user_query = invoke_skill
-                                .user_query
-                                .clone()
-                                .map(|user_query| crate::ai::agent::InvokeSkillUserQuery {
-                                    base: BaseUserQuery::from_message(&user_query),
-                                    query: user_query.query,
-                                    // Restored conversations currently do not hydrate invoke-skill
-                                    // inline attachments back into client-side attachment structs.
-                                    // TODO(APP-3101): support rehydration of attachments.
-                                    referenced_attachments: HashMap::new(),
-                                });
-                            let input = AIAgentInput::InvokeSkill {
-                                context: Arc::new([]),
-                                skill: parsed_skill,
-                                user_query,
-                            };
-                            current_inputs.push(input);
-                        };
-
-                    true
-                }
                 // Preserve EventsFromAgents as an explicit input in restored conversations
                 // so orchestration state (including lifecycle timestamps) survives roundtrip.
                 api::message::Message::EventsFromAgents(events) => {
@@ -509,6 +481,7 @@ impl ConvertToExchanges for &api::Task {
                 | api::message::Message::WebFetch(_)
                 | api::message::Message::DebugOutput(_)
                 | api::message::Message::ArtifactEvent(_)
+                | api::message::Message::InvokeSkill(_)
                 | api::message::Message::MessagesReceivedFromAgents(_)
                 | api::message::Message::ModelUsed(_)
                 | api::message::Message::OrchestrationConfigSnapshot(_)
@@ -523,7 +496,6 @@ impl ConvertToExchanges for &api::Task {
                         // TODO(alokedesai): Support persistence for the code review state.
                         active_code_review: None,
                         task_id: &TaskId::new(api_message.task_id.clone()),
-                        skill_path_origin: &SkillPathOrigin::Unavailable,
                     })
             {
                 current_outputs.push(output_msg);
@@ -898,31 +870,6 @@ pub(crate) fn convert_tool_call_result_to_input(
                     id: tool_call_id.into(),
                     task_id: task_id.clone(),
                     result: AIAgentActionResultType::FileGlobV2(glob_result),
-                },
-                context,
-            })
-        }
-        Some(ToolCallResultType::ReadSkill(result)) => {
-            let read_skill_result = match &result.result {
-                Some(api::read_skill_result::Result::Success(success)) => {
-                    if let Some(content) = &success.content {
-                        let context = FileContext::from(content.clone());
-                        ReadSkillResult::Success { content: context }
-                    } else {
-                        ReadSkillResult::Error("FileContent is None".to_string())
-                    }
-                }
-                Some(api::read_skill_result::Result::Error(error)) => {
-                    ReadSkillResult::Error(error.message.clone())
-                }
-                None => ReadSkillResult::Cancelled,
-            };
-
-            Some(AIAgentInput::ActionResult {
-                result: AIAgentActionResult {
-                    id: tool_call_id.into(),
-                    task_id: task_id.clone(),
-                    result: AIAgentActionResultType::ReadSkill(read_skill_result),
                 },
                 context,
             })
@@ -1481,7 +1428,6 @@ fn create_cancelled_result_for_tool_call(
         #[allow(deprecated)]
         ToolType::FileGlob(_) => AIAgentActionResultType::FileGlob(FileGlobResult::Cancelled),
         ToolType::FileGlobV2(_) => AIAgentActionResultType::FileGlobV2(FileGlobV2Result::Cancelled),
-        ToolType::ReadSkill(_) => AIAgentActionResultType::ReadSkill(ReadSkillResult::Cancelled),
         ToolType::SuggestNewConversation(_) => {
             AIAgentActionResultType::SuggestNewConversation(SuggestNewConversationResult::Cancelled)
         }

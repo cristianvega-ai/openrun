@@ -100,7 +100,7 @@ pub async fn generate_multi_agent_output(
             supports_v4a_file_diffs: FeatureFlag::V4AFileDiffs.is_enabled(),
             supports_summarization_via_message_replacement:
                 FeatureFlag::SummarizationViaMessageReplacement.is_enabled(),
-            supports_bundled_skills: FeatureFlag::BundledSkills.is_enabled(),
+            supports_bundled_skills: false,
             supports_research_agent: params.research_agent_enabled,
             supports_orchestration_v2: supports_orchestration_v2(params.orchestration_enabled),
             supports_orchestration_runners: params.orchestration_enabled
@@ -246,10 +246,6 @@ fn get_supported_tools(params: &RequestParams) -> Vec<api::ToolType> {
     }
 
     supported_tools.push(api::ToolType::InsertReviewComments);
-
-    if FeatureFlag::ListSkills.is_enabled() {
-        supported_tools.push(api::ToolType::ReadSkill);
-    }
 
     if params.orchestration_enabled {
         supported_tools.extend([api::ToolType::RunAgents, api::ToolType::SendMessageToAgent]);

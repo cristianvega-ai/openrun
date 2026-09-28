@@ -553,42 +553,6 @@ impl From<FileGlobV2Result> for FileGlobResult {
     }
 }
 
-impl TryFrom<ReadSkillResult> for api::request::input::tool_call_result::Result {
-    type Error = ConvertToAPITypeError;
-
-    fn try_from(result: ReadSkillResult) -> Result<Self, Self::Error> {
-        match result {
-            ReadSkillResult::Success { content } => {
-                let file_contents: Vec<api::FileContent> = content.into();
-
-                // There should only be one file content
-
-                if file_contents.len() != 1 {
-                    return Err(ConvertToAPITypeError::Ignore);
-                }
-
-                Ok(api::request::input::tool_call_result::Result::ReadSkill(
-                    api::ReadSkillResult {
-                        result: Some(api::read_skill_result::Result::Success(
-                            api::read_skill_result::Success {
-                                content: Some(file_contents[0].clone()),
-                            },
-                        )),
-                    },
-                ))
-            }
-            ReadSkillResult::Error(error) => Ok(
-                api::request::input::tool_call_result::Result::ReadSkill(api::ReadSkillResult {
-                    result: Some(api::read_skill_result::Result::Error(
-                        api::read_skill_result::Error { message: error },
-                    )),
-                }),
-            ),
-            ReadSkillResult::Cancelled => Err(ConvertToAPITypeError::Ignore),
-        }
-    }
-}
-
 impl TryFrom<ReadDocumentsResult> for api::request::input::tool_call_result::Result {
     type Error = ConvertToAPITypeError;
 
@@ -971,12 +935,6 @@ impl From<EditDocumentsResult> for AIAgentActionResultType {
 impl From<ReadDocumentsResult> for AIAgentActionResultType {
     fn from(result: ReadDocumentsResult) -> Self {
         AIAgentActionResultType::ReadDocuments(result)
-    }
-}
-
-impl From<ReadSkillResult> for AIAgentActionResultType {
-    fn from(result: ReadSkillResult) -> Self {
-        AIAgentActionResultType::ReadSkill(result)
     }
 }
 

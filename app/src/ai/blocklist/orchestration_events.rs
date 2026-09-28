@@ -420,8 +420,7 @@ impl OrchestrationEventService {
                     | AIAgentOutputMessageType::WebFetch(_)
                     | AIAgentOutputMessageType::CommentsAddressed { .. }
                     | AIAgentOutputMessageType::DebugOutput { .. }
-                    | AIAgentOutputMessageType::ArtifactCreated(_)
-                    | AIAgentOutputMessageType::SkillInvoked(_) => {}
+                    | AIAgentOutputMessageType::ArtifactCreated(_) => {}
                 }
             }
         }

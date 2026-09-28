@@ -870,7 +870,6 @@ pub enum AIAgentInput {
     CloneRepository { url: String },
     CodeReview,
     SummarizeConversation,
-    InvokeSkill { skill_name: String },
     StartFromAmbientRunPrompt,
     MessagesReceivedFromAgents { message_count: usize },
     EventsFromAgents { event_count: usize },
@@ -895,9 +894,6 @@ impl From<FullAIAgentInput> for AIAgentInput {
             },
             FullAIAgentInput::CodeReview { .. } => Self::CodeReview,
             FullAIAgentInput::SummarizeConversation { .. } => Self::SummarizeConversation,
-            FullAIAgentInput::InvokeSkill { skill, .. } => Self::InvokeSkill {
-                skill_name: skill.name.clone(),
-            },
             FullAIAgentInput::StartFromAmbientRunPrompt { .. } => Self::StartFromAmbientRunPrompt,
             FullAIAgentInput::MessagesReceivedFromAgents { messages } => {
                 Self::MessagesReceivedFromAgents {
