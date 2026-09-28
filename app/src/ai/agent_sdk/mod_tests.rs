@@ -144,7 +144,6 @@ fn agent_driver_options() -> AgentDriverOptions {
         working_dir: std::env::current_dir().unwrap(),
         task_id: None,
         parent_run_id: None,
-        should_share: false,
         idle_on_complete: None,
         idle_on_fail: None,
         secrets: Default::default(),

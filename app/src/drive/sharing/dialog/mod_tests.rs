@@ -10,8 +10,8 @@ use crate::cloud_object::model::view::CloudViewModel;
 use crate::drive::sharing::{ShareableObject, SharingAccessLevel};
 use crate::server::ids::{ClientId, ServerId, SyncId};
 use crate::terminal::TerminalView;
+use crate::terminal::shared_session::SharedSessionStatus;
 use crate::terminal::shared_session::manager::Manager;
-use crate::terminal::shared_session::{SharedSessionSource, SharedSessionStatus};
 use crate::test_util::add_window_with_terminal;
 use crate::test_util::terminal::{
     add_window_with_id_and_terminal, initialize_app_for_terminal_view,
@@ -74,13 +74,12 @@ fn session_qr_code_requires_status_eligible_matching_session_id() {
         let first_session_id = SessionId::new();
 
         terminal.update(&mut app, |view, ctx| {
-            let window_id = ctx.window_id();
             Manager::handle(ctx).update(ctx, |manager, ctx| {
-                manager.started_share(terminal.downgrade(), first_session_id, window_id, ctx);
+                manager.joined_share(terminal.downgrade(), first_session_id, ctx);
             });
             view.model
                 .lock()
-                .set_shared_session_status(SharedSessionStatus::ActiveSharer);
+                .set_shared_session_status(SharedSessionStatus::reader());
         });
 
         let first_target = ShareableObject::Session {
@@ -99,8 +98,8 @@ fn session_qr_code_requires_status_eligible_matching_session_id() {
             assert_eq!(dialog.mode, SharingDialogMode::QrCode);
         });
 
-        Manager::handle(&app).update(&mut app, |manager, ctx| {
-            manager.stopped_share(terminal.id(), ctx);
+        Manager::handle(&app).update(&mut app, |manager, _| {
+            manager.left_share(terminal.id());
         });
 
         for status in [
@@ -111,7 +110,7 @@ fn session_qr_code_requires_status_eligible_matching_session_id() {
             assert_session_link_state(&terminal, &dialog, Some(first_session_id), &app);
         }
 
-        set_shared_session_status(&terminal, SharedSessionStatus::SharePending, &mut app);
+        set_shared_session_status(&terminal, SharedSessionStatus::ViewPending, &mut app);
         assert_session_link_state(&terminal, &dialog, None, &app);
         dialog.update(&mut app, |dialog, ctx| {
             dialog.refresh_shared_session_link(ctx);
@@ -123,10 +122,6 @@ fn session_qr_code_requires_status_eligible_matching_session_id() {
             SharedSessionStatus::ActiveViewer {
                 role: Default::default(),
             },
-            SharedSessionStatus::SharePendingPreBootstrap {
-                source: SharedSessionSource::default(),
-            },
-            SharedSessionStatus::ActiveSharer,
         ] {
             set_shared_session_status(&terminal, status, &mut app);
             assert_session_link_state(&terminal, &dialog, None, &app);
@@ -139,13 +134,12 @@ fn session_qr_code_requires_status_eligible_matching_session_id() {
 
         let second_session_id = SessionId::new();
         terminal.update(&mut app, |view, ctx| {
-            let window_id = ctx.window_id();
             Manager::handle(ctx).update(ctx, |manager, ctx| {
-                manager.started_share(terminal.downgrade(), second_session_id, window_id, ctx);
+                manager.joined_share(terminal.downgrade(), second_session_id, ctx);
             });
             view.model
                 .lock()
-                .set_shared_session_status(SharedSessionStatus::ActiveSharer);
+                .set_shared_session_status(SharedSessionStatus::reader());
         });
 
         terminal.read(&app, |view, ctx| {

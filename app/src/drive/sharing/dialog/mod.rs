@@ -5,7 +5,7 @@ use inheritance::{InheritanceDetails, InheritanceState};
 use itertools::Itertools;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
-use session_sharing_protocol::common::{Guest, PendingGuest, SessionId, TeamAclData};
+use session_sharing_protocol::common::SessionId;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::theme::Fill as ThemeFill;
 use warp_editor::editor::NavigationKey;
@@ -49,9 +49,6 @@ use crate::server::telemetry::{
 };
 use crate::terminal::TerminalView;
 use crate::terminal::shared_session::SharedSessionActionSource;
-use crate::terminal::shared_session::permissions_manager::{
-    SessionPermissionsEvent, SessionPermissionsManager,
-};
 use crate::ui_components::buttons::icon_button_with_color;
 use crate::ui_components::icons::Icon;
 use crate::view_components::DismissibleToast;
@@ -249,13 +246,6 @@ impl SharingDialog {
         });
 
         ctx.subscribe_to_model(
-            &SessionPermissionsManager::handle(ctx),
-            |me, _, event, ctx| {
-                me.handle_session_permissions_event(event, ctx);
-            },
-        );
-
-        ctx.subscribe_to_model(
             &BlocklistAIHistoryModel::handle(ctx),
             |me, _, event, ctx| {
                 me.handle_ai_history_event(event, ctx);
@@ -355,32 +345,6 @@ impl SharingDialog {
             if event_object_id.sync_id().into_server() == Some(target_server_id) {
                 self.refresh_object_permission_states(ctx);
             }
-        }
-    }
-
-    fn handle_session_permissions_event(
-        &mut self,
-        event: &SessionPermissionsEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            SessionPermissionsEvent::GuestsUpdated {
-                session_id,
-                guests,
-                pending_guests,
-            } => {
-                self.update_session_guests(ctx, session_id, guests, pending_guests);
-            }
-            SessionPermissionsEvent::LinkPermissionsUpdated {
-                session_id,
-                access_level,
-            } => {
-                self.update_session_link_permissions(*session_id, *access_level, ctx);
-            }
-            SessionPermissionsEvent::TeamPermissionsUpdated {
-                session_id,
-                team_acl,
-            } => self.update_session_team_permissions(session_id, team_acl.clone(), ctx),
         }
     }
 
@@ -574,17 +538,7 @@ impl SharingDialog {
                     }
                 }
             }
-            Some(ShareableObject::Session { handle, .. }) => {
-                // Sharer always has Full access.
-                if handle.upgrade(app).is_some_and(|handle| {
-                    handle
-                        .as_ref(app)
-                        .sharer_session_kind()
-                        .is_some_and(|kind| kind.is_sharer())
-                }) {
-                    return SharingAccessLevel::Full;
-                }
-
+            Some(ShareableObject::Session { .. }) => {
                 if let Some(owner) = self.owner(app) {
                     // If we are the user owner, we have Full access.
                     if let Some(user_uid) = AuthStateProvider::as_ref(app).get().user_id()
@@ -726,112 +680,6 @@ impl SharingDialog {
                     .map(|m| Subject::from_owner(m.permissions.space))
             }
         }
-    }
-
-    fn update_session_guests(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-        session_id: &SessionId,
-        guests: &[Guest],
-        pending_guests: &[PendingGuest],
-    ) {
-        // We should only update the guests if the dialog is targeting the
-        // correct session.
-        match self.target.as_ref() {
-            Some(ShareableObject::Session {
-                session_id: target_session_id,
-                ..
-            }) => {
-                if session_id != target_session_id {
-                    return;
-                }
-            }
-            _ => return,
-        }
-
-        let guests_iter = guests.iter().map(|guest| GuestState {
-            menu_button_handle: Default::default(),
-            tooltip_handle: Default::default(),
-            current_access_level: guest.direct_acl.into(),
-            subject: Subject::User(UserKind::SharedSessionParticipant(
-                guest.profile_data.clone(),
-            )),
-            inheritance: None,
-        });
-
-        let pending_guests_iter = pending_guests.iter().map(|guest| GuestState {
-            menu_button_handle: Default::default(),
-            tooltip_handle: Default::default(),
-            current_access_level: guest.direct_acl.into(),
-            subject: Subject::PendingUser {
-                email: Some(guest.email.clone()),
-            },
-            inheritance: None,
-        });
-
-        self.guest_states = guests_iter.chain(pending_guests_iter).collect();
-
-        self.guest_states
-            .sort_by_cached_key(|guest| guest.subject.name(ctx));
-
-        ctx.notify();
-    }
-
-    fn update_session_link_permissions(
-        &mut self,
-        session_id: SessionId,
-        access_level: Option<SharingAccessLevel>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // Ensure we're targeting the correct session.
-        let Some(ShareableObject::Session {
-            session_id: target_session_id,
-            ..
-        }) = self.target
-        else {
-            return;
-        };
-        if session_id != target_session_id {
-            return;
-        }
-
-        self.link_sharing_state = LinkSharingState {
-            access_level,
-            tooltip_handle: Default::default(),
-            inheritance: None,
-        };
-        ctx.notify()
-    }
-
-    fn update_session_team_permissions(
-        &mut self,
-        session_id: &SessionId,
-        team_acl: Option<TeamAclData>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // Ensure we're targeting the correct session.
-        match self.target.as_ref() {
-            Some(ShareableObject::Session {
-                session_id: target_session_id,
-                ..
-            }) => {
-                if session_id != target_session_id {
-                    return;
-                }
-            }
-            _ => return,
-        }
-
-        self.team_sharing_state = TeamSharingState {
-            access_level: team_acl.as_ref().map(|team_acl| team_acl.acl.into()),
-            team: team_acl.map(|team_acl| TeamKind::SharedSessionTeam {
-                team_uid: ServerId::from_string_lossy(team_acl.uid),
-                name: team_acl.name,
-            }),
-            tooltip_handle: Default::default(),
-            inheritance: None,
-        };
-        ctx.notify()
     }
 
     /// Refreshes all permissions that have cached UI state.

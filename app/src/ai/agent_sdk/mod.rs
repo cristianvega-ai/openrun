@@ -29,7 +29,6 @@ use warp_cli::provider::ProviderCommand;
 use warp_cli::runner::RunnerCommand;
 use warp_cli::schedule::ScheduleSubcommand;
 use warp_cli::secret::SecretCommand;
-use warp_cli::share::ShareRequest;
 use warp_cli::task::{MessageCommand, TaskCommand};
 use warp_cli::{CliCommand, GlobalOptions, OZ_HARNESS_ENV};
 use warp_core::features::FeatureFlag;
@@ -746,7 +745,6 @@ impl AgentDriverRunner {
                 .await?;
 
             // Pull relevant variables out of args before moving it into the closure.
-            let share_requests = args.share.share.clone();
             let bedrock_inference_role = args.bedrock_inference_role.clone();
             let bedrock_role_region = args.bedrock_role_region.clone();
             let has_task_id = args.task_id.is_some();
@@ -871,7 +869,6 @@ impl AgentDriverRunner {
                         ctx,
                         driver_options,
                         output_format,
-                        share_requests,
                         task,
                     );
                 })
@@ -1158,8 +1155,6 @@ impl AgentDriverRunner {
                 )?;
 
                 let task_id = args.task_id.as_ref().and_then(|s| s.parse().ok());
-                let should_share = (args.share.is_shared() || args.task_id.is_some())
-                    && FeatureFlag::AgentSharedSessions.is_enabled();
 
                 let third_party_harness_model_config = merged_config
                     .harness
@@ -1169,7 +1164,6 @@ impl AgentDriverRunner {
                     working_dir: working_dir.clone(),
                     task_id,
                     parent_run_id: None,
-                    should_share,
                     idle_on_complete: args.idle_on_complete.map(|d| d.into()),
                     idle_on_fail: args.idle_on_fail.map(|d| d.into()),
                     secrets: Default::default(),
@@ -1633,7 +1627,6 @@ impl AgentDriverRunner {
         ctx: &mut AppContext,
         driver_options: driver::AgentDriverOptions,
         output_format: OutputFormat,
-        share_requests: Option<Vec<ShareRequest>>,
         task: driver::Task,
     ) {
         maybe_warn_team_api_key(ctx);
@@ -1646,9 +1639,6 @@ impl AgentDriverRunner {
 
         driver.update(ctx, |driver, ctx| {
             driver.set_output_format(output_format);
-            if let Some(share_requests) = share_requests {
-                driver.add_share_requests(share_requests, ctx);
-            }
             let span =
                 tracing::info_span!("AgentDriver::run", tags.cloud_agent = true, ?task.model, ?task.harness);
             let agent_future = span

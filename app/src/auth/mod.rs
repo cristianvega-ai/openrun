@@ -82,7 +82,6 @@ pub fn maybe_log_out(app: &mut AppContext) {
     let num_long_running_commands = RunningSessionSummary::new(&sessions)
         .long_running_cmds
         .len();
-    let num_shared_sessions = crate::session_management::num_shared_sessions(app);
     let num_unsaved_objects =
         CloudModel::as_ref(app).num_unsaved_objects_to_warn_about_before_quitting();
 
@@ -95,10 +94,7 @@ pub fn maybe_log_out(app: &mut AppContext) {
         .show_warning_before_quitting
         .value();
     if show_warning_before_log_out
-        && (num_long_running_commands > 0
-            || num_shared_sessions > 0
-            || num_unsaved_objects > 0
-            || num_unsaved_files > 0)
+        && (num_long_running_commands > 0 || num_unsaved_objects > 0 || num_unsaved_files > 0)
     {
         send_telemetry_sync_from_app_ctx!(TelemetryEvent::LogOutModalShown, app);
         let mut button_data = vec![ModalButton::for_app("Yes, log out", |ctx| {
@@ -146,15 +142,6 @@ pub fn maybe_log_out(app: &mut AppContext) {
                     );
                 }
             }))
-        }
-
-        if num_shared_sessions > 0 {
-            let plural = if num_shared_sessions > 1 {
-                "sessions"
-            } else {
-                "session"
-            };
-            info_text_vec.push(format!("You have {num_shared_sessions} shared {plural}."));
         }
 
         if num_unsaved_objects > 0 {
@@ -291,9 +278,8 @@ pub fn log_out(app: &mut AppContext) {
     EnvVarCollectionManager::handle(app).update(app, |manager, _| manager.reset());
     WorkflowManager::handle(app).update(app, |manager, _| manager.reset());
 
-    // Stop and leave all shared sessions
-    SharedSessionManager::handle(app).update(app, |manager, ctx| {
-        manager.stop_all_shared_sessions(ctx);
+    // Leave all joined shared sessions
+    SharedSessionManager::handle(app).update(app, |manager, _| {
         manager.clear_joined();
     });
 

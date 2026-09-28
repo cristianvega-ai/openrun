@@ -23,13 +23,11 @@ use itertools::Itertools as _;
 use oneshot::{Canceled, Receiver};
 use repo_metadata::local_model::IndexedRepoState;
 use repo_metadata::{RepoMetadataModel, RepositoryIdentifier};
-use session_sharing_protocol::sharer::SessionRetentionReason;
 use tracing::Instrument as _;
 use uuid::Uuid;
 use warp_cli::agent::{Harness, RepositoryPreparationOverride};
 use warp_cli::mcp::MCPSpec;
 use warp_cli::output_format::OutputFormat;
-use warp_cli::share::ShareRequest;
 use warp_cli::skill::SkillSpec;
 use warp_core::features::FeatureFlag;
 use warp_core::{safe_debug, safe_error, safe_info, safe_warn};
@@ -595,8 +593,6 @@ pub struct AgentDriverOptions {
     pub task_id: Option<AmbientAgentTaskId>,
     /// Parent run ID for child orchestration flows, if this task was spawned by another run.
     pub parent_run_id: Option<String>,
-    /// Whether the agent run should share its session.
-    pub should_share: bool,
     /// How long to keep the session alive after the agent run completes, if at all.
     pub idle_on_complete: Option<Duration>,
     /// How long to keep the session alive after the agent run ends in a terminal error, if at
@@ -684,10 +680,6 @@ pub struct AgentDriver {
     // session it is sharing) stays alive after the conversation fails, so a human can attach to
     // the failed run and keep working in its environment.
     idle_on_fail: Option<Duration>,
-
-    // Whether a viewer-input subscription is already refreshing an open debug window. Guards
-    // against stacking a second subscription when a run fails, is resumed, and fails again.
-    debug_window_refresh_installed: bool,
 
     // When the debug window's deadline was last published to the server, used to throttle
     // republishing on high-frequency viewer input.
@@ -850,11 +842,6 @@ pub enum AgentDriverError {
     BootstrapFailed {
         #[source]
         error: terminal::BootstrapError,
-    },
-    #[error("Unable to share agent session")]
-    ShareSessionFailed {
-        #[source]
-        error: terminal::ShareSessionError,
     },
     #[error("Error syncing Warp Drive")]
     WarpDriveSyncFailed,
@@ -1047,7 +1034,6 @@ impl AgentDriver {
             working_dir,
             task_id,
             parent_run_id,
-            should_share,
             idle_on_complete,
             idle_on_fail,
             secrets,
@@ -1079,9 +1065,9 @@ impl AgentDriver {
         };
 
         safe_info!(
-            safe: ("Initializing agent driver: share={should_share}, idle_on_complete={idle_on_complete:?}, idle_on_fail={idle_on_fail:?}"),
+            safe: ("Initializing agent driver: idle_on_complete={idle_on_complete:?}, idle_on_fail={idle_on_fail:?}"),
             full: (
-                "Initializing agent driver: share={should_share}, idle_on_complete={idle_on_complete:?}, idle_on_fail={idle_on_fail:?}, working_dir={}",
+                "Initializing agent driver: idle_on_complete={idle_on_complete:?}, idle_on_fail={idle_on_fail:?}, working_dir={}",
                 working_dir.display()
             )
         );
@@ -1140,7 +1126,6 @@ impl AgentDriver {
             terminal::TerminalDriverOptions {
                 working_dir: working_dir.clone(),
                 env_vars: HashMap::clone(&resolved_env_vars),
-                should_share,
                 task_id,
                 conversation_restoration,
                 team_scope,
@@ -1148,12 +1133,11 @@ impl AgentDriver {
             ctx,
         )?;
 
-        // Sharing starts asynchronously from terminal creation, before run_internal's setup waits.
         log::info!(
-            "event=driver_queue_configuration task_id={task_id:?} harness={selected_harness} sharing_requested={should_share} native_queue_enabled={}",
-            selected_harness == Harness::Oz && (should_share || task_id.is_some()),
+            "event=driver_queue_configuration task_id={task_id:?} harness={selected_harness} native_queue_enabled={}",
+            selected_harness == Harness::Oz && task_id.is_some(),
         );
-        if selected_harness == Harness::Oz && (should_share || task_id.is_some()) {
+        if selected_harness == Harness::Oz && task_id.is_some() {
             let terminal = terminal_driver.as_ref(ctx).terminal_view().clone();
             terminal.update(ctx, |terminal, ctx| {
                 terminal.ai_controller().update(ctx, |controller, ctx| {
@@ -1162,8 +1146,8 @@ impl AgentDriver {
             });
         }
         // Subscribe to TerminalDriver events for task-specific handling.
-        ctx.subscribe_to_model(&terminal_driver, |me, _, event, ctx| {
-            me.handle_terminal_driver_event(event, ctx);
+        ctx.subscribe_to_model(&terminal_driver, |me, _, event, _| {
+            me.handle_terminal_driver_event(event);
         });
 
         let mut run_conversation_id: Option<AIConversationId> = None;
@@ -1233,7 +1217,6 @@ impl AgentDriver {
             harness: None,
             idle_on_complete,
             idle_on_fail,
-            debug_window_refresh_installed: false,
             last_published_debug_deadline: None,
             restored_conversation_id,
             resume_payload,
@@ -1271,8 +1254,8 @@ impl AgentDriver {
         terminal_driver: ModelHandle<terminal::TerminalDriver>,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
-        ctx.subscribe_to_model(&terminal_driver, |me, _, event, ctx| {
-            me.handle_terminal_driver_event(event, ctx);
+        ctx.subscribe_to_model(&terminal_driver, |me, _, event, _| {
+            me.handle_terminal_driver_event(event);
         });
         Self {
             terminal_driver,
@@ -1285,7 +1268,6 @@ impl AgentDriver {
             harness: None,
             idle_on_complete: None,
             idle_on_fail: None,
-            debug_window_refresh_installed: false,
             last_published_debug_deadline: None,
             restored_conversation_id: None,
             resume_payload: None,
@@ -1325,25 +1307,6 @@ impl AgentDriver {
 
     pub fn set_output_format(&mut self, output_format: OutputFormat) {
         self.output_format = output_format;
-    }
-
-    pub fn add_share_requests(
-        &self,
-        share_requests: impl IntoIterator<Item = ShareRequest>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.terminal_driver.update(ctx, |td, ctx| {
-            td.add_share_requests(share_requests, ctx);
-        });
-    }
-    fn extend_shared_session_retention(
-        &mut self,
-        reason: SessionRetentionReason,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.terminal_driver.update(ctx, |driver, ctx| {
-            driver.extend_shared_session_retention(reason, ctx);
-        });
     }
 
     /// Waits until sandbox teardown should begin and returns the corresponding deadline error.
@@ -1485,7 +1448,6 @@ impl AgentDriver {
     ) -> impl Future<Output = Result<(), AgentDriverError>> + use<> {
         let (tx, rx) = oneshot::channel();
         let foreground = ctx.spawner();
-        let foreground_for_error = foreground.clone();
         let server_api = ServerApiProvider::as_ref(ctx).get_ai_client();
         let task_id = self.task_id;
         let background = ctx.background_executor();
@@ -1615,20 +1577,6 @@ impl AgentDriver {
             // Success/blocked/cancelled are handled by LocalAgentTaskSyncModel.
             if let (Some(task_id), Err(err)) = (task_id, &result) {
                 report_driver_error(task_id, err, &server_api_for_error).await;
-                if matches!(
-                    err,
-                    AgentDriverError::EnvironmentSetupFailed(_)
-                        | AgentDriverError::SetupCommandExitedShell { .. }
-                ) {
-                    let _ = foreground_for_error
-                        .spawn(|me, ctx| {
-                            me.extend_shared_session_retention(
-                                SessionRetentionReason::SetupFailed,
-                                ctx,
-                            );
-                        })
-                        .await;
-                }
             }
 
             result
@@ -2170,18 +2118,7 @@ impl AgentDriver {
                         .await?;
                 }
 
-                // For all harnesses: wait for the shared session and prepare the environment.
-                setup_events
-                    .record_result(SetupStep::SharedSessionEstablishment, async {
-                        foreground
-                            .spawn(|me, ctx| {
-                                me.terminal_driver
-                                    .update(ctx, |driver, _| driver.wait_for_session_shared())
-                            })
-                            .await?
-                            .await
-                    })
-                    .await?;
+                // For all harnesses: prepare the environment.
                 let global_skill_resolution = setup_events
                     .record_result(
                         SetupStep::GlobalSkillResolution,
@@ -2439,11 +2376,6 @@ impl AgentDriver {
                 );
 
                 // Pause before returning to make sure that all conversation events are transmitted before the session is closed.
-                // TODO: This is a bit of a bandaid fix, and it would be better if we explicitly waited for the session to end before terminating.
-                // The way we could do that is through having the driver wait for all in-flight streams to be finished before terminating
-                // and then call stop_sharing_session when they're done. To know when streams are finished, we would need to modify start_ordered_terminal_events_listener
-                // to send a message when the streams are finished, flushed, and the websocket is disconnected. For now, we'll just sleep for a second, as this seems
-                // to be enough time for the streams to be finished and the events to be flushed.
                 warpui::r#async::Timer::after(Duration::from_secs(1)).await;
 
                 conversation_status.into_result()
@@ -2541,11 +2473,10 @@ impl AgentDriver {
         );
     }
 
-    /// Arms a post-failure debug window and pushes its deadline out on every viewer input, so a
-    /// session someone is working in is not torn down underneath them.
+    /// Arms a post-failure debug window.
     ///
     /// Both failure paths route through here so a conversation error and a setup failure behave
-    /// identically. The refresh subscription is installed once per driver.
+    /// identically.
     fn arm_debug_window<T: Clone + Send + 'static>(
         &mut self,
         idle_timeout: IdleTimeoutSender<T>,
@@ -2561,34 +2492,6 @@ impl AgentDriver {
         // run, which reads as already-expired and hides that the session is reachable.
         self.last_published_debug_deadline = None;
         self.publish_debug_window_deadline(window, None, None, ctx);
-
-        if self.debug_window_refresh_installed {
-            return;
-        }
-        self.debug_window_refresh_installed = true;
-
-        self.subscribe_to_viewer_input_refresh(ctx, move || idle_timeout.refresh());
-    }
-
-    /// Subscribes the terminal driver's viewer-input events to `refresh`, publishing the
-    /// resulting deadline on each keystroke. Callers supply the refresh function so a pin-aware
-    /// one and a plain one can share this wiring.
-    fn subscribe_to_viewer_input_refresh(
-        &self,
-        ctx: &mut ModelContext<Self>,
-        refresh: impl Fn() -> Option<Duration> + Send + 'static,
-    ) {
-        let terminal_driver = self.terminal_driver.clone();
-        ctx.subscribe_to_model(&terminal_driver, move |me, _, event, ctx| {
-            if matches!(event, TerminalDriverEvent::SharedSessionViewerInput)
-                && let Some(window) = refresh()
-            {
-                log::debug!(
-                    "Ambient agent idle lifecycle: event=idle_timeout_refreshed trigger=viewer_input"
-                );
-                me.publish_debug_window_deadline(window, None, None, ctx);
-            }
-        });
     }
 
     /// Arms the post-failure debug window for a retained environment-setup failure and installs
@@ -2608,11 +2511,6 @@ impl AgentDriver {
         self.last_published_debug_deadline = Some(SystemTime::now());
 
         let terminal_surface_id = self.terminal_driver.as_ref(ctx).terminal_view().id();
-
-        let viewer_input_controller = controller.clone();
-        self.subscribe_to_viewer_input_refresh(ctx, move || {
-            viewer_input_controller.refresh_from_last_armed()
-        });
 
         let history_model = BlocklistAIHistoryModel::handle(ctx);
         ctx.subscribe_to_model(&history_model, move |me, _, event, ctx| {
@@ -3624,10 +3522,8 @@ impl AgentDriver {
             });
         }
 
-        // ServerSide prompts enter the agent view and emit
-        // `CloudModeSetupPhaseEnded` to tear down the Cloud Mode Setup V2 chip.
-        // (Local prompts have no cloud setup phase; they enter the view with
-        // the user prompt below.)
+        // ServerSide prompts enter the agent view. (Local prompts enter the view
+        // with the user prompt below.)
         //
         // When `skip_initial_turn` is set, also schedule the deferred `Success`
         // now so the run isn't stuck waiting for a turn that will never arrive.
@@ -3644,10 +3540,6 @@ impl AgentDriver {
                             ctx,
                         );
                     }
-                    terminal
-                        .model
-                        .lock()
-                        .send_cloud_mode_setup_phase_ended_for_shared_session();
                 })
             });
             if self.skip_initial_turn && prepared_conversation_id.is_none() {
@@ -4353,11 +4245,7 @@ impl AgentDriver {
     }
 
     /// Handle events re-emitted by the `TerminalDriver`.
-    fn handle_terminal_driver_event(
-        &mut self,
-        event: &TerminalDriverEvent,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    fn handle_terminal_driver_event(&mut self, event: &TerminalDriverEvent) {
         match event {
             TerminalDriverEvent::SlowBootstrap => {
                 tracing::event!(
@@ -4369,46 +4257,6 @@ impl AgentDriver {
                     "Warning: Terminal session is slow to bootstrap. See https://docs.warp.dev/support-and-community/troubleshooting-and-support/known-issues#shells to troubleshoot."
                 );
             }
-            TerminalDriverEvent::EstablishedSharedSession {
-                session_id,
-                join_url,
-            } => {
-                tracing::event!(
-                    tracing::Level::INFO,
-                    tags.cloud_agent = true,
-                    session_id = %*session_id,
-                    "shared session established",
-                );
-                write_session_joined(join_url, self.output_format);
-
-                // If running as part of a task, store the session-sharing link.
-                if let Some(task_id) = self.task_id {
-                    let server_api = ServerApiProvider::as_ref(ctx).get_ai_client();
-                    let session_id = *session_id;
-                    ctx.spawn(
-                        async move {
-                            report_if_error!(
-                                server_api
-                                    .update_agent_task(
-                                        task_id,
-                                        None,
-                                        Some(session_id),
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                    )
-                                    .await
-                                    .context("Error setting ambient agent shared session ID")
-                            );
-                        },
-                        |_, _, _| {},
-                    );
-                }
-            }
-            // Only meaningful while a post-failure debug window is open, which subscribes to
-            // the terminal driver separately. Nothing to do on the steady-state path.
-            TerminalDriverEvent::SharedSessionViewerInput => {}
         }
     }
 
@@ -4769,20 +4617,6 @@ fn stamp_parent_agent_id_if_some(
             conv.set_parent_agent_id(parent_run_id);
         }
     });
-}
-
-/// Write the session URL to stdout using the appropriate output format
-fn write_session_joined(join_url: &str, output_format: OutputFormat) {
-    report_if_error!(
-        output::with_stdout_buffered(|buf| match output_format {
-            OutputFormat::Json | OutputFormat::Ndjson =>
-                output::json::shared_session_established(join_url, buf),
-            OutputFormat::Text | OutputFormat::Pretty => {
-                output::text::shared_session_established(join_url, buf)
-            }
-        })
-        .context("Failed to write shared session event")
-    );
 }
 
 #[cfg(test)]

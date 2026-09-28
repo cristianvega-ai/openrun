@@ -133,6 +133,15 @@ impl GithubPrPromptChipDefaultValidation {
     }
 }
 
+/// Drops items that are no longer offered from a saved toolbar layout.
+fn without_retired_items(items: &[AgentToolbarItemKind]) -> Vec<AgentToolbarItemKind> {
+    items
+        .iter()
+        .filter(|item| !matches!(item, AgentToolbarItemKind::ShareSession))
+        .cloned()
+        .collect()
+}
+
 /// Shared behavior for toolbar chip selection types.
 /// Each variant stores either a `Default` (resolved via type-specific defaults) or `Custom` left/right item lists.
 pub trait ToolbarChipSelection {
@@ -212,14 +221,14 @@ impl ToolbarChipSelection for AgentToolbarChipSelection {
     fn left_items(&self) -> Vec<AgentToolbarItemKind> {
         match self {
             Self::Default => Self::default_left_items(),
-            Self::Custom { left, .. } => left.clone(),
+            Self::Custom { left, .. } => without_retired_items(left),
         }
     }
 
     fn right_items(&self) -> Vec<AgentToolbarItemKind> {
         match self {
             Self::Default => Self::default_right_items(),
-            Self::Custom { right, .. } => right.clone(),
+            Self::Custom { right, .. } => without_retired_items(right),
         }
     }
 }
@@ -262,14 +271,14 @@ impl ToolbarChipSelection for CLIAgentToolbarChipSelection {
     fn left_items(&self) -> Vec<AgentToolbarItemKind> {
         match self {
             Self::Default => Self::default_left_items(),
-            Self::Custom { left, .. } => left.clone(),
+            Self::Custom { left, .. } => without_retired_items(left),
         }
     }
 
     fn right_items(&self) -> Vec<AgentToolbarItemKind> {
         match self {
             Self::Default => Self::default_right_items(),
-            Self::Custom { right, .. } => right.clone(),
+            Self::Custom { right, .. } => without_retired_items(right),
         }
     }
 }
@@ -322,25 +331,6 @@ define_settings_group!(SessionSettings, settings: [
         surface: settings::SettingSurfaces::GUI,
         private: true,
     },
-    should_confirm_close_session: ShouldConfirmCloseSession {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: false,
-        toml_path: "general.should_confirm_close_session",
-        description: "Whether to show a confirmation dialog when closing a session.",
-    },
-    // Value is saved here but not shown in ui (can't be toggled in settings)
-    should_confirm_shared_session_edit_access: ShouldConfirmSharedSessionEditAccess {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: true,
-    }
     notifications: Notifications {
         type: NotificationsSettings,
         default: NotificationsSettings::default(),

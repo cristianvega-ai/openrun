@@ -10,7 +10,7 @@ use warpui::geometry::rect::RectF;
 use warpui::geometry::vector::Vector2F;
 use warpui::platform::Cursor;
 use warpui::platform::keyboard::KeyCode;
-use warpui::{EntityId, WeakViewHandle, WindowId};
+use warpui::{EntityId, WindowId};
 
 use super::global_actions::{ForkFromExchange, ForkedConversationDestination};
 use super::tab_settings::{
@@ -30,7 +30,6 @@ use crate::auth::auth_manager::LoginGatedFeature;
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::items::WarpDriveItemId;
 use crate::palette::PaletteMode;
-use crate::pane_group::PaneGroup;
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::search;
 use crate::server::ids::{ServerId, SyncId};
@@ -432,18 +431,8 @@ pub enum WorkspaceAction {
     #[cfg(target_family = "wasm")]
     OpenLinkOnDesktop(url::Url),
     ReopenClosedSession,
-    OpenShareSessionModal(usize),
-    StopSharingSessionFromTabMenu {
-        terminal_view_id: EntityId,
-    },
-    StopSharingAllSessionsInTab {
-        pane_group: WeakViewHandle<PaneGroup>,
-    },
     CopySharedSessionLinkFromTab {
         tab_index: usize,
-    },
-    OpenSharedSessionQrCode {
-        session_id: SessionId,
     },
     AddWindow,
     AddWindowWithShell {
@@ -876,7 +865,6 @@ impl From<&WorkspaceAction> for LoginGatedFeature {
             CreateTeamFolder => "Creating a team folder",
             CreateTeamEnvVarCollection => "Creating a team environment variable collection",
             CreateTeamAIPrompt => "Creating a team prompt",
-            OpenShareSessionModal(_) => "Sharing a session",
             _ => "Unknown reason",
         }
     }
@@ -893,7 +881,6 @@ impl WorkspaceAction {
                 | CreateTeamFolder
                 | CreateTeamEnvVarCollection
                 | CreateTeamAIPrompt
-                | OpenShareSessionModal(_)
         )
     }
 
@@ -1099,11 +1086,7 @@ impl WorkspaceAction {
             | SignupAnonymousUser
             | LogOut
             | OpenLink(_)
-            | OpenShareSessionModal(_)
-            | StopSharingSessionFromTabMenu { .. }
-            | StopSharingAllSessionsInTab { .. }
             | CopySharedSessionLinkFromTab { .. }
-            | OpenSharedSessionQrCode { .. }
             | ReopenClosedSession
             | FocusLeftPanel
             | FocusRightPanel

@@ -207,10 +207,7 @@ impl EventLoop {
                     self.parser
                         .parse_bytes(&mut *model, &decompressed, &mut self.sink);
                 }
-                OrderedTerminalEventType::CommandExecutionStarted {
-                    participant_id,
-                    ai_metadata,
-                } => {
+                OrderedTerminalEventType::CommandExecutionStarted { ai_metadata, .. } => {
                     let should_clear_input = ai_metadata.is_none();
 
                     // If we have AI metadata, map the tool_call_id back to the owning conversation
@@ -260,7 +257,6 @@ impl EventLoop {
                         .terminal_model
                         .lock()
                         .start_command_execution_for_shared_session(
-                            participant_id,
                             reconstructed_ai_metadata.clone(),
                         );
 

@@ -91,7 +91,7 @@ use warpui::elements::{
 };
 pub use warpui::elements::{ParentElement as _, Stack};
 pub use warpui::geometry::vector::{Vector2F, vec2f};
-use warpui::keymap::{BindingDescription, EditableBinding, FixedBinding, Keystroke};
+use warpui::keymap::{EditableBinding, FixedBinding, Keystroke};
 use warpui::platform::OperatingSystem;
 use warpui::presenter::ChildView;
 use warpui::text_layout::TextStyle;
@@ -245,7 +245,6 @@ use crate::pane_group::focus_state::PaneFocusHandle;
 #[cfg(feature = "local_fs")]
 use crate::persistence::{database_file_path_for_current_scope, establish_ro_connection};
 use crate::prefix::longest_common_prefix;
-use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::resource_center::{
     Tip, TipAction, TipHint, TipsCompleted, mark_feature_used_and_write_to_user_defaults,
 };
@@ -1135,8 +1134,6 @@ pub enum Event {
     RegisterPluginListener(CLIAgent),
     #[cfg(not(target_family = "wasm"))]
     OpenPluginInstructionsPane(CLIAgent, PluginModalKind),
-    OpenShareSessionModal,
-    StartRemoteControl,
     OpenHandoffEnvironmentCreationModal,
     OpenCloudModeV2EnvironmentCreationModal,
 }
@@ -2136,23 +2133,6 @@ pub fn init(app: &mut AppContext) {
         .with_key_binding("pagedown"),
     ]);
 
-    app.register_editable_bindings([EditableBinding::new(
-        "workspace:edit_prompt",
-        BindingDescription::new("Edit Prompt")
-            .with_custom_description(bindings::MAC_MENUS_CONTEXT, "Edit Prompt"),
-        WorkspaceAction::OpenPromptEditor {
-            open_source: PromptEditorOpenSource::CommandPalette,
-        },
-    )
-    .with_group(bindings::BindingGroup::Settings.as_str())
-    .with_context_predicate(
-        id!("Input")
-            & id!(SharedSessionStatus::ActiveSharer.as_keymap_context())
-            & !id!("LongRunningCommand")
-            & !id!(flags::ACTIVE_AGENT_VIEW)
-            & !id!(flags::ACTIVE_INLINE_AGENT_VIEW),
-    )]);
-
     if FeatureFlag::ClassicCompletions.is_enabled()
         && !FeatureFlag::ForceClassicCompletions.is_enabled()
     {
@@ -2889,10 +2869,6 @@ impl Input {
                 }
                 AgentInputFooterEvent::SelectFile => {
                     me.select_image(ctx);
-                }
-                AgentInputFooterEvent::StartRemoteControl
-                | AgentInputFooterEvent::StopRemoteControl => {
-                    // Handled by UseAgentToolbar's subscription, not here.
                 }
                 // These events are handled by UseAgentToolbar's subscription.
                 // The UseAgentToolbar shares this same AgentInputFooter instance,
@@ -7388,25 +7364,6 @@ impl Input {
         preserve_input: bool,
         ctx: &mut ViewContext<Self>,
     ) -> bool {
-        // Cancel any active agent conversation when the sharer executes a command on behalf of the viewer
-        // (this is handled automatically when the sharer executes a command that they requested).
-        // This will also notify viewers to cancel their representation of the conversation.
-        let is_participant_viewer = self
-            .shared_session_presence_manager
-            .as_ref()
-            .and_then(|pm| pm.as_ref(ctx).get_participant(&participant_id))
-            .and_then(|participant| participant.role)
-            .is_some();
-        if FeatureFlag::AgentMode.is_enabled()
-            && self.model.lock().shared_session_status().is_sharer()
-            && is_participant_viewer
-        {
-            self.cancel_active_agent_conversation_for_shared_session(
-                CancellationReason::UserCommandExecuted,
-                ctx,
-            );
-        }
-
         let block_id = self.model.lock().block_list().active_block_id().clone();
         self.try_execute_command_from_source(
             command,
@@ -7520,7 +7477,7 @@ impl Input {
         ctx: &mut ViewContext<Self>,
     ) -> bool {
         let shared_session_status = self.model.lock().shared_session_status().clone();
-        if shared_session_status.is_sharer_or_viewer() {
+        if shared_session_status.is_viewer() {
             // If this is a viewer who isn't also an executor, they should not
             // be allowed to execute commands.
             if shared_session_status.is_reader() {
@@ -7834,7 +7791,7 @@ impl Input {
     ) {
         if matches!(
             self.model.lock().shared_session_status(),
-            SharedSessionStatus::ActiveViewer { .. } | SharedSessionStatus::ActiveSharer
+            SharedSessionStatus::ActiveViewer { .. }
         ) {
             self.editor.update(ctx, |editor, ctx| {
                 if let SharedSessionStatus::ActiveViewer { role } =
@@ -7890,11 +7847,9 @@ impl Input {
         });
     }
 
-    /// Cancel any active agent conversation in a shared session
-    /// and fan out a cancellation control action.
+    /// Ask the sharer to cancel the active agent conversation in a viewed shared session.
     pub(crate) fn cancel_active_agent_conversation_for_shared_session(
         &mut self,
-        cancellation_reason: CancellationReason,
         ctx: &mut ViewContext<Self>,
     ) {
         let active_conversation =
@@ -7914,21 +7869,6 @@ impl Input {
             if let Some(server_conversation_token) = server_conversation_token {
                 ctx.emit(Event::CancelSharedSessionConversation {
                     server_conversation_token,
-                });
-            }
-        } else if self.model.lock().shared_session_status().is_sharer() {
-            let active_conversation_id = active_conversation
-                .filter(|conversation| conversation.status().is_in_progress())
-                .map(|conversation| conversation.id());
-
-            if let Some(active_conversation_id) = active_conversation_id {
-                // First, cancel locally via the existing pipeline.
-                self.ai_controller.update(ctx, |controller, ctx| {
-                    controller.cancel_conversation_progress(
-                        active_conversation_id,
-                        cancellation_reason,
-                        ctx,
-                    );
                 });
             }
         }

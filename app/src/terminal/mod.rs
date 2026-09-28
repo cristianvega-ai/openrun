@@ -187,13 +187,6 @@ pub enum SizeUpdateReason {
     /// The resultant [`SizeUpdate`] will use the larger of the
     /// sharer's and viewer's size.
     SharerSizeChanged { num_rows: usize, num_cols: usize },
-
-    /// A viewer reported its terminal size to the sharer.
-    /// This is only applicable for shared session sharers.
-    ///
-    /// The resultant [`SizeUpdate`] will use the viewer's reported
-    /// size directly (floored at 1 row and 1 column).
-    ViewerSizeReported { num_rows: usize, num_cols: usize },
 }
 
 /// Encapsulates info for updating the size of the terminal.

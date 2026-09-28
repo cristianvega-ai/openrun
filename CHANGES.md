@@ -32,6 +32,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Legacy Warp AI assistant and AI command search](#legacy-warp-ai-assistant-and-ai-command-search) — deleted the Warp AI side panel, every "Ask Warp AI" entry point, AI command search (`#`) and its server endpoints
 - [SSH remote server](#ssh-remote-server) — removed the SSH extension daemon (downloaded from Warp's CDN, authenticated with Warp credentials) and every remote file, diff, git, search, indexing and agent-context backend it powered; plain SSH, SSH Warpify and blocks and completions over SSH stay
 - [Natural-language detection and input auto-detection](#natural-language-detection-and-input-auto-detection) — deleted the `input_classifier` and `natural_language_detection` crates, the classifier singleton, input auto-detection and its settings, toolbar toggle and slash command
+- [Session sharing: sharer side and entry points](#session-sharing-sharer-side-and-entry-points) — removed sharing a session and every share entry point (menus, keybindings, palette, `/remote-control`, tab indicator, quit and close warnings); viewing stays until SS-2
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 ## <Area>
@@ -743,3 +744,52 @@ Each section below covers one removal (a single commit or a small group of relat
 - Left for TEL-4: the NLD telemetry variants in `server/telemetry/events.rs` (`AgentModeChangedInputType`, `AgentModePotentialAutoDetectionFalsePositive`, `AgentModeToggleAutoDetectionSetting` and their payload types).
 - Left for AI-26: the `is_locked` flag of `InputConfig` now only records explicit locks. AI code still derives `is_autodetected_user_query` from it (always `false` in practice).
 - `rg 'autodetect'` outside `app/src/ai` still matches unrelated code: URL autodetection (`crates/editor`, `crates/markdown_parser`, the `osc8` integration test), prompt-plugin detection in `crates/warp_terminal`, the web-intent redirect in `wasm_nux_dialog.rs`, and telemetry in `events.rs`.
+
+## Session sharing: sharer side and entry points
+**Why:** Session sharing streamed a live terminal session (PTY output, input edits, agent responses, presence) to other users through Warp's `sessions.app.warp.dev` relay, gated on a Warp account. An offline build has no relay and no accounts, so this client can no longer share its own sessions. This change removes the sharer side and every entry point that starts, stops or manages a share. Viewing someone else's session (the viewer) is left in place for SS-2.
+
+**Removed:**
+- `terminal/shared_session/sharer/` (the sharer `Network` model and its tests), `share_modal/` ("Share session" modal and quota-denied body), `role_change_modal/` (viewer role request, sharer grant and sharer response modals), `permissions_manager.rs` (`SessionPermissionsManager` singleton), `participant_avatar_view.rs` (pane-header participant avatars and role menus) and `settings.rs` (`SharedSessionSettings`: onboarding-block flag, inactivity timers, viewer-driven sizing killswitch).
+- `terminal/view/shared_session/sharer/` (the `Sharer` view state and the sharer inactivity warning modal).
+- The sharer glue in `terminal/local_tty/terminal_view_adaptor.rs`: starting and ending the share, the prompt/model/input-mode/selected-conversation broadcasts, guest and ACL handling, viewer command/PTY/agent-prompt handling on the sharer, network reconnect handling and the stop-on-detach hook. `TerminalManager::session_sharer` and the `terminal_view_adaptor_tests.rs` (sharer prompt authorization) go with it.
+- `IsSharedSessionCreator`, the auto-share-after-bootstrap path (`SharedSessionStatus::SharePendingPreBootstrap`) and the `SharePending`/`ActiveSharer` statuses with `is_sharer`, `is_active_sharer`, `is_share_pending` and `is_sharer_or_viewer`.
+- `SharedSessionScrollbackType`, `max_session_size` and the sharer-only `SharedSessionActionSource` variants.
+- Sharer-side model plumbing in `TerminalModel`: the ordered-terminal-event sender for viewers and the helpers that fed it (agent responses, conversation replay markers, cloud-mode setup-phase end, command start/finish, resize, PTY bytes), and `disable_secret_obfuscation_for_shared_sesson_creator`.
+- `TerminalView` sharer methods: `attempt_to_share_session`, `stop_sharing_session`, `on_session_share_started`, the share modal openers, role grant/response handling, inactivity timers, viewer-reported resizing (`resize_from_viewer_report`, `active_viewer_driven_size`, `SizeUpdateReason::ViewerSizeReported`), `is_sharing_session`, `handle_shared_session_cancel_action` and the sharer `Event`s (`StartSharingCurrentSession`, `StopSharingCurrentSession`, `EstablishedSharedSession`, `FailedToShareSession`, `ExtendSessionRetention`, `SharedSessionViewerInput`, the ACL/guest/role events, `OpenShareSessionModal`, `OpenShareSessionDeniedModal`).
+- Entry points:
+  - The "Share session..."/"Stop sharing"/"Copy session sharing link" block, input and blocklist context-menu items.
+  - The "Share session"/"Stop sharing session" pane-header overflow items and "Share session"/"Stop sharing"/"Stop sharing all" tab menu items.
+  - The `terminal:share_current_session` and `terminal:stop_sharing_current_session` bindings and palette entries.
+  - `CustomAction::ShareCurrentSession` and the "Share Session" item in the Drive menu.
+  - `TerminalAction::{OpenShareSessionModal, StopSharingCurrentSession, MakeAllParticipantsReaders, OpenSharedSessionViewerRoleMenu}` and `WorkspaceAction::{OpenShareSessionModal, StopSharingSessionFromTabMenu, StopSharingAllSessionsInTab, OpenSharedSessionQrCode}`.
+  - The `/remote-control` slash command, the `/remote-control` and "Stop sharing" footer chips of the agent and CLI-agent toolbars, and their `Start/StopRemoteControl` events.
+- Indicators: the tab bar "shared" indicator (`Indicator::Shared`), the pane-header participant avatars and the "Sharing started / Remote control active" banner variants.
+- `PaneGroup` sharer state: the share-session modal, the role-change modal, `number_of_shared_sessions`, `shared_session_view_ids`, `is_terminal_pane_being_shared`, `CloseSharedSessionPaneRequested`, and the transitive child-agent share tracking (`inherit_share_for_local_child`, `host_terminal_shared_session_source_type`, `transitively_shared_child_panes`).
+- `session_management::num_shared_sessions` and the shared-session lines of the quit warning (`UnsavedStateSummary::shared_sessions`) and the log-out warning.
+- The close-shared-session confirmation dialog (`workspace/close_session_confirmation_dialog.rs`, `OpenDialogSource`) and its settings widget (`ConfirmCloseSharedSessionWidget`), plus the settings `ShouldConfirmCloseSession` (`general.should_confirm_close_session`) and `ShouldConfirmSharedSessionEditAccess`.
+- `ContextFlag::CreateSharedSession`.
+- The shared-session `Manager`'s sharer half (`started_share`, `stopped_share`, `share_failed`, `stop_all_shared_sessions`, `shared_view_by_*`, and the `ShareAttempted`/`StartedShare`/`StoppedShare`/`FailedToShare` events).
+- Tests for all of the above.
+
+**Modified:**
+- `terminal/shared_session/manager.rs` now tracks only joined (viewed) sessions. Log-out clears joined sessions, and a user change still rejoins them.
+- `terminal/view/shared_session/adapter.rs` is viewer-only (the `Kind` enum is gone); `viewer.rs` loses the role-request menu, so a viewer asks for edit access only through the "Request edit access" button.
+- The pane header shows the plain sharing icon for a viewed session instead of the sharer's avatar.
+- The sharing dialog (`drive/sharing/dialog`) no longer subscribes to `SessionPermissionsManager`; the viewer terminal manager stops forwarding guest and ACL updates to it.
+- `SharedSessionScrollbackType::first_block_index` became `shared_session::first_scrollback_block_index`, used for the viewer's banner placement.
+- Agent and CLI toolbar layouts: `AgentToolbarItemKind::ShareSession` is no longer offered or rendered. The variant stays only so saved layouts that contain it still deserialize (a `Vec` with an unknown item fails as a whole, which would reset the user's layout and block writes to it), and it is dropped when a custom layout is read.
+- AI-side share entry points, as minimal compile fixes:
+  - The agent SDK driver no longer shares its terminal: `should_share`, `--share` guest requests, `wait_for_session_shared`, share-retention extension on setup failure, `ShareSessionError`/`ShareSessionFailed`, the "Sharing session at:" output, the `SharedSessionEstablishment` setup step and the viewer-input idle refresh are gone.
+  - `BlocklistAIController` no longer forwards response events or synthetic cancellations to viewers.
+  - Child-agent panes (`pane_group/child_agent`, `terminal_pane.rs`) no longer inherit the host's share.
+  - The docker sandbox stops passing `IsSharedSessionCreator`.
+- `workspace/sync_inputs.rs` (synchronized input across panes) was checked and is independent of session sharing. It is unchanged.
+
+**User-visible impact:** Warp can no longer share a session. Every "Share session", "Stop sharing" and `/remote-control` entry is gone from menus, the command palette, keybindings, the tab bar and the agent footers, as are the sharing tab indicator and the "Confirm before closing shared session" setting. Closing a tab or quitting no longer mentions shared sessions. Viewing a session someone else shares still works for now (SS-2 removes it); viewers lose the participant avatars, the role menu and the right-click "Copy session sharing link" item, while "Copy link" remains in the pane-header menu.
+
+**Notes:**
+- Left for SS-2 (viewer, model and protocol): the viewer code in `terminal/shared_session/viewer/` and `terminal/view/shared_session/`, `UriHost::{SharedSession, Session}`, `WebIntent::SessionView`, the remaining shared-session state in `TerminalModel`, `input.rs`, `pane_group`, `block_list_element`, `alt_screen` and `local_tty`, `SharedSessionSource` and `SharedSessionStatus`, `PresenceManager` (including the sharer constructor its tests use), `CommandExecutionSource::SharedSession`, and the `session-sharing-protocol` dependency. `session_sharing_protocol::sharer::SessionSourceType` is still imported by that viewer and model code and by `server/telemetry/events.rs`, so `rg 'sharer::' app/src` still matches those protocol imports.
+- The viewer's URI entry points are still reachable, so they stay for SS-2.
+- Left for the AI tasks, as dead code: `BaseUserQuery::{decode_b64, for_viewer, unattributed}` (viewer prompts accepted by the sharer), `PendingCliHarnessPromptQueue::queue` (its only producer was the sharer), `IdleTimeoutSender::refresh` and `DebugWindowController::refresh_from_last_armed` in the agent SDK driver, `AIClient::setup_failure_debug_authorization` (the sharer's check of a viewer's debug prompt), and `BlocklistAIController`'s `sharer_participant_id`.
+- Left for FLAGS-1: the `CreatingSharedSessions` and `HOARemoteControl` feature flags and the `creating_shared_sessions`/`hoa_remote_control` Cargo features. `server/experiments` and the team tier policy still set `CreatingSharedSessions`, but nothing reads it.
+- Left for TEL-4: the sharing telemetry variants in `server/telemetry/events.rs`.

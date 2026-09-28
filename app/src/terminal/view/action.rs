@@ -7,7 +7,6 @@ use command_corrections::Correction;
 pub use onboarding::OnboardingIntention;
 use pathfinder_geometry::vector::Vector2F;
 use session_sharing_protocol::common::Role;
-use session_sharing_protocol::sharer::RoleUpdateReason;
 use warp_util::user_input::UserInput;
 use warpui::EntityId;
 use warpui::elements::HyperlinkUrl;
@@ -255,25 +254,15 @@ pub enum TerminalAction {
     OpenBlockFilterEditor(BlockIndex),
     OnboardingFlow(OnboardingVersion),
     ImportSettings,
-    StopSharingCurrentSession {
-        source: SharedSessionActionSource,
-    },
     OpenSharedSessionOnDesktop {
         source: SharedSessionActionSource,
     },
     ToggleBlockFilterOnSelectedOrLastBlock(ToggleBlockFilterSource),
-    OpenShareSessionModal {
-        source: SharedSessionActionSource,
-    },
     CopySharedSessionLink {
         source: SharedSessionActionSource,
     },
     VimModeBanner(VimModeBannerAction),
     ToggleSnackbarInActivePane,
-    MakeAllParticipantsReaders {
-        reason: RoleUpdateReason,
-    },
-    OpenSharedSessionViewerRoleMenu,
     RequestSharedSessionRole(Role),
     /// User selected a block inside an AI block's attached block menu so we jump to it and select
     /// it if possible.
@@ -582,23 +571,15 @@ impl fmt::Debug for TerminalAction {
             }
             OnboardingFlow(version) => write!(f, "OnboardingFlow({version:?})"),
             ImportSettings => write!(f, "ImportSettings"),
-            StopSharingCurrentSession { source } => {
-                write!(f, "StopSharingCurrentSession({source:?})")
-            }
             OpenSharedSessionOnDesktop { source } => {
                 write!(f, "OpenSharedSessionOnDesktop({source:?})")
             }
             ToggleBlockFilterOnSelectedOrLastBlock(_) => {
                 f.write_str("ToggleBlockFilterOnSelectedOrLastBlock")
             }
-            OpenShareSessionModal { source } => write!(f, "OpenShareSessionModal({source:?})"),
             CopySharedSessionLink { .. } => f.write_str("CopySharedSessionLink"),
             VimModeBanner(action) => write!(f, "VimModeBanner({action:?})"),
             ToggleSnackbarInActivePane => write!(f, "ToggleSnackbarInActivePane"),
-            MakeAllParticipantsReaders { reason } => {
-                write!(f, "MakeAllParticipantsReaders {{ reason: {reason:?} }}")
-            }
-            OpenSharedSessionViewerRoleMenu => write!(f, "OpenSharedSessionViewerRoleMenu"),
             RequestSharedSessionRole(role) => write!(f, "RequestSharedSessionRole({role:?})"),
             MiddleClickOnGrid { position } => {
                 write!(f, "MiddleClickonGrid {{ position: {position:?} }}")

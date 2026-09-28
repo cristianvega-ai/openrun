@@ -17,8 +17,8 @@ use session_sharing_protocol::common::{
     AgentPromptRequest, AgentPromptRequestId, CommandExecutionFailureReason, ControlAction,
     ControlActionFailureReason, FeatureSupport, InputOperationId, InputOperationSeqNo, InputUpdate,
     LinkAccessLevelUpdateResponse, ParticipantId, ParticipantList, ParticipantPresenceUpdate,
-    RemoveGuestResponse, Role, RoleRequestId, RoleRequestResponse, Selection, SelectionUpdate,
-    ServerConversationToken, SessionId, TeamAccessLevelUpdateResponse, TeamAclData,
+    RemoveGuestResponse, Role, RoleRequestResponse, Selection, SelectionUpdate,
+    ServerConversationToken, SessionId, TeamAccessLevelUpdateResponse,
     UniversalDeveloperInputContext, UniversalDeveloperInputContextUpdate,
     UpdatePendingUserRoleResponse, UserID, WindowSize, WriteToPtyFailureReason,
     WriteToPtyRequestId, WriteToPtySeqNo,
@@ -683,9 +683,6 @@ impl Network {
             DownstreamMessage::ParticipantPresenceUpdated(update) => {
                 ctx.emit(NetworkEvent::ParticipantPresenceUpdated(update));
             }
-            DownstreamMessage::RoleRequestInFlight(role_request_id) => {
-                ctx.emit(NetworkEvent::RoleRequestInFlight(role_request_id));
-            }
             DownstreamMessage::RoleRequestResponse(role_request_response) => {
                 ctx.emit(NetworkEvent::RoleRequestResponse(role_request_response));
             }
@@ -741,14 +738,6 @@ impl Network {
             DownstreamMessage::ControlActionRequestFailed { reason } => {
                 ctx.emit(NetworkEvent::ControlActionRequestFailed { reason });
             }
-            DownstreamMessage::LinkAccessLevelUpdated { role } => {
-                ctx.emit(NetworkEvent::LinkAccessLevelUpdated { role });
-            }
-            // We don't use the `team_uid` field yet because currently, sessions
-            // can only have a single team ACL.
-            DownstreamMessage::TeamAccessLevelUpdated { team_acl, .. } => {
-                ctx.emit(NetworkEvent::TeamAccessLevelUpdated { team_acl });
-            }
             DownstreamMessage::LinkAccessLevelUpdateResponse(response) => {
                 ctx.emit(NetworkEvent::LinkAccessLevelUpdateResponse { response });
             }
@@ -764,7 +753,10 @@ impl Network {
             DownstreamMessage::TeamAccessLevelUpdateResponse(response) => {
                 ctx.emit(NetworkEvent::TeamAccessLevelUpdateResponse { response });
             }
-            DownstreamMessage::Pong { .. } => {}
+            DownstreamMessage::RoleRequestInFlight(_)
+            | DownstreamMessage::LinkAccessLevelUpdated { .. }
+            | DownstreamMessage::TeamAccessLevelUpdated { .. }
+            | DownstreamMessage::Pong { .. } => {}
         }
     }
 
@@ -1035,11 +1027,6 @@ impl Network {
         self.send_message_to_server(message);
     }
 
-    pub fn send_cancel_role_request(&mut self, role_request_id: RoleRequestId) {
-        let message = UpstreamMessage::CancelRoleRequest(role_request_id);
-        self.send_message_to_server(message);
-    }
-
     pub fn send_universal_developer_input_context_update(
         &mut self,
         update: UniversalDeveloperInputContextUpdate,
@@ -1214,7 +1201,6 @@ pub enum NetworkEvent {
         block_id: BlockId,
         operations: Vec<CrdtOperation>,
     },
-    RoleRequestInFlight(RoleRequestId),
     RoleRequestResponse(RoleRequestResponse),
     CommandExecutionRequestFailed {
         reason: CommandExecutionFailureReason,
@@ -1231,12 +1217,6 @@ pub enum NetworkEvent {
     },
     ViewerRemoved {
         reason: ViewerRemovedReason,
-    },
-    LinkAccessLevelUpdated {
-        role: Option<Role>,
-    },
-    TeamAccessLevelUpdated {
-        team_acl: Option<TeamAclData>,
     },
     LinkAccessLevelUpdateResponse {
         response: LinkAccessLevelUpdateResponse,

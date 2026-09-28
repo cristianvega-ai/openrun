@@ -1,10 +1,9 @@
-use byte_unit::Byte;
 use instant::Duration;
 use serde::{Deserialize, Serialize};
-use session_sharing_protocol::common::{Role, Scrollback, ScrollbackBlock, SessionId};
+use session_sharing_protocol::common::{Role, Scrollback, SessionId};
 use session_sharing_protocol::sharer::SessionSourceType;
+use warpui::id;
 use warpui::keymap::ContextPredicate;
-use warpui::{AppContext, WindowId, id};
 
 use super::model::block::SerializedBlock;
 use super::model::terminal_model::BlockIndex;
@@ -16,21 +15,12 @@ use crate::features::FeatureFlag;
 pub mod ai_agent;
 pub mod manager;
 pub mod network;
-pub mod participant_avatar_view;
-pub mod permissions_manager;
 pub mod presence_manager;
 pub mod render_util;
 pub mod replay_agent_conversations;
-pub mod role_change_modal;
 mod selections;
-pub mod settings;
-pub mod share_modal;
 pub(super) mod shared_handlers;
-pub mod sharer;
 pub mod viewer;
-
-#[cfg(test)]
-pub use tests::MAX_BYTES_SHAREABLE;
 
 /// The toast copy when copying a shared session link.
 pub const COPY_LINK_TEXT: &str = "Sharing link copied";
@@ -81,25 +71,10 @@ impl Default for SharedSessionSource {
     }
 }
 
-/// Whether or not a local session is also being shared.
-/// Since a shared session creator is also the creator of a local session,
-/// we make use of the local_tty::TerminalManager for shared session creators.
-/// Otherwise, there would be a lot of overlap between a shared session creator
-/// and a regular, purely local session.
-#[derive(Debug, Clone, Default)]
-pub enum IsSharedSessionCreator {
-    /// This session should be shared automatically once bootstrapped.
-    Yes { source: SharedSessionSource },
-    #[default]
-    No,
-}
-
 /// The type of shared session a particular session is, if applicable.
 #[derive(Debug, Clone)]
 pub enum SharedSessionStatus {
     /// This session is not a shared session.
-    /// When a sharer ends a session, the status
-    /// changes back to [`SharedSessionStatus::NotShared`].
     NotShared,
 
     /// We're in the process of joining the session but have not
@@ -112,19 +87,6 @@ pub enum SharedSessionStatus {
 
     /// We were viewing a shared session but it ended.
     FinishedViewer,
-
-    /// We haven't yet attempted to share the session because it is not bootstrapped yet.
-    /// The `source` encodes what kind of shared session will be created once
-    /// the session finishes bootstrapping.
-    SharePendingPreBootstrap { source: SharedSessionSource },
-
-    /// The session is bootstrapped and we're in the process of
-    /// sharing the session but have not yet established the
-    /// connection with the server.
-    SharePending,
-
-    /// This session is actively being shared.
-    ActiveSharer,
 }
 
 impl SharedSessionStatus {
@@ -165,26 +127,6 @@ impl SharedSessionStatus {
         )
     }
 
-    pub fn is_share_pending(&self) -> bool {
-        matches!(
-            self,
-            SharedSessionStatus::SharePending
-                | SharedSessionStatus::SharePendingPreBootstrap { .. }
-        )
-    }
-
-    pub fn is_active_sharer(&self) -> bool {
-        matches!(self, SharedSessionStatus::ActiveSharer)
-    }
-
-    pub fn is_sharer(&self) -> bool {
-        self.is_share_pending() || self.is_active_sharer()
-    }
-
-    pub fn is_sharer_or_viewer(&self) -> bool {
-        !matches!(self, Self::NotShared)
-    }
-
     pub fn as_keymap_context(&self) -> &'static str {
         match self {
             Self::NotShared => "SharedSessionStatus_NotShared",
@@ -194,9 +136,6 @@ impl SharedSessionStatus {
                 role: Role::Executor | Role::Full,
             } => "SharedSessionStatus_Executor",
             Self::FinishedViewer => "SharedSessionStatus_FinishedViewer",
-            Self::SharePendingPreBootstrap { .. } => "SharedSessionStatus_SharePendingPreBootstrap",
-            Self::SharePending => "SharedSessionStatus_SharePending",
-            Self::ActiveSharer => "SharedSessionStatus_ActiveSharer",
         }
     }
 
@@ -205,124 +144,26 @@ impl SharedSessionStatus {
     }
 }
 
-/// The scrollback options when starting a shared session.
-/// Note: currently, these options only encode the point at which
-/// scrollback _starts_. We do not yet support more
-/// selective scrollback (e.g. a closed range).
-/// The active block is included for the prompt when it is scrollback-eligible.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SharedSessionScrollbackType {
-    /// Do not include any scrollback in this shared session.
-    /// The active block can still be sent as part of scrollback for the prompt.
-    /// TODO(suraj): consider renaming this to "from active block" or encapsulating
-    /// this with the `FromBlock` variant with the block_index equal to the
-    /// active block index.
-    None,
-
-    /// Include scrollback starting at `block_index`.
-    FromBlock { block_index: BlockIndex },
-
-    /// The entire blocklist should be part of the scrollback.
-    All,
-}
-
-impl SharedSessionScrollbackType {
-    /// Returns the set of scrollback that adheres to the scrollback type.
-    /// Note that some blocks might not actually be included in the scrollback
-    /// even if they were specified as part of the scrollback type.
-    /// For example, if the [`Self::All]` variant is used, restored blocks
-    /// _won't_ be included in scrollback, and neither will hidden active blocks.
-    fn to_scrollback(self, model: &TerminalModel) -> Scrollback {
-        let first_block_index = self.first_block_index(model);
-        let blocks = model
-            .block_list()
-            .blocks()
-            .iter()
-            .skip(first_block_index.into())
-            .filter(|block| {
-                block.is_scrollback_block_for_shared_session(model.block_list().transcript_scope())
-            })
-            .filter_map(|block| {
-                let serialized_block: SerializedBlock = block.into();
-                let bytes = serde_json::to_vec(&serialized_block);
-                bytes.ok().map(|raw| ScrollbackBlock { raw })
-            })
-            .collect();
-
-        let is_alt_screen_active = model.is_alt_screen_active();
-
-        Scrollback {
-            blocks,
-            is_alt_screen_active,
-        }
-    }
-
-    /// Returns the first block index that will be used for scrollback.
-    pub fn first_block_index(self, model: &TerminalModel) -> BlockIndex {
-        match self {
-            Self::None => model.block_list().active_block_index(),
-            Self::FromBlock { block_index } => model
-                .block_list()
-                .blocks()
-                .iter()
-                .skip(block_index.into())
-                .find(|block| {
-                    block.is_scrollback_block_for_shared_session(
-                        model.block_list().transcript_scope(),
-                    )
-                })
-                .map_or(model.block_list().active_block_index(), |block| {
-                    block.index()
-                }),
-            Self::All => Self::FromBlock {
-                block_index: BlockIndex::zero(),
-            }
-            .first_block_index(model),
-        }
-    }
-}
-
-#[cfg(not(test))]
-pub fn max_session_size(window_id: WindowId, app: &AppContext) -> Byte {
-    use warpui::SingletonEntity;
-
-    use crate::workspaces::user_workspaces::UserWorkspaces;
-    UserWorkspaces::as_ref(app)
-        .team_for_window(window_id)
-        .and_then(|team| team.billing_metadata.tier.session_sharing_policy)
-        .map(|policy| Byte::from_u64(policy.max_session_size))
-        .unwrap_or(Byte::from_u64_with_unit(100, byte_unit::Unit::MB).unwrap())
-}
-
-#[cfg(test)]
-pub fn max_session_size(_window_id: WindowId, _app: &AppContext) -> Byte {
-    Byte::from_u64(MAX_BYTES_SHAREABLE as u64)
+/// Returns the index of the first block that belongs to a shared session's scrollback.
+pub fn first_scrollback_block_index(model: &TerminalModel) -> BlockIndex {
+    model
+        .block_list()
+        .blocks()
+        .iter()
+        .find(|block| {
+            block.is_scrollback_block_for_shared_session(model.block_list().transcript_scope())
+        })
+        .map_or(model.block_list().active_block_index(), |block| {
+            block.index()
+        })
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub enum SharedSessionActionSource {
-    /// From right-click menu in blocklist
-    /// * `block_index`: provided with selected block, none when no blocks selected
-    BlocklistContextMenu {
-        block_index: Option<BlockIndex>,
-    },
     Tab,
     PaneHeader,
-    /// Includes keybindings.
-    CommandPalette,
-    OnboardingBlock,
-    Closed {
-        is_confirm_close_session: bool,
-    },
-    InactivityModal,
-    /// The user did not initiate this action themselves.
-    NonUser,
     /// The object-specific sharing dialog.
     SharingDialog,
-    /// From the session sharing context menu items.
-    RightClickMenu,
-    /// From the agent/CLI footer chip.
-    FooterChip,
 }
 
 /// Returns the native intent URL to join a shared session.

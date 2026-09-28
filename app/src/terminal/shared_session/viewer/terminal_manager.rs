@@ -52,7 +52,6 @@ use crate::terminal::model_events::ModelEventDispatcher;
 use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::shared_session::SharedSessionStatus;
 use crate::terminal::shared_session::manager::Manager;
-use crate::terminal::shared_session::permissions_manager::SessionPermissionsManager;
 use crate::terminal::shared_session::shared_handlers::{
     ActiveRemoteUpdate, RemoteUpdateGuard, apply_auto_approve_agent_actions_update,
     apply_cli_agent_state_update, apply_input_mode_update, apply_selected_agent_model_update,
@@ -1158,20 +1157,6 @@ impl TerminalManager {
                         presence_manager.update_participants(*participant_list.clone(), ctx)
                     });
                 };
-
-                if let Some(session_id) = view.as_ref(ctx).shared_session_id().cloned() {
-                    SessionPermissionsManager::handle(ctx).update(
-                        ctx,
-                        |permissions_manager, ctx| {
-                            permissions_manager.updated_guests(
-                                ctx,
-                                session_id,
-                                participant_list.guests.clone(),
-                                participant_list.pending_guests.clone(),
-                            );
-                        },
-                    );
-                }
             }
             NetworkEvent::ParticipantPresenceUpdated(update) => {
                 let Some(view) = weak_view_handle.upgrade(ctx) else {
@@ -1231,18 +1216,6 @@ impl TerminalManager {
                     }
                     view.apply_viewer_shared_session_input_update(block_id, operations.clone(), ctx);
                 })
-            }
-            NetworkEvent::RoleRequestInFlight(role_request_id) => {
-                let Some(view) = weak_view_handle.upgrade(ctx) else {
-                    return;
-                };
-
-                view.update(ctx, |view, ctx| {
-                    view.on_shared_session_viewer_role_request_in_flight(
-                        role_request_id.clone(),
-                        ctx,
-                    );
-                });
             }
             NetworkEvent::RoleRequestResponse(role_request_response) => {
                 let Some(view) = weak_view_handle.upgrade(ctx) else {
@@ -1313,62 +1286,12 @@ impl TerminalManager {
                     terminal_view.show_persistent_toast(reason_string, ToastFlavor::Error, ctx);
                 });
             }
-            NetworkEvent::LinkAccessLevelUpdated { role } => {
-                let Some(view) = weak_view_handle.upgrade(ctx) else {
-                    return;
-                };
-                view.update(ctx, |terminal_view, ctx| {
-                    let Some(session_id) = terminal_view.shared_session_id() else {
-                        return;
-                    };
-                    SessionPermissionsManager::handle(ctx).update(
-                        ctx,
-                        |permissions_manager, ctx| {
-                            permissions_manager.updated_link_permissions(*session_id, *role, ctx);
-                        },
-                    );
-                });
-            }
-            NetworkEvent::TeamAccessLevelUpdated { team_acl } => {
-                let Some(view) = weak_view_handle.upgrade(ctx) else {
-                    return;
-                };
-                view.update(ctx, |terminal_view, ctx| {
-                    let Some(session_id) = terminal_view.shared_session_id() else {
-                        return;
-                    };
-                    SessionPermissionsManager::handle(ctx).update(
-                        ctx,
-                        |permissions_manager, ctx| {
-                            permissions_manager.updated_team_permissions(
-                                *session_id,
-                                team_acl.clone(),
-                                ctx,
-                            );
-                        },
-                    );
-                });
-            }
             NetworkEvent::LinkAccessLevelUpdateResponse { response } => {
                 let Some(view) = weak_view_handle.upgrade(ctx) else {
                     return;
                 };
                 view.update(ctx, |terminal_view, ctx| match response {
-                    LinkAccessLevelUpdateResponse::Ok { role } => {
-                        let Some(session_id) = terminal_view.shared_session_id() else {
-                            return;
-                        };
-                        SessionPermissionsManager::handle(ctx).update(
-                            ctx,
-                            |permissions_manager, ctx| {
-                                permissions_manager.updated_link_permissions(
-                                    *session_id,
-                                    *role,
-                                    ctx,
-                                );
-                            },
-                        );
-                    }
+                    LinkAccessLevelUpdateResponse::Ok { .. } => {}
                     LinkAccessLevelUpdateResponse::Error => {
                         terminal_view.show_persistent_toast(
                             "Failed to update permissions for shared session".to_owned(),
@@ -1383,21 +1306,7 @@ impl TerminalManager {
                     return;
                 };
                 view.update(ctx, |terminal_view, ctx| match response {
-                    TeamAccessLevelUpdateResponse::Success { team_acl, .. } => {
-                        let Some(session_id) = terminal_view.shared_session_id() else {
-                            return;
-                        };
-                        SessionPermissionsManager::handle(ctx).update(
-                            ctx,
-                            |permissions_manager, ctx| {
-                                permissions_manager.updated_team_permissions(
-                                    *session_id,
-                                    team_acl.clone(),
-                                    ctx,
-                                );
-                            },
-                        );
-                    }
+                    TeamAccessLevelUpdateResponse::Success { .. } => {}
                     TeamAccessLevelUpdateResponse::Error(_) => {
                         terminal_view.show_persistent_toast(
                             "Something went wrong. Please try again.".to_owned(),
@@ -1580,11 +1489,6 @@ impl TerminalManager {
             TerminalViewEvent::RequestSharedSessionRole(role) => {
                 Self::update_current_network(&current_network, ctx, |network, _| {
                     network.send_role_request(*role);
-                });
-            }
-            TerminalViewEvent::CancelRoleRequest(role_request_id) => {
-                Self::update_current_network(&current_network, ctx, |network, _| {
-                    network.send_cancel_role_request(role_request_id.clone());
                 });
             }
             TerminalViewEvent::InputEditorUpdated {

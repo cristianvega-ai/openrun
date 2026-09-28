@@ -241,11 +241,8 @@ pub(crate) fn resolve_ai_query_routing(
         };
     }
 
-    // Ordinary local pane, or a sharer running locally (e.g. a local orchestration child).
+    // Ordinary local pane.
     if !is_ambient && !is_transcript_viewer {
-        return AIQueryRouting::Local;
-    }
-    if status.is_active_sharer() {
         return AIQueryRouting::Local;
     }
 

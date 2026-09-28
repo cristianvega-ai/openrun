@@ -15,7 +15,6 @@ use crate::channel::ChannelState;
 /// this is used in is found in the ContextFlag impl.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug, Sequence)]
 pub enum ContextFlag {
-    CreateSharedSession,
     CreateNewSession,
     CloseWindow,
     ForceSidePanelOpen,
@@ -60,7 +59,6 @@ impl ContextFlag {
         disable_flag(Self::ForceSidePanelOpen);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::RunWorkflow);
-        disable_flag(Self::CreateSharedSession);
         disable_flag(Self::CreateNewSession);
         disable_flag(Self::CloseWindow);
         disable_flag(Self::WarpEssentials);
@@ -72,7 +70,6 @@ impl ContextFlag {
         disable_flag(Self::ForceSidePanelOpen);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::RunWorkflow);
-        disable_flag(Self::CreateSharedSession);
         disable_flag(Self::CreateNewSession);
         disable_flag(Self::CloseWindow);
         disable_flag(Self::WarpEssentials);
@@ -87,7 +84,6 @@ impl ContextFlag {
         disable_flag(Self::ForceSidePanelOpen);
         disable_flag(Self::HideOpenOnDesktopButton);
         disable_flag(Self::RunWorkflow);
-        disable_flag(Self::CreateSharedSession);
         disable_flag(Self::CreateNewSession);
         disable_flag(Self::CloseWindow);
         disable_flag(Self::WarpEssentials);
@@ -97,7 +93,6 @@ impl ContextFlag {
 
     // ContextFlag flag sets:
     pub fn set_shared_session_only() {
-        disable_flag(Self::CreateSharedSession);
         disable_flag(Self::CreateNewSession);
         disable_flag(Self::CloseWindow);
         disable_flag(Self::ForceSidePanelOpen);
@@ -109,7 +104,6 @@ impl ContextFlag {
     }
 
     pub fn set_conversation_only() {
-        disable_flag(Self::CreateSharedSession);
         disable_flag(Self::CreateNewSession);
         disable_flag(Self::CloseWindow);
         disable_flag(Self::ForceSidePanelOpen);
@@ -127,7 +121,6 @@ impl FromStr for ContextFlag {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "CreateSharedSession" => Ok(Self::CreateSharedSession),
             "CreateNewSession" => Ok(Self::CreateNewSession),
             "CloseWindow" => Ok(Self::CloseWindow),
             "ForceSidePanelOpen" => Ok(Self::ForceSidePanelOpen),

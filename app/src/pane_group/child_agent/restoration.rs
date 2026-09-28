@@ -20,7 +20,6 @@ use crate::pane_group::{PaneGroup, PaneId, PendingParentChildSeed};
 use crate::server::retry_strategies::is_transient_http_error;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::ai::TaskListFilter;
-use crate::terminal::shared_session::IsSharedSessionCreator;
 use crate::terminal::view::load_ai_conversation::{
     RestoreConversationEntryBehavior, RestoredAIConversation,
 };
@@ -516,15 +515,8 @@ impl PaneGroup {
                         .or_else(|| child_conversation.initial_working_directory())
                         .map(PathBuf::from),
                 });
-        // Restored hidden child panes don't inherit the host's shared
-        // session — the host's share decision is handled at original
-        // dispatch time, not on subsequent restores.
-        let new_pane_id = self.insert_terminal_pane_hidden_for_child_agent(
-            parent_pane_id,
-            HashMap::new(),
-            IsSharedSessionCreator::No,
-            ctx,
-        );
+        let new_pane_id =
+            self.insert_terminal_pane_hidden_for_child_agent(parent_pane_id, HashMap::new(), ctx);
 
         match self.terminal_view_from_pane_id(new_pane_id, ctx) {
             Some(new_terminal_view) => {
