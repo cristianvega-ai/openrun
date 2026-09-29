@@ -61,10 +61,10 @@ use warpui::elements::{
     Align, Border, CacheOption, ChildAnchor, ChildView, Clipped, ConstrainedBox, Container,
     CornerRadius, CrossAxisAlignment, Dismiss, DispatchEventResult, DragAxis, Draggable,
     DraggableState, DropTarget, Element, Empty, EventHandler, Expanded, Fill as ElementFill, Flex,
-    Highlight, Hoverable, Icon as WarpUiIcon, Image, MainAxisAlignment, MainAxisSize,
-    MouseInBehavior, MouseStateHandle, OffsetPositioning, ParentAnchor, ParentElement,
-    ParentOffsetBounds, PositionedElementAnchor, PositionedElementOffsetBounds, Radius, Rect,
-    SavePosition, Shrinkable, SizeConstraintCondition, SizeConstraintSwitch, Stack, Text,
+    Highlight, Hoverable, Image, MainAxisAlignment, MainAxisSize, MouseInBehavior,
+    MouseStateHandle, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds,
+    PositionedElementAnchor, PositionedElementOffsetBounds, Radius, Rect, SavePosition, Shrinkable,
+    SizeConstraintCondition, SizeConstraintSwitch, Stack, Text,
 };
 use warpui::event::KeyState;
 use warpui::fonts::{Properties, Weight};
@@ -163,7 +163,7 @@ use crate::prompt::editor_modal::{
 };
 use crate::quit_warning::UnsavedStateSummary;
 use crate::resource_center::{
-    ResourceCenterEvent, ResourceCenterPage, ResourceCenterView, Tip, TipAction, TipsCompleted,
+    ResourceCenterEvent, ResourceCenterView, Tip, TipAction, TipsCompleted,
     mark_feature_used_and_write_to_user_defaults, skip_tips_and_write_to_user_defaults,
 };
 use crate::root_view::{NewWorkspaceSource, OpenLaunchConfigArg};
@@ -245,9 +245,7 @@ use crate::terminal::view::cli_agent_footer::editor::{
     CLIAgentToolbarEditorEvent, CLIAgentToolbarEditorModal,
 };
 use crate::terminal::view::ssh_file_upload::FileUploadId;
-use crate::terminal::view::{
-    LeftPanelTargetView, NOTIFICATIONS_TROUBLESHOOT_URL, SyncEvent, SyncInputType,
-};
+use crate::terminal::view::{LeftPanelTargetView, SyncEvent, SyncInputType};
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::terminal::{self, BlockListSettings, SizeInfo, TerminalModel, TerminalView};
 use crate::themes::theme::{AnsiColorIdentifier, RespectSystemTheme, ThemeKind};
@@ -273,7 +271,6 @@ use crate::util::file::external_editor::Editor;
 #[cfg(feature = "local_fs")]
 use crate::util::file::external_editor::EditorSettings;
 #[cfg(feature = "local_fs")]
-use crate::util::links;
 use crate::util::openable_file_type::FileTarget;
 #[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::{EditorLayout, resolve_file_target_with_editor_choice};
@@ -384,9 +381,6 @@ pub(crate) const VERTICAL_TABS_PANEL_POSITION_ID: &str = "workspace_view:vertica
 const TAB_CONTENT_POSITION_ID: &str = "workspace_view:tab_content";
 
 const WELCOME_TIPS_POSITION_ID: &str = "welcome_tips_pill";
-const ELLIPSE_SVG_PATH: &str = "bundled/svg/ellipse.svg";
-
-const TOGGLE_RESOURCE_CENTER_KEYBINDING_NAME: &str = "workspace:toggle_resource_center";
 
 /// Shared position ID for the new-session sidecar overlay. Used for both the
 /// `SavePosition` wrapper and the safe-zone rect lookup.
@@ -437,8 +431,7 @@ pub(crate) const LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME: &str =
     "workspace:left_panel_project_explorer";
 pub(crate) const LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME: &str = "workspace:left_panel_global_search";
 
-const KEYBINDINGS_TO_CACHE: [&str; 3] = [
-    TOGGLE_RESOURCE_CENTER_KEYBINDING_NAME,
+const KEYBINDINGS_TO_CACHE: [&str; 2] = [
     SHOW_SETTINGS_KEYBINDING_NAME,
     TOGGLE_COMMAND_PALETTE_KEYBINDING_NAME,
 ];
@@ -1196,12 +1189,8 @@ impl Workspace {
         (welcome_tips_view, welcome_tips_view_state)
     }
 
-    fn build_resource_center_view(
-        ctx: &mut ViewContext<Self>,
-        tips_completed: ModelHandle<TipsCompleted>,
-    ) -> ViewHandle<ResourceCenterView> {
-        let resource_center_view =
-            ctx.add_typed_action_view(|ctx| ResourceCenterView::new(ctx, tips_completed.clone()));
+    fn build_resource_center_view(ctx: &mut ViewContext<Self>) -> ViewHandle<ResourceCenterView> {
+        let resource_center_view = ctx.add_view(ResourceCenterView::new);
 
         ctx.subscribe_to_view(&resource_center_view, |me, _, event, ctx| {
             me.handle_resource_center_event(event, ctx);
@@ -1895,7 +1884,7 @@ impl Workspace {
         let (settings_pane, theme_chooser_view) =
             Self::build_settings_views(tips_completed.clone(), ctx);
 
-        let resource_center_view = Self::build_resource_center_view(ctx, tips_completed.clone());
+        let resource_center_view = Self::build_resource_center_view(ctx);
 
         let theme_creator_modal = Self::build_theme_creator_modal(ctx);
 
@@ -3068,10 +3057,6 @@ impl Workspace {
 
     pub fn active_tab_index(&self) -> usize {
         self.active_tab_index
-    }
-
-    pub fn is_resource_center_showing(&self) -> bool {
-        self.current_workspace_state.is_resource_center_open
     }
 
     #[cfg(feature = "integration_tests")]
@@ -4344,22 +4329,6 @@ impl Workspace {
         let _ = (event, ctx);
     }
 
-    fn join_slack(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.open_url(links::SLACK_URL);
-    }
-
-    fn view_user_docs(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.open_url(links::USER_DOCS_URL);
-    }
-
-    fn view_privacy_policy(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.open_url(links::PRIVACY_POLICY_URL);
-    }
-
-    fn send_feedback(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.open_url(&links::feedback_form_url());
-    }
-
     #[cfg(not(target_family = "wasm"))]
     fn view_logs(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.spawn(
@@ -4695,9 +4664,6 @@ impl Workspace {
                     open_in_active_window: false,
                 },
             ),
-            NewSessionMenuItem::OpenLaunchConfigDocs => {
-                ctx.open_url("https://docs.warp.dev/terminal/sessions/launch-configurations")
-            }
             #[cfg(feature = "local_fs")]
             NewSessionMenuItem::CreateNewTabConfig => {
                 self.create_and_open_new_tab_config(ctx);
@@ -6158,34 +6124,6 @@ impl Workspace {
         })
     }
 
-    fn open_resource_center_main_page(&mut self, ctx: &mut ViewContext<Self>) {
-        // Set current page to Main
-        self.resource_center_view
-            .update(ctx, |resource_center_view, ctx| {
-                resource_center_view.set_current_page(ResourceCenterPage::Main, ctx)
-            });
-
-        // Open side panel
-        self.current_workspace_state.is_resource_center_open = true;
-    }
-
-    pub fn toggle_resource_center(&mut self, ctx: &mut ViewContext<Self>) {
-        if !self.current_workspace_state.is_resource_center_open {
-            self.focus_active_tab(ctx);
-        }
-
-        if !self.current_workspace_state.is_resource_center_open {
-            self.open_resource_center_main_page(ctx);
-            send_telemetry_from_ctx!(TelemetryEvent::ResourceCenterOpened, ctx);
-        } else {
-            // Close side panel
-            self.current_workspace_state.is_resource_center_open = false;
-        }
-
-        self.update_resource_center_action_target(ctx);
-        ctx.notify();
-    }
-
     fn open_left_panel(&mut self, ctx: &mut ViewContext<Self>) {
         self.left_panel_open = true;
 
@@ -6561,13 +6499,6 @@ impl Workspace {
             MenuItemFields::new("Keyboard shortcuts")
                 .with_on_select_action(WorkspaceAction::ToggleKeybindingsPage)
                 .into_item(),
-            MenuItem::Separator,
-            MenuItemFields::new("Documentation")
-                .with_on_select_action(WorkspaceAction::ViewUserDocs)
-                .into_item(),
-            MenuItemFields::new("Feedback")
-                .with_on_select_action(WorkspaceAction::SendFeedback)
-                .into_item(),
         ]);
 
         #[cfg(not(target_family = "wasm"))]
@@ -6577,9 +6508,6 @@ impl Workspace {
                 .into_item(),
         );
 
-        items.extend([MenuItemFields::new("Join our Slack community")
-            .with_on_select_action(WorkspaceAction::JoinSlack)
-            .into_item()]);
         items
     }
 
@@ -6620,48 +6548,20 @@ impl Workspace {
     }
 
     pub fn toggle_keybindings_page(&mut self, ctx: &mut ViewContext<Self>) {
-        let current_page = self
-            .resource_center_view
-            .read(ctx, |resource_center_view, _ctx| {
-                resource_center_view.get_current_page()
-            });
-
         if !self.current_workspace_state.is_resource_center_open {
-            // Set current page to Keybindings
             self.resource_center_view
                 .update(ctx, |resource_center_view, ctx| {
-                    resource_center_view.set_current_page(ResourceCenterPage::Keybindings, ctx)
+                    resource_center_view.focus_keybindings(ctx)
                 });
 
-            // Open side panel
             self.current_workspace_state.is_resource_center_open = true;
             send_telemetry_from_ctx!(TelemetryEvent::KeybindingsPageOpened, ctx);
-        } else if current_page != ResourceCenterPage::Keybindings
-            && self.current_workspace_state.is_resource_center_open
-        {
-            // Navigate to keybindings page
-            self.resource_center_view
-                .update(ctx, |resource_center_view, ctx| {
-                    resource_center_view.set_current_page(ResourceCenterPage::Keybindings, ctx)
-                });
-            send_telemetry_from_ctx!(TelemetryEvent::KeybindingsPageOpened, ctx);
         } else {
-            // Close side panel
             self.current_workspace_state.is_resource_center_open = false;
             self.focus_active_tab(ctx);
         }
 
         ctx.notify();
-    }
-
-    fn update_resource_center_action_target(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.current_workspace_state.is_resource_center_open {
-            let input_id = self.active_input_id(ctx);
-            self.resource_center_view
-                .update(ctx, |resource_center_view, ctx| {
-                    resource_center_view.set_action_target(ctx.window_id(), input_id, ctx)
-                });
-        }
     }
 
     fn handle_tab_right_click_menu_event(
@@ -9301,15 +9201,10 @@ impl Workspace {
                     RequestPermissionsOutcome::Accepted => (),
                     RequestPermissionsOutcome::PermissionsDenied => {
                         // Show a helpful toast if the user denied permissions.
-                        let url = NOTIFICATIONS_TROUBLESHOOT_URL.to_string();
                         view.toast_stack.update(ctx, |toast_stack, ctx| {
                             let toast = DismissibleToast::error(
                                 "Warp doesn't have permission to send desktop notifications."
                                     .to_string(),
-                            )
-                            .with_link(
-                                ToastLink::new("Troubleshoot notifications".to_string())
-                                    .with_href(url),
                             );
                             toast_stack.add_persistent_toast(toast, ctx);
                         });
@@ -9862,7 +9757,6 @@ impl Workspace {
             pane_group::Event::AppStateChanged => {
                 ctx.dispatch_global_action("workspace:save_app", ());
                 self.refresh_working_directories_for_pane_group(&pane_group, ctx);
-                self.update_resource_center_action_target(ctx);
                 self.update_active_session(ctx);
 
                 if FeatureFlag::DirectoryTabColors.is_enabled()
@@ -10606,10 +10500,6 @@ impl Workspace {
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            ResourceCenterEvent::Close => {
-                self.current_workspace_state.is_resource_center_open = false;
-                ctx.notify();
-            }
             ResourceCenterEvent::Escape => {
                 // Calls terminal view focus to determine where focus should be
                 if let Some(pane_group_handle) = self.get_pane_group_view(self.active_tab_index) {
@@ -13008,15 +12898,6 @@ impl Workspace {
                     .finish(),
             );
         } else {
-            let resource_center_closed = !self.current_workspace_state.is_resource_center_open;
-            if resource_center_closed && ContextFlag::WarpEssentials.is_enabled() {
-                target.add_child(
-                    Container::new(self.render_resource_center_button(appearance, ctx))
-                        .with_margin_left(TAB_BAR_PADDING_LEFT)
-                        .finish(),
-                );
-            }
-
             target.add_child(
                 Container::new(self.render_settings_button(appearance))
                     .with_margin_left(TAB_BAR_PADDING_LEFT)
@@ -13313,54 +13194,6 @@ impl Workspace {
         .finish();
 
         SavePosition::new(Align::new(button).finish(), USER_MENU_BUTTON_POSITION_ID).finish()
-    }
-
-    fn render_resource_center_button(
-        &self,
-        appearance: &Appearance,
-        ctx: &AppContext,
-    ) -> Box<dyn Element> {
-        // only show the unread indicator if the tips are NOT completed
-        let should_show_unread_indicator = !self.tips_completed.as_ref(ctx).skipped_or_completed;
-        let mut button = self
-            .render_tab_bar_icon_button(
-                appearance,
-                icons::Icon::Lightbulb,
-                &self.mouse_states.resource_center_icon,
-                WorkspaceAction::ToggleResourceCenter,
-                "Warp Essentials".to_string(),
-                self.cached_keybindings[TOGGLE_RESOURCE_CENTER_KEYBINDING_NAME].clone(),
-                false,
-                false,
-            )
-            .finish();
-
-        if should_show_unread_indicator {
-            const INDICATOR_DIAMETER: f32 = 6.;
-            let indicator = Container::new(
-                ConstrainedBox::new(
-                    WarpUiIcon::new(ELLIPSE_SVG_PATH, appearance.theme().accent()).finish(),
-                )
-                .with_height(INDICATOR_DIAMETER)
-                .with_width(INDICATOR_DIAMETER)
-                .finish(),
-            )
-            .finish();
-            let mut stack = Stack::new();
-            stack.add_child(button);
-            stack.add_positioned_child(
-                indicator,
-                OffsetPositioning::offset_from_parent(
-                    Vector2F::zero(),
-                    ParentOffsetBounds::WindowByPosition,
-                    ParentAnchor::TopRight,
-                    ChildAnchor::TopRight,
-                ),
-            );
-            button = stack.finish();
-        }
-
-        Align::new(button).finish()
     }
 
     fn render_settings_button(&self, appearance: &Appearance) -> Box<dyn Element> {
@@ -15060,10 +14893,6 @@ impl TypedActionView for Workspace {
                 mode: palette_mode,
                 source,
             } => self.toggle_palette(*palette_mode, *source, ctx),
-            JoinSlack => self.join_slack(ctx),
-            ViewUserDocs => self.view_user_docs(ctx),
-            ViewPrivacyPolicy => self.view_privacy_policy(ctx),
-            SendFeedback => self.send_feedback(ctx),
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => self.view_logs(ctx),
             ChangeCursor(cursor) => self.change_cursor(*cursor, ctx),
@@ -15097,7 +14926,6 @@ impl TypedActionView for Workspace {
             ToggleInBandGenerators => self.toggle_in_band_generators(ctx),
             ToggleDebugNetworkStatus => self.toggle_debug_network_status(ctx),
             ToggleShowMemoryStats => self.toggle_show_memory_stats(ctx),
-            ToggleResourceCenter => self.toggle_resource_center(ctx),
             ToggleUserMenu => self.toggle_user_menu(ctx),
             ToggleKeybindingsPage => self.toggle_keybindings_page(ctx),
             ShowCommandSearch(CommandSearchOptions {
@@ -15584,11 +15412,6 @@ impl TypedActionView for Workspace {
             } => {
                 self.insert_in_input(content, *replace_buffer, false, ctx);
                 ctx.notify();
-            }
-            #[cfg(all(enable_crash_recovery, target_os = "linux"))]
-            DismissWaylandCrashRecoveryBannerAndOpenLink => {
-                self.dismiss_workspace_banner(ctx, &WorkspaceBanner::WaylandCrashRecovery);
-                ctx.open_url("https://docs.warp.dev/terminal/more-features/linux#native-wayland");
             }
             TabHoverWidthStart { width } => {
                 // Store the fixed width value for the tab to maintain consistent size during hover

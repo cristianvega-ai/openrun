@@ -1,7 +1,5 @@
 # Warp Tab Config
 # Stored in ~/.warp/tab_configs/ — rename this file and edit anytime!
-#
-# Docs at https://docs.warp.dev/terminal/windows/tab-configs
 
 name = "My Tab Config"
 

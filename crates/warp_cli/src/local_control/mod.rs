@@ -405,7 +405,7 @@ pub enum SurfaceCommand {
     #[command(subcommand)]
     Keybindings(SurfaceOpenCommand),
 
-    /// Toggle the resource center.
+    /// Toggle the keyboard shortcuts panel.
     #[command(subcommand)]
     ResourceCenter(SurfaceToggleCommand),
 

@@ -22,7 +22,6 @@ pub(super) struct WorkspaceMouseStates {
     pub(super) new_tab_menu: MouseStateHandle,
     pub(super) new_tab: MouseStateHandle,
     pub(super) banner_button: MouseStateHandle,
-    pub(super) resource_center_icon: MouseStateHandle,
     pub(super) left_panel_icon: MouseStateHandle,
     pub(super) settings_icon: MouseStateHandle,
     pub(super) dismiss_banner_button: MouseStateHandle,

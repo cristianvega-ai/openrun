@@ -19,11 +19,7 @@ pub fn banner_metadata(ctx: &AppContext) -> Option<WorkspaceBannerFields> {
                 settings to use Xwayland for windowing. This can result in blurry text if you \
                 are using fractional scaling."
                 .to_owned(),
-            button: Some(super::WorkspaceBannerButtonDetails {
-                text: "Learn More".to_owned(),
-                action: super::WorkspaceAction::DismissWaylandCrashRecoveryBannerAndOpenLink,
-                icon: None,
-            }),
+            button: None,
         }),
         // We're not showing anything to the user when we recover from a crash
         // by switching from preferring integrated to dedicated gpu due to the

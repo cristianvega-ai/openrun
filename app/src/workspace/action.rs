@@ -257,10 +257,6 @@ pub enum WorkspaceAction {
         mode: PaletteMode,
         source: PaletteSource,
     },
-    JoinSlack,
-    ViewUserDocs,
-    ViewPrivacyPolicy,
-    SendFeedback,
     /// Open the log directory in the system file explorer with the current log file selected.
     #[cfg(not(target_family = "wasm"))]
     ViewLogs,
@@ -281,7 +277,6 @@ pub enum WorkspaceAction {
     OpenLaunchConfigSaveModal,
     SelectTabConfig(TabConfig),
     DispatchToSettingsTab(SettingsTabAction),
-    ToggleResourceCenter,
     ToggleUserMenu,
     ToggleKeybindingsPage,
     ShowCommandSearch(CommandSearchOptions),
@@ -389,10 +384,6 @@ pub enum WorkspaceAction {
         content: String,
         replace_buffer: bool,
     },
-    /// Dismisses the Wayland crash recovery banner and opens a link to our docs page with more
-    /// information.
-    #[cfg(target_os = "linux")]
-    DismissWaylandCrashRecoveryBannerAndOpenLink,
     FocusTerminalViewInWorkspace {
         terminal_view_id: EntityId,
     },
@@ -617,10 +608,6 @@ impl WorkspaceAction {
             | ResetZoom
             | OpenPalette { .. }
             | TogglePalette { mode: _, source: _ }
-            | JoinSlack
-            | ViewUserDocs
-            | ViewPrivacyPolicy
-            | SendFeedback
             | ChangeCursor(_)
             | ToggleBlockSnackbar
             | ToggleErrorUnderlining
@@ -637,7 +624,6 @@ impl WorkspaceAction {
             | SetA11yVerbosityLevel(_)
             | ToggleNotifications
             | DispatchToSettingsTab { .. }
-            | ToggleResourceCenter
             | ToggleUserMenu
             | ToggleKeybindingsPage
             | ShowCommandSearch(_)
@@ -739,12 +725,10 @@ impl WorkspaceAction {
             FileRenamed { .. } => false, // File rename doesn't change workspace state
             #[cfg(feature = "local_fs")]
             FileDeleted { .. } => false, // File deletion doesn't change workspace state
-            #[cfg(target_os = "linux")]
-            DismissWaylandCrashRecoveryBannerAndOpenLink => false,
-            // actions that are related to updating user settings or
-            // managing some ui elements (like closing/opening modals)
-            // that don't reflect on actual workspace and don't need to
-            // be preserved between restarts.
+                                         // actions that are related to updating user settings or
+                                         // managing some ui elements (like closing/opening modals)
+                                         // that don't reflect on actual workspace and don't need to
+                                         // be preserved between restarts.
         }
     }
 }

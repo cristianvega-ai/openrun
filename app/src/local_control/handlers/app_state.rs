@@ -109,7 +109,7 @@ pub(crate) fn handle(
         ActionKind::SurfaceResourceCenterToggle => workspace_action(
             instance_id,
             action,
-            WorkspaceAction::ToggleResourceCenter,
+            WorkspaceAction::ToggleKeybindingsPage,
             target,
             ctx,
         ),

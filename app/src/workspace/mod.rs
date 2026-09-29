@@ -865,17 +865,6 @@ pub fn init(app: &mut AppContext) {
         .with_enabled(|| ContextFlag::LaunchConfigurations.is_enabled()),
     ]);
 
-    if !FeatureFlag::AvatarInTabBar.is_enabled() {
-        app.register_editable_bindings([EditableBinding::new(
-            "workspace:toggle_resource_center",
-            "Toggle resource center",
-            WorkspaceAction::ToggleResourceCenter,
-        )
-        .with_group(bindings::BindingGroup::Navigation.as_str())
-        .with_context_predicate(id!("Workspace"))
-        .with_custom_action(CustomAction::ToggleResourceCenter)]);
-    }
-
     // Warp Control CLI install/uninstall actions (macOS only)
     #[cfg(target_os = "macos")]
     {
@@ -1058,35 +1047,11 @@ fn add_overflow_menu_items_as_editable_binding(app: &mut AppContext) {
 
     // Add the ability to open all overflow menu items to the command palette.
     app.register_editable_bindings([
-        EditableBinding::new(
-            "workspace:link_to_slack",
-            "Join our Slack community (opens external link)",
-            WorkspaceAction::JoinSlack,
-        )
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
-            "workspace:link_to_user_docs",
-            "View user docs (opens external link)",
-            WorkspaceAction::ViewUserDocs,
-        )
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
-            "workspace:send_feedback",
-            BindingDescription::new("Send feedback (opens external link)"),
-            WorkspaceAction::SendFeedback,
-        )
-        .with_context_predicate(id!("Workspace")),
         #[cfg(not(target_family = "wasm"))]
         EditableBinding::new(
             "workspace:view_logs",
             "View Warp logs",
             WorkspaceAction::ViewLogs,
-        )
-        .with_context_predicate(id!("Workspace")),
-        EditableBinding::new(
-            "workspace:link_to_privacy_policy",
-            "View privacy policy (opens external link)",
-            WorkspaceAction::ViewPrivacyPolicy,
         )
         .with_context_predicate(id!("Workspace")),
     ]);

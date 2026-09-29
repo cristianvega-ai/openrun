@@ -97,6 +97,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [AI crates and dependencies](#ai-crates-and-dependencies) — deleted the `ai`, `ai_types` and `warp_multi_agent_client` crates, the Warp agent protocol and MCP/AWS SDK dependencies, and the AI types of `persistence` (tables stay until DB-1)
 - [Per-setting cloud-sync attribute](#per-setting-cloud-sync-attribute) — removed the sync-mode attribute, its `Setting` accessor and its macro argument from every setting definition
 - [Docs, skills, comments and icons: leftover AI mentions](#docs-skills-comments-and-icons-leftover-ai-mentions) — removed the AI and skills text from `AGENTS.md`, `README.md`, `FAQ.md`, `CONTRIBUTING.md`, the repo-local skills and the Nix flake; rewrote stale Agent Mode, Warp AI and AI-block comments; deleted 37 unused AI icon variants and 36 SVGs
+- [Warp help, docs and feedback links](#warp-help-docs-and-feedback-links) — removed the Help menu, every warp.dev docs, Slack, privacy, feedback and issue link from the UI, and the resource-center main page; the resource center is now the keyboard-shortcuts panel
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
@@ -2538,3 +2539,29 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Left for TEL-4: Agent-mode wording in the `code_review/telemetry_event.rs` variant docs.
 - Left for AI-33 (code, not comments): `appearance_page.rs` still builds an AI font family dropdown and an "Oz and third-party agent sessions" vertical-tabs setting text; `code_editor_review_page.rs` search terms name `oz`/`agent mode`; `FeatureFlag::AgentMode` binding in `editor/view/mod.rs`; `is_agent_executed` in `terminal/history.rs`; `FindWorkItem::ScanAIBlock`; `assert_secrets_redacted_for_ai`; `cfg!(feature = "agent_mode_evals")` in `warp_logging`; the `oz` CLI log directory and `Channel::cli_command_name` values (CFG-1).
 - `crates/graphql`, `crates/warp_server_client`, `crates/warp_graphql_schema`, `crates/warp_features` and `app/src/server/telemetry` were not touched; SRV-1, FLAGS-1 and TEL-4 delete them.
+
+## Warp help, docs and feedback links
+**Why:** decision 3 in the master plan: an offline enterprise build has no Warp help site, Slack, feedback form or warpdotdev issue tracker to link to. Every link to a warp.dev domain is gone, together with the buttons and menu items that only opened such links.
+
+**Removed:**
+- `app/src/util/links.rs` (`USER_DOCS_URL`, `SLACK_URL`, `PRIVACY_POLICY_URL`, `GITHUB_ISSUES_URL`, `feedback_form_url`).
+- The Help menu of the menu bar (`make_new_help_menu`, `link_menu_item`, `feedback_menu_item`, "Send Feedback...", "Warp Documentation...", "GitHub Issues...", "Join our Slack community..."), the "Privacy Policy..." item of the app menu, `root_view:send_feedback`, and the `WorkspaceAction` variants `JoinSlack`, `ViewUserDocs`, `ViewPrivacyPolicy` and `SendFeedback` with their command palette bindings (`workspace:link_to_slack`, `workspace:link_to_user_docs`, `workspace:link_to_privacy_policy`, `workspace:send_feedback`). The account menu lost "Documentation", "Feedback" and "Join our Slack community"; Settings, Keyboard shortcuts and View Warp logs stay.
+- The resource center's main page and footer: `resource_center/{main_page, sections}.rs`, `section_views/` (feature and content sections), the "Warp Essentials" header, the Docs, Slack and Feedback footer buttons, the docs and blog content links, `ResourceCenterPage`, `ResourceCenterAction`, `ResourceCenterMainView`, the header button that opened it (`render_resource_center_button`, only shown with `AvatarInTabBar` off), `WorkspaceAction::ToggleResourceCenter`, `CustomAction::ToggleResourceCenter`, the `workspace:toggle_resource_center` binding and app-menu item, and `ContextFlag::WarpEssentials`. The bundled `gitbook-logo.svg`, `slack-logo.svg` and `feedback.svg` icons and `Icon::Slack` went with them.
+- The "Manage your data" (account deletion page) and "Privacy policy" widgets of Settings > Privacy, `data_management_url`, `PrivacyPageAction::OpenDataManagementWebpage`.
+- "Learn more", "Troubleshoot", "See docs", "Link to Documentation", "More info", "File issue" and "Let us know" links and buttons: the notifications discovery and error banners, the view-in-Warp banner, the slow-bootstrap, incompatible-configuration, ControlMaster and unsupported-shell banners, the shell-terminated banner, the Wayland crash-recovery banner, the tmux SSH deprecation banner, the warpify success block (`WarpificationSource`, `SSH_DOCS_URL`, `SUBSHELL_DOCS_URL`), the onboarding prompt block, the launch configuration save modal, the empty workflow list, the Warpify, Features, Appearance and External editor settings pages (info icons that only opened docs, `FeaturesPageAction::OpenUrl`, `AppearancePageAction::OpenUrl`, `ExternalEditorAction::OpenUrl`, `WarpifyPageAction::OpenUrl`, the "Create your own custom theme" widget), the notification-permission toast link, and `NewSessionMenuItem::OpenLaunchConfigDocs`.
+- Doc links in the launch configuration comment (`user_config`), the new tab config template, the Nvidia driver warning (`wgpu/resources.rs`) and the rendering-offset warning (`winit/window.rs`).
+- The integration test `test_open_and_close_resource_center` (it was already ignored and clicked a saved position that no longer exists).
+
+**Modified:**
+- `resource_center/view.rs` — `ResourceCenterView` shows only the keyboard shortcuts list under a "Keyboard Shortcuts" header with a close button. `Workspace::toggle_keybindings_page` opens and closes it.
+- `warpctrl surface resource-center toggle` — still works; it now toggles the keyboard shortcuts panel.
+- `TipsCompleted` no longer auto-completes when a gamified tip count is reached (the count was only ever set by the removed main page and was 0 with `AvatarInTabBar` on).
+- Banner text keeps its explanation and drops the trailing link.
+
+**User-visible impact:** no Help menu, no links to warp.dev, Slack, feedback or GitHub issues anywhere in the UI, and no account-deletion or privacy-policy entries in Settings. The side panel behind Cmd-/ (Ctrl-Shift-/ was only bound with `AvatarInTabBar` off) is the keyboard shortcuts list only.
+
+**Notes:**
+- Still matching `rg '"https?://[^"]*warp\.dev'`: `crates/warpui_extras/src/secure_storage/linux.rs` (a key string, kept on purpose so stored secrets stay readable) and `crates/warp_server_client/src/public_api.rs` (parses server error URIs; deleted with the crate by SRV-1).
+- `app/src/cloud_object/mod.rs` builds a link from the server root URL (DRV-5 deletes the module).
+- The `TelemetryEvent` variants `ResourceCenterOpened`, `ResourceCenterTipsCompleted` and `ResourceCenterTipsSkipped`, and `KeybindingsPageOpened`'s payload, are TEL-4's. `FeatureFlag::AvatarInTabBar` still guards dead `else` branches in `workspace/view.rs` and `app_menus.rs` (FLAGS-1).
+- Comments that cite warpdotdev GitHub issues or Linear tickets are SWP-14's.

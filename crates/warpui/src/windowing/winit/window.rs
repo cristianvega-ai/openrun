@@ -651,12 +651,12 @@ fn window_level_for_style(style: WindowStyle) -> WindowLevel {
 }
 
 /// If the selected adapter has a known rendering offset bug, enable native window decorations
-/// to work around it. See: https://github.com/warpdotdev/Warp/issues/6120
+/// to work around it.
 fn enable_decorations_if_needed(window: &winit::window::Window, adapter_info: &AdapterInfo) {
     if adapter_has_rendering_offset_bug(adapter_info) {
         log::warn!(
             "Enabling native window decorations to work around a rendering offset bug in the \
-            selected GPU adapter ({}). See: https://github.com/warpdotdev/Warp/issues/6120",
+            selected GPU adapter ({}).",
             adapter_info.name,
         );
         window.set_decorations(true);

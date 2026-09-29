@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -28,7 +27,6 @@ use crate::terminal::settings::{SpacingMode, TerminalSettings};
 use crate::undo_close::UndoCloseStack;
 use crate::user_config::WarpConfig;
 use crate::util::bindings::{self, CustomAction, trigger_to_keystroke};
-use crate::util::links;
 use crate::workspace::sync_inputs::SyncedInputState;
 use crate::workspace_metadata::PersistedWorkspace;
 use crate::workspace_metadata::WorkspaceMetadata;
@@ -66,7 +64,6 @@ pub fn menu_bar(ctx: &mut AppContext) -> MenuBar {
         make_new_tab_menu(ctx),
         make_new_blocks_menu(ctx),
         make_new_window_menu(),
-        make_new_help_menu(),
     ])
 }
 
@@ -137,13 +134,6 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
         ctx,
     )];
 
-    if !FeatureFlag::AvatarInTabBar.is_enabled() {
-        menu_items.push(updateable_custom_item_without_checkmark(
-            CustomAction::ToggleResourceCenter,
-            ctx,
-        ))
-    }
-
     menu_items.push(MenuItem::Separator);
 
     let preferences_menu_items = vec![
@@ -170,10 +160,6 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
     }
 
     menu_items.push(MenuItem::Separator);
-    menu_items.push(link_menu_item(
-        "Privacy Policy...",
-        links::PRIVACY_POLICY_URL.into(),
-    ));
 
     let debug_menu_items = debug_menu_items();
     if !debug_menu_items.is_empty() {
@@ -778,42 +764,6 @@ fn debug_menu_items() -> Vec<MenuItem> {
     }
 
     debug_menu_items
-}
-
-fn link_menu_item(title: &'static str, link: Cow<'static, str>) -> MenuItem {
-    MenuItem::Custom(CustomMenuItem::new(
-        title,
-        move |ctx| {
-            ctx.open_url(&link);
-        },
-        no_updates,
-        None,
-    ))
-}
-
-fn feedback_menu_item() -> MenuItem {
-    MenuItem::Custom(CustomMenuItem::new(
-        "Send Feedback...",
-        move |ctx| {
-            // Routed through the root view so windows without a workspace fall back to the
-            // browser-based feedback form.
-            ctx.dispatch_global_action("root_view:send_feedback", &());
-        },
-        no_updates,
-        None,
-    ))
-}
-
-fn make_new_help_menu() -> Menu {
-    Menu::new(
-        "Help",
-        vec![
-            feedback_menu_item(),
-            link_menu_item("Warp Documentation...", links::USER_DOCS_URL.into()),
-            link_menu_item("GitHub Issues...", links::GITHUB_ISSUES_URL.into()),
-            link_menu_item("Join our Slack community...", links::SLACK_URL.into()),
-        ],
-    )
 }
 
 fn make_launch_config_menu_items(ctx: &mut AppContext) -> Vec<MenuItem> {

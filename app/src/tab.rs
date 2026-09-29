@@ -322,7 +322,6 @@ pub enum TabTelemetryAction {
 #[derive(Debug, Clone)]
 pub enum NewSessionMenuItem {
     OpenLaunchConfig(LaunchConfig),
-    OpenLaunchConfigDocs,
     CreateNewTabConfig,
     /// Creates a new tab group. Gated by `FeatureFlag::GroupedTabs`.
     CreateNewTabGroup,

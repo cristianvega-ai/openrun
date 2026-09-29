@@ -3,7 +3,7 @@ use itertools::{Either, Itertools};
 use warpui::elements::{
     Align, Border, ClippedScrollStateHandle, ClippedScrollable, ConstrainedBox, Container,
     CornerRadius, CrossAxisAlignment, Element, Fill, Flex, MainAxisSize, MouseStateHandle,
-    ParentElement, Radius, Shrinkable,
+    ParentElement, Radius, ScrollbarWidth, Shrinkable,
 };
 use warpui::keymap::{DescriptionContext, Keystroke};
 use warpui::presenter::ChildView;
@@ -14,10 +14,6 @@ use warpui::{
     ViewContext, ViewHandle,
 };
 
-use super::section_views::{
-    DESCRIPTION_FONT_SIZE, ITEM_PADDING_BOTTOM, SCROLLBAR_OFFSET, SCROLLBAR_WIDTH,
-    SECTION_HEADER_FONT_SIZE, SECTION_SPACING,
-};
 use super::utils::{
     BLOCKS_KEYBINDINGS, FUNDAMENTALS_KEYBINDINGS, INPUT_EDITOR_KEYBINDINGS, TERMINAL_KEYBINDINGS,
     get_additional_keybindings,
@@ -38,6 +34,13 @@ use crate::workspace::tab_settings::TabSettings;
 const KEYBINDINGS_PAGE_SHORTCUT: &str = "workspace:toggle_keybindings_page";
 const LINK_WIDTH: f32 = 30.;
 
+const SECTION_HEADER_FONT_SIZE: f32 = 16.;
+const DESCRIPTION_FONT_SIZE: f32 = 14.;
+const SCROLLBAR_OFFSET: f32 = 7.;
+const SCROLLBAR_WIDTH: ScrollbarWidth = ScrollbarWidth::Auto;
+const SECTION_SPACING: f32 = 12.;
+const ITEM_PADDING_BOTTOM: f32 = 6.;
+
 #[derive(Default)]
 struct MouseStateHandles {
     navigate_to_settings_link: MouseStateHandle,
@@ -56,7 +59,6 @@ pub struct KeybindingsView {
 
 /// Keybindings are sorted into these sections,
 /// where "Fundamentals" is the default for any remaining non-categorized ones.
-/// This should always align with documentation: https://docs.warp.dev/getting-started/keyboard-shortcuts
 #[derive(Clone, Eq, PartialEq, Sequence)]
 pub enum KeybindingSection {
     Essentials,

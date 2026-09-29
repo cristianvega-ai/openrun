@@ -14,7 +14,6 @@ pub enum ContextFlag {
     NetworkLogConsole,
     RunWorkflow,
     LaunchConfigurations,
-    WarpEssentials,
     AllowSettingsModalToClose,
     ShowSlowShellStartupBanner,
 }

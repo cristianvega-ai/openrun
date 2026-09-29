@@ -163,8 +163,6 @@ fn resolve_tab_config_shell(name: &str, ctx: &AppContext) -> Option<AvailableShe
 
     AvailableShell::try_from(name).ok()
 }
-const WARP_SHELL_COMPATIBILITY_DOCS: &str =
-    "https://docs.warp.dev/getting-started/supported-shells";
 
 #[derive(Debug, Clone, Copy)]
 pub enum ActivationReason {
@@ -1766,12 +1764,9 @@ impl PaneGroup {
 
         let user_default_shell_changed_banner = ctx.add_typed_action_view(|_| {
             Banner::<PaneGroupAction>::new_permanently_dismissible(
-                BannerTextContent::formatted_text(vec![
-                    FormattedTextFragment::plain_text(
-                        "Warp doesn't currently support your default shell, falling back to zsh.  ",
-                    ),
-                    FormattedTextFragment::hyperlink("Learn more", WARP_SHELL_COMPATIBILITY_DOCS),
-                ]),
+                BannerTextContent::formatted_text(vec![FormattedTextFragment::plain_text(
+                    "Warp doesn't currently support your default shell, falling back to zsh.",
+                )]),
             )
         });
 

@@ -1807,7 +1807,7 @@ fn test_switch_focus_panels() {
         workspace.update(&mut app, |view, ctx| {
             view.resource_center_view
                 .update(ctx, |resource_center_view, ctx| {
-                    resource_center_view.set_current_page(ResourceCenterPage::Keybindings, ctx)
+                    resource_center_view.focus_keybindings(ctx)
                 });
             view.current_workspace_state.is_resource_center_open = true;
             view.focus_left_panel(ctx);

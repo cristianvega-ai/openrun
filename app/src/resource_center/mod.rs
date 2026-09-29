@@ -6,21 +6,14 @@ use warp_errors::report_if_error;
 use crate::terminal::general_settings::GeneralSettings;
 use crate::util::bindings::trigger_to_keystroke;
 
-mod main_page;
-pub mod utils;
-pub use main_page::{ResourceCenterMainEvent, ResourceCenterMainView};
 mod keybindings_page;
+pub mod utils;
 pub use keybindings_page::KeybindingsView;
-mod section_views;
-pub use section_views::{ContentSectionView, FeatureSectionView};
-pub mod sections;
 mod view;
 use serde::{Deserialize, Serialize};
-pub use view::{ResourceCenterAction, ResourceCenterEvent, ResourceCenterPage, ResourceCenterView};
+pub use view::{ResourceCenterEvent, ResourceCenterView};
 use warpui::keymap::Keystroke;
 use warpui::{AppContext, Entity, SingletonEntity};
-
-use self::section_views::feature_section::FeatureSection;
 
 #[derive(
     Clone,
@@ -121,98 +114,14 @@ impl TipAction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-
-// Section item that dispatches an action within the app
-pub struct FeatureItem {
-    pub title: &'static str,
-    pub description: &'static str,
-    pub feature: Tip,
-    pub editable_binding_name: Option<&'static str>,
-    pub shortcut: Option<Keystroke>,
-}
-
-impl FeatureItem {
-    pub fn new(
-        title: &'static str,
-        description: &'static str,
-        feature: Tip,
-        ctx: &mut AppContext,
-    ) -> Self {
-        let editable_binding_name;
-        let shortcut;
-
-        match feature {
-            Tip::Hint(_) => {
-                editable_binding_name = None;
-                shortcut = None;
-            }
-            Tip::Action(tip) => {
-                editable_binding_name = Some(tip.editable_binding_name());
-                shortcut = tip.keyboard_shortcut(ctx);
-            }
-        }
-
-        Self {
-            title,
-            description,
-            feature,
-            editable_binding_name,
-            shortcut,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-// Section item that links to an external URL
-pub struct ContentItem {
-    pub title: &'static str,
-    pub description: &'static str,
-    pub url: &'static str,
-    pub button_label: &'static str,
-}
-
-pub enum Section {
-    Feature(FeatureSectionData),
-    Content(ContentSectionData),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FeatureSectionData {
-    pub section_name: FeatureSection,
-    pub items: Vec<FeatureItem>,
-}
-
-#[derive(Clone)]
-pub struct ContentSectionData {
-    pub section_name: FeatureSection,
-    pub items: Vec<ContentItem>,
-}
-
 #[derive(Default)]
 pub struct TipsCompleted {
     pub features_used: HashSet<Tip>,
     pub skipped_or_completed: bool,
-    pub gamified_tips_count: Option<usize>,
 }
 
 impl Entity for TipsCompleted {
     type Event = ();
-}
-
-impl FeatureSectionData {
-    pub fn is_section_completed(&self, tips_completed: &TipsCompleted) -> bool {
-        self.items
-            .iter()
-            .all(|item| tips_completed.features_used.contains(&item.feature))
-    }
-
-    pub fn tips_completed_count(&self, tips_completed: &TipsCompleted) -> usize {
-        self.items
-            .iter()
-            .filter(|item| tips_completed.features_used.contains(&item.feature))
-            .count()
-    }
 }
 
 /// Marks the welcome tip as used and writes the current state to user defaults.
@@ -275,23 +184,12 @@ impl TipsCompleted {
         Self {
             features_used,
             skipped_or_completed,
-            gamified_tips_count: None,
         }
     }
 
     /// Returns true if the feature previously wasn't used.
     pub fn mark_feature_used(&mut self, feature: Tip) -> bool {
-        let is_new_value = self.features_used.insert(feature);
-
-        // Check if all gamified tips are completed
-        if let Some(total_tips) = self.gamified_tips_count
-            && is_new_value
-            && self.features_used.len() == total_tips
-        {
-            self.skipped_or_completed = true;
-        }
-
-        is_new_value
+        self.features_used.insert(feature)
     }
 
     pub fn serialized_tips(&self) -> Result<String, serde_json::Error> {
@@ -300,9 +198,5 @@ impl TipsCompleted {
 
     pub fn completed_count(&self) -> usize {
         self.features_used.len()
-    }
-
-    pub fn set_gamified_tips_count(&mut self, total: usize) {
-        self.gamified_tips_count = Some(total)
     }
 }

@@ -1,5 +1,4 @@
 // Hard coded constants to divide keybindings into their respective categories/sections.
-// This should always align with documentation: https://docs.warp.dev/getting-started/keyboard-shortcuts
 
 use warpui::keymap::Keystroke;
 
@@ -88,7 +87,7 @@ pub const TERMINAL_KEYBINDINGS: &[&str] = &[
     "workspace:toggle_launch_config_palette",
     "workspace:toggle_mouse_reporting",
     "workspace:toggle_navigation_palette",
-    "workspace:toggle_resource_center",
+    "workspace:toggle_keybindings_page",
     "pane_group:add_down",
     "pane_group:navigate_down",
     "pane_group:navigate_left",
