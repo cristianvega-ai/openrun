@@ -1,3 +1,8 @@
+[graph]
+# Match the audit in script/offline_audit: every feature, runtime and build edges only.
+all-features = true
+exclude-dev = true
+
 [advisories]
 git-fetch-with-cli = true
 ignore = [
@@ -42,6 +47,35 @@ multiple-versions = "allow"
 # (i.e.: workspace crates).
 wildcards = "deny"
 allow-wildcard-paths = true
+
+# The fork is offline: nothing in the dependency graph may talk to Warp services, report crashes,
+# export telemetry or speak the removed protocols. A crate with `wrappers` may appear only as a
+# direct dependency of the listed crates. script/offline_audit checks the same graph and lists
+# the workspace crates that must not exist.
+deny = [
+    # HTTP stack: only the shared HTTP client and the loopback control server may use it.
+    { crate = "reqwest", wrappers = ["http_client", "local_control"], reason = "network access goes through http_client; local_control is loopback only" },
+    { crate = "hyper", wrappers = ["reqwest", "axum", "hyper-util", "hyper-rustls"], reason = "transport of reqwest and the local_control axum server" },
+    { crate = "axum", wrappers = ["warp"], reason = "local_control server only" },
+    { crate = "tower-http", wrappers = ["reqwest"], reason = "unconditional dependency of reqwest; nothing else may use it" },
+    { crate = "interprocess", wrappers = ["ipc"], reason = "local IPC with the terminal-server child only" },
+    # Warp server protocols and clients.
+    { crate = "cynic", reason = "GraphQL client for the removed Warp server" },
+    { crate = "tungstenite", reason = "websocket transport of the removed Warp server and session sharing" },
+    { crate = "async-tungstenite", reason = "websocket transport of the removed Warp server and session sharing" },
+    { crate = "session-sharing-protocol", reason = "session sharing is removed" },
+    { crate = "warp_multi_agent_api", reason = "Warp agent protocol is removed" },
+    { crate = "oauth2", reason = "no account or MCP sign-in flows" },
+    { crate = "rmcp", reason = "MCP is removed" },
+    # Crash reporting and telemetry export.
+    { crate = "sentry", reason = "crash reporting is removed" },
+    { crate = "sentry-core", reason = "crash reporting is removed" },
+    { crate = "sentry-log", reason = "crash reporting is removed" },
+    { crate = "minidumper", reason = "crash reporting is removed" },
+    { crate = "crash-handler", reason = "crash reporting is removed" },
+    { crate = "opentelemetry-otlp", reason = "telemetry export is removed" },
+    { crate = "opentelemetry-http", reason = "telemetry export is removed" },
+]
 
 [sources]
 allow-git = [

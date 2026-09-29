@@ -83,6 +83,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Plans, billing, pricing and upgrade prompts](#plans-billing-pricing-and-upgrade-prompts) — removed the pricing model, plan/tier gating for shared objects, purchase, overage and add-on credit APIs, the billing and admin-panel links on the Teams page, every "Upgrade" call to action, and the plan/billing GraphQL types
 - [Cloud environments, schedules, runners, managed secrets and isolation platform](#cloud-environments-schedules-runners-managed-secrets-and-isolation-platform) — removed Oz cloud environments, scheduled agents, self-hosted workers and runners, Oz API keys, managed secrets, the isolation platform, the Gemini Enterprise and OIDC Bedrock credential mints, and `OzConfig`
 - [Agent management view and conversation list](#agent-management-view-and-conversation-list) — removed the agent management view, the left-panel conversation list and its delete dialog, the header-toolbar and `warpctrl` entries for them, and the legacy Warp-agent toast; notifications, tab icons and the notifications mailbox now describe CLI-agent sessions only
+- [Offline guardrails (draft)](#offline-guardrails-draft) — `script/offline_audit`, its allowlist, cargo-deny bans with wrappers and a non-blocking `offline-audit` CI job that report what still reaches Warp services
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
@@ -2194,3 +2195,22 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **Notes:**
 - Left for AI-27: `ConversationDetailsPanel`, `ai/artifacts/buttons.rs` and `artifact_download.rs` (only the panel uses them), the `AgentViewEntryOrigin::ConversationListView` variant, `OzAgent` in `IconWithStatusVariant`, and the Oz desktop notification in `terminal/view.rs`.
 - Left for AI-29: the whole task model in `ai/ambient_agents/task.rs` and its `server_api/ai.rs` calls (now unused), `UsageDisplayUnit`, `format_usage`, `usage_label`, `AIConversation::usage_totals` and `ConversationUsageMetadataUpdated` (the details panel and history plumbing still use them); `AIConversation::{turn_panel_data, turn_panel_records}` were not used by the removed views (only by tests) and stay for AI-29/AI-30. Left for DB-1: the `windows.agent_management_filters` column. Left for FLAGS-1: `AgentManagementView`, `AgentManagementDetailsView`, `AgentViewConversationListView`, `InteractiveConversationManagementView` and their Cargo features.
+
+## Offline guardrails (draft)
+**Why:** the fork is only offline if nothing puts Warp hosts, Warp server clients or network code back. The removal tasks are still landing, so this draft acts as a progress meter; SWP-17 finalisation makes it blocking.
+
+**Added:**
+- `script/offline_audit` (python3 and ripgrep) with three groups of checks. `hosts` is the zero-tolerance grep for Warp domains, services, keys and the Metal-skip build hook. `network` lists network-capable Rust (`reqwest`, `http_client`, `hyper`, sockets, `url_source` and others), `curl`/`wget` in scripts and non-git subprocesses, and each hit must fall under an allowed consumer. `deps` reads `cargo metadata` for banned workspace crates, banned external crates, wrapper rules and `cargo deny check bans licenses sources`. Informational lists cover the removed-feature wording review list, browser-opening call sites and every hard-coded URL host.
+- `script/offline_audit --report` lists every finding and exits 0. The default mode exits 1 on any finding. `--net-log FILE` checks an `strace` log of a sandboxed run and fails on any connect or send to a non-loopback address or to port 53.
+- `script/offline_audit.allowlist`: reasoned exceptions (`CHANGES.md`, the audit's own patterns, `deny.toml`, the build-time `warpdotdev` git forks, historical migrations, the secure-storage key string, the third-party DirectX compiler binaries, `http_client`, `node_runtime`, `local_control` and developer bootstrap scripts). Entries that match nothing are reported.
+- `deny.toml`: `[graph]` (all features, no dev edges) and `[bans] deny` with wrappers for `reqwest`, `hyper`, `axum`, `tower-http` and `interprocess`, and outright bans for `cynic`, `tungstenite`, `async-tungstenite`, `oauth2`, `rmcp`, `session-sharing-protocol`, `warp_multi_agent_api`, the Sentry and minidump crates and the OpenTelemetry exporters.
+- `.github/workflows/ci.yml`: an `offline-audit` job that runs the static audit, then the whole test suite (including `integration`) under `unshare --user --map-root-user --net` with `strace`, and checks the recorded connections. It has `continue-on-error: true`.
+
+**User-visible impact:** none; this is repository tooling.
+
+**Notes:**
+- The audit fails today by design: hosts, network and dependency findings remain in code that the pending tasks delete. The report groups them by directory to map them onto owner tasks.
+- `tower-http` is allowed as a dependency of `reqwest` only, because reqwest 0.13 depends on it unconditionally (sweep.md 9.3 asks for no `tower-http` at all). `hyper` also allows `hyper-util` and `hyper-rustls`, which are part of reqwest's transport.
+- Comment lines are skipped in the `network` check (`--include-comments` restores them); `hyper` is matched as a whole word so `hyperlink` and the Hyper terminal do not count; `git` and `gh` subprocesses are counted but never reported.
+- Unchanged in the draft and left to finalisation: the two-minute idle `integration` session of 9.4a, the SSH integration tests (`test_ssh_*`), which the CI job excludes with a filter until they are deleted or ignored, and dropping `continue-on-error`.
+- The runtime step of the CI job could not be run locally (it needs Linux, `unshare` and `strace`); the log parser was tested against a hand-written `strace` sample.

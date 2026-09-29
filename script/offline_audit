@@ -1,0 +1,553 @@
+#!/usr/bin/env python3
+"""Static audit that keeps the fork offline.
+
+Runs three groups of checks over the working tree:
+
+  hosts    Warp-owned hosts, services and build hooks: zero tolerance outside the allowlist.
+  network  Network-capable code: every hit must belong to an allowed consumer.
+  deps     Cargo dependency graph: banned workspace crates, banned external crates, wrapper
+           rules, and `cargo deny check bans licenses sources`.
+
+Modes:
+
+  script/offline_audit            Strict: exit 1 if any check has findings.
+  script/offline_audit --report   List every finding and exit 0.
+  script/offline_audit --net-log net.log
+                                  Check a strace log of a sandboxed run (see the `offline-audit`
+                                  job in .github/workflows/ci.yml): fail on any connect or send to
+                                  a non-loopback address or to port 53.
+
+Allowed exceptions live in script/offline_audit.allowlist, one reasoned entry per line. Requires
+python3 (3.9 or newer), ripgrep, and for the deps group cargo and cargo-deny.
+"""
+
+import argparse
+import collections
+import fnmatch
+import ipaddress
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_ALLOWLIST = os.path.join(ROOT, "script", "offline_audit.allowlist")
+DENY_TOML = os.path.join(ROOT, "deny.toml")
+
+MAX_TEXT = 200
+
+# Set from --include-comments. Comment lines in the network check are skipped by default: prose
+# about websockets or `Hyper` the terminal is not network-capable code.
+INCLUDE_COMMENTS = False
+
+HOST_PATTERNS = [
+    r"warp\.dev", r"warpdotdev", r"warp-server", r"warp_server", r"app\.warp", r"oz\.warp",
+    r"releases\.warp", r"gs://warp", r"warp-static-assets", r"storage\.googleapis\.com",
+    r"firebase", r"identitytoolkit", r"securetoken", r"AIza[0-9A-Za-z_-]{35}",
+    r"sentry", r"rudder", r"segment\.(io|com)", r"typeform", r"warpcommunity\.slack",
+    r"linear\.app/", r"download/cli", r"channel_versions", r"WARP_LOCAL_SKIP_METAL",
+]
+
+REVIEW_PATTERNS = [
+    "oz", "warp drive", "agent mode", "warp ai", "ambient", "cloud agent", "shared session",
+    "telemetry", "autoupdate", "referral", "billing",
+]
+
+# `hyper` and `websocket` are matched as whole words or with their crate suffixes so that
+# `hyperlink` and `WebSocket`-free prose do not drown the list.
+NETWORK_RUST_PATTERNS = [
+    r"reqwest", r"http_client", r"\bhyper(_util|_rustls)?\b", r"tungstenite", r"(?i:websocket)",
+    r"TcpStream", r"TcpListener", r"UdpSocket", r"tokio::net", r"std::net::", r"url_source",
+    r"axum", r"opentelemetry_otlp",
+]
+
+COMMAND_PATTERN = (
+    r'Command::new\("(curl|wget|git|gh|npm|npx|pip3?|go|brew|apt(-get)?|yum|dnf|pacman)"'
+)
+# `git` and `gh` subprocesses are user-initiated operations against the user's own remotes.
+ALLOWED_COMMANDS = {"git", "gh"}
+
+SCRIPT_PATTERNS = [r"curl ", r"wget ", r"Invoke-WebRequest"]
+SCRIPT_DIRS = ["app/assets", "resources", "script"]
+
+LINK_PATTERNS = [r"open_url\(", r"hyperlink\(", r"with_href\(", r"OpenLink"]
+
+URL_LITERAL = r"https?://[A-Za-z0-9][A-Za-z0-9._-]*"
+
+# Workspace packages that must not exist. A trailing `*` matches any suffix.
+BANNED_WORKSPACE_PACKAGES = [
+    "ai", "mcp", "computer_use", "warp_multi_agent_client", "warp_server_client",
+    "warp_server_auth", "graphql", "warp_graphql", "warp_graphql_schema", "firebase", "websocket",
+    "cloud_object*", "cloud_objects", "managed_secrets*", "warp_managed_secrets*",
+    "remote_server", "app-installation-detection", "http_server", "serve-wasm",
+    "warp_channel_config", "warp_web_event_bus", "warp_harness_usage", "isolation_platform",
+    "warp_isolation_platform", "channel_versions", "warp_tui",
+]
+
+
+class Finding(object):
+    def __init__(self, path, line, text):
+        self.path = path
+        self.line = line
+        self.text = text
+
+
+class Result(object):
+    def __init__(self, check_id, title, blocking=True):
+        self.check_id = check_id
+        self.title = title
+        self.blocking = blocking
+        self.findings = []
+        self.notes = []
+        self.skipped = None
+
+    def add(self, path, line, text):
+        self.findings.append(Finding(path, line, text))
+
+
+class Allowlist(object):
+    """Entries are `check | path glob | line regex or * | reason`, `#` starts a comment.
+
+    Fields are separated by a pipe with spaces around it, so a regex must not contain ` | `."""
+
+    def __init__(self, path):
+        self.entries = []
+        self.used = set()
+        if not os.path.exists(path):
+            return
+        with open(path, encoding="utf-8") as f:
+            for number, raw in enumerate(f, 1):
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = [p.strip() for p in re.split(r"\s+\|\s+", line, maxsplit=3)]
+                if len(parts) != 4 or not parts[3]:
+                    sys.exit("%s:%d: expected `check | path glob | regex or * | reason`" % (path, number))
+                check, glob, regex, _reason = parts
+                compiled = None if regex == "*" else re.compile(regex, re.IGNORECASE)
+                self.entries.append((check, glob, compiled, number))
+
+    def allows(self, check, path, text):
+        for index, (entry_check, glob, regex, _number) in enumerate(self.entries):
+            if entry_check != check:
+                continue
+            if not fnmatch.fnmatch(path, glob):
+                continue
+            if regex is not None and not regex.search(text):
+                continue
+            self.used.add(index)
+            return True
+        return False
+
+    def unused(self):
+        return [
+            (check, glob, number)
+            for index, (check, glob, _regex, number) in enumerate(self.entries)
+            if index not in self.used
+        ]
+
+
+def run(cmd, cwd=ROOT, check=False):
+    env = dict(os.environ)
+    env.pop("WARP_LOCAL_SKIP_METAL", None)
+    proc = subprocess.run(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if check and proc.returncode != 0:
+        raise RuntimeError("%s failed:\n%s" % (" ".join(cmd), proc.stderr.decode("utf-8", "replace")))
+    return proc
+
+
+def rg_lines(args, paths=None):
+    """Runs ripgrep and yields (path, line number, text). Exit code 1 means no matches."""
+    cmd = [
+        "rg", "--no-heading", "--with-filename", "--line-number", "--null", "--color=never",
+        "--max-columns=400", "--max-columns-preview", "--no-messages", "--no-ignore-global", "--no-ignore-parent",
+    ] + args + ["--"] + (paths or ["."])
+    proc = run(cmd)
+    if proc.returncode not in (0, 1):
+        raise RuntimeError("rg failed (%d): %s" % (proc.returncode, proc.stderr.decode("utf-8", "replace")))
+    for raw in proc.stdout.decode("utf-8", "replace").splitlines():
+        path, separator, rest = raw.partition("\0")
+        match = re.match(r"^(\d+)[:-](.*)$", rest)
+        if not separator or not match:
+            continue
+        if path.startswith("./"):
+            path = path[2:]
+        yield path, int(match.group(1)), match.group(2).replace("\0", "")
+
+
+def pattern_args(patterns):
+    args = []
+    for pattern in patterns:
+        args += ["-e", pattern]
+    return args
+
+
+def clip(text, regex=None):
+    text = text.strip()
+    unprintable = sum(1 for c in text if not (c.isprintable() or c == "\t"))
+    if regex is not None and unprintable * 10 > len(text):
+        match = regex.search(text)
+        if match:
+            start = max(0, match.start() - 30)
+            return "[binary] ..." + re.sub(r"[^ -~]", ".", text[start:match.end() + 30]) + "..."
+    return text if len(text) <= MAX_TEXT else text[:MAX_TEXT] + "..."
+
+
+def area(path):
+    """Coarse ownership bucket for the summary: crate, or app/src module, or top-level dir."""
+    parts = path.split("/")
+    if parts[0] == "crates" and len(parts) > 1:
+        return "crates/" + parts[1]
+    if parts[0] == "app" and len(parts) > 2:
+        if parts[1] == "src" and len(parts) > 3:
+            return "app/src/" + parts[2]
+        return "app/" + parts[1]
+    return parts[0]
+
+
+# --- 9.1 ---------------------------------------------------------------------------------
+
+
+def check_hosts(allow):
+    result = Result("hosts", "Warp-owned hosts and services (9.1)")
+    args = ["-i", "-a", "--hidden", "-g", "!.git", "-g", "!target"] + pattern_args(HOST_PATTERNS)
+    regex = re.compile("|".join(HOST_PATTERNS), re.IGNORECASE)
+    for path, line, text in rg_lines(args):
+        if allow.allows("hosts", path, text):
+            continue
+        result.add(path, line, clip(text, regex))
+    return result
+
+
+def check_review(_allow):
+    result = Result("review", "Review list: removed-feature wording (9.1, informational)", blocking=False)
+    args = ["-i", "-w", "-t", "rust", "-t", "md", "-t", "toml", "-g", "!target"] + pattern_args(REVIEW_PATTERNS)
+    compiled = [(p, re.compile(r"\b" + re.escape(p) + r"\b", re.IGNORECASE)) for p in REVIEW_PATTERNS]
+    per_pattern = collections.Counter()
+    for path, line, text in rg_lines(args):
+        for pattern, regex in compiled:
+            if regex.search(text):
+                per_pattern[pattern] += 1
+        result.add(path, line, clip(text))
+    result.notes.append(
+        "hits per pattern: " + ", ".join("%s=%d" % (p, per_pattern[p]) for p, _ in compiled)
+    )
+    return result
+
+
+# --- 9.2 ---------------------------------------------------------------------------------
+
+
+def is_comment(text):
+    return text.lstrip().startswith("//") and not INCLUDE_COMMENTS
+
+
+def check_network(allow):
+    result = Result("network", "Network-capable code (9.2)")
+    args = ["-t", "rust", "-g", "!target"]
+
+    for path, line, text in rg_lines(args + pattern_args(NETWORK_RUST_PATTERNS)):
+        if is_comment(text):
+            continue
+        if not allow.allows("net-rust", path, text):
+            result.add(path, line, clip(text))
+
+    allowed_commands = collections.Counter()
+    command_regex = re.compile(COMMAND_PATTERN)
+    for path, line, text in rg_lines(args + ["-e", COMMAND_PATTERN]):
+        if is_comment(text):
+            continue
+        match = command_regex.search(text)
+        if match and match.group(1) in ALLOWED_COMMANDS:
+            allowed_commands[match.group(1)] += 1
+            continue
+        if not allow.allows("net-cmd", path, text):
+            result.add(path, line, clip(text))
+    if allowed_commands:
+        result.notes.append(
+            "allowed subprocesses (user-initiated): "
+            + ", ".join("%s x%d" % item for item in sorted(allowed_commands.items()))
+        )
+
+    script_paths = [d for d in SCRIPT_DIRS if os.path.exists(os.path.join(ROOT, d))]
+    if script_paths:
+        for path, line, text in rg_lines(["--hidden", "-g", "!.git"] + pattern_args(SCRIPT_PATTERNS), script_paths):
+            if text.lstrip().startswith("#") and not INCLUDE_COMMENTS:
+                continue
+            if not allow.allows("net-script", path, text):
+                result.add(path, line, clip(text))
+    return result
+
+
+def check_links(_allow):
+    result = Result("links", "Browser-opening call sites (9.2, informational)", blocking=False)
+    for path, line, text in rg_lines(["-t", "rust", "-g", "!target"] + pattern_args(LINK_PATTERNS)):
+        result.add(path, line, clip(text))
+    return result
+
+
+def check_url_hosts(_allow):
+    result = Result("urls", "Hard-coded URL hosts in Rust sources (informational)", blocking=False)
+    per_host = collections.defaultdict(list)
+    for path, line, text in rg_lines(["-t", "rust", "-g", "!target", "-o", "-e", URL_LITERAL]):
+        host = re.sub(r"^https?://", "", text.strip()).lower()
+        per_host[host].append((path, line))
+    for host in sorted(per_host):
+        locations = per_host[host]
+        files = sorted(set(p for p, _ in locations))
+        result.add(None, None, "%-42s %4d in %3d files, e.g. %s:%d" % (host, len(locations), len(files), files[0], locations[0][1]))
+    return result
+
+
+# --- 9.3 ---------------------------------------------------------------------------------
+
+
+def parse_deny_bans():
+    """Returns {crate: wrappers or None} from the `bans.deny` entries of deny.toml."""
+    with open(DENY_TOML, encoding="utf-8") as f:
+        text = f.read()
+    section = re.search(r"^\[bans\](.*?)(?=^\[|\Z)", text, re.S | re.M)
+    if not section:
+        raise RuntimeError("deny.toml has no [bans] section")
+    bans = {}
+    for entry in re.finditer(r'\{\s*crate\s*=\s*"([^"]+)"([^}]*)\}', section.group(1)):
+        wrappers = re.search(r"wrappers\s*=\s*\[([^\]]*)\]", entry.group(2))
+        bans[entry.group(1)] = re.findall(r'"([^"]+)"', wrappers.group(1)) if wrappers else None
+    return bans
+
+
+def load_graph():
+    proc = run(["cargo", "metadata", "--format-version", "1", "--locked", "--all-features"])
+    if proc.returncode != 0:
+        raise RuntimeError("cargo metadata failed:\n" + proc.stderr.decode("utf-8", "replace"))
+    meta = json.loads(proc.stdout)
+    packages = {p["id"]: p for p in meta["packages"]}
+    nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
+    members = set(meta["workspace_members"])
+    # Runtime and build edges only, like `cargo tree -e normal,build`.
+    reachable = set()
+    stack = list(members)
+    while stack:
+        current = stack.pop()
+        if current in reachable:
+            continue
+        reachable.add(current)
+        for dep in nodes[current]["deps"]:
+            if any(kind["kind"] in (None, "build") for kind in dep["dep_kinds"]):
+                stack.append(dep["pkg"])
+    dependents = collections.defaultdict(set)
+    for current in reachable:
+        for dep in nodes[current]["deps"]:
+            if dep["pkg"] in reachable and any(kind["kind"] in (None, "build") for kind in dep["dep_kinds"]):
+                dependents[dep["pkg"]].add(packages[current]["name"])
+    return packages, members, reachable, dependents
+
+
+def check_deps(_allow):
+    result = Result("deps", "Dependency graph (9.3)")
+    packages, members, reachable, dependents = load_graph()
+    bans = parse_deny_bans()
+
+    workspace = sorted(p["name"] for i, p in packages.items() if i in members)
+    for name in workspace:
+        for banned in BANNED_WORKSPACE_PACKAGES:
+            if fnmatch.fnmatch(name, banned):
+                result.add(None, None, "workspace crate `%s` must not exist" % name)
+                break
+
+    for package_id in sorted(reachable, key=lambda i: (packages[i]["name"], packages[i]["version"])):
+        package = packages[package_id]
+        name = package["name"]
+        if name not in bans:
+            continue
+        wrappers = bans[name]
+        who = sorted(dependents[package_id])
+        label = "%s %s" % (name, package["version"])
+        if wrappers is None:
+            result.add(None, None, "banned crate `%s` is in the graph, used by: %s" % (label, ", ".join(who) or "(workspace root)"))
+        else:
+            extra = [d for d in who if d not in wrappers]
+            if extra:
+                result.add(
+                    None, None,
+                    "`%s` is used by crates outside its wrappers %s: %s" % (label, wrappers, ", ".join(extra)),
+                )
+    return result
+
+
+def check_deny(_allow):
+    result = Result("deny", "cargo deny check bans licenses sources (9.3)")
+    if shutil.which("cargo-deny") is None:
+        result.findings.append(Finding(None, None, "cargo-deny is not installed (cargo install --locked cargo-deny)"))
+        return result
+    proc = run(["cargo", "deny", "--locked", "--format", "json", "check", "bans", "licenses", "sources"])
+    seen = set()
+    for raw in proc.stderr.decode("utf-8", "replace").splitlines():
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        fields = entry.get("fields", {})
+        if entry.get("type") != "diagnostic" or fields.get("severity") != "error":
+            continue
+        message = "[%s] %s" % (fields.get("code", "error"), fields.get("message", ""))
+        if message not in seen:
+            seen.add(message)
+            result.add(None, None, message)
+    if proc.returncode != 0 and not result.findings:
+        result.add(None, None, "cargo deny failed: " + proc.stderr.decode("utf-8", "replace").strip()[-400:])
+    return result
+
+
+# --- 9.4a: strace log ----------------------------------------------------------------------
+
+SOCKADDR_V4 = re.compile(r'sa_family=AF_INET,\s*sin_port=htons\((\d+)\),\s*sin_addr=inet_addr\("([^"]+)"\)')
+SOCKADDR_V6 = re.compile(r'sa_family=AF_INET6,.*?sin6_port=htons\((\d+)\),.*?inet_pton\(AF_INET6,\s*"([^"]+)"')
+
+
+def net_log_violation(address, port):
+    if port == 53:
+        return "DNS (port 53)"
+    parsed = ipaddress.ip_address(address)
+    if getattr(parsed, "ipv4_mapped", None) is not None:
+        parsed = parsed.ipv4_mapped
+    if not parsed.is_loopback:
+        return "non-loopback address"
+    return None
+
+
+def check_net_log(path):
+    result = Result("netlog", "Sandboxed run: connect/send targets in %s (9.4a)" % path)
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for number, raw in enumerate(f, 1):
+            if not re.search(r"\b(connect|sendto|sendmsg|sendmmsg)\(", raw):
+                continue
+            for regex in (SOCKADDR_V4, SOCKADDR_V6):
+                for match in regex.finditer(raw):
+                    reason = net_log_violation(match.group(2), int(match.group(1)))
+                    if reason:
+                        result.add(path, number, "%s: %s:%s" % (reason, match.group(2), match.group(1)))
+    return result
+
+
+# --- driver ----------------------------------------------------------------------------
+
+
+GROUPS = collections.OrderedDict([
+    ("hosts", [check_hosts, check_review]),
+    ("network", [check_network, check_links, check_url_hosts]),
+    ("deps", [check_deps, check_deny]),
+])
+
+
+def print_result(result, summary):
+    if result.skipped:
+        print("== %s: %s\n   skipped: %s\n" % (result.check_id, result.title, result.skipped))
+        return
+    by_path = collections.OrderedDict()
+    for finding in sorted(result.findings, key=lambda f: (f.path or "", f.line or 0)):
+        by_path.setdefault(finding.path, []).append(finding)
+    status = "FAIL" if result.findings and result.blocking else ("info" if not result.blocking else "ok")
+    print("== %s: %s [%s: %d findings in %d files]" % (
+        result.check_id, result.title, status, len(result.findings), len([p for p in by_path if p]),
+    ))
+    for note in result.notes:
+        print("   note: " + note)
+    for path, findings in by_path.items():
+        if path is None:
+            for finding in findings:
+                print("   " + finding.text)
+            continue
+        print("   %s (%d)" % (path, len(findings)))
+        if not summary:
+            for finding in findings:
+                print("      %d: %s" % (finding.line, finding.text))
+    print()
+
+
+def print_areas(results):
+    print("== findings by area (blocking checks)")
+    for result in results:
+        if not result.blocking or not result.findings:
+            continue
+        counts = collections.Counter(area(f.path) for f in result.findings if f.path)
+        if not counts:
+            continue
+        print("   [%s]" % result.check_id)
+        for name, count in counts.most_common():
+            print("      %5d  %s" % (count, name))
+    print()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--report", action="store_true", help="list findings and exit 0")
+    parser.add_argument("--summary", action="store_true", help="per-file counts instead of every line")
+    parser.add_argument("--review", action="store_true", help="also print the informational lists in full")
+    parser.add_argument("--only", help="comma-separated groups to run: " + ", ".join(GROUPS))
+    parser.add_argument("--include-comments", action="store_true", help="count comment lines in the network check")
+    parser.add_argument("--skip-deny", action="store_true", help="do not run cargo deny")
+    parser.add_argument("--net-log", metavar="FILE", help="check an strace log instead of the tree")
+    parser.add_argument("--allowlist", default=DEFAULT_ALLOWLIST, help="allowlist file")
+    args = parser.parse_args()
+    global INCLUDE_COMMENTS
+    INCLUDE_COMMENTS = args.include_comments
+
+    if args.net_log:
+        result = check_net_log(args.net_log)
+        print_result(result, args.summary)
+        return 0 if args.report or not result.findings else 1
+
+    if shutil.which("rg") is None:
+        print("error: ripgrep (rg) is required", file=sys.stderr)
+        return 2
+
+    groups = list(GROUPS)
+    if args.only:
+        groups = [g.strip() for g in args.only.split(",")]
+        unknown = [g for g in groups if g not in GROUPS]
+        if unknown:
+            parser.error("unknown group(s): " + ", ".join(unknown))
+
+    allow = Allowlist(args.allowlist)
+    results = []
+    for group in groups:
+        for check in GROUPS[group]:
+            if check is check_deny and args.skip_deny:
+                continue
+            try:
+                results.append(check(allow))
+            except RuntimeError as error:
+                print("error: %s" % error, file=sys.stderr)
+                return 2
+
+    for result in results:
+        print_result(result, args.summary or (not result.blocking and not args.review))
+    print_areas(results)
+
+    unused = allow.unused() if "hosts" in groups and "network" in groups else []
+    if unused:
+        print("== allowlist entries that matched nothing (remove them)")
+        for check, glob, number in unused:
+            print("   %s:%d  %s | %s" % (os.path.relpath(args.allowlist, ROOT), number, check, glob))
+        print()
+
+    blocking = [r for r in results if r.blocking and r.findings]
+    print("== summary")
+    for result in results:
+        state = "FAIL" if result.blocking and result.findings else ("info" if not result.blocking else "ok")
+        print("   %-8s %-5s %6d findings" % (result.check_id, state, len(result.findings)))
+    if blocking and not args.report:
+        print("\noffline audit FAILED: %s" % ", ".join(r.check_id for r in blocking))
+        return 1
+    if blocking:
+        print("\nreport mode: exiting 0 with %d failing check(s)" % len(blocking))
+    else:
+        print("\noffline audit passed")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
