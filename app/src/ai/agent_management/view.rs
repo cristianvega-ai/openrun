@@ -784,18 +784,11 @@ impl AgentManagementView {
         });
     }
 
-    /// Since the valid set of environments depends on what tasks we have loaded in,
-    /// we use this function to update the available options depending on the most recent
-    /// set of tasks.
     fn update_environment_dropdown(&mut self, ctx: &mut ViewContext<Self>) {
-        let model = AgentConversationsModel::as_ref(ctx);
-        let scope = UserWorkspaces::as_ref(ctx).team_context(&self.view_handle, ctx);
-        let envs = model.get_all_environment_ids_and_names(&scope, ctx);
-
         let selected_name = match &self.filters.environment {
             EnvironmentFilter::All => Some("All".to_string()),
             EnvironmentFilter::NoEnvironment => Some("None".to_string()),
-            EnvironmentFilter::Specific(id) => envs.get(id).cloned(),
+            EnvironmentFilter::Specific(_) => None,
         };
 
         self.environment_dropdown.update(ctx, |dropdown, ctx| {
@@ -816,21 +809,6 @@ impl AgentManagementView {
                     ),
                 ),
             ));
-
-            let mut sorted_envs: Vec<_> = envs.into_iter().collect();
-            sorted_envs.sort_by(|(_, name_a), (_, name_b)| name_a.cmp(name_b));
-
-            for (environment_id, environment_name) in sorted_envs {
-                items.push(MenuItem::Item(
-                    MenuItemFields::new(environment_name).with_on_select_action(
-                        DropdownAction::select_action_and_close(
-                            AgentManagementViewAction::SetEnvironmentFilter(
-                                EnvironmentFilter::Specific(environment_id),
-                            ),
-                        ),
-                    ),
-                ));
-            }
 
             dropdown.set_rich_items(items, ctx);
             if let Some(selected_name) = selected_name {
@@ -1225,8 +1203,7 @@ impl AgentManagementView {
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            AgentConversationsModelEvent::ConversationsLoaded
-            | AgentConversationsModelEvent::TasksUpdated => {
+            AgentConversationsModelEvent::ConversationsLoaded => {
                 self.update_creator_dropdown(ctx);
                 self.update_environment_dropdown(ctx);
                 self.update_source_dropdown(ctx);
@@ -1306,13 +1283,9 @@ impl AgentManagementView {
             AgentConversationNavigationSubject::Entry(*item_id),
             ctx,
         );
-        let task = entry
-            .identity
-            .ambient_agent_task_id
-            .and_then(|task_id| model.get_task_data(&task_id));
         let data = ConversationDetailsData::from_agent_conversation_entry(
             &entry,
-            task.as_ref(),
+            None,
             open_action,
             copy_link_url,
         );

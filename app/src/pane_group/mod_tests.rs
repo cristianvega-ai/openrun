@@ -63,7 +63,6 @@ use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_profiles::UserProfiles;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandlesProvider};
-use warp_server_client::HttpStatusError;
 
 fn initialize_app(app: &mut App) {
     initialize_app_with_history(app, Vec::new());

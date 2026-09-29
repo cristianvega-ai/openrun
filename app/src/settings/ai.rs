@@ -132,7 +132,9 @@ impl DefaultSessionMode {
             .enumerate()
             .flat_map(|(index, c)| {
                 let separator = (c.is_ascii_uppercase() && index > 0).then_some('_');
-                separator.into_iter().chain(std::iter::once(c.to_ascii_lowercase()))
+                separator
+                    .into_iter()
+                    .chain(std::iter::once(c.to_ascii_lowercase()))
             })
             .collect::<String>();
         match snake_case.as_str() {

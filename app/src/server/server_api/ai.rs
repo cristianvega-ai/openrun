@@ -122,7 +122,6 @@ pub struct RenameConversationResponse {
     pub title: String,
 }
 
-
 /// Response from the artifact endpoint.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "artifact_type")]
@@ -446,7 +445,6 @@ pub trait AIClient: 'static + Send + Sync {
         &self,
         artifact_uid: &str,
     ) -> anyhow::Result<ArtifactDownloadResponse, anyhow::Error>;
-
 }
 
 impl ServerApi {

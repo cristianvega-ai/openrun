@@ -3,14 +3,12 @@ pub mod entry;
 mod query;
 
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
 
 use ai::harness::Harness;
 pub use entry::{
     AgentConversationEntry, AgentConversationEntryId, AgentConversationNavigationSubject,
 };
 use fuzzy_match::FuzzyMatchResult;
-use instant::Instant;
 use itertools::Itertools;
 pub use query::query_conversation_entries;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -18,60 +16,22 @@ use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::WarpTheme;
 use warp_core::ui::theme::color::internal_colors;
-use warp_errors::report_error;
 use warpui::color::ColorU;
-use warpui::{AppContext, Entity, ModelContext, RequestState, SingletonEntity};
+use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
-use crate::ai::ambient_agents::{AgentSource, AmbientAgentTask, AmbientAgentTaskId};
+use crate::ai::ambient_agents::AgentSource;
 use crate::ai::artifacts::Artifact;
 use crate::ai::blocklist::{
     BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate,
 };
-use crate::ai::cloud_environments::CloudAmbientAgentEnvironment;
 use crate::ai::conversation_navigation::ConversationNavigationData;
 use crate::auth::AuthStateProvider;
-use crate::cloud_object::CloudObjectLookup as _;
-use crate::server::ids::{ServerId, SyncId};
-use crate::server::retry_strategies::{
-    OUT_OF_BAND_REQUEST_RETRY_STRATEGY, is_transient_http_error,
-};
-use crate::server::server_api::ServerApiProvider;
 use crate::ui_components::icons::Icon;
 use crate::workspace::{RestoreConversationLayout, WorkspaceAction};
 use crate::workspaces::user_workspaces::TeamScope;
-
-/// How long to skip refetching a task that just failed with a transient error
-/// (5xx / 408 / 429 / network). Short cooldown — `spawn_with_retry_on_error_when` already
-/// runs fast exponential retries before bubbling up the failure, so this is just enough to
-/// absorb streaming-driven re-entries.
-const TRANSIENT_FETCH_FAILURE_COOLDOWN: Duration = Duration::from_secs(2);
-
-/// How long to skip refetching a task that just failed with a permanent (non-transient) HTTP
-/// error such as 401/403/404. We don't refuse forever — permissions can change mid-session
-/// (e.g. an ACL grant) — but we wait long enough that streaming bursts and rapid re-entries
-/// can't cause a flood.
-const PERMANENT_FETCH_FAILURE_COOLDOWN: Duration = Duration::from_secs(60);
-
-/// Per-task fetch state for `get_or_async_fetch_task_data`. The three variants are mutually
-/// exclusive: a task id is either being fetched right now, in a short cooldown after a
-/// transient failure, or in a longer cooldown after a permanent (non-transient) failure.
-#[derive(Debug)]
-enum TaskFetchState {
-    /// A retry chain is currently outstanding for this task id. Used to dedupe re-entries
-    /// (e.g. from streaming-driven panel refreshes) so we don't spawn overlapping retry
-    /// chains for the same task id.
-    InFlight,
-    /// The fetch returned a permanent (non-transient) HTTP error such as 401/403/404; remember
-    /// when it failed so we can back off for [`PERMANENT_FETCH_FAILURE_COOLDOWN`] before
-    /// retrying. We don't refuse forever in case permissions change mid-session.
-    PermanentlyFailed { at: Instant },
-    /// The retry chain just exhausted on a transient error; remember when it failed so we
-    /// can back off for [`TRANSIENT_FETCH_FAILURE_COOLDOWN`] before retrying.
-    TransientlyFailed { at: Instant },
-}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SessionStatus {
@@ -359,22 +319,14 @@ pub(crate) fn artifacts_match_filter(
 /// This model serves as a unified interface for reading local agent conversations. It backs
 /// both the agent management view and the conversation list view.
 pub struct AgentConversationsModel {
-    /// A map of task IDs to agent tasks.
-    tasks: HashMap<AmbientAgentTaskId, AmbientAgentTask>,
     /// A map of conversation IDs to local conversations.
     conversations: HashMap<AIConversationId, ConversationMetadata>,
-    /// Per-task fetch state for `get_or_async_fetch_task_data`. See [`TaskFetchState`] for
-    /// the meaning of each variant. Tasks that have been successfully fetched live in `tasks`
-    /// and are absent from this map.
-    task_fetch_state: HashMap<AmbientAgentTaskId, TaskFetchState>,
     is_loading: bool,
 }
 
 pub enum AgentConversationsModelEvent {
     /// Conversation data was loaded or refreshed.
     ConversationsLoaded,
-    /// Existing task data may have been updated (e.g., state changes).
-    TasksUpdated,
     /// Conversation status data was updated
     ConversationUpdated { kind: ConversationUpdateKind },
     /// Conversation artifacts were updated (plans, PRs, etc.)
@@ -407,9 +359,7 @@ impl AgentConversationsModel {
         // If FF not enabled, return an empty model.
         if !FeatureFlag::AgentManagementView.is_enabled() {
             return Self {
-                tasks: HashMap::new(),
                 conversations: HashMap::new(),
-                task_fetch_state: HashMap::new(),
                 is_loading: false,
             };
         }
@@ -425,9 +375,7 @@ impl AgentConversationsModel {
         });
 
         let mut model = Self {
-            tasks: HashMap::new(),
             conversations: HashMap::new(),
-            task_fetch_state: HashMap::new(),
             is_loading: true,
         };
 
@@ -466,13 +414,6 @@ impl AgentConversationsModel {
         ctx.emit(AgentConversationsModelEvent::ConversationsLoaded);
     }
 
-    /// Seeds the task cache so tests can exercise cache-hit paths without a
-    /// server round trip.
-    #[cfg(test)]
-    pub(crate) fn insert_task_for_test(&mut self, task: AmbientAgentTask) {
-        self.tasks.insert(task.task_id, task);
-    }
-
     /// Returns normalized, owned entries for agent management/navigation surfaces.
     pub fn get_entries<S: TeamScope + ?Sized>(
         &self,
@@ -489,13 +430,6 @@ impl AgentConversationsModel {
 
     pub fn has_items<S: TeamScope + ?Sized>(&self, _scope: &S, app: &AppContext) -> bool {
         !self.unfiltered_entries(app).is_empty()
-    }
-
-    fn task_matches_team(task: &AmbientAgentTask, team_uid: Option<ServerId>) -> bool {
-        task.scope
-            .as_ref()
-            .filter(|scope| scope.is_team())
-            .is_none_or(|scope| team_uid.is_some_and(|team_uid| scope.uid == team_uid.to_string()))
     }
 
     /// Returns normalized entries before user-selected filters are applied.
@@ -749,166 +683,6 @@ impl AgentConversationsModel {
         }
     }
 
-    /// Get raw task data by task ID
-    pub fn get_task_data(&self, task_id: &AmbientAgentTaskId) -> Option<AmbientAgentTask> {
-        self.tasks.get(task_id).cloned()
-    }
-
-    /// Updates a cached task to reflect that execution has started and its
-    /// session is now known (from a `run_session_linked` wire event). If the
-    /// task is not yet cached, starts a fetch to retrieve it.
-    ///
-    /// Mutating the cache entry directly avoids a full round-trip while still
-    /// giving `decide_child_pane_materialization` the `InProgress` +
-    /// `is_sandbox_running=true` + `session_id` it needs to return `AttachLive`
-    /// on the next pill click. `TasksUpdated` is emitted so any pending
-    /// re-drives fire immediately.
-    pub fn update_task_as_running_with_session(
-        &mut self,
-        task_id: &AmbientAgentTaskId,
-        session_id_str: String,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        use crate::ai::ambient_agents::AmbientAgentTaskState;
-        if let Some(task) = self.tasks.get_mut(task_id) {
-            task.session_id = Some(session_id_str);
-            task.is_sandbox_running = true;
-            // Only promote to InProgress if still in a queued/pending state;
-            // never downgrade a terminal state that may have arrived concurrently.
-            match task.state {
-                AmbientAgentTaskState::Queued
-                | AmbientAgentTaskState::Pending
-                | AmbientAgentTaskState::Claimed => {
-                    task.state = AmbientAgentTaskState::InProgress;
-                }
-                _ => {}
-            }
-            ctx.emit(AgentConversationsModelEvent::TasksUpdated);
-        } else {
-            // Task not cached yet; start a fetch.
-            self.async_fetch_task(task_id, ctx);
-        }
-    }
-
-    /// Evicts a task from the cache and immediately starts a fresh
-    /// `GET /agent/runs/{id}` fetch. Used by the family drain when a terminal
-    /// lifecycle event arrives for a child whose cached state is stale (e.g.
-    /// still shows `Queued` from the initial discovery fetch). The refreshed
-    /// data — including the server conversation token and terminal state —
-    /// enables `decide_child_pane_materialization` to return `LoadTranscript`
-    /// so subsequent pill clicks load the cloud transcript.
-    pub fn evict_and_refetch_task(
-        &mut self,
-        task_id: &AmbientAgentTaskId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.tasks.remove(task_id);
-        self.task_fetch_state.remove(task_id);
-        self.async_fetch_task(task_id, ctx);
-    }
-
-    /// Get raw task data by task ID, fetching from server if not in memory.
-    /// If the task is already in memory, returns it immediately.
-    /// If not, spawns an async task to fetch it from the server, stores it in memory,
-    /// and emits a TasksUpdated event when ready.
-    ///
-    /// Multiple unrelated callers (the WASM transcript details panel, the cloud-mode details
-    /// panel, and pane-group restoration) can all hit this method, sometimes many times per
-    /// second while an agent is streaming. To avoid spamming `GET /api/v1/agent/runs/{id}` we:
-    /// * dedupe in-flight fetches per task id,
-    /// * back off for [`TRANSIENT_FETCH_FAILURE_COOLDOWN`] after a transient retry chain
-    ///   exhausts (5xx/408/429/network), and
-    /// * back off for [`PERMANENT_FETCH_FAILURE_COOLDOWN`] after a non-transient failure
-    ///   (e.g. 401/403/404). Permanent failures still get retried periodically so we recover
-    ///   if permissions change mid-session.
-    pub fn get_or_async_fetch_task_data(
-        &mut self,
-        task_id: &AmbientAgentTaskId,
-        ctx: &mut ModelContext<Self>,
-    ) -> Option<AmbientAgentTask> {
-        // If we already have it, return it
-        if let Some(task) = self.tasks.get(task_id) {
-            return Some(task.clone());
-        }
-
-        self.async_fetch_task(task_id, ctx);
-        None
-    }
-
-    /// Consult fetch-state guards and spawn a fetch if allowed.
-    fn async_fetch_task(&mut self, task_id: &AmbientAgentTaskId, ctx: &mut ModelContext<Self>) {
-        match self.task_fetch_state.get(task_id) {
-            Some(TaskFetchState::InFlight) => return,
-            Some(TaskFetchState::PermanentlyFailed { at, .. }) => {
-                if at.elapsed() < PERMANENT_FETCH_FAILURE_COOLDOWN {
-                    return;
-                }
-                // Cooldown has elapsed; clear the entry and fall through to fetch again.
-                self.task_fetch_state.remove(task_id);
-            }
-            Some(TaskFetchState::TransientlyFailed { at, .. }) => {
-                if at.elapsed() < TRANSIENT_FETCH_FAILURE_COOLDOWN {
-                    return;
-                }
-                self.task_fetch_state.remove(task_id);
-            }
-            None => {}
-        }
-
-        // Opportunistically purge other expired entries so the map doesn't grow unbounded.
-        self.task_fetch_state.retain(|_, state| match state {
-            TaskFetchState::TransientlyFailed { at, .. } => {
-                at.elapsed() < TRANSIENT_FETCH_FAILURE_COOLDOWN
-            }
-            TaskFetchState::PermanentlyFailed { at, .. } => {
-                at.elapsed() < PERMANENT_FETCH_FAILURE_COOLDOWN
-            }
-            TaskFetchState::InFlight => true,
-        });
-
-        // Otherwise, spawn a task to fetch it. Use the `_when` variant so non-transient errors
-        // (e.g. 401/403/404) bail after the first attempt instead of issuing all 4 requests in
-        // the retry chain before being cached.
-        let ai_client = ServerApiProvider::as_ref(ctx).get_ai_client();
-        let task_id_clone = *task_id;
-
-        self.task_fetch_state
-            .insert(task_id_clone, TaskFetchState::InFlight);
-
-        ctx.spawn_with_retry_on_error_when(
-            move || {
-                let ai_client = ai_client.clone();
-                async move { ai_client.get_ambient_agent_task(&task_id_clone).await }
-            },
-            OUT_OF_BAND_REQUEST_RETRY_STRATEGY,
-            is_transient_http_error,
-            move |model, result, ctx| match result {
-                RequestState::RequestSucceeded(task) => {
-                    let fetched_id = task.task_id;
-                    model.tasks.insert(fetched_id, task);
-                    model.task_fetch_state.remove(&fetched_id);
-                    ctx.emit(AgentConversationsModelEvent::TasksUpdated);
-                }
-                RequestState::RequestFailed(e) => {
-                    let now = Instant::now();
-                    let new_state = if is_transient_http_error(&e) {
-                        TaskFetchState::TransientlyFailed { at: now }
-                    } else {
-                        TaskFetchState::PermanentlyFailed { at: now }
-                    };
-                    model.task_fetch_state.insert(task_id_clone, new_state);
-                    report_error!(e);
-
-                    // On failure, this still emits an update event so that the details panel can re-render with the error message.
-                    ctx.emit(AgentConversationsModelEvent::TasksUpdated);
-                }
-                RequestState::RequestFailedRetryPending(_) => {
-                    // Wait for a terminal outcome before updating dedup/backoff state.
-                }
-            },
-        );
-    }
-
     /// Returns all (name, uid) pairs for creators of conversations.
     ///
     /// We use this function to populate the available creator filter list.
@@ -929,54 +703,6 @@ impl AgentConversationsModel {
         creators.dedup_by(|a, b| a.0 == b.0);
 
         creators
-    }
-
-    /// Returns a mapping of environment IDs to display names.
-    ///
-    /// When multiple environments share the same name, each is disambiguated
-    /// as "<name> (<id>)".
-    pub fn get_all_environment_ids_and_names<S: TeamScope + ?Sized>(
-        &self,
-        scope: &S,
-        ctx: &AppContext,
-    ) -> HashMap<String, String> {
-        let mut envs = HashMap::<String, String>::new();
-        for task in self
-            .tasks
-            .values()
-            .filter(|task| Self::task_matches_team(task, scope.team_uid()))
-        {
-            let Some(environment_id) = task
-                .agent_config_snapshot
-                .as_ref()
-                .and_then(|s| s.environment_id.as_deref())
-            else {
-                continue;
-            };
-
-            let Some(server_id) = ServerId::try_from(environment_id).ok() else {
-                continue;
-            };
-            let sync_id = SyncId::ServerId(server_id);
-            let Some(env) = CloudAmbientAgentEnvironment::get_by_id(&sync_id, ctx) else {
-                continue;
-            };
-            let env_model = &env.model().string_model;
-            envs.insert(environment_id.to_string(), env_model.name.clone());
-        }
-
-        // Disambiguate duplicate names by appending the environment ID.
-        let mut name_counts = HashMap::<String, usize>::new();
-        for name in envs.values() {
-            *name_counts.entry(name.clone()).or_default() += 1;
-        }
-        for (id, name) in &mut envs {
-            if name_counts.get(name.as_str()).copied().unwrap_or(0) > 1 {
-                *name = format!("{name} ({id})");
-            }
-        }
-
-        envs
     }
 }
 

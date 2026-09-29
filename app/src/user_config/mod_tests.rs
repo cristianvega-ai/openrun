@@ -136,7 +136,10 @@ fn test_load_tab_configs_opens_retired_cloud_pane_type_as_terminal() {
 
     let (configs, errors) = load_tab_configs(dir.path());
 
-    assert!(errors.is_empty(), "no tab config may fail to load: {errors:?}");
+    assert!(
+        errors.is_empty(),
+        "no tab config may fail to load: {errors:?}"
+    );
     let names: Vec<&str> = configs.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, vec!["Cloud", "Plain"]);
     assert_eq!(

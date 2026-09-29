@@ -42,8 +42,7 @@ impl ConversationListViewModel {
             match event {
                 // These events change the set of items in the list, so we need
                 // to rebuild the cached ID list.
-                AgentConversationsModelEvent::ConversationsLoaded
-                | AgentConversationsModelEvent::TasksUpdated => {
+                AgentConversationsModelEvent::ConversationsLoaded => {
                     me.refresh_cached_items(ctx);
                 }
                 // Status changes don't affect the set of IDs (status is read

@@ -16,7 +16,6 @@ use crate::auth::UserUid;
 use crate::cloud_object::{Revision, ServerMetadata, ServerPermissions};
 use crate::server::ids::ServerId;
 use crate::workspaces::user_profiles::UserProfileWithUID;
-use cloud_object_models::HarnessConfig;
 
 #[test]
 fn test_from_conversation_prefers_server_creator_profile() {

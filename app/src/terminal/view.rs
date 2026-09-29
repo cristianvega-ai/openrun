@@ -2885,8 +2885,7 @@ impl TerminalView {
             |me, _, event, ctx| {
                 let should_refresh_details_panel = matches!(
                     event,
-                    AgentConversationsModelEvent::TasksUpdated
-                        | AgentConversationsModelEvent::ConversationUpdated { .. }
+                    AgentConversationsModelEvent::ConversationUpdated { .. }
                 );
                 // Only refresh panel if it's currently open (avoids unnecessary work)
                 if should_refresh_details_panel && me.is_conversation_details_panel_open {

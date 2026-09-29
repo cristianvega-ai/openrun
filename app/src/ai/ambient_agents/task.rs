@@ -166,12 +166,6 @@ pub struct TaskScope {
     pub uid: String,
 }
 
-impl TaskScope {
-    pub fn is_team(&self) -> bool {
-        self.scope_type.eq_ignore_ascii_case("team")
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct AmbientAgentTask {
     pub task_id: AmbientAgentTaskId,
@@ -242,30 +236,6 @@ pub struct RunExecution<'a> {
 impl RunExecution<'_> {}
 
 impl AmbientAgentTask {
-    /// Returns the short label for this task: trimmed `agent_config_snapshot.name`,
-    /// trimmed `title`, or `"Agent"`.
-    pub fn display_name(&self) -> &str {
-        if let Some(name) = self
-            .agent_config_snapshot
-            .as_ref()
-            .and_then(|c| c.name.as_deref())
-        {
-            let trimmed = name.trim();
-            if !trimmed.is_empty() {
-                return trimmed;
-            }
-        }
-        let trimmed_title = self.title.trim();
-        if !trimmed_title.is_empty() {
-            return trimmed_title;
-        }
-        "Agent"
-    }
-
-    pub fn conversation_id(&self) -> Option<&str> {
-        self.conversation_id.as_deref()
-    }
-
     pub fn active_run_execution(&self) -> RunExecution<'_> {
         RunExecution {
             session_id: self.session_id.as_deref(),
@@ -273,10 +243,6 @@ impl AmbientAgentTask {
             request_usage: self.request_usage.as_ref(),
             is_sandbox_running: self.is_sandbox_running,
         }
-    }
-
-    pub fn is_terminal_run_state(&self) -> bool {
-        self.state.is_terminal()
     }
 
     /// Total credits used (inference + compute + platform).
@@ -337,8 +303,6 @@ impl AmbientAgentTaskState {
             AmbientAgentTaskState::Error => Some("ERROR"),
             AmbientAgentTaskState::Blocked => Some("BLOCKED"),
             AmbientAgentTaskState::Cancelled => Some("CANCELLED"),
-            // Unknown states are only for resilient deserialization and should not be
-            // sent back as filter values.
             AmbientAgentTaskState::Unknown => None,
         }
     }
@@ -355,21 +319,6 @@ impl AmbientAgentTaskState {
             | AmbientAgentTaskState::InProgress
             | AmbientAgentTaskState::Succeeded
             | AmbientAgentTaskState::Cancelled => false,
-        }
-    }
-
-    pub fn is_terminal(&self) -> bool {
-        match self {
-            AmbientAgentTaskState::Succeeded
-            | AmbientAgentTaskState::Failed
-            | AmbientAgentTaskState::Error
-            | AmbientAgentTaskState::Blocked
-            | AmbientAgentTaskState::Cancelled
-            | AmbientAgentTaskState::Unknown => true,
-            AmbientAgentTaskState::Queued
-            | AmbientAgentTaskState::Pending
-            | AmbientAgentTaskState::Claimed
-            | AmbientAgentTaskState::InProgress => false,
         }
     }
 }

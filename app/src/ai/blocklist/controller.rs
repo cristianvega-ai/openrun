@@ -42,7 +42,6 @@ use crate::ai::agent::{
     FinishedAIAgentOutput, RenderableAIError, RequestCost, RequestMetadata, RunningCommand,
     StaticQueryType, TransientNetworkErrorKind, UserQueryMode, extract_user_query_mode,
 };
-use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::document::ai_document_model::{
     AIDocumentId, AIDocumentModel, AIDocumentUserEditStatus,
 };
@@ -272,15 +271,6 @@ pub struct BlocklistAIController {
     team_context_resolver: TeamContextResolver,
 
     should_refresh_available_llms_on_stream_finish: bool,
-
-    /// Ambient agent task ID attached to this controller. This is a property of the controller, and not an individual
-    /// conversation, because the ambient agent task driver owns the entire Warp window working on a task, and any
-    /// sessions within it. In the future, one task may span several sessions with background processes.
-    ambient_agent_task_id: Option<AmbientAgentTaskId>,
-
-    /// Per-session directory for downloading file attachments.
-    /// Set by the agent driver based on the workspace directory (e.g. `{working_dir}/.warp/attachments`).
-    attachments_download_dir: Option<std::path::PathBuf>,
 
     /// Pending auto-resume tasks that are waiting for network connectivity.
     /// These should be cancelled when a new request is sent for the same conversation.
@@ -528,8 +518,6 @@ impl BlocklistAIController {
             terminal_surface_id,
             team_context_resolver,
             should_refresh_available_llms_on_stream_finish: false,
-            ambient_agent_task_id: None,
-            attachments_download_dir: None,
             pending_auto_resume_handles: HashMap::new(),
             pending_passive_follow_ups: HashSet::new(),
         }
@@ -1405,16 +1393,6 @@ impl BlocklistAIController {
             .insert(conversation_id, handle);
     }
 
-    #[cfg(test)]
-    pub fn get_ambient_agent_task_id(&self) -> Option<AmbientAgentTaskId> {
-        self.ambient_agent_task_id
-    }
-
-    /// Set the per-session directory for downloading file attachments.
-    pub fn set_attachments_download_dir(&mut self, dir: std::path::PathBuf) {
-        self.attachments_download_dir = Some(dir);
-    }
-
     fn start_new_conversation_for_request<'a>(
         &self,
         ctx: &'a mut ModelContext<Self>,
@@ -1539,7 +1517,6 @@ impl BlocklistAIController {
             tasks: active_tasks,
             server_conversation_token: conversation_server_token,
             forked_from_conversation_token: conversation_forked_from_token,
-            ambient_agent_task_id: self.ambient_agent_task_id,
             existing_suggestions: history_model
                 .as_ref(ctx)
                 .existing_suggestions_for_conversation(conversation_id)

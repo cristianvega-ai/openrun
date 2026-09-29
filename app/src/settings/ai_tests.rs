@@ -310,9 +310,7 @@ fn retired_default_session_modes_read_as_the_default_mode() {
         let path = dir.path().join("settings.toml");
         std::fs::write(
             &path,
-            format!(
-                "[general]\ndefault_session_mode = \"{retired}\"\nrestore_session = false\n"
-            ),
+            format!("[general]\ndefault_session_mode = \"{retired}\"\nrestore_session = false\n"),
         )
         .unwrap();
         let (preferences, error) = TomlBackedUserPreferences::new(path);

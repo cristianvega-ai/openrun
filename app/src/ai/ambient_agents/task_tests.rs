@@ -65,45 +65,6 @@ fn task_json_with_run_time(run_time_key: &str, run_time: Value) -> Value {
 }
 
 #[test]
-fn display_name_prefers_agent_config_snapshot_name_over_title() {
-    let task = make_task(Some("frontend-tests"), "Long descriptive task title");
-    assert_eq!(task.display_name(), "frontend-tests");
-}
-
-#[test]
-fn display_name_falls_back_to_title_when_snapshot_name_is_missing() {
-    let task = make_task(None, "Long descriptive task title");
-    assert_eq!(task.display_name(), "Long descriptive task title");
-}
-
-#[test]
-fn display_name_falls_back_to_title_when_snapshot_name_is_whitespace() {
-    let task = make_task(Some("   "), "Long descriptive task title");
-    assert_eq!(task.display_name(), "Long descriptive task title");
-}
-
-#[test]
-fn display_name_returns_literal_agent_when_both_sources_are_empty() {
-    let task = make_task(None, "");
-    assert_eq!(task.display_name(), "Agent");
-}
-
-#[test]
-fn display_name_returns_literal_agent_for_whitespace_only_title() {
-    let task = make_task(None, "   \t\n  ");
-    assert_eq!(task.display_name(), "Agent");
-}
-
-#[test]
-fn display_name_trims_whitespace_at_each_layer() {
-    let task = make_task(Some("  frontend-tests  "), "  Long descriptive title  ");
-    assert_eq!(task.display_name(), "frontend-tests");
-
-    let task = make_task(None, "  Long descriptive title  ");
-    assert_eq!(task.display_name(), "Long descriptive title");
-}
-
-#[test]
 fn task_status_error_code_deserializes_public_api_casing() {
     let message: TaskStatusMessage = serde_json::from_str(
         "{\"message\":\"setup failed\",\"error_code\":\"environment_setup_failed\"}",
