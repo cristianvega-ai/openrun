@@ -10,7 +10,6 @@ pub(crate) mod diff_storage;
 pub(crate) mod diff_types;
 
 pub(crate) mod local_agent_task_sync_model;
-pub(crate) mod queued_query;
 pub(super) use controller::RequestInput;
 pub mod history_model;
 pub mod inline_action;
@@ -65,10 +64,6 @@ pub(crate) use persistence::PersistedAIInputType;
 #[cfg_attr(target_family = "wasm", allow(unused))]
 pub use persistence::maybe_build_ai_query_upsert_event;
 pub(crate) use persistence::{PersistedAIInput, SerializedBlockListItem};
-pub(crate) use queued_query::{
-    AutofireAction, QueuedQuery, QueuedQueryId, QueuedQueryOrigin, is_lrc_auto_queue_active,
-};
-pub use queued_query::{QueuedQueryEvent, QueuedQueryModel};
 pub(crate) use view_util::{
     ai_brand_color, ai_indicator_height, get_ai_block_overflow_menu_element_position_id,
     get_attached_blocks_chip_element_position_id, render_ai_agent_mode_icon,

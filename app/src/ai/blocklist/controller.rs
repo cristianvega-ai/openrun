@@ -30,7 +30,6 @@ use super::action_model::{BlocklistAIActionEvent, BlocklistAIActionModel};
 use super::context_model::{BlocklistAIContextModel, PendingAttachment, PendingFile};
 use super::conversation_selection::{ConversationSelectionEvent, ConversationSelectionHandle};
 use super::history_model::BlocklistAIHistoryModel;
-use super::queued_query::{QueuedQueryId, QueuedQueryModel};
 use super::{BlocklistAIInputModel, ResponseStreamId};
 use crate::ai::agent::api::{self, ServerConversationToken};
 use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
@@ -120,12 +119,6 @@ pub enum BlocklistAIControllerEvent {
     /// Emitted when a request is sent to the AI agent API.
     SentRequest {
         contains_user_query: bool,
-        /// True when this request is the first send of a previously queued prompt (e.g.
-        /// via `/queue` or the auto-queue toggle) rather than a direct user submission.
-        /// Subscribers that perform user-submission side effects (e.g. clearing the input
-        /// buffer) should skip those effects when this is true — the user may have typed
-        /// new input while the agent was busy and we don't want to wipe it.
-        is_queued_prompt: bool,
         /// The model ID used for this request. None for slash commands that don't
         /// send a model request (e.g., /fork).
         model_id: LLMId,
@@ -309,9 +302,6 @@ struct InputQuery {
     /// Additional referenced attachments to include in the query
     /// (e.g. file path references from shared session file uploads).
     additional_attachments: HashMap<String, AIAgentAttachment>,
-    /// When `Some`, this submission is a fired queued-prompt row; the send path resolves the
-    /// row's stored attachments by this id instead of the live input staging.
-    queued_query_id: Option<QueuedQueryId>,
 }
 
 impl InputQuery {
@@ -466,19 +456,9 @@ impl BlocklistAIController {
                         );
                     });
                 }
-                // Unlock any pending-LRC row so it isn't left locked if the action
-                // completes without triggering a follow-up request.
-                QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                    model.unlock_pending_lrc_rows(*conversation_id, ctx);
-                });
                 return;
             }
             me.send_follow_up_for_conversation(*conversation_id, ctx);
-            // Unlock any query queued during the pre-snapshot window now that the
-            // snapshot has been sent.
-            QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                model.unlock_pending_lrc_rows(*conversation_id, ctx);
-            });
         });
 
         ctx.subscribe_to_model(&conversation_selection, |me, _, event, ctx| {
@@ -534,7 +514,6 @@ impl BlocklistAIController {
         &mut self,
         input_query: InputQuery,
         entrypoint_type: EntrypointType,
-        is_queued_prompt: bool,
         ctx: &mut ModelContext<Self>,
     ) {
         let query = input_query.query().to_owned();
@@ -561,19 +540,7 @@ impl BlocklistAIController {
         }
 
         if let Some(slash_command_request) = SlashCommandRequest::from_query(query.as_str()) {
-            // Only fired queued rows carry `queued_query_id`. For those rows, keep slash commands
-            // (e.g. queued `/compact`) on the conversation they were queued on; direct slash
-            // submissions still re-derive their target from the current UI selection.
-            let conversation_id_override = input_query
-                .queued_query_id
-                .is_some()
-                .then_some(conversation_id);
-            slash_command_request.send_request(
-                self,
-                input_query.queued_query_id,
-                conversation_id_override,
-                ctx,
-            );
+            slash_command_request.send_request(self, ctx);
             return;
         }
 
@@ -626,7 +593,6 @@ impl BlocklistAIController {
         };
 
         let additional_attachments = input_query.additional_attachments;
-        let queued_query_id = input_query.queued_query_id;
         let ai_input = match input_query.input_query {
             InputQueryType::UserSubmittedQueryFromInput {
                 static_query_type,
@@ -634,19 +600,11 @@ impl BlocklistAIController {
                 base,
                 ..
             } => {
-                // Resolve the attachment set for this submission. The direct-send branch
-                // preserves existing behavior: live input staging is still consumed by regular
-                // submissions, but fired queued rows read from their row-owned attachment set.
-                let prompt_attachments = match queued_query_id {
-                    Some(query_id) => QueuedQueryModel::as_ref(ctx)
-                        .attachments_for(conversation_id, query_id)
-                        .to_vec(),
-                    None => self
-                        .context_model
-                        .as_ref(ctx)
-                        .pending_attachments()
-                        .to_vec(),
-                };
+                let prompt_attachments = self
+                    .context_model
+                    .as_ref(ctx)
+                    .pending_attachments()
+                    .to_vec();
 
                 input_for_query(
                     query,
@@ -684,7 +642,6 @@ impl BlocklistAIController {
                 is_auto_resume_after_error: false,
             }),
             RecoveryBudget::fresh(),
-            is_queued_prompt,
             ctx,
         ) {
             report_error!(e);
@@ -777,32 +734,6 @@ impl BlocklistAIController {
             query,
             static_query_type,
             entrypoint_type,
-            /*is_queued_prompt*/ false,
-            /*queued_query_id*/ None,
-            None,
-            HashMap::new(),
-            ctx,
-        );
-    }
-
-    /// Sends the first submission of a previously queued user prompt into a new conversation.
-    /// Same as [`Self::send_user_query_in_new_conversation`] but marks the emitted
-    /// `SentRequest` event so UI subscribers (e.g. the input editor) know not to treat
-    /// this as a direct user submission and therefore not clear the input buffer.
-    pub fn send_queued_user_query_in_new_conversation(
-        &mut self,
-        query: String,
-        static_query_type: Option<StaticQueryType>,
-        entrypoint_type: EntrypointType,
-        queued_query_id: QueuedQueryId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.send_user_query_in_new_conversation_internal(
-            query,
-            static_query_type,
-            entrypoint_type,
-            /*is_queued_prompt*/ true,
-            Some(queued_query_id),
             None,
             HashMap::new(),
             ctx,
@@ -815,8 +746,6 @@ impl BlocklistAIController {
         query: String,
         static_query_type: Option<StaticQueryType>,
         entrypoint_type: EntrypointType,
-        is_queued_prompt: bool,
-        queued_query_id: Option<QueuedQueryId>,
         base: Option<BaseUserQuery>,
         additional_attachments: HashMap<String, AIAgentAttachment>,
         ctx: &mut ModelContext<Self>,
@@ -858,10 +787,8 @@ impl BlocklistAIController {
                         base,
                     },
                     additional_attachments,
-                    queued_query_id,
                 },
                 entrypoint_type,
-                is_queued_prompt,
                 ctx,
             );
         } else {
@@ -875,10 +802,8 @@ impl BlocklistAIController {
                         base,
                     },
                     additional_attachments,
-                    queued_query_id,
                 },
                 entrypoint_type,
-                is_queued_prompt,
                 ctx,
             );
         }
@@ -898,8 +823,6 @@ impl BlocklistAIController {
             false,
             HashMap::new(),
             EntrypointType::AgentInitiated,
-            /*is_queued_prompt*/ false,
-            /*queued_query_id*/ None,
             None,
             ctx,
         );
@@ -919,35 +842,9 @@ impl BlocklistAIController {
             false, // skip_running_command_detection
             HashMap::new(),
             EntrypointType::UserInitiated,
-            /*is_queued_prompt*/ false,
-            /*queued_query_id*/ None,
             None,
             ctx,
         )
-    }
-
-    /// Sends the first submission of a previously queued user prompt into an existing conversation.
-    /// Same as [`Self::send_user_query_in_conversation`] but marks the emitted `SentRequest`
-    /// event so UI subscribers (e.g. the input editor) know not to treat this as a direct
-    /// user submission and therefore not clear the input buffer.
-    pub fn send_queued_user_query_in_conversation(
-        &mut self,
-        query: String,
-        conversation_id: AIConversationId,
-        queued_query_id: QueuedQueryId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.send_user_query_in_conversation_internal(
-            query,
-            conversation_id,
-            false, // skip_running_command_detection
-            HashMap::new(),
-            EntrypointType::UserInitiated,
-            /*is_queued_prompt*/ true,
-            Some(queued_query_id),
-            None,
-            ctx,
-        );
     }
 
     /// Sends the given user query to the AI model, skipping long running command detection.
@@ -966,8 +863,6 @@ impl BlocklistAIController {
             true, // skip_running_command_detection
             HashMap::new(),
             EntrypointType::UserInitiated,
-            /*is_queued_prompt*/ false,
-            /*queued_query_id*/ None,
             None,
             ctx,
         );
@@ -981,8 +876,6 @@ impl BlocklistAIController {
         skip_running_command_detection: bool,
         additional_attachments: HashMap<String, AIAgentAttachment>,
         entrypoint_type: EntrypointType,
-        is_queued_prompt: bool,
-        queued_query_id: Option<QueuedQueryId>,
         base: Option<BaseUserQuery>,
         ctx: &mut ModelContext<Self>,
     ) -> bool {
@@ -1088,10 +981,8 @@ impl BlocklistAIController {
                     base,
                 },
                 additional_attachments,
-                queued_query_id,
             },
             entrypoint_type,
-            is_queued_prompt,
             ctx,
         );
         true
@@ -1125,10 +1016,8 @@ impl BlocklistAIController {
                 which_task,
                 input_query: InputQueryType::AIInputType { ai_input },
                 additional_attachments: HashMap::new(),
-                queued_query_id: None,
             },
             EntrypointType::UserInitiated,
-            /*is_queued_prompt*/ false,
             ctx,
         )
     }
@@ -1138,24 +1027,7 @@ impl BlocklistAIController {
         slash_command: SlashCommandRequest,
         ctx: &mut ModelContext<Self>,
     ) {
-        slash_command.send_request(self, None, None, ctx);
-    }
-    /// Starts the create-project agent flow with the supplied project description.
-    pub fn send_create_new_project_request(&mut self, query: String, ctx: &mut ModelContext<Self>) {
-        self.send_slash_command_request(SlashCommandRequest::CreateNewProject { query }, ctx);
-    }
-
-    /// Same as [`Self::send_slash_command_request`] but marks the emitted `SentRequest`
-    /// event as a queued prompt submission so UI subscribers (e.g. the input editor)
-    /// don't clear the input buffer on the auto-send.
-    pub fn send_queued_slash_command_request(
-        &mut self,
-        slash_command: SlashCommandRequest,
-        queued_query_id: QueuedQueryId,
-        conversation_id: Option<AIConversationId>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        slash_command.send_request(self, Some(queued_query_id), conversation_id, ctx);
+        slash_command.send_request(self, ctx);
     }
 
     /// Mark a conversation to follow up after its actions complete and attempt to send immediately
@@ -1250,13 +1122,7 @@ impl BlocklistAIController {
             ctx,
         );
 
-        let _ = self.send_request_input(
-            request_input,
-            None,
-            RecoveryBudget::fresh(),
-            /*is_queued_prompt*/ false,
-            ctx,
-        );
+        let _ = self.send_request_input(request_input, None, RecoveryBudget::fresh(), ctx);
 
         self.pending_passive_follow_ups.remove(&conversation_id);
     }
@@ -1350,7 +1216,6 @@ impl BlocklistAIController {
             ),
             metadata,
             recovery,
-            /*is_queued_prompt*/ false,
             ctx,
         );
     }
@@ -1435,7 +1300,6 @@ impl BlocklistAIController {
         request_input: RequestInput,
         query_metadata: Option<RequestMetadata>,
         recovery: RecoveryBudget,
-        is_queued_prompt: bool,
         ctx: &mut ModelContext<Self>,
     ) -> anyhow::Result<(AIConversationId, ResponseStreamId)> {
         let history_model = BlocklistAIHistoryModel::handle(ctx);
@@ -1622,10 +1486,7 @@ impl BlocklistAIController {
             ctx,
         );
 
-        // Skip the context reset for a fired queued-prompt row (`is_queued_prompt`): its
-        // attachments came from the row, not the live staging, so the live `pending_attachments`
-        // belong to the user's next prompt and must be preserved.
-        if input_contains_user_query && !is_queued_prompt {
+        if input_contains_user_query {
             // Get the pending document ID before clearing context
             let pending_document_id = self.context_model.as_ref(ctx).pending_document_id();
 
@@ -1644,7 +1505,6 @@ impl BlocklistAIController {
 
         ctx.emit(BlocklistAIControllerEvent::SentRequest {
             contains_user_query: input_contains_user_query,
-            is_queued_prompt,
             model_id: request_params.model.clone(),
             stream_id: response_stream_id.clone(),
         });
@@ -1722,11 +1582,6 @@ impl BlocklistAIController {
         if let Some(handle) = self.pending_auto_resume_handles.remove(&conversation_id) {
             handle.abort();
         }
-
-        // Remove any locked pending-LRC queries so they don't linger after cancellation.
-        QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-            model.remove_pending_lrc_rows(conversation_id, ctx);
-        });
 
         if !self
             .in_flight_response_streams

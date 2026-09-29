@@ -14,9 +14,9 @@ use super::initializer::SettingsInitializer;
 use super::{
     AISettings, AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
     BlockVisibilitySettings, CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings,
-    FontSettingsChangedEvent, GPUSettings, InputBoxType, InputModeSettings, InputSettings,
-    LocalControlSettings, PaneSettings, SameLinePromptBlockSettings, ScrollSettings,
-    SelectionSettings, SshSettings, ThemeSettings, VimBannerSettings, WarpDrivePrivacySettings,
+    FontSettingsChangedEvent, GPUSettings, InputModeSettings, InputSettings, LocalControlSettings,
+    PaneSettings, SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings,
+    ThemeSettings, VimBannerSettings, WarpDrivePrivacySettings,
 };
 use crate::appearance;
 use crate::banner::BannerState;
@@ -28,7 +28,7 @@ use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::keys_settings::KeysSettings;
 use crate::terminal::ligature_settings::LigatureSettings;
 use crate::terminal::safe_mode_settings::SafeModeSettings;
-use crate::terminal::session_settings::{SessionSettings, SessionSettingsChangedEvent};
+use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::settings::TerminalSettings;
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::undo_close::UndoCloseSettings;
@@ -185,25 +185,6 @@ pub fn init(
             });
         }
     });
-
-    // Keep input_box_type in sync whenever honor_ps1 changes —
-    // Classic when PS1 is honored, Universal otherwise.
-    ctx.subscribe_to_model(
-        &SessionSettings::handle(ctx),
-        |session_settings, event, ctx| {
-            if let SessionSettingsChangedEvent::HonorPS1 { .. } = event {
-                let new_honor_ps1 = *session_settings.as_ref(ctx).honor_ps1;
-                let new_type = if new_honor_ps1 {
-                    InputBoxType::Classic
-                } else {
-                    InputBoxType::Universal
-                };
-                InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
-                    report_if_error!(input_settings.input_box_type.set_value(new_type, ctx));
-                });
-            }
-        },
-    );
 
     appearance::register(ctx);
 

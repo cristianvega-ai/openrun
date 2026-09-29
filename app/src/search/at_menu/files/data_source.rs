@@ -13,8 +13,8 @@ use warpui::{AppContext, SingletonEntity};
 use super::search_item::FileSearchItem;
 #[cfg(feature = "local_fs")]
 use crate::code::opened_files::OpenedFilesModel;
-use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
 use crate::search::async_snapshot_data_source::AsyncSnapshotDataSource;
+use crate::search::at_menu::mixer::AtMenuSearchableAction;
 use crate::search::data_source::{Query, QueryResult};
 use crate::search::files::model::FileSearchModel;
 use crate::search::files::search_item::FileSearchResult;
@@ -34,11 +34,11 @@ pub(crate) struct FileSnapshot {
     pub(crate) last_opened: HashMap<String, instant::Instant>,
 }
 
-/// Builds the repository-backed file search source used by the AI context menu.
+/// Builds the repository-backed file search source used by the @ menu.
 /// For empty queries, snapshots repo contents with git-change status to prioritize modified files,
 /// and for non-empty queries snapshots repo contents only for faster fuzzy matching.
 pub fn file_data_source_for_current_repo()
--> AsyncSnapshotDataSource<FileSnapshot, AIContextMenuSearchableAction> {
+-> AsyncSnapshotDataSource<FileSnapshot, AtMenuSearchableAction> {
     AsyncSnapshotDataSource::new(
         |query: &Query, app: &AppContext| {
             if FileSearchModel::should_skip_overly_broad_query(&query.text) {
@@ -77,7 +77,7 @@ pub fn file_data_source_for_current_repo()
 
 pub fn file_data_source_for_pwd(
     app: &AppContext,
-) -> AsyncSnapshotDataSource<FileSnapshot, AIContextMenuSearchableAction> {
+) -> AsyncSnapshotDataSource<FileSnapshot, AtMenuSearchableAction> {
     let file_search_model = FileSearchModel::as_ref(app);
     let mut cached_contents = file_search_model.get_folder_contents(app);
     // Reverse sort to put what you'd expect at the top for zero-state
@@ -141,10 +141,8 @@ fn snapshot_last_opened(_app: &AppContext) -> HashMap<String, instant::Instant> 
 /// Routes file matching to zero-state ranking or query-based fuzzy scoring.
 pub(crate) fn fuzzy_match_files(
     snapshot: FileSnapshot,
-) -> BoxFuture<
-    'static,
-    Result<Vec<QueryResult<AIContextMenuSearchableAction>>, DataSourceRunErrorWrapper>,
-> {
+) -> BoxFuture<'static, Result<Vec<QueryResult<AtMenuSearchableAction>>, DataSourceRunErrorWrapper>>
+{
     Box::pin(async move {
         if snapshot.query_text.is_empty() {
             Ok(fuzzy_match_files_zero_state(snapshot).await)
@@ -176,10 +174,10 @@ fn build_recency_index(
 /// as a secondary sort within each tier.
 async fn fuzzy_match_files_zero_state(
     snapshot: FileSnapshot,
-) -> Vec<QueryResult<AIContextMenuSearchableAction>> {
+) -> Vec<QueryResult<AtMenuSearchableAction>> {
     let recency_index = build_recency_index(&snapshot.contents, &snapshot.last_opened);
     let max_recency = recency_index.len();
-    let mut results: Vec<QueryResult<AIContextMenuSearchableAction>> = Vec::new();
+    let mut results: Vec<QueryResult<AtMenuSearchableAction>> = Vec::new();
 
     // Pass 1: git-changed or recently-opened files (guaranteed inclusion)
     for chunk in snapshot.contents.chunks(512) {
@@ -238,7 +236,7 @@ async fn fuzzy_match_files_zero_state(
 /// Returns fuzzy-ranked file results for non-empty queries.
 async fn fuzzy_match_files_query(
     snapshot: FileSnapshot,
-) -> Vec<QueryResult<AIContextMenuSearchableAction>> {
+) -> Vec<QueryResult<AtMenuSearchableAction>> {
     let recency_index = build_recency_index(&snapshot.contents, &snapshot.last_opened);
     let max_recency = recency_index.len();
     let mut results = Vec::new();

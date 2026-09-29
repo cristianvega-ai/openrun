@@ -1,182 +1,72 @@
-use super::slash_command_is_submitted_as_prompt;
-use crate::search::slash_command_menu::static_commands::{
-    Availability, SlashCommandKind, commands,
+use super::{
+    SlashCommandSelectionBehavior, should_close_slash_command_menu_for_exact_match,
+    slash_command_selection_behavior,
 };
+use crate::search::slash_command_menu::static_commands::{SlashCommandKind, commands};
 
-/// The centralized classifier must mark only the prompt-submitting commands (/compact, /plan) as
-/// "submitted as a prompt". Every other slash command emits an immediate action
-/// and must be treated as "run now" by the prompt-queue gate and the shared-session viewer path.
 #[test]
-fn slash_command_is_submitted_as_prompt_only_for_prompt_commands() {
-    assert!(slash_command_is_submitted_as_prompt(&commands::COMPACT));
-    assert!(slash_command_is_submitted_as_prompt(&commands::PLAN));
+fn rename_tab_inserts_input_for_its_required_argument() {
+    assert_eq!(
+        slash_command_selection_behavior(&commands::RENAME_TAB),
+        SlashCommandSelectionBehavior::InsertCommandText("/rename-tab ".to_owned())
+    );
+}
 
+#[test]
+fn commands_without_arguments_execute_on_selection() {
     for command in [
-        &*commands::FORK,
-        &*commands::FORK_AND_COMPACT,
-        &commands::FORK_FROM,
-        &*commands::COMPACT_AND,
-        &*commands::MODEL,
-        &commands::AUTO_APPROVE,
-        &commands::REWIND,
-        &commands::CONVERSATIONS,
-        &*commands::QUEUE,
+        &commands::OPEN_CODE_REVIEW,
+        &commands::OPEN_SETTINGS_FILE,
+        &commands::OPEN_REPO,
     ] {
-        assert!(!slash_command_is_submitted_as_prompt(command));
-    }
-}
-
-#[test]
-fn auto_approve_is_an_exact_no_argument_command() {
-    use super::{SlashCommandSelectionBehavior, slash_command_selection_behavior};
-
-    assert_eq!(commands::AUTO_APPROVE.kind, SlashCommandKind::AutoApprove);
-    assert_eq!(
-        slash_command_selection_behavior(&commands::AUTO_APPROVE),
-        SlashCommandSelectionBehavior::Execute
-    );
-    assert!(commands::AUTO_APPROVE.argument.is_none());
-}
-
-#[test]
-fn theme_command_inserts_input_for_its_required_argument() {
-    use super::{SlashCommandSelectionBehavior, slash_command_selection_behavior};
-
-    assert_eq!(
-        slash_command_selection_behavior(&commands::THEME),
-        SlashCommandSelectionBehavior::InsertCommandText("/theme ".to_owned())
-    );
-    let argument = commands::THEME
-        .argument
-        .as_ref()
-        .expect("theme should require an argument");
-    assert!(!argument.is_optional);
-    assert_eq!(argument.hint_text, Some("<auto|light|dark>"));
-}
-#[test]
-fn commands_have_typed_identities() {
-    for (command, expected) in [
-        (&*commands::AGENT, SlashCommandKind::Agent),
-        (&*commands::NEW, SlashCommandKind::New),
-        (&*commands::COMPACT, SlashCommandKind::Compact),
-        (&*commands::PLAN, SlashCommandKind::Plan),
-        (&*commands::MODEL, SlashCommandKind::Model),
-        (
-            &*commands::CREATE_NEW_PROJECT,
-            SlashCommandKind::CreateNewProject,
-        ),
-        (
-            &commands::EXPORT_TO_CLIPBOARD,
-            SlashCommandKind::ExportToClipboard,
-        ),
-        (&*commands::EXPORT_TO_FILE, SlashCommandKind::ExportToFile),
-        (&commands::AUTO_APPROVE, SlashCommandKind::AutoApprove),
-        (&commands::EXIT, SlashCommandKind::Exit),
-        (&commands::LOGOUT, SlashCommandKind::Logout),
-        (&commands::VIEW_LOGS, SlashCommandKind::ViewLogs),
-        (&commands::THEME, SlashCommandKind::Theme),
-    ] {
+        assert!(command.argument.is_none());
         assert_eq!(
-            command.kind, expected,
-            "{} should have its typed command identity",
-            command.name
+            slash_command_selection_behavior(command),
+            SlashCommandSelectionBehavior::Execute
         );
     }
 }
 
 #[test]
-fn model_command_is_not_submitted_as_a_prompt() {
-    assert_eq!(commands::MODEL.kind, SlashCommandKind::Model);
-    assert!(!slash_command_is_submitted_as_prompt(&commands::MODEL));
-    assert!(commands::MODEL.argument.is_none());
+fn commands_have_typed_identities() {
+    for (command, expected) in [
+        (&*commands::EDIT, SlashCommandKind::Edit),
+        (&*commands::RENAME_TAB, SlashCommandKind::RenameTab),
+        (&*commands::SET_TAB_COLOR, SlashCommandKind::SetTabColor),
+        (
+            &commands::OPEN_CODE_REVIEW,
+            SlashCommandKind::OpenCodeReview,
+        ),
+        (
+            &commands::OPEN_SETTINGS_FILE,
+            SlashCommandKind::OpenSettingsFile,
+        ),
+        (&commands::OPEN_REPO, SlashCommandKind::OpenRepo),
+    ] {
+        assert_eq!(command.kind, expected, "{}", command.name);
+    }
 }
 
 #[test]
-fn exit_command_executes_immediately_and_takes_no_argument() {
-    use super::{SlashCommandSelectionBehavior, slash_command_selection_behavior};
+fn open_repo_has_a_default_keybinding() {
+    use crate::search::slash_command_menu::static_commands::bindings::{
+        DefaultSlashCommandBinding, default_binding_for_command,
+    };
 
-    assert_eq!(commands::EXIT.kind, SlashCommandKind::Exit);
-    assert!(commands::EXIT.argument.is_none());
-    assert!(!slash_command_is_submitted_as_prompt(&commands::EXIT));
-    assert_eq!(
-        slash_command_selection_behavior(&commands::EXIT),
-        SlashCommandSelectionBehavior::Execute
-    );
-    assert_eq!(commands::EXIT.availability, Availability::ALWAYS);
+    assert!(matches!(
+        default_binding_for_command(commands::OPEN_REPO.name),
+        DefaultSlashCommandBinding::PerPlatform(_)
+    ));
+    assert!(matches!(
+        default_binding_for_command(commands::RENAME_TAB.name),
+        DefaultSlashCommandBinding::None
+    ));
 }
 
 #[test]
-fn logout_command_executes_immediately_and_takes_no_argument() {
-    use super::{SlashCommandSelectionBehavior, slash_command_selection_behavior};
-
-    assert_eq!(commands::LOGOUT.kind, SlashCommandKind::Logout);
-    assert!(commands::LOGOUT.argument.is_none());
-    assert!(!slash_command_is_submitted_as_prompt(&commands::LOGOUT));
-    assert_eq!(
-        slash_command_selection_behavior(&commands::LOGOUT),
-        SlashCommandSelectionBehavior::Execute
-    );
-    assert_eq!(commands::LOGOUT.availability, Availability::ALWAYS);
-}
-
-#[cfg(all(feature = "local_fs", windows))]
-mod windows {
-    use std::sync::Arc;
-
-    use super::super::*;
-    use crate::terminal::ShellLaunchData;
-    use crate::terminal::model::session::SessionInfo;
-    use crate::terminal::model::session::command_executor::testing::TestCommandExecutor;
-    use crate::terminal::shell::ShellType;
-
-    fn wsl_session() -> Session {
-        Session::new(
-            SessionInfo::new_for_test().with_shell_type(ShellType::Bash),
-            Arc::new(TestCommandExecutor::default()),
-        )
-        .with_shell_launch_data(ShellLaunchData::WSL {
-            distro: "Ubuntu".to_owned(),
-        })
-    }
-
-    #[test]
-    fn open_file_command_converts_wsl_paths_to_host_paths() {
-        let session = wsl_session();
-        let cases = [
-            (
-                "/home/ubuntu",
-                "subdir/test.txt",
-                r"\\WSL$\Ubuntu\home\ubuntu\subdir\test.txt",
-                None,
-            ),
-            (
-                "/home/ubuntu/project",
-                "../test.txt",
-                r"\\WSL$\Ubuntu\home\ubuntu\test.txt",
-                None,
-            ),
-            (
-                "/home/ubuntu",
-                "subdir/file\\ name.txt",
-                r"\\WSL$\Ubuntu\home\ubuntu\subdir\file name.txt",
-                None,
-            ),
-            (
-                "/home/ubuntu",
-                "subdir/test.txt:4:2",
-                r"\\WSL$\Ubuntu\home\ubuntu\subdir\test.txt",
-                Some(LineAndColumnArg {
-                    line_num: 4,
-                    column_num: Some(2),
-                }),
-            ),
-        ];
-
-        for (current_dir, raw_arg, expected_path, expected_line_col) in cases {
-            let (path, line_col) = open_file_command_path(&session, current_dir, raw_arg);
-
-            assert_eq!(path, PathBuf::from(expected_path));
-            assert_eq!(line_col, expected_line_col);
-        }
-    }
+fn menu_closes_for_unique_match_or_started_argument() {
+    assert!(should_close_slash_command_menu_for_exact_match(0, false));
+    assert!(should_close_slash_command_menu_for_exact_match(1, false));
+    assert!(should_close_slash_command_menu_for_exact_match(3, true));
+    assert!(!should_close_slash_command_menu_for_exact_match(2, false));
 }

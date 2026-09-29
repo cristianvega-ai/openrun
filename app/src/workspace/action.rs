@@ -468,8 +468,6 @@ pub enum WorkspaceAction {
     /// Summarize the active AI conversation in the focused pane.
     SummarizeAIConversation {
         prompt: Option<String>,
-        /// Optional prompt to send after summarization completes successfully.
-        initial_prompt: Option<String>,
     },
     /// Install the Warp Control CLI command to /usr/local/bin
     #[cfg(target_os = "macos")]

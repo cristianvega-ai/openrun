@@ -236,8 +236,7 @@ impl TerminalSettings {
         line_height_ratio: f32,
         ctx: &AppContext,
     ) -> TerminalSpacing {
-        let should_force_normal_spacing =
-            InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
+        let should_force_normal_spacing = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
         if should_force_normal_spacing {
             return TerminalSpacing::normal(line_height_ratio, ctx);
         }

@@ -296,8 +296,7 @@ impl UsageDisplayUnit {
 /// still responding to an earlier prompt.
 ///
 /// This is the *default* used when a conversation has no explicit auto-queue
-/// override. Per-conversation overrides live on `QueuedQueryModel` and take
-/// precedence over this setting.
+/// override.
 #[derive(
     Default,
     Debug,
@@ -741,13 +740,11 @@ define_settings_group!(AISettings, settings: [
     thinking_display_mode: ThinkingDisplayMode,
 
     // Default behavior when the user submits a new prompt while the agent is still
-    // responding. Per-conversation overrides live on `QueuedQueryModel`; this
-    // setting is the fallback used when a conversation has no explicit override.
+    // responding.
     default_prompt_submission_mode: PromptSubmissionMode,
 
     // What happens when a prompt is submitted while an agent controls an agent-requested
-    // long-running command. Only consulted when `default_prompt_submission_mode` is `Interrupt`;
-    // per-LRC manual overrides live on `QueuedQueryModel`.
+    // long-running command. Only consulted when `default_prompt_submission_mode` is `Interrupt`.
     long_running_command_submission_mode: LongRunningCommandSubmissionMode,
 
     // Whether agent-executed shell commands should be included in command history

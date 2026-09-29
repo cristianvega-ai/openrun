@@ -151,7 +151,7 @@ const KEYBOARD_RESIZE_DELTA: f32 = 10.;
 
 fn get_minimum_pane_size(app: &AppContext) -> f32 {
     use crate::settings::InputSettings;
-    if InputSettings::as_ref(app).is_universal_developer_input_enabled(app) {
+    if InputSettings::as_ref(app).is_warp_prompt_enabled(app) {
         MINIMUM_PANE_SIZE_UDI
     } else {
         MINIMUM_PANE_SIZE

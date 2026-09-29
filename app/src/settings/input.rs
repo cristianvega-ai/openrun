@@ -56,28 +56,6 @@ impl settings_value::SettingsValue for InlineMenuHeights {
     }
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    Default,
-    schemars::JsonSchema,
-    settings_value::SettingsValue,
-)]
-#[schemars(description = "Terminal input style.", rename_all = "snake_case")]
-pub enum InputBoxType {
-    /// AI-first input
-    Universal,
-
-    #[default]
-    /// Terminal-first input
-    Classic,
-}
-
 define_settings_group!(InputSettings,
     settings: [
         show_hint_text: ShowHintText {
@@ -177,16 +155,6 @@ define_settings_group!(InputSettings,
             surface: settings::SettingSurfaces::GUI,
             private: true,
         },
-        input_box_type: InputBoxTypeSetting {
-            type: InputBoxType,
-            default: InputBoxType::Classic,
-            supported_platforms: SupportedPlatforms::ALL,
-            sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-            surface: settings::SettingSurfaces::GUI,
-            private: false,
-            toml_path: "terminal.input.input_box_type_setting",
-            description: "The terminal input style.",
-        },
         at_context_menu_in_terminal_mode: AtContextMenuInTerminalMode {
             type: bool,
             default: true,
@@ -233,17 +201,6 @@ define_settings_group!(InputSettings,
             surface: settings::SettingSurfaces::GUI,
             private: true,
         },
-        // Whether to show the terminal input message bar (contextual hints at the bottom of terminal input).
-        show_terminal_input_message_bar: ShowTerminalInputMessageBar {
-            type: bool,
-            default: true,
-            supported_platforms: SupportedPlatforms::ALL,
-            sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-            surface: settings::SettingSurfaces::GUI,
-            private: false,
-            toml_path: "terminal.input.show_terminal_input_message_bar",
-            description: "Whether the terminal input message bar is shown.",
-        },
         // Per-menu custom content heights set by drag-to-resize. Not user-visible.
         inline_menu_custom_content_heights: InlineMenuCustomContentHeights {
             type: InlineMenuHeights,
@@ -257,50 +214,9 @@ define_settings_group!(InputSettings,
 );
 
 impl InputSettings {
-    pub fn input_type(&self, app: &AppContext) -> InputBoxType {
-        let stored_input_type_value = &self.input_box_type;
-
-        // Check if the user has explicitly set the InputBoxTypeSetting
-        let computed_input_type_value = if stored_input_type_value.is_value_explicitly_set() {
-            // User has explicitly set the value, use it
-            **stored_input_type_value
-        } else {
-            // User hasn't set it explicitly, use our computed default.
-            // If the user is in Preview or isn't using PS1, default to UDI.
-            // TODO(CORE-3752): migrate unit and integration tests to pass with UDI instead of Classic
-            let should_default_to_universal = (cfg!(feature = "preview_channel")
-                || !*SessionSettings::as_ref(app).honor_ps1.value())
-                && !cfg!(feature = "integration_tests")
-                && !cfg!(test);
-
-            if should_default_to_universal {
-                InputBoxType::Universal
-            } else {
-                InputBoxType::Classic
-            }
-        };
-
-        // PS1 input is only valid when honor_ps1 is active. If the user has PS1 selected
-        // but the shell has not signalled PS1 support, fall back to Warp input.
-        let is_ps1_enabled = *SessionSettings::as_ref(app).honor_ps1
-            && computed_input_type_value == InputBoxType::Classic;
-        if is_ps1_enabled {
-            InputBoxType::Classic
-        } else {
-            InputBoxType::Universal
-        }
-    }
-
-    pub fn is_universal_developer_input_enabled(&self, app: &AppContext) -> bool {
-        self.input_type(app) == InputBoxType::Universal
-    }
-
-    pub fn is_classic_input_enabled(&self, app: &AppContext) -> bool {
-        self.input_type(app) == InputBoxType::Classic
-    }
-
-    pub fn is_terminal_input_message_bar_enabled(&self) -> bool {
-        *self.show_terminal_input_message_bar
+    /// Whether the Warp prompt is used, as opposed to the shell's own PS1.
+    pub fn is_warp_prompt_enabled(&self, app: &AppContext) -> bool {
+        !*SessionSettings::as_ref(app).honor_ps1.value()
     }
 }
 

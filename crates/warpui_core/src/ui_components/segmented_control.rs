@@ -262,7 +262,7 @@ impl<T: SegmentedControlOption> View for SegmentedControl<T> {
                 if let Some(width_override) = label_config.width_override {
                     // Scale label width by the same ratio as font size for proper zoom behavior
                     let font_size = self.styles.font_size.unwrap_or(12.0);
-                    let base_font_size = 10.0; // Match the base font size used in universal_developer_input.rs
+                    let base_font_size = 10.0;
                     let ui_scalar = font_size / base_font_size;
                     text = text.with_width(width_override * ui_scalar);
                 }

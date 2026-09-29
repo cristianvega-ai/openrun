@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use warp_completer::completer::Description;
-use warp_core::features::FeatureFlag;
 use warpui::elements::{
     AnchorPair, Border, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment,
     DispatchEventResult, Element, EventHandler, Flex, OffsetPositioning, OffsetType, ParentElement,
@@ -11,23 +10,12 @@ use warpui::elements::{
 use warpui::fonts::Weight;
 use warpui::presenter::ChildView;
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
-use warpui::{AppContext, SingletonEntity, ViewHandle};
+use warpui::{AppContext, ViewHandle};
 
 use crate::appearance::Appearance;
-use crate::settings::{AISettings, InputSettings};
 use crate::terminal::input::{Input, InputAction, InputSuggestionsMode, MenuPositioning};
 
 use crate::terminal::view::{PADDING_LEFT, TerminalAction};
-
-/// Whether the terminal input message bar should be shown.
-///
-/// The message bar is hidden when AI is disabled, the user has turned it off in settings,
-/// or the session is a shared ambient agent session.
-pub(super) fn should_show_terminal_input_message_bar(app: &AppContext) -> bool {
-    !FeatureFlag::AgentViewPromptChip.is_enabled()
-        && InputSettings::as_ref(app).is_terminal_input_message_bar_enabled()
-        && AISettings::as_ref(app).is_any_ai_enabled(app)
-}
 
 /// Wraps the given column, assumed to represent the full input content, with appropriate
 /// left padding to be consistent with the terminal content, as well as an event handler to
@@ -166,19 +154,11 @@ pub(super) fn add_input_suggestions_overlays(
                 ),
             );
         }
-        InputSuggestionsMode::AIContextMenu { .. } => {
-            input.render_ai_context_menu(stack, &menu_positioning, app);
+        InputSuggestionsMode::AtMenu { .. } => {
+            input.render_at_menu(stack, &menu_positioning, app);
         }
         // SlashCommandsMenu is rendered separately via inline_slash_commands_menu_view
         InputSuggestionsMode::SlashCommands => {}
-        // Conversation menu is rendered separately via inline_conversation_menu_view
-        InputSuggestionsMode::ConversationMenu => {}
-        // Model selector is rendered separately via inline_model_selector_view
-        InputSuggestionsMode::ModelSelector => {}
-        // Profile selector is rendered separately via inline_profile_selector_view
-        InputSuggestionsMode::ProfileSelector => {}
-        // User query menu is rendered separately via user_query_menu_view
-        InputSuggestionsMode::UserQueryMenu { .. } => {}
         // Inline history menu is rendered separately via inline_history_menu_view
         InputSuggestionsMode::InlineHistoryMenu { .. } => {}
         // Repos menu is rendered separately via inline_repos_menu_view

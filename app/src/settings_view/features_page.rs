@@ -551,17 +551,9 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         context,
         flags::SMART_SELECT_FLAG,
     ));
-    toggle_binding_pairs.push(ToggleSettingActionPair::new(
-        "terminal input message line",
-        builder(SettingsAction::FeaturesPageToggle(
-            FeaturesPageAction::ToggleShowTerminalInputMessageLine,
-        )),
-        context,
-        flags::SHOW_TERMINAL_INPUT_MESSAGE_LINE_FLAG,
-    ));
     toggle_binding_pairs.push(
         ToggleSettingActionPair::new(
-            "'@' context menu in terminal mode",
+            "'@' files and code menu in terminal mode",
             builder(SettingsAction::FeaturesPageToggle(
                 FeaturesPageAction::ToggleAtContextMenuInTerminalMode,
             )),
@@ -584,23 +576,21 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         flags::PRESERVE_INPUT_FOCUS_ON_BLOCK_SELECTION_FLAG,
     ));
 
-    if AISettings::as_ref(app).is_any_ai_enabled(app) {
-        toggle_binding_pairs.push(
-            ToggleSettingActionPair::new(
-                "slash commands in terminal mode",
-                builder(SettingsAction::FeaturesPageToggle(
-                    FeaturesPageAction::ToggleSlashCommandsInTerminalMode,
-                )),
-                context,
-                flags::SLASH_COMMANDS_IN_TERMINAL_FLAG,
-            )
-            .is_supported_on_current_platform(
-                InputSettings::as_ref(app)
-                    .enable_slash_commands_in_terminal
-                    .is_supported_on_current_platform(),
-            ),
-        );
-    }
+    toggle_binding_pairs.push(
+        ToggleSettingActionPair::new(
+            "slash commands in terminal mode",
+            builder(SettingsAction::FeaturesPageToggle(
+                FeaturesPageAction::ToggleSlashCommandsInTerminalMode,
+            )),
+            context,
+            flags::SLASH_COMMANDS_IN_TERMINAL_FLAG,
+        )
+        .is_supported_on_current_platform(
+            InputSettings::as_ref(app)
+                .enable_slash_commands_in_terminal
+                .is_supported_on_current_platform(),
+        ),
+    );
     if FeatureFlag::AIContextMenuCode.is_enabled() {
         toggle_binding_pairs.push(
             ToggleSettingActionPair::new(
@@ -775,7 +765,6 @@ pub enum FeaturesPageAction {
     ToggleSlashCommandsInTerminalMode,
     ToggleOutlineCodebaseSymbolsForAtContextMenu,
     ToggleAutoOpenCodeReviewPane,
-    ToggleShowTerminalInputMessageLine,
     TogglePreserveInputFocusOnBlockSelection,
     ToggleAgentInAppNotifications,
     MakeWarpDefaultTerminal,
@@ -944,13 +933,6 @@ impl FeaturesPageAction {
                 TelemetryEvent::FeaturesPageAction {
                     action: "ToggleShowInputHintText".to_string(),
                     value: to_string(*settings.show_hint_text),
-                }
-            }
-            Self::ToggleShowTerminalInputMessageLine => {
-                let settings = InputSettings::as_ref(ctx);
-                TelemetryEvent::FeaturesPageAction {
-                    action: "ToggleShowTerminalInputMessageLine".to_string(),
-                    value: to_string(settings.is_terminal_input_message_bar_enabled()),
                 }
             }
             Self::ActivationKeybindEditorClicked => TelemetryEvent::FeaturesPageAction {
@@ -1829,15 +1811,6 @@ impl TypedActionView for FeaturesPageView {
             ToggleShowInputHintText => {
                 InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
                     report_if_error!(input_settings.show_hint_text.toggle_and_save_value(ctx));
-                });
-            }
-            ToggleShowTerminalInputMessageLine => {
-                InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
-                    report_if_error!(
-                        input_settings
-                            .show_terminal_input_message_bar
-                            .toggle_and_save_value(ctx)
-                    );
                 });
             }
             ToggleLinkTooltip => {
@@ -2845,8 +2818,6 @@ impl FeaturesPageView {
                 OutlineCodebaseSymbolsForAtContextMenuWidget::default(),
             ));
         }
-
-        editor_widgets.push(Box::new(ShowTerminalInputMessageLineWidget::default()));
 
         editor_widgets.push(Box::new(TabKeyBehaviorWidget::default()));
 
@@ -5812,7 +5783,7 @@ impl SettingsWidget for AtContextMenuInTerminalModeWidget {
     type View = FeaturesPageView;
 
     fn search_terms(&self) -> &str {
-        "@ at sign context menu terminal mode AI assistant"
+        "@ at sign menu files code terminal mode"
     }
 
     fn render(
@@ -5823,7 +5794,7 @@ impl SettingsWidget for AtContextMenuInTerminalModeWidget {
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
         render_body_item::<FeaturesPageAction>(
-            "Enable '@' context menu in terminal mode".into(),
+            "Enable '@' menu for files and code in terminal mode".into(),
             None,
             ToggleState::Enabled,
             appearance,
@@ -5856,10 +5827,6 @@ impl SettingsWidget for SlashCommandsInTerminalModeWidget {
 
     fn search_terms(&self) -> &str {
         "slash commands terminal mode input menu"
-    }
-
-    fn should_render(&self, app: &AppContext) -> bool {
-        AISettings::as_ref(app).is_any_ai_enabled(app)
     }
 
     fn render(
@@ -5928,45 +5895,6 @@ impl SettingsWidget for OutlineCodebaseSymbolsForAtContextMenuWidget {
                 .on_click(move |ctx, _, _| {
                     ctx.dispatch_typed_action(
                         FeaturesPageAction::ToggleOutlineCodebaseSymbolsForAtContextMenu,
-                    );
-                })
-                .finish(),
-            None,
-        )
-    }
-}
-
-#[derive(Default)]
-struct ShowTerminalInputMessageLineWidget {
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for ShowTerminalInputMessageLineWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "terminal input message line bar agent"
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
-            "Show terminal input message line".into(),
-            None,
-            ToggleState::Enabled,
-            appearance,
-            ui_builder
-                .switch(self.switch_state.clone())
-                .check(InputSettings::as_ref(app).is_terminal_input_message_bar_enabled())
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(
-                        FeaturesPageAction::ToggleShowTerminalInputMessageLine,
                     );
                 })
                 .finish(),

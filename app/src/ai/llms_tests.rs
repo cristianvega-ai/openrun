@@ -15,7 +15,6 @@ use crate::server::server_api::team::MockTeamClient;
 use crate::server::server_api::workspace::MockWorkspaceClient;
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::PrivacySettings;
-use crate::terminal::input::models::query_model_picker_choices;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::workspaces::team::Team;
 use crate::workspaces::team_tester::TeamTesterStatus;
@@ -1257,40 +1256,6 @@ fn preferences_for_profile_model_tests(ctx: &mut ModelContext<LLMPreferences>) -
         });
     });
     LLMPreferences::for_test(Vec::new())
-}
-
-#[test]
-fn shared_model_picker_query_orders_filters_and_marks_disabled_choices() {
-    with_model_picker_query_test_context(|preferences, scope, app| {
-        let all = query_model_picker_choices(
-            preferences,
-            preferences.get_base_llm_choices_for_agent_mode(&TeamlessScopeForTest, app),
-            "",
-            scope,
-            app,
-        );
-        assert_eq!(
-            all.first().map(|choice| choice.llm.id.as_str()),
-            Some("auto")
-        );
-        assert_eq!(
-            all.last().map(|choice| choice.llm.id.as_str()),
-            Some("disabled-gpt")
-        );
-        assert!(!all.last().expect("disabled choice").is_selectable());
-
-        let filtered = query_model_picker_choices(
-            preferences,
-            preferences.get_base_llm_choices_for_agent_mode(&TeamlessScopeForTest, app),
-            "gpt 5",
-            scope,
-            app,
-        );
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].llm.id.as_str(), "gpt-5");
-        assert!(filtered[0].name_match_result.is_some());
-        assert!(filtered[0].is_selectable());
-    });
 }
 
 #[test]

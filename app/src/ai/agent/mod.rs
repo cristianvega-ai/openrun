@@ -49,7 +49,6 @@ use crate::ai::execution_context::WarpAiExecutionContext;
 use crate::code::editor_management::CodeSource;
 use crate::code_review::comments::AgentReviewCommentBatch;
 use crate::code_review::diff_set::{CurrentHead, DiffBase, DiffSetHunk};
-use crate::search::slash_command_menu::static_commands::commands;
 use crate::server::server_api::{AIApiError, DeserializationError};
 use crate::terminal::model::block::BlockId;
 use crate::terminal::shell::ShellType;
@@ -2583,7 +2582,11 @@ pub enum UserQueryMode {
 }
 
 pub fn extract_user_query_mode(query: String) -> (String, UserQueryMode) {
-    if let Some(query) = commands::strip_command_prefix(&query, commands::PLAN_NAME) {
+    if let Some(query) = query
+        .strip_prefix("/plan")
+        .and_then(|rest| rest.strip_prefix(' '))
+        .map(str::to_owned)
+    {
         (query, UserQueryMode::Plan)
     } else {
         (query, UserQueryMode::Normal)
@@ -2600,7 +2603,7 @@ pub fn extract_user_query_mode(query: String) -> (String, UserQueryMode) {
 pub fn display_user_query_with_mode(mode: UserQueryMode, query: &str) -> String {
     match mode {
         UserQueryMode::Normal => query.to_owned(),
-        UserQueryMode::Plan => format!("{} {query}", commands::PLAN.name),
+        UserQueryMode::Plan => format!("/plan {query}"),
     }
 }
 

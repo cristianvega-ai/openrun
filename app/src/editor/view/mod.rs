@@ -94,10 +94,8 @@ use crate::editor::RangeExt;
 use crate::editor::accept_autosuggestion_keybinding_view::AcceptAutosuggestionKeybinding;
 use crate::editor::autosuggestion_ignore_view::{AutosuggestionIgnore, AutosuggestionIgnoreEvent};
 use crate::features::FeatureFlag;
-use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
-use crate::search::ai_context_menu::view::{
-    AIContextMenu, AIContextMenuCategory, AIContextMenuEvent,
-};
+use crate::search::at_menu::mixer::AtMenuSearchableAction;
+use crate::search::at_menu::view::{AtMenu, AtMenuCategory, AtMenuEvent};
 use crate::server::telemetry::TelemetryEvent;
 use crate::settings::{
     AppEditorSettings, AppEditorSettingsChangedEvent, CursorBlink, CursorDisplayType,
@@ -1052,7 +1050,7 @@ pub enum EditorAction {
     InsertAutosuggestion,
     EmacsBinding,
     AttachFiles,
-    SetAIContextMenuOpen(bool),
+    SetAtMenuOpen(bool),
     ReadAndProcessImagesAsync {
         num_images_user_attached: usize,
         file_paths: Vec<String>,
@@ -1420,7 +1418,7 @@ pub struct EditorOptions {
     /// If true, the user's [`CursorDisplayType`] will be respected.
     pub allow_user_cursor_preference: bool,
     pub convert_newline_to_space: bool,
-    pub include_ai_context_menu: bool,
+    pub include_at_menu: bool,
     /// If true, this editor will delegate handling of paste events to its parent instead of
     /// inserting clipboard contents directly.
     pub delegate_paste_handling: bool,
@@ -1463,7 +1461,7 @@ impl Default for EditorOptions {
             middle_click_paste: true,
             allow_user_cursor_preference: false,
             convert_newline_to_space: false,
-            include_ai_context_menu: false,
+            include_at_menu: false,
             delegate_paste_handling: false,
             drag_drop_path_transformer: None,
             is_password: false,
@@ -1498,7 +1496,7 @@ impl From<SingleLineEditorOptions> for EditorOptions {
             middle_click_paste: options.middle_click_paste,
             allow_user_cursor_preference: options.allow_user_cursor_preference,
             convert_newline_to_space: options.convert_newline_to_space,
-            include_ai_context_menu: false,
+            include_at_menu: false,
             delegate_paste_handling: false,
             drag_drop_path_transformer: None,
             is_password: options.is_password,
@@ -1654,8 +1652,8 @@ impl ImageContextOptions {
     }
 }
 
-pub struct AIContextMenuState {
-    ai_context_menu: ViewHandle<AIContextMenu>,
+pub struct AtMenuState {
+    at_menu: ViewHandle<AtMenu>,
 }
 
 pub struct EditorView {
@@ -1770,10 +1768,10 @@ pub struct EditorView {
     /// Made public to allow terminal input to access image attachment state and limits.
     pub image_context_options: ImageContextOptions,
 
-    /// Because the AIContextMenu also contains a text editor,
+    /// Because the AtMenu also contains a text editor,
     /// we need to avoid infinite recursion and selectively
-    /// allow the creation of AIContextMenuState.
-    pub ai_context_menu_state: Option<AIContextMenuState>,
+    /// allow the creation of AtMenuState.
+    pub at_menu_state: Option<AtMenuState>,
 
     /// Whether this editor is in AI input mode.
     is_ai_input: bool,
@@ -2944,68 +2942,64 @@ impl EditorView {
             },
         );
 
-        let ai_context_menu_state = if options.include_ai_context_menu {
-            let ai_context_menu = ctx.add_typed_action_view(AIContextMenu::new);
-            ctx.subscribe_to_view(
-                &ai_context_menu,
-                |me, _, event: &AIContextMenuEvent, ctx| {
-                    let is_udi_enabled =
-                        InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
-                    let current_input_mode = if me.is_ai_input {
-                        InputType::AI
-                    } else {
-                        InputType::Shell
-                    };
-                    match event {
-                        AIContextMenuEvent::Close {
-                            item_count,
-                            query_length,
-                        } => {
-                            send_telemetry_from_ctx!(
-                                TelemetryEvent::AtMenuInteracted {
-                                    action: "cancelled".to_string(),
-                                    item_count: *item_count,
-                                    query_length: Some(*query_length),
-                                    is_udi_enabled,
-                                    current_input_mode,
-                                },
-                                ctx
-                            );
+        let at_menu_state = if options.include_at_menu {
+            let at_menu = ctx.add_typed_action_view(AtMenu::new);
+            ctx.subscribe_to_view(&at_menu, |me, _, event: &AtMenuEvent, ctx| {
+                let is_udi_enabled = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
+                let current_input_mode = if me.is_ai_input {
+                    InputType::AI
+                } else {
+                    InputType::Shell
+                };
+                match event {
+                    AtMenuEvent::Close {
+                        item_count,
+                        query_length,
+                    } => {
+                        send_telemetry_from_ctx!(
+                            TelemetryEvent::AtMenuInteracted {
+                                action: "cancelled".to_string(),
+                                item_count: *item_count,
+                                query_length: Some(*query_length),
+                                is_udi_enabled,
+                                current_input_mode,
+                            },
+                            ctx
+                        );
 
-                            ctx.emit(Event::SetAIContextMenuOpen(false));
-                            ctx.focus_self();
-                            ctx.notify();
-                        }
-                        AIContextMenuEvent::ResultAccepted {
-                            action,
-                            item_count,
-                            query_length,
-                        } => {
-                            send_telemetry_from_ctx!(
-                                TelemetryEvent::AtMenuInteracted {
-                                    action: "item_selected".to_string(),
-                                    item_count: *item_count,
-                                    query_length: Some(*query_length),
-                                    is_udi_enabled,
-                                    current_input_mode,
-                                },
-                                ctx
-                            );
-
-                            ctx.emit(Event::AcceptAIContextMenuItem(action.clone()));
-                            ctx.focus_self();
-                            ctx.notify();
-                        }
-                        AIContextMenuEvent::CategorySelected { category } => {
-                            ctx.emit(Event::SelectAIContextMenuCategory(*category));
-                            ctx.focus_self();
-                            ctx.notify();
-                        }
+                        ctx.emit(Event::SetAtMenuOpen(false));
+                        ctx.focus_self();
+                        ctx.notify();
                     }
-                },
-            );
+                    AtMenuEvent::ResultAccepted {
+                        action,
+                        item_count,
+                        query_length,
+                    } => {
+                        send_telemetry_from_ctx!(
+                            TelemetryEvent::AtMenuInteracted {
+                                action: "item_selected".to_string(),
+                                item_count: *item_count,
+                                query_length: Some(*query_length),
+                                is_udi_enabled,
+                                current_input_mode,
+                            },
+                            ctx
+                        );
 
-            Some(AIContextMenuState { ai_context_menu })
+                        ctx.emit(Event::AcceptAtMenuItem(action.clone()));
+                        ctx.focus_self();
+                        ctx.notify();
+                    }
+                    AtMenuEvent::CategorySelected { category } => {
+                        ctx.emit(Event::SelectAtMenuCategory(*category));
+                        ctx.focus_self();
+                        ctx.notify();
+                    }
+                }
+            });
+
+            Some(AtMenuState { at_menu })
         } else {
             None
         };
@@ -3067,7 +3061,7 @@ impl EditorView {
             convert_newline_to_space: options.convert_newline_to_space,
             context_model: None,
             image_context_options: ImageContextOptions::Disabled,
-            ai_context_menu_state,
+            at_menu_state,
             delegate_paste_handling: options.delegate_paste_handling,
             drag_drop_path_transformer: options.drag_drop_path_transformer,
             process_attached_images_future_handle: None,
@@ -5001,7 +4995,7 @@ impl EditorView {
             return;
         }
 
-        let is_udi_enabled = InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
+        let is_udi_enabled = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
 
         send_telemetry_from_ctx!(
             TelemetryEvent::AttachedImagesToAgentModeQuery {
@@ -7752,18 +7746,16 @@ impl EditorView {
         self.user_insert(&input, ctx);
     }
 
-    pub fn render_ai_context_menu(&self) -> Option<Box<dyn Element>> {
-        if let Some(ai_context_menu_state) = &self.ai_context_menu_state {
-            Some(ChildView::new(&ai_context_menu_state.ai_context_menu).finish())
+    pub fn render_at_menu(&self) -> Option<Box<dyn Element>> {
+        if let Some(at_menu_state) = &self.at_menu_state {
+            Some(ChildView::new(&at_menu_state.at_menu).finish())
         } else {
             None
         }
     }
 
-    pub fn ai_context_menu(&self) -> Option<&ViewHandle<AIContextMenu>> {
-        self.ai_context_menu_state
-            .as_ref()
-            .map(|state| &state.ai_context_menu)
+    pub fn at_menu(&self) -> Option<&ViewHandle<AtMenu>> {
+        self.at_menu_state.as_ref().map(|state| &state.at_menu)
     }
 
     /// Commits the currently composed text from the IME (if there is any) to properly handle one of the following:
@@ -7943,9 +7935,9 @@ pub enum Event {
     UpdatePeers {
         operations: Rc<Vec<CrdtOperation>>,
     },
-    SetAIContextMenuOpen(bool),
-    AcceptAIContextMenuItem(AIContextMenuSearchableAction),
-    SelectAIContextMenuCategory(AIContextMenuCategory),
+    SetAtMenuOpen(bool),
+    AcceptAtMenuItem(AtMenuSearchableAction),
+    SelectAtMenuCategory(AtMenuCategory),
     ProcessingAttachedImages(bool),
     /// Request parent to process image file paths from drag-and-drop
     DroppedImageFiles(Vec<String>),
@@ -8157,17 +8149,17 @@ impl TypedActionView for EditorView {
             DragAndDropFiles(paths) => {
                 self.drag_and_drop_files(paths, ctx);
             }
-            SetAIContextMenuOpen(open) => {
+            SetAtMenuOpen(open) => {
                 if !self.is_ai_input && *open {
                     // In terminal mode, check the setting before opening
                     let input_settings = InputSettings::as_ref(ctx);
                     if *input_settings.at_context_menu_in_terminal_mode {
-                        ctx.emit(Event::SetAIContextMenuOpen(*open));
+                        ctx.emit(Event::SetAtMenuOpen(*open));
                     }
                     // If setting is false, don't emit the event to open the menu
                 } else {
                     // In AI mode or when closing, always allow
-                    ctx.emit(Event::SetAIContextMenuOpen(*open));
+                    ctx.emit(Event::SetAtMenuOpen(*open));
                 }
             }
             ImeCommit(text) => self.ime_commit(text, ctx),

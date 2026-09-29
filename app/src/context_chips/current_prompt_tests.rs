@@ -437,15 +437,6 @@ fn test_disabling_chips() {
         });
         let current_prompt = app.add_model(move |ctx| CurrentPrompt::new(sessions, ctx));
 
-        // Context chips can only be disabled in Classic mode.
-        app.update(|ctx| {
-            crate::settings::InputSettings::handle(ctx).update(ctx, |settings, ctx| {
-                let _ = settings
-                    .input_box_type
-                    .set_value(crate::settings::InputBoxType::Classic, ctx);
-            });
-        });
-
         executor.clear();
 
         current_prompt

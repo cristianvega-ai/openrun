@@ -15,13 +15,10 @@ use crate::ai::agent::{
     RequestMetadata,
 };
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::queued_query::QueuedQueryId;
-use crate::search::slash_command_menu::static_commands::commands;
 use crate::terminal::input::slash_commands::SlashCommandTrigger;
 use crate::workspaces::user_workspaces::ResolvedTeamScope;
 
 pub enum SlashCommandRequest {
-    CreateNewProject { query: String },
     CloneRepository { url: String },
     Summarize { prompt: Option<String> },
 }
@@ -31,7 +28,7 @@ impl SlashCommandRequest {
     /// via the AI query flow (as opposed to action-based slash commands handled in input.rs).
     pub fn from_query(query: &str) -> Option<SlashCommandRequest> {
         // Check if query starts with /compact and route to summarize conversation
-        if let Some(prompt) = query.strip_prefix(commands::COMPACT.name) {
+        if let Some(prompt) = query.strip_prefix("/compact") {
             return Some(Self::Summarize {
                 prompt: prompt.strip_prefix(' ').map(String::from),
             });
@@ -43,16 +40,9 @@ impl SlashCommandRequest {
     pub(super) fn send_request(
         self,
         controller: &mut BlocklistAIController,
-        queued_query_id: Option<QueuedQueryId>,
-        conversation_id_override: Option<AIConversationId>,
         ctx: &mut ModelContext<BlocklistAIController>,
     ) {
-        let is_queued_prompt = queued_query_id.is_some();
-        // A fired queued prompt carries the conversation it was queued on; use it directly
-        // instead of re-deriving from the current UI selection (which may point at a different
-        // conversation the user navigated to). Falls back to the selection for direct sends.
-        let conversation_id =
-            conversation_id_override.or_else(|| self.conversation_id(controller, ctx));
+        let conversation_id = self.conversation_id(controller, ctx);
         let context = input_context_for_request(
             false,
             controller.context_model.as_ref(ctx),
@@ -131,7 +121,6 @@ impl SlashCommandRequest {
                 is_auto_resume_after_error: false,
             }),
             RecoveryBudget::fresh(),
-            is_queued_prompt,
             ctx,
         ) {
             Ok((_, stream_id)) => {
@@ -139,7 +128,6 @@ impl SlashCommandRequest {
                 if is_summarize {
                     ctx.emit(BlocklistAIControllerEvent::SentRequest {
                         contains_user_query: true,
-                        is_queued_prompt,
                         model_id,
                         stream_id,
                     });
@@ -165,9 +153,6 @@ impl SlashCommandRequest {
 
     fn input(self, context: Arc<[AIAgentContext]>) -> Vec<AIAgentInput> {
         match self {
-            SlashCommandRequest::CreateNewProject { query } => {
-                vec![AIAgentInput::CreateNewProject { query, context }]
-            }
             SlashCommandRequest::CloneRepository { url } => {
                 vec![AIAgentInput::CloneRepository {
                     clone_repo_url: CloneRepositoryURL::new(url),
@@ -183,8 +168,7 @@ impl SlashCommandRequest {
     fn entrypoint(&self) -> EntrypointType {
         match self {
             SlashCommandRequest::CloneRepository { .. } => EntrypointType::CloneRepository,
-            SlashCommandRequest::CreateNewProject { .. }
-            | SlashCommandRequest::Summarize { .. } => EntrypointType::UserInitiated,
+            SlashCommandRequest::Summarize { .. } => EntrypointType::UserInitiated,
         }
     }
 }

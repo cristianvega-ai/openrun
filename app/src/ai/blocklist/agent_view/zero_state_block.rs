@@ -44,7 +44,6 @@ const MAX_RECENT_CONVERSATION_COUNT: usize = 3;
 #[derive(Default)]
 struct StateHandles {
     start_new_conversation: MouseStateHandle,
-    switch_model: MouseStateHandle,
     exit: MouseStateHandle,
     recent_conversations: [MouseStateHandle; MAX_RECENT_CONVERSATION_COUNT],
 }
@@ -487,41 +486,21 @@ fn render_body(props: ZeroStateBodyProps<'_>, app: &AppContext) -> Vec<Box<dyn E
             vec![recent_conversations_section]
         }
         _ => {
-            let mut body_items = vec![
-                render_standard_message(
-                    Message::new(vec![MessageItem::clickable(
-                        vec![
-                            MessageItem::keystroke(
-                                ENTER_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE.clone(),
-                            ),
-                            MessageItem::text("start a new agent conversation"),
-                        ],
-                        |ctx| {
-                            ctx.dispatch_typed_action(TerminalAction::StartNewAgentConversation {
-                                origin: AgentViewEntryOrigin::Input,
-                            });
-                        },
-                        state_handles.start_new_conversation.clone(),
-                    )]),
-                    app,
-                ),
-                render_standard_message(
-                    Message::new(vec![MessageItem::clickable(
-                        vec![
-                            MessageItem::keystroke(Keystroke {
-                                key: "/model".to_owned(),
-                                ..Default::default()
-                            }),
-                            MessageItem::text("switch model"),
-                        ],
-                        |ctx| {
-                            ctx.dispatch_typed_action(TerminalAction::OpenModelSelector);
-                        },
-                        state_handles.switch_model.clone(),
-                    )]),
-                    app,
-                ),
-            ];
+            let mut body_items = vec![render_standard_message(
+                Message::new(vec![MessageItem::clickable(
+                    vec![
+                        MessageItem::keystroke(ENTER_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE.clone()),
+                        MessageItem::text("start a new agent conversation"),
+                    ],
+                    |ctx| {
+                        ctx.dispatch_typed_action(TerminalAction::StartNewAgentConversation {
+                            origin: AgentViewEntryOrigin::Input,
+                        });
+                    },
+                    state_handles.start_new_conversation.clone(),
+                )]),
+                app,
+            )];
 
             body_items.push(render_standard_message(
                 Message::new(vec![MessageItem::clickable(

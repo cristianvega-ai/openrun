@@ -34,7 +34,7 @@ use model::AIBlockOutputStatus;
 use parking_lot::{FairMutex, Mutex, RwLock};
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
-pub use pending_user_query_block::{PendingUserQueryBlock, PendingUserQueryBlockEvent};
+pub use pending_user_query_block::PendingUserQueryBlock;
 #[cfg(not(target_family = "wasm"))]
 use repo_metadata::repositories::DetectedRepositories;
 use rustc_hash::FxHashSet;
@@ -1642,7 +1642,7 @@ impl AIBlock {
             .time_to_last_token
             .map(|duration| duration.num_milliseconds() as u128);
         let status = self.model.status(ctx);
-        let is_udi_enabled = InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
+        let is_udi_enabled = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
 
         match status {
             AIBlockOutputStatus::Pending => {

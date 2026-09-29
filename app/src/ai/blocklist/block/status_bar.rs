@@ -43,7 +43,7 @@ use crate::ai::blocklist::summarization_cancel_dialog::{
 use crate::ai::blocklist::{
     BlocklistAIActionEvent, BlocklistAIActionModel, BlocklistAIContextEvent,
     BlocklistAIContextModel, BlocklistAIController, BlocklistAIHistoryEvent, BlocklistAIInputEvent,
-    BlocklistAIInputModel, QueuedQueryEvent, QueuedQueryModel, ResponseStreamId, ai_brand_color,
+    BlocklistAIInputModel, ResponseStreamId, ai_brand_color,
 };
 use crate::ai::llms::LLMPreferences;
 use crate::settings::{InputModeSettings, InputSettings};
@@ -57,7 +57,7 @@ use crate::terminal::model_events::{ModelEvent, ModelEventDispatcher};
 use crate::terminal::warpify::render::LEFT_STRIPE_WIDTH;
 use crate::terminal::{
     CANCEL_COMMAND_KEYBINDING, TOGGLE_AUTOEXECUTE_MODE_KEYBINDING,
-    TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING, TOGGLE_QUEUE_NEXT_PROMPT_KEYBINDING, TerminalModel,
+    TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING, TerminalModel,
 };
 use crate::util::bindings::keybinding_name_to_keystroke;
 
@@ -68,7 +68,6 @@ pub fn init(app: &mut AppContext) {
 #[derive(Default)]
 struct StateHandles {
     autoexecute_button: MouseStateHandle,
-    queue_next_prompt_button: MouseStateHandle,
     stop_button: MouseStateHandle,
     take_over_button: MouseStateHandle,
     hide_cli_responses_button: MouseStateHandle,
@@ -90,7 +89,6 @@ pub struct BlocklistAIStatusBar {
     state_handles: StateHandles,
 
     autoexecute_keystroke: Option<Keystroke>,
-    queue_next_prompt_keystroke: Option<Keystroke>,
     stop_keystroke: Option<Keystroke>,
     set_terminal_input_keystroke: Option<Keystroke>,
     hide_cli_responses_keystroke: Option<Keystroke>,
@@ -198,15 +196,6 @@ impl BlocklistAIStatusBar {
                 ctx.notify();
             }
         });
-        ctx.subscribe_to_model(&QueuedQueryModel::handle(ctx), |_, _, event, ctx| {
-            if matches!(
-                event,
-                QueuedQueryEvent::QueueNextPromptToggled { .. }
-                    | QueuedQueryEvent::DefaultModeChanged
-            ) {
-                ctx.notify();
-            }
-        });
         ctx.subscribe_to_model(&input_model, |_, _, event, ctx| {
             if let BlocklistAIInputEvent::InputTypeChanged { .. } = event {
                 ctx.notify();
@@ -251,8 +240,6 @@ impl BlocklistAIStatusBar {
         let stop_keystroke = keybinding_name_to_keystroke(CANCEL_COMMAND_KEYBINDING, ctx);
         let autoexecute_keystroke =
             keybinding_name_to_keystroke(TOGGLE_AUTOEXECUTE_MODE_KEYBINDING, ctx);
-        let queue_next_prompt_keystroke =
-            keybinding_name_to_keystroke(TOGGLE_QUEUE_NEXT_PROMPT_KEYBINDING, ctx);
         let set_terminal_input_keystroke =
             keybinding_name_to_keystroke(SET_INPUT_MODE_TERMINAL_ACTION_NAME, ctx);
         let hide_cli_responses_keystroke =
@@ -261,8 +248,6 @@ impl BlocklistAIStatusBar {
             me.stop_keystroke = keybinding_name_to_keystroke(CANCEL_COMMAND_KEYBINDING, ctx);
             me.autoexecute_keystroke =
                 keybinding_name_to_keystroke(TOGGLE_AUTOEXECUTE_MODE_KEYBINDING, ctx);
-            me.queue_next_prompt_keystroke =
-                keybinding_name_to_keystroke(TOGGLE_QUEUE_NEXT_PROMPT_KEYBINDING, ctx);
             me.set_terminal_input_keystroke =
                 keybinding_name_to_keystroke(SET_INPUT_MODE_TERMINAL_ACTION_NAME, ctx);
             ctx.notify();
@@ -339,7 +324,6 @@ impl BlocklistAIStatusBar {
             cli_subagent_controller,
             state_handles: Default::default(),
             autoexecute_keystroke,
-            queue_next_prompt_keystroke,
             stop_keystroke,
             set_terminal_input_keystroke,
             hide_cli_responses_keystroke,
@@ -744,17 +728,6 @@ impl BlocklistAIStatusBar {
                         is_locked: is_in_cloud_context(&terminal_model),
                     },
                 ),
-                queue_next_prompt_button: FeatureFlag::QueueSlashCommand.is_enabled().then_some(
-                    ButtonProps {
-                        button_handle: &self.state_handles.queue_next_prompt_button,
-                        keystroke: self.queue_next_prompt_keystroke.as_ref(),
-                        is_active: QueuedQueryModel::as_ref(app).is_queue_next_prompt_enabled(
-                            conversation.id(),
-                            active_block,
-                            app,
-                        ),
-                    },
-                ),
                 stop_button: Some(ButtonProps {
                     button_handle: &self.state_handles.stop_button,
                     keystroke: self.stop_keystroke.as_ref(),
@@ -1048,7 +1021,7 @@ impl View for BlocklistAIStatusBar {
 
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
-        let background = if InputSettings::as_ref(app).is_universal_developer_input_enabled(app)
+        let background = if InputSettings::as_ref(app).is_warp_prompt_enabled(app)
             || FeatureFlag::AgentView.is_enabled()
         {
             // Use a fully transparent background for universal developer input (or unconditionally, if the new
@@ -1088,7 +1061,7 @@ impl View for BlocklistAIStatusBar {
         }
 
         let is_input_pinned_to_top = InputModeSettings::as_ref(app).is_pinned_to_top();
-        let is_udi_enabled = InputSettings::as_ref(app).is_universal_developer_input_enabled(app);
+        let is_udi_enabled = InputSettings::as_ref(app).is_warp_prompt_enabled(app);
         if !FeatureFlag::AgentView.is_enabled() && is_udi_enabled {
             if is_input_pinned_to_top {
                 // Use 2px padding on the top, so combined with the 6px padding on the universal

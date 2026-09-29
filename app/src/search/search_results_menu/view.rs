@@ -48,7 +48,7 @@ pub enum SearchResultsViewEvent<T: Action + Clone> {
 }
 
 pub struct SearchResultsMenuView<T: Action + Clone> {
-    // Search results components (following AIContextMenu pattern)
+    // Search results components (following AtMenu pattern)
     search_bar: ViewHandle<SearchBar<T>>,
     search_bar_state: ModelHandle<SearchBarState<T>>,
     scroll_state: ScrollStateHandle,
@@ -65,7 +65,7 @@ impl<T: Action + Clone> SearchResultsMenuView<T> {
         query_result_renderer: CreateQueryResultRendererFn<T>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        // Set up SearchBar system (following AIContextMenu pattern)
+        // Set up SearchBar system (following AtMenu pattern)
         let search_bar_state = ctx.add_model(|_ctx| {
             SearchBarState::new(SearchResultOrdering::TopDown)
                 .with_max_results(config.max_search_results)
@@ -221,7 +221,7 @@ impl<T: Action + Clone> SearchResultsMenuView<T> {
         });
     }
 
-    // TODO(moira): refactor to shared component with AIContextMenu
+    // TODO(moira): refactor to shared component with AtMenu
     fn handle_search_bar_event(&mut self, event: &SearchBarEvent<T>, ctx: &mut ViewContext<Self>) {
         match event {
             SearchBarEvent::ResultSelected { index } => {
@@ -273,7 +273,7 @@ impl<T: Action + Clone> SearchResultsMenuView<T> {
     }
 
     /// Render the search results using ScrollableMenu
-    // TODO(moira): refactor to shared component with AIContextMenu
+    // TODO(moira): refactor to shared component with AtMenu
     pub fn render_search_results(&self, app: &AppContext) -> Box<dyn Element> {
         let state = self.search_bar_state.as_ref(app);
         let selected_index = state.selected_index();

@@ -252,7 +252,7 @@ fn test_finalize_query_returns_top_results() {
     let best = results.iter().max_by_key(|r| r.score()).unwrap();
     assert_eq!(
         best.accept_result(),
-        AIContextMenuSearchableAction::InsertText {
+        AtMenuSearchableAction::InsertText {
             text: "fn my_function in test.rs:1".to_string()
         }
     );

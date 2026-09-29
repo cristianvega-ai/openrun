@@ -1,17 +1,15 @@
 use warp_core::settings::Setting;
 use warpui::elements::{
-    Border, Clipped, Container, DropTarget, Element, Flex, Hoverable, ParentElement, SavePosition,
-    Stack,
+    Border, Container, DropTarget, Element, Flex, Hoverable, ParentElement, SavePosition, Stack,
 };
 use warpui::presenter::ChildView;
 use warpui::{AppContext, SingletonEntity};
 
 use super::common::{
     add_command_xray_overlay, add_input_suggestions_overlays, add_voltron_overlay,
-    add_workflow_info_overlay, should_show_terminal_input_message_bar,
-    wrap_input_with_terminal_padding_and_focus_handler,
+    add_workflow_info_overlay, wrap_input_with_terminal_padding_and_focus_handler,
 };
-use super::{Input, InputAction, InputDropTargetData};
+use super::{Input, InputDropTargetData};
 use crate::appearance::Appearance;
 use crate::context_chips::spacing;
 use crate::settings::InputModeSettings;
@@ -38,7 +36,7 @@ impl Input {
 
         let prompt_elements = self
             .prompt_render_helper
-            .render_universal_developer_input_prompt(&model, appearance, app);
+            .render_warp_prompt(&model, appearance, app);
 
         column.add_child(prompt_elements);
 
@@ -53,11 +51,7 @@ impl Input {
                 .finish(),
         );
 
-        if should_show_terminal_input_message_bar(app) {
-            column.add_child(
-                Clipped::new(ChildView::new(&self.terminal_input_message_bar).finish()).finish(),
-            );
-        } else if !(matches!(input_mode, InputMode::PinnedToTop)
+        if !(matches!(input_mode, InputMode::PinnedToTop)
             && self
                 .suggestions_mode_model
                 .as_ref(app)
@@ -116,9 +110,6 @@ impl Input {
         .finish();
 
         let hoverable_input = Hoverable::new(self.hoverable_handle.clone(), |_| drop_target)
-            .on_hover(|is_hovered, ctx, _app, _position| {
-                ctx.dispatch_typed_action(InputAction::SetUDIHovered(is_hovered));
-            })
             .on_middle_click(|ctx, _app, _position| {
                 ctx.dispatch_typed_action(TerminalAction::MiddleClickOnInput)
             })
@@ -139,10 +130,6 @@ impl Input {
 
         let mut column = Flex::column();
         let is_slash_commands = self.suggestions_mode_model.as_ref(app).is_slash_commands();
-        let is_conversation_menu = self
-            .suggestions_mode_model
-            .as_ref(app)
-            .is_conversation_menu();
         let is_inline_history_menu = self
             .suggestions_mode_model
             .as_ref(app)
@@ -160,8 +147,6 @@ impl Input {
                             None
                         } else if is_slash_commands {
                             Some(ChildView::new(&self.inline_slash_commands_view).finish())
-                        } else if is_conversation_menu {
-                            Some(ChildView::new(&self.inline_conversation_menu_view).finish())
                         } else if is_inline_history_menu {
                             Some(ChildView::new(&self.inline_history_menu_view).finish())
                         } else if is_repos_menu {
@@ -185,8 +170,6 @@ impl Input {
                             None
                         } else if is_slash_commands {
                             Some(ChildView::new(&self.inline_slash_commands_view).finish())
-                        } else if is_conversation_menu {
-                            Some(ChildView::new(&self.inline_conversation_menu_view).finish())
                         } else if is_inline_history_menu {
                             Some(ChildView::new(&self.inline_history_menu_view).finish())
                         } else if is_repos_menu {
@@ -208,10 +191,6 @@ impl Input {
                 if !hide_menu {
                     if is_slash_commands && !should_render_below {
                         column.add_child(ChildView::new(&self.inline_slash_commands_view).finish());
-                    } else if is_conversation_menu && !should_render_below {
-                        column.add_child(
-                            ChildView::new(&self.inline_conversation_menu_view).finish(),
-                        );
                     } else if is_inline_history_menu && !should_render_below {
                         column.add_child(ChildView::new(&self.inline_history_menu_view).finish());
                     } else if is_repos_menu && !should_render_below {
@@ -224,10 +203,6 @@ impl Input {
                 if !hide_menu {
                     if is_slash_commands && should_render_below {
                         column.add_child(ChildView::new(&self.inline_slash_commands_view).finish());
-                    } else if is_conversation_menu && should_render_below {
-                        column.add_child(
-                            ChildView::new(&self.inline_conversation_menu_view).finish(),
-                        );
                     } else if is_inline_history_menu && should_render_below {
                         column.add_child(ChildView::new(&self.inline_history_menu_view).finish());
                     } else if is_repos_menu && should_render_below {

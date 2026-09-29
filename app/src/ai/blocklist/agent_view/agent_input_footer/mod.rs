@@ -18,10 +18,8 @@ use warpui::{
     ViewHandle,
 };
 
-use crate::ai::blocklist::BlocklistAIInputModel;
 use crate::ai::blocklist::agent_view::is_in_cloud_context;
 use crate::ai::blocklist::history_model::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::appearance::Appearance;
 use crate::completer::SessionContext;
 use crate::context_chips;
@@ -31,11 +29,7 @@ use crate::features::FeatureFlag;
 use crate::settings::{
     CodeSettings, CodeSettingsChangedEvent, PrivacySettings, PrivacySettingsChangedEvent,
 };
-use crate::settings_view::SettingsSection;
 use crate::terminal::TerminalModel;
-use crate::terminal::input::MenuPositioningProvider;
-use crate::terminal::input::models::InlineModelSelectorTab;
-use crate::terminal::profile_model_selector::{ProfileModelSelector, ProfileModelSelectorEvent};
 use crate::terminal::session_settings::{
     SessionSettings, SessionSettingsChangedEvent, ToolbarChipSelection,
 };
@@ -58,7 +52,6 @@ const FAST_FORWARD_LOCKED_TOOLTIP: &str =
 pub struct AgentInputFooter {
     terminal_view_id: EntityId,
     file_button: ViewHandle<ActionButton>,
-    model_selector: ViewHandle<ProfileModelSelector>,
     left_display_chips: Vec<ViewHandle<DisplayChip>>,
     right_display_chips: Vec<ViewHandle<DisplayChip>>,
     display_chip_config: DisplayChipConfig,
@@ -75,9 +68,7 @@ pub struct AgentInputFooter {
 impl AgentInputFooter {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
         terminal_view_id: EntityId,
-        ai_input_model: ModelHandle<BlocklistAIInputModel>,
         terminal_model: Arc<FairMutex<TerminalModel>>,
         prompt: ModelHandle<PromptType>,
         display_chip_config: DisplayChipConfig,
@@ -127,23 +118,6 @@ impl AgentInputFooter {
                     ctx.dispatch_typed_action(AgentInputFooterAction::ToggleFileExplorer);
                 })
         });
-        let profile_model_selector_full = ctx.add_typed_action_view(|ctx| {
-            let mut selector = ProfileModelSelector::new(
-                menu_positioning_provider.clone(),
-                terminal_view_id,
-                ai_input_model,
-                terminal_model.clone(),
-                None,
-                ctx,
-            );
-            selector.set_render_compact(false, ctx);
-            selector
-        });
-
-        ctx.subscribe_to_view(&profile_model_selector_full, |me, _, event, ctx| {
-            me.handle_profile_model_selector_event(event, ctx);
-        });
-
         ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |_, _, _, ctx| {
             ctx.notify();
         });
@@ -173,9 +147,6 @@ impl AgentInputFooter {
         ctx.subscribe_to_model(
             &SessionSettings::handle(ctx),
             move |me, _, event, ctx| match event {
-                SessionSettingsChangedEvent::ShowModelSelectorsInPrompt { .. } => {
-                    ctx.notify();
-                }
                 SessionSettingsChangedEvent::AgentToolbarChipSelectionSetting { .. }
                 | SessionSettingsChangedEvent::GithubPrChipDefaultValidation { .. } => {
                     me.update_display_chips(&prompt_for_session_settings, ctx);
@@ -184,11 +155,6 @@ impl AgentInputFooter {
                 _ => {}
             },
         );
-        // Subscribe to AIExecutionProfilesModel to potentially show/hide the profile selector button when profiles are added/removed
-        ctx.subscribe_to_model(&AIExecutionProfilesModel::handle(ctx), |_, _, _, ctx| {
-            ctx.notify();
-        });
-
         ctx.subscribe_to_model(
             &BlocklistAIHistoryModel::handle(ctx),
             |me, _, event, ctx| {
@@ -207,14 +173,12 @@ impl AgentInputFooter {
                     | BlocklistAIHistoryEvent::RemoveConversation { .. }
                     | BlocklistAIHistoryEvent::UpdatedAutoexecuteOverride { .. } => {
                         me.sync_fast_forward_button(ctx);
-                        me.model_selector.update(ctx, |_, ctx| ctx.notify());
                         ctx.notify();
                     }
                     BlocklistAIHistoryEvent::UpdatedTodoList { .. }
                     | BlocklistAIHistoryEvent::UpdatedConversationStatus { .. }
                     | BlocklistAIHistoryEvent::AppendedExchange { .. }
                     | BlocklistAIHistoryEvent::UpdatedStreamingExchange { .. } => {
-                        me.model_selector.update(ctx, |_, ctx| ctx.notify());
                         ctx.notify();
                     }
                     _ => (),
@@ -230,7 +194,6 @@ impl AgentInputFooter {
             terminal_view_id,
             file_button,
             file_explorer_button,
-            model_selector: profile_model_selector_full,
             terminal_model,
             left_display_chips: vec![],
             right_display_chips: vec![],
@@ -282,44 +245,6 @@ impl AgentInputFooter {
             .any(|chip| chip.as_ref(app).display_chip_kind().has_open_menu());
 
         has_open_display_chip
-    }
-
-    pub fn is_model_selector_open(&self, app: &AppContext) -> bool {
-        self.model_selector.as_ref(app).is_open()
-    }
-
-    fn handle_profile_model_selector_event(
-        &mut self,
-        event: &ProfileModelSelectorEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            ProfileModelSelectorEvent::MenuVisibilityChanged { open } => {
-                if *open {
-                    ctx.emit(AgentInputFooterEvent::ModelSelectorOpened);
-                } else {
-                    ctx.emit(AgentInputFooterEvent::ModelSelectorClosed);
-                }
-            }
-            ProfileModelSelectorEvent::OpenSettings(section) => {
-                ctx.emit(AgentInputFooterEvent::OpenSettings(*section));
-            }
-            ProfileModelSelectorEvent::ToggleInlineModelSelector => {
-                let initial_tab = if self
-                    .terminal_model
-                    .lock()
-                    .block_list()
-                    .active_block()
-                    .is_agent_in_control_or_tagged_in()
-                {
-                    InlineModelSelectorTab::FullTerminalUse
-                } else {
-                    InlineModelSelectorTab::BaseAgent
-                };
-
-                ctx.emit(AgentInputFooterEvent::ToggleInlineModelSelector { initial_tab });
-            }
-        }
     }
 
     fn sync_fast_forward_button(&self, ctx: &mut ViewContext<Self>) {
@@ -377,11 +302,7 @@ impl AgentInputFooter {
                     .find(|chip| chip.as_ref(app).chip_kind() == chip_kind)
                     .map(|chip| ChildView::new(chip).finish())
             }
-            AgentToolbarItemKind::ModelSelector => {
-                let show = FeatureFlag::ProfilesDesignRevamp.is_enabled()
-                    || *SessionSettings::as_ref(app).show_model_selectors_in_prompt;
-                show.then(|| ChildView::new(&self.model_selector).finish())
-            }
+            AgentToolbarItemKind::ModelSelector => None,
             AgentToolbarItemKind::NLDToggle => None,
             AgentToolbarItemKind::VoiceInput => None,
             AgentToolbarItemKind::FileAttach => Some(ChildView::new(&self.file_button).finish()),
@@ -506,10 +427,6 @@ pub enum AgentInputFooterEvent {
     ToggleFileExplorer,
     ToggledChipMenu { open: bool },
     TryExecuteChipCommand(PromptChipShellCommand),
-    ModelSelectorOpened,
-    ModelSelectorClosed,
-    ToggleInlineModelSelector { initial_tab: InlineModelSelectorTab },
-    OpenSettings(SettingsSection),
     OpenCodeReview,
     ShowContextMenu { position: Vector2F },
 }

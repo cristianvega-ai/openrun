@@ -28,7 +28,7 @@ impl InputType {
 
 use super::ConversationSelectionHandle;
 use super::input_mode_policy::InputModePolicyHandle;
-use crate::settings::{InputBoxType, InputSettings};
+use crate::settings::InputSettings;
 use crate::terminal::TerminalModel;
 use crate::terminal::cli_agent_sessions::{
     CLIAgentInputState, CLIAgentSessionsModel, CLIAgentSessionsModelEvent,
@@ -227,8 +227,7 @@ impl BlocklistAIInputModel {
             return;
         }
 
-        let input_type = InputSettings::as_ref(ctx).input_type(ctx);
-        if !matches!(input_type, InputBoxType::Classic) {
+        if InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx) {
             return;
         }
         self.set_input_config_internal(new_config, ctx);

@@ -3,8 +3,6 @@ use warp_errors::report_if_error;
 use warpui::{App, SingletonEntity as _};
 
 use super::{ParsedSlashCommandInput, SlashCommandEntryState};
-use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::{QueuedQuery, QueuedQueryModel, QueuedQueryOrigin};
 use crate::search::slash_command_menu::static_commands::commands;
 use crate::settings::AISettings;
 use crate::terminal::input::slash_commands::SlashCommandDataSource as _;
@@ -142,7 +140,7 @@ fn test_parse_rename_tab_slash_command_arguments() {
 }
 
 #[test]
-fn test_non_ai_commands_remain_active_when_ai_is_disabled() {
+fn test_terminal_commands_remain_active_when_ai_is_disabled() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -174,14 +172,9 @@ fn test_non_ai_commands_remain_active_when_ai_is_disabled() {
                 "/rename-tab should remain active when AI is off, got: {active_command_names:?}"
             );
 
-            // Commands that require AI should be filtered out.
             assert!(
-                !active_command_names.contains(&commands::AGENT.name),
-                "/agent should NOT be active when AI is off, got: {active_command_names:?}"
-            );
-            assert!(
-                !active_command_names.contains(&commands::PLAN.name),
-                "/plan should NOT be active when AI is off, got: {active_command_names:?}"
+                !active_command_names.contains(&"/agent"),
+                "/agent is not a terminal command, got: {active_command_names:?}"
             );
         });
     });
@@ -417,128 +410,6 @@ fn test_detect_command_matches_buffer_driven_detection() {
     });
 }
 
-#[test]
-fn test_detect_command_parses_queue_with_argument() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        input.read(&app, |input, ctx| {
-            let result = input
-                .slash_command_model
-                .as_ref(ctx)
-                .detect_command("/queue fix the tests", ctx);
-
-            if let SlashCommandEntryState::SlashCommand(detected) = result {
-                assert_eq!(detected.command.name, "/queue");
-                assert_eq!(detected.argument.as_deref(), Some("fix the tests"));
-            } else {
-                // /queue may not be registered if the feature flag is off in tests.
-                // That's fine — this test validates argument extraction when it is.
-            }
-        });
-    });
-}
-
-#[test]
-fn test_detect_command_returns_queue_with_no_argument() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        input.read(&app, |input, ctx| {
-            let result = input
-                .slash_command_model
-                .as_ref(ctx)
-                .detect_command("/queue", ctx);
-
-            // /queue requires an argument, so bare "/queue" should not be detected.
-            // (StaticCommand with required argument rejects input without a space-delimited arg.)
-            assert!(
-                !matches!(result, SlashCommandEntryState::SlashCommand(_)),
-                "/queue with no argument should not be detected as a complete slash command"
-            );
-        });
-    });
-}
-
-#[test]
-fn test_submit_queued_prompt_routes_plain_text_to_conversation() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        // submit_queued_prompt with plain text should not panic or crash.
-        // It routes through detect_command (returning None) and falls through
-        // to send_user_query_in_new_conversation.
-        input.update(&mut app, |input, ctx| {
-            let conversation_id = AIConversationId::new();
-            let query_id = QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                model.append(
-                    conversation_id,
-                    QueuedQuery::new(
-                        "fix the tests".to_owned(),
-                        QueuedQueryOrigin::QueueSlashCommand,
-                    ),
-                    ctx,
-                )
-            });
-            input.submit_queued_prompt("fix the tests".to_string(), conversation_id, query_id, ctx);
-        });
-    });
-}
-
-#[test]
-fn test_submit_queued_prompt_detects_slash_command() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        // Verify that submit_queued_prompt correctly detects slash commands.
-        // Find a command that exists and has an optional argument.
-        let command_with_arg = input.read(&app, |input, ctx| {
-            let ds = &input.slash_command_data_source;
-            ds.as_ref(ctx).active_commands().find_map(|(_, command)| {
-                (command.argument.as_ref().is_some_and(|a| a.is_optional)
-                    && ds.as_ref(ctx).parse_slash_command(command.name).is_some())
-                .then(|| command.name.to_owned())
-            })
-        });
-
-        if let Some(command_text) = command_with_arg {
-            // submit_queued_prompt should detect the slash command and route through
-            // execute_slash_command. This should not panic.
-            input.update(&mut app, |input, ctx| {
-                let conversation_id = AIConversationId::new();
-                let query_id = QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                    model.append(
-                        conversation_id,
-                        QueuedQuery::new(
-                            command_text.clone(),
-                            QueuedQueryOrigin::QueueSlashCommand,
-                        ),
-                        ctx,
-                    )
-                });
-                input.submit_queued_prompt(command_text, conversation_id, query_id, ctx);
-            });
-        }
-    });
-}
-
-/// Regression test: a REPOSITORY-gated command must stop being available the
-/// moment the working directory leaves the repository, even before async git
-/// detection has refreshed the cached repo root. Before the fix, availability
-/// keyed off the stale `active_repo_root` cache, so the command lingered in the
-/// window after `cd`-ing out of the repo until detection resolved.
 #[test]
 fn repository_gated_command_drops_when_leaving_repository() {
     use repo_metadata::repositories::DetectedRepositories;

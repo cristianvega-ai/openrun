@@ -7,10 +7,7 @@ use warpui::{
 };
 
 pub use super::ContextChipKind;
-use crate::settings::{
-    AISettings, AISettingsChangedEvent, InputSettings, InputSettingsChangedEvent,
-    WarpPromptSeparator,
-};
+use crate::settings::{AISettings, AISettingsChangedEvent, WarpPromptSeparator};
 use crate::terminal::session_settings::{SessionSettings, SessionSettingsChangedEvent};
 
 #[cfg(test)]
@@ -154,8 +151,6 @@ impl Prompt {
         ctx.subscribe_to_model(&session_settings, Self::handle_session_settings_change);
         let ai_settings = AISettings::handle(ctx);
         ctx.subscribe_to_model(&ai_settings, Self::handle_ai_settings_change);
-        let input_settings = InputSettings::handle(ctx);
-        ctx.subscribe_to_model(&input_settings, Self::handle_input_settings_change);
 
         let initial_config = Self::from_user_settings(ctx);
         Self {
@@ -263,18 +258,6 @@ impl Prompt {
                 | SessionSettingsChangedEvent::GithubPrChipDefaultValidation { .. }
         ) {
             log::debug!("Loading new prompt configuration");
-            self.config = Self::from_user_settings(ctx);
-            ctx.emit(PromptEvent::Changed);
-        }
-    }
-
-    fn handle_input_settings_change(
-        &mut self,
-        _: ModelHandle<InputSettings>,
-        event: &InputSettingsChangedEvent,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if matches!(event, InputSettingsChangedEvent::InputBoxTypeSetting { .. }) {
             self.config = Self::from_user_settings(ctx);
             ctx.emit(PromptEvent::Changed);
         }

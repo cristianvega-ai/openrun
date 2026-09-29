@@ -21,7 +21,6 @@ use crate::ai::blocklist::{
     BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIHistoryEvent,
     BlocklistAIInputEvent, BlocklistAIInputModel,
 };
-use crate::search::slash_command_menu::static_commands::commands;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
 use crate::terminal::input::message_bar::attached_context::{
     AttachedBlocksMessageProducer, AttachedContextArgs, AttachedTextSelectionMessageProducer,
@@ -50,7 +49,6 @@ pub struct AgentMessageBarMouseStates {
     pub fork_from_last_known_good_state: MouseStateHandle,
     pub toggle_shortcuts: MouseStateHandle,
     pub toggle_slash_commands: MouseStateHandle,
-    pub toggle_conversation_menu: MouseStateHandle,
     pub toggle_code_review: MouseStateHandle,
     pub clear_attached_context: MouseStateHandle,
 }
@@ -331,11 +329,7 @@ impl MessageProvider<AgentMessageArgs<'_>> for ZeroStateMessageProducer {
             return None;
         }
 
-        let AgentViewState::Active {
-            original_conversation_length,
-            ..
-        } = agent_view_controller.agent_view_state()
-        else {
+        let AgentViewState::Active { .. } = agent_view_controller.agent_view_state() else {
             return None;
         };
 
@@ -419,26 +413,6 @@ impl MessageProvider<AgentMessageArgs<'_>> for ZeroStateMessageProducer {
         );
 
         let is_cloud_agent = is_in_cloud_context(terminal_model);
-
-        let has_conversation_been_updated_since_agent_view_entry =
-            *original_conversation_length != active_conversation.exchange_count();
-
-        if !is_cloud_agent
-            && !has_conversation_been_updated_since_agent_view_entry
-            && let Some(conversations_keystroke) =
-                keybinding_name_to_keystroke(commands::CONVERSATIONS.name, app)
-        {
-            items.push(MessageItem::clickable(
-                vec![
-                    MessageItem::keystroke(conversations_keystroke),
-                    MessageItem::text("open conversation"),
-                ],
-                |ctx| {
-                    ctx.dispatch_typed_action(InputAction::ToggleConversationsMenu);
-                },
-                mouse_states.toggle_conversation_menu.clone(),
-            ));
-        }
 
         // Code review only works locally.
         #[cfg(not(target_family = "wasm"))]
@@ -561,9 +535,7 @@ impl MessageProvider<AgentMessageArgs<'_>> for ForkSlashCommandMessageProducer {
             return None;
         };
         let command_name = detected_command.command.name;
-        let is_fork_family = command_name == commands::FORK.name
-            || command_name == commands::FORK_FROM.name
-            || command_name == commands::FORK_AND_COMPACT.name;
+        let is_fork_family = matches!(command_name, "/fork" | "/fork-from" | "/fork-and-compact");
         if !is_fork_family {
             return None;
         }

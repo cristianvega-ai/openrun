@@ -24,7 +24,7 @@ use crate::appearance::Appearance;
 use crate::context_chips::display::PromptDisplay;
 use crate::context_chips::spacing;
 use crate::features::FeatureFlag;
-use crate::settings::{FontSettings, InputSettings};
+use crate::settings::FontSettings;
 use crate::terminal::blockgrid_element::BlockGridElement;
 use crate::terminal::grid_size_util::grid_compute_baseline_position_fn;
 use crate::terminal::input::get_input_box_top_border_width;
@@ -55,31 +55,10 @@ fn prompt_marker_grace_period(shell_type: Option<ShellType>, is_msys2: bool) -> 
 
 pub const LPROMPT_RIGHT_PADDING_SAME_LINE_PROMPT: f32 = 4.;
 
-pub fn should_render_ps1_prompt(terminal_model: &TerminalModel, app: &AppContext) -> bool {
-    let is_classic_input_enabled = InputSettings::as_ref(app).is_classic_input_enabled(app);
-    let session_settings = SessionSettings::as_ref(app);
-
-    // In the context of session sharing, these values may differ from the local settings i.e.
-    // if the sharer is using PS1 and the viewer is not (using Warp prompt in non-SLP mode).
-    // In this case, we still want to render the prompt on the same line (PS1 should ALWAYS be
-    // rendered on the same line).
-    // Note that the product behavior for session sharing is normally to respect the local settings
-    // for prompt cosmetics, but this is an exception!
-    let active_block = terminal_model.block_list().active_block();
-    let active_block_honor_ps1 = active_block.honor_ps1();
-
-    is_classic_input_enabled && (*session_settings.honor_ps1.value() || active_block_honor_ps1)
-}
-
-/// Returns whether the prompt should be rendered on the same line as the input editor's contents.
-pub fn should_render_prompt_on_same_line(
-    is_universal_developer_input: bool,
-    terminal_model: &TerminalModel,
-    app: &AppContext,
-) -> bool {
-    // We render the prompt on the same line, in the input editor, if the user is using a custom
-    // prompt (PS1). If universal developer input is enabled, ignore PS1 rendering logic.
-    !is_universal_developer_input && should_render_ps1_prompt(terminal_model, app)
+/// Returns whether the shell's own PS1 is rendered, on the same line as the input editor's
+/// contents, instead of the Warp prompt.
+pub fn should_render_ps1_prompt(app: &AppContext) -> bool {
+    *SessionSettings::as_ref(app).honor_ps1.value()
 }
 
 pub(in crate::terminal) struct PromptAndPadding {
@@ -340,11 +319,8 @@ impl PromptRenderHelper {
         Option<PromptAndPadding>,
     ) {
         let active_block = model.block_list().active_block();
-        let is_universal_input =
-            InputSettings::as_ref(app).is_universal_developer_input_enabled(app);
-        let render_prompt_on_same_line =
-            should_render_prompt_on_same_line(is_universal_input, model, app);
-        let padding_right = if should_render_prompt_on_same_line(is_universal_input, model, app) {
+        let render_prompt_on_same_line = should_render_ps1_prompt(app);
+        let padding_right = if render_prompt_on_same_line {
             LPROMPT_RIGHT_PADDING_SAME_LINE_PROMPT
         } else {
             *TERMINAL_VIEW_PADDING_LEFT
@@ -380,9 +356,9 @@ impl PromptRenderHelper {
             }
         } else if active_block.honor_ps1()
             && model.block_list().is_bootstrapped()
-            && !is_universal_input
+            && render_prompt_on_same_line
         {
-            // Only render PS1 directly if the shell is bootstrapped and universal developer input is disabled.
+            // Only render PS1 directly if the shell is bootstrapped and the Warp prompt is disabled.
             let prompt_block = self.prompt_block(model).unwrap_or(active_block);
             let shell_type = active_block.shell_host().map(|shell| shell.shell_type);
             let is_msys2 = active_block
@@ -473,7 +449,7 @@ impl PromptRenderHelper {
             (lprompt_top, lprompt_bottom_val, rprompt_val)
 
         // If not render the default starting shell message.
-        } else if model.block_list().active_block().honor_ps1() && !is_universal_input {
+        } else if model.block_list().active_block().honor_ps1() && render_prompt_on_same_line {
             let prompt = PromptAndPadding {
                 element: PromptAndPaddingElement::Text(Box::new(
                     self.bootstrapping_shell_text(model, appearance, app),
@@ -512,17 +488,12 @@ impl PromptRenderHelper {
 
     fn render_prompt_area_helper(
         &self,
-        terminal_model: &TerminalModel,
         prompt_and_padding: PromptAndPadding,
         appearance: &Appearance,
         prompt_side: PromptSide,
         app: &AppContext,
     ) -> Option<Box<dyn Element>> {
-        let is_universal_input =
-            InputSettings::as_ref(app).is_universal_developer_input_enabled(app);
-
-        let should_render_prompt_using_editor_decorator_elements =
-            should_render_prompt_on_same_line(is_universal_input, terminal_model, app);
+        let should_render_prompt_using_editor_decorator_elements = should_render_ps1_prompt(app);
         let view_id = self.prompt_parent_view_id;
         let position_id = format!("{prompt_side}_{view_id}");
         let size_info = app.model(&self.input_render_state_model_handle).size_info();
@@ -589,7 +560,7 @@ impl PromptRenderHelper {
         )
     }
 
-    pub(in crate::terminal) fn render_universal_developer_input_prompt(
+    pub(in crate::terminal) fn render_warp_prompt(
         &self,
         model: &TerminalModel,
         appearance: &Appearance,
@@ -652,7 +623,6 @@ impl PromptRenderHelper {
             self.render_prompt(model, appearance, app);
         let lprompt = lprompt_and_padding_option.and_then(|lprompt_top_and_padding| {
             self.render_prompt_area_helper(
-                model,
                 lprompt_top_and_padding,
                 appearance,
                 PromptSide::Left,
@@ -660,13 +630,7 @@ impl PromptRenderHelper {
             )
         });
         let rprompt = rprompt_and_padding_option.and_then(|rprompt_and_padding| {
-            self.render_prompt_area_helper(
-                model,
-                rprompt_and_padding,
-                appearance,
-                PromptSide::Right,
-                app,
-            )
+            self.render_prompt_area_helper(rprompt_and_padding, appearance, PromptSide::Right, app)
         });
         PromptElements { lprompt, rprompt }
     }
@@ -684,7 +648,6 @@ impl PromptRenderHelper {
         ) = self.render_prompt(model, appearance, app);
         let lprompt_top = lprompt_top_and_padding_option.and_then(|lprompt_top_and_padding| {
             self.render_prompt_area_helper(
-                model,
                 lprompt_top_and_padding,
                 appearance,
                 PromptSide::Left,
@@ -694,7 +657,6 @@ impl PromptRenderHelper {
         let lprompt_bottom =
             lprompt_bottom_and_padding_option.and_then(|lprompt_bottom_and_padding| {
                 self.render_prompt_area_helper(
-                    model,
                     lprompt_bottom_and_padding,
                     appearance,
                     PromptSide::Left,
@@ -702,13 +664,7 @@ impl PromptRenderHelper {
                 )
             });
         let rprompt = rprompt_and_padding_option.and_then(|rprompt_and_padding| {
-            self.render_prompt_area_helper(
-                model,
-                rprompt_and_padding,
-                appearance,
-                PromptSide::Right,
-                app,
-            )
+            self.render_prompt_area_helper(rprompt_and_padding, appearance, PromptSide::Right, app)
         });
         SameLinePromptElements {
             lprompt_top,

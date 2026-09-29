@@ -6,7 +6,7 @@ use super::*;
 fn command_names_and_kinds_are_unique() {
     let mut names = HashSet::new();
     let mut kinds = HashSet::new();
-    for command in all_commands(settings::SettingsMode::Gui) {
+    for command in all_commands() {
         assert!(
             names.insert(command.name),
             "duplicate slash command name: {}",
@@ -21,48 +21,56 @@ fn command_names_and_kinds_are_unique() {
 }
 
 #[test]
-fn gui_icon_metadata_matches_surface_support() {
-    for command in all_commands(settings::SettingsMode::Gui) {
-        assert_eq!(
-            command.supported_surfaces.gui_icon_path().is_some(),
-            command.supports_gui(),
-            "{} has inconsistent GUI icon metadata",
-            command.name
-        );
-    }
-}
-#[test]
-fn command_registry_filters_explicit_surface_metadata() {
-    for command in all_commands(settings::SettingsMode::Gui) {
+fn every_command_has_an_icon() {
+    for command in all_commands() {
         assert!(
-            command.supports_surface(settings::SettingsMode::Gui),
-            "{} should support the GUI",
+            !command.icon_path.is_empty(),
+            "{} has no icon",
             command.name
         );
     }
-    assert_eq!(EXIT.kind, SlashCommandKind::Exit);
-    assert_eq!(EXIT.supported_surfaces, SlashCommandSurfaces::TuiOnly);
 }
 
 #[test]
-fn command_registry_contains_commands_for_both_surfaces() {
+fn only_terminal_commands_are_registered() {
+    let registered = all_commands()
+        .into_iter()
+        .map(|command| command.name)
+        .collect::<HashSet<_>>();
+    for removed in [
+        "/agent",
+        "/new",
+        "/clear",
+        "/plan",
+        "/model",
+        "/profile",
+        "/fork",
+        "/rewind",
+        "/queue",
+        "/compact",
+        "/conversations",
+        "/feedback",
+        "/version",
+    ] {
+        assert!(
+            !registered.contains(removed),
+            "{removed} should not be registered"
+        );
+    }
+}
+
+#[test]
+fn no_command_requires_ai() {
     let registry = Registry::new();
-
-    assert_eq!(
-        registry
-            .get_command_with_name(EXIT.name)
-            .map(|command| command.supported_surfaces),
-        Some(SlashCommandSurfaces::TuiOnly)
-    );
-}
-
-#[test]
-fn version_command_is_not_registered() {
-    assert!(
-        all_commands(settings::SettingsMode::Gui)
-            .iter()
-            .all(|command| command.name != "/version")
-    );
+    for command in registry.all_commands() {
+        assert!(
+            Availability::LOCAL
+                .union(Availability::REPOSITORY)
+                .contains(command.availability),
+            "{} has unexpected availability",
+            command.name
+        );
+    }
 }
 
 #[test]
@@ -76,33 +84,7 @@ fn rename_tab_command_requires_argument() {
         .expect("expected /rename-tab to require an argument");
 
     assert!(!argument.is_optional);
-    assert!(!argument.should_execute_on_selection);
     assert_eq!(argument.hint_text, Some("<tab name>"));
-}
-
-#[test]
-fn rename_conversation_command_is_active_conversation_scoped_and_requires_argument() {
-    let command = COMMAND_REGISTRY
-        .get_command_with_name(RENAME_CONVERSATION.name)
-        .expect("expected /rename-conversation to be registered");
-    let argument = command
-        .argument
-        .as_ref()
-        .expect("expected /rename-conversation to require an argument");
-
-    assert_eq!(command.name, "/rename-conversation");
-    assert_eq!(
-        command.supported_surfaces.gui_icon_path(),
-        Some("bundled/svg/pencil-line.svg")
-    );
-    assert!(!command.auto_enter_ai_mode);
-    assert_eq!(
-        command.availability,
-        Availability::AGENT_VIEW | Availability::ACTIVE_CONVERSATION | Availability::AI_ENABLED,
-    );
-    assert!(!argument.is_optional);
-    assert!(!argument.should_execute_on_selection);
-    assert_eq!(argument.hint_text, Some("<new title>"));
 }
 
 #[test]
@@ -116,7 +98,6 @@ fn set_tab_color_command_requires_argument() {
         .expect("expected /set-tab-color to require an argument");
 
     assert!(!argument.is_optional);
-    assert!(!argument.should_execute_on_selection);
 
     let hint = argument
         .hint_text
@@ -126,71 +107,4 @@ fn set_tab_color_command_requires_argument() {
         assert!(hint.contains(&lower), "hint should mention `{lower}`");
     }
     assert!(hint.contains("none"), "hint should mention `none`");
-}
-
-#[test]
-fn strip_command_prefix_no_match() {
-    let result = strip_command_prefix("just a normal query", "/plan");
-    assert_eq!(result, None);
-}
-
-#[test]
-fn strip_command_prefix_empty() {
-    let result = strip_command_prefix("", "/plan");
-    assert_eq!(result, None);
-}
-
-#[test]
-fn strip_command_prefix_no_trailing_space() {
-    // "/plan" alone (no trailing space) should NOT be stripped
-    let result = strip_command_prefix("/plan", "/plan");
-    assert_eq!(result, None);
-}
-
-#[test]
-fn strip_command_prefix_trailing_space_only() {
-    // "/plan " with nothing after should strip to empty string
-    let result = strip_command_prefix("/plan ", "/plan");
-    assert_eq!(result, Some(String::new()));
-}
-
-#[test]
-fn strip_command_prefix_substring_not_matched() {
-    // "/planning" should not match "/plan"
-    let result = strip_command_prefix("/planning something", "/plan");
-    assert_eq!(result, None);
-}
-
-#[test]
-fn copy_debugging_id_command_is_registered() {
-    assert!(
-        all_commands(settings::SettingsMode::Gui)
-            .iter()
-            .any(|command| command.kind == SlashCommandKind::CopyDebuggingId),
-        "/copy-debugging-id should be registered"
-    );
-}
-
-#[test]
-fn copy_debugging_id_command_has_correct_registry_metadata() {
-    let command = all_commands(settings::SettingsMode::Gui)
-        .into_iter()
-        .find(|command| command.kind == SlashCommandKind::CopyDebuggingId)
-        .expect("expected /copy-debugging-id to be registered");
-
-    assert_eq!(command.name, "/copy-debugging-id");
-    assert_eq!(command.kind, SlashCommandKind::CopyDebuggingId);
-    assert_eq!(
-        command.supported_surfaces,
-        SlashCommandSurfaces::GuiAndTui {
-            icon_path: "bundled/svg/copy.svg"
-        }
-    );
-    assert!(!command.auto_enter_ai_mode);
-    assert_eq!(command.availability, Availability::ACTIVE_CONVERSATION);
-    assert!(command.argument.is_none());
-    // Available when there is an active conversation.
-    assert!(command.is_active(Availability::ACTIVE_CONVERSATION));
-    // Hidden when there is no active conversation.
-    assert!(!command.is_active(Availability::ALWAYS));
 }

@@ -8,10 +8,6 @@ mod context_menu;
 pub mod init;
 pub mod inline_banner;
 pub mod load_ai_conversation;
-pub(crate) mod queued_prompts_panel;
-#[cfg(test)]
-#[path = "view/queued_prompts_tests.rs"]
-mod queued_prompts_tests;
 use ai::agent::action::InsertReviewComment;
 pub use load_ai_conversation::ConversationRestorationInNewPaneType;
 use repo_metadata::CanonicalizedPath;
@@ -21,7 +17,6 @@ use crate::global_resource_handles::GlobalResourceHandlesProvider;
 mod link_detection;
 mod open_in_warp;
 mod pane_impl;
-mod pending_user_query;
 pub mod rich_content;
 mod shell_terminated_banner;
 pub mod ssh_file_upload;
@@ -60,7 +55,7 @@ use command_corrections::{Command, Correction, HistoryItem, SessionMetadata, cor
 use enclose::enclose;
 pub use init::{
     CANCEL_COMMAND_KEYBINDING, TOGGLE_AUTOEXECUTE_MODE_KEYBINDING,
-    TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING, TOGGLE_QUEUE_NEXT_PROMPT_KEYBINDING, init,
+    TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING, init,
 };
 use init::{INPUT_BOX_VISIBLE_KEY, TOGGLE_BLOCK_FILTER_KEYBINDING};
 use inline_banner::{
@@ -172,25 +167,24 @@ use crate::ai::blocklist::agent_view::{
     InlineAgentViewHeader, fork_from_last_known_good_state_exchange_id,
     get_agent_view_entry_block_position_id, is_in_cloud_context,
 };
+use crate::ai::blocklist::block::AIBlockAction;
 use crate::ai::blocklist::block::cli::{CLISubagentView, CLISubagentViewEvent};
 use crate::ai::blocklist::block::cli_controller::{
     CLISubagentController, CLISubagentEvent, UserTakeOverReason,
 };
 use crate::ai::blocklist::block::status_bar::BlocklistAIStatusBarEvent;
-use crate::ai::blocklist::block::{AIBlockAction, FinishReason};
 use crate::ai::blocklist::model::AIBlockModelImpl;
 use crate::ai::blocklist::summarization_cancel_dialog::SummarizationCancelDialog;
 use crate::ai::blocklist::telemetry_banner::TelemetryBanner;
 use crate::ai::blocklist::{
-    AIBlock, AIBlockEvent, AutofireAction, BlocklistAIActionEvent, BlocklistAIActionModel,
-    BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
-    BlocklistAIControllerEvent, BlocklistAIHistoryEvent, BlocklistAIHistoryModel,
-    BlocklistAIInputEvent, BlocklistAIInputModel, ClientIdentifiers, ConversationSelection,
-    ConversationStatusUpdate, InputConfig, InputType, PRE_REWIND_PREFIX, PendingAttachment,
-    PendingQueryState, QueuedQuery, QueuedQueryId, QueuedQueryModel, QueuedQueryOrigin,
-    ShellCommandExecutor, ShellCommandExecutorEvent, SlashCommandRequest, ai_brand_color,
+    AIBlock, AIBlockEvent, BlocklistAIActionEvent, BlocklistAIActionModel, BlocklistAIContextEvent,
+    BlocklistAIContextModel, BlocklistAIController, BlocklistAIControllerEvent,
+    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, BlocklistAIInputEvent, BlocklistAIInputModel,
+    ClientIdentifiers, ConversationSelection, ConversationStatusUpdate, InputConfig, InputType,
+    PRE_REWIND_PREFIX, PendingAttachment, PendingQueryState, ShellCommandExecutor,
+    ShellCommandExecutorEvent, SlashCommandRequest, ai_brand_color,
     block_context_from_terminal_model, get_ai_block_overflow_menu_element_position_id,
-    get_attached_blocks_chip_element_position_id, is_lrc_auto_queue_active,
+    get_attached_blocks_chip_element_position_id,
 };
 use crate::ai::conversation_details_panel::ConversationDetailsData;
 use crate::ai::conversation_details_panel::ConversationDetailsPanelEvent;
@@ -1826,13 +1820,6 @@ enum SecretTooltip {
 }
 
 type TerminalViewCallback = Box<dyn FnOnce(&mut TerminalView, &mut ViewContext<TerminalView>)>;
-type ConversationFinishedCallback =
-    Box<dyn FnOnce(&mut TerminalView, FinishReason, &mut ViewContext<TerminalView>)>;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::terminal::view) enum PendingUserQueryKind {
-    QueuedPrompt,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AgentTranscriptNavigationDirection {
@@ -2061,9 +2048,6 @@ pub struct TerminalView {
     /// The child views that represent rich content. These can be inserted into the block list with
     /// the `insert_rich_content` helper function.
     rich_content_views: Vec<RichContent>,
-    pending_user_query_view_id: Option<EntityId>,
-    pending_user_query_kind: Option<PendingUserQueryKind>,
-    queued_prompt_callback: Option<ConversationFinishedCallback>,
     last_observed_conversation_status: HashMap<AIConversationId, ConversationStatus>,
     last_observed_active_subagent: HashMap<AIConversationId, bool>,
 
@@ -2161,7 +2145,6 @@ pub struct TerminalView {
 
     /// A list of callbacks to run on the next
     /// [`BlocklistAIControllerEvent::FinishedReceivingOutput`] received, regardless of the finish reason.
-    conversation_completed_callbacks: Vec<ConversationFinishedCallback>,
 
     /// Path to the current repository, or None if not currently in a repo.
     current_repo_path: Option<LocalOrRemotePath>,
@@ -2575,22 +2558,6 @@ impl TerminalView {
                         );
                     }
 
-                    let active_conversation_id = me
-                        .agent_view_controller
-                        .as_ref(ctx)
-                        .agent_view_state()
-                        .active_conversation_id();
-                    let pending_user_query_conversation_id =
-                        me.pending_user_query_conversation_id();
-                    let should_keep_pending_user_query = active_conversation_id.is_some()
-                        && active_conversation_id == pending_user_query_conversation_id;
-
-                    // Keep the pending query only when the user is still viewing the conversation
-                    // targeted by that pending query; otherwise cancel it.
-                    if !should_keep_pending_user_query {
-                        me.remove_pending_user_query_block(ctx);
-                    }
-
                     ctx.notify();
                 }
                 AgentViewControllerEvent::ExitConfirmed { .. } => {}
@@ -2867,7 +2834,6 @@ impl TerminalView {
                 ai_context_model.clone(),
                 ai_input_model.clone(),
                 ai_action_model.clone(),
-                conversation_selection.clone(),
                 cli_subagent_controller.clone(),
                 terminal_view_id,
                 None, // current_repo_path - will be set when CWD is determined
@@ -3369,9 +3335,6 @@ impl TerminalView {
             block_filter_editor,
             active_filter_editor_block_index: None,
             rich_content_views: Vec::new(),
-            pending_user_query_view_id: None,
-            pending_user_query_kind: None,
-            queued_prompt_callback: None,
             last_observed_conversation_status: Default::default(),
             last_observed_active_subagent: Default::default(),
             block_onboarding_active: false,
@@ -3407,7 +3370,6 @@ impl TerminalView {
             github_repo_model: None,
             deferred_code_review_open: None,
             block_completed_callbacks: Default::default(),
-            conversation_completed_callbacks: Default::default(),
             current_repo_path: None,
             terminal_title: Default::default(),
             ignore_next_set_title_event: false,
@@ -3455,60 +3417,6 @@ impl TerminalView {
         self.agent_view_controller.update(ctx, |controller, ctx| {
             controller.exit_agent_view(ctx);
         });
-    }
-
-    /// Schedule a callback to run after the next
-    /// [`BlocklistAIControllerEvent::FinishedReceivingOutput`] received, regardless of whether the
-    /// conversation completed successfully, was cancelled, or encountered an error.
-    /// The callback receives the `FinishReason` to allow different handling based on how the
-    /// conversation ended.
-    pub fn on_next_conversation_finished<F>(&mut self, callback: F)
-    where
-        F: FnOnce(&mut Self, FinishReason, &mut ViewContext<Self>) + 'static,
-    {
-        self.conversation_completed_callbacks
-            .push(Box::new(callback));
-    }
-
-    /// Fires the pane-level one-shot callbacks registered via
-    /// [`Self::on_next_conversation_finished`], plus the queued-prompt
-    /// callback if one is armed.
-    fn fire_conversation_finished_callbacks(
-        &mut self,
-        finish_reason: FinishReason,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let queued_prompt = self.queued_prompt_callback.take();
-        let callbacks = self
-            .conversation_completed_callbacks
-            .drain(..)
-            .collect_vec();
-        for callback in callbacks {
-            callback(self, finish_reason, ctx);
-        }
-        if let Some(callback) = queued_prompt {
-            callback(self, finish_reason, ctx);
-        }
-    }
-
-    /// Advances the queued-prompts queue after a dispatched queued command's block completes.
-    /// Runs after input cleanup so queued-command draft preservation can observe the in-flight
-    /// flag first.
-    /// No-ops unless a queued command is in flight for a conversation owned by this terminal view;
-    /// clearing the flag before draining keeps repeated calls idempotent.
-    pub(crate) fn on_queued_command_finished(&mut self, ctx: &mut ViewContext<Self>) {
-        let Some(conversation_id) = QueuedQueryModel::as_ref(ctx)
-            .command_in_flight_for_terminal_view(
-                self.view_id,
-                BlocklistAIHistoryModel::as_ref(ctx),
-            )
-        else {
-            return;
-        };
-        QueuedQueryModel::handle(ctx).update(ctx, |model, _ctx| {
-            model.clear_command_in_flight(conversation_id);
-        });
-        self.drain_queued_prompts(conversation_id, FinishReason::Complete, ctx);
     }
 
     fn handle_git_repo_status_event(&mut self, ctx: &mut ViewContext<Self>) {
@@ -3624,7 +3532,7 @@ impl TerminalView {
         // off, or when UDI overrides PS1. The prompt must include a chip backed
         // by git status.
         let is_using_warp_prompt = !*SessionSettings::as_ref(ctx).honor_ps1
-            || InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
+            || InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
         if is_using_warp_prompt && Self::should_retry_default_pr_chip_validation(ctx) {
             return true;
         }
@@ -3658,7 +3566,7 @@ impl TerminalView {
         }
 
         let is_using_warp_prompt = !*SessionSettings::as_ref(ctx).honor_ps1
-            || InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
+            || InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
         is_using_warp_prompt
             && (Self::should_retry_default_pr_chip_validation(ctx)
                 || Prompt::as_ref(ctx)
@@ -3800,309 +3708,8 @@ impl TerminalView {
         if let BlocklistAIControllerEvent::SentRequest { model_id, .. } = event {
             self.maybe_insert_aws_bedrock_login_banner(model_id, ctx);
         }
-        if let BlocklistAIControllerEvent::FinishedReceivingOutput {
-            conversation_id, ..
-        } = event
-        {
-            // If the conversation still has a subagent in flight (e.g. a CLI
-            // subagent managing a long-running command), the response stream
-            // that just ended belongs to the subagent or to the main agent
-            // handing off to it — not the end of the overall turn. Defer
-            // conversation-finished side effects (e.g. firing a queued `/queue`
-            // prompt) until the entire turn is actually done.
-            let has_active_subagent = BlocklistAIHistoryModel::as_ref(ctx)
-                .conversation(conversation_id)
-                .is_some_and(|c| c.has_active_subagent());
-
-            let mut pane_finish_reason: Option<FinishReason> = None;
-            if let Some(active_ai_block) = self.active_ai_block(ctx) {
-                // A new exchange is already active, so callbacks for the
-                // just-finished exchange will be skipped. Clear any pending
-                // user query now to prevent its callback from firing when
-                // the new exchange eventually completes.
-                //
-                // However, if the active block belongs to the same conversation
-                // that has the queued prompt (e.g. a blocked tool-call approval),
-                // keep the pending query — the conversation hasn't truly moved on.
-                let active_block_conversation_id = active_ai_block.as_ref(ctx).conversation_id();
-                let pending_query_conversation_id = self.pending_user_query_conversation_id();
-                let is_same_conversation = pending_query_conversation_id
-                    .is_some_and(|id| id == active_block_conversation_id);
-                if self.pending_user_query_view_id.is_some() && !is_same_conversation {
-                    self.remove_pending_user_query_block(ctx);
-                }
-            } else if !has_active_subagent && let Some(last_ai_block) = self.last_ai_block() {
-                pane_finish_reason = last_ai_block.as_ref(ctx).finish_reason();
-            }
-
-            // Pane-scoped: the one-shot conversation-finished callbacks fire
-            // when the pane's most recent block is done.
-            if let Some(reason) = pane_finish_reason {
-                self.fire_conversation_finished_callbacks(reason, ctx);
-            }
-
-            // Conversation-scoped: drain this conversation's queued prompts
-            // keyed off its own most recent block. The pane-global lookup
-            // above can observe a sibling conversation's block instead, so it
-            // can't drive the drain decision or supply the finish reason.
-            if !has_active_subagent
-                && let Some(reason) = self.finish_reason_for_conversation(*conversation_id, ctx)
-            {
-                self.drain_queued_prompts(*conversation_id, reason, ctx);
-            } else if QueuedQueryModel::as_ref(ctx).has_queue(*conversation_id) {
-                log::info!(
-                    "event=turn_drain_deferred terminal_id={:?} conversation_id={conversation_id} active_subagent={has_active_subagent} has_finished_block={} queue_len={}",
-                    self.view_id,
-                    self.finish_reason_for_conversation(*conversation_id, ctx)
-                        .is_some(),
-                    QueuedQueryModel::as_ref(ctx).queue(*conversation_id).len(),
-                );
-            }
-
+        if let BlocklistAIControllerEvent::FinishedReceivingOutput { .. } = event {
             ctx.notify();
-        }
-    }
-
-    /// Append a prompt to the queued-query singleton for regular Agent Mode queueing surfaces
-    /// such as the queue-next toggle and `/queue`. Returns `None` if no conversation is selected
-    /// (e.g. the agent view is closed), in which case the prompt is silently dropped.
-    pub fn enqueue_prompt(
-        &mut self,
-        prompt: String,
-        origin: QueuedQueryOrigin,
-        ctx: &mut ViewContext<Self>,
-    ) -> Option<QueuedQueryId> {
-        // Guard against queueing when no conversation is active to avoid stranding prompts.
-        let conversation_id = self
-            .ai_context_model
-            .as_ref(ctx)
-            .selected_conversation_id(ctx)?;
-        let id = QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-            model.append(conversation_id, QueuedQuery::new(prompt, origin), ctx)
-        });
-        Some(id)
-    }
-
-    /// Files a follow-up prompt that will run after the next conversation finishes on
-    /// `conversation_id`. Used by `/compact-and` (targets the active conversation) and
-    /// `/fork-and-compact` (targets the newly forked conversation, which may differ from the
-    /// currently selected one). Falls back to the legacy pending-user-query block when
-    /// `QueuedPromptsV2` is disabled.
-    pub fn enqueue_followup_prompt(
-        &mut self,
-        prompt: String,
-        origin: QueuedQueryOrigin,
-        conversation_id: AIConversationId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if FeatureFlag::QueuedPromptsV2.is_enabled() {
-            let attachments = self.ai_context_model.update(ctx, |context_model, ctx| {
-                context_model.take_pending_attachments(ctx)
-            });
-            QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                model.append(
-                    conversation_id,
-                    QueuedQuery::new_with_attachments(prompt, origin, attachments),
-                    ctx,
-                );
-            });
-        } else {
-            self.send_user_query_after_next_conversation_finished(
-                prompt, /* show_close_button */ true, /* show_send_now_button */ false,
-                ctx,
-            );
-        }
-    }
-
-    /// Drains one prompt from the queued-query singleton for `conversation_id` when that
-    /// conversation finishes.
-    pub(crate) fn drain_queued_prompts(
-        &mut self,
-        conversation_id: AIConversationId,
-        finish_reason: FinishReason,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match finish_reason {
-            FinishReason::Complete => {
-                let input_is_empty = self.input.as_ref(ctx).buffer_text(ctx).is_empty();
-                let first_row_is_in_edit_mode =
-                    QueuedQueryModel::as_ref(ctx).first_row_is_in_edit_mode(conversation_id);
-                if first_row_is_in_edit_mode && !input_is_empty {
-                    log::info!(
-                        "event=turn_drain_deferred conversation_id={conversation_id} reason=editing_head_with_local_draft",
-                    );
-                    return;
-                }
-
-                // Peek the head row's action without removing it so the send path can read its
-                // attachments by id; the row is removed afterward via `remove_fired_row`.
-                let action = QueuedQueryModel::as_ref(ctx).peek_autofire(conversation_id);
-                match action {
-                    Some(AutofireAction::Submit { query_id, text }) => {
-                        self.input.update(ctx, |input, ctx| {
-                            input.submit_queued_prompt_for_active_pane(
-                                text,
-                                conversation_id,
-                                query_id,
-                                ctx,
-                            );
-                        });
-                        QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                            model.remove_fired_row(conversation_id, query_id, ctx);
-                        });
-                    }
-                    Some(AutofireAction::ExecuteCommand { query_id, command }) => {
-                        let started = self.input.update(ctx, |input, ctx| {
-                            input.execute_queued_command(&command, conversation_id, ctx)
-                        });
-                        // If the command couldn't start (e.g. precmd not yet received) no
-                        // completion will arrive. Keep the row queued when the user has a draft;
-                        // otherwise restore it into the empty input and remove the row.
-                        if started {
-                            QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                                model.remove_fired_row(conversation_id, query_id, ctx);
-                            });
-                        } else if self.input.as_ref(ctx).buffer_text(ctx).is_empty() {
-                            self.input.update(ctx, |input, ctx| {
-                                input.replace_buffer_content(&command, ctx);
-                                input.set_input_mode_terminal(/* steal_focus */ false, ctx);
-                            });
-                            QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                                model.remove_fired_row(conversation_id, query_id, ctx);
-                            });
-                        }
-                    }
-                    Some(AutofireAction::PopFromEditMode {
-                        query_id,
-                        text,
-                        attachments,
-                        is_command,
-                    }) => {
-                        if self.input.as_ref(ctx).buffer_text(ctx).is_empty() {
-                            self.input.update(ctx, |input, ctx| {
-                                input.replace_buffer_content(&text, ctx);
-                                if is_command {
-                                    // Keep a restored command in shell mode so it stays a command
-                                    // rather than being submitted as an agent prompt.
-                                    input.set_input_mode_terminal(/* steal_focus */ true, ctx);
-                                } else {
-                                    input.focus_input_box(ctx);
-                                }
-                            });
-                            // Commands never carry attachments; only restore them for prompts.
-                            if !is_command {
-                                self.ai_context_model.update(ctx, |context_model, ctx| {
-                                    context_model.append_pending_attachments(attachments, ctx);
-                                });
-                            }
-                        }
-                        QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                            model.remove_fired_row(conversation_id, query_id, ctx);
-                        });
-                    }
-                    None => {}
-                }
-            }
-            FinishReason::Error
-            | FinishReason::Cancelled
-            | FinishReason::CancelledDuringRequestedCommandExecution => {
-                // Only restore the head into the input when the user is
-                // currently viewing this conversation in agent view. Cancels
-                // triggered by exiting the agent view leave `agent_view_state`
-                // Inactive by the time the cancel fires, so the head stays in
-                // the queue and re-entering the agent view shows the same
-                // queue the user left.
-                let is_active_in_agent_view = self
-                    .agent_view_controller
-                    .as_ref(ctx)
-                    .agent_view_state()
-                    .active_conversation_id()
-                    == Some(conversation_id);
-                if !is_active_in_agent_view {
-                    return;
-                }
-
-                let input_is_empty = self.input.as_ref(ctx).buffer_text(ctx).is_empty();
-                if !input_is_empty {
-                    return;
-                }
-
-                let popped = QueuedQueryModel::handle(ctx)
-                    .update(ctx, |model, ctx| model.pop_front(conversation_id, ctx));
-                if let Some(query) = popped {
-                    let is_command = query.is_command();
-                    self.input.update(ctx, |input, ctx| {
-                        input.replace_buffer_content(query.text(), ctx);
-                        if is_command {
-                            // Keep a restored command in shell mode so it stays a command
-                            // rather than being submitted as an agent prompt.
-                            input.set_input_mode_terminal(/* steal_focus */ false, ctx);
-                        }
-                    });
-                    // Commands never carry attachments; only restore them for prompts.
-                    if !is_command {
-                        // Re-stage the restored row's attachments so a manual re-submit keeps them.
-                        self.ai_context_model.update(ctx, |context_model, ctx| {
-                            context_model
-                                .append_pending_attachments(query.attachments().to_vec(), ctx);
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    /// Sends the leading prompts that were auto-queued during an agent-requested long-running
-    /// command ([`QueuedQueryOrigin::LrcAutoQueue`]) to the agent, in queue order.
-    ///
-    /// Command finish may happen before the CLI subagent has handed its result back to the main
-    /// agent. In that case the rows stay queued and fire when history shows the subagent is gone.
-    pub(crate) fn send_lrc_queued_prompts(
-        &mut self,
-        conversation_id: AIConversationId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let has_active_subagent = BlocklistAIHistoryModel::as_ref(ctx)
-            .conversation(&conversation_id)
-            .is_some_and(|conversation| conversation.has_active_subagent());
-        if has_active_subagent {
-            self.last_observed_active_subagent
-                .insert(conversation_id, true);
-            return;
-        }
-        let editing_front_lrc_row = QueuedQueryModel::as_ref(ctx)
-            .editing_row(conversation_id)
-            .is_some_and(|query_id| {
-                QueuedQueryModel::as_ref(ctx)
-                    .queue(conversation_id)
-                    .first()
-                    .is_some_and(|row| {
-                        row.id() == query_id && row.origin() == QueuedQueryOrigin::LrcAutoQueue
-                    })
-            });
-        if editing_front_lrc_row {
-            let queued_prompts_panel = self.input.as_ref(ctx).queued_prompts_panel().cloned();
-            let Some(queued_prompts_panel) = queued_prompts_panel else {
-                return;
-            };
-            queued_prompts_panel.update(ctx, |panel, ctx| {
-                panel.commit_edit(ctx);
-            });
-        }
-
-        let rows: Vec<(QueuedQueryId, String)> = QueuedQueryModel::as_ref(ctx)
-            .queue(conversation_id)
-            .iter()
-            .take_while(|row| row.origin() == QueuedQueryOrigin::LrcAutoQueue)
-            .map(|row| (row.id(), row.text().to_owned()))
-            .collect();
-        for (query_id, text) in rows {
-            self.input.update(ctx, |input, ctx| {
-                input.submit_queued_prompt_for_active_pane(text, conversation_id, query_id, ctx);
-            });
-            QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                model.remove_fired_row(conversation_id, query_id, ctx);
-            });
         }
     }
 
@@ -4483,7 +4090,6 @@ impl TerminalView {
                 response_stream_id,
                 ..
             } => {
-                self.maybe_send_lrc_queued_prompts_after_subagent_handoff(*conversation_id, ctx);
                 // Hide telemetry banner forever after first AI input user sends.
                 if FeatureFlag::GlobalAIAnalyticsBanner.is_enabled()
                     && !GeneralSettings::as_ref(ctx)
@@ -4652,7 +4258,6 @@ impl TerminalView {
                 conversation_id,
                 ..
             } => {
-                self.maybe_send_lrc_queued_prompts_after_subagent_handoff(*conversation_id, ctx);
                 let _ai_block_model = match AIBlockModelImpl::<AIBlock>::new(
                     *exchange_id,
                     *conversation_id,
@@ -4718,7 +4323,6 @@ impl TerminalView {
                 new_status,
                 ..
             } => {
-                self.maybe_send_lrc_queued_prompts_after_subagent_handoff(*conversation_id, ctx);
                 // When the conversation state changes or a new conversation
                 // is selected, update the title to reflect that change.
                 self.update_pane_configuration(ctx);
@@ -4811,19 +4415,12 @@ impl TerminalView {
             | BlocklistAIHistoryEvent::DeletedConversation {
                 conversation_id, ..
             } => {
-                // The queue is always for the currently active conversation; agent-view exit
-                // already wipes it via `ExitedAgentView`, so no per-conversation cleanup is
-                // needed here.
                 self.last_observed_conversation_status
                     .remove(conversation_id);
                 self.last_observed_active_subagent.remove(conversation_id);
             }
-            BlocklistAIHistoryEvent::CreatedSubtask {
-                conversation_id, ..
-            } => {
-                self.maybe_send_lrc_queued_prompts_after_subagent_handoff(*conversation_id, ctx);
-            }
-            BlocklistAIHistoryEvent::UpdatedAutoexecuteOverride { .. }
+            BlocklistAIHistoryEvent::CreatedSubtask { .. }
+            | BlocklistAIHistoryEvent::UpdatedAutoexecuteOverride { .. }
             | BlocklistAIHistoryEvent::UpdatedTodoList { .. }
             | BlocklistAIHistoryEvent::RestoredConversations { .. }
             | BlocklistAIHistoryEvent::UpgradedTask { .. }
@@ -4833,30 +4430,6 @@ impl TerminalView {
             | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. } => {}
         }
         ctx.notify();
-    }
-
-    fn maybe_send_lrc_queued_prompts_after_subagent_handoff(
-        &mut self,
-        conversation_id: AIConversationId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let has_lrc_queued_prompt = QueuedQueryModel::as_ref(ctx)
-            .queue(conversation_id)
-            .first()
-            .is_some_and(|row| row.origin() == QueuedQueryOrigin::LrcAutoQueue);
-        if !has_lrc_queued_prompt {
-            return;
-        }
-        let has_active_subagent = BlocklistAIHistoryModel::as_ref(ctx)
-            .conversation(&conversation_id)
-            .is_some_and(|conversation| conversation.has_active_subagent());
-        let previously_had_active_subagent = self
-            .last_observed_active_subagent
-            .insert(conversation_id, has_active_subagent)
-            .unwrap_or(false);
-        if previously_had_active_subagent && !has_active_subagent {
-            self.send_lrc_queued_prompts(conversation_id, ctx);
-        }
     }
 
     fn handle_cli_subagent_controller_event(
@@ -4973,16 +4546,6 @@ impl TerminalView {
                 ..
             } => {
                 self.cli_subagent_views.remove(block_id);
-
-                // The command ended — drop any LRC-scoped auto-queue override so the
-                // conversation reverts to its pre-command queue state, then try to deliver the
-                // prompts queued for this LRC. Delivery defers until subagent handoff if needed.
-                if let Some(conversation_id) = conversation_id {
-                    QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                        model.clear_queue_next_lrc_prompt_override(*conversation_id, ctx);
-                    });
-                    self.send_lrc_queued_prompts(*conversation_id, ctx);
-                }
 
                 let Some(conversation_id) = conversation_id else {
                     return;
@@ -6278,9 +5841,6 @@ impl TerminalView {
         if !ctx.is_self_or_child_focused() {
             return;
         }
-        if self.is_queued_prompt_inline_editor_focused(ctx) {
-            return;
-        }
         let target_needs_attention = block.as_ref(ctx).is_blocked_on_user_confirmation(ctx);
         if target_needs_attention || !self.is_any_ai_block_focused(ctx) {
             block.update(ctx, |block, ctx| block.try_steal_focus(ctx));
@@ -6303,12 +5863,6 @@ impl TerminalView {
                 .ai_block_metadata()
                 .is_some_and(|metadata| ancestors.contains(&metadata.ai_block_handle.id()))
         })
-    }
-
-    fn is_queued_prompt_inline_editor_focused(&self, ctx: &AppContext) -> bool {
-        self.input
-            .as_ref(ctx)
-            .is_queued_prompt_inline_editor_focused(ctx)
     }
 
     #[cfg(not(windows))]
@@ -7892,8 +7446,7 @@ impl TerminalView {
         let reset_focus = ctx.is_self_or_child_focused()
             && !self.find_bar.is_self_or_child_focused(ctx)
             && !self.block_filter_editor.is_self_or_child_focused(ctx)
-            && !self.is_any_ai_block_focused(ctx)
-            && !self.is_queued_prompt_inline_editor_focused(ctx);
+            && !self.is_any_ai_block_focused(ctx);
         if reset_focus {
             self.redetermine_global_focus_with_policy(selection_focus_policy, ctx);
         }
@@ -8432,12 +7985,6 @@ impl TerminalView {
                                             input.update_repo_path(Some(repo_path.clone()), ctx);
                                         });
 
-                                        me.input.update(ctx, |input, ctx| {
-                                            input.check_and_update_ai_context_menu_disabled_state(
-                                                ctx,
-                                            );
-                                        });
-
                                         me.start_lsp_server_in_active_pwd(ctx);
                                     }
                                     #[cfg(not(feature = "local_fs"))]
@@ -8840,14 +8387,6 @@ impl TerminalView {
 
                                     me.maybe_show_use_agent_footer_in_blocklist(ctx);
                                     me.maybe_auto_open_cli_agent_rich_input(ctx);
-                                    me.input.update(ctx, |input, ctx| {
-                                        input.universal_developer_input_button_bar().update(
-                                            ctx,
-                                            |bar, ctx| {
-                                                bar.update_segmented_control_disabled_state(ctx);
-                                            },
-                                        )
-                                    });
                                     // Update agent view back button state when command becomes long-running
                                     if me.agent_view_controller.as_ref(ctx).is_fullscreen() {
                                         me.update_agent_view_back_button_state(ctx);
@@ -8908,8 +8447,8 @@ impl TerminalView {
                         _ => *SessionSettings::as_ref(ctx).honor_ps1,
                     };
                     if let BlockType::User(user_block_completed) = block_type {
-                        let is_universal_developer_input_enabled =
-                            InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
+                        let is_warp_prompt_enabled =
+                            InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
                         let is_in_agent_view = self.agent_view_controller.as_ref(ctx).is_active();
                         let serialized_block =
                             user_block_completed.serialized_block.get_with(|compute| {
@@ -8925,7 +8464,7 @@ impl TerminalView {
                                 num_output_lines_truncated: user_block_completed
                                     .num_output_lines_truncated,
                                 terminal_session_id: serialized_block.session_id,
-                                is_udi_enabled: is_universal_developer_input_enabled,
+                                is_udi_enabled: is_warp_prompt_enabled,
                                 is_in_agent_view,
                             },
                             ctx
@@ -9004,16 +8543,6 @@ impl TerminalView {
                         }
                         ctx.emit(Event::PendingCommandCompleted);
                     }
-                }
-
-                // Advance the queued-prompts queue when a dispatched queued command's block
-                // completes. `on_queued_command_finished` no-ops unless a queued command is in
-                // flight, and the `!was_part_of_agent_interaction` filter keeps agent-executed
-                // command blocks (including LRC snapshots) from advancing the queue.
-                if let BlockType::User(user_block_completed) = block_type
-                    && !user_block_completed.was_part_of_agent_interaction
-                {
-                    self.on_queued_command_finished(ctx);
                 }
 
                 // For the case when the user uses session configuration with a
@@ -14634,8 +14163,7 @@ impl TerminalView {
                 self.handle_resume_conversation(conversation_id, ctx);
             }
             AIBlockEvent::InsertForkSlashCommand => {
-                let command_name =
-                    crate::search::slash_command_menu::static_commands::commands::FORK.name;
+                let command_name = "/fork";
 
                 self.input.update(ctx, |input, ctx| {
                     input.replace_buffer_content(&format!("{} ", command_name), ctx);
@@ -14854,19 +14382,6 @@ impl TerminalView {
                 && !ai_block.is_hidden(ctx))
             .then_some(&ai_metadata.ai_block_handle)
         })
-    }
-
-    /// Returns the finish reason of the most recent AI block belonging to
-    /// `conversation_id`, or `None` when the conversation has no AI blocks in
-    /// this view or its most recent block is still in flight.
-    fn finish_reason_for_conversation(
-        &self,
-        conversation_id: AIConversationId,
-        ctx: &AppContext,
-    ) -> Option<FinishReason> {
-        self.ai_block_metadata_for_current_thread(&conversation_id, ctx)
-            .next()
-            .and_then(|ai_metadata| ai_metadata.ai_block_handle.as_ref(ctx).finish_reason())
     }
 
     fn ai_block_for_exchange(
@@ -15425,17 +14940,7 @@ impl TerminalView {
                 ctx.emit(Event::Escape)
             }
             InputEvent::InputStateChanged(_) => {}
-            InputEvent::InputEmptyStateChanged { is_empty, .. } => {
-                // Update the universal developer input button bar with the new empty state
-                let universal_developer_input_button_bar = self
-                    .input
-                    .as_ref(ctx)
-                    .universal_developer_input_button_bar()
-                    .clone();
-                universal_developer_input_button_bar.update(ctx, |button_bar, ctx| {
-                    button_bar.update_input_empty_state(*is_empty, ctx);
-                });
-            }
+            InputEvent::InputEmptyStateChanged { .. } => {}
             InputEvent::SyncInput(input) => {
                 if !SyncedInputState::as_ref(ctx).is_syncing_any_inputs(ctx.window_id()) {
                     return;
@@ -19424,7 +18929,6 @@ impl TypedActionView for TerminalView {
             | OpenAttachmentLightbox { .. }
             | AttachFile
             | ToggleAutoexecuteMode
-            | ToggleQueueNextPrompt
             | ToggleCodeReviewPane { .. }
             | AddProjectAtCurrentDirectory
             | DismissCodeToolbeltTooltip
@@ -19436,7 +18940,6 @@ impl TypedActionView for TerminalView {
             | StartNewAgentConversation { .. }
             | ToggleConversationDetailsPanel
             | OpenInlineHistoryMenu
-            | OpenModelSelector
             | AwsBedrockLoginBanner(_)
             | AwsCliNotInstalledBanner(_)
             | ExecuteRewindFromInlineMenu { .. }
@@ -20016,31 +19519,6 @@ impl TypedActionView for TerminalView {
                 });
                 ctx.notify();
             }
-            ToggleQueueNextPrompt => {
-                let Some(conversation_id) =
-                    BlocklistAIHistoryModel::as_ref(ctx).active_conversation_id(self.view_id)
-                else {
-                    return;
-                };
-                // While LRC auto-queue is active, the toggle is scoped to that command so the
-                // conversation reverts to its pre-command queue state once the command ends.
-                let lrc_auto_queue_active = {
-                    let terminal_model = self.model.lock();
-                    is_lrc_auto_queue_active(
-                        terminal_model.block_list().active_block(),
-                        conversation_id,
-                        ctx,
-                    )
-                };
-                QueuedQueryModel::handle(ctx).update(ctx, |model, ctx| {
-                    if lrc_auto_queue_active {
-                        model.toggle_queue_next_prompt_during_lrc(conversation_id, ctx);
-                    } else {
-                        model.toggle_queue_next_prompt(conversation_id, ctx);
-                    }
-                });
-                ctx.notify();
-            }
             ResumeConversation => {
                 // Resume the conversation the user is currently viewing, not necessarily the most
                 // recently created one.
@@ -20176,11 +19654,6 @@ impl TypedActionView for TerminalView {
             OpenInlineHistoryMenu => {
                 self.input.update(ctx, |input, ctx| {
                     input.handle_action(&InputAction::OpenInlineHistoryMenu, ctx);
-                });
-            }
-            OpenModelSelector => {
-                self.input.update(ctx, |input, ctx| {
-                    input.handle_action(&InputAction::OpenModelSelector, ctx);
                 });
             }
             AwsBedrockLoginBanner(action) => {
@@ -20540,10 +20013,7 @@ impl View for TerminalView {
             && FeatureFlag::MinimalistUI.is_enabled())
             || *BlockListSettings::as_ref(app).show_block_dividers.value())
             && self.is_input_box_visible(&model, app)
-            && !self
-                .input
-                .as_ref(app)
-                .should_show_universal_developer_input(app)
+            && !InputSettings::as_ref(app).is_warp_prompt_enabled(app)
             && !(self.agent_view_controller.as_ref(app).is_fullscreen())
         {
             let positioning = match input_mode {

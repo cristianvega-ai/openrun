@@ -2,7 +2,6 @@ use settings::Setting as _;
 use warp_search_core::inline_menu::InputDrivenInlineMenuLifecycle;
 use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 
-use crate::ai::blocklist::{BlocklistAIInputModel, InputType};
 use crate::search::slash_command_menu::StaticCommand;
 use crate::settings::InputSettings;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
@@ -103,7 +102,6 @@ pub fn slash_command_composition_filter(input: &str) -> Option<&str> {
 
 pub struct SlashCommandModel {
     input_buffer_model: ModelHandle<InputBufferModel>,
-    ai_input_model: ModelHandle<BlocklistAIInputModel>,
     state: SlashCommandEntryState,
     lifecycle: InputDrivenInlineMenuLifecycle,
     data_source: ModelHandle<GuiSlashCommandDataSource>,
@@ -112,7 +110,6 @@ pub struct SlashCommandModel {
 impl SlashCommandModel {
     pub fn new(
         buffer_model: &ModelHandle<InputBufferModel>,
-        ai_input_model: &ModelHandle<BlocklistAIInputModel>,
         data_source: ModelHandle<GuiSlashCommandDataSource>,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
@@ -122,7 +119,6 @@ impl SlashCommandModel {
 
         Self {
             input_buffer_model: buffer_model.clone(),
-            ai_input_model: ai_input_model.clone(),
             data_source,
             state: SlashCommandEntryState::None,
             lifecycle: InputDrivenInlineMenuLifecycle::default(),
@@ -193,11 +189,7 @@ impl SlashCommandModel {
         } = event;
         self.lifecycle
             .input_changed(new.is_empty(), new.starts_with('/'));
-        // AI-off is no longer a blanket disable: AI-dependent commands are filtered out
-        // of `active_commands` via `Availability::AI_ENABLED`, so parsing still works for
-        // non-AI commands like `/open-file`.
-        if !self.data_source.as_ref(ctx).is_agent_view_active(ctx)
-            && !self.data_source.as_ref(ctx).is_cli_agent_input_open(ctx)
+        if !self.data_source.as_ref(ctx).is_cli_agent_input_open(ctx)
             && !*InputSettings::as_ref(ctx)
                 .enable_slash_commands_in_terminal
                 .value()
@@ -226,11 +218,6 @@ impl SlashCommandModel {
                     return;
                 }
 
-                if detected_command.command.auto_enter_ai_mode {
-                    self.ai_input_model.update(ctx, |input_model, ctx| {
-                        input_model.set_input_type(InputType::AI, ctx);
-                    });
-                }
                 self.state = SlashCommandEntryState::SlashCommand(detected_command);
             }
             ParsedSlashCommandInput::Composing {

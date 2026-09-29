@@ -23,10 +23,7 @@ use crate::ai::blocklist::agent_view::{AgentViewEntryOrigin, EnterAgentViewError
 use crate::ai::blocklist::conversation_selection::{
     ConversationSelection, ConversationSelectionEvent,
 };
-use crate::ai::blocklist::{
-    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, QueuedQuery, QueuedQueryModel,
-    QueuedQueryOrigin,
-};
+use crate::ai::blocklist::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 #[cfg(feature = "local_fs")]
 use crate::code_review::git_repo_model::GitRepoStatusModel;
 #[cfg(feature = "local_fs")]
@@ -576,47 +573,5 @@ fn take_pending_attachments_drains_and_returns_all_staged() {
 
         // Draining clears the live staging so the input's attachment chips disappear.
         model.read(&app, |m, _| assert!(m.pending_attachments().is_empty()));
-    });
-}
-
-#[test]
-fn enqueue_moves_staged_attachments_onto_the_row_and_clears_input() {
-    // Mirrors the enqueue sites in `input.rs`: `take_pending_attachments` drains the live input
-    // staging and the drained set is stored on the queued row via `new_with_attachments`, leaving
-    // no attachments behind in the input.
-    App::test((), |mut app| async move {
-        let model = build_test_context_model(&mut app);
-        let queued = app.add_singleton_model(QueuedQueryModel::new);
-        let conv = AIConversationId::new();
-
-        model.update(&mut app, |m, _| {
-            m.append_pending_attachments_for_test(vec![
-                make_image_attachment("a.png"),
-                make_file_attachment("notes.txt"),
-            ]);
-        });
-
-        // Capture-and-clear, then store on the row (the exact composition used at enqueue time).
-        let taken = model.update(&mut app, |m, ctx| m.take_pending_attachments(ctx));
-        let id = queued.update(&mut app, |q, ctx| {
-            q.append(
-                conv,
-                QueuedQuery::new_with_attachments(
-                    "queued".to_owned(),
-                    QueuedQueryOrigin::AutoQueueToggle,
-                    taken,
-                ),
-                ctx,
-            )
-        });
-
-        // Live staging is cleared; the row owns the attachments.
-        model.read(&app, |m, _| assert!(m.pending_attachments().is_empty()));
-        queued.read(&app, |q, _| {
-            let attachments = q.attachments_for(conv, id);
-            assert_eq!(attachments.len(), 2);
-            assert_eq!(attachments[0].file_name(), "a.png");
-            assert_eq!(attachments[1].file_name(), "notes.txt");
-        });
     });
 }

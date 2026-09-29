@@ -11,14 +11,9 @@ use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::fonts::FamilyId;
 use warpui::{AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity};
 
-use crate::ai::blocklist::block::cli_controller::{CLISubagentController, CLISubagentEvent};
-use crate::ai::blocklist::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 use crate::search::slash_command_menu::fuzzy_match::SlashCommandFuzzyMatchResult;
 use crate::search::slash_command_menu::static_commands::{Availability, commands};
 use crate::search::slash_command_menu::{SlashCommandId, StaticCommand};
-use crate::settings::{
-    AISettings, AISettingsChangedEvent, PrivacySettings, PrivacySettingsChangedEvent,
-};
 use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, CLIAgentSessionsModelEvent};
 use crate::terminal::input::slash_command_model::{
     DetectedCommand, ParsedSlashCommandInput, slash_command_composition_filter,
@@ -26,9 +21,6 @@ use crate::terminal::input::slash_command_model::{
 use crate::terminal::input::slash_commands::AcceptSlashMenuItem;
 use crate::terminal::model::session::SessionType;
 use crate::terminal::model::session::active_session::{ActiveSession, ActiveSessionEvent};
-use crate::workspaces::user_workspaces::{
-    TeamContext, TeamContextResolver, UserWorkspaces, UserWorkspacesEvent,
-};
 
 /// Event emitted when the set of active slash commands changes.
 #[derive(Debug, Clone, Copy)]
@@ -50,19 +42,14 @@ fn split_command_and_argument(buffer: &str) -> (&str, Option<&str>) {
         })
 }
 
-/// Command availability gates whose inputs are identical on every surface.
-///
-/// These do not depend on GUI-only concepts such as cloud mode or the agent view;
-/// they are computed once per recompute and shared by both surfaces.
+/// Command availability gates computed once per recompute.
 pub struct CommonCommandGates {
     is_cli_agent_input: bool,
 }
 
-/// Subscribe a concrete surface data source to dependencies that affect command availability.
-/// The callback remains concrete, so this helper does not require a surface trait.
+/// Subscribe a data source to dependencies that affect command availability.
 pub(super) fn subscribe_to_shared_dependencies<T>(
     active_session: &ModelHandle<ActiveSession>,
-    cli_subagent_controller: &ModelHandle<CLISubagentController>,
     terminal_view_id: EntityId,
     recompute_active_commands: fn(&mut T, &mut ModelContext<T>),
     ctx: &mut ModelContext<T>,
@@ -71,32 +58,6 @@ pub(super) fn subscribe_to_shared_dependencies<T>(
 {
     ctx.subscribe_to_model(active_session, move |me, _, event, ctx| match event {
         ActiveSessionEvent::UpdatedPwd | ActiveSessionEvent::Bootstrapped => {
-            recompute_active_commands(me, ctx);
-        }
-    });
-    ctx.subscribe_to_model(cli_subagent_controller, move |me, _, event, ctx| {
-        if let CLISubagentEvent::SpawnedSubagent { .. }
-        | CLISubagentEvent::FinishedSubagent { .. }
-        | CLISubagentEvent::UpdatedControl { .. } = event
-        {
-            recompute_active_commands(me, ctx);
-        }
-    });
-    ctx.subscribe_to_model(&AISettings::handle(ctx), move |me, _, event, ctx| {
-        if matches!(event, AISettingsChangedEvent::IsAnyAIEnabled { .. }) {
-            recompute_active_commands(me, ctx);
-        }
-    });
-    ctx.subscribe_to_model(&PrivacySettings::handle(ctx), move |me, _, event, ctx| {
-        if matches!(
-            event,
-            PrivacySettingsChangedEvent::UpdateIsCloudConversationStorageEnabled { .. }
-        ) {
-            recompute_active_commands(me, ctx);
-        }
-    });
-    ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), move |me, _, event, ctx| {
-        if matches!(event, UserWorkspacesEvent::TeamsChanged) {
             recompute_active_commands(me, ctx);
         }
     });
@@ -113,60 +74,37 @@ pub(super) fn subscribe_to_shared_dependencies<T>(
             }
         },
     );
-    // Recompute when the active conversation switches so commands gated on the active
-    // conversation's task (e.g. /continue-locally) update on navigation.
-    ctx.subscribe_to_model(
-        &BlocklistAIHistoryModel::handle(ctx),
-        move |me, _, event, ctx| {
-            if matches!(
-                event,
-                BlocklistAIHistoryEvent::SetActiveConversation { .. }
-                    | BlocklistAIHistoryEvent::ClearedActiveConversation { .. }
-            ) {
-                recompute_active_commands(me, ctx);
-            }
-        },
-    );
 }
 
 /// State shared by slash command data sources.
 ///
-/// Surface-neutral behavior is provided by [`SlashCommandDataSource`]. Surface-specific behavior
-/// such as agent view, cloud mode, compact rendering, recomputation, and event emission lives on
-/// the wrapping surface types.
+/// Shared behavior is provided by [`SlashCommandDataSource`]. Recomputation and event emission
+/// live on the wrapping type.
 pub struct SlashCommandDataSourceState {
     active_session: ModelHandle<ActiveSession>,
-    cli_subagent_controller: ModelHandle<CLISubagentController>,
     terminal_view_id: EntityId,
     active_commands_by_id: HashMap<SlashCommandId, StaticCommand>,
     active_repo_root: Option<PathBuf>,
-    /// Resolves the team context of the window this data source's terminal surface belongs to,
-    /// minted by that surface at construction. See [`SlashCommandDataSource::team_context`].
-    team_context_resolver: TeamContextResolver,
 }
 impl SlashCommandDataSourceState {
     pub(super) fn new(
         active_session: ModelHandle<ActiveSession>,
-        cli_subagent_controller: ModelHandle<CLISubagentController>,
         terminal_view_id: EntityId,
-        team_context_resolver: TeamContextResolver,
     ) -> Self {
         Self {
             active_session,
-            cli_subagent_controller,
             terminal_view_id,
             active_commands_by_id: HashMap::new(),
             active_repo_root: None,
-            team_context_resolver,
         }
     }
 }
 
-/// Surface-neutral slash command behavior shared by slash command data sources.
+/// Slash command behavior shared by slash command data sources.
 ///
-/// Implementors provide access to their shared state. Default methods own the behavior whose
-/// meaning is identical across surfaces, while each concrete surface retains lifecycle wiring,
-/// availability policy, active-command recomputation, event emission, and query presentation.
+/// Implementors provide access to their shared state. Default methods own the shared behavior,
+/// while each implementor retains lifecycle wiring, availability policy, active-command
+/// recomputation, event emission, and query presentation.
 pub trait SlashCommandDataSource {
     fn state(&self) -> &SlashCommandDataSourceState;
 
@@ -180,17 +118,11 @@ pub trait SlashCommandDataSource {
         self.state().terminal_view_id
     }
 
-    /// The team context of the window this data source's terminal surface belongs to. Resolved
-    /// on demand so it follows the surface if it is ever moved between windows.
-    fn team_context<'a>(&self, app: &'a AppContext) -> TeamContext<'a> {
-        (self.state().team_context_resolver)(app)
-    }
-
     fn active_commands(&self) -> impl Iterator<Item = (&SlashCommandId, &StaticCommand)> {
         self.state().active_commands_by_id.iter()
     }
 
-    /// Classifies slash command input consistently across surfaces.
+    /// Classifies slash command input.
     fn parse_input(&self, buffer: &str) -> ParsedSlashCommandInput {
         if !buffer.starts_with('/') {
             return ParsedSlashCommandInput::None;
@@ -256,11 +188,8 @@ pub trait SlashCommandDataSource {
         }
     }
 
-    /// Availability bits derived only from state shared by both surfaces.
-    ///
-    /// Surfaces add their own bits (agent view vs. terminal view, cloud mode, active
-    /// conversation) on top of this baseline.
-    fn base_availability(&self, ctx: &AppContext) -> Availability {
+    /// Availability bits derived from the active session.
+    fn availability(&self, ctx: &AppContext) -> Availability {
         let mut availability = Availability::empty();
 
         let is_local = self
@@ -283,19 +212,6 @@ pub trait SlashCommandDataSource {
         // repo's root.
         if is_local && self.cwd_is_in_repository(ctx) {
             availability |= Availability::REPOSITORY;
-        }
-
-        if !self
-            .state()
-            .cli_subagent_controller
-            .as_ref(ctx)
-            .is_agent_in_control()
-        {
-            availability |= Availability::NO_LRC_CONTROL;
-        }
-
-        if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
-            availability |= Availability::AI_ENABLED;
         }
 
         availability
@@ -365,15 +281,6 @@ pub trait SlashCommandDataSource {
         }
     }
 
-    /// Whether there is an active conversation, given whether the agent view is active.
-    /// There is always an active conversation in the agent view.
-    fn has_active_conversation(&self, is_agent_view_active: bool, ctx: &AppContext) -> bool {
-        is_agent_view_active
-            || crate::ai::blocklist::BlocklistAIHistoryModel::as_ref(ctx)
-                .active_conversation(self.terminal_view_id())
-                .is_some()
-    }
-
     /// Returns `true` if the CLI agent rich input is currently open for this terminal.
     fn is_cli_agent_input_open(&self, ctx: &AppContext) -> bool {
         CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id())
@@ -423,12 +330,7 @@ pub trait SlashCommandDataSource {
     fn ordered_zero_state_commands(&self, app: &AppContext) -> Vec<InlineItem> {
         use itertools::Itertools;
 
-        let prioritized_commands = vec![
-            &*commands::EDIT,
-            &commands::CONVERSATIONS,
-            &*commands::PLAN,
-            &commands::AGENT,
-        ];
+        let prioritized_commands = vec![&*commands::EDIT];
 
         let mut active_prioritized_commands = vec![];
         let mut results = vec![];
@@ -504,7 +406,7 @@ impl InlineItem {
         let appearance = Appearance::as_ref(app);
         Self {
             action: AcceptSlashMenuItem::SlashCommand { id: *command_id },
-            icon_path: command.supported_surfaces.gui_icon_path(),
+            icon_path: Some(command.icon_path),
             name: command.name.to_owned(),
             description: Some(command.description.to_owned()),
             font_family: appearance.monospace_font_family(),

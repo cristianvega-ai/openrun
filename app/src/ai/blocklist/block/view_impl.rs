@@ -1065,8 +1065,7 @@ impl View for AIBlock {
             app,
         ));
 
-        let should_use_transparent_overlay = InputSettings::as_ref(app)
-            .is_universal_developer_input_enabled(app)
+        let should_use_transparent_overlay = InputSettings::as_ref(app).is_warp_prompt_enabled(app)
             || FeatureFlag::AgentView.is_enabled();
 
         let theme = Appearance::as_ref(app).theme();

@@ -9,7 +9,8 @@ pub use entry::{
 };
 use fuzzy_match::FuzzyMatchResult;
 use itertools::Itertools;
-pub use query::query_conversation_entries;
+#[cfg(test)]
+use query::query_conversation_entries;
 use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::WarpTheme;

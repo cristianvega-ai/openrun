@@ -9,8 +9,8 @@ use warpui::{AppContext, Element, SingletonEntity};
 // Import CodeSymbol from the data_source module
 use super::data_source::CodeSymbol;
 use crate::appearance::Appearance;
-use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
-use crate::search::ai_context_menu::{safe_truncate, styles};
+use crate::search::at_menu::mixer::AtMenuSearchableAction;
+use crate::search::at_menu::{safe_truncate, styles};
 use crate::search::item::{IconLocation, SearchItem};
 use crate::search::result_renderer::ItemHighlightState;
 
@@ -23,7 +23,7 @@ pub struct CodeSearchItem {
 }
 
 impl SearchItem for CodeSearchItem {
-    type Action = AIContextMenuSearchableAction;
+    type Action = AtMenuSearchableAction;
 
     fn render_icon(
         &self,
@@ -248,7 +248,7 @@ impl SearchItem for CodeSearchItem {
         text.push(':');
         text.push_str(&self.code_symbol.symbol.line_number.to_string());
 
-        AIContextMenuSearchableAction::InsertText { text }
+        AtMenuSearchableAction::InsertText { text }
     }
 
     fn execute_result(&self) -> Self::Action {

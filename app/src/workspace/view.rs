@@ -120,8 +120,7 @@ use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::agent_view::editor::{AgentToolbarEditorEvent, AgentToolbarEditorModal};
 use crate::ai::blocklist::history_model::load_conversation_from_server;
 use crate::ai::blocklist::{
-    FORK_PREFIX, PendingAttachment, PendingQueryState, QueuedQueryOrigin, SerializedBlockListItem,
-    SlashCommandRequest,
+    FORK_PREFIX, PendingAttachment, PendingQueryState, SerializedBlockListItem, SlashCommandRequest,
 };
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::LLMPreferences;
@@ -10096,15 +10095,6 @@ impl Workspace {
                             ctx,
                         );
                     });
-
-                if let Some(prompt) = initial_prompt {
-                    terminal_view.enqueue_followup_prompt(
-                        prompt,
-                        crate::ai::blocklist::QueuedQueryOrigin::ForkAndCompactSlashCommand,
-                        forked_conversation_id,
-                        terminal_view_ctx,
-                    );
-                }
             } else if let Some(prompt) = initial_prompt {
                 // Add any attachments to the new pane's context model before sending,
                 // so images/files from the source pane are included with the prompt.
@@ -10182,7 +10172,6 @@ impl Workspace {
     fn summarize_active_ai_conversation(
         &mut self,
         prompt: Option<String>,
-        initial_prompt: Option<String>,
         ctx: &mut ViewContext<Self>,
     ) {
         let Some(terminal_view) = self
@@ -10198,25 +10187,6 @@ impl Workspace {
                 controller
                     .send_slash_command_request(SlashCommandRequest::Summarize { prompt }, ctx);
             });
-
-            if let Some(prompt) = initial_prompt {
-                // The slash-command handler at
-                // `app/src/terminal/input/slash_commands/mod.rs` for `/compact-and` short-circuits
-                // when there is no active conversation, so `selected_conversation_id` is set by the
-                // time we get here. Skip the follow-up if for some reason that invariant is broken.
-                if let Some(conversation_id) = terminal
-                    .ai_context_model()
-                    .as_ref(ctx)
-                    .selected_conversation_id(ctx)
-                {
-                    terminal.enqueue_followup_prompt(
-                        prompt,
-                        QueuedQueryOrigin::CompactAndSlashCommand,
-                        conversation_id,
-                        ctx,
-                    );
-                }
-            }
         });
     }
 
@@ -15745,12 +15715,6 @@ impl Workspace {
             context.set.insert(flags::AGENT_IN_APP_NOTIFICATIONS_FLAG);
         }
 
-        if input_settings.is_terminal_input_message_bar_enabled() {
-            context
-                .set
-                .insert(flags::SHOW_TERMINAL_INPUT_MESSAGE_LINE_FLAG);
-        }
-
         if *input_settings.enable_slash_commands_in_terminal.value() {
             context.set.insert(flags::SLASH_COMMANDS_IN_TERMINAL_FLAG);
         }
@@ -16993,11 +16957,8 @@ impl TypedActionView for Workspace {
                     ctx,
                 );
             }
-            SummarizeAIConversation {
-                prompt,
-                initial_prompt,
-            } => {
-                self.summarize_active_ai_conversation(prompt.clone(), initial_prompt.clone(), ctx);
+            SummarizeAIConversation { prompt } => {
+                self.summarize_active_ai_conversation(prompt.clone(), ctx);
             }
             #[cfg(feature = "local_fs")]
             FileRenamed { old_path, new_path } => {
@@ -17418,13 +17379,6 @@ impl View for Workspace {
             .is_syncing_all_panes_in_pane_group(self.window_id, self.active_tab_pane_group().id())
         {
             context.set.insert(flags::SYNC_ALL_PANES_IN_CURRENT_TAB);
-        }
-
-        let is_universal_developer_input_enabled =
-            InputSettings::as_ref(app).is_universal_developer_input_enabled(app);
-
-        if is_universal_developer_input_enabled {
-            context.set.insert(flags::UNIVERSAL_DEVELOPER_INPUT_ENABLED);
         }
 
         let default_terminal = DefaultTerminal::as_ref(app);

@@ -2476,7 +2476,7 @@ pub enum BlocklistAIHistoryEvent {
         terminal_surface_id: EntityId,
         active_conversation_id: Option<AIConversationId>,
         /// All conversation ids that were live in `terminal_surface_id` before the clear.
-        /// Subscribers (e.g. `QueuedQueryModel`) use this to drop per-conversation state.
+        /// Subscribers use this to drop per-conversation state.
         cleared_conversation_ids: Vec<AIConversationId>,
     },
 

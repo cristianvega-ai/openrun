@@ -1,7 +1,6 @@
 use warpui::elements::ChildView;
 use warpui::{AppContext, Element, Entity, ModelHandle, View, ViewContext, ViewHandle};
 
-use crate::ai::blocklist::agent_view::AgentViewController;
 use crate::search::slash_command_menu::SlashCommandId;
 use crate::terminal::input::buffer_model::InputBufferModel;
 use crate::terminal::input::inline_menu::{InlineMenuEvent, InlineMenuPositioner, InlineMenuView};
@@ -34,11 +33,7 @@ impl CloseReason {
 #[derive(Debug, Clone)]
 pub enum SlashCommandsEvent {
     Close(CloseReason),
-    /// `cmd_or_ctrl_enter` is true if accepted via Cmd/Ctrl+Enter (vs Enter/click).
-    SelectedStaticCommand {
-        id: SlashCommandId,
-        cmd_or_ctrl_enter: bool,
-    },
+    SelectedStaticCommand { id: SlashCommandId },
 }
 
 /// Wrapper around `InlineMenuView` specialized for slash commands.
@@ -62,7 +57,6 @@ impl InlineSlashCommandView {
         positioner: &ModelHandle<InlineMenuPositioner>,
         slash_commands_source: ModelHandle<GuiSlashCommandDataSource>,
         suggestions_mode_model: ModelHandle<InputSuggestionsModeModel>,
-        agent_view_controller: ModelHandle<AgentViewController>,
         input_buffer_model: ModelHandle<InputBufferModel>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
@@ -87,17 +81,13 @@ impl InlineSlashCommandView {
                 mixer.clone(),
                 positioner.clone(),
                 &suggestions_mode_model,
-                agent_view_controller,
                 ctx,
             )
         });
 
         ctx.subscribe_to_view(&menu_view, |me, _, event, ctx| match event {
-            InlineMenuEvent::AcceptedItem {
-                item,
-                cmd_or_ctrl_shift_enter,
-            } => {
-                me.handle_selection(item, *cmd_or_ctrl_shift_enter, ctx);
+            InlineMenuEvent::AcceptedItem { item, .. } => {
+                me.handle_selection(item, ctx);
             }
             InlineMenuEvent::NoResults => {
                 if me.suggestions_mode_model.as_ref(ctx).is_slash_commands() {
@@ -165,18 +155,10 @@ impl InlineSlashCommandView {
         });
     }
 
-    fn handle_selection(
-        &mut self,
-        item: &AcceptSlashMenuItem,
-        cmd_or_ctrl_enter: bool,
-        ctx: &mut ViewContext<Self>,
-    ) {
+    fn handle_selection(&mut self, item: &AcceptSlashMenuItem, ctx: &mut ViewContext<Self>) {
         match item {
             AcceptSlashMenuItem::SlashCommand { id } => {
-                ctx.emit(SlashCommandsEvent::SelectedStaticCommand {
-                    id: *id,
-                    cmd_or_ctrl_enter,
-                });
+                ctx.emit(SlashCommandsEvent::SelectedStaticCommand { id: *id });
             }
         }
     }

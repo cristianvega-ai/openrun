@@ -7,8 +7,8 @@ use warpui::elements::{ConstrainedBox, Container, Icon};
 use warpui::{AppContext, Element};
 
 use crate::appearance::Appearance;
-use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
-use crate::search::ai_context_menu::styles;
+use crate::search::at_menu::mixer::AtMenuSearchableAction;
+use crate::search::at_menu::styles;
 use crate::search::files::icon::icon_from_file_path;
 use crate::search::item::SearchItem;
 use crate::search::result_renderer::ItemHighlightState;
@@ -22,7 +22,7 @@ pub struct FileSearchItem {
 }
 
 impl SearchItem for FileSearchItem {
-    type Action = AIContextMenuSearchableAction;
+    type Action = AtMenuSearchableAction;
 
     fn render_icon(
         &self,
@@ -68,7 +68,7 @@ impl SearchItem for FileSearchItem {
     }
 
     fn accept_result(&self) -> Self::Action {
-        AIContextMenuSearchableAction::InsertFilePath {
+        AtMenuSearchableAction::InsertFilePath {
             file_path: self.path.to_string_lossy().to_string(),
         }
     }

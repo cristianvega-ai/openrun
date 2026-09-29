@@ -12,10 +12,10 @@ use warpui::platform::WindowStyle;
 use warpui::windowing::WindowManager;
 use warpui::{App, AppContext, Element, Entity, SingletonEntity, TypedActionView, View};
 
-use crate::search::ai_context_menu::files::data_source::{
+use crate::search::at_menu::files::data_source::{
     FileSnapshot, file_data_source_for_pwd, fuzzy_match_files,
 };
-use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
+use crate::search::at_menu::mixer::AtMenuSearchableAction;
 use crate::search::data_source::Query;
 use crate::search::files::model::FileSearchModel;
 use crate::search::files::search_item::FileSearchResult;
@@ -31,7 +31,7 @@ impl Entity for TestView {
 
 impl View for TestView {
     fn ui_name() -> &'static str {
-        "AIContextMenuFilesDataSourceTestView"
+        "AtMenuFilesDataSourceTestView"
     }
 
     fn render(&self, _app: &AppContext) -> Box<dyn Element> {
@@ -409,7 +409,7 @@ fn test_path_proximity_ranking() {
 fn test_directory_search_support() {
     use fuzzy_match::FuzzyMatchResult;
 
-    use crate::search::ai_context_menu::files::search_item::FileSearchItem;
+    use crate::search::at_menu::files::search_item::FileSearchItem;
 
     // Test that directories can be created with is_directory flag
     let directory_item = FileSearchItem {
@@ -440,8 +440,8 @@ fn test_directory_search_support() {
 fn test_directory_action_type() {
     use fuzzy_match::FuzzyMatchResult;
 
-    use crate::search::ai_context_menu::files::search_item::FileSearchItem;
-    use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
+    use crate::search::at_menu::files::search_item::FileSearchItem;
+    use crate::search::at_menu::mixer::AtMenuSearchableAction;
     use crate::search::item::SearchItem;
 
     let directory_item = FileSearchItem {
@@ -458,7 +458,7 @@ fn test_directory_action_type() {
 
     // Test that directories return InsertFilePath action with trailing slash
     match directory_item.accept_result() {
-        AIContextMenuSearchableAction::InsertFilePath { file_path } => {
+        AtMenuSearchableAction::InsertFilePath { file_path } => {
             assert_eq!(file_path, "src/components/");
         }
         _ => panic!("Expected InsertFilePath action for directory"),
@@ -466,7 +466,7 @@ fn test_directory_action_type() {
 
     // Test that files return InsertFilePath action without trailing slash
     match file_item.accept_result() {
-        AIContextMenuSearchableAction::InsertFilePath { file_path } => {
+        AtMenuSearchableAction::InsertFilePath { file_path } => {
             assert_eq!(file_path, "src/components/button.rs");
         }
         _ => panic!("Expected InsertFilePath action for file"),
@@ -542,7 +542,7 @@ fn test_mixed_file_directory_search() {
         );
 
         // Verify we can create search items for both types
-        let search_item = crate::search::ai_context_menu::files::search_item::FileSearchItem {
+        let search_item = crate::search::at_menu::files::search_item::FileSearchItem {
             path: PathBuf::from(path),
             match_result,
             is_directory,
@@ -643,7 +643,7 @@ fn test_fuzzy_match_files_zero_state_git_changed_first() {
     // Git-changed file should be first with high score
     assert_eq!(
         results[0].accept_result(),
-        AIContextMenuSearchableAction::InsertFilePath {
+        AtMenuSearchableAction::InsertFilePath {
             file_path: "src/changed.rs".to_string()
         }
     );
@@ -684,7 +684,7 @@ fn test_fuzzy_match_files_non_empty_query() {
     assert_eq!(results.len(), 1);
     assert_eq!(
         results[0].accept_result(),
-        AIContextMenuSearchableAction::InsertFilePath {
+        AtMenuSearchableAction::InsertFilePath {
             file_path: "src/components/button.rs".to_string()
         }
     );
@@ -708,7 +708,7 @@ fn test_fuzzy_match_files_directory_boost() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/components.rs".to_string(),
                 }
         })
@@ -717,7 +717,7 @@ fn test_fuzzy_match_files_directory_boost() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/components".to_string(),
                 }
         })
@@ -801,7 +801,7 @@ fn test_file_data_source_for_pwd_holistic_behavior() {
         assert_eq!(focused_query_results.len(), 1);
         assert_eq!(
             focused_query_results[0].accept_result(),
-            AIContextMenuSearchableAction::InsertFilePath {
+            AtMenuSearchableAction::InsertFilePath {
                 file_path: "needle.rs".to_string()
             }
         );
@@ -836,7 +836,7 @@ fn test_zero_state_recently_opened_files_rank_above_untouched() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/opened.rs".to_string(),
                 }
         })
@@ -845,7 +845,7 @@ fn test_zero_state_recently_opened_files_rank_above_untouched() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/untouched.rs".to_string(),
                 }
         })
@@ -879,7 +879,7 @@ fn test_zero_state_git_changed_ranks_above_recently_opened() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/changed.rs".to_string(),
                 }
         })
@@ -888,7 +888,7 @@ fn test_zero_state_git_changed_ranks_above_recently_opened() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/opened.rs".to_string(),
                 }
         })
@@ -927,7 +927,7 @@ fn test_zero_state_recently_opened_ordered_by_recency() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/newer.rs".to_string(),
                 }
         })
@@ -936,7 +936,7 @@ fn test_zero_state_recently_opened_ordered_by_recency() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/older.rs".to_string(),
                 }
         })
@@ -981,7 +981,7 @@ fn test_zero_state_git_changed_also_ordered_by_recency() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/changed_newer.rs".to_string(),
                 }
         })
@@ -990,7 +990,7 @@ fn test_zero_state_git_changed_also_ordered_by_recency() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/changed_older.rs".to_string(),
                 }
         })
@@ -1026,7 +1026,7 @@ fn test_fuzzy_query_recently_opened_bonus() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/components/opened_button.rs".to_string(),
                 }
         })
@@ -1035,7 +1035,7 @@ fn test_fuzzy_query_recently_opened_bonus() {
         .iter()
         .find(|r| {
             r.accept_result()
-                == AIContextMenuSearchableAction::InsertFilePath {
+                == AtMenuSearchableAction::InsertFilePath {
                     file_path: "src/components/other_button.rs".to_string(),
                 }
         })
@@ -1088,7 +1088,7 @@ fn test_zero_state_full_ordering_end_to_end() {
             .iter()
             .find(|r| {
                 r.accept_result()
-                    == AIContextMenuSearchableAction::InsertFilePath {
+                    == AtMenuSearchableAction::InsertFilePath {
                         file_path: path.to_string(),
                     }
             })

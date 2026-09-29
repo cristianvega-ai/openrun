@@ -5,149 +5,17 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use warp_core::features::FeatureFlag;
 
-use super::{Availability, SlashCommandKind, SlashCommandSurfaces};
+use super::{Availability, SlashCommandKind};
 use crate::search::slash_command_menu::StaticCommand;
 use crate::search::slash_command_menu::static_commands::Argument;
 use crate::ui_components::color_dot;
-
-pub static AGENT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/agent",
-    description: "Start a new conversation",
-    kind: SlashCommandKind::Agent,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/warp-3.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: Some(Argument::optional().with_execute_on_selection()),
-});
-
-pub const RESET_STATUSLINE: StaticCommand = StaticCommand {
-    name: "/reset-statusline",
-    description: "Reset the statusline to its default items and ordering",
-    kind: SlashCommandKind::ResetStatusline,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-pub const STATUSLINE: StaticCommand = StaticCommand {
-    name: "/statusline",
-    description: "Configure the statusline",
-    kind: SlashCommandKind::Statusline,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const AUTO_APPROVE: StaticCommand = StaticCommand {
-    name: "/auto-approve",
-    description: "Toggle auto approve",
-    kind: SlashCommandKind::AutoApprove,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::AGENT_VIEW
-        .union(Availability::ACTIVE_CONVERSATION)
-        .union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const VIEW_LOGS: StaticCommand = StaticCommand {
-    name: "/view-logs",
-    description: "Bundle your logs into a zip archive",
-    kind: SlashCommandKind::ViewLogs,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const API_KEYS: StaticCommand = StaticCommand {
-    name: "/api-keys",
-    description: "View and manage API keys",
-    kind: SlashCommandKind::ApiKeys,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const CONNECT_GROK: StaticCommand = StaticCommand {
-    name: "/connect-grok",
-    description: "Connect your Grok (X Premium / SuperGrok) account",
-    kind: SlashCommandKind::ConnectGrok,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const THEME: StaticCommand = StaticCommand {
-    name: "/theme",
-    description: "Set color theme",
-    kind: SlashCommandKind::Theme,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: Some(Argument {
-        hint_text: Some("<auto|light|dark>"),
-        is_optional: false,
-        should_execute_on_selection: false,
-    }),
-};
-
-pub const EXIT: StaticCommand = StaticCommand {
-    name: "/exit",
-    description: "Exit Warp",
-    kind: SlashCommandKind::Exit,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const STATUS: StaticCommand = StaticCommand {
-    name: "/status",
-    description: "Show session and account status",
-    kind: SlashCommandKind::Status,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const LOGOUT: StaticCommand = StaticCommand {
-    name: "/logout",
-    description: "Log out of Warp",
-    kind: SlashCommandKind::Logout,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub static CREATE_NEW_PROJECT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/create-new-project",
-    description: "Have Oz walk you through creating a new coding project",
-    kind: SlashCommandKind::CreateNewProject,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/plus.svg",
-    },
-    availability: Availability::LOCAL | Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: Some(Argument::required().with_hint_text("<describe what you want to build>")),
-});
 
 pub static EDIT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
     name: "/open-file",
     description: "Open a file in Warp's code editor",
     kind: SlashCommandKind::Edit,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/file-code-02.svg",
-    },
+    icon_path: "bundled/svg/file-code-02.svg",
     availability: Availability::LOCAL,
-    auto_enter_ai_mode: false,
     argument: Some(
         Argument::optional().with_hint_text("<path/to/file[:line[:col]]> or \"@\" to search"),
     ),
@@ -157,26 +25,9 @@ pub static RENAME_TAB: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand 
     name: "/rename-tab",
     description: "Rename the current tab",
     kind: SlashCommandKind::RenameTab,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/pencil-line.svg",
-    },
+    icon_path: "bundled/svg/pencil-line.svg",
     availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
     argument: Some(Argument::required().with_hint_text("<tab name>")),
-});
-
-pub static RENAME_CONVERSATION: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/rename-conversation",
-    description: "Rename the current conversation",
-    kind: SlashCommandKind::RenameConversation,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/pencil-line.svg",
-    },
-    availability: Availability::AGENT_VIEW
-        | Availability::ACTIVE_CONVERSATION
-        | Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: Some(Argument::required().with_hint_text("<new title>")),
 });
 
 static SET_TAB_COLOR_HINT: LazyLock<String> = LazyLock::new(|| {
@@ -193,41 +44,17 @@ pub static SET_TAB_COLOR: LazyLock<StaticCommand> = LazyLock::new(|| StaticComma
     name: "/set-tab-color",
     description: "Set the color of the current tab",
     kind: SlashCommandKind::SetTabColor,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/ellipse.svg",
-    },
+    icon_path: "bundled/svg/ellipse.svg",
     availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
     argument: Some(Argument::required().with_hint_text(SET_TAB_COLOR_HINT.as_str())),
-});
-
-pub static FORK: LazyLock<StaticCommand> = LazyLock::new(|| {
-    let hint_text = "<optional prompt to send in forked conversation>";
-    StaticCommand {
-        name: "/fork",
-        description: "Fork the current conversation",
-        kind: SlashCommandKind::Fork,
-        supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-            icon_path: "bundled/svg/arrow-split.svg",
-        },
-        availability: Availability::AGENT_VIEW
-            | Availability::ACTIVE_CONVERSATION
-            | Availability::NO_LRC_CONTROL
-            | Availability::AI_ENABLED,
-        auto_enter_ai_mode: true,
-        argument: Some(Argument::optional().with_hint_text(hint_text)),
-    }
 });
 
 pub const OPEN_CODE_REVIEW: StaticCommand = StaticCommand {
     name: "/open-code-review",
     description: "Open code review",
     kind: SlashCommandKind::OpenCodeReview,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/diff.svg",
-    },
+    icon_path: "bundled/svg/diff.svg",
     availability: Availability::REPOSITORY,
-    auto_enter_ai_mode: false,
     argument: None,
 };
 
@@ -235,272 +62,17 @@ pub const OPEN_SETTINGS_FILE: StaticCommand = StaticCommand {
     name: "/open-settings-file",
     description: "Open settings file (TOML)",
     kind: SlashCommandKind::OpenSettingsFile,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/file-code-02.svg",
-    },
+    icon_path: "bundled/svg/file-code-02.svg",
     availability: Availability::LOCAL,
-    auto_enter_ai_mode: false,
     argument: None,
 };
-
-// Accepts an optional argument so that buffers like `/feedback some text` still parse to
-// this command (the trailing text is ignored on execution). Without this, typing any
-// argument after `/feedback` would fall through and be treated as plain input.
-pub static FEEDBACK: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/feedback",
-    description: "Send feedback",
-    kind: SlashCommandKind::Feedback,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/feedback.svg",
-    },
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: Some(Argument::optional().with_execute_on_selection()),
-});
 
 pub const OPEN_REPO: StaticCommand = StaticCommand {
     name: "/open-repo",
     description: "Switch to another repository",
     kind: SlashCommandKind::OpenRepo,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/folder.svg",
-    },
-    availability: Availability::LOCAL.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub static NEW: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/new",
-    description: "Start a new conversation (alias for /agent)",
-    kind: SlashCommandKind::New,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/new-conversation.svg",
-    },
-    availability: Availability::NO_LRC_CONTROL | Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: Some(Argument::optional().with_execute_on_selection()),
-});
-
-pub const CLEAR: StaticCommand = StaticCommand {
-    name: "/clear",
-    description: "Clear the transcript and start a new conversation (alias for /agent)",
-    kind: SlashCommandKind::Clear,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::NO_LRC_CONTROL.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: false,
-    argument: Some(Argument {
-        hint_text: None,
-        is_optional: true,
-        should_execute_on_selection: true,
-    }),
-};
-
-pub static MODEL: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/model",
-    description: "Switch the base agent model",
-    kind: SlashCommandKind::Model,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/warp-3.svg",
-    },
-    availability: Availability::AGENT_VIEW | Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: None,
-});
-
-/// TUI-only: the GUI switches teams from the title-bar pill, which opens a new window for the
-/// chosen team rather than re-scoping the current one. The TUI has a single window, so it
-/// switches in place instead.
-pub const TEAM: StaticCommand = StaticCommand {
-    name: "/team",
-    description: "Switch the active team",
-    kind: SlashCommandKind::Team,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub static PROFILE: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/profile",
-    description: "Switch the active execution profile",
-    kind: SlashCommandKind::Profile,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/psychology.svg",
-    },
-    availability: Availability::AGENT_VIEW | Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: None,
-});
-
-pub const PLAN_NAME: &str = "/plan";
-
-pub static PLAN: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: PLAN_NAME,
-    description: "Prompt the agent to do some research and create a plan for a task",
-    kind: SlashCommandKind::Plan,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/file-06.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: Some(Argument::optional().with_hint_text("<describe your task>")),
-});
-
-/// If `query` starts with the given command `name` followed by a space,
-/// returns the remainder of the query. Otherwise returns `None`.
-pub fn strip_command_prefix(query: &str, name: &str) -> Option<String> {
-    query
-        .strip_prefix(name)
-        .and_then(|rest| rest.strip_prefix(' '))
-        .map(|rest| rest.to_string())
-}
-
-pub static COMPACT: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/compact",
-    description: "Free up context by summarizing convo history",
-    kind: SlashCommandKind::Compact,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/collapse_content.svg",
-    },
-    availability: Availability::AGENT_VIEW
-        | Availability::ACTIVE_CONVERSATION
-        | Availability::NO_LRC_CONTROL
-        | Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: Some(
-        Argument::optional().with_hint_text("<optional custom summarization instructions>"),
-    ),
-});
-
-pub static COMPACT_AND: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/compact-and",
-    description: "Compact conversation and then send a follow-up prompt",
-    kind: SlashCommandKind::CompactAnd,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/collapse_content.svg",
-    },
-    availability: Availability::AGENT_VIEW
-        | Availability::ACTIVE_CONVERSATION
-        | Availability::NO_LRC_CONTROL
-        | Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: Some(Argument::optional().with_hint_text("<prompt to send after compaction>")),
-});
-
-pub static QUEUE: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/queue",
-    description: "Queue a prompt to send after the agent finishes responding",
-    kind: SlashCommandKind::Queue,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/clock-plus.svg",
-    },
-    availability: Availability::AGENT_VIEW
-        | Availability::ACTIVE_CONVERSATION
-        | Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: Some(Argument::required().with_hint_text("<prompt to send when agent is done>")),
-});
-
-pub static FORK_AND_COMPACT: LazyLock<StaticCommand> = LazyLock::new(|| {
-    let hint_text = "<optional prompt to send after compaction>";
-    StaticCommand {
-        name: "/fork-and-compact",
-        description: "Fork current conversation and compact it in the forked copy",
-        kind: SlashCommandKind::ForkAndCompact,
-        supported_surfaces: SlashCommandSurfaces::GuiOnly {
-            icon_path: "bundled/svg/fork_and_compact.svg",
-        },
-        availability: Availability::AGENT_VIEW
-            | Availability::ACTIVE_CONVERSATION
-            | Availability::NO_LRC_CONTROL
-            | Availability::AI_ENABLED,
-        auto_enter_ai_mode: true,
-        argument: Some(Argument::optional().with_hint_text(hint_text)),
-    }
-});
-
-pub const FORK_FROM: StaticCommand = StaticCommand {
-    name: "/fork-from",
-    description: "Fork conversation from a specific query",
-    kind: SlashCommandKind::ForkFrom,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/arrow-split.svg",
-    },
-    availability: Availability::AGENT_VIEW
-        .union(Availability::NO_LRC_CONTROL)
-        .union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: true,
-    argument: None,
-};
-
-pub const CONVERSATIONS: StaticCommand = StaticCommand {
-    name: "/conversations",
-    description: "Open conversation history",
-    kind: SlashCommandKind::Conversations,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/conversation.svg",
-    },
-    availability: Availability::AI_ENABLED,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const REWIND: StaticCommand = StaticCommand {
-    name: "/rewind",
-    description: "Rewind to a previous point in the conversation",
-    kind: SlashCommandKind::Rewind,
-    supported_surfaces: SlashCommandSurfaces::GuiOnly {
-        icon_path: "bundled/svg/clock-rewind.svg",
-    },
-    availability: Availability::AGENT_VIEW.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: true,
-    argument: None,
-};
-
-pub const EXPORT_TO_CLIPBOARD: StaticCommand = StaticCommand {
-    name: "/export-to-clipboard",
-    description: "Export current conversation to clipboard in markdown format",
-    kind: SlashCommandKind::ExportToClipboard,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/copy.svg",
-    },
-    availability: Availability::AGENT_VIEW.union(Availability::AI_ENABLED),
-    auto_enter_ai_mode: true,
-    argument: None,
-};
-
-pub static EXPORT_TO_FILE: LazyLock<StaticCommand> = LazyLock::new(|| StaticCommand {
-    name: "/export-to-file",
-    description: "Export current conversation to a markdown file",
-    kind: SlashCommandKind::ExportToFile,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/download-01.svg",
-    },
-    availability: Availability::AGENT_VIEW | Availability::AI_ENABLED,
-    auto_enter_ai_mode: true,
-    argument: Some(Argument::optional().with_hint_text("<optional filename>")),
-});
-
-pub const VIM_MODE: StaticCommand = StaticCommand {
-    name: "/vim-mode",
-    description: "Toggle Vim mode",
-    kind: SlashCommandKind::VimMode,
-    supported_surfaces: SlashCommandSurfaces::TuiOnly,
-    availability: Availability::ALWAYS,
-    auto_enter_ai_mode: false,
-    argument: None,
-};
-
-pub const COPY_DEBUGGING_ID: StaticCommand = StaticCommand {
-    name: "/copy-debugging-id",
-    description: "Copy debugging information for this conversation",
-    kind: SlashCommandKind::CopyDebuggingId,
-    supported_surfaces: SlashCommandSurfaces::GuiAndTui {
-        icon_path: "bundled/svg/copy.svg",
-    },
-    availability: Availability::ACTIVE_CONVERSATION,
-    auto_enter_ai_mode: false,
+    icon_path: "bundled/svg/folder.svg",
+    availability: Availability::LOCAL,
     argument: None,
 };
 
@@ -535,14 +107,7 @@ impl Default for Registry {
 impl Registry {
     pub fn new() -> Self {
         let mut commands = HashMap::new();
-        for command in all_commands_for_all_surfaces() {
-            debug_assert!(
-                !command
-                    .availability
-                    .contains(Availability::TERMINAL_VIEW | Availability::AGENT_VIEW),
-                "command `{}` sets both TERMINAL_VIEW and AGENT_VIEW, which is unsatisfiable",
-                command.name,
-            );
+        for command in all_commands() {
             commands.insert(SlashCommandId::new(), command);
         }
         Self { commands }
@@ -573,80 +138,11 @@ impl Registry {
     }
 }
 
-#[cfg(test)]
-fn all_commands(settings_mode: settings::SettingsMode) -> Vec<StaticCommand> {
-    all_commands_for_all_surfaces()
-        .into_iter()
-        .filter(|command| command.supports_surface(settings_mode))
-        .collect()
-}
-
-fn all_commands_for_all_surfaces() -> Vec<StaticCommand> {
-    let mut commands = vec![
-        AUTO_APPROVE,
-        EXIT,
-        FEEDBACK.clone(),
-        API_KEYS,
-        CONNECT_GROK,
-        LOGOUT,
-        AGENT.clone(),
-        CLEAR,
-        NEW.clone(),
-        PLAN.clone(),
-        RENAME_CONVERSATION.clone(),
-        RENAME_TAB.clone(),
-        SET_TAB_COLOR.clone(),
-        STATUSLINE,
-        RESET_STATUSLINE,
-        THEME,
-        VIM_MODE,
-        CONVERSATIONS,
-        EXPORT_TO_CLIPBOARD,
-        COPY_DEBUGGING_ID,
-        MODEL.clone(),
-        TEAM,
-        STATUS,
-        VIEW_LOGS,
-    ];
-
-    commands.push(OPEN_CODE_REVIEW);
-
-    if FeatureFlag::CreateProjectFlow.is_enabled() {
-        commands.push(CREATE_NEW_PROJECT.clone());
-    }
-
-    if FeatureFlag::SummarizationConversationCommand.is_enabled() {
-        commands.push(COMPACT.clone());
-        commands.push(COMPACT_AND.clone());
-    }
-
-    if FeatureFlag::QueueSlashCommand.is_enabled() {
-        commands.push(QUEUE.clone());
-    }
+fn all_commands() -> Vec<StaticCommand> {
+    let mut commands = vec![RENAME_TAB.clone(), SET_TAB_COLOR.clone(), OPEN_CODE_REVIEW];
 
     if !cfg!(target_family = "wasm") {
-        commands.extend([FORK.clone(), FORK_AND_COMPACT.clone()]);
-
-        if FeatureFlag::ForkFromCommand.is_enabled() {
-            commands.push(FORK_FROM);
-        }
-    }
-
-    if !cfg!(target_family = "wasm") {
-        commands.extend([EDIT.clone(), EXPORT_TO_FILE.clone()]);
-    }
-
-    if FeatureFlag::InlineProfileSelector.is_enabled() {
-        commands.push(PROFILE.clone());
-    }
-
-    if FeatureFlag::RevertToCheckpoints.is_enabled() && FeatureFlag::RewindSlashCommand.is_enabled()
-    {
-        commands.push(REWIND);
-    }
-
-    if !cfg!(target_family = "wasm") {
-        commands.push(OPEN_REPO);
+        commands.extend([EDIT.clone(), OPEN_REPO]);
     }
 
     if FeatureFlag::SettingsFile.is_enabled() && cfg!(feature = "local_fs") {

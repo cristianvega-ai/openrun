@@ -228,7 +228,6 @@ fn summarize_ai_conversation(prompt: &Option<String>, ctx: &mut AppContext) {
         ctx,
         WorkspaceAction::SummarizeAIConversation {
             prompt: prompt.clone(),
-            initial_prompt: None,
         },
     );
 }

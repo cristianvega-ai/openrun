@@ -256,7 +256,6 @@ pub enum TerminalAction {
     },
     AttachFile,
     ToggleAutoexecuteMode,
-    ToggleQueueNextPrompt,
     ResumeConversation,
     ForkConversationFromLastKnownGoodState,
     ToggleCodeReviewPane {
@@ -281,7 +280,6 @@ pub enum TerminalAction {
     /// Toggle the conversation details panel
     ToggleConversationDetailsPanel,
     OpenInlineHistoryMenu,
-    OpenModelSelector,
     AwsBedrockLoginBanner(AwsBedrockLoginBannerAction),
     AwsCliNotInstalledBanner(AwsCliNotInstalledBannerAction),
     /// Toggle PTY recording for this session.
@@ -473,7 +471,6 @@ impl fmt::Debug for TerminalAction {
             }
             AttachFile => write!(f, "AttachFile"),
             ToggleAutoexecuteMode => write!(f, "ToggleAutoexecuteMode"),
-            ToggleQueueNextPrompt => write!(f, "ToggleQueueNextPrompt"),
             ResumeConversation => write!(f, "ResumeConversation"),
             ForkConversationFromLastKnownGoodState => {
                 write!(f, "ForkConversationFromLastKnownGoodState")
@@ -496,7 +493,6 @@ impl fmt::Debug for TerminalAction {
             }
             ToggleConversationDetailsPanel => write!(f, "ToggleConversationDetailsPanel"),
             OpenInlineHistoryMenu => write!(f, "OpenInlineHistoryMenu"),
-            OpenModelSelector => write!(f, "OpenModelSelector"),
             AwsBedrockLoginBanner(action) => write!(f, "AwsBedrockLoginBanner({action:?})"),
             AwsCliNotInstalledBanner(action) => write!(f, "AwsCliNotInstalledBanner({action:?})"),
             ToggleSessionRecording => write!(f, "ToggleSessionRecording"),

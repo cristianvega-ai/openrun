@@ -52,7 +52,6 @@ pub mod mock_terminal_manager;
 pub mod model;
 pub mod model_events;
 pub mod platform;
-pub mod profile_model_selector;
 pub mod prompt;
 pub mod prompt_render_helper;
 pub mod recorder;
@@ -63,7 +62,6 @@ mod secret_regex_updater;
 pub mod session_settings;
 pub mod settings;
 mod shell_launch_state;
-pub mod universal_developer_input;
 
 pub mod ssh;
 pub mod terminal_manager;
@@ -87,7 +85,7 @@ pub use shell_launch_state::ShellLaunchState;
 pub use terminal_manager::TerminalManager;
 pub use view::{
     CANCEL_COMMAND_KEYBINDING, TOGGLE_AUTOEXECUTE_MODE_KEYBINDING,
-    TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING, TOGGLE_QUEUE_NEXT_PROMPT_KEYBINDING,
+    TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING,
 };
 
 use crate::settings::SelectionSettings;

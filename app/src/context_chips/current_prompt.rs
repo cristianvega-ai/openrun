@@ -1121,7 +1121,7 @@ impl CurrentPrompt {
 
     fn active_surfaces(&self, ctx: &AppContext) -> ActiveChipSurfaces {
         let prompt = !*SessionSettings::as_ref(ctx).honor_ps1
-            || InputSettings::as_ref(ctx).is_universal_developer_input_enabled(ctx);
+            || InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
         let agent_footer = self
             .agent_view_controller
             .as_ref()

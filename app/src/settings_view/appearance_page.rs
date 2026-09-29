@@ -52,20 +52,20 @@ use crate::editor::{
 use crate::features::FeatureFlag;
 use crate::gpu_state::{GPUState, GPUStateEvent};
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
-use crate::server::telemetry::{InputUXChangeOrigin, TelemetryEvent};
+use crate::server::telemetry::TelemetryEvent;
 use crate::settings::app_icon::{AppIcon, AppIconSettings};
 use crate::settings::{
     AIFontName, AppEditorSettings, CodeSettings, CursorBlink, CursorDisplayType,
     DEFAULT_MONOSPACE_FONT_NAME, EnforceMinimumContrast, FontSettings, FontSettingsChangedEvent,
-    GPUSettings, InputBoxType, InputModeSettings, InputSettings, InputSettingsChangedEvent,
-    MonospaceFontName, PaneSettings, ThemeSettings, active_theme_kind, respect_system_theme,
+    GPUSettings, InputModeSettings, MonospaceFontName, PaneSettings, ThemeSettings,
+    active_theme_kind, respect_system_theme,
 };
 use crate::terminal::block_list_viewport::InputMode;
 use crate::terminal::blockgrid_element::BlockGridElement;
 use crate::terminal::ligature_settings::LigatureSettings;
 use crate::terminal::model::ObfuscateSecrets;
 use crate::terminal::model::blockgrid::BlockGrid;
-use crate::terminal::session_settings::SessionSettings;
+use crate::terminal::session_settings::{SessionSettings, SessionSettingsChangedEvent};
 use crate::terminal::settings::{AltScreenPaddingMode, SpacingMode, TerminalSettings};
 use crate::terminal::{BlockListSettings, SizeInfo};
 use crate::themes::theme::{self, RespectSystemTheme, SelectedSystemThemes, ThemeKind, WarpTheme};
@@ -460,7 +460,7 @@ pub enum AppearancePageAction {
         new_mode: InputMode,
         from_binding: bool,
     },
-    SetInputType(InputBoxType),
+    SetHonorPs1(bool),
     SetAppIcon(AppIcon),
     ToggleShowDockIcon,
     SetCursorType(CursorDisplayType),
@@ -631,7 +631,7 @@ impl TypedActionView for AppearanceSettingsPageView {
                 new_mode,
                 from_binding,
             } => self.set_input_mode(*new_mode, *from_binding, ctx),
-            SetInputType(input_type) => self.set_input_type(*input_type, ctx),
+            SetHonorPs1(honor_ps1) => self.set_honor_ps1(*honor_ps1, ctx),
             SetAppIcon(new_icon) => self.set_app_icon(*new_icon, ctx),
             ToggleShowDockIcon => self.toggle_show_dock_icon(ctx),
             SetCursorType(cursor_display_type) => self.set_cursor_type(*cursor_display_type, ctx),
@@ -918,11 +918,11 @@ impl AppearanceSettingsPageView {
             ctx.notify()
         });
 
-        ctx.subscribe_to_model(&InputSettings::handle(ctx), |me, _, event, ctx| {
-            if matches!(event, InputSettingsChangedEvent::InputBoxTypeSetting { .. }) {
-                let input_type = *InputSettings::as_ref(ctx).input_box_type;
+        ctx.subscribe_to_model(&SessionSettings::handle(ctx), |me, _, event, ctx| {
+            if matches!(event, SessionSettingsChangedEvent::HonorPS1 { .. }) {
+                let honor_ps1 = *SessionSettings::as_ref(ctx).honor_ps1;
                 me.input_type_radio_state
-                    .set_selected_idx(input_type as usize);
+                    .set_selected_idx(usize::from(honor_ps1));
                 ctx.notify();
             }
         });
@@ -1269,10 +1269,9 @@ impl AppearanceSettingsPageView {
             me.handle_alt_screen_padding_editor_event(event, ctx);
         });
 
-        // Initialize the input type radio state
-        let input_type = InputSettings::as_ref(ctx).input_type(ctx);
         let input_type_radio_state = RadioButtonStateHandle::default();
-        input_type_radio_state.set_selected_idx(input_type as usize);
+        input_type_radio_state
+            .set_selected_idx(usize::from(*SessionSettings::as_ref(ctx).honor_ps1));
         let header_toolbar_inline_editor =
             ctx.add_typed_action_view(HeaderToolbarInlineEditor::new);
 
@@ -2328,35 +2327,13 @@ impl AppearanceSettingsPageView {
         }
     }
 
-    fn set_input_type(&mut self, new_type: InputBoxType, ctx: &mut ViewContext<Self>) {
-        let old_type = InputSettings::as_ref(ctx).input_type(ctx);
-
-        if old_type != new_type {
-            InputSettings::handle(ctx).update(ctx, |input_type_settings, ctx| {
-                report_if_error!(input_type_settings.input_box_type.set_value(new_type, ctx));
+    fn set_honor_ps1(&mut self, honor_ps1: bool, ctx: &mut ViewContext<Self>) {
+        if *SessionSettings::as_ref(ctx).honor_ps1 != honor_ps1 {
+            SessionSettings::handle(ctx).update(ctx, |session_settings, ctx| {
+                report_if_error!(session_settings.honor_ps1.set_value(honor_ps1, ctx));
             });
             self.input_type_radio_state
-                .set_selected_idx(new_type as usize);
-
-            let is_udi_enabled = new_type == InputBoxType::Universal;
-            send_telemetry_from_ctx!(
-                TelemetryEvent::InputUXModeChanged {
-                    is_udi_enabled,
-                    origin: InputUXChangeOrigin::Settings
-                },
-                ctx
-            );
-
-            // Selecting classic mode must also enable honor_ps1 so the mode takes
-            // effect immediately (input_type() requires honor_ps1 to return classic).
-            SessionSettings::handle(ctx).update(ctx, |session_settings, ctx| {
-                report_if_error!(
-                    session_settings
-                        .honor_ps1
-                        .set_value(new_type == InputBoxType::Classic, ctx)
-                );
-            });
-
+                .set_selected_idx(usize::from(honor_ps1));
             ctx.notify();
         }
     }
@@ -2711,17 +2688,8 @@ impl AppearanceSettingsPageView {
     }
 
     pub fn toggle_input_mode(&mut self, ctx: &mut ViewContext<Self>) {
-        // Get the current input type
-        let current_type = InputSettings::as_ref(ctx).input_type(ctx);
-
-        // Toggle between Universal and Classic
-        let new_type = match current_type {
-            InputBoxType::Universal => InputBoxType::Classic,
-            InputBoxType::Classic => InputBoxType::Universal,
-        };
-
-        // Update the setting
-        self.set_input_type(new_type, ctx);
+        let honor_ps1 = *SessionSettings::as_ref(ctx).honor_ps1;
+        self.set_honor_ps1(!honor_ps1, ctx);
     }
 
     pub fn update_tab_close_button_position(
@@ -3574,7 +3542,7 @@ impl SettingsWidget for InputTypeWidget {
     type View = AppearanceSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "input type warp universal classic style prompt terminal ai developer mode interface shell chips ps1"
+        "input type warp classic style prompt terminal mode interface shell chips ps1"
     }
 
     fn render(
@@ -3583,7 +3551,7 @@ impl SettingsWidget for InputTypeWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let input_type = InputSettings::as_ref(app).input_type(app);
+        let honor_ps1 = *SessionSettings::as_ref(app).honor_ps1;
         let radio_buttons = appearance
             .ui_builder()
             .radio_buttons(
@@ -3593,17 +3561,13 @@ impl SettingsWidget for InputTypeWidget {
                     RadioButtonItem::text("Shell (PS1)"),
                 ],
                 view.input_type_radio_state.clone(),
-                Some(input_type as usize),
+                Some(usize::from(honor_ps1)),
                 appearance.ui_font_size(),
                 RadioButtonLayout::Row,
             )
             .on_change(Rc::new(move |ctx, _, index| {
                 if let Some(index) = index {
-                    let input_type = match index {
-                        0 => InputBoxType::Universal,
-                        _ => InputBoxType::Classic,
-                    };
-                    ctx.dispatch_typed_action(AppearancePageAction::SetInputType(input_type));
+                    ctx.dispatch_typed_action(AppearancePageAction::SetHonorPs1(index == 1));
                 }
             }))
             .build()

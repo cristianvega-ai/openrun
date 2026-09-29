@@ -7,34 +7,22 @@ use super::core::subscribe_to_shared_dependencies;
 use super::{
     InlineItem, SlashCommandDataSource, SlashCommandDataSourceState, UpdatedActiveCommands,
 };
-use crate::ai::blocklist::agent_view::{AgentViewController, AgentViewControllerEvent};
-use crate::ai::blocklist::block::cli_controller::CLISubagentController;
 use crate::search::SyncDataSource;
 use crate::search::data_source::{Query, QueryResult};
 use crate::search::mixer::DataSourceRunErrorWrapper;
 use crate::search::slash_command_menu::StaticCommand;
-use crate::search::slash_command_menu::static_commands::Availability;
 use crate::search::slash_command_menu::static_commands::commands::COMMAND_REGISTRY;
-use crate::settings::{
-    InputSettings, InputSettingsChangedEvent, PrivacySettings, PrivacySettingsChangedEvent,
-};
+use crate::settings::{InputSettings, InputSettingsChangedEvent};
 use crate::terminal::input::slash_commands::AcceptSlashMenuItem;
 use crate::terminal::model::session::active_session::ActiveSession;
-use crate::workspaces::user_workspaces::TeamContextResolver;
 
 pub struct GuiDataSourceArgs {
     pub active_session: ModelHandle<ActiveSession>,
-    pub agent_view_controller: ModelHandle<AgentViewController>,
-    pub cli_subagent_controller: ModelHandle<CLISubagentController>,
     pub terminal_view_id: EntityId,
-    /// Resolves this data source's terminal surface's window's team context. Minted by the
-    /// owning view at construction via `UserWorkspaces::team_context_resolver`.
-    pub team_context_resolver: TeamContextResolver,
 }
 
 pub struct GuiSlashCommandDataSource {
     state: SlashCommandDataSourceState,
-    agent_view_controller: ModelHandle<AgentViewController>,
 }
 
 impl GuiSlashCommandDataSource {
@@ -45,35 +33,15 @@ impl GuiSlashCommandDataSource {
     fn build(args: GuiDataSourceArgs, ctx: &mut ModelContext<Self>) -> Self {
         let GuiDataSourceArgs {
             active_session,
-            agent_view_controller,
-            cli_subagent_controller,
             terminal_view_id,
-            team_context_resolver,
         } = args;
 
         subscribe_to_shared_dependencies(
             &active_session,
-            &cli_subagent_controller,
             terminal_view_id,
             Self::recompute_active_commands,
             ctx,
         );
-        ctx.subscribe_to_model(&agent_view_controller, |me, _, event, ctx| match event {
-            AgentViewControllerEvent::EnteredAgentView { .. }
-            | AgentViewControllerEvent::ExitedAgentView { .. } => {
-                me.recompute_active_commands(ctx);
-            }
-            _ => (),
-        });
-        // Preserve the existing GUI subscriptions whose settings affect GUI-only command gates.
-        ctx.subscribe_to_model(&PrivacySettings::handle(ctx), |me, _, event, ctx| {
-            if matches!(
-                event,
-                PrivacySettingsChangedEvent::UpdateIsCloudConversationStorageEnabled { .. }
-            ) {
-                me.recompute_active_commands(ctx);
-            }
-        });
         ctx.subscribe_to_model(&InputSettings::handle(ctx), |me, _, event, ctx| {
             if matches!(
                 event,
@@ -84,20 +52,10 @@ impl GuiSlashCommandDataSource {
         });
 
         let mut me = Self {
-            state: SlashCommandDataSourceState::new(
-                active_session,
-                cli_subagent_controller,
-                terminal_view_id,
-                team_context_resolver,
-            ),
-            agent_view_controller,
+            state: SlashCommandDataSourceState::new(active_session, terminal_view_id),
         };
         me.recompute_active_commands(ctx);
         me
-    }
-
-    pub fn is_agent_view_active(&self, ctx: &AppContext) -> bool {
-        self.agent_view_controller.as_ref(ctx).is_active()
     }
 
     pub fn set_active_repo_root(
@@ -113,7 +71,7 @@ impl GuiSlashCommandDataSource {
     pub(crate) fn command_is_active(&self, command: &StaticCommand, ctx: &AppContext) -> bool {
         let availability = self.availability(ctx);
         let gates = self.common_command_gates(ctx);
-        command.supports_gui() && self.command_passes_common_gates(command, availability, &gates)
+        self.command_passes_common_gates(command, availability, &gates)
     }
 
     fn recompute_active_commands(&mut self, ctx: &mut ModelContext<Self>) {
@@ -123,34 +81,12 @@ impl GuiSlashCommandDataSource {
             COMMAND_REGISTRY
                 .all_commands_by_id()
                 .filter(|(_, command)| {
-                    command.supports_gui()
-                        && self.command_passes_common_gates(command, availability, &gates)
+                    self.command_passes_common_gates(command, availability, &gates)
                 })
                 .map(|(id, command)| (id, command.clone())),
         );
         if self.replace_active_commands(commands) {
             ctx.emit(UpdatedActiveCommands);
-        }
-    }
-
-    fn availability(&self, ctx: &AppContext) -> Availability {
-        let is_agent_view_active = self.is_agent_view_active(ctx);
-        let mut availability =
-            self.base_availability(ctx) | Self::view_availability(is_agent_view_active);
-
-        if self.has_active_conversation(is_agent_view_active, ctx) {
-            availability |= Availability::ACTIVE_CONVERSATION;
-        }
-
-        availability
-    }
-
-    /// View-related availability bits for the GUI's terminal-view and agent-view modalities.
-    fn view_availability(is_agent_view_active: bool) -> Availability {
-        if is_agent_view_active {
-            Availability::AGENT_VIEW
-        } else {
-            Availability::TERMINAL_VIEW
         }
     }
 }

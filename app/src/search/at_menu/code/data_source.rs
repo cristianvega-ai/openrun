@@ -28,7 +28,7 @@ use super::search_item::CodeSearchItem;
 #[cfg(not(target_family = "wasm"))]
 use crate::code::outline::{OutlineStatus, RepoOutlines, RepoOutlinesEvent};
 #[cfg(not(target_family = "wasm"))]
-use crate::search::ai_context_menu::mixer::AIContextMenuSearchableAction;
+use crate::search::at_menu::mixer::AtMenuSearchableAction;
 #[cfg(not(target_family = "wasm"))]
 use crate::search::data_source::{Query, QueryResult};
 #[cfg(not(target_family = "wasm"))]
@@ -62,7 +62,7 @@ impl SymbolCache {
 }
 
 /// Entity that owns a per-repo map of cached [`CodeSymbol`]s (the "symbol cache").
-/// Lives on `AIContextMenu` so the cache persists across mixer resets.
+/// Lives on `AtMenu` so the cache persists across mixer resets.
 ///
 /// On construction subscribes to [`RepoOutlinesEvent::OutlinesUpdated`]; when an
 /// outline changes for a repo, the corresponding cache entry is evicted so the next
@@ -263,7 +263,7 @@ impl CodeCursorDataSource {
 
 #[cfg(not(target_family = "wasm"))]
 impl AsyncDataSource for CodeCursorDataSource {
-    type Action = AIContextMenuSearchableAction;
+    type Action = AtMenuSearchableAction;
 
     fn run_query(
         &self,
@@ -342,8 +342,8 @@ pub fn code_data_source(cache: &CodeSymbolCache) -> CodeCursorDataSource {
 fn finalize_zero_state(
     items: Vec<CodeSearchItem>,
     git_changed_files: &HashSet<String>,
-) -> Vec<QueryResult<AIContextMenuSearchableAction>> {
-    let mut results: Vec<QueryResult<AIContextMenuSearchableAction>> = Vec::new();
+) -> Vec<QueryResult<AtMenuSearchableAction>> {
+    let mut results: Vec<QueryResult<AtMenuSearchableAction>> = Vec::new();
 
     // First, add all symbols from git-changed files (they get priority)
     for item in &items {
@@ -380,7 +380,7 @@ fn finalize_zero_state(
 
 /// Query finalisation: take top-k by fuzzy score.
 #[cfg(not(target_family = "wasm"))]
-fn finalize_query(items: Vec<CodeSearchItem>) -> Vec<QueryResult<AIContextMenuSearchableAction>> {
+fn finalize_query(items: Vec<CodeSearchItem>) -> Vec<QueryResult<AtMenuSearchableAction>> {
     items
         .into_iter()
         .k_largest_relaxed_by_key(MAX_RESULTS, |item| item.match_result.score)

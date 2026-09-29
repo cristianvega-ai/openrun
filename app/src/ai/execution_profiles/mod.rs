@@ -16,7 +16,6 @@ use crate::settings::AISettings;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
 mod config;
-pub mod model_menu_items;
 pub mod profiles;
 pub use config::{ExecutionProfileId, ExecutionProfilesConfig};
 

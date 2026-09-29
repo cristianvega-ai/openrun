@@ -1,8 +1,4 @@
-mod blocks;
 mod code;
-mod commands;
-mod conversations;
-mod diffset;
 mod files;
 pub mod mixer;
 pub mod search;

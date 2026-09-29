@@ -1,23 +1,22 @@
 use pathfinder_geometry::vector::vec2f;
 use settings::Setting;
 use warpui::elements::{
-    Border, ChildAnchor, ChildView, Clipped, Container, DropTarget, Element, Empty, Flex,
-    Hoverable, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, SavePosition,
-    Stack,
+    Border, ChildAnchor, ChildView, Container, DropTarget, Element, Empty, Flex, Hoverable,
+    OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, SavePosition, Stack,
 };
 use warpui::{AppContext, SingletonEntity};
 
-use super::{Input, SubshellRenderState, should_render_prompt_on_same_line};
+use super::{Input, SubshellRenderState};
 use crate::appearance::Appearance;
 use crate::settings::InputModeSettings;
 use crate::terminal::block_list_settings::BlockListSettings;
 use crate::terminal::block_list_viewport::InputMode;
 use crate::terminal::input::common::{
     add_command_xray_overlay, add_input_suggestions_overlays, add_voltron_overlay,
-    add_workflow_info_overlay, should_show_terminal_input_message_bar,
-    wrap_input_with_terminal_padding_and_focus_handler,
+    add_workflow_info_overlay, wrap_input_with_terminal_padding_and_focus_handler,
 };
 use crate::terminal::input::{InputDropTargetData, get_input_box_top_border_width};
+use crate::terminal::prompt_render_helper::should_render_ps1_prompt;
 use crate::terminal::settings::{SpacingMode, TerminalSettings};
 use crate::terminal::view::TerminalAction;
 use crate::terminal::warpify::render::{render_subshell_flag, render_subshell_flag_pole};
@@ -30,8 +29,7 @@ impl Input {
         let menu_positioning = self.menu_positioning(app);
 
         let model = self.model.lock();
-        let should_render_prompt_using_editor_decorator_elements =
-            should_render_prompt_on_same_line(false, &model, app);
+        let should_render_prompt_using_editor_decorator_elements = should_render_ps1_prompt(app);
 
         // We should likely rework this stack to not need to use `with_constrain_absolute_children`,
         // by reworking the positioning of the children to not depend on this.
@@ -93,11 +91,7 @@ impl Input {
 
         column.add_child(self.render_input_box(appearance, app));
 
-        if should_show_terminal_input_message_bar(app) {
-            column.add_child(
-                Clipped::new(ChildView::new(&self.terminal_input_message_bar).finish()).finish(),
-            );
-        } else if !(matches!(input_mode, InputMode::PinnedToTop)
+        if !(matches!(input_mode, InputMode::PinnedToTop)
             && self
                 .suggestions_mode_model
                 .as_ref(app)
@@ -223,14 +217,6 @@ impl Input {
 
         let mut column = Flex::column();
         let is_slash_commands = self.suggestions_mode_model.as_ref(app).is_slash_commands();
-        let is_conversation_menu = self
-            .suggestions_mode_model
-            .as_ref(app)
-            .is_conversation_menu();
-        let is_model_selector = self
-            .suggestions_mode_model
-            .as_ref(app)
-            .is_inline_model_selector();
         let is_inline_history_menu = self
             .suggestions_mode_model
             .as_ref(app)
@@ -241,12 +227,8 @@ impl Input {
             InputMode::PinnedToBottom => {
                 column.add_children(
                     [
-                        if is_model_selector {
-                            Some(ChildView::new(&self.inline_model_selector_view).finish())
-                        } else if is_slash_commands {
+                        if is_slash_commands {
                             Some(ChildView::new(&self.inline_slash_commands_view).finish())
-                        } else if is_conversation_menu {
-                            Some(ChildView::new(&self.inline_conversation_menu_view).finish())
                         } else if is_inline_history_menu {
                             Some(ChildView::new(&self.inline_history_menu_view).finish())
                         } else if is_repos_menu {
@@ -266,12 +248,8 @@ impl Input {
                     [
                         Some(input),
                         Some(ChildView::new(&self.agent_status_view).finish()),
-                        if is_model_selector {
-                            Some(ChildView::new(&self.inline_model_selector_view).finish())
-                        } else if is_slash_commands {
+                        if is_slash_commands {
                             Some(ChildView::new(&self.inline_slash_commands_view).finish())
-                        } else if is_conversation_menu {
-                            Some(ChildView::new(&self.inline_conversation_menu_view).finish())
                         } else if is_inline_history_menu {
                             Some(ChildView::new(&self.inline_history_menu_view).finish())
                         } else if is_repos_menu {
@@ -292,8 +270,6 @@ impl Input {
 
                 if is_slash_commands && !should_render_below {
                     column.add_child(ChildView::new(&self.inline_slash_commands_view).finish());
-                } else if is_conversation_menu && !should_render_below {
-                    column.add_child(ChildView::new(&self.inline_conversation_menu_view).finish());
                 } else if is_inline_history_menu && !should_render_below {
                     column.add_child(ChildView::new(&self.inline_history_menu_view).finish());
                 } else if is_repos_menu && !should_render_below {
@@ -302,12 +278,8 @@ impl Input {
 
                 column.add_children([ChildView::new(&self.agent_status_view).finish(), input]);
 
-                if is_model_selector && should_render_below {
-                    column.add_child(ChildView::new(&self.inline_model_selector_view).finish());
-                } else if is_slash_commands && should_render_below {
+                if is_slash_commands && should_render_below {
                     column.add_child(ChildView::new(&self.inline_slash_commands_view).finish());
-                } else if is_conversation_menu && should_render_below {
-                    column.add_child(ChildView::new(&self.inline_conversation_menu_view).finish());
                 } else if is_inline_history_menu && should_render_below {
                     column.add_child(ChildView::new(&self.inline_history_menu_view).finish());
                 } else if is_repos_menu && should_render_below {

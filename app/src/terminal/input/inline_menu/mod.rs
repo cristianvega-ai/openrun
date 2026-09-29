@@ -16,7 +16,7 @@ pub use view::{
     InlineMenuHeaderConfig, InlineMenuRowAction, InlineMenuView, QueryResultRendererExt,
 };
 
-use super::{InputSuggestionsMode, UserQueryMenuAction};
+use super::InputSuggestionsMode;
 
 /// Identifies a specific inline menu type.
 #[derive(
@@ -37,11 +37,6 @@ use super::{InputSuggestionsMode, UserQueryMenuAction};
 )]
 pub enum InlineMenuType {
     SlashCommands,
-    ModelSelector,
-    ConversationMenu,
-    ProfileSelector,
-    UserQueryMenu,
-    RewindMenu,
     InlineHistoryMenu,
     IndexedReposMenu,
 }
@@ -50,11 +45,6 @@ impl InlineMenuType {
     fn display_label(&self) -> &'static str {
         match self {
             InlineMenuType::SlashCommands => "/Commands",
-            InlineMenuType::ModelSelector => "/Model",
-            InlineMenuType::ConversationMenu => "/Conversations",
-            InlineMenuType::ProfileSelector => "/Profiles",
-            InlineMenuType::UserQueryMenu => "/Fork",
-            InlineMenuType::RewindMenu => "/Rewind",
             InlineMenuType::InlineHistoryMenu => "History",
             InlineMenuType::IndexedReposMenu => "/Repos",
         }
@@ -63,17 +53,6 @@ impl InlineMenuType {
     pub(crate) fn from_suggestions_mode(mode: &InputSuggestionsMode) -> Option<Self> {
         match mode {
             InputSuggestionsMode::SlashCommands => Some(InlineMenuType::SlashCommands),
-            InputSuggestionsMode::ModelSelector => Some(InlineMenuType::ModelSelector),
-            InputSuggestionsMode::ConversationMenu => Some(InlineMenuType::ConversationMenu),
-            InputSuggestionsMode::ProfileSelector => Some(InlineMenuType::ProfileSelector),
-            InputSuggestionsMode::UserQueryMenu {
-                action: UserQueryMenuAction::ForkFrom,
-                ..
-            } => Some(InlineMenuType::UserQueryMenu),
-            InputSuggestionsMode::UserQueryMenu {
-                action: UserQueryMenuAction::Rewind,
-                ..
-            } => Some(InlineMenuType::RewindMenu),
             InputSuggestionsMode::InlineHistoryMenu { .. } => {
                 Some(InlineMenuType::InlineHistoryMenu)
             }
@@ -81,7 +60,7 @@ impl InlineMenuType {
             InputSuggestionsMode::Closed
             | InputSuggestionsMode::HistoryUp { .. }
             | InputSuggestionsMode::CompletionSuggestions { .. }
-            | InputSuggestionsMode::AIContextMenu { .. } => None,
+            | InputSuggestionsMode::AtMenu { .. } => None,
         }
     }
 }
