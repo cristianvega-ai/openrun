@@ -115,40 +115,19 @@ impl LogManager {
         relative_path: impl AsRef<Path>,
         executor: Arc<Background>,
     ) -> Result<SimpleLogger, LogManagerError> {
-        self.register_with_rotation(namespace, relative_path, executor, None)
-    }
-
-    /// Registers a logger with optional size-based rotation.
-    ///
-    /// Identical to [`register`](Self::register) when `rotation` is `None`. When
-    /// `Some(config)`, the resulting logger rotates the active log file once
-    /// it accumulates `config.max_file_size_bytes` of writes, keeping up to
-    /// `config.max_rotation` rotated copies on disk and discarding older ones.
-    ///
-    /// This is the entry point for callers that produce high-volume logs over
-    /// long-lived sessions, where a single chatty source could otherwise grow
-    /// its log file unboundedly.
-    pub fn register_with_rotation(
-        &mut self,
-        namespace: &str,
-        relative_path: impl AsRef<Path>,
-        executor: Arc<Background>,
-        rotation: Option<crate::RotationConfig>,
-    ) -> Result<SimpleLogger, LogManagerError> {
         if !self.namespaces.contains(namespace) {
             return Err(LogManagerError::UnknownNamespace {
                 namespace: namespace.to_string(),
             });
         }
         let path = resolve_log_path(namespace, relative_path);
-        self.register_resolved_path(path, executor, rotation)
+        self.register_resolved_path(path, executor)
     }
 
     fn register_resolved_path(
         &mut self,
         path: PathBuf,
         executor: Arc<Background>,
-        rotation: Option<crate::RotationConfig>,
     ) -> Result<SimpleLogger, LogManagerError> {
         if let Some(existing) = self.loggers.get(&path)
             && let Some(writer) = existing.upgrade()
@@ -163,7 +142,7 @@ impl LogManager {
 
         // In the absence of an active logger at this path, initialize and return a new logger,
         // which truncates any existing log file on creation.
-        let logger = SimpleLogger::new(path.clone(), executor, rotation);
+        let logger = SimpleLogger::new(path.clone(), executor);
         self.loggers.insert(path, logger.downgrade());
         Ok(logger)
     }

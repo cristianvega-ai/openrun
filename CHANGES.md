@@ -123,6 +123,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Unused input hint setting, tree budget mode, icons and theme accessors](#unused-input-hint-setting-tree-budget-mode-icons-and-theme-accessors) — removed the no-op `show_hint_text` setting, `BudgetExceededBehavior`, unused icons and theme accessors, and dogfood/preview wording
 - [Input lock state](#input-lock-state) — removed the vestigial `InputConfig::is_locked` and the lock events
 - [Inline menu tabs and UDI names](#inline-menu-tabs-and-udi-names) — removed the unused inline-menu tab machinery and the `UDI` naming
+- [Log rotation](#log-rotation) — removed the unused size-based rotation from `simple_logger`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3200,3 +3201,11 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - The `UDI_*` spacing constants in `context_chips::spacing`, `UDI_CHIP_MAX_NUM_CHARACTERS` and `MINIMUM_PANE_SIZE_UDI` lost the prefix (`CHIP_*`, `PROMPT_*_PADDING_FACTOR`, `MINIMUM_PANE_SIZE_WITH_WARP_PROMPT`); comments say "prompt chips" or "the Warp prompt".
 
 **User-visible impact:** None.
+
+## Log rotation
+**Why:** Size-based log rotation was added for the MCP server logs. Every remaining logger (LSP) registers without a rotation config.
+
+**Removed:**
+- `simple_logger::RotationConfig`, `perform_rotation`, `path_with_suffix`, `LogManager::register_with_rotation` and the rotation argument of `SimpleLogger::new`; the rotation tests in `manager_tests.rs` and `lib_tests.rs`.
+
+**User-visible impact:** None. LSP logs were never rotated.
