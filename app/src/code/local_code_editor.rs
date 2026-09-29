@@ -479,7 +479,9 @@ impl LocalCodeEditorView {
             Self::handle_window_focus_change,
         );
 
-        let model = Self {
+        
+
+        Self {
             editor,
             diff_type,
             is_new_file,
@@ -503,9 +505,7 @@ impl LocalCodeEditorView {
             processed_diagnostics: Vec::new(),
             diagnostic_decorations: Vec::new(),
             find_references_view: None,
-        };
-
-        model
+        }
     }
 
     /// Calls LSP goto_definition and spawns a callback with the result.

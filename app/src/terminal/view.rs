@@ -4165,8 +4165,7 @@ impl TerminalView {
     ) {
         if action == VimModeBannerAction::Enable {
             self.enable_vim_keybindings(ctx);
-        } else {
-        }
+        } 
         self.remove_vim_mode_banner(ctx);
         VimBannerSettings::handle(ctx).update(ctx, |banner_settings, model_ctx| {
             report_if_error!(
@@ -7945,9 +7944,6 @@ impl TerminalView {
                             self.reset_selection_to_single_block(*block_index, ctx);
                         }
 
-                        if !self.input_mode_model.as_ref(ctx).is_prompt_input_enabled() {
-                        } else if !self.selected_blocks.is_empty() {
-                        }
                         self.tips_completed.update(ctx, |tips, ctx| {
                             mark_feature_used_and_write_to_user_defaults(
                                 Tip::Hint(TipHint::BlockSelect),
@@ -13259,11 +13255,10 @@ impl View for TerminalView {
         }
 
         let active_block = model_lock.block_list().active_block();
-        if active_block.is_active_and_long_running() {
-            if !model_lock.is_alt_screen_active() {
+        if active_block.is_active_and_long_running()
+            && !model_lock.is_alt_screen_active() {
                 context.set.insert("LongRunningCommand");
             }
-        }
 
         // Add keyboard protocol context if enabled.
         if model_lock.is_term_mode_set(TermMode::KEYBOARD_PROTOCOL) {

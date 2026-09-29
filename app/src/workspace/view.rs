@@ -2860,18 +2860,10 @@ impl Workspace {
         else if self.resource_center_view.is_self_or_child_focused(ctx) {
             self.focus_active_tab(ctx);
         }
-        // Starts from the left panel
-        else if self.left_panel_view.is_self_or_child_focused(ctx) {
-            if self.current_workspace_state.is_right_panel_open() {
-                if self.current_workspace_state.is_resource_center_open {
-                    ctx.focus(&self.resource_center_view);
-                }
-            } else {
-                self.focus_active_tab(ctx);
-            }
-        }
-        // Starts from a left panel: theme chooser
-        else if self.theme_chooser_view.is_self_or_child_focused(ctx) {
+        // Starts from the left panel or the theme chooser
+        else if self.left_panel_view.is_self_or_child_focused(ctx)
+            || self.theme_chooser_view.is_self_or_child_focused(ctx)
+        {
             if self.current_workspace_state.is_right_panel_open() {
                 if self.current_workspace_state.is_resource_center_open {
                     ctx.focus(&self.resource_center_view);

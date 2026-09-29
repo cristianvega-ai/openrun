@@ -116,6 +116,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Cargo and license metadata](#cargo-and-license-metadata) — crate `authors` inherit one generic workspace value instead of `Warp Team <dev@warp.dev>`; `deny.toml` and `about.toml` comments explain the remaining warpdotdev git sources; dropped the unused `dev-remote` profile and the `brotli`/`jq` flake inputs
 - [Script cleanup: channel arguments and stale tests](#script-cleanup-channel-arguments-and-stale-tests) — bundle, run and icon scripts build `warp-oss` only and take no channel argument; `check_license_config_sync` works without Python 3.11; two stale script tests fixed; fixture author made generic
 - [Offline guardrails (final)](#offline-guardrails-final) — the `offline-audit` CI job blocks, an idle two-minute sandboxed session joins it, the SSH tests that needed Warp's GCP VM and the Metal-skip build hook are gone, host patterns cover the removed features' hosts
+- [Clippy and dead-code fixes](#clippy-and-dead-code-fixes) — restored a clean `cargo clippy --workspace --all-targets --tests -- -D warnings`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3091,3 +3092,20 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Advisories: `cargo deny check advisories` fails on 12 distinct RUSTSEC advisories in `Cargo.lock` (14 error diagnostics: 7 vulnerability, 5 unsound, 2 unmaintained) on 11 crate versions: anyhow 1.0.79 (0190), crossbeam-epoch 0.9.15 (0204), event-listener 5.4.0 (0221), git2 0.20.4 (0183, 0184), h2 0.4.15 (0258), memmap2 0.9.7 (0186), quick-xml 0.30.0 and 0.37.4 (0194, 0195), rustls 0.23.39 (0285), rustybuzz 0.20.1 (0206) and ttf-parser 0.25.1 (0192), plus three yanked crates (spin, spinning, xml-rs). All are in the graph of `warp-oss`; none is known to be reachable through the vulnerable API (the git2, event-listener and anyhow APIs are not called; h2 and rustls are only used by the opt-in LSP/Node download path and loopback `warpctrl`). They were published after the baseline lockfile and dependencies were not changed, so the blocking job runs `bans licenses sources` only and the CI comment says so. Bumping them is a separate decision.
 - The orphaned `cfg` attribute check that CFG-1 and AI-33 asked for is not part of the audit: the scanners AI-33 wrote diff against the baseline commit `cb2416204` and were not committed to the tree, so they can't run in CI.
 - The static audit could not run the runtime step locally (Linux, `unshare`, `strace`); the strace log parser is unchanged from the draft.
+## Clippy and dead-code fixes
+**Why:** The lint baseline was zero warnings; the removal tasks left dead code and a few clippy findings. AI-33 restores `cargo clippy --workspace --all-targets --tests -- -D warnings`.
+
+**Removed:**
+- `CommentViewCard::{toggle_collapsed, is_collapsed}`, its `is_collapsed` field and the collapsed-card rendering (nothing collapsed a card).
+- `AgentStatus::Cancelled` (nothing constructed it).
+- `GitHubRepoModel::set_repository_info_for_test` (the wrapper; the local model's own method stays for its tests).
+- `Input::should_restore_buffer_on_inline_menu_dismiss` (always `true`), the empty `if`/`else if` in the block-click handler, and the duplicated left-panel/theme-chooser focus branches.
+
+**Modified:**
+- `MockTerminalManager::create_model` returns a `(manager, view)` tuple instead of the `MockTerminalManagerInit` struct whose fields were unread on native targets.
+- `WorkflowDocument::Supported` boxes its `Workflow`.
+- Mechanical `cargo clippy --fix` results (redundant `.into()`, collapsible `if`s, needless `return`, `let` before return).
+
+**User-visible impact:** None.
+
+**Notes:** Clippy on `warp`, including its build script, passes with `-D warnings`; the earlier build-script failure came from a lint in `crates/persistence` that has since been fixed.

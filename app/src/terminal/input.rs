@@ -2395,11 +2395,10 @@ impl Input {
                 let command = render_prompt_chip_shell_command(command, shell_type);
                 // Snapshot the current input so we can restore it after the command completes.
                 let current_input = self.buffer_text(ctx);
-                if self.try_execute_command_with_history_option(&command, true, ctx) {
-                    if !current_input.is_empty() {
+                if self.try_execute_command_with_history_option(&command, true, ctx)
+                    && !current_input.is_empty() {
                         self.input_contents_before_prompt_chip_command = Some(current_input);
                     }
-                }
             }
         }
     }
@@ -2940,8 +2939,7 @@ impl Input {
             .active_block_mut()
             .set_home_dir(home_dir);
 
-        let did_execute: bool;
-        if self
+        let did_execute = if self
             .model
             .lock()
             .block_list()
@@ -2968,13 +2966,13 @@ impl Input {
             }
 
             self.start_block_and_write_command_to_pty(command, should_add_command_to_history, ctx);
-            did_execute = true;
+            true
         } else {
             // We don't want to submit the command if precmd has not
             // been received. Instead, we want the user to be aware
             // that the prompt might not be up to date.
-            did_execute = false;
-        }
+            false
+        };
 
         // Close the workflows info box if it was open.
         self.clear_selected_workflow(ctx);
@@ -3921,17 +3919,6 @@ impl Input {
         }
     }
 
-    /// Asks the currently active inline menu whether the buffer should be restored on dismiss
-    /// (defaulting to true for any inline menus that don't have specific behavior requirements for this decision).
-    fn should_restore_buffer_on_inline_menu_dismiss(&self, ctx: &ViewContext<Self>) -> bool {
-        match self.suggestions_mode_model.as_ref(ctx).mode() {
-            // If the input is not being used as a search on the model menu
-            // we should not restore/revert the changes to the input on-dismiss,
-            // unless we parked a prompt to search (then we restore that prompt).
-            _ => true,
-        }
-    }
-
     fn editor_escape(&mut self, ctx: &mut ViewContext<Self>) {
         let vim_mode = self.editor.as_ref(ctx).vim_mode(ctx);
         let should_escape_vim_before_dismissing = vim_mode == Some(VimMode::Insert)
@@ -3960,15 +3947,9 @@ impl Input {
             .as_ref(ctx)
             .is_inline_menu_open()
         {
-            if self.should_restore_buffer_on_inline_menu_dismiss(ctx) {
-                self.suggestions_mode_model.update(ctx, |model, ctx| {
-                    model.close_and_restore_buffer(ctx);
-                });
-            } else {
-                self.suggestions_mode_model.update(ctx, |model, ctx| {
-                    model.set_mode(InputSuggestionsMode::Closed, ctx);
-                });
-            }
+            self.suggestions_mode_model.update(ctx, |model, ctx| {
+                model.close_and_restore_buffer(ctx);
+            });
             ctx.notify();
         } else if self.suggestions_mode_model.as_ref(ctx).is_visible() {
             self.input_suggestions
@@ -6502,15 +6483,14 @@ impl Input {
     }
 
     fn input_shift_tab(&mut self, ctx: &mut ViewContext<Self>) {
-        match self.suggestions_mode_model.as_ref(ctx).mode() {
-            // If we're in CompletionSuggestions mode, shift tab moves to the previous selection.
-            InputSuggestionsMode::CompletionSuggestions { .. } => {
-                self.input_suggestions.update(ctx, |suggestions, ctx| {
-                    suggestions.select_prev(ctx);
-                });
-                return;
-            }
-            _ => {}
+        // If we're in CompletionSuggestions mode, shift tab moves to the previous selection.
+        if let InputSuggestionsMode::CompletionSuggestions { .. } =
+            self.suggestions_mode_model.as_ref(ctx).mode()
+        {
+            self.input_suggestions.update(ctx, |suggestions, ctx| {
+                suggestions.select_prev(ctx);
+            });
+            return;
         }
 
         if let Some(workflows_info_view) = &self
@@ -6940,7 +6920,6 @@ impl Input {
                     });
                 }
             });
-            return;
         } else if self
             .suggestions_mode_model
             .as_ref(ctx)
@@ -6955,19 +6934,14 @@ impl Input {
         {
             self.inline_history_menu_view
                 .update(ctx, |view, ctx| view.accept_selected_item(ctx));
-            return;
         } else if self.suggestions_mode_model.as_ref(ctx).is_repos_menu() {
             self.inline_repos_menu_view
                 .update(ctx, |view, ctx| view.accept_selected_item(false, ctx));
-            return;
         } else if self.suggestions_mode_model.as_ref(ctx).is_slash_commands() {
             self.inline_slash_commands_view.update(ctx, |view, ctx| {
                 view.accept_selected_item(false, ctx);
             });
-
-            return;
         } else if self.maybe_handle_enter_for_slash_command(ctx) {
-            return;
         } else if matches!(
             self.suggestions_mode_model.as_ref(ctx).mode(),
             InputSuggestionsMode::CompletionSuggestions { .. }
@@ -7043,7 +7017,6 @@ impl Input {
 
                 if let Some(command) = cmd_enter_slash_command {
                     self.select_slash_command(&command, ctx);
-                    return;
                 }
             }
         }

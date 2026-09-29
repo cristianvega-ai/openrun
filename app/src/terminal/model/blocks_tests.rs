@@ -702,9 +702,9 @@ pub fn test_restore_blocks_with_local_status() {
 
     // Create block list with these blocks
     let restored_blocks = [
-        local_block.clone().into(),
-        remote_block.clone().into(),
-        unspecified_block.clone().into(),
+        local_block.clone(),
+        remote_block.clone(),
+        unspecified_block.clone(),
     ];
 
     let block_list = TestBlockListBuilder::new()
@@ -746,7 +746,7 @@ pub fn test_restore_block_that_wasnt_started() {
     let block = SerializedBlock::new_active_block_for_test();
     let block_list = TestBlockListBuilder::new()
         .with_channel_event_proxy(channel_event_proxy)
-        .with_restored_blocks(&[block.into()])
+        .with_restored_blocks(&[block])
         .build();
 
     // Non-started blocks are skipped during the restoration process, so we
@@ -778,7 +778,7 @@ pub fn test_restore_block_that_wasnt_completed() {
     block.completed_ts = None;
     let block_list = TestBlockListBuilder::new()
         .with_channel_event_proxy(channel_event_proxy)
-        .with_restored_blocks(&[block.into()])
+        .with_restored_blocks(&[block])
         .build();
 
     // Non-completed blocks are skipped during the restoration process, so we

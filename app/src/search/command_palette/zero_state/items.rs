@@ -23,6 +23,12 @@ enum SelectedIndex {
     Suggested(usize),
 }
 
+impl Default for Items {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Items {
     pub fn new() -> Self {
         Self {

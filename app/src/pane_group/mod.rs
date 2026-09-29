@@ -1872,7 +1872,9 @@ impl PaneGroup {
                     model_event_sender_clone,
                 ),
                 PanesLayout::Snapshot(panes_snapshot) => {
-                    let result = Self::restore_pane_tree(
+                    
+
+                    Self::restore_pane_tree(
                         *panes_snapshot,
                         block_lists,
                         resources.clone(),
@@ -1894,9 +1896,7 @@ impl PaneGroup {
                             pane_history,
                             ctx,
                         )
-                    });
-
-                    result
+                    })
                 }
                 PanesLayout::SingleTerminal(options) => Self::initial_single_terminal_pane(
                     *options,
@@ -3348,7 +3348,7 @@ impl PaneGroup {
             } else {
                 use crate::terminal::{ShellLaunchState, shell::{ShellName, ShellType}};
 
-                let terminal_init = MockTerminalManager::create_model(
+                let (terminal_manager, terminal_view) = MockTerminalManager::create_model(
                     ShellLaunchState::ShellSpawned {
                         available_shell: chosen_shell,
                         display_name: ShellName::blank(),
@@ -3360,8 +3360,6 @@ impl PaneGroup {
                     ctx.window_id(),
                     ctx,
                 );
-                let terminal_manager = terminal_init.manager;
-                let terminal_view = terminal_init.view;
             }
         }
 

@@ -52,29 +52,6 @@ fn comment_card_container(
         .finish()
 }
 
-/// Renders a collapsed comment card showing only the file-path header and an
-/// optional trailing element (e.g. action buttons).
-fn render_collapsed_comment_card(
-    title: &str,
-    is_outdated: bool,
-    header_trailing_element: Option<Box<dyn Element>>,
-    on_header_click: Option<&HeaderClickHandler>,
-    app: &AppContext,
-) -> Box<dyn Element> {
-    let appearance = Appearance::as_ref(app);
-    let theme = appearance.theme();
-    let header = render_comment_file_path_header(
-        title,
-        is_outdated,
-        header_trailing_element,
-        CornerRadius::with_all(Radius::Pixels(8.)),
-        on_header_click,
-        appearance,
-    );
-
-    comment_card_container(header, theme)
-}
-
 fn render_comment_file_path_header(
     title: &str,
     is_outdated: bool,
@@ -280,7 +257,6 @@ pub(crate) struct CommentViewCard {
     source: AttachedReviewComment,
     title: String,
     last_updated_duration: Duration,
-    is_collapsed: bool,
 }
 
 impl CommentViewCard {
@@ -307,7 +283,6 @@ impl CommentViewCard {
             source,
             title,
             last_updated_duration,
-            is_collapsed: false,
         }
     }
 
@@ -335,14 +310,6 @@ impl CommentViewCard {
         }
     }
 
-    pub(crate) fn toggle_collapsed(&mut self) {
-        self.is_collapsed = !self.is_collapsed;
-    }
-
-    pub(crate) fn is_collapsed(&self) -> bool {
-        self.is_collapsed
-    }
-
     /// Updates the comment data and resets the body editor with the new content.
     pub(crate) fn update_source<V: View>(
         &mut self,
@@ -359,9 +326,7 @@ impl CommentViewCard {
         self.title = Self::compute_title(&self.source, repo_path);
     }
 
-    /// Renders the comment card. When collapsed, only the header and trailing
-    /// element are shown. When expanded, the full card with diff content and
-    /// comment text is rendered.
+    /// Renders the comment card with its header, diff content and comment text.
     ///
     /// When `diff_content` is `EditorLens`, the caller must supply the live element via
     /// `editor_lens_element`. For `StaticEditor` or `None` it is ignored.
@@ -375,16 +340,6 @@ impl CommentViewCard {
         on_header_click: Option<&HeaderClickHandler>,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        if self.is_collapsed {
-            return render_collapsed_comment_card(
-                &self.title,
-                self.source.outdated,
-                header_trailing_element,
-                on_header_click,
-                app,
-            );
-        }
-
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
 

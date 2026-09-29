@@ -2,7 +2,6 @@
 
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::color::coloru_with_opacity;
-use warp_core::ui::theme::color::internal_colors;
 use warp_core::ui::theme::{Fill, WarpTheme};
 use warpui::Element;
 use warpui::color::ColorU;
@@ -22,8 +21,6 @@ pub enum AgentStatus {
     Success,
     /// The agent's last turn failed.
     Error,
-    /// The user cancelled the agent's last turn.
-    Cancelled,
     /// The agent is waiting on the user.
     Blocked,
 }
@@ -34,7 +31,6 @@ impl std::fmt::Display for AgentStatus {
             AgentStatus::InProgress => write!(f, "In progress"),
             AgentStatus::Success => write!(f, "Done"),
             AgentStatus::Error => write!(f, "Error"),
-            AgentStatus::Cancelled => write!(f, "Cancelled"),
             AgentStatus::Blocked => write!(f, "Blocked"),
         }
     }
@@ -46,7 +42,6 @@ impl AgentStatus {
             AgentStatus::InProgress => (Icon::ClockLoader, theme.ansi_fg_magenta()),
             AgentStatus::Success => (Icon::Check, theme.ansi_fg_green()),
             AgentStatus::Error => (Icon::Triangle, theme.ansi_fg_red()),
-            AgentStatus::Cancelled => (Icon::StopFilled, internal_colors::neutral_5(theme)),
             AgentStatus::Blocked => (Icon::StopFilled, theme.ansi_fg_yellow()),
         }
     }

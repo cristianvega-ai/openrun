@@ -328,15 +328,15 @@ impl View for CLIAgentFooter {
         // would deadlock since the lock is non-reentrant.
         let background_color = {
             let terminal_model = self.terminal_model.lock();
-            let background_color = if terminal_model.is_alt_screen_active() {
+            
+            if terminal_model.is_alt_screen_active() {
                 terminal_model
                     .alt_screen()
                     .inferred_bg_color()
                     .unwrap_or_else(|| appearance.theme().surface_1().into_solid())
             } else {
                 appearance.theme().surface_1().into_solid()
-            };
-            background_color
+            }
         };
 
         let session_settings = SessionSettings::as_ref(app);

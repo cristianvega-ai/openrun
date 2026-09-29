@@ -1796,8 +1796,8 @@ impl AppearanceSettingsPageView {
         let appearance = Appearance::as_ref(ctx);
         let current_line_height = appearance.ui_builder().line_height_ratio();
 
-        if (current_line_height - new_line_height).abs() > f32::EPSILON {
-            if (MIN_LINE_SPACING..=MAX_LINE_SPACING).contains(&new_line_height) {
+        if (current_line_height - new_line_height).abs() > f32::EPSILON
+            && (MIN_LINE_SPACING..=MAX_LINE_SPACING).contains(&new_line_height) {
                 FontSettings::handle(ctx).update(ctx, |font_settings, ctx| {
                     report_if_error!(
                         font_settings
@@ -1806,7 +1806,6 @@ impl AppearanceSettingsPageView {
                     );
                 });
             }
-        }
     }
 
     pub fn toggle_open_windows_at_custom_size(&mut self, ctx: &mut ViewContext<Self>) {

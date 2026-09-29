@@ -811,20 +811,16 @@ impl PersistedWorkspace {
 
         for server in servers {
             let workspace_root_display = workspace_root_display.clone();
-            ctx.subscribe_to_model(&server, move |_me, _, event, ctx| match event {
-                LspEvent::Failed(e) => {
-                    if let Some(window_id) = WindowManager::as_ref(ctx).active_window()
-                    {
-                        ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                            let toast = DismissibleToast::error(format!(
-                                "Failed to start LSP server for {workspace_root_display} with error {e}",
-                            ));
-                            toast_stack.add_ephemeral_toast(toast, window_id, ctx);
-                        });
-                    }
-                }
-                _ => {}
-            });
+            ctx.subscribe_to_model(&server, move |_me, _, event, ctx| if let LspEvent::Failed(e) = event
+                && let Some(window_id) = WindowManager::as_ref(ctx).active_window()
+                {
+                    ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+                        let toast = DismissibleToast::error(format!(
+                            "Failed to start LSP server for {workspace_root_display} with error {e}",
+                        ));
+                        toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+                    });
+                });
         }
 
         // Once we start a LSP server, also start the garbage collection process if it is not active.

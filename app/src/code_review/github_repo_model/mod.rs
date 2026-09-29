@@ -107,15 +107,4 @@ impl GitHubRepoModel {
         let Self::Local(m) = self;
         m.update(ctx, |m, ctx| m.set_pr_info_for_test(pr_info, ctx));
     }
-
-    pub(crate) fn set_repository_info_for_test(
-        &mut self,
-        repository_info: Option<RepositoryInfo>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let Self::Local(m) = self;
-        m.update(ctx, |m, ctx| {
-            m.set_repository_info_for_test(repository_info, ctx)
-        });
-    }
 }

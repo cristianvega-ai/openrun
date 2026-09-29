@@ -162,7 +162,7 @@ pub(super) fn parse_single_theme_dir_entry(item: &DirEntry) -> Option<(ThemeKind
 #[derive(serde::Deserialize)]
 #[serde(untagged)]
 enum WorkflowDocument {
-    Supported(Workflow),
+    Supported(Box<Workflow>),
     Unsupported(serde::de::IgnoredAny),
 }
 
@@ -172,7 +172,7 @@ pub(super) fn parse_multi_workflow_dir_entry(item: &DirEntry) -> Option<Vec<Work
         documents
             .into_iter()
             .filter_map(|document| match document {
-                WorkflowDocument::Supported(workflow) => Some(workflow),
+                WorkflowDocument::Supported(workflow) => Some(*workflow),
                 WorkflowDocument::Unsupported(_) => {
                     log::warn!("Skipping an unsupported workflow in {:?}", item.file_name());
                     None

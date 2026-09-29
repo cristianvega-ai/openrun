@@ -5445,7 +5445,6 @@ impl CodeReviewView {
                 terminal_view.update(ctx, |terminal_view, ctx| {
                     terminal_view.handle_file_tree_drop_on_active_command(&path_with_range, ctx);
                 });
-                return;
             }
         }
     }
