@@ -25,7 +25,6 @@ serde_regex = "1.1.0"
 settings.workspace = true
 settings_value = { workspace = true, features = ["derive"] }
 url.workspace = true
-warp-workflows.workspace = true
 warp_core.workspace = true
 warp_graphql.workspace = true
 warp_util.workspace = true

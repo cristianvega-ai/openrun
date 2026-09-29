@@ -6,7 +6,6 @@ use warp::integration_testing::step::{
 use warp::integration_testing::tab::assert_pane_title;
 use warp::integration_testing::terminal::wait_until_bootstrapped_single_pane_for_tab;
 use warp::integration_testing::view_getters::single_terminal_view_for_tab;
-use warp::integration_testing::workflow::assert_workflow_metadata_revision;
 use warp::integration_testing::{self};
 use warp::settings_view::{SettingsSection, SettingsView};
 use warp::sqlite_testing::set_user_and_hostname_for_blocks;
@@ -325,26 +324,6 @@ pub fn test_restore_snapshot_with_background_output() -> Builder {
         )
 }
 
-/// Test restoring a snapshot that includes workflow panes - the second pane exists, but the first
-/// is for a deleted workflow.
-pub fn test_restore_snapshot_with_workflows() -> Builder {
-    new_builder()
-        .with_setup(|_utils| {
-            integration_testing::create_file_from_assets(
-                TEST_ONLY_ASSETS,
-                "restored_workflows.sqlite",
-                &integration_testing::persistence::database_file_path_for_scope(
-                    &integration_testing::persistence::PersistenceScope::App,
-                ),
-            )
-        })
-        .with_step(
-            TestStep::new("Verify that the workflow panes were restored")
-                .add_assertion(assert_pane_title(0, 1, "My Workflow"))
-                .add_assertion(assert_pane_title(0, 0, "Untitled")),
-        )
-}
-
 /// Tests restoring a snapshot that includes a test json object.
 ///
 /// The test json object has as its contents the string "egpmggresq"
@@ -363,29 +342,6 @@ pub fn test_restore_snapshot_with_test_json_object() -> Builder {
             TestStep::new("Verify json object contents")
                 .add_assertion(assert_cloud_preference_exists("HonorPS1", "false")),
         )
-}
-
-/// Tests restoring a snapshot that has multiple objects with the same shareable_object_id
-/// in the metadata table.  This test verifies a regression introduced in
-/// https://github.com/warpdotdev/warp-internal/pull/7406 and fixed in
-/// https://github.com/warpdotdev/warp-internal/pull/7480
-///
-/// The two objects have server ids Workflow-ftv7on4HwTeixO2xF5hmKf and Notebook-Flbu686H9XDCHZlYRriVpB
-/// and shareable_object_id 2. Only the workflow is verified.
-pub fn test_restore_snapshot_with_common_shareable_metadata_ids() -> Builder {
-    new_builder()
-        .with_setup(|_utils| {
-            integration_testing::create_file_from_assets(
-                TEST_ONLY_ASSETS,
-                "test_duplicate_shareable_ids.sqlite",
-                &integration_testing::persistence::database_file_path_for_scope(
-                    &integration_testing::persistence::PersistenceScope::App,
-                ),
-            );
-        })
-        .with_step(TestStep::new("Verify revision of workflow").add_assertion(
-            assert_workflow_metadata_revision("ftv7on4HwTeixO2xF5hmKf", 1676321629559090),
-        ))
 }
 
 /// Tests restoring a snapshot that includes a Markdown file pane.

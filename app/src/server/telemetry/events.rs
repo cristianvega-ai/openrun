@@ -29,7 +29,6 @@ use crate::ai::blocklist::{
 };
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::channel::Channel;
-use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::notebook_model::NotebookId;
 use crate::cloud_object::{GenericStringObjectFormat, ObjectType, Space};
 #[cfg(feature = "local_fs")]
@@ -67,7 +66,7 @@ use crate::tips::WelcomeTipFeature;
 use crate::util::file::external_editor::settings::EditorLayout;
 #[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::FileTarget;
-use crate::workflows::{WorkflowId, WorkflowSelectionSource, WorkflowSource};
+use crate::workflows::{WorkflowSelectionSource, WorkflowSource};
 use crate::workspace::TabMovement;
 use crate::workspace::tab_settings::{TabCloseButtonPosition, WorkspaceDecorationVisibility};
 
@@ -126,7 +125,6 @@ pub enum DownloadSource {
 // For use when recording what type of cloud object a particular telemetry is for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TelemetryCloudObjectType {
-    Workflow,
     Notebook,
     Folder,
     GenericStringObject(GenericStringObjectFormat),
@@ -136,7 +134,6 @@ impl From<&CloudObjectTypeAndId> for TelemetryCloudObjectType {
     fn from(cloud_object_type_and_id: &CloudObjectTypeAndId) -> Self {
         match cloud_object_type_and_id {
             CloudObjectTypeAndId::Notebook(_) => Self::Notebook,
-            CloudObjectTypeAndId::Workflow(_) => Self::Workflow,
             CloudObjectTypeAndId::Folder(_) => Self::Folder,
             CloudObjectTypeAndId::GenericStringObject { object_type, .. } => {
                 Self::GenericStringObject(*object_type)
@@ -186,12 +183,7 @@ pub struct CloudObjectTelemetryMetadata {
 pub struct WorkflowTelemetryMetadata {
     pub workflow_categories: Option<Vec<String>>,
     pub workflow_source: WorkflowSource,
-    pub workflow_space: Option<TelemetrySpace>,
     pub workflow_selection_source: WorkflowSelectionSource,
-    // This field is only populated for cloud workflows that have been synced to the server
-    pub workflow_id: Option<WorkflowId>,
-    // Any referenced workflow enums that have been synced to the cloud
-    pub enum_ids: Vec<GenericStringObjectId>,
 }
 
 /// Metadata to include in all notebook telemetry events.
@@ -1906,24 +1898,6 @@ pub enum TelemetryEvent {
     ToggleLigatureRendering {
         enabled: bool,
     },
-    WorkflowAliasAdded {
-        workflow_id: Option<WorkflowId>,
-        workflow_space: Option<TelemetrySpace>,
-    },
-    WorkflowAliasRemoved {
-        workflow_id: Option<WorkflowId>,
-        workflow_space: Option<TelemetrySpace>,
-    },
-    WorkflowAliasEnvVarsAttached {
-        workflow_id: Option<WorkflowId>,
-        workflow_space: Option<TelemetrySpace>,
-        env_vars_id: Option<GenericStringObjectId>,
-        env_vars_space: Option<TelemetrySpace>,
-    },
-    WorkflowAliasArgumentEdited {
-        workflow_id: Option<WorkflowId>,
-        workflow_space: Option<TelemetrySpace>,
-    },
 
     ToggledAgentModeAutoexecuteReadonlyCommandsSetting {
         src: AutonomySettingToggleSource,
@@ -2007,10 +1981,6 @@ pub enum TelemetryEvent {
     #[cfg(windows)]
     AutoupdateMinidumpCleanupFailed {
         exit_code: i32,
-    },
-    ExecutedWarpDrivePrompt {
-        id: Option<WorkflowId>,
-        selection_source: WorkflowSelectionSource,
     },
     /// A file from the result of an AI Agent Action exceeded the context limit.
     FileExceededContextLimit {
@@ -3144,38 +3114,6 @@ impl TelemetryEvent {
             TelemetryEvent::ToggleLigatureRendering { enabled } => {
                 Some(json!({"enabled": enabled}))
             }
-            TelemetryEvent::WorkflowAliasAdded {
-                workflow_id,
-                workflow_space,
-            } => Some(json!({
-                "workflow_id": workflow_id,
-                "workflow_space": workflow_space,
-            })),
-            TelemetryEvent::WorkflowAliasRemoved {
-                workflow_id,
-                workflow_space,
-            } => Some(json!({
-                "workflow_id": workflow_id,
-                "workflow_space": workflow_space,
-            })),
-            TelemetryEvent::WorkflowAliasArgumentEdited {
-                workflow_id,
-                workflow_space,
-            } => Some(json!({
-                "workflow_id": workflow_id,
-                "workflow_space": workflow_space,
-            })),
-            TelemetryEvent::WorkflowAliasEnvVarsAttached {
-                workflow_id,
-                workflow_space,
-                env_vars_id,
-                env_vars_space,
-            } => Some(json!({
-                "workflow_id": workflow_id,
-                "workflow_space": workflow_space,
-                "env_vars_id": env_vars_id,
-                "env_vars_space": env_vars_space,
-            })),
             TelemetryEvent::AutoupdateRelaunchAttempt { new_version } => Some(json!({
                 "new_version": new_version,
             })),
@@ -3236,13 +3174,6 @@ impl TelemetryEvent {
                 "server_output_id": server_output_id,
                 "conversation_id": conversation_id,
                 "rating": rating,
-            })),
-            TelemetryEvent::ExecutedWarpDrivePrompt {
-                id,
-                selection_source,
-            } => Some(json!({
-                "id": id,
-                "selection_source": selection_source,
             })),
             TelemetryEvent::FileExceededContextLimit { identifiers } => Some(json!({
                 "server_output_id": identifiers.server_output_id,
@@ -4092,10 +4023,6 @@ impl TelemetryEvent {
             | TelemetryEvent::AgentModeOpenedCitation { .. }
             | TelemetryEvent::OpenedSharingDialog(_)
             | TelemetryEvent::ToggleLigatureRendering { .. }
-            | TelemetryEvent::WorkflowAliasAdded { .. }
-            | TelemetryEvent::WorkflowAliasRemoved { .. }
-            | TelemetryEvent::WorkflowAliasEnvVarsAttached { .. }
-            | TelemetryEvent::WorkflowAliasArgumentEdited { .. }
             | TelemetryEvent::ToggledAgentModeAutoexecuteReadonlyCommandsSetting { .. }
             | TelemetryEvent::ChangedAgentModeCodingPermissions { .. }
             | TelemetryEvent::ChangedAgentModeAskUserQuestionPermission { .. }
@@ -4103,7 +4030,6 @@ impl TelemetryEvent {
             | TelemetryEvent::RepoOutlineConstructionFailed { .. }
             | TelemetryEvent::AutoexecutedAgentModeRequestedCommand { .. }
             | TelemetryEvent::KnowledgePaneOpened { .. }
-            | TelemetryEvent::ExecutedWarpDrivePrompt { .. }
             | TelemetryEvent::ToggleSshWarpification { .. }
             | TelemetryEvent::SettingsImportInitiated
             | TelemetryEvent::AgentModeCreatedAIBlock { .. }
@@ -4584,12 +4510,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::OpenedSharingDialog => EnablementState::Always,
             Self::ToggleLigatureRendering => EnablementState::Flag(FeatureFlag::Ligatures),
-            Self::WorkflowAliasAdded
-            | Self::WorkflowAliasRemoved
-            | Self::WorkflowAliasArgumentEdited
-            | Self::WorkflowAliasEnvVarsAttached => {
-                EnablementState::Flag(FeatureFlag::WorkflowAliases)
-            }
             Self::ToggledAgentModeAutoexecuteReadonlyCommandsSetting
             | Self::ChangedAgentModeCodingPermissions
             | Self::ChangedAgentModeAskUserQuestionPermission
@@ -4609,7 +4529,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentModeRatedResponse => {
                 EnablementState::Flag(FeatureFlag::GlobalAIAnalyticsBanner)
             }
-            Self::ExecutedWarpDrivePrompt => EnablementState::Flag(FeatureFlag::AgentModeWorkflows),
             Self::FileExceededContextLimit => EnablementState::Always,
             Self::AgentModeError => EnablementState::Always,
             Self::AgentModeRequestRetrySucceeded => EnablementState::Always,
@@ -5015,10 +4934,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::SuperGrokSubscriptionConnectFinished => "SuperGrok.Connect.Finished",
             Self::ToggleActiveAI => "Toggle Active AI Enablement",
             Self::ToggleLigatureRendering => "Toggle Ligature Rendering",
-            Self::WorkflowAliasAdded => "Added Workflow Alias",
-            Self::WorkflowAliasRemoved => "Removed Workflow Alias",
-            Self::WorkflowAliasArgumentEdited => "Edited Workflow Alias Argument",
-            Self::WorkflowAliasEnvVarsAttached => "Attached Workflow Alias Environment Variables",
 
             Self::ToggledAgentModeAutoexecuteReadonlyCommandsSetting => {
                 "AIAutonomy.ToggledAutoexecuteReadonlyCommandsSetting"
@@ -5057,7 +4972,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::ToggleAutoIndexing => "Toggle Codebase Context Autoindexing",
             Self::AttachedImagesToAgentModeQuery => "AgentMode.AttachedImages",
             Self::AgentModeRatedResponse => "AgentMode.RatedResponse",
-            Self::ExecutedWarpDrivePrompt => "AgentMode.ExecutedWarpDrivePrompt",
             Self::FileExceededContextLimit => "AgentMode.Code.FileExceededContextLimit",
             Self::AgentModeError => "AgentMode.Error",
             Self::AgentModeRequestRetrySucceeded => "AgentMode.RequestRetrySucceeded",
@@ -5727,14 +5641,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::ToggleActiveAI => "Toggled active AI enablement.",
             Self::ToggleLigatureRendering => "Toggled ligature rendering",
-            Self::WorkflowAliasAdded => "Added an alias to a Warp Drive workflow",
-            Self::WorkflowAliasRemoved => "Removed an alias from a Warp Drive workflow",
-            Self::WorkflowAliasArgumentEdited => {
-                "Edited an argument in a Warp Drive workflow alias"
-            }
-            Self::WorkflowAliasEnvVarsAttached => {
-                "Added or removed environment variables for a Warp Drive workflow alias"
-            }
             Self::ToggledAgentModeAutoexecuteReadonlyCommandsSetting => {
                 "Toggled setting to autoexecute readonly Agent Mode requested commands"
             }
@@ -5778,7 +5684,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::ToggleAutoIndexing => {
                 "Toggled on/off the enablement of autoindexing for codebase context."
             }
-            Self::ExecutedWarpDrivePrompt => "Executed a saved prompt.",
             Self::FileExceededContextLimit => "File from AI exceeded context limit",
             Self::AgentModeError => "Received an error when getting Agent Mode response",
             Self::AgentModeRequestRetrySucceeded => {

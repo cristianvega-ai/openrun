@@ -81,8 +81,6 @@ impl InlineMenuType {
             InputSuggestionsMode::Closed
             | InputSuggestionsMode::HistoryUp { .. }
             | InputSuggestionsMode::CompletionSuggestions { .. }
-            | InputSuggestionsMode::StaticWorkflowEnumSuggestions { .. }
-            | InputSuggestionsMode::DynamicWorkflowEnumSuggestions { .. }
             | InputSuggestionsMode::AIContextMenu { .. } => None,
         }
     }

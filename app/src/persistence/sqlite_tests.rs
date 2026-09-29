@@ -1156,6 +1156,48 @@ fn test_sqlite_save_succeeds_over_stale_mcp_server_pane_rows() {
 }
 
 #[test]
+fn test_sqlite_restore_and_save_survive_stale_workflow_pane_rows() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let app_state = AppState {
+        windows: vec![window_with_tabs(
+            vec![tab_with_root(PaneNodeSnapshot::Branch(BranchSnapshot {
+                direction: SplitDirection::Vertical,
+                children: vec![
+                    (PaneFlex(0.5), terminal_leaf(1)),
+                    (PaneFlex(0.5), settings_leaf()),
+                ],
+            }))],
+            0,
+        )],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+    rewrite_settings_panes_as_kind(&mut conn, "workflow");
+    conn.batch_execute(
+        "INSERT INTO workflow_panes (id, workflow_id)
+         SELECT pane_node_id, NULL FROM pane_leaves WHERE kind = 'workflow';",
+    )
+    .expect("stale workflow pane row should be inserted");
+
+    let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
+        .expect("stale workflow pane rows must not fail the read")
+        .app_state
+        .expect("app state should be present for the full scope");
+    assert_eq!(
+        terminal_uuid(&restored.windows[0].tabs[0].root),
+        vec![1],
+        "the split collapses to its remaining pane"
+    );
+
+    save_app_state(&mut conn, &app_state)
+        .expect("saving must not trip over the stale workflow pane rows");
+}
+
+#[test]
 fn test_sqlite_restore_skips_cloud_notebook_pane_without_losing_the_tab() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");

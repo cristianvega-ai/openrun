@@ -1,5 +1,5 @@
 use warp::integration_testing::assertions::{
-    assert_websocket_has_not_started, assert_websocket_has_started, create_a_personal_workflow,
+    assert_websocket_has_not_started, assert_websocket_has_started, create_a_personal_folder,
     join_a_workspace,
 };
 use warp::integration_testing::terminal::wait_until_bootstrapped_single_pane_for_tab;
@@ -45,6 +45,6 @@ pub fn test_websocket_begins_after_creating_an_object() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(assert_websocket_has_not_started())
-        .with_step(create_a_personal_workflow())
+        .with_step(create_a_personal_folder())
         .with_step(assert_websocket_has_started())
 }

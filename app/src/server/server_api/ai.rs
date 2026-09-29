@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::Engine;
@@ -18,10 +16,6 @@ use warp_graphql::mutations::create_agent_task::{
 use warp_graphql::mutations::delete_ai_conversation::{
     DeleteAIConversation, DeleteAIConversationVariables, DeleteConversationInput,
     DeleteConversationResult,
-};
-use warp_graphql::mutations::generate_metadata_for_command::{
-    GenerateMetadataForCommand, GenerateMetadataForCommandInput, GenerateMetadataForCommandResult,
-    GenerateMetadataForCommandStatus, GenerateMetadataForCommandVariables,
 };
 use warp_graphql::mutations::update_agent_task::{
     AgentTaskStatusMessageInput, UpdateAgentTask, UpdateAgentTaskInput, UpdateAgentTaskResult,
@@ -54,12 +48,9 @@ use crate::ai::llms::{
     AvailableLLMs, DisableReason, LLMContextWindow, LLMInfo, LLMModelHost, LLMSpec,
     LLMUsageMetadata, ModelsByFeature, RoutingHostConfig,
 };
-use crate::drive::workflows::ai_assist::{GeneratedCommandMetadata, GeneratedCommandMetadataError};
 use crate::persistence::model::ConversationUsageMetadata;
 use crate::server::graphql::{get_request_context, get_user_facing_error_message};
 use crate::server::team_scope::RequestTeamScope;
-
-const AI_ASSISTANT_REQUEST_TIMEOUT_SECONDS: u64 = 30;
 
 /// A status update for a task, optionally including a platform error code.
 pub struct TaskStatusUpdate {
@@ -349,11 +340,6 @@ pub(crate) const CONNECTED_SELF_HOSTED_WORKERS_PATH: &str = "agent/connected-sel
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 pub trait AIClient: 'static + Send + Sync {
-    async fn generate_metadata_for_command(
-        &self,
-        command: String,
-    ) -> Result<GeneratedCommandMetadata, GeneratedCommandMetadataError>;
-
     async fn get_feature_model_choices(&self) -> Result<ModelsByFeature, anyhow::Error>;
 
     async fn get_available_harnesses(&self) -> Result<Vec<HarnessAvailability>, anyhow::Error>;
@@ -468,43 +454,6 @@ impl ServerApi {
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 impl AIClient for ServerApi {
-    async fn generate_metadata_for_command(
-        &self,
-        command: String,
-    ) -> Result<GeneratedCommandMetadata, GeneratedCommandMetadataError> {
-        let default_err = GeneratedCommandMetadataError::Other;
-        let variables = GenerateMetadataForCommandVariables {
-            input: GenerateMetadataForCommandInput { command },
-            request_context: get_request_context(),
-        };
-
-        let operation = GenerateMetadataForCommand::build(variables);
-        let response = self
-            .send_graphql_request(
-                operation,
-                Some(Duration::from_secs(AI_ASSISTANT_REQUEST_TIMEOUT_SECONDS)),
-            )
-            .await
-            .map_err(|_| default_err)?;
-
-        match response.generate_metadata_for_command {
-            GenerateMetadataForCommandResult::GenerateMetadataForCommandOutput(output) => {
-                match output.status {
-                    GenerateMetadataForCommandStatus::GenerateMetadataForCommandSuccess(
-                        success,
-                    ) => Ok(success.into()),
-                    GenerateMetadataForCommandStatus::GenerateMetadataForCommandFailure(
-                        failure,
-                    ) => Err(failure.type_.into()),
-                    GenerateMetadataForCommandStatus::Unknown => {
-                        Err(GeneratedCommandMetadataError::Other)
-                    }
-                }
-            }
-            _ => Err(GeneratedCommandMetadataError::Other),
-        }
-    }
-
     async fn get_feature_model_choices(&self) -> Result<ModelsByFeature, anyhow::Error> {
         let variables = GetFeatureModelChoicesVariables {
             request_context: get_request_context(),

@@ -134,7 +134,6 @@ pub enum LeafContents {
     Notebook(NotebookPaneSnapshot),
     Code(CodePaneSnapShot),
     EnvironmentManagement(EnvironmentManagementPaneSnapshot),
-    Workflow(WorkflowPaneSnapshot),
     Settings(SettingsPaneSnapshot),
     CustomRouterEditor,
     ExecutionProfileEditor,
@@ -167,7 +166,6 @@ impl LeafContents {
             LeafContents::Terminal(_)
             | LeafContents::Notebook(_)
             | LeafContents::Code(_)
-            | LeafContents::Workflow(_)
             | LeafContents::Settings(_)
             | LeafContents::CustomRouterEditor
             | LeafContents::ExecutionProfileEditor
@@ -215,11 +213,6 @@ pub enum CodePaneSnapShot {
         /// The full `CodeSource` for this pane, serialized as JSON in the DB.
         source: Option<CodeSource>,
     },
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum WorkflowPaneSnapshot {
-    CloudWorkflow { workflow_id: Option<SyncId> },
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -18,7 +18,7 @@ pub enum AIContextMenuSearchableAction {
         text: String,
     },
     InsertDriveObject {
-        /// The type of the drive object (Workflow, Notebook, etc.)
+        /// The type of the drive object (Notebook, etc.)
         object_type: ObjectType,
         /// The UID of the drive object to insert as <object_type:{uid}>
         object_uid: String,

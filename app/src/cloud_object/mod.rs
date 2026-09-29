@@ -26,7 +26,6 @@ use crate::server::ids::{HashableId, HashedSqliteId, ObjectUid, ServerId, SyncId
 use crate::server::server_api::object::ObjectClient;
 use crate::server::sync_queue::{QueueItem, SerializedModel};
 use crate::util::time_format::format_approx_duration_from_now_utc;
-use crate::workflows::WorkflowSource;
 use crate::workspaces::user_profiles::UserProfiles;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
@@ -37,7 +36,7 @@ pub mod preference;
 pub use cloud_objects::cloud_object::*;
 
 /// A CloudObject represents
-/// therefore shareable and editable (i.e. Notebooks and Workflows). In order
+/// therefore shareable and editable (i.e. Notebooks). In order
 /// to support collaborative editing of these objects, they must each store local
 /// revision numbers to ensure a stable way of accepting and rejecting edits.
 ///
@@ -69,7 +68,7 @@ pub use cloud_objects::cloud_object::*;
 /// For more info on revisions: https://docs.google.com/document/d/1SGtX_5AiSJmUxXCRk5NzGTzrC_XrxQRsio-KZOec_ng/edit
 /// And grab the baton: https://docs.google.com/document/d/1LgGaz8bB40AONTzC0ZFOw5Kg0SD8_RM10V_nyt3zOvY/edit#heading=h.tcup5oqi82p4
 pub trait CloudObject: Debug {
-    /// Returns the name of this model type (e.g. Workflow, Folder, Notebook)
+    /// Returns the name of this model type (e.g. Folder, Notebook)
     fn model_type_name(&self) -> &'static str;
 
     /// Returns the  uid for this object.
@@ -79,7 +78,7 @@ pub trait CloudObject: Debug {
     fn sync_id(&self) -> SyncId;
 
     /// Returns the id used to index into sqlite, this is the object's UID with its type
-    /// prefixed, such as "Workflow-{UID}"
+    /// prefixed, such as "Notebook-{UID}"
     fn hashed_sqlite_id(&self) -> HashedSqliteId;
 
     /// Returns the CloudObjectMetadata struct associated with this object.
@@ -94,7 +93,7 @@ pub trait CloudObject: Debug {
     /// Returnsa mutable reference to the CloudObjectPermissions struct associated with this object.
     fn permissions_mut(&mut self) -> &mut CloudObjectPermissions;
 
-    /// Returns the ObjectType i.e. 'Workflow' or 'Notebook'
+    /// Returns the ObjectType i.e. 'Folder' or 'Notebook'
     fn object_type(&self) -> ObjectType;
 
     /// Returns the CloudObjectTypeAndId for this object.
@@ -394,7 +393,7 @@ pub trait CloudObject: Debug {
 
 /// Defines a common trait for cloud models to implement.
 /// The "model" is the domain specific piece of data for a cloud object,
-/// e.g. it contains the notebook, workflow, or folder specific data, but has
+/// e.g. it contains the notebook or folder specific data, but has
 /// no logic around metadata, permissions, or sync status.
 ///
 /// See the comments for CloudObject to understand the relationship between
@@ -405,12 +404,12 @@ pub trait CloudObject: Debug {
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 pub trait CloudModelType: Debug + Clone + Send + Sync {
-    /// The associated CloudObject type for this model (e.g. CloudNotebook, CloudWorkflow, etc)
+    /// The associated CloudObject type for this model (e.g. CloudNotebook, CloudFolder, etc)
     type CloudObjectType: CloudObject + 'static;
     // TODO: @ianhodge - remove for sync ID refactor.
     type IdType: HashableId + ToServerId + Debug + Into<String> + Clone + 'static;
 
-    /// Returns the name of this model type (e.g. Workflow, Folder, Notebook)
+    /// Returns the name of this model type (e.g. Folder, Notebook)
     fn model_type_name(&self) -> &'static str;
 
     /// Returns the CloudObjectTypeAndId for this object.
@@ -868,7 +867,7 @@ pub use cloud_object_client::{
 pub use cloud_object_models::{
     ServerAIExecutionProfile, ServerAmbientAgentEnvironment, ServerCloudAgentConfig,
     ServerCloudObject, ServerFolder, ServerNotebook, ServerPreference, ServerScheduledAmbientAgent,
-    ServerWorkflow, ServerWorkflowEnum, TryFromGql,
+    TryFromGql,
 };
 use warp_errors::report_error;
 
@@ -908,25 +907,4 @@ pub enum CloudObjectLocation {
     Space(Space),
     Folder(SyncId),
     Trash,
-}
-
-impl From<Space> for WorkflowSource {
-    fn from(space: Space) -> Self {
-        match space {
-            Space::Personal => WorkflowSource::PersonalCloud,
-            Space::Team { team_uid } => WorkflowSource::Team { team_uid },
-            // TODO(ben): Model sharing in workflow telemetry.
-            Space::Shared => WorkflowSource::PersonalCloud,
-        }
-    }
-}
-
-impl From<Owner> for WorkflowSource {
-    fn from(owner: Owner) -> WorkflowSource {
-        match owner {
-            // TODO(ben): Represent shared objects in telemetry.
-            Owner::User { .. } => Self::PersonalCloud,
-            Owner::Team { team_uid } => Self::Team { team_uid },
-        }
-    }
 }

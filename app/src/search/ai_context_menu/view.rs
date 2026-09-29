@@ -45,7 +45,6 @@ use crate::search::ai_context_menu::mixer::{AIContextMenuMixer, AIContextMenuSea
 #[cfg(not(target_family = "wasm"))]
 #[cfg(not(target_family = "wasm"))]
 #[cfg(not(target_family = "wasm"))]
-use crate::search::ai_context_menu::workflows::data_source::WorkflowDataSource;
 use crate::search::data_source::{Query, QueryFilter, QueryResult};
 #[cfg(not(target_family = "wasm"))]
 use crate::search::mixer::AddAsyncSourceOptions;
@@ -79,7 +78,6 @@ pub enum AIContextMenuCategory {
     RepoFiles,
     Commands,
     Blocks,
-    Workflows,
     Diffs,
     Docs,
     Tasks,
@@ -100,7 +98,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::RepoFiles => "Files and folders",
             AIContextMenuCategory::Commands => "Commands",
             AIContextMenuCategory::Blocks => "Blocks",
-            AIContextMenuCategory::Workflows => "Workflows",
             AIContextMenuCategory::Diffs => "Diffs",
             AIContextMenuCategory::Docs => "Docs",
             AIContextMenuCategory::Tasks => "Past tasks",
@@ -121,7 +118,6 @@ impl AIContextMenuCategory {
             AIContextMenuCategory::RepoFiles => "bundled/svg/folder.svg",
             AIContextMenuCategory::Commands => "bundled/svg/terminal.svg",
             AIContextMenuCategory::Blocks => "bundled/svg/terminal.svg",
-            AIContextMenuCategory::Workflows => "bundled/svg/workflow.svg",
             AIContextMenuCategory::Diffs => "bundled/svg/diff.svg",
             AIContextMenuCategory::Docs => "bundled/svg/docs.svg",
             AIContextMenuCategory::Tasks => "bundled/svg/tasks.svg",
@@ -841,20 +837,6 @@ impl AIContextMenu {
                 });
             }
             #[cfg(not(target_family = "wasm"))]
-            NavigationState::Category(AIContextMenuCategory::Workflows) => {
-                let workflow_data_source = ctx.add_model(|_| WorkflowDataSource::new());
-                self.mixer.update(ctx, |mixer, ctx| {
-                    mixer.add_sync_source(workflow_data_source, [QueryFilter::Workflows]);
-                    mixer.run_query(
-                        Query {
-                            text: "".into(),
-                            filters: HashSet::new(),
-                        },
-                        ctx,
-                    );
-                });
-            }
-            #[cfg(not(target_family = "wasm"))]
             NavigationState::Category(AIContextMenuCategory::DiffSet) => {
                 let diffset_data_source = ctx.add_model(|_| DiffSetDataSource);
                 self.mixer.update(ctx, |mixer, ctx| {
@@ -968,12 +950,6 @@ impl AIContextMenu {
                             },
                             ctx,
                         );
-                    });
-                }
-                AIContextMenuCategory::Workflows => {
-                    let workflow_data_source = ctx.add_model(|_| WorkflowDataSource::new());
-                    self.mixer.update(ctx, |mixer, _ctx| {
-                        mixer.add_sync_source(workflow_data_source, [QueryFilter::Workflows]);
                     });
                 }
                 AIContextMenuCategory::DiffSet => {

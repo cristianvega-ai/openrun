@@ -2,7 +2,6 @@ pub mod cloud_action_confirmation_dialog;
 pub mod cloud_object_styling;
 pub mod folders;
 pub mod sharing;
-pub mod workflows;
 
 pub use cloud_objects::drive::CloudObjectTypeAndId;
 

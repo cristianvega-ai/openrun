@@ -2611,7 +2611,6 @@ dependencies = [
  "settings",
  "settings_value",
  "url",
- "warp-workflows",
  "warp_core",
  "warp_graphql",
  "warp_util",

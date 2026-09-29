@@ -13,13 +13,11 @@ use diesel::result::Error;
 use crate::{
     CloudAIExecutionProfile, CloudAIExecutionProfileModel, CloudAmbientAgentEnvironment,
     CloudAmbientAgentEnvironmentModel, CloudPreference, CloudPreferenceModel,
-    CloudScheduledAmbientAgent, CloudScheduledAmbientAgentModel, CloudWorkflowEnum,
-    CloudWorkflowEnumModel,
+    CloudScheduledAmbientAgent, CloudScheduledAmbientAgentModel,
 };
 
 pub enum PersistedGenericStringObject {
     Preference(CloudPreference),
-    WorkflowEnum(CloudWorkflowEnum),
     AIExecutionProfile(CloudAIExecutionProfile),
     CloudEnvironment(CloudAmbientAgentEnvironment),
     ScheduledAmbientAgent(CloudScheduledAmbientAgent),
@@ -52,17 +50,6 @@ pub fn read_generic_string_objects(
                     let model = CloudPreferenceModel::deserialize_owned(&object.data);
                     model.ok().map(|model| {
                         PersistedGenericStringObject::Preference(CloudPreference::new(
-                            object_id,
-                            model,
-                            to_cloud_object_metadata(metadata),
-                            cloud_object_permissions,
-                        ))
-                    })
-                }
-                JsonObjectType::WorkflowEnum => {
-                    let model = CloudWorkflowEnumModel::deserialize_owned(&object.data);
-                    model.ok().map(|model| {
-                        PersistedGenericStringObject::WorkflowEnum(CloudWorkflowEnum::new(
                             object_id,
                             model,
                             to_cloud_object_metadata(metadata),

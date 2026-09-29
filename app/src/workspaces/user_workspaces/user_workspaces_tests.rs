@@ -60,6 +60,7 @@ use crate::ai::llms::{
 use crate::auth::AuthManager;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::cloud_object::{CloudObject, CloudObjectGuest};
+use crate::drive::folders::{CloudFolder, CloudFolderModel};
 use crate::drive::sharing::SharingAccessLevel;
 use crate::features::FeatureFlag;
 use crate::network::NetworkStatus;
@@ -70,8 +71,6 @@ use crate::server::server_api::team::{MockTeamClient, TeamClient};
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::{AISettings, CodeSettings, FocusedTerminalInfo};
 use crate::system::SystemStats;
-use crate::workflows::workflow::Workflow;
-use crate::workflows::{CloudWorkflow, CloudWorkflowModel};
 use crate::workspaces::gql_convert::{
     PLACEHOLDER_WORKSPACE_UID, workspaces_metadata_response_from_gql,
 };
@@ -2451,10 +2450,8 @@ fn test_spaces_for_window_orders_selected_team_shared_and_personal() {
                 .user_id()
                 .expect("test user should be authenticated")
         });
-        let mut shared_object = CloudWorkflow::new_local(
-            CloudWorkflowModel {
-                data: Workflow::new("shared workflow", "echo shared"),
-            },
+        let mut shared_object = CloudFolder::new_local(
+            CloudFolderModel::new("shared folder", false),
             Owner::User {
                 user_uid: UserUid::new("other-user"),
             },
@@ -2561,10 +2558,8 @@ fn test_joining_team_moves_objects() {
         total_requests_used_since_last_refresh: 0,
     };
 
-    let shared_object = CloudWorkflow::new_local(
-        CloudWorkflowModel {
-            data: Workflow::new("shared workflow", "echo shared"),
-        },
+    let shared_object = CloudFolder::new_local(
+        CloudFolderModel::new("shared folder", false),
         Owner::Team { team_uid },
         None,
         ClientId::default(),
@@ -2837,10 +2832,8 @@ fn test_leaving_team_moves_objects() {
         total_requests_used_since_last_refresh: 0,
     };
 
-    let shared_object = CloudWorkflow::new_local(
-        CloudWorkflowModel {
-            data: Workflow::new("shared workflow", "echo shared"),
-        },
+    let shared_object = CloudFolder::new_local(
+        CloudFolderModel::new("shared folder", false),
         Owner::Team { team_uid },
         None,
         ClientId::default(),

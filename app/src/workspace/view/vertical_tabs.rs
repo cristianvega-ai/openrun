@@ -41,8 +41,6 @@ use crate::code::editor::{add_color, remove_color};
 use crate::code::icon_from_file_path;
 use crate::context_chips::display_chip::GitLineChanges;
 use crate::context_chips::github_pr_display_text_from_url;
-use crate::drive::DriveObjectType;
-use crate::drive::cloud_object_styling::warp_drive_icon_color;
 use crate::editor::EditorView;
 use crate::pane_group::pane::IPaneType;
 use crate::pane_group::{CodePane, PaneGroup, PaneId, TabBarHoverIndex, TerminalPane};
@@ -896,7 +894,6 @@ pub(super) enum SummaryPaneKind {
     Code { title: String },
     CodeDiff,
     File,
-    Workflow,
     Settings,
     EnvironmentManagement,
     ExecutionProfileEditor,
@@ -1481,15 +1478,7 @@ fn render_detail_kind_badge_icon(
         }
         TypedPane::Code(_) => icon_from_file_path(&props.title, appearance)
             .unwrap_or_else(|| WarpIcon::Code2.to_warpui_icon(sub_text).finish()),
-        typed => {
-            let fill = typed
-                .warp_drive_object_type()
-                .map(|object_type| {
-                    WarpThemeFill::Solid(warp_drive_icon_color(appearance, object_type))
-                })
-                .unwrap_or(sub_text);
-            typed.icon().to_warpui_icon(fill).finish()
-        }
+        typed => typed.icon().to_warpui_icon(sub_text).finish(),
     }
 }
 
@@ -3323,10 +3312,6 @@ fn resolve_icon_with_status_variant(
     let main_text = theme.main_text_color(theme.background());
     let sub_text = theme.sub_text_color(theme.background());
 
-    let drive_color = |object_type: DriveObjectType| -> WarpThemeFill {
-        WarpThemeFill::Solid(warp_drive_icon_color(appearance, object_type))
-    };
-
     match typed {
         TypedPane::Terminal(terminal_pane) => {
             let terminal_view = terminal_pane.terminal_view(app);
@@ -3353,11 +3338,6 @@ fn resolve_icon_with_status_variant(
         TypedPane::Settings | TypedPane::EnvironmentManagement => IconWithStatusVariant::Neutral {
             icon: typed.icon(),
             icon_color: main_text,
-        },
-        // Warp Drive object types use their established index colors
-        TypedPane::Workflow => IconWithStatusVariant::Neutral {
-            icon: typed.icon(),
-            icon_color: drive_color(DriveObjectType::Workflow),
         },
         // Other pane types use sub-text color
         other => IconWithStatusVariant::Neutral {
@@ -3499,7 +3479,7 @@ fn render_pane_row(props: PaneProps<'_>, app: &AppContext) -> Box<dyn Element> {
     );
 
     // Top-align the icon when there are multiple lines of content so it sits next to
-    // the first line; center it for single-line rows (Settings, Workflow with no subtitle, etc.).
+    // the first line; center it for single-line rows (Settings, etc.).
     let icon_alignment =
         if matches!(props.typed, TypedPane::Terminal(_)) || !effective_subtitle.is_empty() {
             CrossAxisAlignment::Start
@@ -3595,7 +3575,6 @@ enum TypedPane<'a> {
     Code(&'a CodePane),
     CodeDiff,
     File,
-    Workflow,
     Settings,
     EnvironmentManagement,
     ExecutionProfileEditor,
@@ -3625,7 +3604,6 @@ impl TypedPane<'_> {
             },
             TypedPane::CodeDiff => SummaryPaneKind::CodeDiff,
             TypedPane::File => SummaryPaneKind::File,
-            TypedPane::Workflow => SummaryPaneKind::Workflow,
             TypedPane::Settings => SummaryPaneKind::Settings,
             TypedPane::EnvironmentManagement => SummaryPaneKind::EnvironmentManagement,
             TypedPane::ExecutionProfileEditor => SummaryPaneKind::ExecutionProfileEditor,
@@ -3633,13 +3611,8 @@ impl TypedPane<'_> {
         }
     }
 
-    fn warp_drive_object_type(&self) -> Option<DriveObjectType> {
-        typed_pane_warp_drive_object_type(self)
-    }
-
     fn supports_vertical_tabs_detail_sidecar(&self) -> bool {
         matches!(self, TypedPane::Terminal(_) | TypedPane::Code(_))
-            || self.warp_drive_object_type().is_some()
     }
     fn kind_label(&self) -> &'static str {
         match self {
@@ -3647,7 +3620,6 @@ impl TypedPane<'_> {
             TypedPane::Code(_) => "Code",
             TypedPane::CodeDiff => "Code Diff",
             TypedPane::File => "File",
-            TypedPane::Workflow => "Workflow",
             TypedPane::Settings => "Settings",
             TypedPane::EnvironmentManagement => "Environments",
             TypedPane::ExecutionProfileEditor => "Execution Profile",
@@ -3665,7 +3637,6 @@ impl TypedPane<'_> {
             TypedPane::Terminal(_)
             | TypedPane::CodeDiff
             | TypedPane::File
-            | TypedPane::Workflow
             | TypedPane::Settings
             | TypedPane::EnvironmentManagement
             | TypedPane::ExecutionProfileEditor
@@ -3679,7 +3650,6 @@ impl TypedPane<'_> {
             TypedPane::Code(_) => WarpIcon::Code2,
             TypedPane::CodeDiff => WarpIcon::Diff,
             TypedPane::File => WarpIcon::File,
-            TypedPane::Workflow => WarpIcon::Workflow,
             TypedPane::Settings | TypedPane::EnvironmentManagement => WarpIcon::Gear,
             TypedPane::ExecutionProfileEditor => WarpIcon::Lightning,
             TypedPane::Other => WarpIcon::File,
@@ -3820,7 +3790,6 @@ fn build_vertical_tabs_summary_data(
             }
             TypedPane::CodeDiff
             | TypedPane::File
-            | TypedPane::Workflow
             | TypedPane::Settings
             | TypedPane::EnvironmentManagement
             | TypedPane::ExecutionProfileEditor
@@ -3960,7 +3929,6 @@ impl<'a> PaneProps<'a> {
             TypedPane::Code(_)
             | TypedPane::CodeDiff
             | TypedPane::File
-            | TypedPane::Workflow
             | TypedPane::Settings
             | TypedPane::EnvironmentManagement
             | TypedPane::ExecutionProfileEditor
@@ -4371,7 +4339,6 @@ impl PaneGroup {
             ),
             IPaneType::CodeDiff => TypedPane::CodeDiff,
             IPaneType::File => TypedPane::File,
-            IPaneType::Workflow => TypedPane::Workflow,
             IPaneType::Settings => TypedPane::Settings,
             IPaneType::EnvironmentManagement => TypedPane::EnvironmentManagement,
             IPaneType::ExecutionProfileEditor => TypedPane::ExecutionProfileEditor,
@@ -5026,7 +4993,7 @@ pub(super) fn render_summary_pane_kind_icons(
 }
 
 // Inline rendering for non-agent summary kinds — for an icon (e.g. Terminal, Code,
-// Workflow) sized to fill its `total_size` bounding box.
+// File) sized to fill its `total_size` bounding box.
 const SUMMARY_INLINE_ICON_RATIO: f32 = 2. / 3.;
 const SUMMARY_INLINE_PADDING_RATIO: f32 = (1. - SUMMARY_INLINE_ICON_RATIO) / 2.;
 
@@ -5080,7 +5047,6 @@ pub(super) fn render_summary_pane_kind_icon_circle(
         SummaryPaneKind::Terminal
         | SummaryPaneKind::CodeDiff
         | SummaryPaneKind::File
-        | SummaryPaneKind::Workflow
         | SummaryPaneKind::Settings
         | SummaryPaneKind::EnvironmentManagement
         | SummaryPaneKind::ExecutionProfileEditor
@@ -5133,10 +5099,6 @@ fn summary_pane_kind_icon(
     let theme = appearance.theme();
     let main_text = theme.main_text_color(theme.background());
     let sub_text = theme.sub_text_color(theme.background());
-    let drive_color = |object_type: DriveObjectType| -> WarpThemeFill {
-        WarpThemeFill::Solid(warp_drive_icon_color(appearance, object_type))
-    };
-
     match kind {
         SummaryPaneKind::Terminal => (WarpIcon::Terminal, main_text),
         // Local agent: Agent-brand glyph with theme main-text color, consistent
@@ -5152,7 +5114,6 @@ fn summary_pane_kind_icon(
         SummaryPaneKind::Code { .. } => (WarpIcon::Code2, sub_text),
         SummaryPaneKind::CodeDiff => (WarpIcon::Diff, sub_text),
         SummaryPaneKind::File => (WarpIcon::File, sub_text),
-        SummaryPaneKind::Workflow => (WarpIcon::Workflow, drive_color(DriveObjectType::Workflow)),
         SummaryPaneKind::Settings | SummaryPaneKind::EnvironmentManagement => {
             (WarpIcon::Gear, main_text)
         }
@@ -6958,54 +6919,9 @@ fn render_code_detail_section(
         .finish()
 }
 
-fn render_warp_drive_object_detail_section(
-    props: &PaneProps<'_>,
-    appearance: &Appearance,
-    app: &AppContext,
-) -> Box<dyn Element> {
-    let theme = appearance.theme();
-    let text_colors = detail_sidecar_text_colors(theme);
-
-    let mut section = Flex::column()
-        .with_cross_axis_alignment(CrossAxisAlignment::Start)
-        .with_spacing(DETAIL_SIDECAR_SECTION_GAP);
-    section.add_child(render_detail_wrapping_text(
-        props.title.clone(),
-        12.,
-        text_colors.main,
-        None,
-        appearance,
-    ));
-    section.add_child(render_detail_badge(
-        props.typed.kind_label(),
-        Some(render_detail_kind_badge_icon(props, appearance, app)),
-        None,
-        text_colors.disabled,
-        appearance,
-    ));
-
-    Container::new(section.finish())
-        .with_padding(Padding::uniform(DETAIL_SIDECAR_SECTION_PADDING))
-        .finish()
-}
-
 fn code_detail_kind_label(file_name: &str) -> Option<String> {
     language_by_local_filename(Path::new(file_name))
         .map(|language| language.display_name().to_string())
-}
-
-fn typed_pane_warp_drive_object_type(typed: &TypedPane<'_>) -> Option<DriveObjectType> {
-    match typed {
-        TypedPane::Workflow => Some(DriveObjectType::Workflow),
-        TypedPane::Terminal(_)
-        | TypedPane::Code(_)
-        | TypedPane::CodeDiff
-        | TypedPane::File
-        | TypedPane::Settings
-        | TypedPane::EnvironmentManagement
-        | TypedPane::ExecutionProfileEditor
-        | TypedPane::Other => None,
-    }
 }
 
 fn render_detail_section(
@@ -7021,7 +6937,6 @@ fn render_detail_section(
             app,
         ),
         TypedPane::Code(_) => render_code_detail_section(props, appearance, app),
-        TypedPane::Workflow => render_warp_drive_object_detail_section(props, appearance, app),
         TypedPane::CodeDiff
         | TypedPane::File
         | TypedPane::Settings

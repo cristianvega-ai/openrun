@@ -73,3 +73,32 @@ query: Explain the staged changes
 
     assert!(workflows.is_empty());
 }
+
+#[test]
+fn workflow_file_ignores_fields_of_removed_argument_types_and_environment_variables() {
+    let workflows = workflows_in_file(
+        r#"---
+name: Deploy
+command: deploy {{target}} {{region}}
+environment_variables: Yqtj4R3q4Vcm8TxbUdXrZ7
+arguments:
+  - name: target
+    arg_type: Enum
+    enum_id: Ymgrzu0nh2HwDNeYEtXF1x
+    description: Where to deploy
+  - name: region
+    default_value: us-east-1
+"#,
+    )
+    .expect("the file should be read");
+
+    assert_eq!(workflows.len(), 1);
+    let arguments = workflows[0].arguments();
+    assert_eq!(arguments.len(), 2);
+    assert_eq!(arguments[0].name(), "target");
+    assert_eq!(
+        arguments[0].description().as_deref(),
+        Some("Where to deploy")
+    );
+    assert_eq!(arguments[1].default_value().as_deref(), Some("us-east-1"));
+}

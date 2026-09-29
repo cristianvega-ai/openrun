@@ -19,7 +19,6 @@ pub(super) mod network_log_pane;
 pub(super) mod settings_pane;
 pub(super) mod terminal_pane;
 pub mod view;
-pub mod workflow_pane;
 
 use std::any::Any;
 use std::fmt::Display;
@@ -49,7 +48,6 @@ use crate::settings_view::environments_page::EnvironmentsPageView;
 use crate::terminal::TerminalView;
 use crate::terminal::available_shells::AvailableShell;
 use crate::view_components::action_button::ActionButton;
-use crate::workflows::workflow_view::WorkflowView;
 
 /// The opaque identifier for an arbitrary pane. Consumers
 /// should not be concerned with the internal IDs that are used;
@@ -114,7 +112,6 @@ pub(crate) enum IPaneType {
     Code,
     CodeDiff,
     EnvironmentManagement,
-    Workflow,
     Settings,
     CustomRouterEditor,
     ExecutionProfileEditor,
@@ -132,7 +129,6 @@ impl Display for IPaneType {
             IPaneType::Code => write!(f, "Code"),
             IPaneType::CodeDiff => write!(f, "Code Diff"),
             IPaneType::EnvironmentManagement => write!(f, "Environment Management"),
-            IPaneType::Workflow => write!(f, "Workflow"),
             IPaneType::Settings => write!(f, "Settings"),
             IPaneType::CustomRouterEditor => write!(f, "Custom Router Editor"),
             IPaneType::ExecutionProfileEditor => write!(f, "Execution Profile Editor"),
@@ -173,11 +169,6 @@ impl PaneId {
         ctx: &ViewContext<PaneView<EnvironmentsPageView>>,
     ) -> Self {
         Self::new_from_ctx(IPaneType::EnvironmentManagement, ctx)
-    }
-
-    /// Creates a [`PaneId`] from a [`ViewContext<PaneView<WorkflowView>>`]
-    pub fn from_workflow_pane_ctx(ctx: &ViewContext<PaneView<WorkflowView>>) -> Self {
-        Self::new_from_ctx(IPaneType::Workflow, ctx)
     }
 
     /// Creates a [`PaneId`] from a [`ViewContext<PaneView<TextView>>`]
@@ -246,13 +237,6 @@ impl PaneId {
             IPaneType::EnvironmentManagement,
             environment_management_pane_view,
         )
-    }
-
-    /// Creates a [`PaneId`] from a [`PaneView<WorkflowView>`] entity ID.
-    pub fn from_workflow_pane_view(
-        workflow_pane_view: &ViewHandle<PaneView<WorkflowView>>,
-    ) -> Self {
-        Self::new(IPaneType::Workflow, workflow_pane_view)
     }
 
     /// Creates a [`PaneId`] from a [`PaneView<SettingsView>`] entity ID.
@@ -332,11 +316,6 @@ impl PaneId {
         matches!(self.0.pane_type, IPaneType::EnvironmentManagement)
     }
 
-    /// Returns true if this pane contains a Warp Drive object (workflow, etc.).
-    pub fn is_warp_drive_object_pane(&self) -> bool {
-        matches!(self.0.pane_type, IPaneType::Workflow)
-    }
-
     /// Renders the child view backing this pane.
     pub fn render(self, app: &AppContext) -> Box<dyn Element> {
         let mut element = match self.0.pane_type {
@@ -354,9 +333,6 @@ impl PaneId {
             }
             IPaneType::EnvironmentManagement => {
                 ChildView::<PaneView<EnvironmentsPageView>>::with_id(self.0.pane_view_id).finish()
-            }
-            IPaneType::Workflow => {
-                ChildView::<PaneView<WorkflowView>>::with_id(self.0.pane_view_id).finish()
             }
             IPaneType::Settings => {
                 ChildView::<PaneView<SettingsView>>::with_id(self.0.pane_view_id).finish()

@@ -23,7 +23,6 @@ use crate::ai::agent::AIAgentExchangeId;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
-use crate::server::ids::SyncId;
 use crate::server::telemetry::{AgentModeRewindEntrypoint, PaletteSource, ToggleBlockFilterSource};
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::block_list_element::{
@@ -37,7 +36,6 @@ use crate::terminal::model::mouse::MouseState;
 use crate::terminal::model::selection::{SelectAction, SelectionDirection};
 use crate::terminal::model::terminal_model::{BlockIndex, WithinModel};
 use crate::terminal::view::RichContentSecretTooltipInfo;
-use crate::workflows::workflow::Workflow;
 
 #[derive(Clone)]
 pub enum TerminalAction {
@@ -215,10 +213,6 @@ pub enum TerminalAction {
         layout: crate::util::file::external_editor::settings::EditorLayout,
         line_col: Option<warp_util::path::LineAndColumnArg>,
     },
-    OpenWorkflowModal,
-    OpenWorkflowModalForAIWorkflow(Workflow),
-    OpenWorkflowModalForBlock(BlockIndex),
-    OpenWorkflowModalWithCloudWorkflow(SyncId),
     /// Starts a subshell in the active session.
     TriggerSubshellBootstrap,
     InsertMostRecentCommandCorrection,
@@ -439,14 +433,6 @@ impl fmt::Debug for TerminalAction {
             OpenFileInWarp(_) => f.write_str("OpenFileInWarp"),
             #[cfg(feature = "local_fs")]
             OpenCodeInWarp { .. } => f.write_str("OpenCodeInWarp"),
-            OpenWorkflowModal => f.write_str("OpenWorkflowModal"),
-            OpenWorkflowModalForAIWorkflow(_) => f.write_str("OpenWorkflowModalForAIWorkflow"),
-            OpenWorkflowModalForBlock(block_index) => {
-                write!(f, "OpenWorkflowModalForBlock({block_index:?})")
-            }
-            OpenWorkflowModalWithCloudWorkflow(_) => {
-                f.write_str("OpenWorkflowModalWithCloudWorkflow")
-            }
             OpenBlockListContextMenu => f.write_str("OpenBlockListContextMenu"),
             TriggerSubshellBootstrap => f.write_str("TriggerSubshellBootstrap"),
             InsertMostRecentCommandCorrection => f.write_str("InsertMostRecentCommandCorrection"),

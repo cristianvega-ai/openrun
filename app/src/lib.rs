@@ -189,7 +189,6 @@ use warpui::platform::app::{ApproveTerminateResult, TerminationRequestSource};
 use warpui::windowing::state::ApplicationStage;
 use warpui::{App, AppContext, Event, SingletonEntity, WindowId};
 use window_settings::WindowSettings;
-use workflows::manager::WorkflowManager;
 use workspace::sync_inputs::SyncedInputState;
 
 use self::features::FeatureFlag;
@@ -247,7 +246,6 @@ use crate::user_config::WarpConfig;
 use crate::util::bindings::is_binding_cross_platform;
 use crate::vim_registers::VimRegisters;
 use crate::warp_managed_paths_watcher::{WarpManagedPathsWatcher, ensure_warp_watch_roots_exist};
-use crate::workflows::aliases::WorkflowAliases;
 use crate::workflows::local_workflows::LocalWorkflows;
 use crate::workspace::{ActiveSession, PaneViewLocator, ToastStack, Workspace, WorkspaceAction};
 use crate::workspaces::team_tester::TeamTesterStatus;
@@ -1111,7 +1109,6 @@ pub(crate) fn initialize_app(
         SyncQueue::new(
             all_queue_items,
             server_api_provider.as_ref(ctx).get_cloud_objects_client(),
-            ctx,
         )
     });
 
@@ -1252,8 +1249,6 @@ pub(crate) fn initialize_app(
     // Add a singleton model for resizable modals whose size should be persisted through restarts.
     ctx.add_singleton_model(|_| ResizableData::default());
 
-    ctx.add_singleton_model(WorkflowManager::new);
-
     ctx.add_singleton_model(LocalWorkflows::new);
 
     ctx.add_singleton_model(LLMPreferences::new);
@@ -1279,12 +1274,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(move |_| persistence_writer);
 
     ctx.add_singleton_model(move |_| IgnoredSuggestionsModel::new(persisted_ignored_suggestions));
-
-    // Subscribe WorkflowAliases to the UpdateManager so that it can be notified when objects are
-    // trashed.
-    WorkflowAliases::handle(ctx).update(ctx, |aliases, ctx| {
-        aliases.connect(ctx);
-    });
 
     #[cfg(feature = "local_fs")]
     if FeatureFlag::WarpControlCli.is_enabled() {

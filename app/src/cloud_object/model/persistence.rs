@@ -9,7 +9,6 @@ use warp_errors::report_error;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
-use super::generic_string_model::GenericStringObjectId;
 use crate::ai::execution_profiles::CloudAIExecutionProfile;
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::notebook_model::CloudNotebook;
@@ -17,15 +16,12 @@ use crate::cloud_object::{
     CloudModelType, CloudObject, CloudObjectLocation, CloudObjectPermissions, GenericCloudObject,
     GenericServerObject, ObjectIdType, ObjectType, ObjectsToUpdate, Owner, Revision,
     RevisionAndLastEditor, ServerCloudObject, ServerCreationInfo, ServerFolder, ServerMetadata,
-    ServerNotebook, ServerPermissions, ServerWorkflow, Space,
+    ServerNotebook, ServerPermissions, Space,
 };
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::{CloudFolder, CloudFolderModel};
 use crate::persistence::ModelEvent;
 use crate::server::ids::{ClientId, HashableId, ObjectUid, ServerId, SyncId, ToServerId};
-use crate::workflows::workflow::Workflow;
-use crate::workflows::workflow_enum::{CloudWorkflowEnum, CloudWorkflowEnumModel, WorkflowEnum};
-use crate::workflows::{CloudWorkflow, CloudWorkflowModel};
 use crate::workspaces::user_workspaces::UserWorkspaces;
 
 // Equivalent to 24 hours
@@ -491,17 +487,11 @@ impl CloudModel {
             ServerCloudObject::Notebook(notebook) => {
                 self.upsert_from_server_notebook(notebook, ctx);
             }
-            ServerCloudObject::Workflow(workflow) => {
-                self.upsert_from_server_workflow(*workflow, ctx);
-            }
             ServerCloudObject::Folder(folder) => {
                 self.upsert_from_server_folder(folder, ctx);
             }
             ServerCloudObject::Preference(preferences) => {
                 self.upsert_from_server_object(preferences, ctx);
-            }
-            ServerCloudObject::WorkflowEnum(workflow_enum) => {
-                self.upsert_from_server_object(workflow_enum, ctx);
             }
             ServerCloudObject::AIExecutionProfile(ai_execution_profile) => {
                 self.upsert_from_server_object(ai_execution_profile, ctx);
@@ -530,16 +520,6 @@ impl CloudModel {
         }
 
         self.upsert_from_server_object(server_folder, ctx);
-    }
-
-    /// Updates the in-memory workflow with an update from the server. If the object has not been
-    /// seen before--a new object is created.
-    pub fn upsert_from_server_workflow(
-        &mut self,
-        server_workflow: ServerWorkflow,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.upsert_from_server_object(server_workflow, ctx);
     }
 
     /// Overwrites the trashed_ts, current_editor, etc of the object only if the new_metadata timestamp
@@ -784,44 +764,6 @@ impl CloudModel {
         }
     }
 
-    /// Overwrite a workflow's definition. For example, if a workflow is in conflict with the
-    /// server, we'll replace the local state with the server's version.
-    pub fn overwrite_workflow(
-        &mut self,
-        workflow: Workflow,
-        workflow_id: SyncId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if let Some(cloud_workflow) = self.get_workflow_mut(&workflow_id) {
-            cloud_workflow.set_model(CloudWorkflowModel::new(workflow));
-            ctx.emit(CloudModelEvent::ObjectUpdated {
-                type_and_id: cloud_workflow.cloud_object_type_and_id(),
-                source: UpdateSource::Server,
-            });
-            ctx.notify();
-        }
-    }
-
-    pub fn overwrite_workflow_enum(
-        &mut self,
-        workflow_enum: WorkflowEnum,
-        workflow_enum_id: SyncId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if let Some(cloud_workflow_enum) = self
-            .get_object_of_type_mut::<GenericStringObjectId, CloudWorkflowEnumModel>(
-                &workflow_enum_id,
-            )
-        {
-            cloud_workflow_enum.set_model(CloudWorkflowEnumModel::new(workflow_enum));
-            ctx.emit(CloudModelEvent::ObjectUpdated {
-                type_and_id: cloud_workflow_enum.cloud_object_type_and_id(),
-                source: UpdateSource::Server,
-            });
-            ctx.notify();
-        }
-    }
-
     fn set_folder_open_state(
         &mut self,
         folder_id: SyncId,
@@ -907,9 +849,6 @@ impl CloudModel {
     ) {
         match id {
             CloudObjectTypeAndId::Notebook(sync_id) => {
-                self.force_expand_object_and_ancestors(sync_id, ctx)
-            }
-            CloudObjectTypeAndId::Workflow(sync_id) => {
                 self.force_expand_object_and_ancestors(sync_id, ctx)
             }
             CloudObjectTypeAndId::Folder(sync_id) => {
@@ -1026,22 +965,6 @@ impl CloudModel {
             .filter_map(|object| object.into())
     }
 
-    pub fn get_workflow(&self, workflow_id: &SyncId) -> Option<&CloudWorkflow> {
-        self.objects_by_id
-            .get(&workflow_id.uid())
-            .and_then(|object| object.into())
-    }
-
-    pub fn get_workflow_by_uid(&self, uid: &str) -> Option<&CloudWorkflow> {
-        self.objects_by_id.get(uid).and_then(|object| object.into())
-    }
-
-    pub fn get_workflow_enum(&self, enum_id: &SyncId) -> Option<&CloudWorkflowEnum> {
-        self.objects_by_id
-            .get(&enum_id.uid())
-            .and_then(|object| object.into())
-    }
-
     pub fn get_ai_execution_profile(
         &self,
         profile_id: &SyncId,
@@ -1049,62 +972,6 @@ impl CloudModel {
         self.objects_by_id
             .get(&profile_id.uid())
             .and_then(|object| object.into())
-    }
-
-    pub fn get_workflow_enum_mut(&mut self, enum_id: &SyncId) -> Option<&mut CloudWorkflowEnum> {
-        self.objects_by_id
-            .get_mut(&enum_id.uid())
-            .and_then(|object| object.into())
-    }
-
-    pub fn get_workflow_mut(&mut self, workflow_id: &SyncId) -> Option<&mut CloudWorkflow> {
-        self.objects_by_id
-            .get_mut(&workflow_id.uid())
-            .and_then(|object| object.into())
-    }
-
-    /// Returns only active (not trashed) workflows in cloud model.
-    pub fn get_all_active_workflows(&self) -> impl Iterator<Item = &CloudWorkflow> {
-        self.objects_by_id
-            .values()
-            .filter(|object| !object.is_trashed(self))
-            .filter_map(|object| object.into())
-    }
-
-    /// Returns all workflows (trashed or not) in cloud model.
-    pub fn get_all_active_and_inactive_workflows(&self) -> impl Iterator<Item = &CloudWorkflow> {
-        self.objects_by_id
-            .values()
-            .filter_map(|object| object.into())
-    }
-
-    /// Returns all workflows (trashed or not) in cloud model.
-    pub fn get_all_active_and_inactive_workflows_mut(
-        &mut self,
-    ) -> impl Iterator<Item = &mut CloudWorkflow> {
-        self.objects_by_id
-            .values_mut()
-            .filter_map(|object| object.into())
-    }
-
-    /// Returns all active (not trashed) workflows in the space.
-    pub fn active_workflows_in_space<'a>(
-        &'a self,
-        space: Space,
-        app: &'a AppContext,
-    ) -> impl Iterator<Item = &'a CloudWorkflow> + 'a {
-        self.active_cloud_objects_in_space(space, app)
-            .filter_map(|object| object.into())
-    }
-
-    /// Returns all active (not trashed) and non-welcome workflows (ie. non starter workflows) in the space.
-    pub fn active_non_welcome_workflows_in_space<'a>(
-        &'a self,
-        space: Space,
-        app: &'a AppContext,
-    ) -> impl Iterator<Item = &'a CloudWorkflow> + 'a {
-        self.active_non_welcome_cloud_objects_in_space(space, app)
-            .filter_map(|object| object.into())
     }
 
     /// Returns all active (not trashed) notebooks in the space.
@@ -1124,18 +991,6 @@ impl CloudModel {
         app: &'a AppContext,
     ) -> impl Iterator<Item = &'a CloudNotebook> + 'a {
         self.active_non_welcome_cloud_objects_in_space(space, app)
-            .filter_map(|object| object.into())
-    }
-
-    /// Returns all workflow enums with a given owner.
-    pub fn workflow_enums_with_owner<'a>(
-        &'a self,
-        owner: Owner,
-        _: &'a AppContext,
-    ) -> impl Iterator<Item = &'a CloudWorkflowEnum> + 'a {
-        self.objects_by_id
-            .values()
-            .filter(move |object| !object.is_trashed(self) && object.permissions().owner == owner)
             .filter_map(|object| object.into())
     }
 
@@ -1183,7 +1038,6 @@ impl CloudModel {
         {
             match object_type {
                 ObjectType::Notebook => objects_to_update.notebooks.push(versions),
-                ObjectType::Workflow => objects_to_update.workflows.push(versions),
                 ObjectType::Folder => objects_to_update.folders.push(versions),
                 ObjectType::GenericStringObject(_) => {
                     objects_to_update.generic_string_objects.push(versions)

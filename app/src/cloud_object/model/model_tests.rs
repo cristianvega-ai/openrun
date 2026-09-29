@@ -34,7 +34,6 @@ use crate::server::server_api::workspace::MockWorkspaceClient;
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::init_and_register_user_preferences;
 use crate::system::SystemStats;
-use crate::workflows::CloudWorkflowModel;
 use crate::workspaces::team::Team;
 use crate::workspaces::team_tester::TeamTesterStatus;
 use crate::workspaces::user_profiles::UserProfiles;
@@ -108,13 +107,6 @@ fn initialize_app(
     });
 }
 
-fn mock_random_workflows(start_id: i64, owner: Owner) -> Vec<ServerWorkflow> {
-    let mut rng = rand::thread_rng();
-    // pick how many workflows to generate at random
-    let number_of_workflows = rng.gen_range(1..10);
-    mock_server_workflows(start_id, owner, number_of_workflows)
-}
-
 fn mock_server_metadata() -> ServerMetadata {
     ServerMetadata {
         uid: ServerId::default(),
@@ -147,31 +139,11 @@ fn mock_permissions() -> CloudObjectPermissions {
     }
 }
 
-fn mock_server_workflows(
-    start_id: i64,
-    owner: Owner,
-    number_of_workflows: i64,
-) -> Vec<ServerWorkflow> {
-    (0..number_of_workflows)
-        .map(|idx| {
-            ServerWorkflow::new(
-                SyncId::ServerId((start_id + idx).into()),
-                CloudWorkflowModel::new(Workflow::new(
-                    format!("w{}", start_id + idx),
-                    format!("c{}", start_id + idx),
-                )),
-                mock_server_metadata(),
-                mock_server_permissions(owner),
-            )
-        })
-        .collect()
-}
-
 fn mock_random_folders(start_id: i64, owner: Owner) -> Vec<ServerFolder> {
     let mut rng = rand::thread_rng();
     // pick how many folders to generate at random
-    let number_of_workflows = rng.gen_range(1..10);
-    mock_server_folders(start_id, owner, number_of_workflows)
+    let number_of_folders = rng.gen_range(1..10);
+    mock_server_folders(start_id, owner, number_of_folders)
 }
 
 fn mock_server_folders(start_id: i64, owner: Owner, number_of_folders: i64) -> Vec<ServerFolder> {
@@ -345,7 +317,7 @@ fn move_object(id: ServerId, folder_id: Option<FolderId>, app: &mut App) {
 
 #[test]
 fn test_update_with_deleted_objects() {
-    let workflows = mock_server_workflows(
+    let folders = mock_server_folders(
         5,
         Owner::Team {
             team_uid: ServerId::from(1),
@@ -357,9 +329,9 @@ fn test_update_with_deleted_objects() {
     App::test((), |mut app| async move {
         let cloud_model = create_cloud_model(
             &mut app,
-            workflows
+            folders
                 .iter()
-                .map(|workflow| CloudWorkflow::new_from_server(workflow.clone()))
+                .map(|folder| CloudFolder::new_from_server(folder.clone()))
                 .map(|o| Box::new(o) as Box<dyn CloudObject>)
                 .collect(),
         );
@@ -369,12 +341,9 @@ fn test_update_with_deleted_objects() {
             }
         });
 
-        // Validate there's some notebooks and workflows in memory
+        // Validate there's some notebooks and folders in memory
         cloud_model.read(&app, |cloud_model, _| {
-            assert_eq!(
-                3,
-                cloud_model.get_all_active_and_inactive_workflows().count()
-            );
+            assert_eq!(3, cloud_model.get_all_active_and_inactive_folders().count());
             assert_eq!(
                 4,
                 cloud_model.get_all_active_and_inactive_notebooks().count()
@@ -393,16 +362,13 @@ fn test_update_with_deleted_objects() {
                 ));
             }
             cloud_model.update_objects(notebooks.into_iter().take(2), ctx);
-            cloud_model.update_objects(workflows.into_iter().take(2), ctx);
+            cloud_model.update_objects(folders.into_iter().take(2), ctx);
         });
 
         cloud_model.read(&app, |cloud_model, _| {
-            // expected: 3rd workflow was removed on the server, and so we don't want it in
+            // expected: 3rd folder was removed on the server, and so we don't want it in
             // memory
-            assert_eq!(
-                2,
-                cloud_model.get_all_active_and_inactive_workflows().count()
-            );
+            assert_eq!(2, cloud_model.get_all_active_and_inactive_folders().count());
             // expected: 3rd notebook has local changes, so we want to keep it, but 4th
             // doesn't and also wasn't returned from the server, so we want to remove it.
             assert_eq!(
@@ -522,57 +488,6 @@ fn test_create_json_object() {
 }
 
 #[test]
-fn test_update_object_server_id_for_workflow() {
-    let client_id = ClientId::new();
-    let server_id: ServerId = 1.into();
-    let workflows: Vec<Box<dyn CloudObject>> = vec![Box::new(CloudWorkflow::new(
-        SyncId::ServerId(1.into()),
-        CloudWorkflowModel::new(Workflow::new("w1", "c1")),
-        CloudObjectMetadata {
-            pending_changes_statuses: CloudObjectStatuses {
-                content_sync_status: CloudObjectSyncStatus::NoLocalChanges,
-                has_pending_metadata_change: false,
-                has_pending_permissions_change: false,
-                pending_untrash: false,
-                pending_delete: false,
-            },
-            folder_id: Default::default(),
-            revision: Default::default(),
-            metadata_last_updated_ts: Default::default(),
-            current_editor_uid: Default::default(),
-            trashed_ts: Default::default(),
-            is_welcome_object: false,
-            creator_uid: None,
-            last_editor_uid: None,
-            last_task_run_ts: None,
-        },
-        mock_permissions(),
-    ))];
-    App::test((), |mut app| async move {
-        let cloud_model = create_cloud_model(&mut app, workflows);
-        cloud_model.update(&mut app, |model, ctx| {
-            model.update_object_after_server_creation(
-                client_id,
-                ServerCreationInfo {
-                    creator_uid: None,
-                    permissions: ServerPermissions::mock_personal(),
-                    server_id_and_type: ServerIdAndType {
-                        id: server_id,
-                        id_type: ObjectIdType::Workflow,
-                    },
-                },
-                ctx,
-            )
-        });
-
-        cloud_model.read(&app, |model, _| {
-            let workflow = model.get_workflow(&SyncId::ServerId(server_id)).unwrap();
-            assert_eq!(workflow.id, SyncId::ServerId(server_id));
-        });
-    })
-}
-
-#[test]
 fn test_update_object_server_id_for_folder() {
     let client_id = ClientId::new();
     let server_id: FolderId = 1.into();
@@ -641,18 +556,6 @@ fn check_cloud_folders(app: &mut App, number_of_folders: usize) {
     });
 }
 
-fn check_cloud_workflows(app: &mut App, number_of_workflows: usize) {
-    CloudModel::handle(app).read(app, |model, _| {
-        assert_eq!(
-            number_of_workflows,
-            model.get_all_active_and_inactive_workflows().count(),
-            "we expected {} workflows, and received {}",
-            number_of_workflows,
-            model.get_all_active_and_inactive_workflows().count()
-        );
-    });
-}
-
 fn check_cloud_notebooks(app: &mut App, number_of_notebooks: usize) {
     CloudModel::handle(app).read(app, |model, _| {
         assert_eq!(
@@ -673,15 +576,6 @@ fn check_cloud_notebooks(app: &mut App, number_of_notebooks: usize) {
 fn test_load_cloud_objects_on_initial_load_with_empty_cache() {
     let _flag = FeatureFlag::KnowledgeSidebar.override_enabled(true);
 
-    let personal_workflows = mock_random_workflows(100, Owner::mock_current_user());
-    let personal_workflows_len = personal_workflows.len();
-    let team_workflows = mock_random_workflows(
-        200,
-        Owner::Team {
-            team_uid: ServerId::from(1),
-        },
-    );
-    let team_workflows_len = team_workflows.len();
     let personal_folders = mock_random_folders(300, Owner::mock_current_user());
     let personal_folders_len = personal_folders.len();
     let team_folders = mock_random_folders(
@@ -693,7 +587,6 @@ fn test_load_cloud_objects_on_initial_load_with_empty_cache() {
     let team_folders_len = team_folders.len();
     let notebooks = mock_server_notebooks();
     let notebooks_len = notebooks.len();
-    let all_workflows = [personal_workflows, team_workflows].concat();
     let all_folders = [personal_folders, team_folders].concat();
 
     App::test((), |mut app| async move {
@@ -705,17 +598,14 @@ fn test_load_cloud_objects_on_initial_load_with_empty_cache() {
             // since we don't have anything cached, at startup we just send empty list here
             .withf(|objects_to_update, _| {
                 objects_to_update.notebooks.is_empty()
-                    && objects_to_update.workflows.is_empty()
                     && objects_to_update.folders.is_empty()
                     && objects_to_update.generic_string_objects.is_empty()
             })
             .return_once(move |_, _| {
                 Ok(InitialLoadResponse {
                     updated_notebooks: notebooks,
-                    updated_workflows: all_workflows,
                     updated_folders: all_folders,
                     deleted_notebooks: vec![],
-                    deleted_workflows: vec![],
                     deleted_folders: vec![],
                     user_profiles: vec![],
                     updated_generic_string_objects: Default::default(),
@@ -724,7 +614,7 @@ fn test_load_cloud_objects_on_initial_load_with_empty_cache() {
                 })
             });
 
-        // No workflows or notebooks (or other objects) loaded from sqlite passed to CloudModel
+        // No folders or notebooks (or other objects) loaded from sqlite passed to CloudModel
         initialize_app(&mut app, Vec::new(), Arc::new(cloud_object_server_api_mock));
 
         // Spend time waiting for the initial load to finish etc.
@@ -732,7 +622,6 @@ fn test_load_cloud_objects_on_initial_load_with_empty_cache() {
 
         // TODO: @ianhodge - update tests once cloud model APIs are added
         // Now CloudModel should include all objects that were fetched via initial load
-        check_cloud_workflows(&mut app, personal_workflows_len + team_workflows_len);
         check_cloud_folders(&mut app, personal_folders_len + team_folders_len);
         check_cloud_notebooks(&mut app, notebooks_len);
     })
@@ -742,15 +631,6 @@ fn test_load_cloud_objects_on_initial_load_with_empty_cache() {
 fn test_loading_all_cloud_objects_after_switching_from_offline() {
     let _flag = FeatureFlag::KnowledgeSidebar.override_enabled(true);
 
-    let personal_workflows = mock_random_workflows(100, Owner::mock_current_user());
-    let personal_workflows_len = personal_workflows.len();
-    let team_workflows = mock_random_workflows(
-        200,
-        Owner::Team {
-            team_uid: ServerId::from(1),
-        },
-    );
-    let team_workflows_len = team_workflows.len();
     let personal_folders = mock_random_folders(300, Owner::mock_current_user());
     let personal_folders_len = personal_folders.len();
     let team_folders = mock_random_folders(
@@ -773,14 +653,13 @@ fn test_loading_all_cloud_objects_after_switching_from_offline() {
 
         // Update manager also calls for update based on the current in memory state
         // We only expect it once with the given set of arguments (empty vector) and it'll return
-        // personal workflows
+        // personal folders
         cloud_object_server_api_mock
             .expect_fetch_changed_objects()
             .times(1)
             // since we don't have anything cached, at startup we just send empty list here
             .withf(|objects_to_update, _| {
                 objects_to_update.notebooks.is_empty()
-                    && objects_to_update.workflows.is_empty()
                     && objects_to_update.folders.is_empty()
                     && objects_to_update.generic_string_objects.is_empty()
             })
@@ -788,10 +667,8 @@ fn test_loading_all_cloud_objects_after_switching_from_offline() {
             .return_once(move |_, _| {
                 Ok(InitialLoadResponse {
                     updated_notebooks: vec![],
-                    updated_workflows: personal_workflows,
                     updated_folders: personal_folders,
                     deleted_notebooks: vec![],
-                    deleted_workflows: vec![],
                     deleted_folders: vec![],
                     user_profiles: vec![],
                     updated_generic_string_objects: Default::default(),
@@ -801,25 +678,22 @@ fn test_loading_all_cloud_objects_after_switching_from_offline() {
             });
 
         // Second call will return objects from the team (as a list of updated / new to user objects)
-        // It'll also be called only once, and with personal_workflows in the input
+        // It'll also be called only once, and with personal_folders in the input
         // We expect this call to happen _after_ the network status change (offline -> online).
         cloud_object_server_api_mock
             .expect_fetch_changed_objects()
             .times(1)
-            // verify that the list of objects passed equals the number of personal workflows we
+            // verify that the list of objects passed equals the number of personal folders we
             // already have
             .withf(move |objects_to_update, _| {
-                objects_to_update.workflows.len() == personal_workflows_len
-                    && objects_to_update.folders.len() == personal_folders_len
+                objects_to_update.folders.len() == personal_folders_len
             })
             .in_sequence(&mut cloud_objects_sequence)
             .returning(move |_, _| {
                 Ok(InitialLoadResponse {
                     updated_notebooks: notebooks.clone(),
-                    updated_workflows: team_workflows.clone(),
                     updated_folders: team_folders.clone(),
                     deleted_notebooks: vec![],
-                    deleted_workflows: vec![],
                     deleted_folders: vec![],
                     user_profiles: vec![],
                     updated_generic_string_objects: Default::default(),
@@ -828,9 +702,8 @@ fn test_loading_all_cloud_objects_after_switching_from_offline() {
                 })
             });
 
-        // No workflows or notebooks (or other objects) loaded from sqlite passed to CloudModel
+        // No folders or notebooks (or other objects) loaded from sqlite passed to CloudModel
         initialize_app(&mut app, Vec::new(), Arc::new(cloud_object_server_api_mock));
-        check_cloud_workflows(&mut app, 0);
         check_cloud_notebooks(&mut app, 0);
         check_cloud_folders(&mut app, 0);
 
@@ -839,7 +712,6 @@ fn test_loading_all_cloud_objects_after_switching_from_offline() {
 
         // Now CloudModel should include all objects that were fetched via initial load (in this
         // case: personal only)
-        check_cloud_workflows(&mut app, personal_workflows_len);
         check_cloud_folders(&mut app, personal_folders_len);
         check_cloud_notebooks(&mut app, 0);
 
@@ -857,7 +729,6 @@ fn test_loading_all_cloud_objects_after_switching_from_offline() {
         warpui::r#async::Timer::after(Duration::from_secs(1)).await;
 
         // Now CloudModel should include all objects that were fetched via initial load
-        check_cloud_workflows(&mut app, personal_workflows_len + team_workflows_len);
         check_cloud_folders(&mut app, personal_folders_len + team_folders_len);
         check_cloud_notebooks(&mut app, notebooks_len);
     })
@@ -877,7 +748,6 @@ fn test_force_refresh_only_happens_once() {
             .times(1)
             .withf(|objects_to_update, force_refresh| {
                 objects_to_update.notebooks.is_empty()
-                    && objects_to_update.workflows.is_empty()
                     && objects_to_update.folders.is_empty()
                     && objects_to_update.generic_string_objects.is_empty()
                     && *force_refresh
@@ -886,10 +756,8 @@ fn test_force_refresh_only_happens_once() {
             .return_once(move |_, _| {
                 Ok(InitialLoadResponse {
                     updated_notebooks: vec![],
-                    updated_workflows: vec![],
                     updated_folders: vec![],
                     deleted_notebooks: vec![],
-                    deleted_workflows: vec![],
                     deleted_folders: vec![],
                     user_profiles: vec![],
                     updated_generic_string_objects: Default::default(),
@@ -925,7 +793,6 @@ fn test_force_refresh_correctly_resets_timestamp() {
             .times(1)
             .withf(|objects_to_update, force_refresh| {
                 objects_to_update.notebooks.is_empty()
-                    && objects_to_update.workflows.is_empty()
                     && objects_to_update.folders.is_empty()
                     && objects_to_update.generic_string_objects.is_empty()
                     && *force_refresh
@@ -934,10 +801,8 @@ fn test_force_refresh_correctly_resets_timestamp() {
             .return_once(move |_, _| {
                 Ok(InitialLoadResponse {
                     updated_notebooks: vec![],
-                    updated_workflows: vec![],
                     updated_folders: vec![],
                     deleted_notebooks: vec![],
-                    deleted_workflows: vec![],
                     deleted_folders: vec![],
                     user_profiles: vec![],
                     updated_generic_string_objects: Default::default(),
@@ -1148,13 +1013,13 @@ fn test_update_folder_timestamp_from_object_move() {
         assert_sorting_timestamp(folder_b_id, t1, &app);
         assert_sorting_timestamp(notebook_id, t2, &app);
 
-        // Move the workflow to folder B, so it now has the newer sort timestamp.
+        // Move the object to folder B, so it now has the newer sort timestamp.
         move_object(notebook_id, Some(folder_b_id.into()), &mut app);
 
         assert_sorting_timestamp(folder_a_id, t1, &app);
         assert_sorting_timestamp(folder_b_id, t2, &app);
 
-        // Move the workflow into the root, so both folders have the older sort timestamp.
+        // Move the object into the root, so both folders have the older sort timestamp.
         move_object(notebook_id, None, &mut app);
         assert_sorting_timestamp(folder_a_id, t1, &app);
         assert_sorting_timestamp(folder_b_id, t1, &app);

@@ -42,7 +42,6 @@ use super::selection::ScrollDelta;
 use super::session::{Sessions, command_executor};
 use crate::ai::agent::conversation::AIConversationId;
 use crate::context_chips::prompt_snapshot::PromptSnapshot;
-use crate::server::ids::SyncId;
 use crate::terminal::block_filter::BlockFilterQuery;
 use crate::terminal::block_list_element::GridType;
 use crate::terminal::event::{
@@ -363,10 +362,6 @@ pub struct Block {
     home_dir: Option<String>,
 
     filter_query: Option<BlockFilterQuery>,
-
-    /// If the command is a cloud workflow, this is set to its id. If the block was not a workflow,
-    /// this is None.
-    cloud_workflow_id: Option<SyncId>,
 
     /// The last time this block was painted (i.e.: visible in the window),
     /// if ever.
@@ -969,7 +964,6 @@ impl Block {
             prompt_snapshot: None,
             home_dir: None,
             filter_query: None,
-            cloud_workflow_id: None,
             last_painted_at: None.into(),
             has_received_user_input: false,
             hidden: false,
@@ -2518,14 +2512,6 @@ impl Block {
 
     pub fn set_home_dir(&mut self, home_dir: Option<String>) {
         self.home_dir = home_dir;
-    }
-
-    pub fn set_cloud_workflow_state(&mut self, workflow_id: Option<SyncId>) {
-        self.cloud_workflow_id = workflow_id;
-    }
-
-    pub fn cloud_workflow_state(&self) -> Option<SyncId> {
-        self.cloud_workflow_id
     }
 
     pub fn creation_ts(&self) -> &DateTime<Local> {

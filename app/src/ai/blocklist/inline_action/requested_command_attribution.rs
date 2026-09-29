@@ -7,7 +7,6 @@ use warpui::{AppContext, SingletonEntity};
 use crate::ai::agent::AIAgentCitation;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::cloud_object::notebook_model::CloudNotebookModel;
-use crate::workflows::command_parser::command_matches_workflow;
 
 /// Returns true iff the `command` is directly copied from the `document`.
 pub(crate) fn is_command_copied_from_document(
@@ -32,9 +31,7 @@ fn is_command_copied_from_warp_drive_object(
     object_uid: &str,
     ctx: &AppContext,
 ) -> bool {
-    if let Some(workflow) = CloudModel::as_ref(ctx).get_workflow_by_uid(object_uid) {
-        command_matches_workflow(command, &workflow.model().data)
-    } else if let Some(notebook) = CloudModel::as_ref(ctx).get_notebook_by_uid(object_uid) {
+    if let Some(notebook) = CloudModel::as_ref(ctx).get_notebook_by_uid(object_uid) {
         is_command_copied_from_notebook(command, notebook.model())
     } else {
         false

@@ -26,7 +26,6 @@ use crate::ai::execution_profiles::CloudAIExecutionProfileModel;
 use crate::cloud_object::model::actions::{
     ObjectAction, ObjectActionHistory, ObjectActionSubtype, ObjectActionType,
 };
-use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::notebook_model::CloudNotebookModel;
 use crate::cloud_object::preference::CloudPreferenceModel;
 use crate::cloud_object::{
@@ -39,8 +38,6 @@ use crate::cloud_object::{
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::CloudFolderModel;
 use crate::server::cloud_objects::update_manager::InitiatedBy;
-use crate::workflows::CloudWorkflowModel;
-use crate::workflows::workflow_enum::CloudWorkflowEnumModel;
 
 lazy_static! {
     static ref DEFAULT_RETRY_OPTION: RetryOption =
@@ -130,19 +127,6 @@ pub enum QueueItem {
         entrypoint: CloudObjectEventEntrypoint,
         initiated_by: InitiatedBy,
     },
-    // Separate CreateWorkflow type that should be removed when we do the SyncId refactor.
-    // Stores a reference to a CloudWorkflowModel, rather than a SerializedModel, which is needed
-    // for updating an enqueued workflow with the server IDs of enums it references as they are created.
-    CreateWorkflow {
-        object_type: ObjectType,
-        owner: Owner,
-        id: ClientId,
-        #[derivative(PartialEq = "ignore")]
-        model: Arc<CloudWorkflowModel>,
-        initial_folder_id: Option<SyncId>,
-        entrypoint: CloudObjectEventEntrypoint,
-        initiated_by: InitiatedBy,
-    },
     BulkCreateGenericStringObjects {
         owner: Owner,
         objects: Vec<GenericStringObjectToCreate>,
@@ -156,22 +140,12 @@ pub enum QueueItem {
         id: SyncId,
         revision: Option<Revision>,
     },
-    UpdateWorkflow {
-        model: Arc<CloudWorkflowModel>,
-        id: SyncId,
-        revision: Option<Revision>,
-    },
     UpdateFolder {
         id: SyncId,
         model: Arc<CloudFolderModel>,
     },
     UpdatePreference {
         model: Arc<CloudPreferenceModel>,
-        id: SyncId,
-        revision: Option<Revision>,
-    },
-    UpdateWorkflowEnum {
-        model: Arc<CloudWorkflowEnumModel>,
         id: SyncId,
         revision: Option<Revision>,
     },
@@ -332,21 +306,13 @@ pub struct SyncQueue {
 
 impl SyncQueue {
     #[cfg(test)]
-    pub fn mock(ctx: &mut ModelContext<Self>) -> Self {
+    pub fn mock(_: &mut ModelContext<Self>) -> Self {
         use super::server_api::ServerApiProvider;
 
-        Self::new(
-            Default::default(),
-            ServerApiProvider::new_for_test().get(),
-            ctx,
-        )
+        Self::new(Default::default(), ServerApiProvider::new_for_test().get())
     }
 
-    pub fn new(
-        queue_items: Vec<QueueItem>,
-        object_client: Arc<dyn ObjectClient>,
-        ctx: &mut ModelContext<Self>,
-    ) -> Self {
+    pub fn new(queue_items: Vec<QueueItem>, object_client: Arc<dyn ObjectClient>) -> Self {
         let mut sync_queue = Self {
             queue: queue_items
                 .into_iter()
@@ -362,7 +328,7 @@ impl SyncQueue {
             queue_dependencies: Default::default(),
         };
 
-        sync_queue.initialize_queue_dependencies(ctx);
+        sync_queue.initialize_queue_dependencies();
         sync_queue
     }
 
@@ -387,81 +353,23 @@ impl SyncQueue {
     /// Enqueue a new request.
     pub fn enqueue(&mut self, item: QueueItem, ctx: &mut ModelContext<Self>) -> QueueItemId {
         let queue_id = QueueItemId::new();
-        let mut queue_item = item;
-
-        self.add_inferred_dependencies(&mut queue_item, &queue_id, ctx);
-        self.queue.push((queue_id, queue_item));
+        self.add_inferred_dependencies(&item, &queue_id);
+        self.queue.push((queue_id, item));
         self.dequeue(ctx);
         queue_id
     }
 
     /// Given a queue item, infer its dependencies based on the current state of the queue and add them to queue_dependencies.
-    pub fn add_inferred_dependencies(
-        &mut self,
-        item: &mut QueueItem,
-        item_id: &QueueItemId,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    pub fn add_inferred_dependencies(&mut self, item: &QueueItem, item_id: &QueueItemId) {
         let mut dependencies = match item {
             // Update requests will depend on any existing create/updates to the same object
             QueueItem::UpdateNotebook { id, .. }
             | QueueItem::UpdateFolder { id, .. }
             | QueueItem::UpdatePreference { id, .. }
-            | QueueItem::UpdateWorkflowEnum { id, .. }
             | QueueItem::UpdateAIExecutionProfile { id, .. }
             | QueueItem::UpdateCloudEnvironment { id, .. }
             | QueueItem::UpdateScheduledAmbientAgent { id, .. }
             | QueueItem::UpdateCloudAgentConfig { id, .. } => self.get_update_dependencies(id),
-
-            // Update workflow requests should depend on existing requests to that object, as well as
-            // any enums or env vars they reference.
-            QueueItem::UpdateWorkflow {
-                id: workflow_id,
-                model,
-                ..
-            } => {
-                let mut dependencies = self.get_update_dependencies(workflow_id);
-                let enum_dependencies = self.get_workflow_object_dependencies(
-                    Arc::make_mut(model),
-                    *workflow_id,
-                    item_id,
-                    ctx,
-                );
-                match enum_dependencies {
-                    Ok(deps) => dependencies.extend(deps),
-                    Err(_) => self.handle_update_failure_response(*workflow_id, *item_id, ctx),
-                }
-
-                dependencies
-            }
-
-            // Workflow creation requests should depend on every enum they reference.
-            // We should never dequeue a Workflow that references ClientIds rather than ServerIds.
-            QueueItem::CreateWorkflow {
-                model,
-                id: workflow_id,
-                initiated_by,
-                ..
-            } => {
-                let mut dependencies = HashSet::new();
-                let enum_dependencies = self.get_workflow_object_dependencies(
-                    Arc::make_mut(model),
-                    SyncId::ClientId(*workflow_id),
-                    item_id,
-                    ctx,
-                );
-                match enum_dependencies {
-                    Ok(deps) => dependencies.extend(deps),
-                    Err(_) => self.handle_creation_failure_response(
-                        workflow_id.to_string(),
-                        *item_id,
-                        *initiated_by,
-                        ctx,
-                    ),
-                }
-
-                dependencies
-            }
 
             // These queue item types do not have inferred dependencies.
             QueueItem::CreateObject { .. }
@@ -477,12 +385,11 @@ impl SyncQueue {
 
     /// Given a queue, will initialize queue dependencies for every item in the queue.
     /// Intended to be run only after loading in queue items from SQLite on startup.
-    pub fn initialize_queue_dependencies(&mut self, ctx: &mut ModelContext<Self>) {
-        let mut queue = self.queue.clone();
-        for (queue_item_id, queue_item) in queue.iter_mut() {
-            self.add_inferred_dependencies(queue_item, queue_item_id, ctx);
+    pub fn initialize_queue_dependencies(&mut self) {
+        let queue = self.queue.clone();
+        for (queue_item_id, queue_item) in queue.iter() {
+            self.add_inferred_dependencies(queue_item, queue_item_id);
         }
-        self.queue = queue
     }
 
     /// Given an object ID, return the set of queue IDs of all queue items that operate on that object
@@ -504,9 +411,6 @@ impl SyncQueue {
                 QueueItem::CreateObject { id, .. } if id.to_string() == item_id => {
                     Some(QueueDependency::QueueItem(*queue_item_id))
                 }
-                QueueItem::CreateWorkflow { id, .. } if id.to_string() == item_id => {
-                    Some(QueueDependency::QueueItem(*queue_item_id))
-                }
                 QueueItem::BulkCreateGenericStringObjects { objects, .. } => {
                     objects.iter().find_map(|data| {
                         (data.id.to_string() == item_id).then_some(
@@ -519,9 +423,7 @@ impl SyncQueue {
                 }
                 QueueItem::UpdatePreference { id, .. }
                 | QueueItem::UpdateNotebook { id, .. }
-                | QueueItem::UpdateWorkflow { id, .. }
                 | QueueItem::UpdateFolder { id, .. }
-                | QueueItem::UpdateWorkflowEnum { id, .. }
                 | QueueItem::UpdateAIExecutionProfile { id, .. }
                 | QueueItem::UpdateCloudEnvironment { id, .. }
                 | QueueItem::UpdateScheduledAmbientAgent { id, .. }
@@ -576,55 +478,11 @@ impl SyncQueue {
         dependencies
     }
 
-    /// Get dependencies on objects referenced within any workflow model, and update the model with the server IDs of any referenced objects
-    /// that have already been created. Returns an error if there is a referenced object that does not already exist and is not currently waiting
-    /// to be created.
-    fn get_workflow_object_dependencies(
-        &mut self,
-        workflow_model: &mut CloudWorkflowModel,
-        workflow_id: SyncId,
-        item_id: &QueueItemId,
-        ctx: &mut ModelContext<Self>,
-    ) -> anyhow::Result<HashSet<QueueDependency>> {
-        let mut dependencies = HashSet::new();
-
-        let object_ids = workflow_model.data.get_enum_ids();
-
-        // For every object ID referenced in the workflow, see if a server ID already exists. If it does, update the workflow.
-        for id in object_ids.into_iter() {
-            if let Some(server_id) = self.try_server_id(id) {
-                workflow_model
-                    .data
-                    .replace_object_id(id, SyncId::ServerId(server_id));
-            } else {
-                // If we don't find any dependencies and we have a client ID, this request should fail immediately
-                let queue_items = self.get_items_with_object_id(id.uid());
-                if queue_items.is_empty() {
-                    self.handle_creation_failure_response(
-                        workflow_id.uid(),
-                        *item_id,
-                        // When adding the initiated_by parameter to this function call, InitiatedBy::User was set as a default value.
-                        // It can be changed to propagate initiated_by value from the queue object in the future if desired.
-                        InitiatedBy::User,
-                        ctx,
-                    );
-                    return Err(anyhow::anyhow!("No object with this client ID exists"));
-                } else {
-                    dependencies.extend(queue_items);
-                }
-            }
-        }
-
-        Ok(dependencies)
-    }
-
     fn update_items_with_new_revision(&mut self, server_id: &str, new_revision: Revision) {
         for (_item_id, item) in &mut self.queue {
             match item {
                 QueueItem::UpdateNotebook { id, revision, .. }
-                | QueueItem::UpdateWorkflow { id, revision, .. }
                 | QueueItem::UpdatePreference { id, revision, .. }
-                | QueueItem::UpdateWorkflowEnum { id, revision, .. }
                 | QueueItem::UpdateAIExecutionProfile { id, revision, .. }
                 | QueueItem::UpdateCloudEnvironment { id, revision, .. }
                 | QueueItem::UpdateScheduledAmbientAgent { id, revision, .. }
@@ -638,7 +496,6 @@ impl SyncQueue {
                     );
                 }
                 QueueItem::CreateObject { .. }
-                | QueueItem::CreateWorkflow { .. }
                 | QueueItem::BulkCreateGenericStringObjects { .. }
                 | QueueItem::UpdateFolder { .. }
                 | QueueItem::RecordObjectAction { .. } => {}
@@ -695,20 +552,6 @@ impl SyncQueue {
                         ctx,
                     );
                 }
-                QueueItem::UpdateWorkflow {
-                    model,
-                    id,
-                    revision,
-                } => {
-                    self.update_object(
-                        model.clone(),
-                        id,
-                        revision,
-                        object_client,
-                        dequeued_item_id,
-                        ctx,
-                    );
-                }
                 QueueItem::UpdateFolder { id, model } => {
                     self.update_object(
                         model.clone(),
@@ -736,20 +579,6 @@ impl SyncQueue {
                 QueueItem::UpdateAIExecutionProfile {
                     id,
                     model,
-                    revision,
-                } => {
-                    self.update_object(
-                        model.clone(),
-                        id,
-                        revision,
-                        object_client,
-                        dequeued_item_id,
-                        ctx,
-                    );
-                }
-                QueueItem::UpdateWorkflowEnum {
-                    model,
-                    id,
                     revision,
                 } => {
                     self.update_object(
@@ -800,31 +629,6 @@ impl SyncQueue {
                         revision,
                         object_client,
                         dequeued_item_id,
-                        ctx,
-                    );
-                }
-                QueueItem::CreateWorkflow {
-                    object_type,
-                    owner,
-                    id,
-                    model,
-                    initial_folder_id,
-                    entrypoint,
-                    initiated_by,
-                } => {
-                    let serialized_model = Some(model.serialized());
-
-                    self.create_object(
-                        object_type,
-                        serialized_model,
-                        None,
-                        owner,
-                        id,
-                        initial_folder_id,
-                        entrypoint,
-                        object_client,
-                        dequeued_item_id,
-                        initiated_by,
                         ctx,
                     );
                 }
@@ -1129,13 +933,6 @@ impl SyncQueue {
                             )
                             .await
                         }
-                        ObjectType::Workflow => {
-                            CloudWorkflowModel::send_create_request(
-                                object_client_clone,
-                                create_request,
-                            )
-                            .await
-                        }
                         ObjectType::Folder => {
                             CloudFolderModel::send_create_request(
                                 object_client_clone,
@@ -1148,13 +945,6 @@ impl SyncQueue {
                         )) => match json_object_type {
                             JsonObjectType::Preference => {
                                 CloudPreferenceModel::send_create_request(
-                                    object_client_clone,
-                                    create_request,
-                                )
-                                .await
-                            }
-                            JsonObjectType::WorkflowEnum => {
-                                CloudWorkflowEnumModel::send_create_request(
                                     object_client_clone,
                                     create_request,
                                 )
@@ -1198,14 +988,6 @@ impl SyncQueue {
                         } => {
                             // TODO(alokedesai): Update existing items in the sync queue with
                             // the new revision.
-
-                            // After an object is created, go through any objects dependent on them and update the associated queue items accordingly.
-                            me.update_dependencies_on_creation(
-                                &QueueDependency::QueueItem(queue_item_id),
-                                id,
-                                created_cloud_object.server_id_and_type.id,
-                                object_type,
-                            );
 
                             me.handle_success_response(
                                 &created_cloud_object.server_id_and_type.id.uid(),
@@ -1648,56 +1430,6 @@ impl SyncQueue {
         }
     }
 
-    /// Given a successful object creation, update any dependent objects to refer to the object's new server ID
-    fn update_dependencies_on_creation(
-        &mut self,
-        dependency: &QueueDependency,
-        client_id: ClientId,
-        server_id: ServerId,
-        object_type: ObjectType,
-    ) {
-        if let ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-            JsonObjectType::WorkflowEnum,
-        )) = object_type
-        {
-            let server_id: GenericStringObjectId = server_id.into();
-
-            for (item_id, queue_item) in self.queue.iter_mut() {
-                match queue_item {
-                    QueueItem::CreateWorkflow { model, .. } => {
-                        // Only update the workflow if it depends on this dependency.
-                        if self
-                            .queue_dependencies
-                            .get(item_id)
-                            .is_some_and(|deps| deps.contains(dependency))
-                        {
-                            let workflow_model = Arc::make_mut(model);
-                            workflow_model.data.replace_object_id(
-                                SyncId::ClientId(client_id),
-                                SyncId::from(server_id),
-                            );
-                        }
-                    }
-                    QueueItem::UpdateWorkflow { model, .. } => {
-                        // Only update the workflow if it depends on this dependency.
-                        if self
-                            .queue_dependencies
-                            .get(item_id)
-                            .is_some_and(|deps| deps.contains(dependency))
-                        {
-                            let workflow_model = Arc::make_mut(model);
-                            workflow_model.data.replace_object_id(
-                                SyncId::ClientId(client_id),
-                                SyncId::from(server_id),
-                            );
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
     /// If a request succeeds, update the dependency map by removing it from all dependency sets
     fn handle_dependency_success(&mut self, dependency: &QueueDependency) {
         for (_, dependencies) in self.queue_dependencies.iter_mut() {
@@ -1743,16 +1475,6 @@ impl SyncQueue {
                         ctx,
                     );
                 }
-                QueueItem::CreateWorkflow {
-                    id, initiated_by, ..
-                } => {
-                    self.handle_creation_failure_response(
-                        id.to_string(),
-                        item_id,
-                        initiated_by,
-                        ctx,
-                    );
-                }
                 QueueItem::BulkCreateGenericStringObjects { objects, .. } => {
                     for object in objects.iter() {
                         self.handle_creation_failure_response(
@@ -1763,9 +1485,6 @@ impl SyncQueue {
                         );
                     }
                 }
-                QueueItem::UpdateWorkflow { id, .. } => {
-                    self.handle_update_failure_response(id, item_id, ctx);
-                }
                 QueueItem::UpdateNotebook { id, .. } => {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
@@ -1773,9 +1492,6 @@ impl SyncQueue {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
                 QueueItem::UpdatePreference { id, .. } => {
-                    self.handle_update_failure_response(id, item_id, ctx);
-                }
-                QueueItem::UpdateWorkflowEnum { id, .. } => {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
                 QueueItem::UpdateAIExecutionProfile { id, .. } => {

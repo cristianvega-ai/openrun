@@ -44,9 +44,9 @@ use crate::cloud_object::{
     CloudObjectSyncStatus, CreateCloudObjectResult, CreateObjectRequest, GenericCloudObject,
     GenericServerObject, GenericStringObjectFormat, JsonObjectType, NumInFlightRequests,
     ObjectDeleteResult, ObjectIdType, ObjectMetadataUpdateResult, ObjectPermissionsUpdateData,
-    ObjectType, Owner, Revision, RevisionAndLastEditor, ServerAIExecutionProfile,
-    ServerAmbientAgentEnvironment, ServerCloudAgentConfig, ServerCloudObject, ServerMetadata,
-    ServerPermissions, ServerPreference, ServerScheduledAmbientAgent, ServerWorkflowEnum, Space,
+    ObjectType, Owner, Revision, ServerAIExecutionProfile, ServerAmbientAgentEnvironment,
+    ServerCloudAgentConfig, ServerCloudObject, ServerMetadata, ServerPermissions, ServerPreference,
+    ServerScheduledAmbientAgent, Space,
 };
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::{CloudFolderModel, FolderId};
@@ -64,9 +64,6 @@ use crate::server::server_api::object::{GuestIdentifier, ObjectClient};
 use crate::server::sync_queue::{
     CreationFailureReason, GenericStringObjectToCreate, QueueItem, SyncQueue, SyncQueueEvent,
 };
-use crate::workflows::workflow::Workflow;
-use crate::workflows::workflow_enum::{CloudWorkflowEnum, CloudWorkflowEnumModel, WorkflowEnum};
-use crate::workflows::{CloudWorkflowModel, WorkflowId};
 use crate::workspaces::team_tester::{TeamTesterStatus, TeamTesterStatusEvent};
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_profiles::{UserProfileWithUID, UserProfiles};
@@ -345,35 +342,14 @@ impl UpdateManager {
                         ctx,
                     );
 
-                    // If we have created a GSO, we need to update the in-memory model for any dependent workflows.
-                    // Go through every workflow and try to replace the client ID with the new server ID.
+                    // If we have created a GSO, update the in-memory models that reference it by client ID.
                     if server_creation_info.server_id_and_type.id_type
                         == ObjectIdType::GenericStringObject
                     {
                         let client_id = SyncId::ClientId(*client_id);
                         let server_id = SyncId::ServerId(*server_id);
 
-                        if cloud_model.get_workflow_enum(&server_id).is_some() {
-                            cloud_model
-                                .get_all_active_and_inactive_workflows_mut()
-                                .for_each(|workflow_object| {
-                                    let mut workflow = workflow_object.model().clone();
-                                    let updated_model =
-                                        workflow.data.replace_object_id(client_id, server_id);
-
-                                    // If we changed anything, then update the in-memory model, emit a CloudEvent, and update the DB
-                                    if updated_model {
-                                        workflow_object.set_model(workflow);
-
-                                        ctx.emit(CloudModelEvent::ObjectUpdated {
-                                            type_and_id: workflow_object.cloud_object_type_and_id(),
-                                            source: UpdateSource::Local,
-                                        });
-
-                                        self.save_to_db([workflow_object.upsert_event()]);
-                                    }
-                                });
-                        } else if cloud_model.get_ai_execution_profile(&server_id).is_some() {
+                        if cloud_model.get_ai_execution_profile(&server_id).is_some() {
                             AIExecutionProfilesModel::handle(ctx).update(ctx, |model, ctx| {
                                 model.replace_client_id_with_server_id(server_id, client_id, ctx);
                             });
@@ -772,7 +748,6 @@ impl UpdateManager {
             .collect::<Vec<_>>();
 
         let deleted_notebook_ids = Self::handle_object_deletions(response.deleted_notebooks, ctx);
-        let deleted_workflow_ids = Self::handle_object_deletions(response.deleted_workflows, ctx);
         let deleted_folder_ids = Self::handle_object_deletions(response.deleted_folders, ctx);
         let deleted_generic_string_ids =
             Self::handle_object_deletions(response.deleted_generic_string_objects, ctx);
@@ -780,11 +755,6 @@ impl UpdateManager {
         let deleted_object_ids_and_types: Vec<(SyncId, ObjectIdType)> = deleted_notebook_ids
             .into_iter()
             .map(|id| (id, ObjectIdType::Notebook))
-            .chain(
-                deleted_workflow_ids
-                    .into_iter()
-                    .map(|id| (id, ObjectIdType::Workflow)),
-            )
             .chain(
                 deleted_folder_ids
                     .into_iter()
@@ -806,12 +776,6 @@ impl UpdateManager {
         let mut sqlite_events = vec![
             Self::handle_object_updates(
                 response.updated_notebooks,
-                force_refresh,
-                !is_first_load,
-                ctx,
-            ),
-            Self::handle_object_updates(
-                response.updated_workflows,
                 force_refresh,
                 !is_first_load,
                 ctx,
@@ -841,21 +805,6 @@ impl UpdateManager {
                         ctx,
                     );
                     sqlite_events.push(event);
-                }
-                GenericStringObjectFormat::Json(JsonObjectType::WorkflowEnum) => {
-                    let typed_objects = objects
-                        .iter()
-                        .filter_map(|obj| {
-                            let server_obj: Option<&ServerWorkflowEnum> = obj.into();
-                            server_obj.cloned()
-                        })
-                        .collect::<Vec<_>>();
-                    sqlite_events.push(Self::handle_object_updates(
-                        typed_objects,
-                        force_refresh,
-                        !is_first_load,
-                        ctx,
-                    ));
                 }
                 GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile) => {
                     let typed_objects = objects
@@ -1022,7 +971,7 @@ impl UpdateManager {
         self.spawned_futures.push(future.future_id());
     }
 
-    /// Generic handler updating all objects of a given model type from the server (e.g. all updated/deleted notebooks or workflows).
+    /// Generic handler updating all objects of a given model type from the server (e.g. all updated/deleted notebooks or folders).
     /// Updates the CloudModel directly and returns a model event for updating SQLite.
     fn handle_object_updates<K, M>(
         updated_objects: Vec<GenericServerObject<K, M>>,
@@ -1060,7 +1009,7 @@ impl UpdateManager {
         )
     }
 
-    /// Generic handler deleting all objects of a given model type from the server (e.g. all updated/deleted notebooks or workflows).
+    /// Generic handler deleting all objects of a given model type from the server (e.g. all updated/deleted notebooks or folders).
     /// Updates the CloudModel directly and returns a model event for updating SQLite.
     fn handle_object_deletions<K>(
         deleted_objects: Vec<K>,
@@ -1571,7 +1520,7 @@ impl UpdateManager {
     fn handle_conflicting_object(
         &self,
         conflicting_object: &Arc<ServerCloudObject>,
-        uid: &ObjectUid,
+        _uid: &ObjectUid,
         ctx: &mut ModelContext<Self>,
     ) {
         match conflicting_object.as_ref() {
@@ -1592,73 +1541,6 @@ impl UpdateManager {
                         ctx.notify();
                     }
                 });
-            }
-            ServerCloudObject::Workflow(workflow) => {
-                // we don't have a good UX right now for resolving conflicts, so if the
-                // server tells us that a workflow is in conflict, just reset this client's
-                // state to whatever the server returned as the source of truth.
-                CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| {
-                    cloud_model.overwrite_workflow(workflow.clone().model.data, workflow.id, ctx);
-                    let workflow_metadata = workflow.clone().metadata;
-                    cloud_model.set_latest_revision_and_editor(
-                        uid,
-                        RevisionAndLastEditor {
-                            revision: workflow_metadata.revision,
-                            last_editor_uid: workflow_metadata.last_editor_uid,
-                        },
-                        ctx,
-                    );
-                    if let Some(object) = cloud_model.get_mut_by_uid(uid) {
-                        object.decrement_in_flight_request_count(
-                            CloudObjectSyncStatus::NoLocalChanges,
-                        );
-                        ctx.notify();
-                    }
-                });
-
-                let cloud_model = CloudModel::as_ref(ctx);
-                if let Some(workflow) = cloud_model.get_workflow(&workflow.id) {
-                    self.save_to_db([ModelEvent::UpsertWorkflow {
-                        workflow: workflow.clone(),
-                    }]);
-                }
-            }
-            ServerCloudObject::WorkflowEnum(workflow_enum) => {
-                // Workflow enums exhibit the same behavior as notebooks and workflows on conflict:
-                // If we detect a conflict, we reset the client state to the enum that the server returned as the source of truth.
-                CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| {
-                    cloud_model.overwrite_workflow_enum(
-                        workflow_enum.clone().model.string_model,
-                        workflow_enum.id,
-                        ctx,
-                    );
-                    let workflow_enum_metadata = workflow_enum.clone().metadata;
-                    cloud_model.set_latest_revision_and_editor(
-                        uid,
-                        RevisionAndLastEditor {
-                            revision: workflow_enum_metadata.revision,
-                            last_editor_uid: workflow_enum_metadata.last_editor_uid,
-                        },
-                        ctx,
-                    );
-                    if let Some(object) = cloud_model.get_mut_by_uid(uid) {
-                        object.decrement_in_flight_request_count(
-                            CloudObjectSyncStatus::NoLocalChanges,
-                        );
-                        ctx.notify();
-                    }
-                });
-
-                let cloud_model = CloudModel::as_ref(ctx);
-                if let Some(workflow_enum) = cloud_model
-                    .get_object_of_type::<GenericStringObjectId, CloudWorkflowEnumModel>(
-                        &workflow_enum.id,
-                    )
-                {
-                    self.save_to_db([ModelEvent::UpsertGenericStringObject {
-                        object: Box::new(workflow_enum.clone()),
-                    }]);
-                }
             }
             ServerCloudObject::AIExecutionProfile(server_profile) => {
                 // Update in-memory model with the fact that it was rejected. We don't update sqlite
@@ -1712,36 +1594,6 @@ impl UpdateManager {
         if had_conflicts {
             self.save_in_memory_object_to_sqlite(cloud_model_handle.as_ref(ctx), uid);
         }
-    }
-
-    pub fn update_workflow(
-        &mut self,
-        workflow: Workflow,
-        workflow_id: SyncId,
-        revision_ts: Option<Revision>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_object(
-            CloudWorkflowModel::new(workflow),
-            workflow_id,
-            revision_ts,
-            ctx,
-        );
-    }
-
-    pub fn update_workflow_enum(
-        &mut self,
-        workflow_enum: WorkflowEnum,
-        workflow_enum_id: SyncId,
-        revision_ts: Option<Revision>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_object(
-            CloudWorkflowEnumModel::new(workflow_enum),
-            workflow_enum_id,
-            revision_ts,
-            ctx,
-        );
     }
 
     pub fn update_ambient_agent_environment(
@@ -1963,15 +1815,6 @@ impl UpdateManager {
     ) {
         let object_client = self.object_client.clone();
 
-        // If the moved object is a workflow, we also have to move its the workflow enums to the new space.
-        // We do this before moving the workflow to avoid a potential failure state where we've moved a workflow
-        // that still references enums in the old space.
-        let mut original_workflow = None;
-        if object_type == ObjectType::Workflow {
-            original_workflow =
-                self.copy_workflow_enums_to_drive(server_id, destination_owner, ctx);
-        }
-
         CloudModel::handle(ctx).update(ctx, |model, _| {
             if let Some(object) = model.get_mut_by_uid(&server_id.uid()) {
                 object
@@ -1991,14 +1834,6 @@ impl UpdateManager {
                             object_client
                                 .transfer_notebook_owner(
                                     NotebookId::from(server_id),
-                                    destination_owner,
-                                )
-                                .await
-                        }
-                        ObjectType::Workflow => {
-                            object_client
-                                .transfer_workflow_owner(
-                                    WorkflowId::from(server_id),
                                     destination_owner,
                                 )
                                 .await
@@ -2054,11 +1889,6 @@ impl UpdateManager {
                         ctx.notify();
 
                     } else {
-                        // If the move fails, revert the workflow to use the old enums
-                        if let Some(workflow) = original_workflow.take() {
-                            me.revert_workflow_on_failed_move(server_id, workflow, ctx);
-                        }
-
                         Self::move_object_to_drive_failed(
                             server_id,
                             current_folder,
@@ -2073,11 +1903,6 @@ impl UpdateManager {
                 }
                 RequestState::RequestFailed(e) => {
                     log::warn!("Failed to move object to space: {e}. Not retrying");
-                    // If the move fails, revert the workflow to use the old enums
-                    if let Some(workflow) = original_workflow.take() {
-                        me.revert_workflow_on_failed_move(server_id, workflow, ctx);
-                    }
-
                     Self::move_object_to_drive_failed(
                         server_id,
                         current_folder,
@@ -2599,83 +2424,6 @@ impl UpdateManager {
         self.spawned_futures.push(future.future_id());
     }
 
-    /// Given a workflow_id and a destination drive, make a copy of all referenced workflow enums in the destination drive.
-    /// Returns the original workflow object if it was modified (in case a future revert is needed), otherwise returns None.
-    fn copy_workflow_enums_to_drive(
-        &mut self,
-        server_id: ServerId,
-        owner: Owner,
-        ctx: &mut ModelContext<Self>,
-    ) -> Option<Workflow> {
-        let workflow_id = SyncId::ServerId(server_id);
-        let workflow = CloudModel::as_ref(ctx).get_workflow(&workflow_id);
-
-        if let Some(workflow) = workflow {
-            let original_workflow = workflow.model().data.clone();
-            let mut workflow_model = original_workflow.clone();
-
-            // Duplicate all enums associated with the workflow
-            let enums = workflow_model.get_enum_ids();
-            for enum_id in enums.iter() {
-                let cloud_model = CloudModel::as_ref(ctx);
-                let object: Option<&CloudWorkflowEnum> = cloud_model.get_object_of_type(enum_id);
-                let Some(object) = object else {
-                    report_error!(
-                        "Could not find referenced workflow enum to copy over to the new space, skipping"
-                    );
-                    continue;
-                };
-
-                let client_id = ClientId::new();
-
-                // Create a duplicate enum in the new space with a new client ID
-                self.create_object(
-                    object.model().clone(),
-                    owner,
-                    client_id,
-                    CloudObjectEventEntrypoint::Unknown,
-                    true,
-                    None,
-                    // When adding the initiated_by parameter to this function call, InitiatedBy::User was set as a default value.
-                    // This can be changed to InitiatedBy::System if this action was automatically kicked off by the system and we do not want a user facing toast.
-                    InitiatedBy::User,
-                    ctx,
-                );
-
-                workflow_model.replace_object_id(*enum_id, SyncId::ClientId(client_id));
-            }
-
-            // Update the workflow with the new enum IDs, if there are any
-            if !enums.is_empty() {
-                self.update_workflow(workflow_model, workflow_id, None, ctx);
-                Some(original_workflow)
-            } else {
-                None
-            }
-        } else {
-            report_error!(anyhow::anyhow!(
-                "Tried to move workflow enums to new space but could not find associated workflow",
-            ));
-            None
-        }
-    }
-
-    /// If an ownership transfer fails, revert the workflow to reference the pre-transition workflow enums
-    fn revert_workflow_on_failed_move(
-        &mut self,
-        server_id: ServerId,
-        original_workflow: Workflow,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        let workflow_id = WorkflowId::from(server_id);
-        self.update_workflow(
-            original_workflow,
-            SyncId::ServerId(workflow_id.into()),
-            None,
-            ctx,
-        );
-    }
-
     // This method moves an object from its current location to a new location.
     // Since moving is an online-only operation, this operation does NOT go through the sync queue.
     pub fn move_object_to_location(
@@ -2824,9 +2572,6 @@ impl UpdateManager {
         match cloud_object_type_and_id {
             CloudObjectTypeAndId::Notebook(notebook_id) => {
                 self.duplicate_object_internal::<NotebookId, CloudNotebookModel>(notebook_id, ctx);
-            }
-            CloudObjectTypeAndId::Workflow(workflow_id) => {
-                self.duplicate_object_internal::<WorkflowId, CloudWorkflowModel>(workflow_id, ctx);
             }
             CloudObjectTypeAndId::GenericStringObject { .. } => {
                 report_error!("Tried to duplicate an unsupported type: json object");
@@ -3034,55 +2779,6 @@ impl UpdateManager {
             duplicate_name = get_duplicate_object_name(&duplicate_name);
         }
         duplicate_name
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_workflow(
-        &mut self,
-        workflow: Workflow,
-        owner: Owner,
-        initial_folder_id: Option<SyncId>,
-        client_id: ClientId,
-        entrypoint: CloudObjectEventEntrypoint,
-        force_expand: bool,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.create_object(
-            CloudWorkflowModel::new(workflow),
-            owner,
-            client_id,
-            entrypoint,
-            force_expand,
-            initial_folder_id,
-            // When adding the initiated_by parameter to this function call, InitiatedBy::User was set as a default value.
-            // This can be changed to InitiatedBy::System if this action was automatically kicked off by the system and we do not want a user facing toast.
-            InitiatedBy::User,
-            ctx,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_workflow_enum(
-        &mut self,
-        workflow_enum: WorkflowEnum,
-        owner: Owner,
-        client_id: ClientId,
-        entrypoint: CloudObjectEventEntrypoint,
-        force_expand: bool,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.create_object(
-            CloudWorkflowEnumModel::new(workflow_enum),
-            owner,
-            client_id,
-            entrypoint,
-            force_expand,
-            None,
-            // When adding the initiated_by parameter to this function call, InitiatedBy::User was set as a default value.
-            // This can be changed to InitiatedBy::System if this action was automatically kicked off by the system and we do not want a user facing toast.
-            InitiatedBy::User,
-            ctx,
-        );
     }
 
     #[allow(clippy::too_many_arguments)]

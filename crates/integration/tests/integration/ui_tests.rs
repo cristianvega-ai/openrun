@@ -60,9 +60,7 @@ integration_tests! {
     test_restore_snapshot_with_deleted_cwd,
     test_session_restoration_with_multiple_shells,
     test_restore_snapshot_with_background_output,
-    test_restore_snapshot_with_workflows,
     test_restore_snapshot_with_test_json_object,
-    test_restore_snapshot_with_common_shareable_metadata_ids,
     test_restore_snapshot_with_markdown_file,
     test_restore_snapshot_with_settings_page,
     // TODO(kevin): figure out why the file name doesn't match.
@@ -238,7 +236,6 @@ integration_tests! {
 
     test_open_in_warp_banner,
 
-    test_open_workflow_in_pane,
 
     // TODO(alokedesai): Fix this on the latest version of Bash.
     #[ignore]

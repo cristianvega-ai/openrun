@@ -2,12 +2,11 @@ use warpui::integration::TestStep;
 use warpui::{SingletonEntity, async_assert, async_assert_eq};
 
 use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{CloudObjectEventEntrypoint, CloudObjectLocation, Space};
+use crate::cloud_object::{CloudObjectLocation, Space};
 use crate::server::cloud_objects::listener::Listener;
-use crate::server::cloud_objects::update_manager::UpdateManager;
+use crate::server::cloud_objects::update_manager::{InitiatedBy, UpdateManager};
 use crate::server::ids::ClientId;
 use crate::util::bindings::keybinding_name_to_display_string;
-use crate::workflows::workflow::Workflow;
 use crate::workspaces::team::{Team, TeamVisibility};
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::workspaces::workspace::Workspace;
@@ -68,19 +67,19 @@ pub fn join_a_workspace() -> TestStep {
         })
 }
 
-pub fn create_a_personal_workflow() -> TestStep {
-    TestStep::new("Create a personal workflow")
+pub fn create_a_personal_folder() -> TestStep {
+    TestStep::new("Create a personal folder")
         .with_action(move |app, _, _| {
             UpdateManager::handle(app).update(app, |update_manager, ctx| {
-                update_manager.create_workflow(
-                    Workflow::new("My first workflow", "ls"),
+                update_manager.create_folder(
+                    "My first folder".to_string(),
                     UserWorkspaces::as_ref(ctx)
                         .personal_drive(ctx)
                         .expect("User UID must be set in tests"),
-                    None,
                     ClientId::default(),
-                    CloudObjectEventEntrypoint::ManagementUI,
+                    None,
                     true,
+                    InitiatedBy::User,
                     ctx,
                 )
             })

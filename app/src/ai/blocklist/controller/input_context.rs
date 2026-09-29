@@ -126,7 +126,6 @@ pub(super) fn parse_context_attachments(
                 }
             } else {
                 let object_type = match object_type_str {
-                    "workflow" => ObjectType::Workflow,
                     "notebook" => ObjectType::Notebook,
                     _ => continue, // Skip unknown object types
                 };
@@ -225,16 +224,6 @@ fn get_object_attachment_payload(
     ctx: &AppContext,
 ) -> Option<DriveObjectPayload> {
     match object_type {
-        ObjectType::Workflow => CloudModel::as_ref(ctx)
-            .get_workflow_by_uid(uid)
-            .map(|workflow| {
-                let workflow_data = &workflow.model().data;
-                DriveObjectPayload::Workflow {
-                    name: workflow_data.name().to_string(),
-                    description: workflow_data.description().cloned().unwrap_or_default(),
-                    command: workflow_data.content().to_string(),
-                }
-            }),
         ObjectType::Notebook => CloudModel::as_ref(ctx)
             .get_notebook_by_uid(uid)
             .map(|notebook| DriveObjectPayload::Notebook {

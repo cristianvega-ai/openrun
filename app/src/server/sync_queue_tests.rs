@@ -16,6 +16,7 @@ use crate::cloud_object::model::actions::{
 };
 use crate::cloud_object::model::generic_string_model::GenericStringObjectId;
 use crate::cloud_object::notebook_model::{CloudNotebookModel, NotebookId};
+use crate::cloud_object::preference::{CloudPreferenceModel, Preference};
 use crate::cloud_object::{
     CloudModelType, CloudObjectEventEntrypoint, CreateCloudObjectResult, CreatedCloudObject,
     GenericStringObjectFormat, JsonObjectType, ObjectIdType, ObjectType, Owner, Revision,
@@ -32,10 +33,15 @@ use crate::server::sync_queue::{
 };
 use crate::system::SystemStats;
 use crate::test_util::assert_eventually;
-use crate::workflows::CloudWorkflowModel;
-use crate::workflows::workflow::{Argument, ArgumentType, Workflow};
-use crate::workflows::workflow_enum::{CloudWorkflowEnumModel, EnumVariants, WorkflowEnum};
 use crate::{NetworkStatus, QueueItem, SyncQueue};
+
+fn test_preference(storage_key: &str) -> CloudPreferenceModel {
+    CloudPreferenceModel::new(Preference {
+        storage_key: storage_key.to_string(),
+        value: serde_json::Value::Bool(true),
+        platform: cloud_object_models::Platform::Global,
+    })
+}
 
 #[derive(Default)]
 struct Events(Vec<SyncQueueEvent>);
@@ -80,9 +86,8 @@ fn create_sync_queue(
     cloud_objects_client_mock: MockObjectClient,
     immediately_start_dequeueing: bool,
 ) -> ModelHandle<SyncQueue> {
-    let sync_queue = app.add_singleton_model(|ctx| {
-        SyncQueue::new(queue_items, Arc::new(cloud_objects_client_mock), ctx)
-    });
+    let sync_queue = app
+        .add_singleton_model(|_| SyncQueue::new(queue_items, Arc::new(cloud_objects_client_mock)));
 
     if immediately_start_dequeueing {
         SyncQueue::handle(app).update(app, |sync_queue, ctx| {
@@ -191,10 +196,15 @@ fn test_generic_string_object_unique_key_failure() {
         let owner = Owner::mock_current_user();
         let gso_id = ClientId::default();
         let gso_json = "{\"storage_key\":\"somepref\",\"value\":true,\"platform\":\"Global\"}";
-        let workflow_id = ClientId::default();
-        let workflow_server_id = ServerId::from(1);
-        let workflow_ts = DateTime::<Utc>::default();
-        let workflow_data = Workflow::new("my workflow", "echo hi");
+        let notebook_id = ClientId::default();
+        let notebook_server_id = ServerId::from(1);
+        let notebook_ts = DateTime::<Utc>::default();
+        let notebook_data = CloudNotebookModel {
+            title: "my notebook".to_string(),
+            data: "hi".to_string(),
+            ai_document_id: None,
+            conversation_id: None,
+        };
 
         // This pattern is used in a couple places to control the order of async operations.
         // Basically, we wait to receive a message on a channel before certain mocks can continue,
@@ -211,21 +221,21 @@ fn test_generic_string_object_unique_key_failure() {
                 Ok(CreateCloudObjectResult::GenericStringObjectUniqueKeyConflict)
             });
         cloud_objects_client_mock
-            .expect_create_workflow()
+            .expect_create_notebook()
             .times(1)
             .return_once(move |_| {
                 rx.recv().unwrap();
                 Ok(CreateCloudObjectResult::Success {
                     created_cloud_object: CreatedCloudObject {
-                        client_id: workflow_id,
+                        client_id: notebook_id,
                         revision_and_editor: RevisionAndLastEditor {
-                            revision: workflow_ts.into(),
+                            revision: notebook_ts.into(),
                             last_editor_uid: None,
                         },
-                        metadata_ts: workflow_ts.into(),
+                        metadata_ts: notebook_ts.into(),
                         server_id_and_type: ServerIdAndType {
-                            id: workflow_server_id,
-                            id_type: ObjectIdType::Workflow,
+                            id: notebook_server_id,
+                            id_type: ObjectIdType::Notebook,
                         },
                         creator_uid: None,
                         permissions: ServerPermissions::mock_personal(),
@@ -248,13 +258,12 @@ fn test_generic_string_object_unique_key_failure() {
                     entrypoint: CloudObjectEventEntrypoint::Unknown,
                     initiated_by: InitiatedBy::User,
                 },
-                QueueItem::CreateWorkflow {
-                    object_type: ObjectType::Workflow,
+                QueueItem::CreateObject {
+                    object_type: ObjectType::Notebook,
                     owner,
-                    id: workflow_id,
-                    model: Arc::new(CloudWorkflowModel {
-                        data: workflow_data,
-                    }),
+                    id: notebook_id,
+                    title: None,
+                    serialized_model: Some(Arc::new(notebook_data.serialized())),
                     initial_folder_id: None,
                     entrypoint: CloudObjectEventEntrypoint::Unknown,
                     initiated_by: InitiatedBy::User,
@@ -294,7 +303,7 @@ fn test_generic_string_object_unique_key_failure() {
             );
         });
 
-        // Allow the workflow to be created.
+        // Allow the notebook to be created.
         tx.send(()).unwrap();
         sync_queue
             .update(&mut app, |queue, ctx| {
@@ -321,18 +330,18 @@ fn test_generic_string_object_unique_key_failure() {
                     SyncQueueEvent::ObjectCreationSuccessful {
                         server_creation_info: ServerCreationInfo {
                             server_id_and_type: ServerIdAndType {
-                                id: workflow_server_id,
-                                id_type: ObjectIdType::Workflow
+                                id: notebook_server_id,
+                                id_type: ObjectIdType::Notebook
                             },
                             creator_uid: None,
                             permissions: ServerPermissions::mock_personal(),
                         },
-                        client_id: workflow_id,
+                        client_id: notebook_id,
                         revision_and_editor: RevisionAndLastEditor {
-                            revision: workflow_ts.into(),
+                            revision: notebook_ts.into(),
                             last_editor_uid: None
                         },
-                        metadata_ts: workflow_ts.into(),
+                        metadata_ts: notebook_ts.into(),
                         initiated_by: InitiatedBy::User
                     }
                 ]
@@ -840,10 +849,10 @@ fn test_record_object_action() {
         let timestamp_old = timestamp - Duration::minutes(10);
         let timestamp_older = timestamp - Duration::minutes(20);
         let timestamp_oldest = timestamp - Duration::minutes(30);
-        let workflow_id = "0000watermelonchestnut".to_string();
-        let workflow_id_clone = workflow_id.clone();
-        let hashed_sqlite_id = SyncId::ServerId(ServerId::from_string_lossy(&workflow_id))
-            .sqlite_uid_hash(ObjectIdType::Workflow);
+        let notebook_id = "0000watermelonchestnut".to_string();
+        let notebook_id_clone = notebook_id.clone();
+        let hashed_sqlite_id = SyncId::ServerId(ServerId::from_string_lossy(&notebook_id))
+            .sqlite_uid_hash(ObjectIdType::Notebook);
         let hashed_sqlite_id_clone = hashed_sqlite_id.clone();
 
         let mut cloud_objects_client_mock = MockObjectClient::new();
@@ -852,14 +861,14 @@ fn test_record_object_action() {
             .times(1)
             .returning(move |_, _, _, _| {
                 Ok(ObjectActionHistory {
-                    uid: workflow_id_clone.clone(),
+                    uid: notebook_id_clone.clone(),
                     hashed_sqlite_id: hashed_sqlite_id_clone.clone(),
                     latest_processed_at_timestamp: timestamp,
                     actions: vec![
                         // One action that occurred just now
                         ObjectAction {
                             action_type: ObjectActionType::Execute,
-                            uid: workflow_id_clone.clone(),
+                            uid: notebook_id_clone.clone(),
                             hashed_sqlite_id: hashed_sqlite_id_clone.clone(),
                             action_subtype: ObjectActionSubtype::SingleAction {
                                 timestamp,
@@ -871,7 +880,7 @@ fn test_record_object_action() {
                         // One action that occurred a lil bit ago
                         ObjectAction {
                             action_type: ObjectActionType::Execute,
-                            uid: workflow_id_clone.clone(),
+                            uid: notebook_id_clone.clone(),
                             hashed_sqlite_id: hashed_sqlite_id_clone.clone(),
                             action_subtype: ObjectActionSubtype::SingleAction {
                                 timestamp: timestamp_old,
@@ -883,7 +892,7 @@ fn test_record_object_action() {
                         // A bundle of 10 actions from a lil while ago
                         ObjectAction {
                             action_type: ObjectActionType::Execute,
-                            uid: workflow_id_clone.clone(),
+                            uid: notebook_id_clone.clone(),
                             hashed_sqlite_id: hashed_sqlite_id_clone.clone(),
                             action_subtype: ObjectActionSubtype::BundledActions {
                                 latest_timestamp: timestamp_older,
@@ -909,8 +918,8 @@ fn test_record_object_action() {
             .update(&mut app, |item, ctx| {
                 item.enqueue(
                     QueueItem::RecordObjectAction {
-                        id_and_type: CloudObjectTypeAndId::Workflow(SyncId::ServerId(
-                            ServerId::from_string_lossy(&workflow_id),
+                        id_and_type: CloudObjectTypeAndId::Notebook(SyncId::ServerId(
+                            ServerId::from_string_lossy(&notebook_id),
                         )),
                         action_type: ObjectActionType::Execute,
                         action_timestamp: timestamp,
@@ -923,7 +932,7 @@ fn test_record_object_action() {
             })
             .await;
 
-        let uid = SyncId::ServerId(ServerId::from_string_lossy(&workflow_id)).uid();
+        let uid = SyncId::ServerId(ServerId::from_string_lossy(&notebook_id)).uid();
         sync_queue_events.update(&mut app, |sync_queue_events, _ctx| {
             assert_eq!(sync_queue_events.0.len(), 1);
             assert_eq!(
@@ -979,8 +988,8 @@ fn test_record_object_action() {
 
 #[test]
 fn test_sync_queue_dependency_successes() {
-    // Create a client ID for a workflow
-    let workflow_client_id = ClientId::new();
+    // Create a client ID for a notebook
+    let notebook_client_id = ClientId::new();
 
     App::test((), |mut app| async move {
         initialize_app(&mut app);
@@ -989,15 +998,14 @@ fn test_sync_queue_dependency_successes() {
         let sync_queue = create_sync_queue(&mut app, vec![], cloud_objects_client_mock, false);
 
         sync_queue.update(&mut app, |sync_queue, ctx| {
-            // Enqueue the workflow create request
+            // Enqueue the notebook create request
             let create_id = sync_queue.enqueue(
-                QueueItem::CreateWorkflow {
-                    object_type: ObjectType::Workflow,
+                QueueItem::CreateObject {
+                    object_type: ObjectType::Notebook,
                     owner: Owner::mock_current_user(),
-                    id: workflow_client_id,
-                    model: Arc::new(CloudWorkflowModel {
-                        data: Workflow::new("test".to_string(), "no".to_string()),
-                    }),
+                    id: notebook_client_id,
+                    title: None,
+                    serialized_model: None,
                     initial_folder_id: None,
                     entrypoint: Default::default(),
                     initiated_by: InitiatedBy::User,
@@ -1020,14 +1028,17 @@ fn test_sync_queue_dependency_successes() {
                 ctx,
             );
 
-            // Enqueue an update to the workflow
+            // Enqueue an update to the notebook
             let update_id = sync_queue.enqueue(
-                QueueItem::UpdateWorkflow {
-                    model: CloudWorkflowModel {
-                        data: Workflow::new("hi".to_string(), "no".to_string()),
+                QueueItem::UpdateNotebook {
+                    model: CloudNotebookModel {
+                        title: "hi".to_string(),
+                        data: "no".to_string(),
+                        ai_document_id: None,
+                        conversation_id: None,
                     }
                     .into(),
-                    id: SyncId::ClientId(workflow_client_id),
+                    id: SyncId::ClientId(notebook_client_id),
                     revision: None,
                 },
                 ctx,
@@ -1320,7 +1331,7 @@ fn test_sync_queue_generic_string_object_update_depends_on_pending_create() {
             let create_id = sync_queue.enqueue(
                 QueueItem::CreateObject {
                     object_type: ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                        JsonObjectType::WorkflowEnum,
+                        JsonObjectType::Preference,
                     )),
                     owner: Owner::mock_current_user(),
                     id: client_id,
@@ -1334,13 +1345,8 @@ fn test_sync_queue_generic_string_object_update_depends_on_pending_create() {
             );
 
             let update_id = sync_queue.enqueue(
-                QueueItem::UpdateWorkflowEnum {
-                    model: CloudWorkflowEnumModel::new(WorkflowEnum {
-                        name: "new".to_string(),
-                        is_shared: false,
-                        variants: EnumVariants::Static(vec!["a".to_string()]),
-                    })
-                    .into(),
+                QueueItem::UpdatePreference {
+                    model: test_preference("new").into(),
                     id: SyncId::ClientId(client_id),
                     revision: Some(revision_after_create),
                 },
@@ -1389,13 +1395,8 @@ fn test_sync_queue_generic_string_object_update_depends_on_pending_create() {
             );
 
             let update_id_2 = sync_queue.enqueue(
-                QueueItem::UpdateWorkflowEnum {
-                    model: CloudWorkflowEnumModel::new(WorkflowEnum {
-                        name: "final".to_string(),
-                        is_shared: false,
-                        variants: EnumVariants::Static(vec!["a".to_string()]),
-                    })
-                    .into(),
+                QueueItem::UpdatePreference {
+                    model: test_preference("final").into(),
                     id: server_id,
                     revision: Some(revision_after_create),
                 },
@@ -1429,7 +1430,7 @@ fn test_sync_queue_generic_string_object_update_depends_on_pending_create() {
                 &HashSet::<QueueDependency>::new()
             );
             let queued_revision = sync_queue.queue().iter().find_map(|(_, item)| match item {
-                QueueItem::UpdateWorkflowEnum { id, revision, .. } if *id == server_id => {
+                QueueItem::UpdatePreference { id, revision, .. } if *id == server_id => {
                     Some(*revision)
                 }
                 _ => None,
@@ -1456,7 +1457,7 @@ fn test_sync_queue_bulk_generic_string_object_update_waits_for_matching_create()
         sync_queue.update(&mut app, |sync_queue, ctx| {
             let object_to_create = |id| GenericStringObjectToCreate {
                 id,
-                format: GenericStringObjectFormat::Json(JsonObjectType::WorkflowEnum),
+                format: GenericStringObjectFormat::Json(JsonObjectType::Preference),
                 serialized_model: Arc::new(SerializedModel::new("{}".to_string())),
                 initial_folder_id: None,
                 entrypoint: CloudObjectEventEntrypoint::Unknown,
@@ -1488,13 +1489,8 @@ fn test_sync_queue_bulk_generic_string_object_update_waits_for_matching_create()
             }
 
             let update_b_id = sync_queue.enqueue(
-                QueueItem::UpdateWorkflowEnum {
-                    model: CloudWorkflowEnumModel::new(WorkflowEnum {
-                        name: "updated".to_string(),
-                        is_shared: false,
-                        variants: EnumVariants::Static(vec!["a".to_string()]),
-                    })
-                    .into(),
+                QueueItem::UpdatePreference {
+                    model: test_preference("updated").into(),
                     id: SyncId::ClientId(client_id_b),
                     revision: Some(revision_after_create_a),
                 },
@@ -1578,7 +1574,7 @@ fn test_sync_queue_bulk_generic_string_object_update_waits_for_matching_create()
                     .contains_key(&bulk_create_id)
             );
             let queued_revision = sync_queue.queue().iter().find_map(|(_, item)| match item {
-                QueueItem::UpdateWorkflowEnum { id, revision, .. }
+                QueueItem::UpdatePreference { id, revision, .. }
                     if *id == SyncId::ClientId(client_id_b) =>
                 {
                     Some(*revision)
@@ -1588,238 +1584,4 @@ fn test_sync_queue_bulk_generic_string_object_update_waits_for_matching_create()
             assert_eq!(queued_revision, Some(Some(revision_after_create_b)));
         });
     });
-}
-#[test]
-fn test_sync_queue_enum_dependency() {
-    let enum_id_1 = ClientId::new();
-    let enum_id_2 = ClientId::new();
-    let workflow_client_id = ClientId::new();
-    let enum_server_id_1 = SyncId::ServerId(GenericStringObjectId::from(123).into());
-    let enum_server_id_2 = SyncId::ServerId(GenericStringObjectId::from(456).into());
-    let revision_after_create = Revision::from(DateTime::<Utc>::default());
-
-    let workflow = Workflow::new("test".to_string(), "no".to_string()).with_arguments(vec![
-        Argument {
-            name: "enum".to_string(),
-            default_value: None,
-            description: None,
-            arg_type: ArgumentType::Enum {
-                enum_id: SyncId::ClientId(enum_id_1),
-            },
-        },
-        Argument {
-            name: "enum".to_string(),
-            default_value: None,
-            description: None,
-            arg_type: ArgumentType::Enum {
-                enum_id: SyncId::ClientId(enum_id_2),
-            },
-        },
-    ]);
-
-    let updated_workflow_1 =
-        Workflow::new("test".to_string(), "no".to_string()).with_arguments(vec![
-            Argument {
-                name: "enum".to_string(),
-                default_value: None,
-                description: None,
-                arg_type: ArgumentType::Enum {
-                    enum_id: enum_server_id_1,
-                },
-            },
-            Argument {
-                name: "enum".to_string(),
-                default_value: None,
-                description: None,
-                arg_type: ArgumentType::Enum {
-                    enum_id: SyncId::ClientId(enum_id_2),
-                },
-            },
-        ]);
-
-    let updated_workflow_2 =
-        Workflow::new("test".to_string(), "no".to_string()).with_arguments(vec![
-            Argument {
-                name: "enum".to_string(),
-                default_value: None,
-                description: None,
-                arg_type: ArgumentType::Enum {
-                    enum_id: enum_server_id_1,
-                },
-            },
-            Argument {
-                name: "enum".to_string(),
-                default_value: None,
-                description: None,
-                arg_type: ArgumentType::Enum {
-                    enum_id: enum_server_id_2,
-                },
-            },
-        ]);
-
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let cloud_objects_client_mock = MockObjectClient::new();
-        let sync_queue = create_sync_queue(&mut app, vec![], cloud_objects_client_mock, false);
-
-        sync_queue.update(&mut app, |sync_queue, ctx| {
-            // Enqueue two enum requests
-            let create_enum_1 = sync_queue.enqueue(
-                QueueItem::CreateObject {
-                    object_type: ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                        JsonObjectType::WorkflowEnum,
-                    )),
-                    owner: Owner::mock_current_user(),
-                    id: enum_id_1,
-                    title: None,
-                    serialized_model: None,
-                    initial_folder_id: None,
-                    entrypoint: Default::default(),
-                    initiated_by: InitiatedBy::User
-                },
-                ctx,
-            );
-
-            let create_enum_2 = sync_queue.enqueue(
-                QueueItem::CreateObject {
-                    object_type: ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                        JsonObjectType::WorkflowEnum,
-                    )),
-                    owner: Owner::mock_current_user(),
-                    id: enum_id_2,
-                    title: None,
-                    serialized_model: None,
-                    initial_folder_id: None,
-                    entrypoint: Default::default(),
-                    initiated_by: InitiatedBy::User
-                },
-                ctx,
-            );
-
-            // Simulate success of one enum request
-            sync_queue.remove_id_from_queue(&create_enum_1);
-            sync_queue.queue_dependencies.remove(&create_enum_1);
-            sync_queue.handle_success_response(
-                &enum_server_id_1.uid(),
-                super::ResponseType::Creation {
-                    creation_result: super::CreationResponseType::Success {
-                        client_id: enum_id_1,
-                        revision_and_editor: super::RevisionAndLastEditor {
-                            revision: revision_after_create,
-                            last_editor_uid: None,
-                        },
-                        metadata_ts: DateTime::<Utc>::default().into(),
-                        server_creation_info: ServerCreationInfo {
-                            server_id_and_type: ServerIdAndType {
-                                id: enum_server_id_1.into_server().expect("Expect server id"),
-                                id_type: ObjectIdType::GenericStringObject,
-                            },
-                            creator_uid: Default::default(),
-                            permissions: ServerPermissions::mock_personal(),
-                        },
-                    },
-                },
-                create_enum_1,
-                InitiatedBy::User,
-                ctx,
-            );
-
-            // Enqueue the workflow create request
-            let create_id = sync_queue.enqueue(
-                QueueItem::CreateWorkflow {
-                    object_type: ObjectType::Workflow,
-                    owner: Owner::mock_current_user(),
-                    id: workflow_client_id,
-                    model: Arc::new(CloudWorkflowModel { data: workflow }),
-                    initial_folder_id: None,
-                    entrypoint: Default::default(),
-                    initiated_by: InitiatedBy::User
-                },
-                ctx,
-            );
-
-            // Assert initial state of the queue dependencies
-            assert_eq!(
-                sync_queue.queue_dependencies().get(&create_id).unwrap(),
-                &queue_item_dependencies([create_enum_2])
-            );
-
-            // Assert that the workflow that was enqueued has the enum_id that is a server id
-            assert!(
-                sync_queue
-                    .queue()
-                    .iter()
-                    .find_map(|(_, item)| {
-                        match item {
-                            QueueItem::CreateWorkflow { model, .. } => {
-                                Some(model.data == updated_workflow_1)
-                            }
-                            _ => None,
-                        }
-                    })
-                    .unwrap(),
-                "enqueued workflow should have one enum ID replaced by a server ID"
-            );
-
-            // Simulate success of another enum
-            sync_queue.remove_id_from_queue(&create_enum_2);
-            sync_queue.queue_dependencies.remove(&create_enum_2);
-            sync_queue.update_dependencies_on_creation(
-                &QueueDependency::QueueItem(create_enum_2),
-                enum_id_2,
-                enum_server_id_2.into_server().expect("Expect server id"),
-                ObjectType::GenericStringObject(GenericStringObjectFormat::Json(
-                    JsonObjectType::WorkflowEnum,
-                )),
-            );
-            sync_queue.handle_success_response(
-                &enum_server_id_2.uid(),
-                super::ResponseType::Creation {
-                    creation_result: super::CreationResponseType::Success {
-                        client_id: enum_id_2,
-                        revision_and_editor: super::RevisionAndLastEditor {
-                            revision: revision_after_create,
-                            last_editor_uid: None,
-                        },
-                        metadata_ts: DateTime::<Utc>::default().into(),
-                        server_creation_info: ServerCreationInfo {
-                            server_id_and_type: ServerIdAndType {
-                                id: enum_server_id_2.into_server().expect("Expect server id"),
-                                id_type: ObjectIdType::GenericStringObject,
-                            },
-                            creator_uid: Default::default(),
-                            permissions: ServerPermissions::mock_personal(),
-                        },
-                    },
-                },
-                create_enum_2,
-                InitiatedBy::User,
-                ctx,
-            );
-
-            // Assert updated state of the queue dependencies
-            assert_eq!(
-                sync_queue.queue_dependencies().get(&create_id).unwrap(),
-                &HashSet::<QueueDependency>::new()
-            );
-
-            // Assert that the workflow was updated to reference the server ID of the second enum
-            assert!(
-                sync_queue
-                    .queue()
-                    .iter()
-                    .find_map(|(_, item)| {
-                        match item {
-                            QueueItem::CreateWorkflow { model, .. } => {
-                                Some(model.data == updated_workflow_2)
-                            }
-                            _ => None,
-                        }
-                    })
-                    .unwrap(),
-                "After completing an enum creation, the enqueued workflow should only reference server IDs"
-            );
-        });
-    })
 }

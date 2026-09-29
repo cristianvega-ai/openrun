@@ -2816,13 +2816,7 @@ impl TeamsWidget {
             .tier
             .shared_notebooks_policy
             .map(|policy| !policy.is_unlimited)
-            .unwrap_or_else(|| false)
-            || team_metadata
-                .billing_metadata
-                .tier
-                .shared_workflows_policy
-                .map(|policy| !policy.is_unlimited)
-                .unwrap_or_else(|| false);
+            .unwrap_or_else(|| false);
         if has_plan_limit {
             // Render plan usage and limits
             main_content.add_child(
@@ -3252,26 +3246,6 @@ impl TeamsWidget {
                     .with_margin_right(64.)
                     .finish(),
             );
-        }
-
-        if let Some(policy) = team.billing_metadata.tier.shared_workflows_policy
-            && !policy.is_unlimited
-        {
-            let mut shared_workflows_column = Flex::column();
-            shared_workflows_column
-                .add_child(self.render_plan_usage_header("Shared Workflows".into(), appearance));
-            let num_shared_workflows = cloud_model
-                .active_workflows_in_space(Space::Team { team_uid: team.uid }, app)
-                .count();
-            shared_workflows_column.add_child(
-                Container::new(self.render_plan_usage_text(
-                    format!("{}/{}", num_shared_workflows, policy.limit),
-                    appearance,
-                ))
-                .with_margin_top(4.)
-                .finish(),
-            );
-            shared_objects_usage_row.add_child(shared_workflows_column.finish());
         }
 
         section.add_child(

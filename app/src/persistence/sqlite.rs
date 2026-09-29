@@ -13,8 +13,6 @@ use cloud_object_models::json_model::persistence::{
 };
 use cloud_object_models::notebook::persistence as notebook_persistence;
 use cloud_object_models::notebook::persistence::upsert_notebooks;
-use cloud_object_models::workflow::persistence as workflow_persistence;
-use cloud_object_models::workflow::persistence::upsert_workflows;
 use cloud_object_persistence::{
     GenericStringObjectPersistenceData, delete_cloud_object, delete_generic_string_object,
     increment_retry_count, load_cloud_object_read_context, mark_object_as_synced,
@@ -52,8 +50,8 @@ use super::block_list::{
 use super::model::{
     self, CODE_PANE_KIND, EXECUTION_PROFILE_EDITOR_PANE_KIND, NOTEBOOK_PANE_KIND, NewApp,
     NewCommand, NewTab, NewTabGroup, NewTeam, NewWindow, NewWorkspace, NewWorkspaceMetadata,
-    NewWorkspaceTeam, Project, SETTINGS_PANE_KIND, TERMINAL_PANE_KIND, Tab, TabGroup,
-    WORKFLOW_PANE_KIND, Window, WorkspaceMetadata as WorkspaceMetadataModel,
+    NewWorkspaceTeam, Project, SETTINGS_PANE_KIND, TERMINAL_PANE_KIND, Tab, TabGroup, Window,
+    WorkspaceMetadata as WorkspaceMetadataModel,
 };
 use super::{
     BlockCompleted, FinishedCommandMetadata, ModelEvent, PersistedData, PersistedDataScope,
@@ -64,7 +62,7 @@ use crate::app_state::{
     AppState, BranchSnapshot, CodePaneSnapShot, CodePaneTabSnapshot, CodeReviewPaneSnapshot,
     LeafContents, LeafSnapshot, LeftPanelSnapshot, NotebookPaneSnapshot, PaneFlex,
     PaneNodeSnapshot, RightPanelSnapshot, SettingsPaneSnapshot, SplitDirection, TabGroupSnapshot,
-    TabSnapshot, TerminalPaneSnapshot, WindowSnapshot, WorkflowPaneSnapshot,
+    TabSnapshot, TerminalPaneSnapshot, WindowSnapshot,
 };
 use crate::auth::UserUid;
 use crate::auth::auth_state::AuthStateProvider;
@@ -80,7 +78,7 @@ use crate::persistence::block_list::{
 use crate::persistence::model::{
     CODE_REVIEW_PANE_KIND, NewPersistedObjectAction, NewTeamSettings, UserProfile,
 };
-use crate::server::ids::{ClientId, HashableId, ServerId, SyncId};
+use crate::server::ids::{ServerId, SyncId};
 use crate::server::telemetry::TelemetryEvent;
 use crate::settings_view::SettingsSection;
 use crate::suggestions::ignored_suggestions_model::SuggestionType;
@@ -88,7 +86,6 @@ use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
 use crate::terminal::history::PersistedCommand;
 use crate::themes::theme::AnsiColorIdentifier;
-use crate::workflows::WorkflowId;
 use crate::workspace::tab_group::TabGroupId;
 use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
 use crate::workspaces::team::Team as TeamMetadata;
@@ -464,9 +461,6 @@ fn handle_model_event(event: ModelEvent, connection: &mut SqliteConnection) -> a
         ModelEvent::Snapshot(app_state) => {
             save_app_state(connection, &app_state).context("error saving app state")
         }
-        ModelEvent::UpsertWorkflows(workflows) => {
-            upsert_workflows(connection, workflows).context("error saving workflows")
-        }
         ModelEvent::UpsertNotebooks(notebooks) => {
             upsert_notebooks(connection, notebooks).context("error saving notebooks")
         }
@@ -483,9 +477,6 @@ fn handle_model_event(event: ModelEvent, connection: &mut SqliteConnection) -> a
         }
         ModelEvent::UpsertNotebook { notebook } => {
             upsert_notebooks(connection, vec![notebook]).context("error upserting notebook")
-        }
-        ModelEvent::UpsertWorkflow { workflow } => {
-            upsert_workflows(connection, vec![workflow]).context("error upserting workflow")
         }
         ModelEvent::UpsertFolder { folder } => {
             upsert_folders(connection, vec![folder]).context("error upserting folder")
@@ -953,7 +944,6 @@ fn save_pane_state(
         LeafContents::Terminal(_) => TERMINAL_PANE_KIND,
         LeafContents::Notebook(_) => NOTEBOOK_PANE_KIND,
         LeafContents::Code(_) => CODE_PANE_KIND,
-        LeafContents::Workflow(_) => WORKFLOW_PANE_KIND,
         LeafContents::Settings(_) => SETTINGS_PANE_KIND,
         LeafContents::CodeReview(_) => CODE_REVIEW_PANE_KIND,
         LeafContents::ExecutionProfileEditor | LeafContents::CustomRouterEditor => {
@@ -1069,19 +1059,6 @@ fn save_pane_state(
                     .values(tab_row)
                     .execute(conn)?;
             }
-        }
-        LeafContents::Workflow(workflow_pane_snapshot) => {
-            let workflow_id = match workflow_pane_snapshot {
-                WorkflowPaneSnapshot::CloudWorkflow { workflow_id } => {
-                    workflow_id.map(|id| id.sqlite_uid_hash(ObjectIdType::Workflow))
-                }
-            };
-
-            let workflow = model::NewWorkflowPane { id, workflow_id };
-
-            diesel::insert_into(schema::workflow_panes::dsl::workflow_panes)
-                .values(workflow)
-                .execute(conn)?;
         }
         LeafContents::EnvironmentManagement(_) => {
             // Unreachable: filtered by `is_persisted` in `save_app_state`.
@@ -1744,20 +1721,6 @@ fn read_node(
                         path: Some(decode_path(local_path)),
                     })
                 }
-                WORKFLOW_PANE_KIND => {
-                    let workflow_pane = schema::workflow_panes::dsl::workflow_panes
-                        .find(node.id)
-                        .select(model::WorkflowPane::as_select())
-                        .first(conn)?;
-
-                    let workflow_id = workflow_pane.workflow_id.and_then(|id| {
-                        ClientId::from_hash(&id).map(SyncId::ClientId).or_else(|| {
-                            WorkflowId::from_hash(&id).map(|id| SyncId::ServerId(id.into()))
-                        })
-                    });
-
-                    LeafContents::Workflow(WorkflowPaneSnapshot::CloudWorkflow { workflow_id })
-                }
                 CODE_PANE_KIND => {
                     let code_pane = schema::code_panes::dsl::code_panes
                         .find(node.id)
@@ -1876,7 +1839,6 @@ fn box_persisted_generic_string_object(
 ) -> Box<dyn CloudObject> {
     match object {
         PersistedGenericStringObject::Preference(object) => Box::new(object),
-        PersistedGenericStringObject::WorkflowEnum(object) => Box::new(object),
         PersistedGenericStringObject::AIExecutionProfile(object) => Box::new(object),
         PersistedGenericStringObject::CloudEnvironment(object) => Box::new(object),
         PersistedGenericStringObject::ScheduledAmbientAgent(object) => Box::new(object),
@@ -2117,11 +2079,6 @@ fn read_sqlite_data(
     let read_context = load_cloud_object_read_context(conn, current_user_id)?;
     let mut cloud_objects: Vec<Box<dyn CloudObject>> = Vec::new();
     cloud_objects.extend(
-        workflow_persistence::read_workflows(conn, &read_context)?
-            .into_iter()
-            .map(|workflow| Box::new(workflow) as Box<dyn CloudObject>),
-    );
-    cloud_objects.extend(
         notebook_persistence::read_notebooks(conn, &read_context)?
             .into_iter()
             .map(|notebook| Box::new(notebook) as Box<dyn CloudObject>),
@@ -2323,9 +2280,7 @@ impl From<StartedCommandMetadata> for model::NewCommand {
                 id.try_into().ok()
             }),
             git_branch: metadata.git_branch,
-            cloud_workflow_id: metadata
-                .cloud_workflow_id
-                .map(|id| id.sqlite_uid_hash(ObjectIdType::Workflow)),
+            cloud_workflow_id: None,
             workflow_command: metadata.workflow_command,
             is_agent_executed: Some(metadata.is_agent_executed),
         }
@@ -2508,12 +2463,6 @@ fn delete_objects(
                     sync_id,
                     object_id_type,
                     Box::new(notebook_persistence::delete_notebook),
-                )?,
-                ObjectIdType::Workflow => delete_cloud_object(
-                    conn,
-                    sync_id,
-                    object_id_type,
-                    Box::new(workflow_persistence::delete_workflow),
                 )?,
                 ObjectIdType::Folder => delete_cloud_object(
                     conn,

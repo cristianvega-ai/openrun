@@ -150,8 +150,7 @@ use crate::auth::AuthStateProvider;
 use crate::auth::auth_state::AuthState;
 use crate::banner::BannerState;
 use crate::channel::ChannelState;
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{ObjectType, Owner};
+use crate::cloud_object::Owner;
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor::{add_color, remove_color};
 #[cfg(feature = "local_fs")]
@@ -165,8 +164,6 @@ use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
 use crate::context_chips::ChipRuntimeCapabilities;
 use crate::default_terminal::DefaultTerminal;
-use crate::drive::CloudObjectTypeAndId;
-use crate::drive::workflows::modal::{WorkflowModal, WorkflowModalEvent};
 use crate::editor::{
     EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, SingleLineEditorOptions,
     TextOptions,
@@ -212,12 +209,8 @@ use crate::search::command_search::settings::CommandSearchSettings;
 use crate::search::command_search::view::{CommandSearchEvent, CommandSearchView};
 use crate::search::slash_command_menu::static_commands::commands;
 use crate::search::{self, QueryFilter};
-use crate::server::cloud_objects::update_manager::{
-    ObjectOperation, OperationSuccessType, UpdateManager, UpdateManagerEvent,
-};
-use crate::server::ids::{ObjectUid, ServerId, SyncId};
+use crate::server::ids::ServerId;
 use crate::server::network_log_pane_manager::NetworkLogPaneManager;
-use crate::server::server_api::ai::AIClient;
 use crate::server::server_api::{ServerApi, ServerApiProvider};
 use crate::server::telemetry::{
     AddTabWithShellSource, FileTreeSource, LaunchConfigUiLocation, NotificationsTurnedOnSource,
@@ -333,12 +326,8 @@ use crate::view_components::{
     AgentToast, AgentToastStack, DismissibleToast, DismissibleToastStack, ToastLink,
 };
 use crate::window_settings::{WindowSettings, WindowSettingsChangedEvent, ZoomLevel};
-use crate::workflows::manager::{WorkflowManager, WorkflowOpenSource};
 use crate::workflows::workflow::Workflow;
-use crate::workflows::{
-    AIWorkflowOrigin, CloudWorkflow, WorkflowSelectionSource, WorkflowSource, WorkflowType,
-    WorkflowViewMode,
-};
+use crate::workflows::{WorkflowSelectionSource, WorkflowSource, WorkflowType};
 use crate::workspace::action::CommandSearchOptions;
 #[cfg(target_os = "macos")]
 use crate::workspace::cli_install;
@@ -507,8 +496,6 @@ const KEYBINDINGS_TO_CACHE: [&str; 3] = [
     SHOW_SETTINGS_KEYBINDING_NAME,
     TOGGLE_COMMAND_PALETTE_KEYBINDING_NAME,
 ];
-
-const WORKFLOW_SPLIT_RATIO: f32 = 0.56;
 
 #[cfg(target_family = "wasm")]
 const MOBILE_OVERLAY_PANEL_WIDTH_RATIO: f32 = 0.9;
@@ -787,7 +774,6 @@ pub struct Workspace {
     command_search_view: ViewHandle<CommandSearchView>,
     settings_file_error: Option<crate::settings::SettingsFileError>,
     settings_error_banner_dismissed: bool,
-    workflow_modal: ViewHandle<WorkflowModal>,
     prompt_editor_modal: ViewHandle<PromptEditorModal>,
     agent_toolbar_editor_modal: ViewHandle<AgentToolbarEditorModal>,
     cli_agent_toolbar_editor_modal: ViewHandle<CLIAgentToolbarEditorModal>,
@@ -1340,20 +1326,6 @@ impl Workspace {
         });
 
         (settings_pane, theme_chooser_view)
-    }
-
-    fn build_workflow_modal(
-        ai_client: Arc<dyn AIClient>,
-        ctx: &mut ViewContext<Self>,
-    ) -> ViewHandle<WorkflowModal> {
-        let workflow_modal =
-            ctx.add_typed_action_view(|ctx| WorkflowModal::new(ai_client.clone(), ctx));
-
-        ctx.subscribe_to_view(&workflow_modal, |me, _, event, ctx| {
-            me.handle_workflow_modal_event(event, ctx);
-        });
-
-        workflow_modal
     }
 
     fn build_theme_creator_modal(ctx: &mut ViewContext<Self>) -> ViewHandle<ThemeCreatorModal> {
@@ -2012,7 +1984,6 @@ impl Workspace {
 
         let server_api_provider = ServerApiProvider::as_ref(ctx);
         let server_api = server_api_provider.get();
-        let ai_client = server_api_provider.get_ai_client();
 
         // Inserting a (window, ModalSizes) pair to the ResizableData singleton. A restored window
         // reads the sizes from the window snapshot. A new window initializes with all default sizes.
@@ -2088,8 +2059,6 @@ impl Workspace {
             Self::build_settings_views(tips_completed.clone(), ctx);
 
         let resource_center_view = Self::build_resource_center_view(ctx, tips_completed.clone());
-
-        let workflow_modal = Self::build_workflow_modal(ai_client.clone(), ctx);
 
         let theme_creator_modal = Self::build_theme_creator_modal(ctx);
 
@@ -2236,11 +2205,6 @@ impl Workspace {
         let agent_toast_stack =
             ctx.add_typed_action_view(|ctx| AgentToastStack::new(Duration::from_secs(4), ctx));
 
-        let update_manager = UpdateManager::handle(ctx);
-        ctx.subscribe_to_model(&update_manager, |me, _handle, event, ctx| {
-            me.handle_update_manager_event(event, ctx);
-        });
-
         let cached_keybindings = KEYBINDINGS_TO_CACHE
             .iter()
             .map(|name| {
@@ -2346,7 +2310,6 @@ impl Workspace {
             command_search_view,
             settings_file_error,
             settings_error_banner_dismissed: false,
-            workflow_modal,
             theme_creator_modal,
             theme_deletion_modal,
             window_id: ctx.window_id(),
@@ -6284,63 +6247,6 @@ impl Workspace {
             })
     }
 
-    /// Opens the Warp Drive object identified by `uid` in a new pane
-    /// if it has a pane representation.
-    fn open_warp_drive_object_in_new_pane(&mut self, uid: &ObjectUid, ctx: &mut ViewContext<Self>) {
-        let Some(object) = CloudModel::as_ref(ctx).get_by_uid(uid) else {
-            return;
-        };
-
-        let sync_id = object.sync_id();
-        match object.object_type() {
-            ObjectType::Workflow => {
-                self.open_workflow_in_pane(
-                    &WorkflowOpenSource::Existing(sync_id),
-                    WorkflowViewMode::View,
-                    ctx,
-                );
-            }
-            _ => {}
-        }
-    }
-
-    pub fn open_workflow_in_pane(
-        &mut self,
-        source: &WorkflowOpenSource,
-        mode: WorkflowViewMode,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let workflow_manager = WorkflowManager::handle(ctx);
-
-        if let Some((window_id, locator)) = workflow_manager.as_ref(ctx).find_pane(source) {
-            if window_id == ctx.window_id() {
-                self.focus_pane(locator, ctx);
-            } else if let Some(root_view) = ctx.root_view_id(window_id) {
-                ctx.dispatch_action_for_view(
-                    window_id,
-                    root_view,
-                    "root_view:handle_pane_navigation_event",
-                    &locator,
-                );
-            }
-        } else {
-            let window_id = ctx.window_id();
-            let pane = workflow_manager.update(ctx, |manager, ctx| {
-                manager.create_pane(source, mode, window_id, ctx)
-            });
-            self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-                let smart_split_direction =
-                    pane_group.smart_split_direction(ctx, WORKFLOW_SPLIT_RATIO);
-                pane_group.add_pane_with_direction(
-                    smart_split_direction,
-                    pane,
-                    true, /* focus_new_pane */
-                    ctx,
-                );
-            });
-        }
-    }
-
     fn open_settings_pane(
         &mut self,
         page: Option<SettingsSection>,
@@ -8671,44 +8577,6 @@ impl Workspace {
         }
     }
 
-    fn handle_workflow_modal_event(
-        &mut self,
-        event: &WorkflowModalEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            WorkflowModalEvent::Close => {
-                self.current_workspace_state.is_workflow_modal_open = false;
-                ctx.notify();
-            }
-            WorkflowModalEvent::AiAssistError(message) => {
-                self.toast_stack.update(ctx, |view, ctx| {
-                    let new_toast = DismissibleToast::error(message.clone());
-                    view.add_ephemeral_toast(new_toast, ctx);
-                });
-            }
-            WorkflowModalEvent::UpdatedWorkflow(workflow_id) => {
-                // If saved workflow id matches the one that is currently displayed, then refresh workflow info box + input
-                self.maybe_refresh_workflow_info_box_and_input(workflow_id, ctx);
-            }
-            WorkflowModalEvent::AiAssistUpgradeError(team_uid, user_id) => {
-                let upgrade_link = team_uid
-                    .map(UserWorkspaces::upgrade_link_for_team)
-                    .unwrap_or_else(|| UserWorkspaces::upgrade_link(*user_id));
-
-                self.toast_stack.update(ctx, |view, ctx| {
-                    let new_toast =
-                        DismissibleToast::error("Looks like you're out of AI credits.".into())
-                            .with_link(
-                                ToastLink::new("Upgrade for more credits.".into())
-                                    .with_href(upgrade_link),
-                            );
-                    view.add_ephemeral_toast(new_toast, ctx);
-                });
-            }
-        }
-    }
-
     fn is_input_box_visible(&self, app: &AppContext) -> bool {
         match (
             self.get_active_session_terminal_model(app),
@@ -8720,47 +8588,6 @@ impl Workspace {
                 view.is_input_box_visible(&terminal_model.lock(), ctx)
             }),
             _ => false,
-        }
-    }
-
-    fn maybe_refresh_workflow_info_box_and_input(
-        &mut self,
-        workflow_id: &SyncId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let Some(terminal_view_handle) = self
-            .active_tab_pane_group()
-            .as_ref(ctx)
-            .active_session_view(ctx)
-        else {
-            return;
-        };
-        let terminal_input =
-            terminal_view_handle.read(ctx, |terminal_view, _| terminal_view.input().clone());
-
-        if self.is_input_box_visible(ctx) {
-            let open_workflow_id = terminal_input.update(ctx, |input, _| {
-                // We only care to refresh if workflow info box is visible
-                if input.is_workflows_info_box_open() {
-                    input.workflows_info_box_open_workflow_cloud_id()
-                } else {
-                    None
-                }
-            });
-
-            // Check if workflow displayed in info box matches the one that was just updated.
-            if open_workflow_id == Some(*workflow_id) {
-                // Fetch latest version of workflow and update info box with fresh contents
-                let cloud_model = CloudModel::as_ref(ctx);
-                if let Some(workflow) = cloud_model.get_workflow(workflow_id) {
-                    self.run_cloud_workflow_in_active_input(
-                        workflow.clone(),
-                        WorkflowSelectionSource::WarpDrive,
-                        TerminalSessionFallbackBehavior::default(),
-                        ctx,
-                    );
-                }
-            }
         }
     }
 
@@ -11684,10 +11511,6 @@ impl Workspace {
             || self.current_workspace_state.is_ctrl_tab_palette_open
     }
 
-    pub fn is_workflow_modal_open(&self) -> bool {
-        self.current_workspace_state.is_workflow_modal_open
-    }
-
     pub fn is_left_panel_open(&self, ctx: &AppContext) -> bool {
         self.active_tab_pane_group().as_ref(ctx).left_panel_open
     }
@@ -11938,15 +11761,6 @@ impl Workspace {
                 if !execute_event.source.is_ai_command() {
                     self.handle_task_status_reset(pane_group.id(), ctx);
                 }
-            }
-            pane_group::Event::OpenWorkflowModalWithCommand(command) => {
-                self.open_workflow_with_command(command.clone(), ctx)
-            }
-            pane_group::Event::OpenCloudWorkflowForEdit(workflow_id) => {
-                self.open_workflow_with_existing(*workflow_id, ctx)
-            }
-            pane_group::Event::OpenWorkflowModalWithTemporary(workflow) => {
-                self.open_workflow_with_temporary(*workflow.clone(), ctx)
             }
             pane_group::Event::OpenPromptEditor => {
                 self.open_prompt_editor(PromptEditorOpenSource::InputContextMenu, ctx);
@@ -12348,9 +12162,6 @@ impl Workspace {
                 ctx.notify();
             }
             pane_group::Event::ClearHoveredTabIndex => self.hovered_tab_index = None,
-            pane_group::Event::OpenWarpDriveObjectInPane(uid) => {
-                self.open_warp_drive_object_in_new_pane(uid, ctx);
-            }
             pane_group::Event::OpenPalette {
                 mode,
                 source,
@@ -13012,33 +12823,11 @@ impl Workspace {
         }
     }
 
-    /// Runs a cloud workflow in whichever input is currently active.
-    fn run_cloud_workflow_in_active_input(
-        &mut self,
-        workflow: CloudWorkflow,
-        workflow_selection_source: WorkflowSelectionSource,
-        fallback_behavior: TerminalSessionFallbackBehavior,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let owner = workflow.clone().permissions.owner.into();
-        self.run_workflow_in_active_input(
-            &WorkflowType::Cloud(Box::new(workflow.clone())),
-            owner,
-            workflow_selection_source,
-            None,
-            fallback_behavior,
-            ctx,
-        );
-        ctx.focus_self();
-        ctx.notify();
-    }
-
     /// Focus and return the active terminal input. If there is no active terminal input (either
     /// because a command is running or because there are no terminal panes), this may create a new
     /// terminal pane according to the [`UnavailableTerminalBehavior`].
     fn focus_terminal_input(
         &mut self,
-        object_id: Option<CloudObjectTypeAndId>,
         fallback_behavior: TerminalSessionFallbackBehavior,
         ctx: &mut ViewContext<Self>,
     ) -> Option<ViewHandle<TerminalView>> {
@@ -13067,12 +12856,9 @@ impl Workspace {
             // The active terminal exists but is busy, and the fallback behavior is
             // RequireExisting or OpenIfNone. In those cases, show a toast and no-op.
             self.toast_stack.update(ctx, |toast_stack, ctx| {
-                let mut toast = DismissibleToast::error(
+                let toast = DismissibleToast::error(
                     "A command in this session is still running.".to_string(),
                 );
-                if let Some(id) = object_id {
-                    toast = toast.with_object_id(id.uid());
-                }
                 toast_stack.add_ephemeral_toast(toast, ctx);
             });
             return None;
@@ -13157,9 +12943,7 @@ impl Workspace {
         fallback_behavior: TerminalSessionFallbackBehavior,
         ctx: &mut ViewContext<Self>,
     ) {
-        if let Some(terminal_view_handle) =
-            self.focus_terminal_input(workflow.object_id(), fallback_behavior, ctx)
-        {
+        if let Some(terminal_view_handle) = self.focus_terminal_input(fallback_behavior, ctx) {
             let terminal_input =
                 terminal_view_handle.read(ctx, |terminal_view, _| terminal_view.input().clone());
             terminal_input.update(ctx, |input, ctx| {
@@ -13321,29 +13105,6 @@ impl Workspace {
                 self.update_titlebar_height(ctx);
             }
             _ => {}
-        }
-    }
-
-    fn handle_update_manager_event(
-        &mut self,
-        event: &UpdateManagerEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let UpdateManagerEvent::ObjectOperationComplete { result } = event;
-
-        // If this was a successful update on a workflow - caused by this client - then we may need
-        // to update the contents of the workflow info box to represent the new synced state.
-        if result.success_type == OperationSuccessType::Success
-            && result.operation == ObjectOperation::Update
-        {
-            let cloud_model = CloudModel::as_ref(ctx);
-            let updated_object = cloud_model
-                .get_by_uid(&result.server_id.expect("Expect server id on success").uid());
-            if let Some(CloudObjectTypeAndId::Workflow(workflow_id)) =
-                updated_object.map(|o| o.cloud_object_type_and_id())
-            {
-                self.maybe_refresh_workflow_info_box_and_input(&workflow_id, ctx)
-            }
         }
     }
 
@@ -13954,43 +13715,6 @@ impl Workspace {
                 theme_deletion_modal.set_theme_kind(theme_kind, ctx);
             });
         ctx.focus(&self.theme_deletion_modal);
-        ctx.notify();
-    }
-
-    /// Opens the workflow from a given [`CloudWorkflow`]'s server ID.
-    fn open_workflow_with_existing(&mut self, workflow_id: SyncId, ctx: &mut ViewContext<Self>) {
-        let source = WorkflowOpenSource::Existing(workflow_id);
-        self.open_workflow_in_pane(&source, WorkflowViewMode::Edit, ctx)
-    }
-
-    /// Opens the workflow using a mocked [`Workflow`] object as the base
-    fn open_workflow_with_temporary(&mut self, workflow: Workflow, ctx: &mut ViewContext<Self>) {
-        let Some(owner) = UserWorkspaces::as_ref(ctx).personal_drive(ctx) else {
-            log::warn!("Unable to open temporary workflow - unset personal drive");
-            return;
-        };
-        let source = WorkflowOpenSource::NewFromWorkflow {
-            workflow: workflow.into(),
-            owner,
-            initial_folder_id: None,
-        };
-        self.open_workflow_in_pane(&source, WorkflowViewMode::Create, ctx);
-    }
-
-    /// Opens the workflow for create with a prepopulated command specified
-    fn open_workflow_with_command(&mut self, command: String, ctx: &mut ViewContext<Self>) {
-        let Some(owner) = UserWorkspaces::as_ref(ctx).personal_drive(ctx) else {
-            log::warn!("Unable to open workflow with command - unset personal drive");
-            return;
-        };
-        let source = WorkflowOpenSource::New {
-            title: None,
-            content: Some(command),
-            owner,
-            initial_folder_id: None,
-        };
-        self.open_workflow_in_pane(&source, WorkflowViewMode::Create, ctx);
-
         ctx.notify();
     }
 
@@ -18140,12 +17864,9 @@ impl TypedActionView for Workspace {
                 let command = code.trim().to_string();
                 let workflow = Workflow::new("Command from Oz", command);
                 self.run_workflow_in_active_input(
-                    &WorkflowType::AIGenerated {
-                        workflow,
-                        origin: AIWorkflowOrigin::AgentMode,
-                    },
-                    WorkflowSource::WarpAI,
-                    WorkflowSelectionSource::WarpAI,
+                    &WorkflowType::Local(workflow),
+                    WorkflowSource::App,
+                    WorkflowSelectionSource::Undefined,
                     None,
                     TerminalSessionFallbackBehavior::default(),
                     ctx,
@@ -19511,10 +19232,6 @@ impl View for Workspace {
 
         if self.new_worktree_modal.is_open() {
             stack.add_child(self.new_worktree_modal.render());
-        }
-
-        if self.workflow_modal.as_ref(app).is_open() {
-            stack.add_child(ChildView::new(&self.workflow_modal).finish());
         }
 
         if self.current_workspace_state.is_prompt_editor_open {

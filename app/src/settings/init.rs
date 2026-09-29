@@ -34,7 +34,6 @@ use crate::terminal::settings::TerminalSettings;
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::undo_close::UndoCloseSettings;
 use crate::window_settings::{WindowSettings, migrate_legacy_background_backdrop};
-use crate::workflows::aliases::WorkflowAliases;
 use crate::workspace::tab_settings::TabSettings;
 
 pub struct UserDefaultsOnStartup {
@@ -84,7 +83,6 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     UndoCloseSettings::register(ctx);
     SshSettings::register(ctx);
     VimBannerSettings::register(ctx);
-    WorkflowAliases::register(ctx);
     EmacsBindingsSettings::register(ctx);
     SameLinePromptBlockSettings::register(ctx);
     SemanticSelection::register(ctx);

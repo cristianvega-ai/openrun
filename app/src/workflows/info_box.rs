@@ -2,20 +2,18 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use string_offset::CharOffset;
-use warp_core::features::FeatureFlag;
 use warp_core::settings::Setting;
 use warp_errors::report_error;
 use warpui::color::ColorU;
 use warpui::elements::{
     self, Align, Border, Clipped, ClippedScrollStateHandle, ClippedScrollable, ConstrainedBox,
-    Container, CornerRadius, CrossAxisAlignment, DropShadow, Flex, Highlight, Icon,
-    MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius, Rect, Shrinkable,
-    Text,
+    Container, CornerRadius, CrossAxisAlignment, DropShadow, Flex, Highlight, MainAxisAlignment,
+    MainAxisSize, MouseStateHandle, ParentElement, Radius, Rect, Shrinkable, Text,
 };
 use warpui::fonts::{Properties, Weight};
 use warpui::geometry::vector::Vector2F;
 use warpui::keymap::Keystroke;
-use warpui::text_layout::{ClipConfig, TextStyle};
+use warpui::text_layout::TextStyle;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{
@@ -26,14 +24,10 @@ use super::command_parser::{
     WorkflowArgumentIndex, WorkflowDisplayData, compute_workflow_display_data,
 };
 use super::workflow::Argument;
-use super::{AIWorkflowOrigin, CloudWorkflow};
 use crate::appearance::Appearance;
-use crate::cloud_object::CloudObjectMetadataExt;
-use crate::cloud_object::model::actions::{ObjectActionType, ObjectActions};
 use crate::settings::InputModeSettings;
 use crate::terminal::block_list_viewport::InputMode;
 use crate::terminal::input::InputAction;
-use crate::terminal::view::TerminalAction;
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons;
 use crate::util::color::coloru_with_opacity;
@@ -115,8 +109,6 @@ struct ButtonMouseStates {
     close: MouseStateHandle,
     collapse: MouseStateHandle,
     view_context: MouseStateHandle,
-    save_as_workflow: MouseStateHandle,
-    edit_cloud_workflow: MouseStateHandle,
     reset_command: MouseStateHandle,
 }
 
@@ -176,26 +168,6 @@ impl WorkflowsMoreInfoView {
             self.button_mouse_states.collapse.clone(),
             |ctx, _, _| {
                 ctx.dispatch_typed_action(WorkflowsInfoBoxViewAction::CollapseOrExpand);
-            },
-            appearance,
-        )
-    }
-
-    fn render_edit_button(
-        &self,
-        cloud_workflow: &CloudWorkflow,
-        appearance: &Appearance,
-    ) -> Box<dyn Element> {
-        let label = "Edit workflow";
-        let workflow = cloud_workflow.clone();
-        render_hoverable_card_button(
-            icons::Icon::Rename,
-            Some(label.to_owned()),
-            self.button_mouse_states.edit_cloud_workflow.clone(),
-            move |ctx: &mut warpui::EventContext<'_>, _, _| {
-                ctx.dispatch_typed_action(TerminalAction::OpenWorkflowModalWithCloudWorkflow(
-                    workflow.id,
-                ))
             },
             appearance,
         )
@@ -460,21 +432,6 @@ impl WorkflowsMoreInfoView {
             .finish()
     }
 
-    fn render_save_workflow_button(&self, appearance: &Appearance) -> Box<dyn Element> {
-        let workflow = self.workflow.as_workflow().to_owned();
-        render_hoverable_card_button(
-            icons::Icon::Workflow,
-            Some("Save as workflow".to_string()),
-            self.button_mouse_states.save_as_workflow.clone(),
-            move |ctx, _, _| {
-                ctx.dispatch_typed_action(TerminalAction::OpenWorkflowModalForAIWorkflow(
-                    workflow.clone(),
-                ));
-            },
-            appearance,
-        )
-    }
-
     fn render_close_workflow_button(&self, appearance: &Appearance) -> Box<dyn Element> {
         render_hoverable_card_button(
             icons::Icon::X,
@@ -487,12 +444,7 @@ impl WorkflowsMoreInfoView {
         )
     }
 
-    fn render_info_box(
-        &self,
-        appearance: &Appearance,
-        input_mode: &InputMode,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
+    fn render_info_box(&self, appearance: &Appearance, input_mode: &InputMode) -> Box<dyn Element> {
         let content_and_args = self.render_content_and_arguments(appearance);
 
         let workflow = self.workflow.as_workflow();
@@ -516,53 +468,7 @@ impl WorkflowsMoreInfoView {
 
         let close_button = self.render_close_workflow_button(appearance);
 
-        let mut row_content = Flex::row();
-
-        match &self.workflow {
-            WorkflowType::Cloud(cloud_workflow) => {
-                let editing_history = cloud_workflow.metadata.semantic_editing_history(app);
-
-                let action_history = ObjectActions::as_ref(app)
-                    .get_action_history_summary_for_action_type(
-                        &cloud_workflow.id.uid(),
-                        ObjectActionType::Execute,
-                    );
-
-                let full_object_history_text = match (editing_history, action_history) {
-                    (Some(edits), Some(actions)) => Some(format!("{edits}  |  {actions}")),
-                    (Some(edits), None) => Some(edits),
-                    _ => None,
-                };
-
-                let metadata_history = full_object_history_text.map(|str| {
-                    Container::new(
-                        Text::new_inline(str, appearance.ui_font_family(), 12.)
-                            .with_color(
-                                appearance
-                                    .theme()
-                                    .sub_text_color(appearance.theme().surface_2())
-                                    .into(),
-                            )
-                            .with_clip(ClipConfig::end())
-                            .finish(),
-                    )
-                    .with_uniform_padding(5.)
-                    .finish()
-                });
-
-                if let Some(metadata_history_element) = metadata_history {
-                    row_content.add_child(Shrinkable::new(1., metadata_history_element).finish());
-                }
-
-                let edit_button = self.render_edit_button(cloud_workflow, appearance);
-                row_content.add_children([edit_button, collapse_button, close_button]);
-            }
-            WorkflowType::AIGenerated { .. } => {
-                let save_as_workflow_button = self.render_save_workflow_button(appearance);
-                row_content.add_children([save_as_workflow_button, collapse_button, close_button]);
-            }
-            _ => row_content.add_children([collapse_button, close_button]),
-        };
+        let row_content = Flex::row().with_children([collapse_button, close_button]);
 
         let workflow_info = Flex::column()
             .with_children([
@@ -738,84 +644,26 @@ impl WorkflowsMoreInfoView {
         wrap_text: WrapText,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
-        match &self.workflow {
-            WorkflowType::AIGenerated {
-                workflow,
-                origin: AIWorkflowOrigin::AgentMode,
-            } => {
-                let icon = if FeatureFlag::AgentMode.is_enabled() {
-                    Icon::new(icons::Icon::Prompt.into(), appearance.theme().accent()).finish()
-                } else {
-                    Icon::new(
-                        icons::Icon::AiAssistant.into(),
-                        appearance
-                            .theme()
-                            .main_text_color(appearance.theme().background()),
-                    )
-                    .finish()
-                };
-
-                let ai_icon = Container::new(
-                    ConstrainedBox::new(icon)
-                        .with_width(16.)
-                        .with_height(16.)
-                        .finish(),
-                )
-                .with_margin_right(8.)
-                .finish();
-
-                Flex::row()
-                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                    .with_children([
-                        ai_icon,
-                        appearance
-                            .ui_builder()
-                            .wrappable_text(
-                                workflow.name().to_owned(),
-                                matches!(wrap_text, WrapText::Yes),
-                            )
-                            .with_style(UiComponentStyles {
-                                font_family_id: Some(appearance.ui_font_family()),
-                                font_color: Some(
-                                    appearance
-                                        .theme()
-                                        .main_text_color(appearance.theme().background())
-                                        .into(),
-                                ),
-                                font_size: Some(
-                                    appearance.monospace_font_size() * TITLE_FONT_SIZE_SCALE_FACTOR,
-                                ),
-                                font_weight: Some(Weight::Bold),
-                                ..Default::default()
-                            })
-                            .build()
-                            .finish(),
-                    ])
-                    .finish()
-            }
-            _ => appearance
-                .ui_builder()
-                .wrappable_text(
-                    self.workflow.as_workflow().name().to_owned(),
-                    matches!(wrap_text, WrapText::Yes),
-                )
-                .with_style(UiComponentStyles {
-                    font_family_id: Some(appearance.ui_font_family()),
-                    font_color: Some(
-                        appearance
-                            .theme()
-                            .main_text_color(appearance.theme().background())
-                            .into(),
-                    ),
-                    font_size: Some(
-                        appearance.monospace_font_size() * TITLE_FONT_SIZE_SCALE_FACTOR,
-                    ),
-                    font_weight: Some(Weight::Bold),
-                    ..Default::default()
-                })
-                .build()
-                .finish(),
-        }
+        appearance
+            .ui_builder()
+            .wrappable_text(
+                self.workflow.as_workflow().name().to_owned(),
+                matches!(wrap_text, WrapText::Yes),
+            )
+            .with_style(UiComponentStyles {
+                font_family_id: Some(appearance.ui_font_family()),
+                font_color: Some(
+                    appearance
+                        .theme()
+                        .main_text_color(appearance.theme().background())
+                        .into(),
+                ),
+                font_size: Some(appearance.monospace_font_size() * TITLE_FONT_SIZE_SCALE_FACTOR),
+                font_weight: Some(Weight::Bold),
+                ..Default::default()
+            })
+            .build()
+            .finish()
     }
 
     fn render_workflow_source(
@@ -908,7 +756,7 @@ impl View for WorkflowsMoreInfoView {
         let input_mode = InputModeSettings::as_ref(app).input_mode.value();
 
         let info_box_element = if self.info_box_expanded {
-            self.render_info_box(appearance, input_mode, app)
+            self.render_info_box(appearance, input_mode)
         } else {
             self.render_collapsed_info_box(appearance)
         };

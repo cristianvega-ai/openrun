@@ -55,7 +55,6 @@ use crate::suggestions::ignored_suggestions_model::SuggestionType;
 use crate::terminal::history::PersistedCommand;
 use crate::terminal::model::block::{SerializedAgentViewVisibility, SerializedBlock};
 use crate::terminal::model::session::SessionId;
-use crate::workflows::CloudWorkflow;
 use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
 use crate::workspaces::user_profiles::UserProfileWithUID;
 use crate::workspaces::workspace::{Workspace as WorkspaceMetadata, WorkspaceUid};
@@ -265,7 +264,6 @@ pub struct StartedCommandMetadata {
     pub hostname: Option<String>,
     pub session_id: Option<SessionId>,
     pub git_branch: Option<String>,
-    pub cloud_workflow_id: Option<SyncId>,
     pub workflow_command: Option<String>,
     pub is_agent_executed: bool,
 }
@@ -283,7 +281,6 @@ pub enum ModelEvent {
     SaveBlock(BlockCompleted),
     DeleteBlocks(Vec<u8>),
     Snapshot(AppState),
-    UpsertWorkflows(Vec<CloudWorkflow>),
     UpsertNotebooks(Vec<CloudNotebook>),
     UpsertFolders(Vec<CloudFolder>),
     MarkObjectAsSynced {
@@ -298,9 +295,6 @@ pub enum ModelEvent {
     UpsertGenericStringObjects(Vec<Box<dyn CloudStringObject>>),
     UpsertNotebook {
         notebook: CloudNotebook,
-    },
-    UpsertWorkflow {
-        workflow: CloudWorkflow,
     },
     UpsertFolder {
         folder: CloudFolder,

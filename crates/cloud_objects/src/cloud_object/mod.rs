@@ -40,7 +40,6 @@ pub use update::*;
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ObjectIdType {
     Notebook,
-    Workflow,
     Folder,
     GenericStringObject,
 }
@@ -52,7 +51,6 @@ impl ObjectIdType {
     pub fn sqlite_prefix(&self) -> &'static str {
         match self {
             ObjectIdType::Notebook => "Notebook",
-            ObjectIdType::Workflow => "Workflow",
             ObjectIdType::Folder => "Folder",
             ObjectIdType::GenericStringObject => "GenericStringObject",
         }
@@ -63,7 +61,6 @@ impl ObjectIdType {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum ObjectType {
     Notebook,
-    Workflow,
     Folder,
     GenericStringObject(GenericStringObjectFormat),
 }
@@ -73,7 +70,6 @@ impl ObjectType {
     pub fn sqlite_object_type_as_str(&self) -> Cow<'_, str> {
         match self {
             ObjectType::Notebook => "NOTEBOOK".into(),
-            ObjectType::Workflow => "WORKFLOW".into(),
             ObjectType::Folder => "FOLDER".into(),
             ObjectType::GenericStringObject(format) => format.to_string().into(),
         }
@@ -81,8 +77,6 @@ impl ObjectType {
 }
 
 const NOTEBOOK_OBJECT_STRING: &str = "notebook";
-const WORKFLOW_OBJECT_STRING: &str = "workflow";
-const PROMPT_OBJECT_STRING: &str = "prompt";
 const FOLDER_OBJECT_STRING: &str = "folder";
 
 impl FromStr for ObjectType {
@@ -91,8 +85,6 @@ impl FromStr for ObjectType {
     fn from_str(s: &str) -> Result<Self> {
         match s {
             NOTEBOOK_OBJECT_STRING => Ok(Self::Notebook),
-            WORKFLOW_OBJECT_STRING => Ok(Self::Workflow),
-            PROMPT_OBJECT_STRING => Ok(Self::Workflow),
             FOLDER_OBJECT_STRING => Ok(Self::Folder),
             _ => Err(anyhow!("Unexpected object type")),
         }
@@ -103,7 +95,6 @@ impl fmt::Display for ObjectType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ObjectType::Notebook => write!(f, "{NOTEBOOK_OBJECT_STRING}"),
-            ObjectType::Workflow => write!(f, "{WORKFLOW_OBJECT_STRING}"),
             ObjectType::Folder => write!(f, "{FOLDER_OBJECT_STRING}"),
             ObjectType::GenericStringObject(_) => write!(f, "string_object_placeholder"), // placeholder value
         }
@@ -114,7 +105,6 @@ impl From<ObjectType> for ObjectIdType {
     fn from(value: ObjectType) -> Self {
         match value {
             ObjectType::Notebook => ObjectIdType::Notebook,
-            ObjectType::Workflow => ObjectIdType::Workflow,
             ObjectType::Folder => ObjectIdType::Folder,
             ObjectType::GenericStringObject(_) => ObjectIdType::GenericStringObject,
         }
@@ -171,7 +161,6 @@ impl ToString for GenericStringObjectFormat {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Hash)]
 pub enum JsonObjectType {
     Preference,
-    WorkflowEnum,
     AIExecutionProfile,
     CloudEnvironment,
     ScheduledAmbientAgent,
@@ -182,7 +171,6 @@ impl JsonObjectType {
     pub fn as_str(&self) -> &'static str {
         match self {
             JsonObjectType::Preference => "PREFERENCE",
-            JsonObjectType::WorkflowEnum => "WORKFLOWENUM",
             JsonObjectType::AIExecutionProfile => "AIEXECUTIONPROFILE",
             JsonObjectType::CloudEnvironment => "CLOUDENVIRONMENT",
             JsonObjectType::ScheduledAmbientAgent => "SCHEDULEDAMBIENTAGENT",
@@ -197,7 +185,6 @@ impl TryFrom<&str> for JsonObjectType {
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "PREFERENCE" => Ok(JsonObjectType::Preference),
-            "WORKFLOWENUM" => Ok(JsonObjectType::WorkflowEnum),
             "AIEXECUTIONPROFILE" => Ok(JsonObjectType::AIExecutionProfile),
             "CLOUDENVIRONMENT" => Ok(JsonObjectType::CloudEnvironment),
             "SCHEDULEDAMBIENTAGENT" => Ok(JsonObjectType::ScheduledAmbientAgent),
@@ -215,12 +202,12 @@ impl TryFrom<warp_graphql::object::ObjectType> for ObjectIdType {
                 "AIConversation is not a supported object type for this operation"
             )),
             warp_graphql::object::ObjectType::Notebook => Ok(ObjectIdType::Notebook),
-            warp_graphql::object::ObjectType::Workflow => Ok(ObjectIdType::Workflow),
             warp_graphql::object::ObjectType::Folder => Ok(ObjectIdType::Folder),
             warp_graphql::object::ObjectType::GenericStringObject => {
                 Ok(ObjectIdType::GenericStringObject)
             }
-            warp_graphql::object::ObjectType::Unknown => {
+            warp_graphql::object::ObjectType::Workflow
+            | warp_graphql::object::ObjectType::Unknown => {
                 Err(anyhow!("could not convert unknown cloud object type"))
             }
         }
@@ -231,7 +218,6 @@ impl From<ObjectType> for warp_graphql::object::ObjectType {
     fn from(value: ObjectType) -> Self {
         match value {
             ObjectType::Notebook => warp_graphql::object::ObjectType::Notebook,
-            ObjectType::Workflow => warp_graphql::object::ObjectType::Workflow,
             ObjectType::Folder => warp_graphql::object::ObjectType::Folder,
             ObjectType::GenericStringObject(gso) => {
                 todo!("Moving is not implemented for {:?}", gso);
@@ -826,9 +812,6 @@ impl From<GenericStringObjectFormat>
         match format {
             GenericStringObjectFormat::Json(JsonObjectType::Preference) => {
                 GraphQLFormat::JsonPreference
-            }
-            GenericStringObjectFormat::Json(JsonObjectType::WorkflowEnum) => {
-                GraphQLFormat::JsonWorkflowEnum
             }
             GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile) => {
                 GraphQLFormat::JsonAIExecutionProfile

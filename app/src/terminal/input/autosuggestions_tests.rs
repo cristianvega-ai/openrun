@@ -204,18 +204,18 @@ fn test_find_autosuggestion_from_history_with_no_pwd_and_no_working_directory() 
     );
 }
 
-fn test_session_context(cwd: TypedPathBuf, app: &App) -> SessionContext {
+fn test_session_context(cwd: TypedPathBuf) -> SessionContext {
     let session = Session::new(
         SessionInfo::new_for_test(),
         Arc::new(TestCommandExecutor::default()),
     );
-    app.read(|ctx| SessionContext::new(session, CommandRegistry::default().into(), cwd, ctx))
+    SessionContext::new(session, CommandRegistry::default().into(), cwd)
 }
 
 #[test]
 fn test_feature_flag_arg_is_valid_with_no_whitespace_before_arg() {
-    App::test((), |app| async move {
-        let ctx = test_session_context(TypedPathBuf::from("/test/home/"), &app);
+    App::test((), |_app| async move {
+        let ctx = test_session_context(TypedPathBuf::from("/test/home/"));
 
         let full_command = "cargo run --features=with_local_server,fast_dev";
         let with_local_server_arg = ParsedExpression::new(

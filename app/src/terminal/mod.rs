@@ -30,7 +30,6 @@ mod blockgrid_renderer;
 mod bootstrap;
 pub mod color;
 pub mod conversation_restoration;
-pub mod dynamic_enum_suggestions;
 pub mod event;
 pub mod event_listener;
 pub mod find;

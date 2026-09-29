@@ -10,7 +10,8 @@ use crate::ai::llms::{AvailableLLMs, LLMId, LLMInfo, LLMPreferences, ModelsByFea
 use crate::auth::AuthManager;
 use crate::cloud_object::model::actions::ObjectActions;
 use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{Owner, Revision, ServerMetadata, ServerPermissions, ServerWorkflow};
+use crate::cloud_object::{Owner, Revision, ServerFolder, ServerMetadata, ServerPermissions};
+use crate::drive::folders::{CloudFolder, CloudFolderModel, FolderId};
 use crate::server::cloud_objects::update_manager::InitialLoadResponse;
 use crate::server::ids::SyncId;
 use crate::server::server_api::ServerApiProvider;
@@ -19,8 +20,6 @@ use crate::server::server_api::workspace::{MockWorkspaceClient, WorkspaceClient}
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::{AISettings, CodeSettings, PrivacySettings};
 use crate::system::SystemStats;
-use crate::workflows::workflow::Workflow;
-use crate::workflows::{CloudWorkflow, CloudWorkflowModel, WorkflowId};
 use crate::workspaces::team::Team;
 use crate::workspaces::user_profiles::UserProfiles;
 use crate::workspaces::workspace::{PurchaseAddOnCreditsPolicy, Workspace, WorkspaceUid};
@@ -52,14 +51,14 @@ fn initialize_app(
     app.add_singleton_model(AuthManager::new_for_test);
 }
 
-fn mock_workflow(id: WorkflowId, owner: Owner) -> CloudWorkflow {
-    CloudWorkflow::new_from_server(mock_server_workflow(id, owner))
+fn mock_folder(id: FolderId, owner: Owner) -> CloudFolder {
+    CloudFolder::new_from_server(mock_server_folder(id, owner))
 }
 
-fn mock_server_workflow(id: WorkflowId, owner: Owner) -> ServerWorkflow {
-    ServerWorkflow::new(
+fn mock_server_folder(id: FolderId, owner: Owner) -> ServerFolder {
+    ServerFolder::new(
         SyncId::ServerId(id.into()),
-        CloudWorkflowModel::new(Workflow::new("Test Workflow", "echo hello")),
+        CloudFolderModel::new("Test Folder", false),
         ServerMetadata {
             uid: id.into(),
             revision: Revision::now(),
@@ -85,10 +84,10 @@ fn test_leaving_team_removes_objects() {
     App::test((), |mut app| async move {
         let workspace_uid: WorkspaceUid = WorkspaceUid::from(ServerId::from(987));
         let team_uid: ServerId = ServerId::from(123);
-        let team_workflow_id = WorkflowId::from(1);
-        let personal_workflow_id = WorkflowId::from(2);
-        let shared_workflow_id = WorkflowId::from(3);
-        let shared_workflow = mock_server_workflow(shared_workflow_id, Owner::Team { team_uid });
+        let team_folder_id = FolderId::from(1);
+        let personal_folder_id = FolderId::from(2);
+        let shared_folder_id = FolderId::from(3);
+        let shared_folder = mock_server_folder(shared_folder_id, Owner::Team { team_uid });
 
         let mut team_client = MockTeamClient::new();
         team_client.expect_workspaces_metadata().returning(|| {
@@ -127,18 +126,18 @@ fn test_leaving_team_removes_objects() {
         // Add the initial Warp Drive objects.
         CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
             cloud_model.add_object(
-                SyncId::ServerId(team_workflow_id.into()),
-                mock_workflow(team_workflow_id, Owner::Team { team_uid }),
+                SyncId::ServerId(team_folder_id.into()),
+                mock_folder(team_folder_id, Owner::Team { team_uid }),
             );
 
             cloud_model.add_object(
-                SyncId::ServerId(shared_workflow_id.into()),
-                CloudWorkflow::new_from_server(shared_workflow.clone()),
+                SyncId::ServerId(shared_folder_id.into()),
+                CloudFolder::new_from_server(shared_folder.clone()),
             );
 
             cloud_model.add_object(
-                SyncId::ServerId(personal_workflow_id.into()),
-                mock_workflow(personal_workflow_id, Owner::mock_current_user()),
+                SyncId::ServerId(personal_folder_id.into()),
+                mock_folder(personal_folder_id, Owner::mock_current_user()),
             );
         });
 
@@ -147,7 +146,7 @@ fn test_leaving_team_removes_objects() {
             .expect_fetch_changed_objects()
             .returning(move |_, _| {
                 Ok(InitialLoadResponse {
-                    updated_workflows: vec![shared_workflow.clone()],
+                    updated_folders: vec![shared_folder.clone()],
                     ..Default::default()
                 })
             });
@@ -181,7 +180,7 @@ fn test_leaving_team_removes_objects() {
                     .cloud_objects()
                     .map(|obj| obj.uid())
                     .collect_vec(),
-                vec![personal_workflow_id.to_string()]
+                vec![personal_folder_id.to_string()]
             );
         });
 
@@ -192,7 +191,7 @@ fn test_leaving_team_removes_objects() {
             })
             .await;
 
-        // The refresh will then re-add the shared workflow.
+        // The refresh will then re-add the shared folder.
         CloudModel::handle(&app).read(&app, |cloud_model, _| {
             let mut objects = cloud_model
                 .cloud_objects()
@@ -201,10 +200,7 @@ fn test_leaving_team_removes_objects() {
             objects.sort();
             assert_eq!(
                 objects,
-                vec![
-                    personal_workflow_id.to_string(),
-                    shared_workflow_id.to_string()
-                ]
+                vec![personal_folder_id.to_string(), shared_folder_id.to_string()]
             );
         });
     });
