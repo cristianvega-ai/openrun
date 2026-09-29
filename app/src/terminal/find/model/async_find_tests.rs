@@ -1,6 +1,5 @@
 //! Tests for async find functionality.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use parking_lot::FairMutex;
@@ -11,9 +10,8 @@ use super::{
     FindTaskMessage, is_query_refinement,
 };
 use crate::terminal::block_list_element::GridType;
-use crate::terminal::find::model::block_list::run_find_on_block_list;
+use crate::terminal::find::RichContentMatchId;
 use crate::terminal::find::model::{FindOptions, TerminalFindModel};
-use crate::terminal::find::{BlockListMatch, RichContentMatchId};
 use crate::terminal::model::TerminalModel;
 use crate::terminal::model::blocks::TotalIndex;
 use crate::terminal::model::grid::grid_handler::AbsolutePoint;
@@ -45,7 +43,7 @@ fn make_match_at(row: u64, start_col: usize, end_col: usize) -> AbsoluteMatch {
 }
 
 #[test]
-fn test_async_find_produces_same_results_as_sync_find() {
+fn test_async_find_finds_matches_in_command_and_output_grids() {
     App::test((), |mut app| async move {
         initialize_settings_for_tests(&mut app);
 
@@ -55,34 +53,10 @@ fn test_async_find_produces_same_results_as_sync_find() {
 
         let terminal_model = Arc::new(FairMutex::new(mock_terminal_model));
 
-        // Run sync find for comparison.
-        let sync_run = app.update(|ctx| {
-            run_find_on_block_list(
-                FindOptions {
-                    query: Some("bar".to_owned().into()),
-                    is_regex_enabled: false,
-                    is_case_sensitive: false,
-                    ..Default::default()
-                },
-                terminal_model.lock().block_list(),
-                &HashMap::new(),
-                BlockSortDirection::MostRecentLast,
-                ctx,
-            )
-        });
-
-        // Run async find using TerminalFindModel.
-        let test_model = app.add_model(|_ctx| {
-            let mut model = TerminalFindModel::new(terminal_model.clone());
-            if model.async_find_controller.is_none() {
-                model.async_find_controller =
-                    Some(AsyncFindController::new(terminal_model.clone()));
-            }
-            model
-        });
+        let test_model = app.add_model(|_ctx| TerminalFindModel::new(terminal_model.clone()));
 
         test_model.update(&mut app, |model, ctx| {
-            model.async_find_controller.as_mut().unwrap().start_find(
+            model.async_find_controller.start_find(
                 &FindOptions {
                     query: Some("bar".to_owned().into()),
                     is_regex_enabled: false,
@@ -98,71 +72,29 @@ fn test_async_find_produces_same_results_as_sync_find() {
         // results automatically; we just need to yield to the executor.
         assert_eventually!(
             200 => test_model.update(&mut app, |model, _ctx| {
-                model
-                    .async_find_controller
-                    .as_ref()
-                    .map(|c| matches!(c.status(), AsyncFindStatus::Complete))
-                    .unwrap_or(false)
+                matches!(model.async_find_controller.status(), AsyncFindStatus::Complete)
             }),
             "Async find should complete"
         );
 
-        let (status, async_count) = test_model.update(&mut app, |model, _ctx| {
-            let c = model.async_find_controller.as_ref().unwrap();
-            (c.status().clone(), c.match_count())
+        // Each of the two blocks has one match in its command and one in its output.
+        let match_count = test_model.update(&mut app, |model, _ctx| {
+            model.async_find_controller.match_count()
         });
+        assert_eq!(match_count, 4);
 
-        assert_eq!(
-            status,
-            AsyncFindStatus::Complete,
-            "Async find should complete"
-        );
-
-        // Compare match counts.
-        let sync_count = sync_run.matches().count();
-        assert_eq!(
-            async_count, sync_count,
-            "Async find should produce same number of matches as sync find"
-        );
-
-        // Verify the matches are in the expected blocks and grids.
-        let model = terminal_model.lock();
-        for sync_match in sync_run.matches() {
-            if let BlockListMatch::CommandBlock(grid_match) = sync_match {
-                let async_matches = test_model.update(&mut app, |m, _ctx| {
-                    m.async_find_controller
-                        .as_ref()
-                        .unwrap()
-                        .matches_for_block_grid(grid_match.block_index, grid_match.grid_type)
+        for block_index in [BlockIndex::from(1), BlockIndex::from(2)] {
+            for grid_type in [GridType::PromptAndCommand, GridType::Output] {
+                let matches = test_model.update(&mut app, |model, _ctx| {
+                    model
+                        .async_find_controller
+                        .matches_for_block_grid(block_index, grid_type)
                         .cloned()
                 });
-                assert!(
-                    async_matches.is_some(),
-                    "Async find should have matches for block {:?} grid {:?}",
-                    grid_match.block_index,
-                    grid_match.grid_type
-                );
-
-                // Convert async match to relative range and compare.
-                let block = model.block_list().block_at(grid_match.block_index).unwrap();
-                let grid = match grid_match.grid_type {
-                    GridType::Output => block.output_grid().grid_handler(),
-                    GridType::PromptAndCommand => block.prompt_and_command_grid().grid_handler(),
-                    _ => continue,
-                };
-
-                let async_ranges: Vec<_> = async_matches
-                    .unwrap()
-                    .iter()
-                    .filter_map(|m| m.to_range(grid))
-                    .collect();
-
-                assert!(
-                    async_ranges.contains(&grid_match.range),
-                    "Async find should contain match {:?} in block {:?} grid {:?}",
-                    grid_match.range,
-                    grid_match.block_index,
-                    grid_match.grid_type
+                assert_eq!(
+                    matches.map(|matches| matches.len()),
+                    Some(1),
+                    "Expected one match in block {block_index:?} grid {grid_type:?}"
                 );
             }
         }
@@ -180,18 +112,11 @@ fn test_async_find_cancellation() {
         mock_terminal_model.simulate_block("cmd2", "line3\r\nline4\r\n");
 
         let terminal_model = Arc::new(FairMutex::new(mock_terminal_model));
-        let test_model = app.add_model(|_ctx| {
-            let mut model = TerminalFindModel::new(terminal_model.clone());
-            if model.async_find_controller.is_none() {
-                model.async_find_controller =
-                    Some(AsyncFindController::new(terminal_model.clone()));
-            }
-            model
-        });
+        let test_model = app.add_model(|_ctx| TerminalFindModel::new(terminal_model.clone()));
 
         // Start a find operation.
         test_model.update(&mut app, |model, ctx| {
-            model.async_find_controller.as_mut().unwrap().start_find(
+            model.async_find_controller.start_find(
                 &FindOptions {
                     query: Some("line".to_owned().into()),
                     is_regex_enabled: false,
@@ -205,22 +130,18 @@ fn test_async_find_cancellation() {
 
         // Verify we're scanning.
         let is_scanning = test_model.update(&mut app, |model, _ctx| {
-            model.async_find_controller.as_ref().unwrap().is_scanning()
+            model.async_find_controller.is_scanning()
         });
         assert!(is_scanning, "Should be scanning after starting find");
 
         // Cancel the find.
         test_model.update(&mut app, |model, _ctx| {
-            model
-                .async_find_controller
-                .as_mut()
-                .unwrap()
-                .cancel_current_find();
+            model.async_find_controller.cancel_current_find();
         });
 
         // Verify cancellation state.
         let (is_scanning, has_active) = test_model.update(&mut app, |model, _ctx| {
-            let c = model.async_find_controller.as_ref().unwrap();
+            let c = &model.async_find_controller;
             (c.is_scanning(), c.has_active_find())
         });
         assert!(!is_scanning, "Should not be scanning after cancellation");
@@ -228,15 +149,11 @@ fn test_async_find_cancellation() {
 
         // Clear results should reset everything.
         test_model.update(&mut app, |model, ctx| {
-            model
-                .async_find_controller
-                .as_mut()
-                .unwrap()
-                .clear_results(ctx);
+            model.async_find_controller.clear_results(ctx);
         });
 
         let (has_active, status) = test_model.update(&mut app, |model, _ctx| {
-            let c = model.async_find_controller.as_ref().unwrap();
+            let c = &model.async_find_controller;
             (c.has_active_find(), c.status().clone())
         });
         assert!(
@@ -264,29 +181,25 @@ fn test_message_processing_updates_state() {
             let mut controller = AsyncFindController::new(terminal_model);
             // Manually set up state as if a find is in progress.
             controller.set_test_status(AsyncFindStatus::Scanning);
-            model.async_find_controller = Some(controller);
+            model.async_find_controller = controller;
             model
         });
 
         // Process a BlockGridMatches message directly.
         test_model.update(&mut app, |model, ctx| {
-            model
-                .async_find_controller
-                .as_mut()
-                .unwrap()
-                .process_message(
-                    FindTaskMessage::BlockGridMatches {
-                        block_index: BlockIndex(1),
-                        grid_type: GridType::Output,
-                        matches: vec![make_match_at(0, 0, 2), make_match_at(1, 0, 2)],
-                    },
-                    ctx,
-                );
+            model.async_find_controller.process_message(
+                FindTaskMessage::BlockGridMatches {
+                    block_index: BlockIndex(1),
+                    grid_type: GridType::Output,
+                    matches: vec![make_match_at(0, 0, 2), make_match_at(1, 0, 2)],
+                },
+                ctx,
+            );
         });
 
         // Verify state updates.
         let (match_count, status, focused_idx) = test_model.update(&mut app, |model, _ctx| {
-            let c = model.async_find_controller.as_ref().unwrap();
+            let c = &model.async_find_controller;
             (c.match_count(), c.status().clone(), c.focused_match_index())
         });
 
@@ -302,18 +215,11 @@ fn test_message_processing_updates_state() {
         test_model.update(&mut app, |model, ctx| {
             model
                 .async_find_controller
-                .as_mut()
-                .unwrap()
                 .process_message(FindTaskMessage::Done, ctx);
         });
 
         let status = test_model.update(&mut app, |model, _ctx| {
-            model
-                .async_find_controller
-                .as_ref()
-                .unwrap()
-                .status()
-                .clone()
+            model.async_find_controller.status().clone()
         });
 
         assert_eq!(
@@ -657,7 +563,10 @@ fn test_update_dirty_matches_clear_range() {
     assert_eq!(stored[1].start_row(), 25);
 }
 
-fn assert_async_focused_order_matches_sync(block_sort_direction: BlockSortDirection) {
+fn assert_async_focused_order(
+    block_sort_direction: BlockSortDirection,
+    expected_order: Vec<(BlockIndex, GridType, Point, Point)>,
+) {
     App::test((), |mut app| async move {
         initialize_settings_for_tests(&mut app);
 
@@ -679,60 +588,23 @@ fn assert_async_focused_order_matches_sync(block_sort_direction: BlockSortDirect
             ..Default::default()
         };
 
-        let sync_order = app.update(|ctx| {
-            run_find_on_block_list(
-                find_options.clone(),
-                terminal_model.lock().block_list(),
-                &HashMap::new(),
-                block_sort_direction,
-                ctx,
-            )
-            .matches()
-            .filter_map(|m| match m {
-                BlockListMatch::CommandBlock(grid_match) => Some((
-                    grid_match.block_index,
-                    grid_match.grid_type,
-                    *grid_match.range.start(),
-                    *grid_match.range.end(),
-                )),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-        });
-
-        let test_model = app.add_model(|_ctx| {
-            let mut model = TerminalFindModel::new(terminal_model.clone());
-            if model.async_find_controller.is_none() {
-                model.async_find_controller =
-                    Some(AsyncFindController::new(terminal_model.clone()));
-            }
-            model
-        });
+        let test_model = app.add_model(|_ctx| TerminalFindModel::new(terminal_model.clone()));
 
         test_model.update(&mut app, |model, ctx| {
             model
                 .async_find_controller
-                .as_mut()
-                .expect("Async find controller should exist in test.")
                 .start_find(&find_options, block_sort_direction, ctx);
         });
 
         assert_eventually!(
             200 => test_model.update(&mut app, |model, _ctx| {
-                model
-                    .async_find_controller
-                    .as_ref()
-                    .map(|c| matches!(c.status(), AsyncFindStatus::Complete))
-                    .unwrap_or(false)
+                matches!(model.async_find_controller.status(), AsyncFindStatus::Complete)
             }),
             "Async find should complete."
         );
 
         let (status, async_match_count) = test_model.update(&mut app, |model, _ctx| {
-            let controller = model
-                .async_find_controller
-                .as_ref()
-                .expect("Async find controller should exist in test.");
+            let controller = &model.async_find_controller;
             (controller.status().clone(), controller.match_count())
         });
         assert_eq!(
@@ -742,15 +614,12 @@ fn assert_async_focused_order_matches_sync(block_sort_direction: BlockSortDirect
         );
         assert_eq!(
             async_match_count,
-            sync_order.len(),
-            "Async and sync paths should find the same number of terminal matches.",
+            expected_order.len(),
+            "Async find should find every terminal match.",
         );
 
         let async_order_absolute = test_model.update(&mut app, |model, _ctx| {
-            let controller = model
-                .async_find_controller
-                .as_mut()
-                .expect("Async find controller should exist in test.");
+            let controller = &mut model.async_find_controller;
             let mut ordered = Vec::new();
             for index in 0..controller.match_count() {
                 controller.focused_match_index = Some(index);
@@ -788,21 +657,89 @@ fn assert_async_focused_order_matches_sync(block_sort_direction: BlockSortDirect
         };
 
         assert_eq!(
-            async_order, sync_order,
-            "Async focused ordering should match sync ordering for {:?}.",
+            async_order, expected_order,
+            "Unexpected focused ordering for {:?}.",
             block_sort_direction
         );
     });
 }
 
 #[test]
-fn test_async_focused_order_matches_sync_most_recent_last() {
-    assert_async_focused_order_matches_sync(BlockSortDirection::MostRecentLast);
+fn test_async_focused_order_most_recent_last() {
+    let point = |row, col| Point { row, col };
+    let block = |index| BlockIndex(index);
+    assert_async_focused_order(
+        BlockSortDirection::MostRecentLast,
+        vec![
+            (block(2), GridType::Output, point(4, 4), point(5, 2)),
+            (block(2), GridType::Output, point(0, 0), point(0, 5)),
+            (
+                block(2),
+                GridType::PromptAndCommand,
+                point(2, 5),
+                point(3, 3),
+            ),
+            (
+                block(2),
+                GridType::PromptAndCommand,
+                point(0, 0),
+                point(0, 5),
+            ),
+            (block(1), GridType::Output, point(4, 4), point(5, 2)),
+            (block(1), GridType::Output, point(0, 0), point(0, 5)),
+            (
+                block(1),
+                GridType::PromptAndCommand,
+                point(2, 5),
+                point(3, 3),
+            ),
+            (
+                block(1),
+                GridType::PromptAndCommand,
+                point(0, 0),
+                point(0, 5),
+            ),
+        ],
+    );
 }
 
 #[test]
-fn test_async_focused_order_matches_sync_most_recent_first() {
-    assert_async_focused_order_matches_sync(BlockSortDirection::MostRecentFirst);
+fn test_async_focused_order_most_recent_first() {
+    let point = |row, col| Point { row, col };
+    let block = |index| BlockIndex(index);
+    assert_async_focused_order(
+        BlockSortDirection::MostRecentFirst,
+        vec![
+            (
+                block(2),
+                GridType::PromptAndCommand,
+                point(0, 0),
+                point(0, 5),
+            ),
+            (
+                block(2),
+                GridType::PromptAndCommand,
+                point(2, 5),
+                point(3, 3),
+            ),
+            (block(2), GridType::Output, point(0, 0), point(0, 5)),
+            (block(2), GridType::Output, point(4, 4), point(5, 2)),
+            (
+                block(1),
+                GridType::PromptAndCommand,
+                point(0, 0),
+                point(0, 5),
+            ),
+            (
+                block(1),
+                GridType::PromptAndCommand,
+                point(2, 5),
+                point(3, 3),
+            ),
+            (block(1), GridType::Output, point(0, 0), point(0, 5)),
+            (block(1), GridType::Output, point(4, 4), point(5, 2)),
+        ],
+    );
 }
 
 #[test]

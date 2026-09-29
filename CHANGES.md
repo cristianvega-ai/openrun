@@ -127,6 +127,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Code editor diff proposals](#code-editor-diff-proposals) — removed the agent edit-proposal state of `LocalCodeEditorView`, `DiffType` and the rename/delete save paths
 - [Unused dependencies](#unused-dependencies) — removed dependencies that no code uses (`cargo machete`) and unused workspace entries
 - [Ignored agent-view integration tests](#ignored-agent-view-integration-tests) — un-ignored the integration tests that pass, deleted four whose assertions describe the old UI
+- [Synchronous find path](#synchronous-find-path) — removed the synchronous block-list find and the `Option` around the async find controller
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3247,3 +3248,20 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
   - `test_up_arrow_history_enters_shift_tab_for_workflow`: the first Shift-Tab after Up selects the last workflow argument, because `Input::input_shift_tab` only special-cases `InputSuggestionsMode::HistoryUp`, not the inline history menu.
 
 **Notes:** The last item is a behavior difference in the app, not only in the test. It is left as is (deleting the test keeps behavior unchanged); if workflow arguments in the inline history menu should start at the first argument, extend the `HistoryUp` check in `input_shift_tab`.
+
+## Synchronous find path
+**Why:** Terminal find has two paths: the synchronous block-list find and the background-thread `AsyncFindController`. The async path has been the only one the app uses since the `AsyncFind` flag was folded in, so the synchronous path, and the `Option` around the controller that switched between them, were dead.
+
+**Removed:**
+- `BlockListFindRun`, `run_find_on_block_list` and the rest of the synchronous engine in `terminal/find/model/block_list.rs` (only the `BlockListMatch` and `BlockGridMatch` types stay), `BlockFindRenderData::Sync`, `TerminalFindModel::{block_list_find_run, disable_async_find_for_test}` and every `else` branch that used them; `block_list_tests.rs`.
+- Dead helpers that the module-wide `#[allow(dead_code)]` had been hiding: `TerminalFindModel::focused_rich_content_match_id` and `async_find_controller()`, `AsyncFindController::unregister_rich_content_view`, `FindWorkQueue::{clear, is_empty, len}`.
+
+**Modified:**
+- `TerminalFindModel::async_find_controller` is an `AsyncFindController`, not an `Option`; `BlockFindRenderData` is a plain struct.
+- Tests that compared the async results with the synchronous engine now assert fixed expectations (the focused-match order, taken from what the engine produced). The three find tests in `view_tests.rs` (`test_find_in_blocks*`, `test_case_sensitive_find`, `test_find_bar_prefix_search`) wait for the background scan to finish between steps.
+
+**User-visible impact:** None.
+
+**Notes:**
+- When the terminal switches to the alt screen, the block-list find query was never carried over (it read the empty synchronous run). That stays as is: only the alt screen find carries its query into the block list.
+- With "find within blocks" on and no block selected, the async find never leaves the `Scanning` state (the work queue is empty and never completes). Match counts are correct (zero); only `is_scanning()` stays true. The find test asserts the count without waiting for completion.

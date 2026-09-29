@@ -778,11 +778,44 @@ fn command_first_word_and_suffix_handles_alias_without_args() {
 }
 
 fn assert_block_has_find_match(find_model: &TerminalFindModel, block_index: BlockIndex) {
-    assert!(
-        find_model
-            .block_list_find_run()
-            .is_some_and(|run| run.matches_for_block(block_index).next().is_some())
+    let has_match = [GridType::PromptAndCommand, GridType::Output]
+        .into_iter()
+        .any(|grid_type| {
+            find_model
+                .async_find_controller
+                .matches_for_block_grid(block_index, grid_type)
+                .is_some_and(|matches| !matches.is_empty())
+        });
+    assert!(has_match, "Expected a find match in block {block_index:?}");
+}
+
+fn focused_find_match_block_index(find_model: &TerminalFindModel) -> Option<BlockIndex> {
+    match find_model.focused_block_list_match()? {
+        BlockListMatch::CommandBlock(grid_match) => Some(grid_match.block_index),
+        BlockListMatch::RichContent { .. } => None,
+    }
+}
+
+/// Runs `update` on the terminal view, then waits for the find it may have started to finish
+/// scanning.
+async fn update_and_wait_for_find(
+    app: &mut App,
+    terminal: &ViewHandle<TerminalView>,
+    update: impl FnOnce(&mut TerminalView, &mut ViewContext<TerminalView>),
+) {
+    terminal.update(app, update);
+    assert_eventually!(
+        200 => terminal.read(app, |view, ctx| {
+            !view.find_model.as_ref(ctx).is_async_find_scanning()
+        }),
+        "Find should finish scanning"
     );
+}
+
+fn visible_find_match_count(app: &App, terminal: &ViewHandle<TerminalView>) -> usize {
+    terminal.read(app, |view, ctx| {
+        view.find_model.as_ref(ctx).visible_block_list_match_count()
+    })
 }
 
 impl TerminalView {
@@ -2230,65 +2263,52 @@ fn run_find_test(input_mode: InputMode) {
             }
 
             view.show_find_bar(ctx);
-            view.find_model
-                .update(ctx, |model, _| model.disable_async_find_for_test());
 
             // Test without find_in_block enabled (results should be selection-agnostic)
             view.find_bar.update(ctx, |view, _ctx| {
                 view.display_find_within_block = FindWithinBlockState::Disabled;
             });
+        });
 
-            // find when no block is selected
+        // find when no block is selected
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.handle_find_event(
                 &FindEvent::Update {
                     query: Some("foo".to_string()),
                 },
                 ctx,
             );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 4);
+        terminal.read(&app, |view, ctx| {
             assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                4
+                focused_find_match_block_index(view.find_model.as_ref(ctx)),
+                Some(3.into())
             );
-            assert_eq!(
-                view.find_model
-                    .as_ref(ctx)
-                    .block_list_find_run()
-                    .expect("BlockListFindRun exists.")
-                    .focused_match_block_index()
-                    .expect("Focused match exists."),
-                3.into()
-            );
+        });
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.handle_find_event(
                 &FindEvent::NextMatch {
                     direction: FindDirection::Down,
                 },
                 ctx,
             );
+        })
+        .await;
+        terminal.read(&app, |view, ctx| {
+            let focused_block_index = focused_find_match_block_index(view.find_model.as_ref(ctx));
             if input_mode.is_inverted_blocklist() {
                 // should go "down" to middle block
-                assert_eq!(
-                    view.find_model
-                        .as_ref(ctx)
-                        .block_list_find_run()
-                        .expect("BlockListFindRun exists.")
-                        .focused_match_block_index()
-                        .expect("Focused match exists."),
-                    2.into()
-                );
+                assert_eq!(focused_block_index, Some(2.into()));
             } else {
                 // should loop to earliest block
-                assert_eq!(
-                    view.find_model
-                        .as_ref(ctx)
-                        .block_list_find_run()
-                        .expect("BlockListFindRun exists.")
-                        .focused_match_block_index()
-                        .expect("Focused match exists."),
-                    1.into()
-                );
+                assert_eq!(focused_block_index, Some(1.into()));
             }
+        });
 
-            // find when a single block is selected
+        // find when a single block is selected
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.selected_blocks.reset_to_single(2.into());
             view.handle_find_event(
                 &FindEvent::Update {
@@ -2296,19 +2316,24 @@ fn run_find_test(input_mode: InputMode) {
                 },
                 ctx,
             );
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                2
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 2);
+        terminal.read(&app, |view, ctx| {
             assert_block_has_find_match(view.find_model.as_ref(ctx), 1.into());
             assert_block_has_find_match(view.find_model.as_ref(ctx), 3.into());
+        });
 
-            // Test with find_in_block enabled
+        // Test with find_in_block enabled
+        terminal.update(&mut app, |view, ctx| {
             view.find_bar.update(ctx, |view, _ctx| {
                 view.display_find_within_block = FindWithinBlockState::Enabled;
             });
+        });
 
-            // find when no block is selected
+        // find when no block is selected. There is nothing to scan, so the find never reports
+        // that it finished; the result is available immediately.
+        terminal.update(&mut app, |view, ctx| {
             view.selected_blocks.reset();
             view.handle_find_event(
                 &FindEvent::Update {
@@ -2316,12 +2341,11 @@ fn run_find_test(input_mode: InputMode) {
                 },
                 ctx,
             );
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                0
-            );
+        });
+        assert_eq!(visible_find_match_count(&app, &terminal), 0);
 
-            // find when a single block is selected
+        // find when a single block is selected
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.selected_blocks.reset_to_single(2.into());
             view.handle_find_event(
                 &FindEvent::Update {
@@ -2329,13 +2353,15 @@ fn run_find_test(input_mode: InputMode) {
                 },
                 ctx,
             );
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                1
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 1);
+        terminal.read(&app, |view, ctx| {
             assert_block_has_find_match(view.find_model.as_ref(ctx), 2.into());
+        });
 
-            // find when multiple blocks are selected, and find in block is enabled
+        // find when multiple blocks are selected, and find in block is enabled
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.selected_blocks.toggle(3.into(), Some(2.into()), None);
             view.handle_find_event(
                 &FindEvent::Update {
@@ -2343,10 +2369,10 @@ fn run_find_test(input_mode: InputMode) {
                 },
                 ctx,
             );
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                3
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 3);
+        terminal.read(&app, |view, ctx| {
             assert_block_has_find_match(view.find_model.as_ref(ctx), 2.into());
             assert_block_has_find_match(view.find_model.as_ref(ctx), 3.into());
         });
@@ -2382,34 +2408,36 @@ fn test_case_sensitive_find() {
             }
 
             view.show_find_bar(ctx);
-            view.find_model
-                .update(ctx, |model, _| model.disable_async_find_for_test());
+        });
 
-            // Test without case sensitivity enabled (no blocks enabled)
+        // Test without case sensitivity enabled (no blocks enabled)
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.handle_find_event(
                 &FindEvent::Update {
                     query: Some("fOO".to_string()),
                 },
                 ctx,
             );
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                3
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 3);
 
-            // Test without case sensitivity enabled, but with find in block
+        // Test without case sensitivity enabled, but with find in block
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.find_bar.update(ctx, |view, _ctx| {
                 view.display_find_within_block = FindWithinBlockState::Enabled;
             });
             view.selected_blocks.reset_to_single(1.into());
             view.update_find_selection(ctx);
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                1
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 1);
+        terminal.read(&app, |view, ctx| {
             assert_block_has_find_match(view.find_model.as_ref(ctx), 1.into());
+        });
 
-            // Test with case sensitivity enabled (one block enabled)
+        // Test with case sensitivity enabled (one block enabled)
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.handle_find_event(
                 &FindEvent::ToggleCaseSensitivity {
                     is_case_sensitive: true,
@@ -2418,42 +2446,44 @@ fn test_case_sensitive_find() {
             );
             view.selected_blocks.reset_to_single(1.into());
             view.update_find_selection(ctx);
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                0
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 0);
 
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.selected_blocks.reset_to_single(2.into());
             view.update_find_selection(ctx);
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                1
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 1);
+        terminal.read(&app, |view, ctx| {
             assert_block_has_find_match(view.find_model.as_ref(ctx), 2.into());
+        });
 
-            // Test with case sensitivity enabled (no blocks enabled)
+        // Test with case sensitivity enabled (no blocks enabled)
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.selected_blocks.reset();
             view.find_bar.update(ctx, |view, _ctx| {
                 view.display_find_within_block = FindWithinBlockState::Disabled;
             });
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                1
-            );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 1);
+        terminal.read(&app, |view, ctx| {
             assert_block_has_find_match(view.find_model.as_ref(ctx), 2.into());
+        });
 
-            // Change regex to mismatch case sensitivity across all blocks
+        // Change regex to mismatch case sensitivity across all blocks
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.handle_find_event(
                 &FindEvent::Update {
                     query: Some("FOO".to_string()),
                 },
                 ctx,
             );
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                0
-            );
-        });
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 0);
     })
 }
 
@@ -2474,34 +2504,30 @@ fn test_find_bar_prefix_search() {
             }
 
             view.show_find_bar(ctx);
-            view.find_model
-                .update(ctx, |model, _| model.disable_async_find_for_test());
+        });
 
-            // Test without regex enabled
+        // Test without regex enabled
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.handle_find_event(
                 &FindEvent::Update {
                     query: Some("^foo".to_string()),
                 },
                 ctx,
             );
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 0);
 
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                0
-            );
-
+        update_and_wait_for_find(&mut app, &terminal, |view, ctx| {
             view.handle_find_event(
                 &FindEvent::ToggleRegexSearch {
                     is_regex_enabled: true,
                 },
                 ctx,
             );
-
-            assert_eq!(
-                view.find_model.as_ref(ctx).visible_block_list_match_count(),
-                1
-            );
-        });
+        })
+        .await;
+        assert_eq!(visible_find_match_count(&app, &terminal), 1);
     });
 }
 

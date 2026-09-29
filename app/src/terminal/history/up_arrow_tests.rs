@@ -50,11 +50,10 @@ fn history_for(
         .into_iter()
         .map(|suggestion| {
             let text = suggestion.normalized_text().to_owned();
-            match suggestion {
-                HistoryInputSuggestion { entry } => TestHistoryItem {
-                    text,
-                    linked_workflow_data: entry.linked_workflow_data(),
-                },
+            let HistoryInputSuggestion { entry } = suggestion;
+            TestHistoryItem {
+                text,
+                linked_workflow_data: entry.linked_workflow_data(),
             }
         })
         .collect()

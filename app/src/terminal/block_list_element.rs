@@ -2007,7 +2007,7 @@ impl BlockListElement {
             let command_focused_range =
                 find_render_data
                     .as_ref()
-                    .and_then(|data: &BlockFindRenderData<'_>| {
+                    .and_then(|data: &BlockFindRenderData| {
                         data.focused_range_for_grid(GridType::PromptAndCommand)
                     });
             block.prompt_and_command_grid().draw(
@@ -2024,7 +2024,7 @@ impl BlockListElement {
                 hovered_secret,
                 find_render_data
                     .as_ref()
-                    .and_then(|data: &BlockFindRenderData<'_>| data.command_grid_matches()),
+                    .and_then(|data: &BlockFindRenderData| data.command_grid_matches()),
                 command_focused_range.as_ref(),
                 command_grid_properties,
                 block_grid_params,
@@ -2105,7 +2105,7 @@ impl BlockListElement {
             let output_focused_range =
                 find_render_data
                     .as_ref()
-                    .and_then(|data: &BlockFindRenderData<'_>| {
+                    .and_then(|data: &BlockFindRenderData| {
                         data.focused_range_for_grid(GridType::Output)
                     });
             block.output_grid().draw(
@@ -2123,7 +2123,7 @@ impl BlockListElement {
                 // Render find matches in output grid.
                 find_render_data
                     .as_ref()
-                    .and_then(|data: &BlockFindRenderData<'_>| data.output_grid_matches()),
+                    .and_then(|data: &BlockFindRenderData| data.output_grid_matches()),
                 output_focused_range.as_ref(),
                 output_grid_properties,
                 block_grid_params,

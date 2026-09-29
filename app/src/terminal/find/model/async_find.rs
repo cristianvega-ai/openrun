@@ -747,11 +747,6 @@ impl AsyncFindController {
         self.rich_content_views.insert(view_id, handle);
     }
 
-    /// Unregisters a rich content view.
-    pub(crate) fn unregister_rich_content_view(&mut self, view_id: EntityId) {
-        self.rich_content_views.remove(&view_id);
-    }
-
     /// Starts a new find operation with the given options.
     ///
     /// If a find operation is already in progress, it will be cancelled first.
@@ -1260,9 +1255,8 @@ impl AsyncFindController {
         ctx.spawn_stream_local(
             result_rx,
             move |me, msg, ctx| {
-                if let Some(controller) = &mut me.async_find_controller
-                    && controller.generation == generation
-                {
+                let controller = &mut me.async_find_controller;
+                if controller.generation == generation {
                     controller.process_message(msg, ctx);
                 }
             },

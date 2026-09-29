@@ -43,7 +43,7 @@ impl InputConfig {
     }
 
     pub fn with_input_type(self, input_type: InputType) -> Self {
-        Self { input_type, ..self }
+        Self { input_type }
     }
 
     pub fn is_prompt(&self) -> bool {

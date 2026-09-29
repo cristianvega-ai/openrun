@@ -5219,19 +5219,16 @@ impl TerminalView {
                     }
                 }
 
+                // Only the alt screen find carries its query over to the block list.
                 let existing_find_options = match mode {
-                    TerminalMode::AltScreen => self
-                        .find_model
-                        .as_ref(ctx)
-                        .block_list_find_run()
-                        .map(|run| run.options()),
+                    TerminalMode::AltScreen => None,
                     TerminalMode::BlockList => self
                         .find_model
                         .as_ref(ctx)
                         .alt_screen_find_run()
-                        .map(|run| run.options()),
-                }
-                .cloned();
+                        .map(|run| run.options())
+                        .cloned(),
+                };
                 if let Some(FindOptions {
                     query: Some(query),
                     is_regex_enabled,
