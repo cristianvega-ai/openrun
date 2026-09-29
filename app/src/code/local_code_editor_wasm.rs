@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use warp_core::ui::appearance::Appearance;
 use warp_editor::content::buffer::InitialBufferState;
-use warp_editor::diff::DiffType;
 use warp_editor::render::model::LineCount;
 use warp_util::file::{FileLoadError, FileSaveError};
 use warpui::elements::MouseStateHandle;
@@ -63,12 +62,7 @@ pub struct LocalCodeEditorView {
 }
 
 impl LocalCodeEditorView {
-    pub fn new(
-        editor: ViewHandle<CodeEditorView>,
-        _diff_type: Option<DiffType>,
-        _enable_diff_nav_by_default: bool,
-        _ctx: &mut ViewContext<Self>,
-    ) -> Self {
+    pub fn new(editor: ViewHandle<CodeEditorView>, _ctx: &mut ViewContext<Self>) -> Self {
         Self { editor }
     }
 

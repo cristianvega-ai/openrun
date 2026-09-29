@@ -124,6 +124,8 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Input lock state](#input-lock-state) — removed the vestigial `InputConfig::is_locked` and the lock events
 - [Inline menu tabs and UDI names](#inline-menu-tabs-and-udi-names) — removed the unused inline-menu tab machinery and the `UDI` naming
 - [Log rotation](#log-rotation) — removed the unused size-based rotation from `simple_logger`
+- [Code editor diff proposals](#code-editor-diff-proposals) — removed the agent edit-proposal state of `LocalCodeEditorView`, `DiffType` and the rename/delete save paths
+- [Unused dependencies](#unused-dependencies) — removed dependencies that no code uses (`cargo machete`) and unused workspace entries
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3209,3 +3211,23 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `simple_logger::RotationConfig`, `perform_rotation`, `path_with_suffix`, `LogManager::register_with_rotation` and the rotation argument of `SimpleLogger::new`; the rotation tests in `manager_tests.rs` and `lib_tests.rs`.
 
 **User-visible impact:** None. LSP logs were never rotated.
+
+## Code editor diff proposals
+**Why:** `LocalCodeEditorView` still carried the state of the agent "edit-file" proposal (a pending accept/reject diff). Every editor is created with `diff_type = None` since the agent was removed.
+
+**Removed:**
+- `LocalCodeEditorView::{diff_type, enable_diff_nav_by_default, apply_diffs_if_any, diff}` and the matching arguments of `LocalCodeEditorView::new` and `new_with_global_buffer`; the rename-on-save and delete-on-save branches of `perform_save`; the "never auto-save a pending diff" guards.
+- `warp_editor::diff::DiffType` (`DiffDelta` stays for code review).
+- `GlobalBufferModel::{rename_and_save, delete}` and `FileModel::{rename_and_save, delete}`, whose only callers were those branches.
+
+**User-visible impact:** None.
+
+## Unused dependencies
+**Why:** `cargo machete` reported dependencies that no crate uses any more after the removals, and the workspace still listed entries no crate references.
+
+**Removed:**
+- From `[workspace.dependencies]`: `fs4`, `parquet`, `prost`, and the self-referencing `integration` path entry.
+- From `app/Cargo.toml`: `asset_cache`, `async-compat`, `bincode`, `bitflags-serde-legacy`, `blocking`, `concat-idents`, `content_inspector`, `crc`, `derivative`, `directories`, `email_address`, `getset`, `http`, `http_client`, `lasso`, `line-ending`, `log-panics`, `lz4_flex`, `memo-map`, `os_info`, `pin-project`, `serde_with`, `shlex`, `siphasher`, `tabwriter`, `thousands`, `toml_edit`, `tracing-futures`, `urlocator`, `validator`, `vte`.
+- Smaller sets from `integration`, `repo_metadata`, `warp_core`, `warp_completer`, `warp_files`, `virtual_fs`, `markdown_parser`, `warp_ripgrep`, `warpui`, `warpui_core`, `warp_terminal`, `prevent_sleep`, `node_runtime`, `warpui_extras` and `warp_editor`.
+
+**Notes:** Kept although machete flags them: derive-macro and attribute-string users (`serde`, `serde_bytes`, `serde_regex`, `strum`, `num-traits`, `log` in test-only code), `rust-embed` and `warpui_core` in `app` (named by features and dev-dependencies). Checked with `cargo check --workspace --all-targets` on macOS, `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu`. Dependencies used only by `cfg(wasm)` code could not be verified (the wasm target does not build; see the cross-target notes).

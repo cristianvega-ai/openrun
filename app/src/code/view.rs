@@ -377,7 +377,6 @@ impl CodeView {
                         )
                     })
                 },
-                false,
                 ctx,
             );
             editor = editor.with_selection_as_context(Box::new(get_context_target_terminal_view));
@@ -415,7 +414,7 @@ impl CodeView {
         });
 
         ctx.add_typed_action_view(|ctx| {
-            let mut local_editor = LocalCodeEditorView::new(editor, None, false, ctx);
+            let mut local_editor = LocalCodeEditorView::new(editor, ctx);
             local_editor =
                 local_editor.with_selection_as_context(Box::new(get_context_target_terminal_view));
 

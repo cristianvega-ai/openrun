@@ -2823,7 +2823,6 @@ impl CodeReviewView {
                             editor_view
                         })
                     },
-                    false,
                     ctx,
                 )
                 .with_selection_as_context(Box::new(move |_, app| {
@@ -2916,8 +2915,7 @@ impl CodeReviewView {
             });
 
             let local_code_view = ctx.add_typed_action_view(|ctx| {
-                let mut local_code_view =
-                    LocalCodeEditorView::new(code_editor_view, None, false, ctx);
+                let mut local_code_view = LocalCodeEditorView::new(code_editor_view, ctx);
                 local_code_view =
                     local_code_view.with_selection_as_context(Box::new(move |_, app| {
                         self_handle.upgrade(app).and_then(|code_review_view| {
