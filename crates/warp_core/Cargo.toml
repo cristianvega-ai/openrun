@@ -12,7 +12,7 @@ release_bundle = []
 # Enabled when building the self-contained standalone CLI binary (see the bundle
 # script). Keep in sync with the `app` crate's `standalone` feature.
 standalone = []
-test-util = ["dep:mockito", "warp_features/test-util"]
+test-util = ["warp_features/test-util"]
 
 [dependencies]
 anyhow.workspace = true
@@ -43,7 +43,6 @@ sysinfo.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 concat-idents.workspace = true
-url.workspace = true
 regex.workspace = true
 instant.workspace = true
 schemars = "1"
@@ -54,7 +53,6 @@ futures.workspace = true
 line-ending.workspace = true
 warpui_core.workspace = true
 warpui_extras = { workspace = true, features = ["default"] }
-mockito = { workspace = true, optional = true }
 string-offset.workspace = true
 chrono.workspace = true
 

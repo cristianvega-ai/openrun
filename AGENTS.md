@@ -185,9 +185,8 @@ Warp uses compile-time feature flags with a small runtime plumbing layer.
 
 How to add a feature flag:
 - Add a new variant to `warp_core/src/features.rs` in the `FeatureFlag` enum
-- (Optional) Enable it by default for dogfood builds by listing it in `DOGFOOD_FLAGS`
 - Gate code paths with `FeatureFlag::YourFlag.is_enabled()`
-- For preview or release rollout, add to `PREVIEW_FLAGS` or `RELEASE_FLAGS` respectively (as appropriate)
+- To turn a flag on by default, add a Cargo feature for it in `app/Cargo.toml` and map it in `app/src/features.rs`; otherwise it stays off until enabled at runtime
 
 Best practices:
 - **Prefer runtime checks over cfg directives**: Prefer `FeatureFlag::YourFlag.is_enabled()` over `#[cfg(...)]` compile-time directives so flags can be toggled without recompilation and are easier to clean up later. Use `#[cfg(...)]` only when the code cannot compile without them (for example, platform-specific code or dependencies that do not exist when the feature is disabled).
@@ -201,11 +200,6 @@ Example:
 pub enum FeatureFlag {
     YourNewFeature,
 }
-
-// Default-on for dogfood builds
-pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
-    FeatureFlag::YourNewFeature,
-];
 
 // Use in code
 if FeatureFlag::YourNewFeature.is_enabled() {

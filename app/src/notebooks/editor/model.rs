@@ -148,7 +148,6 @@ fn render_mermaid_clipboard_html(source: &str) -> Option<String> {
 impl NotebooksEditorModel {
     fn editable_markdown_mermaid_enabled() -> bool {
         FeatureFlag::MarkdownMermaid.is_enabled()
-            && FeatureFlag::EditableMarkdownMermaid.is_enabled()
     }
 
     pub fn new(

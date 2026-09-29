@@ -88,7 +88,6 @@ use axum::{Json, Router};
 pub use bridge::LocalControlBridge;
 #[cfg(any(unix, test))]
 use chrono::Duration;
-use permissions::ensure_feature_enabled;
 #[cfg(any(unix, test))]
 use permissions::{ensure_action_allowed, ensure_protocol_version};
 #[cfg(unix)]
@@ -151,10 +150,6 @@ impl LocalControlServer {
 
     /// Starts, refreshes, or removes local-control publication as settings change.
     fn refresh_for_settings(&mut self, ctx: &mut ModelContext<Self>) -> Result<(), ControlError> {
-        if !permissions::warp_control_cli_enabled() {
-            self.stop(ctx);
-            return Ok(());
-        }
         if !local_control_publication_supported() {
             self.stop(ctx);
             return Ok(());
@@ -188,7 +183,6 @@ impl LocalControlServer {
                 "local-control server is already running",
             ));
         }
-        ensure_feature_enabled()?;
         if !local_control_publication_supported() {
             return Err(ControlError::new(
                 ErrorCode::LocalControlDisabled,
@@ -452,7 +446,6 @@ async fn issue_credential(
     state: &ControlServerState,
     request: CredentialRequest,
 ) -> Result<ScopedCredential, ControlError> {
-    ensure_feature_enabled()?;
     ensure_protocol_version(request.protocol_version)?;
     if !request.action.is_implemented() {
         return Err(ControlError::new(
@@ -511,13 +504,6 @@ async fn handle_control_request(
     payload: Bytes,
 ) -> Response {
     if let Err(error) = validate_loopback_headers(&headers, &state.expected_host) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(ErrorResponseEnvelope::new(error)),
-        )
-            .into_response();
-    }
-    if let Err(error) = ensure_feature_enabled() {
         return (
             StatusCode::FORBIDDEN,
             Json(ErrorResponseEnvelope::new(error)),

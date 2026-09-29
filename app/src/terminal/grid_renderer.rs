@@ -1913,9 +1913,7 @@ fn native_glyph_for_cell(cell: &Cell) -> Option<NativeGlyphType> {
     let glyph_type = match cell.c {
         // Supported solid box-drawing lines render as cell-filling rects so
         // adjacent cells tile seamlessly. Other box-drawing glyphs use the font.
-        c @ '\u{2500}'..='\u{257F}'
-            if FeatureFlag::BoxDrawingGlyphs.is_enabled() && box_drawing::is_supported(c) =>
-        {
+        c @ '\u{2500}'..='\u{257F}' if box_drawing::is_supported(c) => {
             NativeGlyphType::BoxDrawing(c)
         }
 

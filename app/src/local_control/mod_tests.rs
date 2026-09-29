@@ -12,7 +12,6 @@ use axum::http::header::{AUTHORIZATION, HOST, ORIGIN};
 use axum::http::{HeaderMap, HeaderValue};
 use chrono::Duration;
 use settings::Setting as _;
-use warp_core::features::FeatureFlag;
 use warpui::SingletonEntity as _;
 
 #[cfg(unix)]
@@ -20,11 +19,10 @@ use super::ensure_peer_uid;
 use super::resolver::validate_action_target;
 use super::{
     ControlServerState, LocalControlBridge, LocalControlServer, MAX_ACTIVE_CREDENTIALS,
-    capabilities, ensure_feature_enabled, ensure_protocol_version, ensure_settings_allow_action,
-    handle_control_request, insert_credential, issue_credential, lookup_credential,
-    require_active_window_id, resolve_index_from_ids, resolve_title_from_matches,
-    validate_action_params, validate_loopback_headers, validate_request_authority,
-    validate_tab_create_target,
+    capabilities, ensure_protocol_version, ensure_settings_allow_action, handle_control_request,
+    insert_credential, issue_credential, lookup_credential, require_active_window_id,
+    resolve_index_from_ids, resolve_title_from_matches, validate_action_params,
+    validate_loopback_headers, validate_request_authority, validate_tab_create_target,
 };
 use crate::settings::{LocalControlMode, LocalControlModeSetting, LocalControlSettings};
 
@@ -222,12 +220,6 @@ fn missing_window_index_returns_missing_target() {
 }
 
 #[test]
-fn feature_flag_disabled_denies_local_control() {
-    let _flag = FeatureFlag::WarpControlCli.override_enabled(false);
-    let err = ensure_feature_enabled().expect_err("feature flag disabled");
-    assert_eq!(err.code, ErrorCode::LocalControlDisabled);
-}
-#[test]
 fn duplicate_server_start_is_rejected() {
     warpui::App::test((), |mut app| async move {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -379,7 +371,6 @@ fn expired_credential_is_rejected_and_pruned_before_request_decode() {
 
 #[test]
 fn disabling_scripting_invalidates_existing_grant_and_prevents_new_grants() {
-    let _flag = FeatureFlag::WarpControlCli.override_enabled(true);
     warpui::App::test((), |mut app| async move {
         crate::test_util::settings::initialize_settings_for_tests(&mut app);
         app.update(|ctx| {

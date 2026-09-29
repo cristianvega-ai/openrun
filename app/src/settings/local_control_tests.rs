@@ -2,14 +2,11 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use settings::{PrivatePreferences, PublicPreferences, Setting as _, SettingsManager};
-use warp_core::channel::{Channel, ChannelState};
 use warpui::SingletonEntity as _;
 use warpui_extras::secure_storage::{self, AppContextExt as _};
 use warpui_extras::user_preferences;
 
-use super::{
-    LocalControlMode, LocalControlModeSetting, LocalControlSettings, default_mode_for_channel,
-};
+use super::{LocalControlMode, LocalControlModeSetting, LocalControlSettings};
 
 #[derive(Default)]
 struct InMemorySecureStorage {
@@ -61,38 +58,12 @@ fn default_settings() -> LocalControlSettings {
 }
 
 #[test]
-fn default_mode_is_enabled_only_on_dogfood_channels() {
-    assert_eq!(
-        default_mode_for_channel(Channel::Dev),
-        LocalControlMode::Enabled
-    );
-    assert_eq!(
-        default_mode_for_channel(Channel::Local),
-        LocalControlMode::Enabled
-    );
-    for channel in [
-        Channel::Stable,
-        Channel::Preview,
-        Channel::Oss,
-        Channel::Integration,
-    ] {
-        assert_eq!(
-            default_mode_for_channel(channel),
-            LocalControlMode::Disabled,
-            "{channel} must require explicit opt-in"
-        );
-    }
-}
-
-#[test]
-fn unset_mode_follows_channel_default() {
+fn unset_mode_defaults_to_disabled() {
     let settings = default_settings();
 
     assert_eq!(LocalControlMode::default(), LocalControlMode::Disabled);
-    assert_eq!(
-        settings.mode(),
-        default_mode_for_channel(ChannelState::channel())
-    );
+    assert_eq!(settings.mode(), LocalControlMode::Disabled);
+    assert!(!settings.is_enabled());
 }
 
 #[test]
@@ -172,7 +143,7 @@ fn mode_does_not_migrate_from_private_preferences() {
         app.read(|ctx| {
             assert_eq!(
                 LocalControlSettings::as_ref(ctx).mode(),
-                default_mode_for_channel(ChannelState::channel())
+                LocalControlMode::Disabled
             );
             let private_value = LocalControlModeSetting::preferences_for_setting(ctx)
                 .read_value(LocalControlModeSetting::storage_key())

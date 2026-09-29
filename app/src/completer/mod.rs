@@ -15,7 +15,6 @@ use warp_completer::completer::{
     GeneratorContext, PathCompletionContext, PathSeparators, TopLevelCommandCaseSensitivity,
 };
 use warp_completer::signatures::CommandRegistry;
-use warp_core::features::FeatureFlag;
 use warp_util::path::{EscapeChar, ShellFamily};
 
 use crate::safe_warn;
@@ -224,10 +223,7 @@ impl GeneratorContext for SessionContext {
                 shell_command,
                 self.pwd().to_str(),
                 env_vars_option,
-                ExecuteCommandOptions {
-                    run_command_in_same_shell_as_session: !FeatureFlag::RunGeneratorsWithCmdExe
-                        .is_enabled(),
-                },
+                ExecuteCommandOptions::default(),
             )
             .await
     }

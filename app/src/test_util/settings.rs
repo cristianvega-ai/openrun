@@ -72,9 +72,7 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     InputSettings::register(app);
     KeysSettings::register(app);
     LigatureSettings::register(app);
-    if warp_core::features::FeatureFlag::WarpControlCli.is_enabled() {
-        LocalControlSettings::register(app);
-    }
+    LocalControlSettings::register(app);
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     {

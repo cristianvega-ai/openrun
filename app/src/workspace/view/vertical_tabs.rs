@@ -2512,9 +2512,9 @@ fn render_tab_group_internal(
                 ctx.dispatch_typed_action(WorkspaceAction::DropTab);
             });
         // Only lock the drag to the vertical axis when cross-window tab drag is
-        // disabled. When it is enabled, the user needs to be able to drag
+        // unsupported. When it is supported, the user needs to be able to drag
         // horizontally out of the panel to detach the tab into a new window.
-        let draggable = if FeatureFlag::DragTabsToWindows.is_enabled() {
+        let draggable = if crate::workspace::cross_window_tab_drag::IS_SUPPORTED {
             draggable
         } else {
             draggable.with_drag_axis(DragAxis::VerticalOnly)

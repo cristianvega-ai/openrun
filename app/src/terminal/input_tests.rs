@@ -2261,7 +2261,6 @@ fn test_tab_completion_longest_common_prefix_with_fuzzy_suggestions_and_completi
 
 #[test]
 fn test_tab_completion_hides_autosuggestion() {
-    let _test = FeatureFlag::RemoveAutosuggestionDuringTabCompletions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -2312,7 +2311,6 @@ fn test_tab_completion_hides_autosuggestion() {
 
 #[test]
 fn test_completions_while_typing_doesnt_hide_autosuggestion() {
-    let _test = FeatureFlag::RemoveAutosuggestionDuringTabCompletions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 

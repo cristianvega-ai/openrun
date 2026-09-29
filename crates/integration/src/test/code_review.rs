@@ -135,7 +135,6 @@ fn code_review_scroll_anchor_builder(
     insertion_line_number: usize,
     insertion_prefix: &'static str,
 ) -> Builder {
-    FeatureFlag::CodeReviewScrollPreservation.set_enabled(true);
     FeatureFlag::IncrementalAutoReload.set_enabled(true);
     let inserted_line_text = inserted_lines(insertion_prefix)
         .into_iter()
@@ -291,7 +290,6 @@ fn deleted_range_diff_contents() -> String {
 }
 
 pub fn test_code_review_scroll_preserved_deleted_range() -> Builder {
-    FeatureFlag::CodeReviewScrollPreservation.set_enabled(true);
     FeatureFlag::IncrementalAutoReload.set_enabled(true);
 
     let inserted_line_text = inserted_lines("above")
@@ -371,7 +369,6 @@ pub fn test_code_review_scroll_preserved_deleted_range() -> Builder {
 // This exercises the Header variant of RelocatableScrollContext.
 
 pub fn test_code_review_scroll_preserved_header_range() -> Builder {
-    FeatureFlag::CodeReviewScrollPreservation.set_enabled(true);
     FeatureFlag::IncrementalAutoReload.set_enabled(true);
 
     let inserted_line_text = inserted_lines("above")
@@ -452,7 +449,6 @@ pub fn test_code_review_scroll_preserved_header_range() -> Builder {
 // has second_file.txt below it, making the footer reachable.
 
 pub fn test_code_review_scroll_preserved_footer_range() -> Builder {
-    FeatureFlag::CodeReviewScrollPreservation.set_enabled(true);
     FeatureFlag::IncrementalAutoReload.set_enabled(true);
 
     let inserted_line_text = inserted_lines("first")
@@ -547,7 +543,6 @@ pub fn test_code_review_scroll_preserved_footer_range() -> Builder {
 }
 
 pub fn test_code_review_scroll_preserved_second_file() -> Builder {
-    FeatureFlag::CodeReviewScrollPreservation.set_enabled(true);
     FeatureFlag::IncrementalAutoReload.set_enabled(true);
 
     let inserted_line_text = inserted_lines("second")

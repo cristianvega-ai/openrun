@@ -976,11 +976,7 @@ impl SettingsView {
             me.handle_privacy_page_event(event, ctx);
         });
 
-        let scripting_page_handle = if FeatureFlag::WarpControlCli.is_enabled() {
-            Some(ctx.add_typed_action_view(ScriptingSettingsPageView::new))
-        } else {
-            None
-        };
+        let scripting_page_handle = ctx.add_typed_action_view(ScriptingSettingsPageView::new);
 
         let font_family = Appearance::as_ref(ctx).ui_font_family();
         let search_editor = ctx.add_typed_action_view(|ctx| {
@@ -1010,7 +1006,7 @@ impl SettingsView {
             me.handle_menu_event(event, ctx);
         });
 
-        let mut settings_pages = vec![
+        let settings_pages = vec![
             SettingsPage::new(cli_agents_page_handle),
             SettingsPage::new(projects_page_handle),
             SettingsPage::new(editor_review_page_handle),
@@ -1018,16 +1014,10 @@ impl SettingsView {
             SettingsPage::new(features_page_handle),
             SettingsPage::new(keybindings_handle),
             SettingsPage::new(warpify_page_handle),
-        ];
-
-        if let Some(scripting_page_handle) = scripting_page_handle {
-            settings_pages.push(SettingsPage::new(scripting_page_handle));
-        }
-
-        settings_pages.extend(vec![
+            SettingsPage::new(scripting_page_handle),
             SettingsPage::new(privacy_page_handle),
             SettingsPage::new(about_page_handle),
-        ]);
+        ];
 
         // Build sidebar nav items. Umbrellas group their subpages here and
         // nowhere else, so this list is the only place membership is declared.
@@ -1048,23 +1038,16 @@ impl SettingsView {
             SettingsNavItem::Page(SettingsSection::About),
         ];
 
-        if FeatureFlag::WarpControlCli.is_enabled() {
-            let scripting_index = nav_items
-                .iter()
-                .position(|item| matches!(item, SettingsNavItem::Page(SettingsSection::Warpify)))
-                .map_or(nav_items.len(), |index| index + 1);
-            nav_items.insert(
-                scripting_index,
-                SettingsNavItem::Page(SettingsSection::Scripting),
-            );
-        }
+        let scripting_index = nav_items
+            .iter()
+            .position(|item| matches!(item, SettingsNavItem::Page(SettingsSection::Warpify)))
+            .map_or(nav_items.len(), |index| index + 1);
+        nav_items.insert(
+            scripting_index,
+            SettingsNavItem::Page(SettingsSection::Scripting),
+        );
 
-        let initial_page = match page {
-            Some(SettingsSection::Scripting) if !FeatureFlag::WarpControlCli.is_enabled() => {
-                SettingsSection::default()
-            }
-            other => other.unwrap_or_default(),
-        };
+        let initial_page = page.unwrap_or_default();
 
         // Auto-expand the umbrella if the initial page is one of its subpages.
         for item in &mut nav_items {

@@ -159,7 +159,6 @@ nix = { version = "0.26.4", default-features = false, features = ["signal"] }
 notify-debouncer-full = { git = "https://github.com/warpdotdev/notify", rev = "91b719849bc04ef251bcb2cc61076b099204e970" }
 nom = "7.1.1"
 num-traits = "0.2"
-oauth2 = { version = "5.0.0", default-features = false }
 openh264 = "0.8"
 static_assertions = "1.1.0"
 url = "2.5.4"
@@ -307,7 +306,6 @@ shellexpand = "3.1.1"
 warp-command-signatures = { git = "https://github.com/warpdotdev/command-signatures.git", rev = "48fd7aa5b7b4d99f5db57d1c5a25c47c05567fcf", default-features = false }
 winit = { git = "https://github.com/warpdotdev/winit.git", rev = "14db95a686387211d57cf2afd1d908b2d82a20fe" }
 x11rb = "0.13.0"
-mockito = "1.7.0"
 sysinfo = { version = "0.37.0", default-features = false, features = [
   "system",
   "multithread",
@@ -396,18 +394,6 @@ lto = "thin"
 [profile.rlto]
 inherits = "release-lto"
 
-# A custom release-like profile that forces debug assertions on.
-[profile.release-lto-debug_assertions]
-inherits = "release-lto"
-debug-assertions = true
-
-# A shorthand profile for `release-lto-debug_assertions`.
-# Windows enforces that any path is a maximum of 255 characters and
-# the length of this profile is sufficiently long that it can cause
-# compiler errors. We use a shorthand to get around these issues.
-[profile.rltoda]
-inherits = "release-lto-debug_assertions"
-
 # A profile tuned for the standalone `warpctrl` binary. We trade some compile time and a
 # small amount of runtime perf for a smaller binary.
 [profile.release-cli]
@@ -418,17 +404,9 @@ opt-level = "s"
 # cross-crate size optimization, so 1 was paying a lot of compile time for little extra size.
 codegen-units = 4
 
-# A custom CLI release-like profile that forces debug assertions on, used for
-# dev/local channel CLI bundles.
-[profile.release-cli-debug_assertions]
-inherits = "release-cli"
-debug-assertions = true
 # Short aliases keep Windows build paths below the legacy MAX_PATH limit.
 [profile.rcli]
 inherits = "release-cli"
-
-[profile.rclida]
-inherits = "release-cli-debug_assertions"
 
 # A dev profile optimized for remote server deployment. Strips symbols to
 # reduce binary size and improve rsync delta transfer efficiency.

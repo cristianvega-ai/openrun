@@ -107,6 +107,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp server client crates](#warp-server-client-crates) — deleted `warp_graphql` (`crates/graphql`), `warp_graphql_schema`, `warp_server_client`, `warp_server_auth`, `firebase`, `cloud_objects`, `websocket`, `channel_versions` and `field_mask`, with `cynic`, `graphql-ws-client`, `tungstenite`, and the SSE and websocket error support
 - [Telemetry framework](#telemetry-framework) — deleted the event enum, registration macros, context provider and event store, plus the last telemetry-only plumbing (`workflow_selection_source`, `anonymous_id`, `TelemetryConfig`, `--print-telemetry-events`)
 - [Dead SQLite tables and columns](#dead-sqlite-tables-and-columns) — one migration drops the AI, MCP, Warp Drive, team, account and experiment tables, the pane kinds and columns that went with them, and the pane-tree rows of removed pane kinds
+- [Server configuration and channel collapse](#server-configuration-and-channel-collapse) — `Channel` is now `{Oss, Integration}`; deleted the server, telemetry, autoupdate and crash-reporting channel config, the `WARP_*` server-URL overrides, the Warp headers and IAP logic in `http_client`, and the dogfood/preview/release flag lists
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2853,3 +2854,36 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `commands.is_agent_executed` stays: history still hides commands an agent ran (`terminal/history.rs`, command search). Dropping it would need those rows deleted and the field removed from the history types. Left for AI-33.
 - The `SettingsFileLastSyncedHash` private preference is not stored in sqlite (nothing in the repo reads or writes it any more), so there was nothing to remove here.
 - The integration sqlite fixtures under `crates/integration/tests/data/` are older than the migration and are migrated on startup by the tests that use them; they were not regenerated. `test_json_object.sqlite` (461 cloud-object rows) now exercises dropping populated Warp Drive tables.
+## Server configuration and channel collapse
+**Why:** The server plan removed every caller of the Warp server, telemetry, autoupdate and crash-reporting configuration, and the earlier channel tasks deleted the `stable`, `preview`, `dev` and `local` binaries. What was left was configuration that pointed at nothing, a `Channel` enum with four variants nothing could construct, and feature-flag lists (`DOGFOOD_FLAGS`, `PREVIEW_FLAGS`, `RELEASE_FLAGS`, `LOCAL_FLAGS`) for builds that no longer exist.
+
+**Removed:**
+- `warp_core::channel`: `WarpServerConfig`, `IapConfig`, `AutoupdateConfig`, `CrashReportingConfig` and the `ChannelConfig` fields for them (TEL-4 had already removed the telemetry and RudderStack types); the `ChannelState` accessors `server_root_url`, `server_root_domain`, `ws_server_url`, `rtc_http_url`, `firebase_api_key`, `iap_config`, `uses_staging_server`, `releases_base_url`, `show_autoupdate_menu_items`, `sentry_url` and `is_crash_reporting_available`; the `override_server_root_url`/`override_ws_server_url` setters and `Channel::allows_server_url_overrides`; the `mockito` mock server and `set_app_version` behind `test-util`; `Channel::is_dogfood` and `Channel::cli_command_name`; `state_tests.rs`. The `url` and `mockito` dependencies of `warp_core` went with them.
+- `Channel::{Stable, Dev, Preview, Local}`. `Channel` is `{Oss, Integration}`; every `match` and `==` on the removed variants is gone (icon choice in `settings/app_icon.rs`, the dock-icon reset in `appearance.rs`, `can_become_default_terminal` on macOS, config and data directory selection in `paths.rs`).
+- `warp_cli`: the hidden `--server-root-url` and `--ws-server-url` arguments and their `WARP_SERVER_ROOT_URL`/`WARP_WS_SERVER_URL` environment variables, with `server_root_url()`/`ws_server_url()` and their tests.
+- `http_client`: the `X-Warp-*` header injection, `is_warp_server_origin`, the IAP token provider and `iap.rs`, the `oauth2` `HttpClient` adapter, the request and response hook setters, `serialized_payload`, the `test-util` feature and the `oauth2`, `serde_urlencoded` and `url` dependencies.
+- `preview_config_migration` (the Preview-to-Stable config directory copy, including its `.mcp.json` step) and its integration test.
+- `warp_logging`: `LogFrontend` and the `oz` log subdirectory (there is only the GUI frontend).
+- `app/src/bin/{oss,integration}.rs` and `crates/integration/src/bin/integration.rs` no longer build server, telemetry, autoupdate or crash-reporting config.
+- `DOGFOOD_FLAGS`, `PREVIEW_FLAGS`, `RELEASE_FLAGS`, `LOCAL_FLAGS`, `RUNTIME_FEATURE_FLAGS`, `FeatureFlag::flag_description` (it only fed the Preview changelog) and `features_tests.rs`; the `preview_channel` Cargo feature; `oauth2` and `mockito` from `[workspace.dependencies]`; the `release-lto-debug_assertions`, `rltoda`, `release-cli-debug_assertions` and `rclida` Cargo profiles (only dev and local bundles used them).
+- Packaging scripts (`script/{macos,linux,windows}/bundle*`, `script/linux/bundle_*`, `script/prepare_bundled_resources`, `script/compile_icon`, `script/windows/windows-installer.iss`): the `local`, `dev`, `preview` and `stable` branches. `--channel` accepts only `oss`, and the warpctrl wrapper is always bundled.
+
+**Modified:**
+- The `safe_*` log macros pick the detailed (`full:`) message in debug builds (`cfg!(debug_assertions)`) instead of on dogfood channels. Release builds log the `safe:` message only, as before.
+- `warpctrl`/`local_control` is available on every build: the `WarpControlCli` flag checks are gone (settings registration, the Scripting settings page, the app menu, the startup path and the permission check), and the `Setting` default for `local_control_mode` is `Disabled`, so it stays loopback-only and opt-in (MASTER decision 8). The `warp_control_cli` Cargo feature is no longer needed by scripts; the flag variant is left for FLAGS-1.
+- Flag lists. The OSS build never received `DOGFOOD_FLAGS`, `PREVIEW_FLAGS` or `LOCAL_FLAGS`, so those features were off for OSS users. Each one now either runs unconditionally (its gate is deleted) or its gated code is deleted:
+  - Now always on (code kept, gate removed): `EditableMarkdownMermaid`, `JupyterNotebookRendering`, `ResizeFix`, `SshDragAndDrop`, `MSYS2Shells`, `RunGeneratorsWithCmdExe`, `TerminalLifecycleRecovery`, `BoxDrawingGlyphs`, `RemoveAutosuggestionDuringTabCompletions`, `ToggleBootstrapBlock`, `CodeReviewScrollPreservation`, `ContextLineReviewComments`, `FileAndDiffSetComments`, `DragTabsToWindows` and `ImeMarkedText` (the last two were in `RELEASE_FLAGS`, which OSS bundles received).
+  - Gated code deleted: `LocalClaudeCodexChildHarnesses` and `RuntimeFeatureFlags`.
+  - Only removed from the lists (nothing left to gate): the flags of features other tasks deleted.
+- `ChannelState::is_release_bundle` and `enable_debug_features` stay; `app/src/features.rs` no longer adds `RELEASE_FLAGS` for release bundles.
+- `AGENTS.md`: the feature-flag section describes Cargo features in `app/src/features.rs` instead of the removed lists.
+
+**Persisted state:** none. Data and config directories, bundle IDs and the `warposs://` scheme are unchanged (MASTER decisions 13 and 17). A leftover Preview config directory is no longer migrated, which only concerned Preview users.
+
+**User-visible impact:** Debug builds log detailed messages as before; release builds log the safe form. The dogfood-only features listed above are on for all users. Scripting settings (`warpctrl`) appears for everyone, with the mode `Disabled` until the user enables it.
+
+**Notes:**
+- Judgment call: promoting the dogfood flags (rather than deleting their code) keeps the features; the alternative is to revert a single hunk per flag.
+- `LocalShellState::get_interactive_path_env_var` still has callers (code review and workspace metadata), so it stays.
+- Left for FLAGS-1: the now-unreferenced `FeatureFlag` variants and their Cargo features.
+- Left for DOCS-1: comments outside these files that mention dogfood or preview channels.

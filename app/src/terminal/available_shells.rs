@@ -720,27 +720,6 @@ impl AvailableShells {
             }
         }
 
-        if FeatureFlag::MSYS2Shells.is_enabled() {
-            // Search the default install location for MSYS2 shells (installed via pacman).
-            match env::var("SystemDrive") {
-                Ok(system_drive) => {
-                    let msys_bin = Path::new(&format!(r"{system_drive}\"))
-                        .join("msys64")
-                        .join("usr")
-                        .join("bin");
-                    for shell in ["bash.exe", "fish.exe", "zsh.exe"] {
-                        let msys_shell = msys_bin.join(shell);
-                        if file_exists_and_is_executable(&msys_shell) {
-                            paths.push(msys_shell);
-                        }
-                    }
-                }
-                Err(err) => {
-                    log::warn!("Environment variable SystemDrive not found {err:#}");
-                }
-            }
-        }
-
         paths
     }
 

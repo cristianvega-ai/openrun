@@ -340,7 +340,6 @@ fn test_appearance_changes() {
 fn test_omnibar_is_hidden_for_rendered_mermaid_selection() {
     App::test((), |mut app| async move {
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let (_, editor_view, _) = initialize_editor(&mut app);
         let markdown = "Before\n```mermaid\ngraph TD\nA --> B\n```\nAfter";
         reset_editor_with_markdown(&mut app, &editor_view, markdown).await;
@@ -379,7 +378,6 @@ fn test_omnibar_is_hidden_for_rendered_mermaid_selection() {
 fn test_shift_click_on_rendered_mermaid_dispatches_selection_update_to_block_boundary() {
     App::test((), |mut app| async move {
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let (_, editor_view, _) = initialize_editor(&mut app);
         let markdown = "Before\n```mermaid\ngraph TD\nA --> B\n```\nAfter";
         reset_editor_with_markdown(&mut app, &editor_view, markdown).await;
@@ -475,7 +473,6 @@ fn test_shift_click_on_rendered_mermaid_dispatches_selection_update_to_block_bou
 fn test_drag_on_rendered_mermaid_dispatches_selection_update_to_block_boundary() {
     App::test((), |mut app| async move {
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let (_, editor_view, _) = initialize_editor(&mut app);
         let markdown = "Before\n```mermaid\ngraph TD\nA --> B\n```\nAfter";
         reset_editor_with_markdown(&mut app, &editor_view, markdown).await;

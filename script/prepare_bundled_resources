@@ -12,8 +12,7 @@
 #   destination_directory:  The directory where resources should be installed.
 #                           Resources will be copied to subdirectories within
 #                           this path (e.g., $DEST_DIR/bundled).
-#   channel:                (Optional) Release channel (local, dev, preview,
-#                           stable).
+#   channel:                (Optional) Release channel (oss).
 #
 # Environment variables:
 #   SKIP_SETTINGS_SCHEMA: Set to "1" to skip generating the JSON settings

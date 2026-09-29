@@ -2,13 +2,8 @@
 use ::local_control::{ActionKind, ControlError, ErrorCode, PROTOCOL_VERSION};
 use warpui::{ModelContext, SingletonEntity};
 
-use crate::features::FeatureFlag;
 use crate::local_control::LocalControlBridge;
 use crate::settings::LocalControlSettings;
-
-pub(super) fn warp_control_cli_enabled() -> bool {
-    FeatureFlag::WarpControlCli.is_enabled()
-}
 
 pub(super) fn ensure_protocol_version(protocol_version: u32) -> Result<(), ControlError> {
     if protocol_version == PROTOCOL_VERSION {
@@ -17,16 +12,6 @@ pub(super) fn ensure_protocol_version(protocol_version: u32) -> Result<(), Contr
     Err(ControlError::new(
         ErrorCode::ProtocolVersionUnsupported,
         format!("unsupported protocol version {protocol_version}"),
-    ))
-}
-
-pub(super) fn ensure_feature_enabled() -> Result<(), ControlError> {
-    if warp_control_cli_enabled() {
-        return Ok(());
-    }
-    Err(ControlError::new(
-        ErrorCode::LocalControlDisabled,
-        "Warp control CLI is disabled by feature flag",
     ))
 }
 

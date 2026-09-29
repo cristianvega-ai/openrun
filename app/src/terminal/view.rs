@@ -2257,25 +2257,23 @@ impl TerminalView {
 
         let ssh_file_upload = ctx.add_typed_action_view(|_| FileUpload::new());
 
-        if FeatureFlag::SshDragAndDrop.is_enabled() {
-            ctx.subscribe_to_view(&ssh_file_upload, |_terminal, _file_upload, event, ctx| {
-                // Pass the file upload events up so they can be processed by the pane group.
-                match event {
-                    FileUploadEvent::CopyFileToRemote { command, upload_id } => {
-                        ctx.emit(Event::CopyFileToRemote {
-                            command: command.clone(),
-                            upload_id: *upload_id,
-                        });
-                    }
-                    FileUploadEvent::OpenUploadSession(upload_id) => {
-                        ctx.emit(Event::OpenFileUploadSession(*upload_id));
-                    }
-                    FileUploadEvent::TerminateUploadSession(upload_id) => {
-                        ctx.emit(Event::TerminateFileUploadSession(*upload_id));
-                    }
+        ctx.subscribe_to_view(&ssh_file_upload, |_terminal, _file_upload, event, ctx| {
+            // Pass the file upload events up so they can be processed by the pane group.
+            match event {
+                FileUploadEvent::CopyFileToRemote { command, upload_id } => {
+                    ctx.emit(Event::CopyFileToRemote {
+                        command: command.clone(),
+                        upload_id: *upload_id,
+                    });
                 }
-            });
-        }
+                FileUploadEvent::OpenUploadSession(upload_id) => {
+                    ctx.emit(Event::OpenFileUploadSession(*upload_id));
+                }
+                FileUploadEvent::TerminateUploadSession(upload_id) => {
+                    ctx.emit(Event::TerminateFileUploadSession(*upload_id));
+                }
+            }
+        });
 
         // Here we initialize the block list mouse states for block zero.
         // Afterwards, we initialize all block list mouse states for a block when the
@@ -3482,9 +3480,6 @@ impl TerminalView {
         selected_range: &Range<usize>,
         ctx: &mut ViewContext<Self>,
     ) {
-        if !FeatureFlag::ImeMarkedText.is_enabled() {
-            return;
-        }
         self.model
             .lock()
             .set_marked_text(marked_text, selected_range);
@@ -3492,9 +3487,6 @@ impl TerminalView {
     }
 
     fn clear_marked_text_on_terminal(&mut self, ctx: &mut ViewContext<Self>) {
-        if !FeatureFlag::ImeMarkedText.is_enabled() {
-            return;
-        }
         self.model.lock().clear_marked_text();
         ctx.notify();
     }
@@ -11935,7 +11927,7 @@ impl TerminalView {
         };
 
         let sshed = session.is_ssh_wrapper_session();
-        if sshed && !paths.is_empty() && FeatureFlag::SshDragAndDrop.is_enabled() {
+        if sshed && !paths.is_empty() {
             self.initiate_ssh_file_upload(paths, ctx);
         } else {
             // For long-running commands in MSYS2/Git Bash on Windows, skip
@@ -12214,9 +12206,7 @@ impl TerminalSurface for TerminalView {
             matches!(notification_settings.mode, NotificationsMode::Unset)
                 || (matches!(notification_settings.mode, NotificationsMode::Enabled)
                     && notification_settings.is_needs_attention_enabled);
-        let pane_handling_ssh_upload =
-            self.is_ssh_uploader() && FeatureFlag::SshDragAndDrop.is_enabled();
-        password_notification_setting_on || pane_handling_ssh_upload
+        password_notification_setting_on || self.is_ssh_uploader()
     }
     #[cfg(unix)]
     fn should_stop_password_prompt_polling(&self, completed: &AfterBlockCompletedEvent) -> bool {
@@ -12232,9 +12222,7 @@ impl TerminalSurface for TerminalView {
         block_index: Option<BlockIndex>,
         ctx: &mut ViewContext<Self>,
     ) {
-        if FeatureFlag::SshDragAndDrop.is_enabled() {
-            self.propagate_password_request(ctx);
-        }
+        self.propagate_password_request(ctx);
 
         // Only send the notification if the user is navigated away from the window
         // when the password prompt appears. If they are present, don't poll again
@@ -13238,7 +13226,7 @@ impl View for TerminalView {
             SavePosition::new(stack.finish(), &self.terminal_position_id()).finish()
         };
 
-        if self.is_file_drop_target && FeatureFlag::SshDragAndDrop.is_enabled() {
+        if self.is_file_drop_target {
             Container::new(element)
                 .with_foreground_overlay(appearance.theme().accent_overlay())
                 .finish()

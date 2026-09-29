@@ -1,10 +1,5 @@
-pub mod iap;
-
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::time::Duration;
 use std::fmt;
+use std::time::Duration;
 
 #[cfg(not(target_family = "wasm"))]
 use async_compat::{Compat, CompatExt};
@@ -17,68 +12,13 @@ pub use http::{HeaderMap, StatusCode};
 use reqwest::IntoUrl;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use warp_core::channel::{Channel, ChannelState};
-use warp_core::execution_mode;
-use warp_core::operating_system_info::OperatingSystemInfo;
-use warp_errors::report_error;
-
-use crate::iap::{IapTokenProvider, proxy_auth_header};
-
-pub mod headers {
-    /// Custom Warp header indicating the version of the Warp app.
-    pub const CLIENT_RELEASE_VERSION_HEADER_KEY: &str = "X-Warp-Client-Version";
-
-    /// Custom Warp header indicating the OS category the request was sent from.
-    pub(crate) const WARP_OS_CATEGORY: &str = "X-Warp-OS-Category";
-    /// Custom Warp header indicating the OS name the request was sent from. On Linux this is the
-    /// name of the distribution. On all other platforms it should be equivalent to
-    /// `WARP_OS_CATEGORY`.
-    pub(crate) const WARP_OS_NAME: &str = "X-Warp-OS-Name";
-    /// Custom Warp header indicating the version of the operating system. On Linux this is the
-    /// version of the distribution, not the Linux kernel version.
-    pub(crate) const WARP_OS_VERSION: &str = "X-Warp-OS-Version";
-
-    /// Custom Warp header indicating the linux kernel version. This is only sent from Linux.
-    pub(crate) const WARP_OS_LINUX_KERNEL_VERSION: &str = "X-Warp-OS-Linux-Kernel-Version";
-
-    /// Custom Warp header indicating the client role. We don't use the User-Agent header
-    /// because it can't be set from WASM.
-    pub(crate) const WARP_CLIENT_ID: &str = "X-Warp-Client-ID";
-}
-
-/// The environment variable containing extra HTTP headers to attach to requests.
-/// Only read when the channel is `Channel::Integration`. The value is a newline-separated
-/// list of `Name:Value` pairs, where each pair is split on the first colon.
-const EXTRA_HTTP_HEADERS_ENV_VAR: &str = "WARP_EXTRA_HTTP_HEADERS";
 
 /// A wrapper around a `reqwest::Client` to execute requests. Returns a custom `RequestBuilder` type
 /// that ensures any call to the underlying `reqwest::Client` are properly adapted so that they can
 /// run outside of a Tokio context.
 pub struct Client {
     wrapped: reqwest::Client,
-
-    /// A callback that is executed before every request is sent with a cloned
-    /// version of the outbound request.  If for some reason the request cannot be
-    /// cloned the function is not called.
-    before_request_sent: Option<RequestHookFn>,
-
-    /// A callback that is executed on after each response is received.
-    after_response_received: Option<ResponseHookFn>,
-
-    /// If set, provides IAP bearer tokens to attach as `Proxy-Authorization`
-    /// headers on outbound requests to the Warp staging server. Wired in by
-    /// the app layer on IAP-enabled builds (staging).
-    iap_token_provider: Option<Arc<dyn IapTokenProvider>>,
 }
-
-/// Type for 'hook' functions to be executed prior to sending a request. A reference to the
-/// outbound request object is given as the first argument. The second argument the request's
-/// serialized JSON payload, if any.
-pub type RequestHookFn = Box<dyn Fn(&reqwest::Request, &Option<String>) + 'static + Send + Sync>;
-
-/// Type for 'hook' functions to be executed after receiving a response. The sole argument is a
-/// reference to the inbound response object.
-pub type ResponseHookFn = Box<dyn Fn(&reqwest::Response) + 'static + Send + Sync>;
 
 /// A custom request builder that is a wrapper around a `request::RequestBuilder`. Ensures any async
 /// call to the underyling `reqwest::RequestBuilder` are properly adapted to run outside of a Tokio
@@ -87,15 +27,11 @@ pub struct RequestBuilder<'a> {
     wrapped: reqwest::RequestBuilder,
     client: &'a Client,
 
-    // The JSON payload of the request, if any, serialized to a pretty-printed String.
-    serialized_payload: Option<String>,
-
     prevent_sleep_reason: Option<&'static str>,
 }
 
 pub struct Request {
     wrapped: reqwest::Request,
-    serialized_payload: Option<String>,
     prevent_sleep_reason: Option<&'static str>,
 }
 
@@ -129,204 +65,38 @@ impl Client {
         Self::from_client_builder(builder).expect("should not fail to create client")
     }
 
-    #[cfg(feature = "test-util")]
-    pub fn new_for_test() -> Self {
-        let client_builder = reqwest::ClientBuilder::new()
-            // Don't load any SSL/TLS certificates, as doing so can be slow and we should
-            // never be making real requests in tests.
-            .tls_certs_only([])
-            // Disable proxy usage in tests, as loading system proxy configuration can be
-            // slow.
-            .no_proxy();
-        Self::from_client_builder(client_builder).expect("should not fail to create client")
-    }
-
     pub fn from_client_builder(client_builder: reqwest::ClientBuilder) -> reqwest::Result<Self> {
-        client_builder.build().map(|client| Self {
-            wrapped: client,
-            before_request_sent: None,
-            after_response_received: None,
-            iap_token_provider: None,
-        })
+        client_builder
+            .build()
+            .map(|client| Self { wrapped: client })
     }
 
-    pub fn set_before_request_fn(&mut self, hook_fn: RequestHookFn) {
-        self.before_request_sent = Some(hook_fn);
-    }
-
-    pub fn set_after_response_fn(&mut self, hook_fn: ResponseHookFn) {
-        self.after_response_received = Some(hook_fn);
-    }
-
-    pub fn set_iap_token_provider(&mut self, provider: Arc<dyn IapTokenProvider>) {
-        self.iap_token_provider = Some(provider);
-    }
-
-    fn builder(
-        &self,
-        wrapped: reqwest::RequestBuilder,
-        include_warp_headers: bool,
-        iap_token: Option<String>,
-    ) -> RequestBuilder<'_> {
-        let mut builder = RequestBuilder {
+    fn builder(&self, wrapped: reqwest::RequestBuilder) -> RequestBuilder<'_> {
+        RequestBuilder {
             wrapped,
             client: self,
-            serialized_payload: None,
             prevent_sleep_reason: None,
-        };
-
-        if include_warp_headers {
-            builder = Self::add_warp_http_headers(builder);
         }
-
-        if let Some(token) = iap_token {
-            let (name, value) = proxy_auth_header(&token);
-            builder = builder.header(name, value);
-        }
-
-        builder
     }
 
-    pub fn get<U: IntoUrl + Clone>(&self, url: U) -> RequestBuilder<'_> {
-        let include_warp_headers = Self::include_warp_http_headers(url.clone());
-        let iap_token = self.iap_token_for(url.clone());
-        self.builder(self.wrapped.get(url), include_warp_headers, iap_token)
+    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+        self.builder(self.wrapped.get(url))
     }
 
-    pub fn post<U: IntoUrl + Clone>(&self, url: U) -> RequestBuilder<'_> {
-        let include_warp_headers = Self::include_warp_http_headers(url.clone());
-        let iap_token = self.iap_token_for(url.clone());
-        self.builder(self.wrapped.post(url), include_warp_headers, iap_token)
+    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+        self.builder(self.wrapped.post(url))
     }
 
-    pub fn put<U: IntoUrl + Clone>(&self, url: U) -> RequestBuilder<'_> {
-        let include_warp_headers = Self::include_warp_http_headers(url.clone());
-        let iap_token = self.iap_token_for(url.clone());
-        self.builder(self.wrapped.put(url), include_warp_headers, iap_token)
+    pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+        self.builder(self.wrapped.put(url))
     }
 
-    pub fn patch<U: IntoUrl + Clone>(&self, url: U) -> RequestBuilder<'_> {
-        let include_warp_headers = Self::include_warp_http_headers(url.clone());
-        let iap_token = self.iap_token_for(url.clone());
-        self.builder(self.wrapped.patch(url), include_warp_headers, iap_token)
+    pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+        self.builder(self.wrapped.patch(url))
     }
 
-    pub fn delete<U: IntoUrl + Clone>(&self, url: U) -> RequestBuilder<'_> {
-        let include_warp_headers = Self::include_warp_http_headers(url.clone());
-        let iap_token = self.iap_token_for(url.clone());
-        self.builder(self.wrapped.delete(url), include_warp_headers, iap_token)
-    }
-
-    /// Returns the IAP bearer token to attach to a request targeting
-    /// `url`, scoped to the Warp server's origin.
-    fn iap_token_for<U: IntoUrl>(&self, url: U) -> Option<String> {
-        let provider = self.iap_token_provider.as_ref()?;
-        let url = url.into_url().ok()?;
-        if !is_warp_server_origin(&url) {
-            return None;
-        }
-        provider.cached_token()
-    }
-
-    /// Helper method to determine if the request should include warp-specific headers. The only case
-    /// where we should include custom headers is if the request is same-origin and is targetted to our server.
-    /// For example, app.warp.dev --> app.warp.dev.
-    #[cfg(target_family = "wasm")]
-    fn include_warp_http_headers<U: IntoUrl + Clone>(url: U) -> bool {
-        url.into_url().is_ok_and(|url| {
-            url.host_str().is_some_and(|dest_host| {
-                let window_hostname = gloo::utils::window()
-                    .location()
-                    .hostname()
-                    .expect("Can't get window hostname");
-
-                // If the request is going to our server, the destination host should be "app.warp.dev" or
-                // "staging.warp.dev". The window hostname should also return the same.
-                // Note that reqwest's host_str() method is described here: https://docs.rs/reqwest/latest/reqwest/struct.Url.html#method.domain and
-                // gloo's hostname() method refers to this mozilla definition: https://developer.mozilla.org/en-US/docs/Web/API/Location/hostname.
-                window_hostname == dest_host
-            })
-        })
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    fn include_warp_http_headers<U: IntoUrl + Clone>(_url: U) -> bool {
-        true
-    }
-
-    fn add_warp_http_headers(mut builder: RequestBuilder) -> RequestBuilder {
-        // Include the client ID header.
-        if let Some(client_id) = execution_mode::current_client_id() {
-            builder = builder.header(headers::WARP_CLIENT_ID, client_id);
-        }
-
-        // If there's an app version, include it as an HTTP request header.
-        if let Some(app_version) = ChannelState::app_version() {
-            builder = builder.header(headers::CLIENT_RELEASE_VERSION_HEADER_KEY, app_version);
-        }
-
-        // On integration builds, attach any extra headers from the environment.
-        if ChannelState::channel() == Channel::Integration
-            && let Ok(raw) = std::env::var(EXTRA_HTTP_HEADERS_ENV_VAR)
-        {
-            for line in raw.lines() {
-                let Some((name, value)) = line.split_once(':') else {
-                    continue;
-                };
-                let name = name.trim();
-                let value = value.trim();
-                if name.is_empty() {
-                    continue;
-                }
-                match (
-                    HeaderName::from_bytes(name.as_bytes()),
-                    HeaderValue::from_str(value),
-                ) {
-                    (Ok(name), Ok(value)) => {
-                        builder = builder.header(name, value);
-                    }
-                    _ => {
-                        log::warn!(
-                            "Ignoring invalid entry in {EXTRA_HTTP_HEADERS_ENV_VAR}: {line}"
-                        );
-                    }
-                }
-            }
-        }
-
-        // Headers indicating the details of the client's operating system, if available here at runtime.
-        if let Ok(os_system_info) = OperatingSystemInfo::get() {
-            // Operating system category.
-            let category = os_system_info.category().to_string();
-            if let Ok(category) = HeaderValue::from_str(&category) {
-                builder = builder.header(headers::WARP_OS_CATEGORY, category);
-            }
-
-            // Operating system name.
-            builder = builder.header(
-                headers::WARP_OS_NAME,
-                HeaderValue::from_static(os_system_info.name()),
-            );
-
-            // Operating system version.
-            if let Some(version) = os_system_info
-                .version()
-                .and_then(|version| HeaderValue::from_str(version).ok())
-            {
-                builder = builder.header(headers::WARP_OS_VERSION, version);
-            }
-
-            // Linux kernel version.
-            if let Some(linux_kernel_version) = os_system_info
-                .linux_kernel_version()
-                .and_then(|kernel_version| HeaderValue::from_str(kernel_version).ok())
-            {
-                builder =
-                    builder.header(headers::WARP_OS_LINUX_KERNEL_VERSION, linux_kernel_version);
-            }
-        }
-
-        builder
+    pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+        self.builder(self.wrapped.delete(url))
     }
 
     pub async fn execute(&self, request: Request) -> reqwest::Result<Response> {
@@ -337,13 +107,8 @@ impl Client {
     async fn execute_inner(&self, request: Request) -> reqwest::Result<Response> {
         let Request {
             wrapped: request,
-            serialized_payload,
             prevent_sleep_reason,
         } = request;
-
-        if let Some(before_response_send_fn) = &self.before_request_sent {
-            before_response_send_fn(&request, &serialized_payload);
-        }
 
         let _guard = prevent_sleep_reason.map(prevent_sleep::prevent_sleep);
 
@@ -359,22 +124,8 @@ impl Client {
             }
         }
 
-        if let Some(after_response_received_fn) = &self.after_response_received {
-            after_response_received_fn(&result);
-        }
-
         Ok(Response(result))
     }
-}
-
-fn is_warp_server_origin(url: &reqwest::Url) -> bool {
-    [
-        ChannelState::server_root_url(),
-        ChannelState::rtc_http_url(),
-    ]
-    .iter()
-    .filter_map(|candidate| reqwest::Url::parse(candidate.as_ref()).ok())
-    .any(|candidate| candidate.origin() == url.origin())
 }
 
 impl<'a> RequestBuilder<'a> {
@@ -385,7 +136,6 @@ impl<'a> RequestBuilder<'a> {
     pub fn build_split(self) -> (&'a Client, reqwest::Result<Request>) {
         let request = self.wrapped.build().map(|request| Request {
             wrapped: request,
-            serialized_payload: self.serialized_payload,
             prevent_sleep_reason: self.prevent_sleep_reason,
         });
         (self.client, request)
@@ -397,34 +147,8 @@ impl<'a> RequestBuilder<'a> {
     }
 
     pub fn json<T: Serialize + ?Sized>(self, json: &T) -> RequestBuilder<'a> {
-        let serialized_payload =
-            match serde_json::to_string_pretty(json).map_err(anyhow::Error::from) {
-                Ok(payload) => Some(payload),
-                Err(err) => {
-                    report_error!(err.context("Failed to serialize JSON request payload."));
-                    None
-                }
-            };
         Self {
             wrapped: self.wrapped.json(json),
-            serialized_payload,
-            ..self
-        }
-    }
-
-    pub fn proto<T: prost::Message>(self, proto: &T) -> RequestBuilder<'a> {
-        let bytes = proto.encode_to_vec();
-        let serialized = String::from_utf8(bytes.clone());
-
-        Self {
-            wrapped: self
-                .wrapped
-                .header(
-                    http::header::CONTENT_TYPE,
-                    HeaderValue::from_static("application/x-protobuf"),
-                )
-                .body(bytes),
-            serialized_payload: serialized.ok(),
             ..self
         }
     }
@@ -488,17 +212,8 @@ impl<'a> RequestBuilder<'a> {
     }
 
     pub fn form<T: Serialize + ?Sized>(self, form: &T) -> RequestBuilder<'a> {
-        let serialized_payload =
-            match serde_urlencoded::to_string(form).map_err(anyhow::Error::from) {
-                Ok(payload) => Some(payload),
-                Err(err) => {
-                    report_error!(err.context("Failed to serialize url-encoded form payload"));
-                    None
-                }
-            };
         Self {
             wrapped: self.wrapped.form(form),
-            serialized_payload,
             ..self
         }
     }
@@ -526,8 +241,7 @@ impl<'a> RequestBuilder<'a> {
 }
 
 /// An error returned from `Response::error_for_status` that includes response metadata.
-/// This allows callers to inspect headers (like X-Warp-Error-Code) and the response body when
-/// handling errors.
+/// This allows callers to inspect the response headers and body when handling errors.
 #[derive(Debug)]
 pub struct ResponseError {
     pub source: reqwest::Error,
@@ -632,75 +346,5 @@ impl Response {
 
     pub fn url(&self) -> &reqwest::Url {
         self.0.url()
-    }
-}
-
-/// Adapter to use our HTTP client wrapper with [`oauth2`]. This is modeled on the [`reqwest`]
-/// implementation of [`oauth2::AsyncHttpClient`].
-impl<'c> oauth2::AsyncHttpClient<'c> for Client {
-    type Error = oauth2::HttpClientError<reqwest::Error>;
-
-    #[cfg(target_arch = "wasm32")]
-    type Future = Pin<Box<dyn Future<Output = Result<oauth2::HttpResponse, Self::Error>> + 'c>>;
-    #[cfg(not(target_arch = "wasm32"))]
-    type Future =
-        Pin<Box<dyn Future<Output = Result<oauth2::HttpResponse, Self::Error>> + Send + 'c>>;
-
-    fn call(&'c self, request: oauth2::HttpRequest) -> Self::Future {
-        Box::pin(async move {
-            let uri = request.uri().to_string();
-            let include_warp_headers = Self::include_warp_http_headers(uri.clone());
-            let iap_token = self.iap_token_for(uri);
-            let builder = reqwest::RequestBuilder::from_parts(
-                self.wrapped.clone(),
-                request.try_into().map_err(Box::new)?,
-            );
-
-            let response = self
-                .builder(builder, include_warp_headers, iap_token)
-                .send()
-                .await
-                .map_err(Box::new)?;
-
-            let mut builder = ::http::Response::builder().status(response.status());
-
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                builder = builder.version(response.0.version());
-            }
-
-            for (name, value) in response.0.headers().iter() {
-                builder = builder.header(name, value);
-            }
-
-            let response_body = response.bytes().await.map_err(Box::new)?.to_vec();
-            builder
-                .body(response_body)
-                .map_err(oauth2::HttpClientError::Http)
-        })
-    }
-}
-
-#[cfg(test)]
-mod origin_tests {
-    use super::*;
-
-    #[test]
-    fn server_and_rtc_origins_match() {
-        // Derive the expected origins from `ChannelState` so the assertion holds
-        // regardless of which channel config the test build resolves to.
-        let server = reqwest::Url::parse(ChannelState::server_root_url().as_ref()).unwrap();
-        assert!(is_warp_server_origin(&server.join("/graphql/v2").unwrap()));
-
-        let rtc = reqwest::Url::parse(ChannelState::rtc_http_url().as_ref()).unwrap();
-        assert!(is_warp_server_origin(
-            &rtc.join("/api/v1/agent/events/stream").unwrap()
-        ));
-    }
-
-    #[test]
-    fn third_party_origin_does_not_match() {
-        let url = reqwest::Url::parse("https://evil.example.com/graphql/v2").unwrap();
-        assert!(!is_warp_server_origin(&url));
     }
 }

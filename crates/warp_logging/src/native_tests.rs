@@ -20,43 +20,34 @@ fn zip_entry_names(zip_path: &Path) -> Vec<String> {
         .map(|index| archive.by_index(index).unwrap().name().to_owned())
         .collect()
 }
-fn log_state(base_directory: &Path, frontend: LogFrontend, logfile_name: &str) -> LogState {
-    LogState::new(
-        true,
-        base_directory.to_path_buf(),
-        logfile_name.to_owned(),
-        frontend,
-    )
+fn log_state(base_directory: &Path, logfile_name: &str) -> LogState {
+    LogState::new(true, base_directory.to_path_buf(), logfile_name.to_owned())
 }
 
 #[test]
-fn frontend_resolves_directory_and_rotation_policy() {
+fn log_state_resolves_directory_and_rotation_policy() {
     let base = PathBuf::from("/tmp/warp-logs");
-    let gui = log_state(&base, LogFrontend::Gui, "warp_dev.log");
-    let cli = log_state(&base, LogFrontend::Cli, "warp_dev.log");
+    let state = log_state(&base, "warp_dev.log");
 
-    assert_eq!(gui.log_directory, base);
-    assert_eq!(gui.max_rotation, MAX_FILES_IN_GUI_ROTATION);
-    assert_eq!(cli.log_directory, PathBuf::from("/tmp/warp-logs/oz"));
-    assert_eq!(cli.max_rotation, MAX_FILES_IN_CLI_ROTATION);
+    assert_eq!(state.log_directory, base);
+    assert_eq!(state.max_rotation, MAX_FILES_IN_ROTATION);
 }
 
 #[test]
-fn cli_bundle_uses_resolved_state_and_ignores_gui_logs() {
+fn log_bundle_uses_resolved_state() {
     let tmp = tempfile::tempdir().unwrap();
-    let state = log_state(tmp.path(), LogFrontend::Cli, "warp_preview.log");
-    fs::create_dir(&state.log_directory).unwrap();
+    let state = log_state(tmp.path(), "warp_preview.log");
     write_bytes(
         &state.log_directory.join("warp_preview.log"),
-        b"active cli session",
+        b"active session",
     );
     write_bytes(
         &state.log_directory.join("warp_preview.log.old.0"),
-        b"previous cli session",
+        b"previous session",
     );
     write_bytes(
         &state.log_directory.join("warp_preview.log.in_session.0"),
-        b"mid-session cli chunk",
+        b"mid-session chunk",
     );
     touch(tmp.path(), "warp_preview.log");
     let zip_path = state.create_log_bundle_zip().unwrap();
@@ -290,27 +281,22 @@ fn remove_nested_chunks_deletes_every_chunk_of_the_target_slot() {
 }
 
 #[test]
-fn resolved_active_paths_use_frontend_directory_and_channel_name() {
+fn resolved_active_path_uses_channel_name() {
     let base = PathBuf::from("/tmp/warp-logs");
-    let gui = log_state(&base, LogFrontend::Gui, "warp_dev.log");
-    let cli = log_state(&base, LogFrontend::Cli, "warp_preview.log");
+    let state = log_state(&base, "warp_dev.log");
 
-    assert_eq!(gui.log_file_path(), base.join("warp_dev.log"));
-    assert_eq!(
-        cli.log_file_path(),
-        base.join("oz").join("warp_preview.log")
-    );
+    assert_eq!(state.log_file_path(), base.join("warp_dev.log"));
 }
 
 #[test]
-fn crash_recovery_paths_use_channel_name_in_cli_directory() {
-    let cli_dir = PathBuf::from("/tmp/warp-logs/oz");
+fn crash_recovery_paths_use_channel_name() {
+    let dir = PathBuf::from("/tmp/warp-logs");
     assert_eq!(
-        temp_log_file_path(&cli_dir, "warp_dev.log"),
-        cli_dir.join("warp_dev.log.old.temp")
+        temp_log_file_path(&dir, "warp_dev.log"),
+        dir.join("warp_dev.log.old.temp")
     );
     assert_eq!(
-        crash_recovery_process_log_file_path(&cli_dir, "warp_dev.log"),
-        cli_dir.join("warp_dev.log.recovery")
+        crash_recovery_process_log_file_path(&dir, "warp_dev.log"),
+        dir.join("warp_dev.log.recovery")
     );
 }

@@ -1,7 +1,6 @@
 //! Tests for the Grid.
 
 use grid_handler::GridHandler;
-use warp_core::features::FeatureFlag;
 
 use super::*;
 use crate::SizeInfo;
@@ -197,8 +196,6 @@ fn shrink_reflow_twice() {
 /// Regression test for bug where cursor position was not correctly reflowed after a resize.
 #[test]
 fn shrink_grow_reflow_cursor_position_saturation() {
-    let _flag = FeatureFlag::ResizeFix.override_enabled(true);
-
     let mut grid = GridHandler::new_for_test_with_scroll_limit(3, 8, 2);
     grid.input_at_cursor("12345");
     grid.set_cursor_point(0, 5);
@@ -228,8 +225,6 @@ fn shrink_grow_reflow_cursor_position_saturation() {
 /// 1 row being added to the cursor position but not removed, meaning we had an invalid position).
 #[test]
 fn shrink_grow_reflow_cursor_position_multiple_grows_same_line_cursor_adjust() {
-    let _flag = FeatureFlag::ResizeFix.override_enabled(true);
-
     let mut grid = GridHandler::new_for_test_with_scroll_limit(10, 80, 10);
     // First row.
     grid.input_at_cursor("12345");
@@ -285,8 +280,6 @@ fn shrink_grow_reflow_cursor_position_multiple_grows_same_line_cursor_adjust() {
 /// Confirm the cursor position is reflowed correctly after a resize for a non-zero row restoration.
 #[test]
 fn shrink_grow_reflow_cursor_position_non_zero_row() {
-    let _flag = FeatureFlag::ResizeFix.override_enabled(true);
-
     let mut grid = GridHandler::new_for_test_with_scroll_limit(8, 8, 6);
     // First row.
     grid.input_at_cursor("12345");
@@ -321,8 +314,6 @@ fn shrink_grow_reflow_cursor_position_non_zero_row() {
 
 #[test]
 fn multiple_resizes_cursor_position_restoration() {
-    let _flag = FeatureFlag::ResizeFix.override_enabled(true);
-
     let mut grid = GridHandler::new_for_test_with_scroll_limit(4, 10, 5);
     {
         let grid = grid.grid_storage_mut();
@@ -363,8 +354,6 @@ fn multiple_resizes_cursor_position_restoration() {
 
 #[test]
 fn non_sequential_resizes_cursor_restoration() {
-    let _flag = FeatureFlag::ResizeFix.override_enabled(true);
-
     let mut grid = GridHandler::new_for_test_with_scroll_limit(5, 5, 10);
     {
         // Populate the grid with some data

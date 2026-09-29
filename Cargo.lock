@@ -851,16 +851,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "assert-json-diff"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "asset_cache"
 version = "0.0.0"
 dependencies = [
@@ -2042,15 +2032,6 @@ name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
-
-[[package]]
-name = "colored"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
-dependencies = [
- "windows-sys 0.59.0",
-]
 
 [[package]]
 name = "combine"
@@ -4373,24 +4354,14 @@ dependencies = [
 name = "http_client"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "async-compat",
  "bytes",
  "cfg-if",
  "futures",
- "gloo",
  "http",
- "log",
- "oauth2",
  "prevent_sleep",
- "prost",
  "reqwest",
  "serde",
- "serde_json",
- "serde_urlencoded",
- "warp_core",
- "warp_errors",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -4812,7 +4783,6 @@ dependencies = [
  "itertools 0.14.0",
  "lazy_static",
  "log",
- "mockito",
  "nix 0.26.4",
  "parking_lot",
  "pathfinder_geometry",
@@ -5879,31 +5849,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockito"
-version = "1.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e0603425789b4a70fcc4ac4f5a46a566c116ee3e2a6b768dc623f7719c611de"
-dependencies = [
- "assert-json-diff",
- "bytes",
- "colored",
- "futures-core",
- "http",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-util",
- "log",
- "pin-project-lite",
- "rand 0.9.4",
- "regex",
- "serde_json",
- "serde_urlencoded",
- "similar",
- "tokio",
-]
-
-[[package]]
 name = "moxcms"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6291,25 +6236,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "oauth2"
-version = "5.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51e219e79014df21a225b1860a479e2dcd7cbd9130f4defd4bd0e191ea31d67d"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "getrandom 0.2.16",
- "http",
- "rand 0.8.6",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "sha2",
- "thiserror 1.0.63",
- "url",
 ]
 
 [[package]]
@@ -9960,7 +9886,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.6.0",
@@ -11054,7 +10979,6 @@ dependencies = [
  "local_control",
  "serde",
  "serde_json",
- "serial_test",
  "url",
  "warp_core",
  "warp_util",
@@ -11116,7 +11040,6 @@ dependencies = [
  "lazy_static",
  "line-ending",
  "log",
- "mockito",
  "objc2-foundation 0.3.2",
  "parking_lot",
  "pin-project",
@@ -11138,7 +11061,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
- "url",
  "warp_errors",
  "warp_features",
  "warp_util",

@@ -878,8 +878,7 @@ pub enum FeatureFlag {
     /// Gates NLD input classification matching the buffer against agent
     /// prompt history (in addition to shell command history). Still in
     /// development; currently disabled on all channels as a mitigation for
-    /// misclassification bug reports (see PR #12586). Re-enable via
-    /// `DOGFOOD_FLAGS` once the underlying issues are resolved.
+    /// misclassification bug reports.
     NldPromptHistoryMatch,
 
     /// Gates the custom model router feature, which allows users to define
@@ -981,90 +980,7 @@ static USER_PREFERENCE_MAP: [AtomicTriState; cardinality::<FeatureFlag>()] =
 static FEATURES_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Features used in debugging.
-pub const DEBUG_FLAGS: &[FeatureFlag] = &[FeatureFlag::DebugMode, FeatureFlag::RuntimeFeatureFlags];
-/// Features enabled only for the WarpLocal developer build.
-pub const LOCAL_FLAGS: &[FeatureFlag] = &[FeatureFlag::LocalClaudeCodexChildHarnesses];
-
-/// Features enabled for the development team.  The expectation is that, over
-/// time, these will move on to PREVIEW_FLAGS before being launched.
-pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
-    FeatureFlag::LogExpensiveFramesInSentry,
-    FeatureFlag::ToggleBootstrapBlock,
-    FeatureFlag::CreatingSharedSessions,
-    FeatureFlag::RemoveAutosuggestionDuringTabCompletions,
-    FeatureFlag::ResizeFix,
-    FeatureFlag::AgentModeWorkflows,
-    FeatureFlag::AgentModeAnalytics,
-    FeatureFlag::LazySceneBuilding,
-    FeatureFlag::SshDragAndDrop,
-    FeatureFlag::MultiWorkspace,
-    FeatureFlag::ImeMarkedText,
-    FeatureFlag::MSYS2Shells,
-    FeatureFlag::RetryTruncatedCodeResponses,
-    FeatureFlag::ContextLineReviewComments,
-    FeatureFlag::RunGeneratorsWithCmdExe,
-    FeatureFlag::Projects,
-    FeatureFlag::ProviderCommand,
-    FeatureFlag::MarkdownImages,
-    FeatureFlag::FileAndDiffSetComments,
-    FeatureFlag::FileGlobV2Warnings,
-    FeatureFlag::SummarizationViaMessageReplacement,
-    FeatureFlag::LocalComputerUse,
-    FeatureFlag::VideoRecording,
-    FeatureFlag::WindowsVideoRecording,
-    FeatureFlag::OzLaunchModal,
-    // These are enabled via 100% experiment on prod warp-server,
-    // but we need to enable here for dogfood builds.
-    FeatureFlag::CrossRepoContext,
-    FeatureFlag::CodebaseIndexPersistence,
-    FeatureFlag::FullSourceCodeEmbedding,
-    FeatureFlag::CodebaseIndexSpeedbump,
-    // End manually enabled Code features.
-    FeatureFlag::EditableMarkdownMermaid,
-    FeatureFlag::CodeReviewScrollPreservation,
-    FeatureFlag::RememberFastForwardState,
-    FeatureFlag::GeminiNotifications,
-    FeatureFlag::LocalDockerSandbox,
-    #[cfg(not(windows))]
-    FeatureFlag::SshRemoteServer,
-    FeatureFlag::RemoteCodebaseIndexing,
-    FeatureFlag::GPTConfigurableContextWindow,
-    FeatureFlag::WarpControlCli,
-    FeatureFlag::TerminalLifecycleRecovery,
-    FeatureFlag::PromptCacheExpiryWarning,
-    FeatureFlag::JupyterNotebookRendering,
-    FeatureFlag::MultiLevelOrchestration,
-    FeatureFlag::McpJsonTreeView,
-    FeatureFlag::BoxDrawingGlyphs,
-    FeatureFlag::PricingTransparency,
-    FeatureFlag::CtrlCCancelsThirdPartyHarness,
-    FeatureFlag::WarpingModelName,
-    FeatureFlag::LrcActivitySignal,
-    FeatureFlag::StoredScreenshots,
-];
-
-/// Features enabled for feature preview build users (e.g.: Friends of Warp).
-/// All PREVIEW_FLAGS are also automatically added to dogfood builds (WarpDev).
-pub const PREVIEW_FLAGS: &[FeatureFlag] = &[FeatureFlag::PeriodicHandoffCheckpoints];
-
-/// Features enabled for all release builds (i.e.: everything but WarpLocal).
-/// NOTE: if you are promoting a feature from Preview to launch, you'll likely
-/// want to enable the feature by default in app/Cargo.toml, rather than add it to RELEASE_FLAGS.
-pub const RELEASE_FLAGS: &[FeatureFlag] = &[
-    FeatureFlag::Autoupdate,
-    FeatureFlag::Changelog,
-    FeatureFlag::CrashReporting,
-    FeatureFlag::VideoRecording,
-    FeatureFlag::ImeMarkedText,
-    // Remote server binary is not yet supported on Windows.
-    #[cfg(not(windows))]
-    FeatureFlag::SshRemoteServer,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    FeatureFlag::DragTabsToWindows,
-];
-
-/// Flags that we want to allow to switch at runtime (assuming RuntimeFeatureFlags is set)
-pub const RUNTIME_FEATURE_FLAGS: &[FeatureFlag] = &[FeatureFlag::LocalClaudeCodexChildHarnesses];
+pub const DEBUG_FLAGS: &[FeatureFlag] = &[FeatureFlag::DebugMode];
 
 impl FeatureFlag {
     pub fn is_enabled(&self) -> bool {
@@ -1115,45 +1031,6 @@ impl FeatureFlag {
     #[cfg(feature = "test-util")]
     pub fn override_enabled(self, enabled: bool) -> overrides::OverrideGuard {
         overrides::override_flag(self, enabled)
-    }
-
-    pub fn flag_description(&self) -> Option<&'static str> {
-        use FeatureFlag::*;
-
-        // Note: many feature flags are purposefully omitted from this list, in order to avoid blowing up
-        // the Preview changelog. Features below which are enabled for Preview via PREVIEW_FLAGS, will be added to the changelog.
-        // Features which are added to Stable should ideally have their feature flag removed entirely, but at the
-        // very least, the feature flag should be removed from the Preview changelog by removing it from PREVIEW_FLAGS.
-        // ** ONLY Preview-exclusive features should be added to this list! **
-        match self {
-            AgentSharedSessions => {
-                Some("Enables viewing agent conversations within shared sessions.")
-            }
-            CodeReviewFind => Some("Enables the find bar in the code review pane."),
-            BlocklistMarkdownImages => {
-                Some("Enables rendering markdown images inline in AI block list responses.")
-            }
-            CloudEnvironments => {
-                Some("Enables creating and managing Warp Environments via the CLI.")
-            }
-            CreateEnvironmentSlashCommand => Some(
-                "Enables the /create environment slash command for setting up Warp Environments with custom configurations.",
-            ),
-            GlobalSearch => Some("Enables global search in the left panel"),
-            BlocklistMarkdownTableRendering => {
-                Some("Enables rendering markdown tables inline in AI block list responses.")
-            }
-            MarkdownTables => {
-                Some("Enables rendering and interaction support for markdown tables in notebooks.")
-            }
-            SettingsFile => Some(
-                "Enables configuring Warp via a user-editable `settings.toml` file, with hot reload and error reporting for invalid values.",
-            ),
-            GitOperationsInCodeReview => Some(
-                "Enables commit, push, and create-PR actions directly from the code review panel.",
-            ),
-            _ => None,
-        }
     }
 }
 
@@ -1305,7 +1182,3 @@ impl From<TriState> for Option<bool> {
         }
     }
 }
-
-#[cfg(test)]
-#[path = "features_tests.rs"]
-mod tests;

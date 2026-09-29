@@ -37,8 +37,6 @@ mod palette;
 mod persistence;
 mod platform;
 mod prefix;
-#[cfg(target_os = "macos")]
-mod preview_config_migration;
 mod profiling;
 mod projects;
 mod prompt;
@@ -150,7 +148,6 @@ pub use warp_core::{safe_debug, safe_error, safe_info, safe_warn};
 use warp_errors::report_if_error;
 #[cfg(feature = "local_fs")]
 use warp_files::FileModel;
-use warp_logging::LogFrontend;
 use warpui::integration::TestDriver;
 use warpui::platform::TerminationMode;
 use warpui::platform::app::{ApproveTerminateResult, TerminationRequestSource};
@@ -300,24 +297,6 @@ pub fn run() -> Result<()> {
     // Parse command-line arguments.
     let args = warp_cli::Args::from_env();
 
-    // Server URL overrides are only honored on internal dev channels. Release channels silently
-    // ignore `--server-root-url` / `--ws-server-url` (and their
-    // `WARP_*` env-var equivalents) so shipped builds can't be redirected away from their
-    // baked-in server URLs. See `Channel::allows_server_url_overrides`.
-    if ChannelState::channel().allows_server_url_overrides() {
-        if let Some(url) = args.server_root_url()
-            && let Err(e) = ChannelState::override_server_root_url(url.to_owned())
-        {
-            eprintln!("Error: Invalid server root URL: {e:#}");
-        }
-
-        if let Some(url) = args.ws_server_url()
-            && let Err(e) = ChannelState::override_ws_server_url(url.to_owned())
-        {
-            eprintln!("Error: Invalid websocket server URL: {e:#}");
-        }
-    }
-
     if let Some(command) = args.command() {
         #[cfg(windows)]
         if command.prints_to_stdout() {
@@ -421,16 +400,10 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
             if crash_recovery::is_crash_recovery_process(launch_mode.args().as_ref()) {
                 warp_logging::init_for_crash_recovery_process()?;
             } else {
-                warp_logging::init(warp_logging::LogConfig {
-                    frontend: LogFrontend::Gui,
-                    ..Default::default()
-                })?;
+                warp_logging::init(warp_logging::LogConfig::default())?;
             }
         } else {
-            warp_logging::init(warp_logging::LogConfig {
-                frontend: LogFrontend::Gui,
-                ..Default::default()
-            })?;
+            warp_logging::init(warp_logging::LogConfig::default())?;
         }
     }
 
@@ -657,12 +630,6 @@ pub(crate) fn initialize_app(
             warpui_extras::secure_storage::register(&secure_storage_service_name, ctx);
         }
     }
-
-    // One-time migration: give Preview its own config directory by
-    // symlinking contents from the shared ~/.warp location. Must run
-    // before ensure_warp_watch_roots_exist() creates the new directory.
-    #[cfg(target_os = "macos")]
-    preview_config_migration::migrate_preview_config_dir_if_needed();
 
     ensure_warp_watch_roots_exist();
     ctx.add_singleton_model(WarpManagedPathsWatcher::new);
@@ -948,7 +915,7 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(move |_| IgnoredSuggestionsModel::new(persisted_ignored_suggestions));
 
     #[cfg(feature = "local_fs")]
-    if FeatureFlag::WarpControlCli.is_enabled() {
+    {
         ctx.add_singleton_model(local_control::LocalControlBridge::new);
         ctx.add_singleton_model(local_control::LocalControlServer::new);
     }

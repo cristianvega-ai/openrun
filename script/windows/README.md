@@ -49,8 +49,8 @@ Usage: `iscc <script path> /D<name>[=<value>]`
 
 The following constants can be overwritten:
 * `MyAppVersion` (default: `0.1.0`)
-* `MyAppExeName` (default: `warp.exe`)
-* `ReleaseChannel` (default: `dev`)
+* `MyAppExeName` (default: `warp-oss.exe`)
+* `ReleaseChannel` (default: `oss`)
 * `TargetProfileDir` (default: `debug`)
 
 ### Option 2: Use the GUI

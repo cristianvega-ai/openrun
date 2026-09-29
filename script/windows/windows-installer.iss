@@ -5,31 +5,27 @@
 #define MyAppPublisher "OpenRun Maintainers"
 #define MyAppURL "https://github.com/cristianvega-ai/openrun"
 #ifndef MyAppName
-  #define MyAppName "WarpDev"
+  #define MyAppName "WarpOss"
 #endif
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.0"
 #endif
 #ifndef MyAppExeName
-  #define MyAppExeName "dev.exe"
+  #define MyAppExeName "warp-oss.exe"
 #endif
 #ifndef ReleaseChannel
-  #define ReleaseChannel "dev"
+  #define ReleaseChannel "oss"
 #endif
 #ifndef TargetProfileDir
-  #define TargetProfileDir "target\release-lto-debug_assertions"
+  #define TargetProfileDir "target\release-lto"
 #endif
 #define AssetsDir "..\..\app\assets\windows"
 
 // The mutex name must match what the Rust app creates in single_instance_manager.rs:
 #define ChannelPascalCase \
-  (ReleaseChannel == "stable") ? "Stable" : \
-  ((ReleaseChannel == "dev") ? "Dev" : \
-  ((ReleaseChannel == "preview") ? "Preview" : \
-  ((ReleaseChannel == "local") ? "Local" : \
-  ((ReleaseChannel == "integration") ? "Integration" : \
+  (ReleaseChannel == "integration") ? "Integration" : \
   ((ReleaseChannel == "oss") ? "Oss" : \
-  "Unknown")))))
+  "Unknown")
 #define AppMutexName "Local\Warp" + ChannelPascalCase + "_SingleInstance"
 
 
@@ -141,15 +137,6 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: postinstall runhidden nowait
 
 [Code]
-function IsNotStable(): Boolean;
-begin
-#if ReleaseChannel == "stable"
-  Result := False;
-#else
-  Result := True;
-#endif
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   BinDir: string;

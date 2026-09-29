@@ -6,10 +6,10 @@ workspace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "$temp_dir"' EXIT
 
-bundle_dir="$temp_dir/WarpDev.app/Contents"
-wrapper_path="$bundle_dir/Resources/bin/warpctrl-dev"
-binary_path="$bundle_dir/MacOS/dev"
-installed_path="$temp_dir/usr/local/bin/warpctrl-dev"
+bundle_dir="$temp_dir/WarpOss.app/Contents"
+wrapper_path="$bundle_dir/Resources/bin/warpctrl-oss"
+binary_path="$bundle_dir/MacOS/warp-oss"
+installed_path="$temp_dir/usr/local/bin/warpctrl-oss"
 forwarded_args_file="$temp_dir/forwarded-args"
 expected_args_file="$temp_dir/expected-args"
 
@@ -22,7 +22,7 @@ chmod +x "$binary_path"
 
 "$workspace_root/script/macos/create_warpctrl_wrapper" \
   "$wrapper_path" \
-  "../../MacOS/dev"
+  "../../MacOS/warp-oss"
 
 cat > "$expected_args_file" << 'EOF'
 --warpctrl

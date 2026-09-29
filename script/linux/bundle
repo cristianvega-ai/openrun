@@ -17,8 +17,8 @@ cleanup() {
 # Run cleanup() when the script terminates (whether it succeeded or failed).
 trap cleanup EXIT
 
-# By default we build dev bundles.
-RELEASE_CHANNEL="dev"
+# The only supported channel is oss.
+RELEASE_CHANNEL="oss"
 FEATURES="release_bundle"
 EXTRA_FEATURES=""
 PACKAGES=( appimage )
@@ -54,6 +54,10 @@ while (( "$#" )); do
     -c|--channel)
       if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
         RELEASE_CHANNEL=$2
+        if [[ "$RELEASE_CHANNEL" != "oss" ]]; then
+          echo "Error: --channel must be 'oss', got '$RELEASE_CHANNEL'" >&2
+          exit 1
+        fi
         shift 2
       else
         echo "Error: Argument for $1 is missing" >&2
@@ -153,15 +157,6 @@ DIST_DIR="$CARGO_TARGET_OUTPUT_ROOT/dist"
 
 if [[ $DEBUG = true ]]; then
   CARGO_PROFILE="dev"
-elif [[ $RELEASE_CHANNEL = "local" || $RELEASE_CHANNEL = "dev" ]]; then
-  # For dev bundles, we want to enable debug assertions to
-  # catch violations that would otherwise silently pass in
-  # a normal release build (e.g. in stable).
-  if [[ "$ARTIFACT" == "warpctrl" ]]; then
-    CARGO_PROFILE="release-cli-debug_assertions"
-  else
-    CARGO_PROFILE="release-lto-debug_assertions"
-  fi
 else
   if [[ "$ARTIFACT" == "warpctrl" ]]; then
     CARGO_PROFILE="release-cli"
@@ -185,42 +180,15 @@ mkdir -p "$OUT_DIR"
 #
 # WARP_BIN is the name of the binary produced by cargo;
 # BINARY_NAME is the desired name of the binary in the final package.
-if [[ $RELEASE_CHANNEL = "local" ]]; then
-  WARP_BIN="warp"
-  BINARY_NAME="warp-local"
-  APP_NAME="WarpLocal"
-  FEATURES="$FEATURES,agent_mode_debug"
-  export HANDLE_MARKDOWN=1
-elif [[ $RELEASE_CHANNEL = "dev" ]]; then
-  WARP_BIN="dev"
-  BINARY_NAME="warp-dev"
-  APP_NAME="WarpDev"
-  FEATURES="$FEATURES,agent_mode_debug"
-  # Enable heap profiling using jemalloc through pprof.
-  FEATURES="$FEATURES,jemalloc_pprof"
-  export HANDLE_MARKDOWN=1
-elif [[ $RELEASE_CHANNEL = "preview" ]]; then
-  WARP_BIN="preview"
-  BINARY_NAME="warp-preview"
-  APP_NAME="WarpPreview"
-  FEATURES="$FEATURES,preview_channel"
-  # Enable heap profiling using jemalloc through pprof.
-  FEATURES="$FEATURES,jemalloc_pprof"
-elif [[ $RELEASE_CHANNEL = "stable" ]]; then
-  WARP_BIN="stable"
-  BINARY_NAME="warp"
-  APP_NAME="Warp"
-elif [[ $RELEASE_CHANNEL = "oss" ]]; then
-  WARP_BIN="warp-oss"
-  BINARY_NAME="warp-oss"
-  APP_NAME="WarpOss"
-fi
+WARP_BIN="warp-oss"
+BINARY_NAME="warp-oss"
+APP_NAME="WarpOss"
 
 # Artifact-specific binary naming and configuration
 if [[ "$ARTIFACT" == "warpctrl" ]]; then
   BINARY_NAME="warpctrl"
   PACKAGES=()
-  FEATURES="$FEATURES,standalone,warp_control_cli"
+  FEATURES="$FEATURES,standalone"
 elif [[ "$ARTIFACT" == "app" ]]; then
   # All channels ship the v3 classifier and v2 heuristic.
   FEATURES="$FEATURES,gui,nld_classifier_v3,nld_heuristic_v2"
@@ -253,15 +221,7 @@ if [[ "$BUILD" == "true" ]]; then
   cp "$EXECUTABLE_PATH" "$DEBUG_EXECUTABLE_PATH"
 
   echo "Stripping debug symbols from '$EXECUTABLE_PATH'"
-  if [[ $RELEASE_CHANNEL = "dev" ]]; then
-    # For dev builds, only strip debug symbols, as we want to keep some
-    # symbols for profiling purposes.
-    "${WARP_MUSL_STRIP:-strip}" --strip-debug "$EXECUTABLE_PATH"
-  else
-    # For production builds, strip all symbols, to keep the binary size
-    # smaller.
-    "${WARP_MUSL_STRIP:-strip}" --strip-all "$EXECUTABLE_PATH"
-  fi
+  "${WARP_MUSL_STRIP:-strip}" --strip-all "$EXECUTABLE_PATH"
 else
   echo 'Skipping `cargo build` step due to --skip-build argument'
 fi

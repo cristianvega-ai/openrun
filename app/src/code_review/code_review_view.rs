@@ -3873,12 +3873,9 @@ impl CodeReviewView {
         is_in_split_pane: bool,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let has_menu_flags = FeatureFlag::DiscardPerFileAndAllChanges.is_enabled()
-            || FeatureFlag::DiffSetAsContext.is_enabled()
-            || FeatureFlag::FileAndDiffSetComments.is_enabled();
         let has_changes = matches!(self.state(), CodeReviewViewState::Loaded(loaded) if !loaded.to_diff_stats().has_no_changes());
         let has_header_menu_items =
-            has_menu_flags && (!FeatureFlag::GitOperationsInCodeReview.is_enabled() || has_changes);
+            !FeatureFlag::GitOperationsInCodeReview.is_enabled() || has_changes;
 
         let code_review_header_fields = CodeReviewHeaderFields {
             is_in_split_pane,
@@ -6153,16 +6150,12 @@ impl CodeReviewView {
         }
     }
 
-    /// Legacy menu items — gated on FileAndDiffSetComments only.
+    /// Legacy menu items.
     fn header_menu_items_legacy(
         &self,
         ctx: &mut ViewContext<Self>,
     ) -> Vec<MenuItem<CodeReviewAction>> {
         let mut items = Vec::new();
-
-        if !FeatureFlag::FileAndDiffSetComments.is_enabled() {
-            return items;
-        }
 
         let mut has_changes = false;
         if let CodeReviewViewState::Loaded(loaded) = self.state() {
@@ -6203,7 +6196,7 @@ impl CodeReviewView {
 
         let has_changes = matches!(self.state(), CodeReviewViewState::Loaded(loaded) if !loaded.to_diff_stats().has_no_changes());
 
-        if FeatureFlag::FileAndDiffSetComments.is_enabled() && has_changes {
+        if has_changes {
             let (comment_label, comment_icon) = if self.get_existing_diffset_comment(ctx).is_some()
             {
                 ("Show saved comment", Icon::MessageText)

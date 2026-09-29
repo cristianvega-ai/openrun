@@ -12,11 +12,9 @@ use warp_errors::report_error;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
-use crate::{LogConfig, LogDestination, LogFrontend};
+use crate::{LogConfig, LogDestination};
 
-const MAX_FILES_IN_GUI_ROTATION: usize = 5;
-const MAX_FILES_IN_CLI_ROTATION: usize = 10;
-const CLI_LOG_SUBDIRECTORY: &str = "oz";
+const MAX_FILES_IN_ROTATION: usize = 5;
 const TEMP_LOG_FILE_SUFFIX: &str = "old.temp";
 
 /// Runtime logging state, computed from `LogConfig` during initialization.
@@ -28,41 +26,20 @@ struct LogState {
     /// The directory that logs should be written to. This is set even if `use_logfile` is false,
     /// as we sometimes generate other log files.
     log_directory: PathBuf,
-    /// The resolved base filename for the active frontend and channel.
+    /// The resolved base filename for the active channel.
     logfile_name: String,
 
     /// The maximum number of backup log files to keep during rotation.
     max_rotation: usize,
 }
 
-impl LogFrontend {
-    fn log_directory(self, base_directory: PathBuf) -> PathBuf {
-        match self {
-            LogFrontend::Gui => base_directory,
-            LogFrontend::Cli => base_directory.join(CLI_LOG_SUBDIRECTORY),
-        }
-    }
-
-    fn max_rotation(self) -> usize {
-        match self {
-            LogFrontend::Gui => MAX_FILES_IN_GUI_ROTATION,
-            LogFrontend::Cli => MAX_FILES_IN_CLI_ROTATION,
-        }
-    }
-}
-
 impl LogState {
-    fn new(
-        use_logfile: bool,
-        base_log_directory: PathBuf,
-        logfile_name: String,
-        frontend: LogFrontend,
-    ) -> Self {
+    fn new(use_logfile: bool, log_directory: PathBuf, logfile_name: String) -> Self {
         Self {
             use_logfile,
-            log_directory: frontend.log_directory(base_log_directory),
+            log_directory,
             logfile_name,
-            max_rotation: frontend.max_rotation(),
+            max_rotation: MAX_FILES_IN_ROTATION,
         }
     }
 
@@ -312,7 +289,6 @@ fn migrate_previous_session_in_session_chunks(log_directory: &Path, channel_file
 pub fn init_for_crash_recovery_process() -> Result<()> {
     init_internal(
         true, /* is_from_crash_recovery_process */
-        LogFrontend::Gui,
         None, /* log_destination */
         None, /* max_file_size_bytes — crash recovery uses its own short-lived log */
     )
@@ -320,11 +296,10 @@ pub fn init_for_crash_recovery_process() -> Result<()> {
 
 /// Initializes the global logger for the application.
 /// If `config.log_destination` is `Some`, always use the specified destination regardless of
-/// environment. The frontend selects the log subdirectory and rotation policy.
+/// environment.
 pub fn init(config: LogConfig) -> Result<()> {
     init_internal(
         false, /* is_from_crash_recovery_process */
-        config.frontend,
         config.log_destination,
         config.max_file_size_bytes,
     )
@@ -517,7 +492,6 @@ fn temp_log_file_path(log_directory: impl AsRef<Path>, channel_logfile_name: &st
 
 fn init_internal(
     is_from_crash_recovery_process: bool,
-    frontend: LogFrontend,
     log_destination: Option<LogDestination>,
     max_file_size_bytes: Option<u64>,
 ) -> Result<()> {
@@ -592,7 +566,6 @@ fn init_internal(
         use_logfile,
         init_log_directory()?,
         ChannelState::logfile_name().into_owned(),
-        frontend,
     );
     if use_logfile {
         let file = setup_log_files_for_current_execution(

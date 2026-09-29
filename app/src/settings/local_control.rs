@@ -7,7 +7,6 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use settings::macros::define_settings_group;
 use settings::{SecureSetting, Setting, SupportedPlatforms};
-use warp_core::channel::{Channel, ChannelState};
 use warpui::{AppContext, ModelContext};
 use warpui_extras::secure_storage;
 
@@ -34,16 +33,6 @@ pub enum LocalControlMode {
     #[default]
     Disabled,
     Enabled,
-}
-
-/// Channel-based default: local control is on for internal dogfood builds and
-/// off for public channels, where users must opt in through Settings > Scripting.
-fn default_mode_for_channel(channel: Channel) -> LocalControlMode {
-    if channel.is_dogfood() {
-        LocalControlMode::Enabled
-    } else {
-        LocalControlMode::Disabled
-    }
 }
 
 impl LocalControlMode {
@@ -166,7 +155,7 @@ impl Setting for LocalControlModeSetting {
     }
 
     fn default_value() -> Self::Value {
-        default_mode_for_channel(ChannelState::channel())
+        LocalControlMode::default()
     }
 
     fn new_from_storage(ctx: &mut AppContext) -> Self {

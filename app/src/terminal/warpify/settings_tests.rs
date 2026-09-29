@@ -1,7 +1,7 @@
 use settings::Setting;
 use warpui::{App, SingletonEntity};
 
-use super::{EnableSshWrapper, UseSshTmuxWrapper, WarpifySettings};
+use super::WarpifySettings;
 use crate::test_util::settings::initialize_settings_for_tests;
 
 #[test]

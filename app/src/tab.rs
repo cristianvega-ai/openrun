@@ -1995,7 +1995,7 @@ impl UiComponent for TabComponent<'_> {
                     });
                 })
                 .on_drop(|ctx, _, _, _| ctx.dispatch_typed_action(WorkspaceAction::DropTab));
-            let draggable = if FeatureFlag::DragTabsToWindows.is_enabled() {
+            let draggable = if crate::workspace::cross_window_tab_drag::IS_SUPPORTED {
                 draggable
             } else {
                 draggable.with_drag_axis(DragAxis::HorizontalOnly)

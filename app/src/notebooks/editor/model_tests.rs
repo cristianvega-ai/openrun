@@ -666,7 +666,6 @@ fn test_delete_inside_raw_mermaid_block_edits_text_without_removing_block() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let markdown = "Text
 ```mermaid
 graph TD
@@ -2108,7 +2107,6 @@ fn test_delete_with_mermaid_command_selection() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let model_handle = model_from_markdown(
             "Text\n```mermaid\ngraph TD\nA --> B\n```\nMore text",
             &mut app,
@@ -2139,7 +2137,6 @@ fn test_adjacent_delete_with_rendered_mermaid_block_is_atomic() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let markdown = "Text
 ```mermaid
 graph TD
@@ -2219,7 +2216,6 @@ fn test_backspace_with_cursor_inside_rendered_mermaid_block_is_atomic() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let markdown = "Text
 ```mermaid
 graph TD
@@ -2274,7 +2270,6 @@ fn test_move_up_from_below_rendered_mermaid_block_lands_on_block_start() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let markdown = "Before\n```mermaid\ngraph TD\nA --> B\n```\nAfter";
 
         let model_handle = model_from_markdown(markdown, &mut app);
@@ -2317,7 +2312,6 @@ fn test_shift_select_across_rendered_mermaid_block_is_reversible_from_below() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let markdown = "Before\n```mermaid\ngraph TD\nA --> B\n```\nAfter";
 
         let model_handle = model_from_markdown(markdown, &mut app);
@@ -2373,7 +2367,6 @@ fn test_move_down_from_rendered_mermaid_block_start_returns_below_block() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let markdown = "Before\n```mermaid\ngraph TD\nA --> B\n```\nAfter";
 
         let model_handle = model_from_markdown(markdown, &mut app);
@@ -2478,7 +2471,6 @@ fn test_cut_mermaid_code_block_uses_fenced_markdown_plain_text() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let model_handle =
             model_from_markdown("Text\n```mermaid\ngraph TD\nA --> B\n```\n* List", &mut app);
         layout_model(&mut app, &model_handle).await;
@@ -2514,7 +2506,6 @@ fn test_copy_mermaid_code_block_adds_html_without_image_clipboard_data() {
     App::test((), |mut app| async move {
         initialize_deps(&mut app);
         let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
-        let _editable_flag = FeatureFlag::EditableMarkdownMermaid.override_enabled(true);
         let model_handle =
             model_from_markdown("Text\n```mermaid\ngraph TD\nA --> B\n```\n* List", &mut app);
         layout_model(&mut app, &model_handle).await;

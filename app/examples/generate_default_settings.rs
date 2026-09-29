@@ -7,8 +7,8 @@
 //! defined via those macros is picked up automatically — there is no
 //! per-generator registration list to keep in sync.
 //!
-//! The file matches a release `warp-oss` build: a setting gated on a feature
-//! flag is included only when that flag is in [`RELEASE_FLAGS`].
+//! A setting gated on a feature flag is included only when that flag is enabled
+//! by the build's Cargo features.
 //!
 //! Usage:
 //!   cargo run --example generate_default_settings -- <output_path>
@@ -16,12 +16,10 @@
 //! Example:
 //!   cargo run --example generate_default_settings -- ./default_settings.toml
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 use settings::SettingsMode;
 use settings::schema::SettingSchemaEntry;
-use warp_core::features::{FeatureFlag, RELEASE_FLAGS};
 use warpui_extras::user_preferences::UserPreferences as _;
 use warpui_extras::user_preferences::toml_backed::TomlBackedUserPreferences;
 
@@ -61,7 +59,7 @@ fn main() {
         std::process::exit(1);
     };
 
-    let active_flags: HashSet<FeatureFlag> = RELEASE_FLAGS.iter().copied().collect();
+    let active_flags = warp::features::enabled_features();
 
     // Generate a fresh document at `output_path`. If the file already exists
     // and contains invalid TOML, `TomlBackedUserPreferences::new` falls back
@@ -79,7 +77,7 @@ fn main() {
             continue;
         }
 
-        // Skip settings whose feature flag is not enabled in release builds.
+        // Skip settings whose feature flag is not enabled.
         if let Some(flag) = entry.feature_flag
             && !active_flags.contains(&flag)
         {

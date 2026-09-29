@@ -7,7 +7,7 @@ use integration::Builder;
 use integration::test::*;
 use warp_cli::WorkerCommand;
 use warp_core::AppId;
-use warp_core::channel::{Channel, ChannelConfig, ChannelState, WarpServerConfig};
+use warp_core::channel::{Channel, ChannelConfig, ChannelState};
 
 /// The Warp integration test runner.
 #[derive(Debug, Default, Parser, Clone)]
@@ -37,16 +37,6 @@ pub fn main() -> Result<()> {
                 },
             ),
             logfile_name: "warp_integration.log".into(),
-            server_config: WarpServerConfig {
-                firebase_auth_api_key: "".into(),
-                iap_config: None,
-                // Use an IP in the IANA testing range, with the TCP discard port, to
-                // black-hole server traffic.
-                server_root_url: "http://192.0.2.0:9".into(),
-                rtc_server_url: "ws://192.0.2.0:9/graphql/v2".into(),
-            },
-            crash_reporting_config: None,
-            autoupdate_config: None,
         },
     ));
 
@@ -225,8 +215,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_create_session_with_new_tab_while_bootstrapping);
     register_test!(test_add_theme_to_warp_config);
     register_test!(test_palette_opens_when_theme_chooser_is_open);
-    #[cfg(target_os = "macos")]
-    register_test!(test_preview_config_dir_migration);
     register_test!(test_launch_warp_with_theme_in_warp_config);
     register_test!(test_add_launch_config_to_warp_config);
     register_test!(test_add_workflows_to_warp_config);

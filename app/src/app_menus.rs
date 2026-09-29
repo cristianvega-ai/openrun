@@ -17,7 +17,7 @@ use warpui::windowing::WindowManager;
 use warpui::{AppContext, SingletonEntity};
 
 use crate::default_terminal::DefaultTerminal;
-use crate::features::{FeatureFlag, runtime_flags_menu_items};
+use crate::features::FeatureFlag;
 use crate::root_view::OpenLaunchConfigArg;
 use crate::settings::{BlockVisibilitySettings, DebugSettings, SelectionSettings};
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
@@ -503,12 +503,7 @@ fn make_new_blocks_menu(ctx: &AppContext) -> Menu {
 
 /// Returns [`MenuItem`]s that aid debugging to be included in the Block menu.
 fn block_menu_debug_items() -> Vec<MenuItem> {
-    let mut items = vec![];
-    if FeatureFlag::ToggleBootstrapBlock.is_enabled() {
-        items.push(toggle_bootstrap_block_menu_item());
-    }
-
-    items.push(MenuItem::Custom(CustomMenuItem::new(
+    let mut items = vec![MenuItem::Custom(CustomMenuItem::new(
         SHOW_IN_BAND_COMMAND_BLOCKS_MENU_ITEM_NAME,
         move |ctx| {
             let handle = BlockVisibilitySettings::handle(ctx);
@@ -541,7 +536,7 @@ fn block_menu_debug_items() -> Vec<MenuItem> {
             }
         },
         None,
-    )));
+    ))];
 
     items.push(MenuItem::Custom(CustomMenuItem::new(
         SHOW_SSH_COMMAND_BLOCKS_MENU_ITEM_NAME,
@@ -719,9 +714,7 @@ fn debug_menu_items() -> Vec<MenuItem> {
             None,
         )));
 
-        if !FeatureFlag::ToggleBootstrapBlock.is_enabled() {
-            debug_menu_items.push(toggle_bootstrap_block_menu_item());
-        }
+        debug_menu_items.push(toggle_bootstrap_block_menu_item());
 
         debug_menu_items.push(MenuItem::Custom(CustomMenuItem::new(
             "Manually Toggle Network Status",
@@ -756,10 +749,6 @@ fn debug_menu_items() -> Vec<MenuItem> {
             no_updates,
             None,
         )));
-    }
-
-    if FeatureFlag::RuntimeFeatureFlags.is_enabled() {
-        debug_menu_items.extend(runtime_flags_menu_items());
     }
 
     debug_menu_items

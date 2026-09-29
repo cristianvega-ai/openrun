@@ -1792,7 +1792,7 @@ impl PaneGroup {
 
         // Notify any restored panes that they belong to this pane group.
         pane_group.reattach_panes(ctx);
-        if FeatureFlag::DragTabsToWindows.is_enabled() {
+        if crate::workspace::cross_window_tab_drag::IS_SUPPORTED {
             pane_group.focus(ctx);
         }
         ctx.notify();

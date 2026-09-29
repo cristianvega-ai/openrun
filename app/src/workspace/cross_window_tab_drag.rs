@@ -7,6 +7,9 @@ use warpui::platform::TerminationMode;
 use warpui::windowing::WindowManager;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity, WindowId};
 
+/// Whether dragging tabs between windows is supported on this platform.
+pub(crate) const IS_SUPPORTED: bool = cfg!(any(target_os = "macos", target_os = "windows"));
+
 /// Singleton model that owns all cross-window tab drag state.
 ///
 /// # Overview

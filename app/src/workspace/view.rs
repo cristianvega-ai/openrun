@@ -15835,7 +15835,7 @@ impl View for Workspace {
 
         // Cross-window ghost drag: floating chip that follows the cursor in the target window.
         // Added last so it renders on top of all other content.
-        if FeatureFlag::DragTabsToWindows.is_enabled()
+        if crate::workspace::cross_window_tab_drag::IS_SUPPORTED
             && let Some(ghost) =
                 CrossWindowTabDrag::as_ref(app).ghost_state_for_window(self.window_id)
         {
@@ -16668,7 +16668,7 @@ impl Workspace {
 
         let source_is_single_tab = self.tabs.len() == 1;
         if (is_drag_outside_tab_bar || source_is_single_tab)
-            && FeatureFlag::DragTabsToWindows.is_enabled()
+            && crate::workspace::cross_window_tab_drag::IS_SUPPORTED
         {
             let source_was_single_tab = source_is_single_tab;
             if !source_was_single_tab && let Some(tab_data) = self.tabs.get_mut(current_index) {

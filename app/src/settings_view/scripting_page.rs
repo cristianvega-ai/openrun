@@ -17,7 +17,6 @@ use super::settings_page::{
 };
 use super::{SettingsSection, ToggleState};
 use crate::appearance::Appearance;
-use crate::features::FeatureFlag;
 use crate::settings::{LocalControlMode, LocalControlSettings};
 #[cfg(target_os = "macos")]
 use crate::view_components::DismissibleToast;
@@ -48,15 +47,10 @@ impl ScriptingSettingsPageView {
         });
         Self::update_local_control_mode_dropdown(local_control_mode_dropdown.clone(), ctx);
 
-        if FeatureFlag::WarpControlCli.is_enabled() {
-            ctx.subscribe_to_model(&LocalControlSettings::handle(ctx), |view, _, _, ctx| {
-                Self::update_local_control_mode_dropdown(
-                    view.local_control_mode_dropdown.clone(),
-                    ctx,
-                );
-                ctx.notify();
-            });
-        }
+        ctx.subscribe_to_model(&LocalControlSettings::handle(ctx), |view, _, _, ctx| {
+            Self::update_local_control_mode_dropdown(view.local_control_mode_dropdown.clone(), ctx);
+            ctx.notify();
+        });
 
         #[cfg(target_os = "macos")]
         let widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
@@ -182,7 +176,7 @@ impl SettingsPageMeta for ScriptingSettingsPageView {
     }
 
     fn should_render(&self, _ctx: &AppContext) -> bool {
-        cfg!(not(target_family = "wasm")) && FeatureFlag::WarpControlCli.is_enabled()
+        cfg!(not(target_family = "wasm"))
     }
 
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {
