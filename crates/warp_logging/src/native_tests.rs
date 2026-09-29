@@ -122,7 +122,7 @@ fn errors_when_directory_is_empty() {
 
 #[test]
 fn respects_channel_specific_logfile_name() {
-    // Beta/preview channels use a different base name; make sure scanning
+    // Channels can use different base names; make sure scanning
     // is gated on that name and doesn't pick up the wrong channel's files.
     let tmp = tempfile::tempdir().unwrap();
     let active = touch(tmp.path(), "warp_preview.log");
