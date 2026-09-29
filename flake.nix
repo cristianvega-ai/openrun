@@ -126,11 +126,9 @@
             cargoDeps = cargoVendorDir;
 
             nativeBuildInputs = with pkgs; [
-              brotli
               cargo-about
               clang
               cmake
-              jq
               makeWrapper
               patchelf
               pkg-config
@@ -238,12 +236,10 @@
           lib = pkgs.lib;
           rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           nativeBuildInputs = with pkgs; [
-            brotli
             cargo-about
             cargo-nextest
             clang
             cmake
-            jq
             lld
             makeWrapper
             patchelf

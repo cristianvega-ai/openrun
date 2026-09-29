@@ -19,7 +19,7 @@ default-members = [
 ]
 
 [workspace.package]
-authors = ["Warp Team <dev@warp.dev>"]
+authors = ["Offline Terminal contributors"]
 license = "AGPL-3.0-only"
 publish = false
 
@@ -407,12 +407,6 @@ codegen-units = 4
 # Short aliases keep Windows build paths below the legacy MAX_PATH limit.
 [profile.rcli]
 inherits = "release-cli"
-
-# A dev profile optimized for remote server deployment. Strips symbols to
-# reduce binary size and improve rsync delta transfer efficiency.
-[profile.dev-remote]
-inherits = "dev"
-strip = "symbols"
 
 [patch.crates-io]
 # Pinned to the merge commit of servo/core-foundation-rs#746, which fixes a

@@ -12,6 +12,7 @@ hosts | CHANGES.md | * | describes the removals
 hosts | script/offline_audit | * | holds the audit patterns
 hosts | script/offline_audit.allowlist | * | documents the exceptions
 hosts | deny.toml | * | allow-org for the build-time git forks, and the names of the banned crates
+hosts | about.toml | * | comment naming the warpdotdev-hosted git sources that cargo-about skips (MASTER decision 15)
 hosts | Cargo.lock | github\.com/warpdotdev/ | build-time git dependencies on the warpdotdev forks are kept (MASTER decision 15)
 hosts | *Cargo.toml | github\.com/warpdotdev/ | build-time git dependencies on the warpdotdev forks are kept (MASTER decision 15)
 hosts | crates/persistence/migrations/* | firebase | historical migrations stay untouched (MASTER decision 14); DB-1 drops the tables

@@ -83,5 +83,8 @@ allow-git = [
     # version to crates.io.
     "https://github.com/servo/core-foundation-rs",
 ]
-# Allow git references to all GitHub repositories in the warpdotdev organization.
+# Build-time git dependencies: the forks and Warp-authored crates (vte, winit, font-kit, notify,
+# command-signatures, warp-workflows, ...) are still fetched from the warpdotdev organization.
+# Nothing they do at runtime reaches a Warp service; this only lets cargo fetch the sources at
+# build time. Drop this entry when those dependencies are vendored or repointed.
 allow-org = { github = ["warpdotdev"] }

@@ -33,17 +33,12 @@ workarounds = [
     "rustls",
 ]
 
-# These are Warp's own private crates, sourced via git from the warpdotdev
-# organization. They are not part of this workspace and do not have explicit
-# licenses yet (they will be open-sourced soon). cargo-about will skip them
-# during generation. Once they are open-sourced and have license fields, they
-# will be included automatically and we can add --fail back to the generate
-# invocation.
+# Third-party crates fetched from git repositories in the warpdotdev GitHub organization (forks and
+# Warp-authored dependencies) that carry no license metadata cargo-about can read. cargo-about skips
+# them during generation. Add --fail back to the generate invocation once they declare licenses.
 #
-# Excluded crates (same as deny.toml exceptions):
+# Crates skipped this way, matching the git sources in Cargo.lock:
 #   - command-corrections
-#   - session-sharing-protocol
 #   - warp-command-signatures
-#   - warp-completion-metadata
 #   - warp-workflows
 #   - warp-workflows-types

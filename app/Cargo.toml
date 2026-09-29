@@ -1,5 +1,5 @@
 [package]
-authors = ["Warp Team <dev@warp.dev>"]
+authors.workspace = true
 default-run = "warp-oss"
 description = "The cloud-backed terminal for individuals and teams"
 edition = "2024"

@@ -113,6 +113,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Top-level docs rewrite](#top-level-docs-rewrite) — README, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT and the `AGENTS.md` architecture section now describe the offline fork; `FAQ.md` deleted; contacts name no person, address or URL
 - [WASM-2 skipped: dormant cfg(wasm) branches stay](#wasm-2-skipped-dormant-cfgwasm-branches-stay) — the user chose to keep the roughly 2,000 `cfg(wasm)` branches; the WASM-2-tagged leftovers stay on purpose
 - [Feature flags and Cargo features](#feature-flags-and-cargo-features) — every `FeatureFlag` folded into its fixed OSS value (289 variants to 3), 261 Cargo features and the `gui`/`standalone`/`agent_mode_evals` features removed; flag skills and gate commands updated
+- [Cargo and license metadata](#cargo-and-license-metadata) — crate `authors` inherit one generic workspace value instead of `Warp Team <dev@warp.dev>`; `deny.toml` and `about.toml` comments explain the remaining warpdotdev git sources; dropped the unused `dev-remote` profile and the `brotli`/`jq` flake inputs
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3019,3 +3020,23 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - The fuzzy searchers in the command palette data sources are compiled only for `target_family = "wasm"`, where they are still the only implementation. The `cfg(wasm)` branches stay dormant (WASM-2 skipped).
 - The bundle scripts still build with `-p warp`, which MASTER.md warns against for local gates; only the features they pass changed.
 - Code compiled only for Windows and Linux was edited by search, not by the compiler (`crates/warp_terminal/src/local_tty/windows/*`, the Windows `wsl_env_allowlist` test).
+
+## Cargo and license metadata
+**Why:** The manifests still named `Warp Team <dev@warp.dev>`, and the license and dependency-policy comments described Warp's private, not-yet-open-sourced crates. Decision 19 says the fork names no person or address.
+
+**Modified:**
+- `Cargo.toml` — `[workspace.package].authors` is now `["Offline Terminal contributors"]`. Every crate manifest (`app` and 25 crates under `crates/`) that carried its own copy of the Warp author string now uses `authors.workspace = true`, as the other 17 crates already did.
+- `about.toml` — the comment block above the excluded crates now says what those crates are (warpdotdev-hosted git sources with no readable license) and lists the four that are still in `Cargo.lock`; it no longer mentions `session-sharing-protocol` or `warp-completion-metadata`, which are gone.
+- `deny.toml` — `allow-org = { github = ["warpdotdev"] }` stays, with a comment saying why: the build-time git dependencies on the forks (`vte`, `winit`, `font-kit`, `notify`, `command-signatures`, `warp-workflows` and others) remain (decision 15).
+- `flake.nix` — dropped `brotli` and `jq` from the build inputs; only the removed remote-server bundle used them.
+
+**Removed:**
+- `[profile.dev-remote]` in `Cargo.toml` — a dev profile for deploying the removed SSH remote-server binary; no script or CI job used it.
+
+**User-visible impact:** None at runtime. `cargo metadata` reports the new author string.
+
+**Notes:**
+- Packaging maintainer and vendor fields (deb, rpm, Windows installer) already read "OpenRun Maintainers" from the packaging cleanup; install paths (`/opt/warpdotdev/...`, `Software\Warp.dev\`) and bundle IDs are unchanged by decisions 13 and 17.
+- Vendoring the git dependencies (D7) was not chosen, so `deny.toml` keeps the `warpdotdev` allowance.
+- `script/check_license_config_sync` needs Python 3.11 (`tomllib`); the default `python3` on this machine is older, so it was not run. The `licenses` lists of `deny.toml` and `about.toml` were not touched.
+- `crates/warpui/build.rs` (`WARP_LOCAL_SKIP_METAL`) is left to SWP-17.
