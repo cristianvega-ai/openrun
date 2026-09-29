@@ -110,15 +110,15 @@ jobs:
         run: cargo nextest run --locked --workspace -E 'not package(integration)'
 
   # Fails when the tree, the dependency graph or a sandboxed test run reaches for Warp-owned
-  # hosts or any non-loopback address. Non-blocking (`continue-on-error`) while the removal tasks
-  # that clear its findings are still landing; SWP-17 finalisation drops that line so the job
-  # blocks merges.
-  # TODO(SWP-17): also run an idle `integration` session for two minutes or more under the same
-  # sandbox to catch timers such as update checks and flushes.
+  # hosts or any non-loopback address. It blocks merges.
+  #
+  # Known RUSTSEC advisories in Cargo.lock (unmaintained crates and a few vulnerabilities in
+  # transitive dependencies, all older than this fork) are deliberately not part of this job:
+  # `cargo deny check advisories` fails on them and the dependency versions are not ours to bump
+  # here. Only `bans licenses sources` run below. CHANGES.md ("Offline guardrails") lists them.
   offline-audit:
     name: Offline audit
     runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -163,18 +163,33 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       # Runs every test, including the `integration` package that boots the full app, in a network
-      # namespace with only a loopback interface while strace records each connect and send. The
-      # SSH tests need a remote host and never pass offline.
+      # namespace with only a loopback interface while strace records each connect and send.
       - name: Run the tests in a network sandbox
         if: ${{ !cancelled() }}
         run: |
           unshare --user --map-root-user --net sh -c '
             ip link set lo up
             strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -o net.log \
-              xvfb-run -a cargo nextest run --locked --workspace --offline --no-fail-fast \
-                -E "not test(/ssh/)"
+              xvfb-run -a cargo nextest run --locked --workspace --offline --no-fail-fast
           '
 
       - name: Check the recorded connections
         if: ${{ !cancelled() }}
         run: ./script/offline_audit --net-log net.log
+
+      # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
+      # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in
+      # the regular run because of its length.
+      - name: Run an idle session in a network sandbox
+        if: ${{ !cancelled() }}
+        run: |
+          unshare --user --map-root-user --net sh -c '
+            ip link set lo up
+            strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -o net-idle.log \
+              xvfb-run -a cargo nextest run --locked --workspace --offline --no-fail-fast \
+                --run-ignored only -E "test(~test_idle_session)"
+          '
+
+      - name: Check the connections of the idle session
+        if: ${{ !cancelled() }}
+        run: ./script/offline_audit --net-log net-idle.log

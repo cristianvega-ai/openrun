@@ -17,7 +17,8 @@ Modes:
                                   job in .github/workflows/ci.yml): fail on any connect or send to
                                   a non-loopback address or to port 53.
 
-Allowed exceptions live in script/offline_audit.allowlist, one reasoned entry per line. Requires
+Allowed exceptions live in script/offline_audit.allowlist, one reasoned entry per line. An entry
+that matches nothing fails the audit, so the list shrinks with the code it covers. Requires
 python3 (3.9 or newer), ripgrep, and for the deps group cargo and cargo-deny.
 """
 
@@ -48,6 +49,12 @@ HOST_PATTERNS = [
     r"firebase", r"identitytoolkit", r"securetoken", r"AIza[0-9A-Za-z_-]{35}",
     r"sentry", r"rudder", r"segment\.(io|com)", r"typeform", r"warpcommunity\.slack",
     r"linear\.app/", r"download/cli", r"channel_versions", r"WARP_LOCAL_SKIP_METAL",
+    # Hosts of the removed AI features, cloud storage and telemetry vendors: none may come back.
+    r"openrouter\.ai", r"\bx\.ai\b", r"openai\.com", r"anthropic\.com", r"terminaltrove",
+    r"amazonaws\.com", r"docs\.aws\.amazon\.com", r"cloudfront\.net", r"googleapis\.com",
+    r"gstatic\.com", r"google-analytics", r"googletagmanager", r"cloudfunctions\.net",
+    r"\.run\.app\b", r"appspot\.com", r"mixpanel", r"amplitude\.com", r"datadoghq",
+    r"posthog", r"bugsnag", r"launchdarkly", r"statsig", r"honeycomb\.io",
 ]
 
 REVIEW_PATTERNS = [
@@ -151,7 +158,6 @@ class Allowlist(object):
 
 def run(cmd, cwd=ROOT, check=False):
     env = dict(os.environ)
-    env.pop("WARP_LOCAL_SKIP_METAL", None)
     proc = subprocess.run(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if check and proc.returncode != 0:
         raise RuntimeError("%s failed:\n%s" % (" ".join(cmd), proc.stderr.decode("utf-8", "replace")))
@@ -527,18 +533,18 @@ def main():
         print_result(result, args.summary or (not result.blocking and not args.review))
     print_areas(results)
 
-    unused = allow.unused() if "hosts" in groups and "network" in groups else []
-    if unused:
-        print("== allowlist entries that matched nothing (remove them)")
-        for check, glob, number in unused:
-            print("   %s:%d  %s | %s" % (os.path.relpath(args.allowlist, ROOT), number, check, glob))
-        print()
+    if "hosts" in groups and "network" in groups:
+        stale = Result("allowlist", "Allowlist entries that matched nothing (remove them)")
+        for check, glob, number in allow.unused():
+            stale.add(None, None, "%s:%d  %s | %s" % (os.path.relpath(args.allowlist, ROOT), number, check, glob))
+        results.append(stale)
+        print_result(stale, args.summary)
 
     blocking = [r for r in results if r.blocking and r.findings]
     print("== summary")
     for result in results:
         state = "FAIL" if result.blocking and result.findings else ("info" if not result.blocking else "ok")
-        print("   %-8s %-5s %6d findings" % (result.check_id, state, len(result.findings)))
+        print("   %-9s %-5s %6d findings" % (result.check_id, state, len(result.findings)))
     if blocking and not args.report:
         print("\noffline audit FAILED: %s" % ", ".join(r.check_id for r in blocking))
         return 1

@@ -108,6 +108,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
 
     // Add new tests here
     register_test!(test_single_command);
+    register_test!(test_idle_session);
     register_test!(test_add_and_close_session);
     register_test!(test_add_many_sessions);
     register_test!(test_ctrl_tab_session_switching);
@@ -244,12 +245,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_zsh_bootstraps_with_nounset_option);
     register_test!(test_zsh_cursor_mode_vi_bindings_do_not_corrupt_commands);
     register_test!(test_pwsh_vi_edit_mode_does_not_corrupt_commands);
-    register_test!(test_ssh_wrapper_into_bash);
-    register_test!(test_ssh_wrapper_into_zsh);
-    register_test!(test_ssh_into_fish);
-    register_test!(test_ssh_into_sh);
-    register_test!(test_ssh_into_ash);
-    register_test!(test_ssh_with_shell_override);
 
     register_test!(test_custom_open_completions_menu_binding);
     register_test!(test_color_overrides_in_prompt_dont_crash);
@@ -294,8 +289,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_can_bootstrap_local_bash_subshell);
     register_test!(test_can_bootstrap_local_fish_subshell);
     register_test!(test_can_bootstrap_local_zsh_subshell);
-    register_test!(test_can_bootstrap_remote_bash_subshell);
-    register_test!(test_can_bootstrap_remote_zsh_subshell);
 
     register_test!(test_can_auto_bootstrap);
 

@@ -25,7 +25,6 @@ mod settings_file_hot_reload;
 mod settings_file_migration;
 mod settings_navigation;
 mod settings_private;
-mod ssh;
 mod subshell;
 mod sync_inputs;
 mod typeahead;
@@ -70,7 +69,6 @@ pub use settings_file_migration::*;
 pub use settings_navigation::*;
 pub use settings_private::*;
 use shell::ShellType;
-pub use ssh::*;
 pub use subshell::*;
 use sum_tree::SeekBias;
 pub use sync_inputs::*;
@@ -436,6 +434,19 @@ pub fn test_completions_with_autocd() -> Builder {
 pub fn test_single_command() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(execute_echo(0))
+}
+
+/// Boots the app, then leaves it idle for two minutes so that periodic timers (flushes, polling,
+/// update checks) get a chance to fire. It is ignored by default; the CI `offline-audit` job runs
+/// it under a network sandbox (`--run-ignored only`).
+pub fn test_idle_session() -> Builder {
+    const IDLE_DURATION: Duration = Duration::from_secs(120);
+
+    new_builder()
+        .with_timeout(IDLE_DURATION + Duration::from_secs(120))
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(TestStep::new("Stay idle").set_post_step_pause(IDLE_DURATION))
         .with_step(execute_echo(0))
 }
 

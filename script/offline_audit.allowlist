@@ -19,6 +19,7 @@ hosts | crates/persistence/migrations/* | firebase | historical migrations stay 
 hosts | crates/warpui_extras/src/secure_storage/linux.rs | releases\.warp\.dev/channel_versions\.json | secure-storage key material, not a network call; changing it would orphan stored secrets (MASTER decision 13)
 hosts | app/assets/windows/*/dxcompiler.dll | * | third-party DirectX compiler binary; `sEntry` matches `sentry` case-insensitively
 hosts | crates/secret_redaction/src/lib.rs | firebase | the redaction regex for leaked Firebase auth domains is a secret pattern, not a network call
+hosts | crates/secret_redaction/src/lib.rs | platform\.openai\.com | doc comment naming where the format of an OpenAI API key is documented; the redaction patterns detect such keys, nothing fetches the page
 hosts | crates/secret_redaction/src/lib_tests.rs | firebase | tests of that redaction regex
 hosts | crates/secret_redaction/src/lib_tests.rs | AIza | fake Google API key that the redaction tests must detect
 hosts | crates/lsp/src/config_tests.rs | firebase | path of an npm package (`node_modules/@firebase/auth`) used as a URI fixture

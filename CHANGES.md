@@ -115,6 +115,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Feature flags and Cargo features](#feature-flags-and-cargo-features) — every `FeatureFlag` folded into its fixed OSS value (289 variants to 3), 261 Cargo features and the `gui`/`standalone`/`agent_mode_evals` features removed; flag skills and gate commands updated
 - [Cargo and license metadata](#cargo-and-license-metadata) — crate `authors` inherit one generic workspace value instead of `Warp Team <dev@warp.dev>`; `deny.toml` and `about.toml` comments explain the remaining warpdotdev git sources; dropped the unused `dev-remote` profile and the `brotli`/`jq` flake inputs
 - [Script cleanup: channel arguments and stale tests](#script-cleanup-channel-arguments-and-stale-tests) — bundle, run and icon scripts build `warp-oss` only and take no channel argument; `check_license_config_sync` works without Python 3.11; two stale script tests fixed; fixture author made generic
+- [Offline guardrails (final)](#offline-guardrails-final) — the `offline-audit` CI job blocks, an idle two-minute sandboxed session joins it, the SSH tests that needed Warp's GCP VM and the Metal-skip build hook are gone, host patterns cover the removed features' hosts
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3066,3 +3067,27 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `app/Cargo.toml` `[package.metadata.bundle.bin.warp-oss]` `short_description` still says "cloud-backed terminal for individuals and teams"; it is packaging metadata outside `script/` and is left for the docs cleanup.
 - `resources/bundled` no longer exists, so `prepare_bundled_resources` prints "No bundled directory found" and continues; this predates this section.
 - `crates/warp_cli/src/local_control_tests.rs` uses the strings `"dev"` and `"dev.warp.Warp"` as sample channel and app-id values in a test fixture; they are data, not a channel.
+
+## Offline guardrails (final)
+**Why:** the draft audit was a progress meter. With the removal tasks landed, the guardrails now block: the audit passes on the tree, CI fails when it stops passing, and the test suite no longer needs a Warp-owned VM.
+
+**Removed:**
+- The `WARP_LOCAL_SKIP_METAL` hook in `crates/warpui/build.rs` (an uncommitted local-verification shortcut that wrote an empty `shaders.metallib`). The Metal shaders are always compiled.
+- The five SSH integration tests that needed Warp's GCP VM through a `gcloud` IAP tunnel (`test_ssh_into_sh`, `test_ssh_into_ash`, `test_ssh_wrapper_into_bash`, `test_ssh_wrapper_into_zsh`, `ui_tests::test_ssh_with_shell_override`), the commented-out `test_ssh_into_fish`, and the two remote-subshell tests that were already ignored for the same reason (`test_can_bootstrap_remote_bash_subshell`, `test_can_bootstrap_remote_zsh_subshell`). With them go `crates/integration/src/test/ssh.rs`, the remote-subshell macro, `app/src/integration_testing/subshell/util.rs` (the IAP `PROXY_COMMAND`, VM host and `ssh_command`) and the helpers `setup_gcloud_sdk`, `enter_ssh_command`, `enter_remote_subshell_command`, `wait_for_password_prompt` and `enter_ssh_password`.
+- The `-E "not test(/ssh/)"` filter and the `continue-on-error` line of the CI `offline-audit` job.
+
+**Added:**
+- `test_idle_session` (integration): boots the app and idles for two minutes. It is `#[ignore]` in the regular run; the CI job runs it with `--run-ignored only` in a second `unshare --net` + `strace` sandbox and checks `net-idle.log` with `script/offline_audit --net-log` (sweep 9.4a). `.config/nextest.toml` gives it a 150 s slow-timeout.
+- Host patterns of `script/offline_audit` for the hosts of the removed features and telemetry vendors: `openrouter.ai`, `x.ai`, `openai.com`, `anthropic.com`, `terminaltrove`, `amazonaws.com`, `docs.aws.amazon.com`, `cloudfront.net`, `googleapis.com`, `gstatic.com`, Google Analytics/Tag Manager, `cloudfunctions.net`, `run.app`, `appspot.com`, Mixpanel, Amplitude, Datadog, PostHog, Bugsnag, LaunchDarkly, Statsig and Honeycomb. The tree already had none of them except one doc URL for the OpenAI key format in `secret_redaction`, which is allowlisted with a reason.
+- An allowlist entry that matches nothing is now a failing check (`allowlist`) when the `hosts` and `network` groups both run, so the list shrinks with the code it covers.
+
+**Modified:**
+- The `offline-audit` CI job is blocking. The whole workspace, `integration` included, runs in the network sandbox without the SSH filter. The Ubuntu `apparmor_restrict_unprivileged_userns` sysctl step stays.
+- `MASTER.md` and the common agent brief no longer describe `WARP_LOCAL_SKIP_METAL`; the integration package is expected to have zero failures.
+
+**User-visible impact:** none; this is repository tooling and tests.
+
+**Notes:**
+- Advisories: `cargo deny check advisories` fails on 12 distinct RUSTSEC advisories in `Cargo.lock` (14 error diagnostics: 7 vulnerability, 5 unsound, 2 unmaintained) on 11 crate versions: anyhow 1.0.79 (0190), crossbeam-epoch 0.9.15 (0204), event-listener 5.4.0 (0221), git2 0.20.4 (0183, 0184), h2 0.4.15 (0258), memmap2 0.9.7 (0186), quick-xml 0.30.0 and 0.37.4 (0194, 0195), rustls 0.23.39 (0285), rustybuzz 0.20.1 (0206) and ttf-parser 0.25.1 (0192), plus three yanked crates (spin, spinning, xml-rs). All are in the graph of `warp-oss`; none is known to be reachable through the vulnerable API (the git2, event-listener and anyhow APIs are not called; h2 and rustls are only used by the opt-in LSP/Node download path and loopback `warpctrl`). They were published after the baseline lockfile and dependencies were not changed, so the blocking job runs `bans licenses sources` only and the CI comment says so. Bumping them is a separate decision.
+- The orphaned `cfg` attribute check that CFG-1 and AI-33 asked for is not part of the audit: the scanners AI-33 wrote diff against the baseline commit `cb2416204` and were not committed to the tree, so they can't run in CI.
+- The static audit could not run the runtime step locally (Linux, `unshare`, `strace`); the strace log parser is unchanged from the draft.

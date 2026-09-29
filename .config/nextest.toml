@@ -4,6 +4,11 @@
 slow-timeout = { period = "30s", terminate-after = 2 }
 
 [[profile.default.overrides]]
+# The idle session sleeps for two minutes by design.
+filter = 'test(~test_idle_session)'
+slow-timeout = { period = "150s", terminate-after = 2 }
+
+[[profile.default.overrides]]
 filter = 'package(integration)'
 # Integration tests are heavier-weight than unit tests, so have each one
 # count twice against the parallelism limit.  This improves overall runtime
