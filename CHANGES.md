@@ -104,6 +104,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [User model](#user-model) — deleted `app/src/auth/`, `AuthStateProvider`, `AuthManager` and the user, anonymous-id and account-credential types; the app has no user entity at all
 - [Remote images and remote asset fetching](#remote-images-and-remote-asset-fetching) — remote `http(s)` markdown images render as alt text plus a link instead of being downloaded; removed `asset_cache::url_source`, the URL asset cache, the URL-based fallback-font loader and the `reqwest` dependency of `asset_cache`
 - [Network log console and the ServerApi provider](#network-log-console-and-the-serverapi-provider) — deleted the in-app network log pane, its Privacy-page entry and binding, `ServerApiProvider`/`ServerApi`, the IAP manager and the staging-access toast; nothing outside `server/telemetry/` is left in `app/src/server/`
+- [Warp server client crates](#warp-server-client-crates) — deleted `warp_graphql` (`crates/graphql`), `warp_graphql_schema`, `warp_server_client`, `warp_server_auth`, `firebase`, `cloud_objects`, `websocket`, `channel_versions` and `field_mask`, with `cynic`, `graphql-ws-client`, `tungstenite`, and the SSE and websocket error support
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2753,3 +2754,31 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **Notes:**
 - `http_client`'s request and response hook setters (`set_before_request_fn`, `set_after_response_fn`) and the `serialized_payload` plumbing existed for the network log and have no callers now (CFG-1).
 - `ChannelState::{iap_config, uses_staging_server}` and `LocalShellState::get_interactive_path_env_var` lost their last callers here (CFG-1).
+
+## Warp server client crates
+**Why:** With accounts, Warp Drive, teams, billing, the AI server client and the network log gone, the crates that spoke to Warp's GraphQL API, websocket and Firebase identity endpoints had no users left. They were the last reason for `cynic`, `graphql-ws-client` and `tungstenite` to be in the build.
+
+**Removed:**
+- Crates, with their `[workspace.dependencies]` entries and `default-members` entries: `crates/graphql` (`warp_graphql`: the queries, mutations and subscriptions, including the leftovers listed by the earlier AI, Drive, sharing, teams and account tasks), `crates/warp_graphql_schema` (the schema, its build script, `package.json` and `yarn.lock`), `crates/warp_server_client` (`BaseClient`, `AuthSession`, the Firebase token refresh, `iap.rs`, the public-API error parser that matched `warp.dev` URIs, the empty-key guard and the `warp-agent-cli` OAuth client id, `network_logging`, `drive`, `ids`), `crates/warp_server_auth` (`AuthState`, `Credentials`, `UserUid`), `crates/firebase`, `crates/cloud_objects` (`Team`, `Owner`, `CloudObjectEventEntrypoint`, `Revision`, `ServerId`), `crates/websocket`, `crates/channel_versions` (including `tui_version`) and `crates/field_mask`.
+- External dependencies: `cynic`, `cynic-codegen`, `graphql-ws-client`, `async-tungstenite`, `tungstenite` and their macro and parser dependencies; `hyper` (the `warp` crate's unused direct dependency and the workspace entry); `prost-reflect`, `prost-types`, `mockall` and `async-stream` (workspace entries whose last users went); `reqwest` from `warp` and `warp_core`; `websocket` from `warp_core`; the `warp_server_client/*` and `warp_server_auth/*` entries in the `warp` feature lists.
+- `warp_errors`: the `reqwest-errors` and `websocket-errors` features with `reqwest.rs` (the `ErrorExt` classification of `reqwest::Error`, including the `staging.warp.dev` 403 downgrade) and `websocket.rs`. Nothing in the workspace reported those error types through `report_error!`.
+- `http_client`: `RequestBuilder::eventsource`, the `EventSourceStream` type and the `reqwest-eventsource` and `async-stream` dependencies (their only caller was the removed server client).
+- `.gitignore`/`.dockerignore` lines for the generated GraphQL schema and `channel_versions_test.json`, the GraphQL VS Code extension recommendations and root-dir setting, and the `crates/graphql` and GraphQL paragraphs of `AGENTS.md`.
+
+**Modified:**
+- `cargo metadata --offline` no longer lists `warp_graphql`, `warp_graphql_schema`, `warp_server_client`, `warp_server_auth`, `firebase`, `cloud_objects`, `websocket`, `channel_versions`, `field_mask`, `cynic`, `tungstenite`, `async-tungstenite` or `graphql-ws-client`.
+- The integration test `test_restore_snapshot_with_legacy_cloud_object` is `test_restore_snapshot_with_legacy_object_row` (same body: a database with a leftover cloud-object row still starts).
+- Nothing needed extracting: the surviving code no longer imported a type from these crates (the `settings/privacy.rs`, `persistence/mod.rs` and `workspace/global_actions.rs` uses went with the earlier removals).
+
+**Persisted state:** none. The sqlite tables these crates' types mapped to are untouched (DB-1).
+
+**User-visible impact:** none.
+
+**Notes:**
+- `script/offline_audit --report` before and after this task (after SWP-12 landed on the same base): workspace-crate bans 8 to 0; `deps` findings 14 to 2; `deny` findings 6 to 2 (`cynic`, `tungstenite`, `async-tungstenite` and `reqwest` cleared); `network` findings 138 to 1; `hosts` findings 1776 to 1572.
+- Still failing in `deps` and `deny`: `oauth2` (used by `http_client`'s IAP token code, CFG-1) and `hyper` through `mockito` (`warp_core/test-util` and the `integration` crate, CFG-1). `reqwest` is now used only by `http_client` and `local_control`.
+- Left for CFG-1: `ChannelState::{iap_config, uses_staging_server}`, `http_client::iap` and the IAP token provider, the request and response hook setters and `serialized_payload` in `http_client`, and the `ws_server_url`/`rtc_server_url` overrides.
+- Left for DB-1: the `cloud_objects_refreshes` and other object tables in `persistence`. Left for TEL-4: the team telemetry variants with plain payloads.
+- Left for DOCS-1: `.agents/skills/logging-and-error-reporting/SKILL.md` still cites `crates/warp_server_client` in an example.
+- Left for WASM-2: the `futures-timer` wasm dependency of `warp` was there for `reqwest-eventsource`.
+- Code compiled only on other platforms (`cfg(windows)`, Linux, wasm) was checked with `rg`: none named these crates.

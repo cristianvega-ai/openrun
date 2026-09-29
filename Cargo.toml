@@ -8,10 +8,8 @@ resolver = "2"
 # Include all members except integration (since it is only used for testing).
 default-members = [
   "app",
-  "crates/channel_versions",
   "crates/command",
   "crates/editor",
-  "crates/graphql",
   "crates/markdown_parser",
   "crates/sum_tree",
   "crates/warpui",
@@ -29,12 +27,8 @@ publish = false
 # Local workspace crates. This lets us reference them in other crates without specifying a path.
 asset_cache = { path = "crates/asset_cache" }
 asset_macro = { path = "crates/asset_macro" }
-channel_versions = { path = "crates/channel_versions", default-features = false }
 command = { path = "crates/command" }
-cloud_objects = { path = "crates/cloud_objects" }
 code_outline = { path = "crates/code_outline" }
-field_mask = { path = "crates/field_mask" }
-firebase = { path = "crates/firebase" }
 fuzzy_match = { path = "crates/fuzzy_match" }
 handlebars = { path = "crates/handlebars" }
 http_client = { path = "crates/http_client" }
@@ -72,20 +66,15 @@ warp_editor = { path = "crates/editor" }
 warp_errors = { path = "crates/warp_errors" }
 warp_features = { path = "crates/warp_features" }
 warp_files = { path = "crates/warp_files" }
-warp_graphql = { path = "crates/graphql" }
-warp_graphql_schema = { path = "crates/warp_graphql_schema" }
 warp_logging = { path = "crates/warp_logging" }
 warp_ripgrep = { path = "crates/warp_ripgrep" }
 warp_search_core = { path = "crates/warp_search_core" }
-warp_server_auth = { path = "crates/warp_server_auth" }
-warp_server_client = { path = "crates/warp_server_client" }
 warp_terminal = { path = "crates/warp_terminal" }
 warp_util = { path = "crates/warp_util" }
 warpui = { path = "crates/warpui" }
 warpui_core = { path = "crates/warpui_core" }
 warpui_extras = { path = "crates/warpui_extras", default-features = false }
 watcher = { path = "crates/watcher" }
-websocket = { path = "crates/websocket" }
 
 # Workspace-level dependencies used by multiple crates. Prefer adding dependencies
 # here to copying-and-pasting versions.
@@ -98,7 +87,6 @@ async-channel = "2.3.1"
 async-compat = "0.2.5"
 async-io = "2.4.0"
 async-process = "2.3.0"
-async-stream = "0.3.5"
 async-task = "4.2.0"
 async-trait = "0.1.89"
 async-fs = "2.1.2"
@@ -122,8 +110,6 @@ clap = { version = "4.5", features = ["derive"] }
 cocoa = "=0.26.0"
 ctrlc = "3.4.7"
 crc = "3.4.0"
-cynic = { version = "3" }
-cynic-codegen = { version = "3", features = ["rkyv"] }
 dashmap = "6.1.0"
 derive_more = "0.99.17"
 diesel = { version = "2.3.8", default-features = false }
@@ -147,10 +133,7 @@ gloo = { version = "0.11.0", default-features = false, features = [
   "futures",
   "utils",
 ] }
-graphql-ws-client = { version = "0.11.1", default-features = false }
 hex = "0.4.3"
-# This matches the version of hyper used by reqwest.
-hyper = "1.6.0"
 html5ever = "0.35.0"
 http = "1.1.0"
 image = { version = "0.25.9", default-features = false, features = [
@@ -181,7 +164,6 @@ openh264 = "0.8"
 static_assertions = "1.1.0"
 url = "2.5.4"
 urlocator = "0.1.4"
-mockall = "0.13.1"
 objc = "0.2"
 objc2 = "0.6.3"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSScreen", "objc2-core-foundation"] }
@@ -198,8 +180,6 @@ pathfinder_geometry = "0.5.1"
 pin-project = "1.0.10"
 pprof = "0.15.0"
 prost = "0.14.3"
-prost-reflect = "0.16.3"
-prost-types = "0.14.3"
 rand = "0.8.6"
 rangemap = "1.3.0"
 reqwest = { version = "0.13", features = [
@@ -212,7 +192,6 @@ reqwest = { version = "0.13", features = [
   "query",
   "stream",
 ] }
-reqwest-eventsource = { package = "aha-reqwest-eventsource", version = "0.1" }
 resvg = "0.47.0"
 rust-embed = { version = "8.7.0", features = ["include-exclude"] }
 rustc-hash = "2.1.1"
@@ -393,8 +372,6 @@ pprof_util.opt-level = 3
 # Vastly improve runtime performance of some font and text layout logic
 # at the cost of a small increase in compile time for this crate.
 ttf-parser.opt-level = 3
-# Improve performance of SSE stream parsing.
-eventsource-stream.opt-level = 3
 memchr.opt-level = 3
 nom.opt-level = 3
 # Improve performance of core runtime components slightly.
