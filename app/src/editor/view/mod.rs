@@ -28,7 +28,6 @@ use model::{
 };
 use num_traits::SaturatingSub;
 use parking_lot::Mutex;
-use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::Vector2F;
 use settings::Setting as _;
 use snapshot::{EditorHeightShrinkDelay, ViewSnapshot};
@@ -55,16 +54,13 @@ use warpui::accessibility::{AccessibilityContent, ActionAccessibilityContent, Wa
 use warpui::actions::StandardAction;
 use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::clipboard::ClipboardContent;
-use warpui::elements::{
-    ChildView, CornerRadius, DEFAULT_UI_LINE_HEIGHT_RATIO, Hoverable, MouseStateHandle, Radius,
-};
-use warpui::fonts::{Cache as FontCache, FamilyId, Properties, Weight};
+use warpui::elements::{ChildView, DEFAULT_UI_LINE_HEIGHT_RATIO, Hoverable, MouseStateHandle};
+use warpui::fonts::{Cache as FontCache, FamilyId, Properties};
 use warpui::keymap::{EditableBinding, FixedBinding, Keystroke, PerPlatformKeystroke};
 use warpui::platform::{Cursor, FilePickerConfiguration, OperatingSystem};
 use warpui::text::TextBuffer;
 use warpui::text::word_boundaries::WordBoundariesPolicy;
 use warpui::text_layout::TextStyle;
-use warpui::ui_components::components::UiComponentStyles;
 use warpui::windowing::WindowManager;
 use warpui::{
     AppContext, BlurContext, CursorInfo, Element, Entity, EntityId, FocusContext, ModelAsRef,
@@ -78,8 +74,7 @@ pub use {
     element::{EditorDecoratorElements, EditorElement, TextColors},
     model::{
         Chars, CrdtOperation, DisplayPoint, EditOrigin, EditorSnapshot, InteractionState,
-        LocalDrawableSelectionData, PeerSelectionData, RemoteDrawableSelectionData, ReplicaId,
-        SelectAction, TextRun, TextStyleOperation,
+        LocalDrawableSelectionData, ReplicaId, SelectAction, TextRun, TextStyleOperation,
     },
 };
 
@@ -103,7 +98,6 @@ use crate::terminal::input::pending_attachments::{
     PendingAttachment, PendingAttachmentsModel, PendingFile,
 };
 use crate::themes::theme::Fill;
-use crate::ui_components::avatar::{Avatar, AvatarContent};
 use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, keybinding_name_to_keystroke};
 use crate::util::clipboard::clipboard_content_with_escaped_paths;
 use crate::util::color::{ContrastingColor, MinimumAllowedContrast};
@@ -3046,48 +3040,6 @@ impl EditorView {
         self.editor_model.update(ctx, |model, ctx| {
             model.show_display_only_empty_buffer(ctx);
         });
-    }
-
-    pub fn register_remote_peer(
-        &mut self,
-        replica_id: ReplicaId,
-        selection_data: PeerSelectionData,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.model().update(ctx, |model, ctx| {
-            model.register_remote_peer(replica_id, selection_data, ctx);
-        });
-
-        ctx.notify();
-    }
-
-    pub fn unregister_all_remote_peers(&mut self, ctx: &mut ViewContext<Self>) {
-        self.model().update(ctx, |model, ctx| {
-            model.unregister_all_remote_peers(ctx);
-        });
-
-        ctx.notify();
-    }
-
-    pub fn unregister_remote_peer(&mut self, replica_id: &ReplicaId, ctx: &mut ViewContext<Self>) {
-        self.model().update(ctx, |model, ctx| {
-            model.unregister_remote_peer(replica_id, ctx);
-        });
-
-        ctx.notify();
-    }
-
-    pub fn set_remote_peer_selection_data(
-        &mut self,
-        replica_id: &ReplicaId,
-        selection_data: PeerSelectionData,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.model().update(ctx, |model, ctx| {
-            model.set_remote_peer_selection_data(replica_id, selection_data, ctx);
-        });
-
-        ctx.notify();
     }
 
     /// A helper function to make arbitrary edits more ergonomic.
@@ -7461,62 +7413,12 @@ impl EditorView {
         self.editor_model.as_ref(ctx).is_single_cursor_only(ctx)
     }
 
-    /// Returns drawable selections data for local and remote peers.
-    pub fn all_drawable_selections_data(
-        &self,
-        font_size: f32,
-        avatar_size: f32,
-        ctx: &AppContext,
-    ) -> (
-        LocalDrawableSelectionData,
-        HashMap<ReplicaId, RemoteDrawableSelectionData>,
-    ) {
-        let local_selection_data = LocalDrawableSelectionData {
+    /// Returns the data for drawing the local selections and cursors.
+    fn local_drawable_selection_data(&self, ctx: &AppContext) -> LocalDrawableSelectionData {
+        LocalDrawableSelectionData {
             colors: (self.get_cursor_colors_fn)(ctx),
             should_draw_cursors: self.should_draw_cursors(ctx),
-        };
-
-        // Convert a remote peer's selection data into an avatar component
-        let appearance = Appearance::as_ref(ctx);
-        let avatar_styles = UiComponentStyles {
-            width: Some(avatar_size),
-            height: Some(avatar_size),
-            border_radius: Some(CornerRadius::with_all(Radius::Percentage(50.))),
-            border_width: Some(1.),
-            font_color: Some(ColorU::black()),
-            font_family_id: Some(appearance.ui_font_family()),
-            font_weight: Some(Weight::Bold),
-            font_size: Some(font_size),
-            ..Default::default()
-        };
-
-        let remote_selections_data = self
-            .editor_model
-            .as_ref(ctx)
-            .registered_peers(ctx)
-            .iter()
-            .map(|(replica_id, peer)| {
-                let color = peer.selection_data.colors.cursor;
-                let avatar = Avatar::new(
-                    AvatarContent::DisplayName(peer.selection_data.display_name.clone()),
-                    UiComponentStyles {
-                        border_color: Some(color.into()),
-                        background: Some(color.into()),
-                        ..avatar_styles
-                    },
-                );
-
-                let drawable_selections_data = RemoteDrawableSelectionData {
-                    colors: peer.selection_data.colors,
-                    should_draw_cursors: peer.selection_data.should_draw_cursors,
-                    avatar,
-                };
-
-                (replica_id.clone(), drawable_selections_data)
-            })
-            .collect::<HashMap<_, _>>();
-
-        (local_selection_data, remote_selections_data)
+        }
     }
 
     fn drag_and_drop_files(&mut self, paths: &[UserInput<String>], ctx: &mut ViewContext<Self>) {
@@ -7998,11 +7900,7 @@ impl View for EditorView {
         let view_snapshot = self.snapshot(ctx);
         let scroll_state = self.into();
 
-        let (local_selection_data, remote_selections_data) = self.all_drawable_selections_data(
-            view_snapshot.cursor_avatar_font_size(),
-            view_snapshot.cursor_avatar_size(),
-            ctx,
-        );
+        let local_selection_data = self.local_drawable_selection_data(ctx);
 
         let editor_element = EditorElement::new(
             view_snapshot,
@@ -8015,7 +7913,6 @@ impl View for EditorView {
             text_colors,
             editor_decorator_elements,
             local_selection_data,
-            remote_selections_data,
             self.cursor_display_override,
         )
         .with_input_editor_icons(

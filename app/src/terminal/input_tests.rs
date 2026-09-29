@@ -717,11 +717,11 @@ fn test_merge_ai_and_command_history() {
             HistoryEntry::command_at_time("echo now [different session]".into(), now, None, false);
 
         let history_commands = vec![
-            HistoryInputSuggestion::Command { entry: &entry_20s },
-            HistoryInputSuggestion::Command { entry: &entry_now },
-            HistoryInputSuggestion::Command { entry: &entry_30s },
-            HistoryInputSuggestion::Command { entry: &entry_10s },
-            HistoryInputSuggestion::Command { entry: &entry_5s },
+            HistoryInputSuggestion { entry: &entry_20s },
+            HistoryInputSuggestion { entry: &entry_now },
+            HistoryInputSuggestion { entry: &entry_30s },
+            HistoryInputSuggestion { entry: &entry_10s },
+            HistoryInputSuggestion { entry: &entry_5s },
         ];
         let only_history_commands = history_commands
             .clone()

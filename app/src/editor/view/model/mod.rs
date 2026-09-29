@@ -9,9 +9,8 @@ use std::ops::Range;
 use std::rc::Rc;
 
 pub use buffer::{
-    Anchor, AnchorBias, Chars, EditOrigin, Operation as CrdtOperation, PeerSelectionData,
-    ReplicaId, SubwordBoundaries, TextRun, TextStyleOperation, ToBufferOffset, ToCharOffset,
-    ToPoint,
+    Anchor, AnchorBias, Chars, EditOrigin, Operation as CrdtOperation, ReplicaId,
+    SubwordBoundaries, TextRun, TextStyleOperation, ToBufferOffset, ToCharOffset, ToPoint,
 };
 use buffer::{Buffer, Text};
 pub use display_map::{Bias, DisplayMap, DisplayPoint, MovementResult, ToDisplayPoint};
@@ -21,8 +20,7 @@ use lazy_static::lazy_static;
 use num_traits::SaturatingSub;
 pub use selections::{
     DrawableSelection, LocalDrawableSelectionData, LocalPendingSelection, LocalSelection,
-    LocalSelections, MarkedTextState, RemoteDrawableSelectionData, SelectAction, Selection,
-    SelectionMode,
+    LocalSelections, MarkedTextState, SelectAction, Selection, SelectionMode,
 };
 use string_offset::{ByteOffset, CharOffset};
 use vec1::{Vec1, vec1};
@@ -44,7 +42,6 @@ use warpui::text::word_boundaries::WordBoundariesPolicy;
 use warpui::text_layout::TextStyle;
 use warpui::{AppContext, Entity, ModelAsRef, ModelContext, ModelHandle, SingletonEntity};
 
-use self::buffer::Peer;
 use super::{PlainTextEditorViewAction, SelectionInsertion, ValidInputType, movement};
 use crate::editor::RangeExt;
 use crate::vim_registers::VimRegisters;
@@ -571,44 +568,6 @@ impl EditorModel {
 
     pub fn replica_id<C: ModelAsRef>(&self, ctx: &C) -> ReplicaId {
         self.collaborative_buffer().as_ref(ctx).replica_id()
-    }
-
-    pub fn registered_peers<C: ModelAsRef>(&self, ctx: &C) -> HashMap<ReplicaId, Peer> {
-        self.buffer(ctx).registered_peers()
-    }
-
-    pub fn register_remote_peer(
-        &mut self,
-        replica_id: ReplicaId,
-        selection_data: PeerSelectionData,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.collaborative_buffer().update(ctx, |buffer, _ctx| {
-            buffer.register_peer(replica_id, selection_data);
-        });
-    }
-
-    pub fn unregister_all_remote_peers(&mut self, ctx: &mut ModelContext<Self>) {
-        self.collaborative_buffer().update(ctx, |buffer, _ctx| {
-            buffer.unregister_all_peers();
-        });
-    }
-
-    pub fn unregister_remote_peer(&mut self, replica_id: &ReplicaId, ctx: &mut ModelContext<Self>) {
-        self.collaborative_buffer().update(ctx, |buffer, _ctx| {
-            buffer.unregister_peer(replica_id);
-        });
-    }
-
-    pub fn set_remote_peer_selection_data(
-        &mut self,
-        replica_id: &ReplicaId,
-        selection_data: PeerSelectionData,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.collaborative_buffer().update(ctx, |buffer, _ctx| {
-            buffer.set_peer_selection_data(replica_id, selection_data);
-        });
     }
 
     pub fn recreate_buffer(&mut self, replica_id: Option<ReplicaId>, ctx: &mut ModelContext<Self>) {
@@ -2754,17 +2713,7 @@ impl EditorModel {
         let map = self.display_map(app);
         self.buffer(app)
             .local_selections()
-            .drawable_selections_intersecting_range(range.clone(), self.replica_id(app), map, app)
-            .chain(self.buffer(app).remote_selections().flat_map(
-                move |(replica_id, selections)| {
-                    selections.drawable_selections_intersecting_range(
-                        range.clone(),
-                        replica_id.clone(),
-                        map,
-                        app,
-                    )
-                },
-            ))
+            .drawable_selections_intersecting_range(range, map, app)
     }
 
     pub fn pending_selection<'a, C: ModelAsRef>(

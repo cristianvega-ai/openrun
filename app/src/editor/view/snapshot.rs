@@ -32,14 +32,6 @@ use super::{
 use crate::editor::soft_wrap::FrameLayouts;
 use crate::terminal::grid_size_util::grid_compute_baseline_position_fn;
 
-/// Ratio to calculate font size of cursor avatar.
-/// Found experimentally to scale the best proportionally with
-/// current font size and the avatar's size.
-pub const CURSOR_AVATAR_FONT_RATIO: f32 = 0.8;
-/// Offset to calculate size of cursor avatar.
-/// Found experimentally to look the best with current font size.
-pub const CURSOR_AVATAR_IMAGE_OFFSET: f32 = 4.;
-
 /// The amount of time the editor height must have remained shrunken
 /// before we actually shrink the height. This is to prevent jittering
 /// before an autosuggestion is computed on keypress, if the autosuggestion would wrap
@@ -608,17 +600,5 @@ impl ViewSnapshot {
             .vim_visual_tails()
             .iter()
             .filter_map(|anchor| anchor.to_display_point(map, app).ok())
-    }
-
-    /// Returns the font size for a cursor avatar. Value is based on the snapshot's
-    /// font size and an avatar-specific ratio.
-    pub fn cursor_avatar_font_size(&self) -> f32 {
-        self.font_size * CURSOR_AVATAR_FONT_RATIO
-    }
-
-    /// Returns the size (diameter) for a cursor avatar. Value is based on the snapshot's
-    /// font size and an avatar-specific offset.
-    pub fn cursor_avatar_size(&self) -> f32 {
-        self.font_size + CURSOR_AVATAR_IMAGE_OFFSET
     }
 }

@@ -72,7 +72,7 @@ impl SyncDataSource for InlineHistoryMenuDataSource {
             .into_iter()
             .filter_map(|suggestion| {
                 let command = suggestion.normalized_text().to_owned();
-                let HistoryInputSuggestion::Command { entry } = &suggestion;
+                let HistoryInputSuggestion { entry } = &suggestion;
                 if !trimmed_query.is_empty() && !command.starts_with(trimmed_query) {
                     return None;
                 }

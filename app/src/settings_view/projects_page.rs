@@ -33,7 +33,7 @@ use super::settings_page::{
 use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, ToggleState, flags};
 use crate::appearance::Appearance;
 use crate::settings::CodeSettings;
-use crate::ui_components::avatar::{Avatar, AvatarContent, StatusElementTypes};
+use crate::ui_components::avatar::{Avatar, AvatarContent};
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons::Icon;
 use crate::workspace::WorkspaceAction;
@@ -825,7 +825,6 @@ impl ProjectsWidget {
         );
 
         avatar = avatar.with_status_element_with_offset(
-            StatusElementTypes::Circle,
             UiComponentStyles {
                 width: Some(LSP_STATUS_INDICATOR_SIZE),
                 height: Some(LSP_STATUS_INDICATOR_SIZE),

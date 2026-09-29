@@ -72,7 +72,7 @@ impl History {
                     !ignored_suggestions.is_ignored(&entry.command, SuggestionType::ShellCommand)
                 })
             })
-            .map(|entry| HistoryInputSuggestion::Command { entry })
+            .map(|entry| HistoryInputSuggestion { entry })
             .collect();
 
         sort_and_dedupe_suggestions(commands, session_id, &self.all_live_session_ids())

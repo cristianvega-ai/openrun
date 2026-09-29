@@ -118,6 +118,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Offline guardrails (final)](#offline-guardrails-final) — the `offline-audit` CI job blocks, an idle two-minute sandboxed session joins it, the SSH tests that needed Warp's GCP VM and the Metal-skip build hook are gone, host patterns cover the removed features' hosts
 - [Clippy and dead-code fixes](#clippy-and-dead-code-fixes) — restored a clean `cargo clippy --workspace --all-targets --tests -- -D warnings`
 - [Linux and Windows compile fixes](#linux-and-windows-compile-fixes) — fixed a Windows-only compile error and Linux/Windows-only warnings found by cross-target checks
+- [Editor peer layer, single-variant enums and grid storage mode](#editor-peer-layer-single-variant-enums-and-grid-storage-mode) — removed the unused editor remote-peer layer and its drawing, avatar status icons, `is_excluded_binding`, single-variant enums and `Storage::is_sequential`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3124,3 +3125,20 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **User-visible impact:** None. The Windows build compiled again for `app`.
 
 **Notes:** The cross checks used `zig cc` and a stub `pkg-config` only to get past `-sys` build scripts (`cargo check` does not link). Neither is part of the repo.
+
+## Editor peer layer, single-variant enums and grid storage mode
+**Why:** These are leftovers of the AI, Warp Drive and session-sharing removals that the compiler cannot flag because the items are `pub` or still referenced from tests.
+
+**Removed:**
+- The editor's remote-peer layer: `EditorView`/`EditorModel::{register_remote_peer, unregister_remote_peer, unregister_all_remote_peers, set_remote_peer_selection_data}`, the buffer's `registered_peers`, `Peer`, `PeerSelectionData`, and `Buffer::remote_selections()`. No peer was ever registered, so `remote_selections()` was always empty. With it went the remote-selection drawing: `RemoteDrawableSelectionData` (both copies), the cursor avatars in `EditorElement`, `REMOTE_BEAM_CURSOR_WIDTH_PX`, `ViewSnapshot::cursor_avatar_*`, and the `replica_id` on `DrawableSelection`/`CursorData`.
+- `Avatar` status icons (`StatusElementTypes` and `with_status_element`); the only remaining status is the dot used by the Projects page.
+- `is_excluded_binding` in the action search (it excluded the deleted `workspace:search_drive` action).
+- `Storage::is_sequential` and the `is_sequential` argument of `Storage::with_capacity`/`with_rows` in `warp_terminal`: grid storage always used the reverse layout.
+
+**Modified:**
+- `SecretTooltip` (one variant) is now the `WithinModel<SecretHandle>` itself; `HistoryInputSuggestion` (one variant) is a struct holding the entry.
+- The description in `app/Cargo.toml` describes the offline terminal instead of a cloud-backed one.
+
+**User-visible impact:** None.
+
+**Notes:** `apply_remote_operations` and the CRDT operation types stay: the buffer tests exercise them as the buffer's merge logic.

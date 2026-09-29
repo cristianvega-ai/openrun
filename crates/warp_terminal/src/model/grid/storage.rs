@@ -42,7 +42,8 @@ use crate::model::index::VisibleRow;
 ///
 /// --------------------
 ///
-/// Imagine we want to print Shakespeare plays in alphabetical order. Let's assume sequential storage.
+/// Imagine we want to print Shakespeare plays in alphabetical order. For clarity the diagrams show
+/// the raw layout without the row reversal that grid indices apply on top of it.
 ///
 /// ```text
 /// 1) The first write takes place at index 0.
@@ -105,10 +106,6 @@ pub(super) struct Storage {
     /// without any additional insertions.
     len: usize,
 
-    /// Whether or not the storage mechanism is reversed or sequential.
-    #[serde(skip)]
-    is_sequential: bool,
-
     /// Maximum number of buffered lines outside of the grid for performance optimization.
     /// Every time we extend the size of the grid, we do so in chunks of this size.
     #[serde(skip)]
@@ -127,17 +124,17 @@ impl PartialEq for Storage {
 
 impl Storage {
     #[inline]
-    pub fn with_capacity(visible_lines: usize, cols: usize, is_sequential: bool) -> Storage {
+    pub fn with_capacity(visible_lines: usize, cols: usize) -> Storage {
         // Initialize visible lines; the scrollback buffer is initialized dynamically.
         let mut inner = Vec::with_capacity(visible_lines);
         inner.resize_with(visible_lines, || Row::new(cols));
 
-        Self::with_rows(inner, is_sequential, visible_lines)
+        Self::with_rows(inner, visible_lines)
     }
 
     /// Initialize Storage with given vector of rows.
     #[inline]
-    pub fn with_rows(rows: Vec<Row>, is_sequential: bool, visible_lines: usize) -> Storage {
+    pub fn with_rows(rows: Vec<Row>, visible_lines: usize) -> Storage {
         let len = rows.len();
         debug_assert!(
             visible_lines <= len,
@@ -154,13 +151,8 @@ impl Storage {
             bottom_row: 0,
             visible_lines,
             len,
-            is_sequential,
             max_cache_size,
         }
-    }
-
-    pub fn is_sequential(&self) -> bool {
-        self.is_sequential
     }
 
     /// Increase the number of lines in the buffer.
@@ -232,9 +224,7 @@ impl Storage {
     pub fn push_from_scrollback(&mut self, mut rows: Vec<Row>) {
         let num_rows = rows.len();
 
-        if !self.is_sequential {
-            rows.reverse();
-        }
+        rows.reverse();
 
         // Append the rows to the internal storage.
         self.rezero();
@@ -317,12 +307,8 @@ impl Storage {
 
     /// Move the bottommost row to indicate a lesser row value.
     #[inline]
-    pub fn retract(&mut self, mut count: isize) {
+    pub fn retract(&mut self, count: isize) {
         debug_assert!(count.unsigned_abs() <= self.inner.len());
-
-        if self.is_sequential {
-            count *= -1;
-        }
 
         let len = self.inner.len();
         self.bottom_row = (self.bottom_row as isize + count + len as isize) as usize % len;
@@ -330,12 +316,10 @@ impl Storage {
 
     /// Move the bottommost row to indicate a greater row value.
     #[inline]
-    pub fn extend(&mut self, mut count: isize) {
+    pub fn extend(&mut self, count: isize) {
         debug_assert!(count.unsigned_abs() <= self.inner.len());
 
-        if !self.is_sequential {
-            count *= -1;
-        }
+        let count = -count;
 
         let len = self.inner.len();
         self.bottom_row = (self.bottom_row as isize + count + len as isize) as usize % len;
@@ -379,10 +363,8 @@ impl Storage {
     pub fn from_grid_index(&self, mut requested: usize) -> usize {
         debug_assert!(requested < self.len);
 
-        // If our storage is not sequential... reverse the index
-        if !self.is_sequential {
-            requested = self.len - requested - 1;
-        }
+        // The rows are stored in reverse order, so reverse the index.
+        requested = self.len - requested - 1;
 
         let zeroed = self.bottom_row + requested;
 

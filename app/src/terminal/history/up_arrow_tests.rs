@@ -51,7 +51,7 @@ fn history_for(
         .map(|suggestion| {
             let text = suggestion.normalized_text().to_owned();
             match suggestion {
-                HistoryInputSuggestion::Command { entry } => TestHistoryItem {
+                HistoryInputSuggestion { entry } => TestHistoryItem {
                     text,
                     linked_workflow_data: entry.linked_workflow_data(),
                 },

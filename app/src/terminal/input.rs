@@ -2396,9 +2396,10 @@ impl Input {
                 // Snapshot the current input so we can restore it after the command completes.
                 let current_input = self.buffer_text(ctx);
                 if self.try_execute_command_with_history_option(&command, true, ctx)
-                    && !current_input.is_empty() {
-                        self.input_contents_before_prompt_chip_command = Some(current_input);
-                    }
+                    && !current_input.is_empty()
+                {
+                    self.input_contents_before_prompt_chip_command = Some(current_input);
+                }
             }
         }
     }

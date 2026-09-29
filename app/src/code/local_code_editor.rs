@@ -479,8 +479,6 @@ impl LocalCodeEditorView {
             Self::handle_window_focus_change,
         );
 
-        
-
         Self {
             editor,
             diff_type,

@@ -1871,33 +1871,29 @@ impl PaneGroup {
                     view_bounds.size(),
                     model_event_sender_clone,
                 ),
-                PanesLayout::Snapshot(panes_snapshot) => {
-                    
-
-                    Self::restore_pane_tree(
-                        *panes_snapshot,
-                        block_lists,
-                        resources.clone(),
-                        ctx,
+                PanesLayout::Snapshot(panes_snapshot) => Self::restore_pane_tree(
+                    *panes_snapshot,
+                    block_lists,
+                    resources.clone(),
+                    ctx,
+                    pane_contents,
+                    unsupported_banner_model_handle.clone(),
+                    view_bounds.size(),
+                    model_event_sender_clone.clone(),
+                )
+                .unwrap_or_else(|err| {
+                    log::warn!("Error restoring pane tree: {err:#}");
+                    Self::initial_single_terminal_pane(
+                        NewTerminalOptions::default(),
+                        resources,
+                        unsupported_banner_model_handle,
+                        view_bounds,
+                        model_event_sender_clone,
                         pane_contents,
-                        unsupported_banner_model_handle.clone(),
-                        view_bounds.size(),
-                        model_event_sender_clone.clone(),
+                        pane_history,
+                        ctx,
                     )
-                    .unwrap_or_else(|err| {
-                        log::warn!("Error restoring pane tree: {err:#}");
-                        Self::initial_single_terminal_pane(
-                            NewTerminalOptions::default(),
-                            resources,
-                            unsupported_banner_model_handle,
-                            view_bounds,
-                            model_event_sender_clone,
-                            pane_contents,
-                            pane_history,
-                            ctx,
-                        )
-                    })
-                }
+                }),
                 PanesLayout::SingleTerminal(options) => Self::initial_single_terminal_pane(
                     *options,
                     resources,

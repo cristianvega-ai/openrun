@@ -1,9 +1,5 @@
-use pathfinder_geometry::vector::vec2f;
 use warp_core::ui::icons::Icon;
-use warpui::elements::{
-    self, Align, Border, ChildAnchor, ConstrainedBox, Container, Element, OffsetPositioning,
-    ParentAnchor, ParentElement, ParentOffsetBounds, Stack, Text,
-};
+use warpui::elements::{self, Align, Border, ConstrainedBox, Container, Element, Text};
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 
 use super::red_notification_dot::RedNotificationDot;
@@ -16,19 +12,11 @@ pub enum AvatarContent {
     Icon(Icon),
 }
 
-#[derive(Clone)]
-pub enum StatusElementTypes {
-    Circle,
-    Icon(Icon),
-}
-
 /// Avatar UI component.
 pub struct Avatar {
     content: AvatarContent,
     styles: UiComponentStyles,
-    /// If this is set, we will render a status symbol on the upper right corner of the avatar.
-    status_element_type: Option<StatusElementTypes>,
-    // Styles for the status
+    /// If this is set, we will render a status dot on the upper right corner of the avatar.
     status_styles: Option<UiComponentStyles>,
     /// Optional additional offset for the status indicator (x to the right, y downward).
     status_offset: Option<(f32, f32)>,
@@ -65,27 +53,12 @@ impl UiComponent for Avatar {
             constrained_box = constrained_box.with_width(width);
         }
 
-        let mut container = Container::new(
-            if let Some(status_element_type) = self.status_element_type {
-                let offset = self.status_offset.unwrap_or((0., 0.));
-                let status_styles = self.status_styles.unwrap_or_default();
-                match status_element_type {
-                    StatusElementTypes::Circle => RedNotificationDot::render_with_offset(
-                        constrained_box.finish(),
-                        &status_styles,
-                        offset,
-                    ),
-                    StatusElementTypes::Icon(icon) => Self::render_icon_with_offset(
-                        constrained_box.finish(),
-                        icon,
-                        &status_styles,
-                        offset,
-                    ),
-                }
-            } else {
-                constrained_box.finish()
-            },
-        );
+        let mut container = Container::new(if let Some(status_styles) = self.status_styles {
+            let offset = self.status_offset.unwrap_or((0., 0.));
+            RedNotificationDot::render_with_offset(constrained_box.finish(), &status_styles, offset)
+        } else {
+            constrained_box.finish()
+        });
 
         if let Some(corner) = styles.border_radius {
             container = container.with_corner_radius(corner);
@@ -132,31 +105,17 @@ impl Avatar {
         Avatar {
             content,
             styles,
-            status_element_type: None,
             status_styles: None,
             status_offset: None,
         }
     }
 
-    pub fn with_status_element(
-        mut self,
-        status_element_type: StatusElementTypes,
-        status_styles: UiComponentStyles,
-    ) -> Self {
-        self.status_element_type = Some(status_element_type);
-        self.status_styles = Some(status_styles);
-        self.status_offset = None;
-        self
-    }
-
     pub fn with_status_element_with_offset(
         mut self,
-        status_element_type: StatusElementTypes,
         status_styles: UiComponentStyles,
         x_delta: f32,
         y_delta: f32,
     ) -> Self {
-        self.status_element_type = Some(status_element_type);
         self.status_styles = Some(status_styles);
         self.status_offset = Some((x_delta, y_delta));
         self
@@ -182,36 +141,5 @@ impl Avatar {
         .with_color(styles.font_color.unwrap_or_default())
         .with_style(styles.font_properties())
         .finish()
-    }
-
-    fn render_icon_with_offset(
-        element: Box<dyn Element>,
-        icon: Icon,
-        styles: &UiComponentStyles,
-        (x_delta, y_delta): (f32, f32),
-    ) -> Box<dyn Element> {
-        let icon_size = styles.width.unwrap_or(12.0);
-        let x_axis_offset = icon_size / 2.;
-        let y_axis_offset = -(icon_size / 2.);
-
-        let icon_element = ConstrainedBox::new(
-            elements::Icon::new(icon.into(), styles.font_color.unwrap_or_default()).finish(),
-        )
-        .with_width(icon_size)
-        .with_height(icon_size)
-        .finish();
-
-        let mut stack = Stack::new();
-        stack.add_child(element);
-        stack.add_positioned_child(
-            icon_element,
-            OffsetPositioning::offset_from_parent(
-                vec2f(x_axis_offset + x_delta, y_axis_offset + y_delta),
-                ParentOffsetBounds::Unbounded,
-                ParentAnchor::TopRight,
-                ChildAnchor::TopRight,
-            ),
-        );
-        stack.finish()
     }
 }

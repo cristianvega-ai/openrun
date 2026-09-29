@@ -211,9 +211,6 @@ use crate::terminal::input::{
 };
 use crate::terminal::ligature_settings::{LigatureSettings, should_use_ligature_rendering};
 use crate::terminal::links::should_directly_open_link;
-#[cfg(feature = "local_tty")]
-#[cfg(all(windows, feature = "local_tty"))]
-use crate::terminal::local_tty::windows::get_user_and_system_env_variable;
 use crate::terminal::model::ansi::{ClearMode, Handler};
 use crate::terminal::model::block::{Block, BlockMetadata, LONG_RUNNING_BOTTOM_PADDING_LINES};
 use crate::terminal::model::blockgrid::BlockGrid;
@@ -1391,10 +1388,6 @@ pub enum ActiveSessionState {
     Inactive,
 }
 
-enum SecretTooltip {
-    Grid { tooltip: WithinModel<SecretHandle> },
-}
-
 type TerminalViewCallback = Box<dyn FnOnce(&mut TerminalView, &mut ViewContext<TerminalView>)>;
 
 #[derive(Debug, Clone)]
@@ -1505,7 +1498,7 @@ pub struct TerminalView {
     hovered_secret: Option<SecretHandle>,
 
     /// The details of a currently focused secret tooltip.
-    open_secret_tool_tip: Option<SecretTooltip>,
+    open_secret_tool_tip: Option<WithinModel<SecretHandle>>,
 
     control_master_error_banner: ViewHandle<Banner<TerminalAction>>,
     control_master_error_banner_state: ControlMasterErrorBannerState,
@@ -4165,7 +4158,7 @@ impl TerminalView {
     ) {
         if action == VimModeBannerAction::Enable {
             self.enable_vim_keybindings(ctx);
-        } 
+        }
         self.remove_vim_mode_banner(ctx);
         VimBannerSettings::handle(ctx).update(ctx, |banner_settings, model_ctx| {
             report_if_error!(
@@ -8024,9 +8017,7 @@ impl TerminalView {
             model.secret_at_point(position).map(|(handle, _)| handle)
         };
         if let Some(handle) = handle {
-            self.open_secret_tool_tip = Some(SecretTooltip::Grid {
-                tooltip: position.replace_inner(handle),
-            });
+            self.open_secret_tool_tip = Some(position.replace_inner(handle));
             self.focus_terminal(ctx);
         }
 
@@ -13255,10 +13246,9 @@ impl View for TerminalView {
         }
 
         let active_block = model_lock.block_list().active_block();
-        if active_block.is_active_and_long_running()
-            && !model_lock.is_alt_screen_active() {
-                context.set.insert("LongRunningCommand");
-            }
+        if active_block.is_active_and_long_running() && !model_lock.is_alt_screen_active() {
+            context.set.insert("LongRunningCommand");
+        }
 
         // Add keyboard protocol context if enabled.
         if model_lock.is_term_mode_set(TermMode::KEYBOARD_PROTOCOL) {

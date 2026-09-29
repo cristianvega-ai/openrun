@@ -1,7 +1,7 @@
 [package]
 authors.workspace = true
 default-run = "warp-oss"
-description = "The cloud-backed terminal for individuals and teams"
+description = "An open-source terminal that works fully offline"
 edition = "2024"
 autobins = false
 name = "warp"
@@ -412,7 +412,7 @@ identifier = "dev.warp.WarpOss"
 name = "WarpOss"
 resources = ["assets/onboarding"]
 icon = ["channels/oss/icon/no-padding/512x512.png", "channels/oss/icon/no-padding/icon.ico"]
-short_description = "The open-source, cloud-backed terminal for individuals and teams."
+short_description = "An open-source terminal that works fully offline."
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["embed_plist"]

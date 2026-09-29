@@ -325,7 +325,7 @@ fn test_history_order() {
     let now = Local::now();
 
     // Commands in current session
-    let current_session_cmd = HistoryInputSuggestion::Command {
+    let current_session_cmd = HistoryInputSuggestion {
         entry: &HistoryEntry::command_at_time(
             "echo current session".to_string(),
             now,
@@ -339,7 +339,7 @@ fn test_history_order() {
     );
 
     // Commands in different live session
-    let different_session_cmd = HistoryInputSuggestion::Command {
+    let different_session_cmd = HistoryInputSuggestion {
         entry: &HistoryEntry::command_at_time(
             "echo different session".to_string(),
             now,
@@ -353,7 +353,7 @@ fn test_history_order() {
     );
 
     // Restored commands in current session are treated as CurrentSession
-    let restored_cmd = HistoryInputSuggestion::Command {
+    let restored_cmd = HistoryInputSuggestion {
         entry: &HistoryEntry::command_at_time("echo restored".to_string(), now, None, true),
     };
     assert_eq!(
@@ -362,7 +362,7 @@ fn test_history_order() {
     );
 
     // Commands with no session are treated as DifferentSession
-    let no_session_cmd = HistoryInputSuggestion::Command {
+    let no_session_cmd = HistoryInputSuggestion {
         entry: &HistoryEntry::command_at_time(
             "echo no session".to_string(),
             now - chrono::Duration::seconds(10),

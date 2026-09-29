@@ -353,7 +353,7 @@ fn multiple_resizes_cursor_position_restoration() {
 }
 
 #[test]
-fn non_sequential_resizes_cursor_restoration() {
+fn resizes_cursor_restoration() {
     let mut grid = GridHandler::new_for_test_with_scroll_limit(5, 5, 10);
     {
         // Populate the grid with some data
@@ -366,7 +366,7 @@ fn non_sequential_resizes_cursor_restoration() {
     }
     grid.set_cursor_point(3, 4);
 
-    // Non-sequential resizes
+    // Resize back and forth
     grid.resize(SizeInfo::new_without_font_metrics(3, 3)); // Shrink
     grid.resize(SizeInfo::new_without_font_metrics(2, 4)); // Shrink width, grow height
     grid.resize(SizeInfo::new_without_font_metrics(4, 2)); // Grow width, shrink height

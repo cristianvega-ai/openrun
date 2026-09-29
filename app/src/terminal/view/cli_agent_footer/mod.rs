@@ -328,7 +328,7 @@ impl View for CLIAgentFooter {
         // would deadlock since the lock is non-reentrant.
         let background_color = {
             let terminal_model = self.terminal_model.lock();
-            
+
             if terminal_model.is_alt_screen_active() {
                 terminal_model
                     .alt_screen()
