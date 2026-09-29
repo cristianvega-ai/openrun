@@ -2655,22 +2655,14 @@ fn terminal_tab_config(name: &str, source_path: Option<PathBuf>) -> crate::tab_c
     }
 }
 
-/// The default tab config is a terminal feature: it applies while AI is unavailable.
 #[test]
-fn test_add_default_tab_opens_default_tab_config_while_ai_is_off() {
+fn test_add_default_tab_opens_default_tab_config() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let workspace = mock_workspace(&mut app);
 
         let config_path = PathBuf::from("/tmp/default-tab-config.toml");
         app.update(|ctx| {
-            AISettings::handle(ctx).update(ctx, |settings, ctx| {
-                settings
-                    .is_any_ai_enabled
-                    .set_value(false, ctx)
-                    .expect("disable AI");
-            });
-            assert!(!AISettings::as_ref(ctx).is_any_ai_enabled(ctx));
             WarpConfig::handle(ctx).update(ctx, |config, ctx| {
                 config.set_tab_configs(
                     vec![terminal_tab_config(
@@ -2686,14 +2678,14 @@ fn test_add_default_tab_opens_default_tab_config_while_ai_is_off() {
                     .set_value(config_path.to_string_lossy().into_owned(), ctx)
                     .expect("set default tab config path");
             });
-            AISettings::handle(ctx).update(ctx, |settings, ctx| {
+            GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                 settings
                     .default_session_mode_internal
                     .set_value(DefaultSessionMode::TabConfig, ctx)
                     .expect("set default session mode");
             });
             assert_eq!(
-                AISettings::as_ref(ctx).default_session_mode(),
+                GeneralSettings::as_ref(ctx).default_session_mode(),
                 DefaultSessionMode::TabConfig
             );
         });
@@ -2730,7 +2722,7 @@ fn test_add_default_tab_reverts_to_terminal_when_default_tab_config_is_missing()
                     .set_value("/tmp/missing-tab-config.toml".to_string(), ctx)
                     .expect("set default tab config path");
             });
-            AISettings::handle(ctx).update(ctx, |settings, ctx| {
+            GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                 settings
                     .default_session_mode_internal
                     .set_value(DefaultSessionMode::TabConfig, ctx)
@@ -2746,7 +2738,7 @@ fn test_add_default_tab_reverts_to_terminal_when_default_tab_config_is_missing()
         workspace.read(&app, |workspace, ctx| {
             assert_eq!(workspace.tab_count(), tabs_before + 1);
             assert_eq!(
-                AISettings::as_ref(ctx).default_session_mode(),
+                GeneralSettings::as_ref(ctx).default_session_mode(),
                 DefaultSessionMode::Terminal
             );
             assert!(

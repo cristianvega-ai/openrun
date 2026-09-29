@@ -8,33 +8,6 @@ use crate::code::editor::EditorReviewComment;
 use crate::code::editor::line::EditorLineLocation;
 use crate::code_review::diff_set::{CurrentHead, DiffBase};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum CommentOrigin {
-    /// Comments originally created in the Warp UI.
-    #[default]
-    Native,
-    /// Comments imported from a GitHub pull request.
-    ImportedFromGitHub(ImportedCommentDetails),
-}
-
-impl CommentOrigin {
-    pub(crate) fn is_imported_from_github(&self) -> bool {
-        matches!(self, Self::ImportedFromGitHub(_))
-    }
-}
-
-/// Imported comment metadata for GitHub-specific fields.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ImportedCommentDetails {
-    pub author: String,
-    /// The GitHub comment ID from the API.
-    pub github_comment_id: String,
-    /// The GitHub parent comment ID if this was a reply.
-    /// Should be None for threaded comments after flattening.
-    pub github_parent_id: Option<String>,
-    pub html_url: Option<String>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct LineDiffContent {
     pub content: String,
@@ -53,19 +26,6 @@ impl LineDiffContent {
             .or_else(|| s.strip_prefix('-'))
             .unwrap_or(s)
             .to_string()
-    }
-
-    /// The source-line text for a comment imported from a provider diff hunk.
-    ///
-    /// Unlike [`Self::original_text`], this strips exactly one leading
-    /// unified-diff marker — `+`, `-`, or the space that context (unchanged)
-    /// lines carry — recovering the raw file line. It must only be used for
-    /// imported comments, whose `content` is always a diff line with exactly one
-    /// such prefix char; native comments store raw text (real leading
-    /// indentation is significant) and must use [`Self::original_text`] instead.
-    pub(crate) fn imported_original_text(&self) -> String {
-        let s = self.content.trim_end_matches('\n');
-        s.strip_prefix(['+', '-', ' ']).unwrap_or(s).to_string()
     }
 
     pub(crate) fn from_content(diff_line: &str) -> Self {
@@ -115,7 +75,6 @@ pub struct AttachedReviewComment {
     pub base: Option<DiffBase>,
     pub head: Option<CurrentHead>,
     pub outdated: bool,
-    pub origin: CommentOrigin,
 }
 
 /// Target for an attached review comment. File paths are always absolute when present.
@@ -170,16 +129,11 @@ impl AttachedReviewComment {
             },
             last_update_time: comment.last_update_time,
             outdated: false,
-            origin: CommentOrigin::Native,
         }
     }
 
     pub fn head(&self) -> Option<&CurrentHead> {
         self.head.as_ref()
-    }
-
-    pub fn origin(&self) -> &CommentOrigin {
-        &self.origin
     }
 }
 

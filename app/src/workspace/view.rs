@@ -184,9 +184,9 @@ use crate::server::telemetry::{
 };
 use crate::session_management::{SessionNavigationData, SessionSource, TabNavigationData};
 use crate::settings::{
-    AISettings, AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
+    AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
     BlockVisibilitySettings, CLIAgentSettings, CLIAgentSettingsChangedEvent, CodeSettings,
-    CodeSettingsChangedEvent, CtrlTabBehavior, CursorBlink, DebugSettings, DefaultSessionMode,
+    CodeSettingsChangedEvent, CtrlTabBehavior, CursorBlink, DebugSettings,
     FontSettings, GPUSettings, InputSettings, MonospaceFontSize, PaneSettings, SelectionSettings,
     SshSettings, ThemeSettings, active_theme_kind, respect_system_theme,
 };
@@ -220,7 +220,7 @@ use crate::terminal::available_shells::AvailableShell;
 #[cfg(target_os = "windows")]
 use crate::terminal::available_shells::AvailableShells;
 use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, CLIAgentSessionsModelEvent};
-use crate::terminal::general_settings::GeneralSettings;
+use crate::terminal::general_settings::{DefaultSessionMode, GeneralSettings};
 #[cfg(not(target_family = "wasm"))]
 use crate::terminal::input::{EXTERNAL_ALT_C_BINDING_CONTEXT, Input, MenuPositioning};
 use crate::terminal::keys_settings::KeysSettings;
@@ -1465,7 +1465,7 @@ impl Workspace {
         match event {
             RemoveTabConfigConfirmationEvent::Confirm { path } => {
                 // If the removed config was the default, revert to Terminal.
-                let is_removed_default = AISettings::as_ref(ctx).default_session_mode()
+                let is_removed_default = GeneralSettings::as_ref(ctx).default_session_mode()
                     == DefaultSessionMode::TabConfig
                     && GeneralSettings::as_ref(ctx).default_tab_config_path()
                         == path.to_string_lossy();
@@ -1476,8 +1476,6 @@ impl Workspace {
                                 .default_tab_config_path
                                 .set_value(String::new(), ctx)
                         );
-                    });
-                    AISettings::handle(ctx).update(ctx, |settings, ctx| {
                         report_if_error!(
                             settings
                                 .default_session_mode_internal
@@ -4440,7 +4438,7 @@ impl Workspace {
     ) -> Vec<MenuItem<WorkspaceAction>> {
         let mut menu_items = vec![];
 
-        let effective_default = AISettings::as_ref(ctx).default_session_mode();
+        let effective_default = GeneralSettings::as_ref(ctx).default_session_mode();
         let default_tab_config_path = GeneralSettings::as_ref(ctx)
             .default_tab_config_path()
             .to_string();
@@ -14888,7 +14886,7 @@ impl TypedActionView for Workspace {
                 }
             }
             AddDefaultTab => {
-                let effective_mode = AISettings::as_ref(ctx).default_session_mode();
+                let effective_mode = GeneralSettings::as_ref(ctx).default_session_mode();
                 match effective_mode {
                     DefaultSessionMode::TabConfig => {
                         if let Some(config) =
@@ -14903,8 +14901,6 @@ impl TypedActionView for Workspace {
                                         .default_tab_config_path
                                         .set_value(String::new(), ctx)
                                 );
-                            });
-                            AISettings::handle(ctx).update(ctx, |settings, ctx| {
                                 report_if_error!(
                                     settings
                                         .default_session_mode_internal
@@ -15006,7 +15002,7 @@ impl TypedActionView for Workspace {
                         );
                     });
                 }
-                AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.default_session_mode_internal.set_value(*mode, ctx));
                 });
                 #[cfg(feature = "local_tty")]
@@ -16540,7 +16536,7 @@ impl View for Workspace {
 
                 if let Some(anchor_label) = anchor_label {
                     let is_already_default = {
-                        let current_mode = AISettings::as_ref(app).default_session_mode();
+                        let current_mode = GeneralSettings::as_ref(app).default_session_mode();
                         let current_path = GeneralSettings::as_ref(app).default_tab_config_path();
                         match sidecar_item {
                             SidecarItemKind::BuiltIn {

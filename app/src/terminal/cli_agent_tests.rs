@@ -12,7 +12,7 @@ use super::{
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor::line::EditorLineLocation;
 use crate::code_review::comments::{
-    AgentReviewCommentBatch, AttachedReviewComment, AttachedReviewCommentTarget, CommentOrigin,
+    AgentReviewCommentBatch, AttachedReviewComment, AttachedReviewCommentTarget,
     LineDiffContent,
 };
 use crate::code_review::diff_set::DiffSetHunk;
@@ -43,7 +43,6 @@ fn make_comment(
         base: None,
         head: None,
         outdated,
-        origin: CommentOrigin::Native,
     }
 }
 

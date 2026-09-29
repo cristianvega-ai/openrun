@@ -73,7 +73,7 @@ use crate::code::{
     NoopCommentEditorProvider, NoopFindReferencesCardProvider, ShowCommentEditorProvider,
     ShowFindReferencesCardProvider,
 };
-use crate::code_review::comments::{CommentId, CommentOrigin};
+use crate::code_review::comments::CommentId;
 use crate::editor::InteractionState;
 use crate::features::FeatureFlag;
 use crate::notebooks::editor::rich_text_styles;
@@ -2053,7 +2053,6 @@ impl CodeEditorView {
         id: &CommentId,
         location: &EditorLineLocation,
         comment_text: &str,
-        origin: &CommentOrigin,
         ctx: &mut ViewContext<Self>,
     ) {
         let comment_exists = self
@@ -2075,13 +2074,12 @@ impl CodeEditorView {
                     id,
                     Some(location.clone()),
                     comment_text,
-                    origin,
                     ctx,
                 );
             });
 
         self.model.update(ctx, |editor_model, ctx| {
-            editor_model.reopen_comment_line(id, location, comment_text, origin, ctx);
+            editor_model.reopen_comment_line(id, location, comment_text, ctx);
         });
         ctx.emit(CodeEditorEvent::CommentEditorOpened);
 

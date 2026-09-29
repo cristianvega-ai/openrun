@@ -53,10 +53,9 @@ use crate::gpu_state::{GPUState, GPUStateEvent};
 use crate::root_view::QuakeModePinPosition;
 use crate::search::command_search::settings::CommandSearchSettings;
 use crate::server::telemetry::TelemetryEvent;
-use crate::settings::ai::AISettings;
 use crate::settings::{
-    AISettingsChangedEvent, AliasExpansionSettings, AppEditorSettings, CLIAgentSettings,
-    CodeSettings, CtrlTabBehavior, DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES, DefaultSessionMode,
+    AliasExpansionSettings, AppEditorSettings, CLIAgentSettings,
+    CodeSettings, CtrlTabBehavior, DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES,
     ExtraMetaKeys, GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
     QUAKE_WINDOW_AUTOHIDE_SUPPORTED, QuakeModeSettings, RightClickBehavior, ScrollSettings,
     ScrollSettingsChangedEvent, SelectionSettings, SelectionSettingsChangedEvent, SshSettings,
@@ -64,7 +63,9 @@ use crate::settings::{
 };
 use crate::terminal::BlockListSettings;
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
-use crate::terminal::general_settings::GeneralSettings;
+use crate::terminal::general_settings::{
+    DefaultSessionMode, GeneralSettings, GeneralSettingsChangedEvent,
+};
 use crate::terminal::input::OPEN_COMPLETIONS_KEYBINDING_NAME;
 use crate::terminal::keys_settings::{KeysSettings, KeysSettingsChangedEvent};
 use crate::terminal::session_settings::{
@@ -1905,10 +1906,8 @@ impl TypedActionView for FeaturesPageView {
                             .default_tab_config_path
                             .set_value(path.clone(), ctx)
                     );
-                });
-                AISettings::handle(ctx).update(ctx, |ai_settings, ctx| {
                     report_if_error!(
-                        ai_settings
+                        general_settings
                             .default_session_mode_internal
                             .set_value(DefaultSessionMode::TabConfig, ctx)
                     );
@@ -2242,8 +2241,8 @@ impl FeaturesPageView {
             ctx.notify();
         });
 
-        ctx.subscribe_to_model(&AISettings::handle(ctx), |me, _, event, ctx| {
-            if matches!(event, AISettingsChangedEvent::DefaultSessionMode { .. }) {
+        ctx.subscribe_to_model(&GeneralSettings::handle(ctx), |me, _, event, ctx| {
+            if matches!(event, GeneralSettingsChangedEvent::DefaultSessionMode { .. }) {
                 Self::update_default_session_mode_dropdown(
                     me.default_session_mode_dropdown.clone(),
                     ctx,
@@ -3528,7 +3527,7 @@ impl FeaturesPageView {
         dropdown.update(
             ctx,
             |dropdown: &mut FilterableDropdown<FeaturesPageAction>, ctx| {
-                let current_mode = AISettings::as_ref(ctx).default_session_mode();
+                let current_mode = GeneralSettings::as_ref(ctx).default_session_mode();
                 let current_tab_config_path = GeneralSettings::as_ref(ctx)
                     .default_tab_config_path()
                     .to_string();
@@ -3582,9 +3581,9 @@ impl FeaturesPageView {
         value: &DefaultSessionMode,
         ctx: &mut ViewContext<Self>,
     ) {
-        AISettings::handle(ctx).update(ctx, |ai_settings, ctx| {
+        GeneralSettings::handle(ctx).update(ctx, |general_settings, ctx| {
             report_if_error!(
-                ai_settings
+                general_settings
                     .default_session_mode_internal
                     .set_value(*value, ctx)
             );

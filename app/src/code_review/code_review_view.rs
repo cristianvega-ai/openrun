@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::mem;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -55,7 +55,7 @@ use warpui::{
 
 use super::code_review_header::CodeReviewHeader;
 use super::comment_list_view::{CommentListDebugState, CommentListEvent, CommentListView};
-use super::comments::{AttachedReviewComment, CommentOrigin, attach_pending_imported_comments};
+use super::comments::AttachedReviewComment;
 use super::diff_size_limits::DiffSize;
 use super::git_dialog::{GitDialog, GitDialogEvent, GitDialogKind};
 use super::{GlobalCodeReviewEvent, GlobalCodeReviewModel};
@@ -993,8 +993,7 @@ impl CodeReviewView {
         } = event
             && self.all_editors_loaded()
         {
-            let diff_mode = self.diff_state_model.as_ref(ctx).diff_mode(ctx);
-            self.reposition_comments_in_file(&diff_mode, ctx);
+            self.reposition_comments_in_file(ctx);
         }
     }
 
@@ -1696,7 +1695,6 @@ impl CodeReviewView {
                     &comment.id,
                     None,
                     &comment.content,
-                    &comment.origin,
                     ctx,
                 );
             });
@@ -1724,7 +1722,6 @@ impl CodeReviewView {
                         base,
                         head,
                         outdated: false,
-                        origin: CommentOrigin::Native,
                     };
 
                     me.update_review_comment(new_comment, ctx);
@@ -1791,7 +1788,6 @@ impl CodeReviewView {
                             &comment.id,
                             line,
                             &comment.content,
-                            comment.origin(),
                             ctx,
                         );
                     });
@@ -2520,8 +2516,7 @@ impl CodeReviewView {
         );
 
         if self.all_editors_loaded() {
-            let diff_mode = self.diff_state_model.as_ref(ctx).diff_mode(ctx);
-            self.reposition_comments_in_file(&diff_mode, ctx);
+            self.reposition_comments_in_file(ctx);
         }
 
         self.update_editor_comment_markers(ctx);
@@ -2751,14 +2746,6 @@ impl CodeReviewView {
 
     fn delete_comment_by_id(&mut self, id: CommentId, ctx: &mut ViewContext<Self>) {
         if let Some(model) = self.active_comment_model.clone() {
-            let is_imported = model
-                .read(ctx, |batch, _| {
-                    batch
-                        .get_review_comment_by_id(id)
-                        .map(|c| c.origin.is_imported_from_github())
-                })
-                .unwrap_or(false);
-
             model.update(ctx, |batch, ctx| {
                 batch.delete_comment(id, ctx);
             });
@@ -2766,7 +2753,7 @@ impl CodeReviewView {
             send_telemetry_from_ctx!(
                 CodeReviewTelemetryEvent::CommentDeleted {
                     is_local: self.repo_is_local(),
-                    is_imported,
+                    is_imported: false,
                 },
                 ctx
             );
@@ -3208,14 +3195,12 @@ impl CodeReviewView {
                 match &existing_comment.target {
                     AttachedReviewCommentTarget::Line { line, .. } => {
                         let comment_text = &existing_comment.content;
-                        let origin = &existing_comment.origin;
                         editor.update(ctx, |local_code_editor, ctx| {
                             local_code_editor.editor().update(ctx, |code_editor, ctx| {
                                 code_editor.open_existing_comment(
                                     comment_id,
                                     line,
                                     comment_text,
-                                    origin,
                                     ctx,
                                 );
                             });
@@ -3328,8 +3313,7 @@ impl CodeReviewView {
         }
 
         if self.all_editors_loaded() {
-            let diff_mode = self.diff_state_model.as_ref(ctx).diff_mode(ctx);
-            self.reposition_comments_in_file(&diff_mode, ctx);
+            self.reposition_comments_in_file(ctx);
         }
     }
 
@@ -3490,15 +3474,7 @@ impl CodeReviewView {
                     return comment;
                 };
 
-                // Imported comments store the raw provider diff line, including its
-                // one-char unified-diff marker (`+`/`-`/space); strip it to recover
-                // the file line for matching. Native comments store raw text where a
-                // leading space would be significant indentation, so keep it as-is.
-                let match_text = if comment.origin.is_imported_from_github() {
-                    content.imported_original_text()
-                } else {
-                    content.original_text()
-                };
+                let match_text = content.original_text();
 
                 let (new_location, new_content, used_fallback) =
                     editor_view.update(ctx, |local_editor, ctx| {
@@ -3531,7 +3507,7 @@ impl CodeReviewView {
         }
     }
 
-    fn reposition_comments_in_file(&mut self, diff_mode: &DiffMode, ctx: &mut ViewContext<Self>) {
+    fn reposition_comments_in_file(&mut self, ctx: &mut ViewContext<Self>) {
         let Some(model) = &self.active_comment_model else {
             report_error!(anyhow::anyhow!(
                 "Failed to relocate PR comments: CodeReviewView diff state not loaded",
@@ -3549,14 +3525,7 @@ impl CodeReviewView {
             return;
         };
 
-        let mut comments = model.update(ctx, |batch, _| batch.take_comments());
-        let pending_imported = model.update(ctx, |batch, _| {
-            batch.take_pending_imported_comments_for_branch(diff_mode)
-        });
-
-        let newly_imported = attach_pending_imported_comments(pending_imported, &repo_path);
-        let newly_imported_ids: HashSet<CommentId> = newly_imported.iter().map(|c| c.id).collect();
-        comments.extend(newly_imported);
+        let comments = model.update(ctx, |batch, _| batch.take_comments());
 
         if comments.is_empty() {
             return;
@@ -3572,27 +3541,6 @@ impl CodeReviewView {
                 CodeReviewTelemetryEvent::CommentRelocationFailed {
                     is_local: self.repo_is_local(),
                     fallback_count,
-                },
-                ctx
-            );
-        }
-
-        if !newly_imported_ids.is_empty() {
-            let (active_count, outdated_count) = relocated_comments
-                .iter()
-                .filter(|c| newly_imported_ids.contains(&c.id))
-                .fold((0usize, 0usize), |(active, outdated), c| {
-                    if c.outdated {
-                        (active, outdated + 1)
-                    } else {
-                        (active + 1, outdated)
-                    }
-                });
-            send_telemetry_from_ctx!(
-                CodeReviewTelemetryEvent::CommentsAttached {
-                    is_local: self.repo_is_local(),
-                    active_count,
-                    outdated_count,
                 },
                 ctx
             );

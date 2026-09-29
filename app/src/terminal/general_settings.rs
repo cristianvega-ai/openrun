@@ -1,4 +1,6 @@
+use settings::Setting as _;
 use settings_value::LenientSet;
+use strum_macros::EnumIter;
 use warp_core::settings::macros::define_settings_group;
 use warp_core::settings::{RespectUserSyncSetting, SupportedPlatforms, SyncToCloud};
 use warpui::{AppContext, SingletonEntity as _};
@@ -7,6 +9,100 @@ use crate::banner::BannerState;
 use crate::resource_center::Tip;
 use crate::tab_configs::TabConfig;
 use crate::user_config::WarpConfig;
+
+/// The default mode for new terminal sessions.
+#[derive(
+    Default, Debug, serde::Serialize, PartialEq, Copy, Clone, EnumIter, schemars::JsonSchema,
+)]
+#[schemars(
+    description = "Default mode for new sessions.",
+    rename_all = "snake_case"
+)]
+pub enum DefaultSessionMode {
+    /// New sessions start in the terminal mode (default).
+    #[default]
+    Terminal,
+    /// New sessions open a user-defined tab config.
+    /// The specific config is identified by the companion `default_tab_config_path` setting.
+    TabConfig,
+}
+
+settings::macros::implement_setting_for_enum!(
+    DefaultSessionMode,
+    GeneralSettings,
+    SupportedPlatforms::ALL,
+    SyncToCloud::Globally(RespectUserSyncSetting::Yes),
+    surface: settings::SettingSurfaces::GUI,
+    private: false,
+    toml_path: "general.default_session_mode",
+    description: "The default mode for new terminal sessions.",
+);
+
+/// Modes that earlier builds offered and that no longer exist. A stored value naming one of
+/// these opens new sessions in the default mode instead of invalidating the setting.
+const RETIRED_DEFAULT_SESSION_MODES: [&str; 3] = ["agent", "cloud_agent", "docker_sandbox"];
+
+impl DefaultSessionMode {
+    /// Reads a stored mode name in either the settings-file (`tab_config`) or the serialized
+    /// (`TabConfig`) spelling. Retired modes read as the default; unknown names are rejected.
+    fn from_stored_name(name: &str) -> Option<Self> {
+        let snake_case = name
+            .chars()
+            .enumerate()
+            .flat_map(|(index, c)| {
+                let separator = (c.is_ascii_uppercase() && index > 0).then_some('_');
+                separator
+                    .into_iter()
+                    .chain(std::iter::once(c.to_ascii_lowercase()))
+            })
+            .collect::<String>();
+        match snake_case.as_str() {
+            "terminal" => Some(Self::Terminal),
+            "tab_config" => Some(Self::TabConfig),
+            retired if RETIRED_DEFAULT_SESSION_MODES.contains(&retired) => {
+                log::warn!("Ignoring retired default session mode {name:?}");
+                Some(Self::default())
+            }
+            _ => None,
+        }
+    }
+
+    fn file_name(&self) -> &'static str {
+        match self {
+            DefaultSessionMode::Terminal => "terminal",
+            DefaultSessionMode::TabConfig => "tab_config",
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DefaultSessionMode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Self::from_stored_name(&name).ok_or_else(|| {
+            serde::de::Error::custom(format!("unknown default session mode {name:?}"))
+        })
+    }
+}
+
+impl settings_value::SettingsValue for DefaultSessionMode {
+    fn to_file_value(&self) -> serde_json::Value {
+        serde_json::Value::String(self.file_name().to_owned())
+    }
+
+    fn from_file_value(value: &serde_json::Value) -> Option<Self> {
+        Self::from_stored_name(value.as_str()?)
+    }
+}
+
+impl DefaultSessionMode {
+    /// Display name for the settings dropdown.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            DefaultSessionMode::Terminal => "Terminal",
+            DefaultSessionMode::TabConfig => "Tab Config",
+        }
+    }
+}
 
 define_settings_group!(GeneralSettings, settings: [
     show_warning_before_quitting: ShowWarningBeforeQuitting {
@@ -164,9 +260,14 @@ define_settings_group!(GeneralSettings, settings: [
         private: false,
         toml_path: "general.default_tab_config_path",
     },
+    default_session_mode_internal: DefaultSessionMode,
 ]);
 
 impl GeneralSettings {
+    pub fn default_session_mode(&self) -> DefaultSessionMode {
+        *self.default_session_mode_internal.value()
+    }
+
     /// Returns the stored default tab config path (only meaningful when the default session
     /// mode is `TabConfig`).
     pub fn default_tab_config_path(&self) -> &str {

@@ -92,6 +92,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Terminal input: input-mode model for the CLI composer](#terminal-input-input-mode-model-for-the-cli-composer) — `BlocklistAIInputModel` is now `terminal/input/input_mode_model.rs` (`InputModeModel`, `InputType::{Shell, Prompt}`); prompt input is only reachable through the CLI agent rich input (Ctrl-G, footer button, auto-open); removed the Cmd-I toggle, the "Use agent" footer, the agent-view checks in `input.rs` and the AI-settings reset that could knock the composer back to shell input
 - [Terminal view: agent view, conversation restore and agent chrome](#terminal-view-agent-view-conversation-restore-and-agent-chrome) — removed the agent view (`AgentViewController` and the whole `ai/blocklist/agent_view/` module), the zero-state block, conversation restore, fork and rewind, the conversation details panel and artifact UI, the CLI subagent controller and views, the agent toolbar (`AgentInputFooter`, its editor modal and layout setting), the Oz desktop notification and the conversation-history palette chain
 - [Terminal view and model: AI blocks, agent block state and the remaining AI plumbing](#terminal-view-and-model-ai-blocks-agent-block-state-and-the-remaining-ai-plumbing) — deleted the AI block views (`ai/blocklist/{block, inline_action, code_block, ...}`) and the AI controller, action, context and task-sync models from the terminal view; removed `AgentViewVisibility`, `TranscriptScope`, block `ai_metadata`, `InteractionMode` and the agent fields of `SerializedBlock` from the terminal model; sessions saved with agent blocks restore without them; image and file attachments for the CLI composer moved to a small non-AI model; dropped the Bedrock login banners, the AI query history suggestions and the agent diff accept flow of the code editor
+- [Default session mode and code review comments: types that outlive `app/src/ai`](#default-session-mode-and-code-review-comments-types-that-outlive-appsrcai) — `DefaultSessionMode` moved from `AISettings` to `GeneralSettings`; deleted the dead GitHub-imported review comment path and `CommentOrigin`
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
@@ -2413,3 +2414,19 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `LocalCodeEditorView` still has the `diff_type` and `is_new_file` state of the agent edit proposal (code-review editors pass `None`); AI-29 or AI-33 can remove it with the remaining `code/` dead-code warnings (`FocusedDiffHunk` is gone, `PrimaryRightBiasedTheme` and `CommentViewCard::{toggle_collapsed, is_collapsed}` are older dead code).
 - The `block_selection_as_context_*` and `text_selection_as_context_color` theme accessors in `warp_core` have no users left (AI-33).
 - `SecretTooltip` and `HistoryInputSuggestion` are single-variant enums now; AI-33 can flatten them.
+
+## Default session mode and code review comments: types that outlive `app/src/ai`
+**Why:** AI-29 deletes `app/src/ai`, `AISettings` and the `ai` crate imports. Two things that are not AI lived inside them: the default session mode of new tabs, and the code review comment types that borrowed the agent's `InsertReviewComment` wire types.
+
+**Moved:**
+- `DefaultSessionMode` (Terminal and TabConfig), its `default_session_mode_internal` setting, its lenient reader (retired `agent`, `cloud_agent` and `docker_sandbox` values still read as Terminal) and the tests for it moved from `settings/ai.rs` to `terminal/general_settings.rs`, next to `default_tab_config_path`. The type name, the storage key and `toml_path = "general.default_session_mode"` are unchanged, so existing preferences keep working. The settings event is now `GeneralSettingsChangedEvent::DefaultSessionMode`. Setting the default tab config now writes both settings in one `GeneralSettings` update.
+
+**Removed:**
+- The GitHub-imported review comment path of code review, which nothing could feed since the agent-inserted comment chain went away in AI-28: `code_review/comments/{pending_imported, flatten, convert, diff_hunk_parser}.rs` (with their `ai::agent::action` review-comment types), `ReviewCommentBatch::take_pending_imported_comments_for_branch`, the import step of `CodeReviewView::reposition_comments_in_file`, `CommentOrigin` (and `AttachedReviewComment::origin`), `ImportedCommentDetails`, `LineDiffContent::imported_original_text`, the "From GitHub" label and "Comment imported from GitHub" footer indicator, and the "View in GitHub" overflow item.
+
+**Modified:** `test_add_default_tab_opens_default_tab_config_while_ai_is_off` lost the AI-off setup (it is `test_add_default_tab_opens_default_tab_config`).
+
+**User-visible impact:** None. Local review comments, the comment list and "send comments to CLI agent" behave as before.
+
+**Notes:**
+- The `CommentsAttached` and `CommentsReceived` code review telemetry variants have no emitter left (TEL-4).
