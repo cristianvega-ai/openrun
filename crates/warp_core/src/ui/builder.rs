@@ -238,8 +238,7 @@ impl UiBuilder {
         let font_color = self.warp_theme().disabled_text_color(background);
         match variant {
             // TODO: we should re-investigate if we want to do this for disabled Text buttons,
-            // as it doesn't conform to our design specification here:
-            // https://www.figma.com/file/chk9pwt35jTJhf9KnHmZyE/Components?node-id=401%3A260.
+            // as it doesn't conform to our design specification.
             ButtonVariant::Text => self.text_button_styles(font_color),
             ButtonVariant::Link => self.text_button_styles(font_color),
             _ => self.base_styles(Some(background), background, font_color),

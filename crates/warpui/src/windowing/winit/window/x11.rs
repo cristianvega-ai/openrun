@@ -35,7 +35,6 @@ pub(super) struct X11Manager {
     /// Rather, if there are multiple monitors plugged in, they get pooled into a single, shared
     /// coordinate space called a "screen". This allows windows to span multiple displays, as X11
     /// does not assume that any window belongs to one monitor.
-    /// https://docs.google.com/drawings/d/1XeYRd9I7liQMj9w17QQZoeHSNYBJ_U0wEQh-pS_4eKM
     screen_index: usize,
     atoms: Atoms,
 }

@@ -29,8 +29,6 @@ pub trait Theme {
 }
 
 /// "Primary" buttons have a colorful fill.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=GRYXipD0INVmDupA-0)
 pub struct Primary;
 
 impl Theme for Primary {
@@ -54,8 +52,6 @@ impl Theme for Primary {
 }
 
 /// "Secondary" buttons have no fill and a border.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=L1sS5Nxu1zzpWPYp-0)
 pub struct Secondary;
 
 impl Theme for Secondary {
@@ -81,8 +77,6 @@ impl Theme for Secondary {
 }
 
 /// "Disabled" buttons have a disabled fill and text color.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=c27DwGHWevMlisVN-0)
 pub struct Disabled;
 
 impl Theme for Disabled {

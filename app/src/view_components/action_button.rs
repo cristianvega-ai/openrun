@@ -34,7 +34,7 @@ const TOOLTIP_MAX_WIDTH: f32 = 300.;
 
 /// A consistent Button component.
 ///
-/// This corresponds to the Figma [`button` component](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=GRYXipD0INVmDupA-0).
+/// It follows the shared button component design.
 /// It's named `ActionButton` to not conflict with the existing `Button` `UiComponent`.
 pub struct ActionButton {
     /// If `true`, this button is active, so we reuse the hover styles.
@@ -979,8 +979,6 @@ impl TypedActionView for ActionButton {
 }
 
 /// "DangerPrimary" buttons have a red fill for destructive actions.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=c27DwGHWevMlisVN-0)
 pub struct DangerPrimaryTheme;
 
 impl ActionButtonTheme for DangerPrimaryTheme {
@@ -1012,8 +1010,6 @@ impl ActionButtonTheme for DangerPrimaryTheme {
 }
 
 /// "Disabled" buttons have a disabled fill and text color.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=c27DwGHWevMlisVN-0)
 pub struct DisabledTheme;
 
 impl ActionButtonTheme for DisabledTheme {
@@ -1036,8 +1032,6 @@ impl ActionButtonTheme for DisabledTheme {
 }
 
 /// "Naked" buttons have no fill or border, only their contents.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=c27DwGHWevMlisVN-0)
 pub struct NakedTheme;
 
 impl ActionButtonTheme for NakedTheme {
@@ -1082,8 +1076,6 @@ impl ActionButtonTheme for PaneHeaderTheme {
 }
 
 /// The "Danger Naked" button variant.
-///
-/// [Figma Spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=MQvgxvZWjcapwzkK-11).
 pub struct DangerNakedTheme;
 
 impl ActionButtonTheme for DangerNakedTheme {
@@ -1114,8 +1106,6 @@ impl ActionButtonTheme for DangerNakedTheme {
 }
 
 /// "Secondary" buttons have no fill and a border.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=L1sS5Nxu1zzpWPYp-0)
 pub struct SecondaryTheme;
 
 impl ActionButtonTheme for SecondaryTheme {
@@ -1173,8 +1163,6 @@ impl ActionButtonTheme for DisabledSecondaryTheme {
 }
 
 /// "Primary" buttons have a colorful fill.
-///
-/// [Figma spec](https://www.figma.com/design/chk9pwt35jTJhf9KnHmZyE/Components?node-id=3628-14344&t=GRYXipD0INVmDupA-0)
 pub struct PrimaryTheme;
 
 impl ActionButtonTheme for PrimaryTheme {

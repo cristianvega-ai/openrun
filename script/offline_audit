@@ -55,6 +55,8 @@ HOST_PATTERNS = [
     r"gstatic\.com", r"google-analytics", r"googletagmanager", r"cloudfunctions\.net",
     r"\.run\.app\b", r"appspot\.com", r"mixpanel", r"amplitude\.com", r"datadoghq",
     r"posthog", r"bugsnag", r"launchdarkly", r"statsig", r"honeycomb\.io",
+    # Warp-internal design docs, TDDs and debugging notes: none may be linked from the code.
+    r"notion\.so", r"figma\.com", r"docs\.google\.com",
 ]
 
 REVIEW_PATTERNS = [

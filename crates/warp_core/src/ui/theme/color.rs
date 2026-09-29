@@ -1,7 +1,5 @@
 //! Module providing utility functions to retrieve the colors used within our ui system and
 //! designs.
-//! These colors can be further understood here:
-//! https://docs.google.com/document/d/1YMovEoXsPRziPk99a4i9LZNEKGm_rjEyzhcHsFkT3ac/edit.
 
 use getset::Getters;
 use serde::{Deserialize, Serialize};
@@ -407,7 +405,7 @@ impl WarpTheme {
     }
 }
 
-/// Internal color system tokens, defined in "Colors" [Figma project](https://www.figma.com/design/dnvTdLbfFaosFSP00F30S0/Colors).
+/// Internal color system tokens.
 /// Should not be used directly outside of reusable components. Use color methods on `WarpTheme` instead.
 pub mod internal_colors {
     use warpui_core::color::ColorU;

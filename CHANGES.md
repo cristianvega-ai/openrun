@@ -132,6 +132,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Import formatting](#import-formatting) — ran `./script/format` so the CI format check passes
 - [Background git and GitHub traffic](#background-git-and-github-traffic) — `gh` and remote `git` now run only while a PR chip or the code-review panel is in use, or on an explicit action; removed the leftover "agent context" triggers and the dead `git fetch origin`
 - [Offline indicator and network reachability watchers](#offline-indicator-and-network-reachability-watchers) — removed the tab-bar "Some features may be unavailable offline" icon, the `NetworkStatus` model and the macOS, Linux, Windows and web reachability watchers
+- [Warp-internal design links](#warp-internal-design-links) — removed Notion, Figma and Google Docs links from comments and a debug assertion message; `script/offline_audit` now fails on them
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3354,3 +3355,15 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 **User-visible impact:** No cloud-off icon in the tab bar; the log no longer prints "application can reach internet". The app no longer registers for OS network-change notifications.
 
 **Notes:** Nothing else consumed `NetworkStatus` (checked with `rg`). `warp_util::sync::Condition` stays; other code uses it.
+
+## Warp-internal design links
+**Why:** SWP-18 findings F1 and F2. A private Warp Notion page was named in the `debug_assert!` message of `Flex::layout` (a runtime string in debug builds) and in comments, and about 30 comments pointed at Warp-internal Figma files and Google Docs TDDs. They are not network calls, but they are internal provenance that does not belong in an enterprise fork, and none of them can be opened by its readers.
+
+**Modified:**
+- `crates/warpui_core/src/elements/gui/flex/mod.rs`: the two "Debugging Flex" Notion links (comments and assertion messages).
+- 16 files in `app/src` and `crates/{editor,ui_components,warp_core,warp_terminal,warpui}`: the Figma, Google Docs and Google Drawings links in doc comments and test comments were dropped, and the sentences around them reworded where they only pointed at the link.
+- `script/offline_audit`: the host patterns now include `notion.so`, `figma.com` and `docs.google.com`; no allowlist entry was needed.
+
+**User-visible impact:** None. The debug-only flex assertion message no longer ends with a link.
+
+**Notes:** Prose that only says "Figma" (for example "matches Figma px-24") stays; it names no location.

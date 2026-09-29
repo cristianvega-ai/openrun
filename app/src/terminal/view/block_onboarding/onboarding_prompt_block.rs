@@ -54,7 +54,6 @@ impl OnboardingPromptBlock {
         let font_size = appearance.monospace_font_size();
         let font_color = current_theme.main_text_color(current_theme.background());
 
-        // Copy - https://docs.google.com/document/d/1zttBLI5Mw07kUupvrMQoC5aTwTXSHIUOIFFnxZ8GQEU/edit
         const LINE_ONE: &str = "Next, let’s set up your prompt. Warp has a custom prompt builder or you can select PS1 to honor your pre-existing prompt configuration.";
         const LINE_TWO: &str =
             "Warp works with many custom prompts like oh-my-zsh, Starship, Powerlevel10K.";
@@ -124,8 +123,6 @@ impl OnboardingPromptBlock {
         mouse_state_handle: MouseStateHandle,
         prompt_type: OnboardingPromptType,
     ) -> Box<dyn Element> {
-        // Pixel values pulled from Figma mocks
-        // https://www.figma.com/file/y888viqzWBoMpFTxQqkQEN/Activation?node-id=568:1595&mode=dev
         const PROMPT_WIDTH: f32 = 442.;
         const PROMPT_HEIGHT: f32 = 136.;
         const PROMPT_BORDER_WIDTH: f32 = 1.;
@@ -211,8 +208,6 @@ impl OnboardingPromptBlock {
     }
 
     fn render_existing_prompt_button_interior(&self, appearance: &Appearance) -> Box<dyn Element> {
-        // Pixel values pulled from Figma mocks
-        // https://www.figma.com/file/y888viqzWBoMpFTxQqkQEN/Activation?node-id=568:1595&mode=dev
         const HEADER_TEXT: &str = "Shell prompt (PS1)";
         const NO_PS1_TEXT: &str = "No existing prompt.";
 
@@ -258,8 +253,6 @@ impl OnboardingPromptBlock {
     }
 
     fn render_warp_prompt_button_interior(&self, appearance: &Appearance) -> Box<dyn Element> {
-        // Pixel values pulled from Figma mocks
-        // https://www.figma.com/file/y888viqzWBoMpFTxQqkQEN/Activation?node-id=568:1595&mode=dev
         const HEADER_TEXT: &str = "Warp prompt";
         const HEADER_MARGIN_LEFT: f32 = 4.;
         const SECTION_MARGIN_TOP: f32 = 8.;

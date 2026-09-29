@@ -460,11 +460,6 @@ impl<V: EditorView> RichTextElement<V> {
         self.blocks.as_deref()
     }
 
-    /*
-     * For an example rich-text layout, see:
-     * https://docs.google.com/drawings/d/15_Rx_GTWJTvLX8_R_Lfph5sCdcugh5MHP6xY4Ws-McM/edit
-     */
-
     pub fn with_max_width(mut self, max_width: Option<Pixels>) -> Self {
         self.max_width = max_width;
         self

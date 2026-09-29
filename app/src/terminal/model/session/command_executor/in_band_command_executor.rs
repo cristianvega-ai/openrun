@@ -55,8 +55,6 @@ struct CommandExecutionInfo {
 /// This can be used to run arbitrary commands in the user's active session most commonly to query
 /// the session context (e.g. files in a directory, branches in a git repo) to power features like
 /// completions and syntax highlighting.
-///
-/// For more context, see the "In-band generators" TDD: https://docs.google.com/document/d/15GO1p9WHNnDsV2Nb-O-FW4c38QpWDuIyb7wmnKxmOrE/edit?usp=sharing.
 pub struct InBandCommandExecutor {
     executor_command_tx: Sender<ExecutorCommandEvent>,
     cancel_command_tx: Sender<InBandCommandCancelledEvent>,

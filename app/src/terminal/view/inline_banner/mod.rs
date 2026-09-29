@@ -42,19 +42,15 @@ pub const INLINE_BANNER_BUTTON_HOVER_OPACITY: u8 = 25;
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum InlineBannerStyle {
     /// Styling for an inline banner that is requesting user action.
-    /// Mock: https://www.figma.com/file/vgZqQ1YvHgFrAX83QO9DkB/SSH-wrapper?node-id=2%3A95
     CallToAction,
     /// Styling for an inline banner that is recommending an action, but at lower priority than a
     /// CTA.
-    /// Mock: https://www.figma.com/file/hCvzJWMtWq38rDMPNOLc2l/Notebooks-UX?node-id=1198:559&mode=dev
     Recommendation,
     /// Styling for an inline banner that is giving the user low-priority
     /// information.
-    /// Mock: https://www.figma.com/file/vgZqQ1YvHgFrAX83QO9DkB/SSH-wrapper?node-id=201%3A418
     LowPriority,
     /// Styling for an inline banner that is giving the user very low-priority
     /// information.
-    /// Mock: https://www.figma.com/file/vgZqQ1YvHgFrAX83QO9DkB/SSH-wrapper?node-id=201%3A570
     VeryLowPriority,
 }
 
