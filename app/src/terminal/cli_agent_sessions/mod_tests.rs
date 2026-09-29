@@ -2,7 +2,6 @@ use super::event::{
     CLIAgentEvent, CLIAgentEventPayload, CLIAgentEventSource, CLIAgentEventType, parse_event,
 };
 use super::{CLIAgentInputState, CLIAgentSession, CLIAgentSessionContext, CLIAgentSessionStatus};
-
 use crate::terminal::CLIAgent;
 use crate::terminal::input::{InputConfig, InputType};
 

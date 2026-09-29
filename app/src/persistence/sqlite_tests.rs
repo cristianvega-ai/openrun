@@ -1173,9 +1173,8 @@ fn test_sqlite_round_trips_shell_input_config() {
 
 #[test]
 fn stored_ignored_suggestions_of_removed_types_are_dropped() {
-    use diesel::sql_query;
     use diesel::sqlite::SqliteConnection;
-    use diesel::{Connection, RunQueryDsl};
+    use diesel::{Connection, RunQueryDsl, sql_query};
     use diesel_migrations::MigrationHarness;
 
     use super::get_all_ignored_suggestions;

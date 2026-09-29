@@ -121,7 +121,6 @@ fn new_command_executor_for_local_tty_session(
     use wsl_command_executor::WslCommandExecutor;
 
     use super::IsSSHWrapperSession;
-
     use crate::settings::DebugSettings;
     use crate::terminal::available_shells::AvailableShells;
     use crate::terminal::model::session::{BootstrapSessionType, ShellLaunchData};

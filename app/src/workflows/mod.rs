@@ -8,9 +8,8 @@ pub mod info_box;
 pub mod local_workflows;
 pub mod workflow;
 
-use workflow::Workflow;
-
 pub use categories::{CategoriesView, CategoriesViewEvent, WorkflowsViewAction};
+use workflow::Workflow;
 
 pub fn init(app: &mut AppContext) {
     categories::init(app);

@@ -19,8 +19,9 @@ use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewCon
 use crate::agent_notifications::item_rendering::{
     NotificationRenderContext, OnExpandClick, render_notification_item_content,
 };
-use crate::agent_notifications::{AgentNotificationsEvent, AgentNotificationsModel};
-use crate::agent_notifications::{NotificationId, NotificationItem};
+use crate::agent_notifications::{
+    AgentNotificationsEvent, AgentNotificationsModel, NotificationId, NotificationItem,
+};
 use crate::appearance::Appearance;
 use crate::terminal::session_settings::SessionSettings;
 use crate::util::bindings::keybinding_name_to_keystroke;

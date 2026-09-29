@@ -12,12 +12,11 @@ pub use view::{CloseReason, InlineSlashCommandView, SlashCommandsEvent};
 use warp_core::ui::theme::AnsiColorIdentifier;
 #[cfg(feature = "local_fs")]
 use warp_util::path::{CleanPathResult, LineAndColumnArg};
-use warpui::{AppContext, ViewContext};
+use warpui::{AppContext, SingletonEntity, ViewContext};
 
-use crate::search::slash_command_menu::SlashCommandId;
-use crate::search::slash_command_menu::StaticCommand;
 use crate::search::slash_command_menu::static_commands::SlashCommandKind;
 use crate::search::slash_command_menu::static_commands::commands::COMMAND_REGISTRY;
+use crate::search::slash_command_menu::{SlashCommandId, StaticCommand};
 use crate::tab::SelectedTabColor;
 use crate::terminal::input::decorations::InputBackgroundJobOptions;
 use crate::terminal::input::inline_menu::{InlineMenuAction, InlineMenuType};
@@ -31,7 +30,6 @@ use crate::terminal::view::TerminalAction;
 use crate::ui_components::color_dot;
 use crate::view_components::DismissibleToast;
 use crate::workspace::{ToastStack, WorkspaceAction};
-use warpui::SingletonEntity;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AcceptSlashMenuItem {

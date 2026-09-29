@@ -27,8 +27,7 @@ use crate::undo_close::UndoCloseStack;
 use crate::user_config::WarpConfig;
 use crate::util::bindings::{self, CustomAction, trigger_to_keystroke};
 use crate::workspace::sync_inputs::SyncedInputState;
-use crate::workspace_metadata::PersistedWorkspace;
-use crate::workspace_metadata::WorkspaceMetadata;
+use crate::workspace_metadata::{PersistedWorkspace, WorkspaceMetadata};
 
 type CheckmarkStatusGetter = dyn 'static + Fn(&mut AppContext) -> bool;
 

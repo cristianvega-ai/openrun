@@ -19,8 +19,10 @@ use crate::agent_notifications::item::NotificationFilter;
 use crate::agent_notifications::item_rendering::{
     NotificationRenderContext, render_notification_item_content,
 };
-use crate::agent_notifications::{AgentNotificationsEvent, AgentNotificationsModel};
-use crate::agent_notifications::{NotificationId, NotificationItem, NotificationItems};
+use crate::agent_notifications::{
+    AgentNotificationsEvent, AgentNotificationsModel, NotificationId, NotificationItem,
+    NotificationItems,
+};
 use crate::appearance::Appearance;
 use crate::ui_components::icons::Icon;
 use crate::view_components::action_button::{ActionButton, ButtonSize, NakedTheme};

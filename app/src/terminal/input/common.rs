@@ -14,7 +14,6 @@ use warpui::{AppContext, ViewHandle};
 
 use crate::appearance::Appearance;
 use crate::terminal::input::{Input, InputAction, InputSuggestionsMode, MenuPositioning};
-
 use crate::terminal::view::{PADDING_LEFT, TerminalAction};
 
 /// Wraps the given column, assumed to represent the full input content, with appropriate

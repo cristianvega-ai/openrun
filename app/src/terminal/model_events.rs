@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_channel::Receiver;
+use warp_terminal::ImageProtocol;
 use warpui::{Entity, ModelContext, ModelHandle};
 
 use super::event::{BootstrappedEvent, SshLoginStatus};
@@ -18,7 +19,6 @@ use crate::terminal::event::{
 };
 use crate::terminal::model::session::Sessions;
 use crate::terminal::shell::ShellType;
-use warp_terminal::ImageProtocol;
 /// Model that dispatches events that have been emitted by the [`crate::terminal::TerminalModel`],
 /// allowing other models/views to subscribe to `TerminalModel` events like it would any other
 /// entity within the UI framework.

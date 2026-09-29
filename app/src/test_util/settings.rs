@@ -17,13 +17,12 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     use warp_core::semantic_selection::SemanticSelection;
 
     use crate::search::command_search::settings::CommandSearchSettings;
-    use crate::settings::CLIAgentSettings;
     use crate::settings::app_icon::AppIconSettings;
     use crate::settings::manager::SettingsManager;
     use crate::settings::{
         AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
-        CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings, GPUSettings,
-        InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
+        CLIAgentSettings, CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings,
+        GPUSettings, InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
         SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings, ThemeSettings,
         VimBannerSettings, init_and_register_user_preferences,
     };

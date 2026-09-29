@@ -128,6 +128,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Unused dependencies](#unused-dependencies) — removed dependencies that no code uses (`cargo machete`) and unused workspace entries
 - [Ignored agent-view integration tests](#ignored-agent-view-integration-tests) — un-ignored the integration tests that pass, deleted four whose assertions describe the old UI
 - [Synchronous find path](#synchronous-find-path) — removed the synchronous block-list find and the `Option` around the async find controller
+- [Import formatting](#import-formatting) — ran `./script/format` so the CI format check passes
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3265,3 +3266,9 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **Notes:**
 - When the terminal switches to the alt screen, the block-list find query was never carried over (it read the empty synchronous run). That stays as is: only the alt screen find carries its query into the block list.
 - With "find within blocks" on and no block selected, the async find never leaves the `Scanning` state (the work queue is empty and never completes). Match counts are correct (zero); only `is_scanning()` stays true. The find test asserts the count without waiting for completion.
+
+## Import formatting
+**Why:** CI runs `./script/format --check`, which merges imports per module (`imports_granularity=Module`, `group_imports=StdExternalCrate`). Plain `cargo fmt` accepts the split `use crate::x::{A};` / `use crate::x::{B};` lines that the removal tasks left behind, so `./script/format --check` failed.
+
+**Modified:**
+- Ran `./script/format` (22 files, imports only).

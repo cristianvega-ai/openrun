@@ -30,7 +30,6 @@ use super::{
     ChipResult, ChipValue, ContextChipKind, footer_chip_color, github_pr_display_text_from_url,
     render_text_from_kind,
 };
-
 use crate::appearance::Appearance;
 use crate::code::editor::{add_color, remove_color};
 use crate::code_review::code_review_view::CODE_REVIEW_TOOLTIP_TEXT;
@@ -43,8 +42,7 @@ use crate::context_chips::node_version_popup::{NodeVersionPopupEvent, NodeVersio
 use crate::context_chips::spacing;
 use crate::settings_view::keybindings::{KeybindingChangedEvent, KeybindingChangedNotifier};
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
-use crate::terminal::input::InputModeModel;
-use crate::terminal::input::{MenuPositioning, MenuPositioningProvider};
+use crate::terminal::input::{InputModeModel, MenuPositioning, MenuPositioningProvider};
 use crate::terminal::model::session::SessionType;
 use crate::terminal::model_events::ModelEventDispatcher;
 use crate::ui_components::blended_colors;

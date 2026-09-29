@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use settings::{PrivatePreferences, PublicPreferences};
+use warp_core::user_preferences::GetUserPreferences as _;
 use warpui::App;
 use warpui_extras::secure_storage::{self, AppContextExt as _};
 use warpui_extras::user_preferences;
-
-use warp_core::user_preferences::GetUserPreferences as _;
 
 use super::{ACCOUNT_CREDENTIALS_KEY, ANONYMOUS_ID_KEY, remove_stored_account_credentials_once};
 

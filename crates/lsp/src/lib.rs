@@ -23,8 +23,9 @@ pub use manager::{LspManagerModel, LspManagerModelEvent};
 pub use model::{
     BackgroundTaskInfo, DocumentDiagnostics, LanguageServerId, LspEvent, LspServerModel, LspState,
 };
-pub use node_runtime::manual_install_hint as node_manual_install_hint;
-pub use node_runtime::{DownloadPermit, Downloader};
+pub use node_runtime::{
+    DownloadPermit, Downloader, manual_install_hint as node_manual_install_hint,
+};
 pub use service::LspService;
 pub use types::{HoverContents, HoverResult, MarkupKind, ReferenceLocation};
 

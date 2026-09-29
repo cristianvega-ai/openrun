@@ -13,11 +13,9 @@ use warpui::{
 use super::display_chip::{DisplayChip, DisplayChipConfig, PromptDisplayChipEvent};
 use super::prompt_type::PromptType;
 use super::{ChipResult, git_line_changes_from_chips};
-
 use crate::completer::SessionContext;
 use crate::context_chips::display_chip::{DisplayChipAction, PromptChipShellCommand};
-use crate::terminal::input::InputModeModel;
-use crate::terminal::input::MenuPositioningProvider;
+use crate::terminal::input::{InputModeModel, MenuPositioningProvider};
 use crate::terminal::model_events::ModelEventDispatcher;
 
 /// A view for displaying the prompt.

@@ -77,11 +77,9 @@ mod warpify_page;
 pub use cli_agents_page::cli_agent_settings_widget_id;
 pub use features_page::FeaturesPageAction;
 pub use privacy_page::PrivacyPageAction;
-use projects_page::ProjectsPageAction;
-use projects_page::ProjectsPageEvent;
-pub use projects_page::ProjectsPageView;
-pub use projects_page::language_server_downloads_widget_id;
 pub(crate) use projects_page::open_language_server_download_settings_action;
+use projects_page::{ProjectsPageAction, ProjectsPageEvent};
+pub use projects_page::{ProjectsPageView, language_server_downloads_widget_id};
 pub use settings_page::{
     AdditionalInfo, InputListItem, ToggleState, render_body_item_label, render_info_icon,
     render_input_list, render_separator,
