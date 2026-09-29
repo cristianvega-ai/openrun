@@ -6,7 +6,6 @@ use warpui::{AddSingletonModel, App};
 use warpui_extras::user_preferences;
 
 use super::*;
-use crate::ai::llms::{AvailableLLMs, LLMId, LLMInfo, LLMPreferences, ModelsByFeature};
 use crate::auth::AuthManager;
 use crate::cloud_object::model::actions::ObjectActions;
 use crate::cloud_object::model::persistence::CloudModel;
@@ -18,7 +17,7 @@ use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::team::MockTeamClient;
 use crate::server::server_api::workspace::{MockWorkspaceClient, WorkspaceClient};
 use crate::server::sync_queue::SyncQueue;
-use crate::settings::{AISettings, CodeSettings, PrivacySettings};
+use crate::settings::{CodeSettings, PrivacySettings};
 use crate::system::SystemStats;
 use crate::workspaces::team::Team;
 use crate::workspaces::user_profiles::UserProfiles;
@@ -112,9 +111,7 @@ fn test_leaving_team_removes_objects() {
                     None,
                     None,
                     None,
-                    None,
                 )]),
-                None,
             )],
             &mut app,
         );
@@ -198,18 +195,7 @@ fn test_leaving_team_removes_objects() {
     });
 }
 
-fn models_by_feature_with_model(model_id: &str) -> ModelsByFeature {
-    let available =
-        AvailableLLMs::new(model_id.into(), vec![LLMInfo::new_for_test(model_id)], None)
-            .expect("choices are non-empty");
-    ModelsByFeature {
-        agent_mode: available.clone(),
-        coding: available.clone(),
-        cli_agent: Some(available),
-    }
-}
-
-fn initialize_llm_preferences_dependencies(app: &mut App) {
+fn initialize_workspace_preference_dependencies(app: &mut App) {
     app.add_singleton_model(|_| {
         PublicPreferences::new(Box::<user_preferences::in_memory::InMemoryPreferences>::default())
     });
@@ -217,13 +203,8 @@ fn initialize_llm_preferences_dependencies(app: &mut App) {
         PrivatePreferences::new(Box::<user_preferences::in_memory::InMemoryPreferences>::default())
     });
     app.add_singleton_model(CodeSettings::new_with_defaults);
-    app.add_singleton_model(AISettings::new_with_defaults);
     app.update(|ctx| {
         warpui_extras::secure_storage::register_noop("test", ctx);
-    });
-    app.add_singleton_model(ai::api_keys::ApiKeyManager::new);
-    app.add_singleton_model(|ctx| {
-        crate::ai::execution_profiles::profiles::AIExecutionProfilesModel::new(ctx)
     });
 }
 
@@ -237,42 +218,26 @@ fn on_workspaces_updated_keeps_teams_distinct_and_prunes_a_team_the_response_omi
             vec![],
             &mut app,
         );
-        initialize_llm_preferences_dependencies(&mut app);
-        app.add_singleton_model(LLMPreferences::new);
+        initialize_workspace_preference_dependencies(&mut app);
         let team_update_manager =
             app.add_singleton_model(|ctx| TeamUpdateManager::new(team_client, None, ctx));
 
         let workspace_uid = WorkspaceUid::from(ServerId::from(999));
         let team_a = ServerId::from(1);
         let team_b = ServerId::from(2);
-        let model_a = LLMId::from("team-a-only");
-        let model_b = LLMId::from("team-b-only");
 
         let workspace_with_teams = |teams: Vec<Team>| {
-            Workspace::from_local_cache(
-                workspace_uid,
-                "Test Workspace".to_owned(),
-                Some(teams),
-                None,
-            )
+            Workspace::from_local_cache(workspace_uid, "Test Workspace".to_owned(), Some(teams))
         };
-        let team_with_model = |uid: ServerId, model_id: &str| {
-            Team::from_local_cache(
-                uid,
-                format!("Team {uid}"),
-                None,
-                None,
-                None,
-                Some(models_by_feature_with_model(model_id)),
-            )
-        };
+        let team_named =
+            |uid: ServerId| Team::from_local_cache(uid, format!("Team {uid}"), None, None, None);
 
         team_update_manager.update(&mut app, |manager, ctx| {
             manager.on_workspaces_updated(
                 Ok(WorkspacesMetadataResponse {
                     workspaces: vec![workspace_with_teams(vec![
-                        team_with_model(team_a, model_a.as_str()),
-                        team_with_model(team_b, model_b.as_str()),
+                        team_named(team_a),
+                        team_named(team_b),
                     ])],
                     joinable_teams: vec![],
                 }),
@@ -282,39 +247,14 @@ fn on_workspaces_updated_keeps_teams_distinct_and_prunes_a_team_the_response_omi
 
         app.read(|ctx| {
             let workspaces = UserWorkspaces::as_ref(ctx);
-            assert!(
-                workspaces
-                    .team_from_uid(team_a)
-                    .is_some_and(|team| team.feature_model_choice.info_for_id(&model_a).is_some()),
-                "team A's own model should be visible in its own bucket"
-            );
-            assert!(
-                workspaces
-                    .team_from_uid(team_b)
-                    .is_some_and(|team| team.feature_model_choice.info_for_id(&model_b).is_some()),
-                "team B's own model should be visible in its own bucket"
-            );
-            assert!(
-                workspaces
-                    .team_from_uid(team_a)
-                    .is_some_and(|team| team.feature_model_choice.info_for_id(&model_b).is_none()),
-                "team A's bucket must not contain team B's model"
-            );
-            assert!(
-                workspaces
-                    .team_from_uid(team_b)
-                    .is_some_and(|team| team.feature_model_choice.info_for_id(&model_a).is_none()),
-                "team B's bucket must not contain team A's model"
-            );
+            assert!(workspaces.team_from_uid(team_a).is_some());
+            assert!(workspaces.team_from_uid(team_b).is_some());
         });
 
         team_update_manager.update(&mut app, |manager, ctx| {
             manager.on_workspaces_updated(
                 Ok(WorkspacesMetadataResponse {
-                    workspaces: vec![workspace_with_teams(vec![team_with_model(
-                        team_b,
-                        model_b.as_str(),
-                    )])],
+                    workspaces: vec![workspace_with_teams(vec![team_named(team_b)])],
                     joinable_teams: vec![],
                 }),
                 ctx,
@@ -325,15 +265,10 @@ fn on_workspaces_updated_keeps_teams_distinct_and_prunes_a_team_the_response_omi
             let workspaces = UserWorkspaces::as_ref(ctx);
             assert!(
                 workspaces.team_from_uid(team_a).is_none(),
-                "team A's catalog bucket should have been evicted once the response stopped \
-                 naming it, not left stale"
+                "team A should have been evicted once the response stopped naming it, not left \
+                 stale"
             );
-            assert!(
-                workspaces
-                    .team_from_uid(team_b)
-                    .is_some_and(|team| team.feature_model_choice.info_for_id(&model_b).is_some()),
-                "team B's catalog should remain"
-            );
+            assert!(workspaces.team_from_uid(team_b).is_some());
         });
 
         team_update_manager.update(&mut app, |manager, ctx| {
@@ -350,10 +285,9 @@ fn on_workspaces_updated_keeps_teams_distinct_and_prunes_a_team_the_response_omi
             let workspaces = UserWorkspaces::as_ref(ctx);
             assert!(
                 workspaces.team_from_uid(team_b).is_none(),
-                "an authoritative empty catalog must prune every remaining bucket, not be \
+                "an authoritative empty response must prune every remaining team, not be \
                  skipped as a no-op"
             );
-            LLMPreferences::as_ref(ctx).get_default_base_model_for_team_uid(None, ctx);
         });
     });
 }

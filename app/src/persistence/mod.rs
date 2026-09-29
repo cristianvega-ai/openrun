@@ -2,7 +2,6 @@
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "local_fs")] {
-        pub mod agent;
         mod block_list;
         mod sqlite;
         pub mod commands;
@@ -37,11 +36,9 @@ pub use sqlite::establish_ro_connection;
 use warp_core::command::ExitCode;
 use warp_errors::report_error;
 use warp_graphql::scalars::time::ServerTimestamp;
-use warp_multi_agent_api as api;
 use warpui::{AppContext, Entity, SingletonEntity};
 
-use self::model::{AgentConversation, AgentConversationData, Project};
-use crate::ai::blocklist::PersistedAIInput;
+use self::model::Project;
 use crate::app_state::AppState;
 use crate::cloud_object::model::actions::ObjectAction;
 use crate::cloud_object::model::generic_string_model::CloudStringObject;
@@ -110,24 +107,6 @@ impl PersistedDataScope {
     fn gui_only_data(self) -> bool {
         matches!(self, PersistedDataScope::Full)
     }
-}
-
-/// A conversation whose `summary` column had to be derived from its task
-/// snapshot at read time (rows written before the column existed, or rows
-/// whose stored summary failed to parse). Sent to the SQLite writer thread
-/// so the derivation happens only once per row.
-#[derive(Debug)]
-pub struct ConversationSummaryBackfill {
-    pub conversation_id: String,
-    /// Serialized [`model::AgentConversationSummary`].
-    pub summary_json: String,
-    /// The `summary` column value observed at read time (`None` or invalid
-    /// JSON). The backfill only applies while the column still holds this
-    /// value, so it never overwrites a newer write.
-    pub previous_summary: Option<String>,
-    /// The row's pre-backfill `last_modified_at`, restored after the
-    /// update trigger bumps it.
-    pub last_modified_at: chrono::NaiveDateTime,
 }
 
 /// Initializes the persistence "subsystem".
@@ -234,16 +213,10 @@ pub struct PersistedData {
     pub user_profiles: Vec<UserProfileWithUID>,
     pub time_of_next_force_object_refresh: Option<DateTime<Utc>>,
     pub object_actions: Vec<ObjectAction>,
-    pub ai_queries: Vec<PersistedAIInput>,
     pub workspace_metadata: Vec<CodeWorkspaceMetadata>,
     pub workspace_language_servers: HashMap<PathBuf, HashMap<LSPServerType, EnablementState>>,
-    pub multi_agent_conversations: Vec<AgentConversation>,
     pub projects: Vec<Project>,
     pub ignored_suggestions: Vec<(String, SuggestionType)>,
-    /// Conversation summaries derived at read time for pre-`summary`-column
-    /// rows. Drained by `sqlite::initialize`, which hands them to the writer
-    /// thread for persistence; not intended for other consumers.
-    pub conversation_summary_backfills: Vec<ConversationSummaryBackfill>,
 }
 
 #[derive(Clone, Debug)]
@@ -339,27 +312,6 @@ pub enum ModelEvent {
     },
     /// Close the SQLite writer thread when the app is about to quit.
     Terminate,
-    UpsertAIQuery {
-        query: Arc<PersistedAIInput>,
-    },
-    /// Delete the AI query and related data for a given conversation.
-    DeleteAIConversation {
-        conversation_id: String,
-    },
-    UpdateMultiAgentConversation {
-        conversation_id: String,
-        updated_tasks: Vec<api::Task>,
-        conversation_data: AgentConversationData,
-    },
-    /// Persists read-time-derived conversation summaries for rows written
-    /// before the `summary` column existed.
-    BackfillConversationSummaries {
-        backfills: Vec<ConversationSummaryBackfill>,
-    },
-    DeleteMultiAgentConversations {
-        conversation_ids: Vec<String>,
-    },
-
     UpsertWorkspaceMetadata {
         metadata: Box<CodeWorkspaceMetadata>,
     },

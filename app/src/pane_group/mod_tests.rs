@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use pathfinder_geometry::rect::RectF;
-use persistence::model::AgentConversation;
 #[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
@@ -16,11 +15,6 @@ use warpui::{App, ModelHandle};
 use watcher::HomeDirectoryWatcher;
 
 use super::*;
-use crate::ai::blocklist::BlocklistAIHistoryModel;
-use crate::ai::document::ai_document_model::AIDocumentModel;
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use crate::ai::llms::LLMPreferences;
-use crate::ai::restored_conversations::RestoredAgentConversations;
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_manager::AuthManager;
 use crate::cloud_object::model::persistence::CloudModel;
@@ -58,10 +52,6 @@ use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandlesProvider};
 
 fn initialize_app(app: &mut App) {
-    initialize_app_with_history(app, Vec::new());
-}
-
-fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversation>) {
     initialize_settings_for_tests(app);
 
     app.add_singleton_model(|_ctx| ServerApiProvider::new_for_test());
@@ -105,12 +95,8 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(global_resources.clone()));
     app.add_singleton_model(|_| KeybindingChangedNotifier::new());
     app.add_singleton_model(NotebookKeybindings::new);
-    app.add_singleton_model(move |_| BlocklistAIHistoryModel::new(vec![], &conversations));
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
-    app.add_singleton_model(crate::ai::blocklist::BlocklistAIPermissions::new);
     app.add_singleton_model(AgentNotificationsModel::new);
-    app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
-    app.add_singleton_model(LLMPreferences::new);
     #[cfg(feature = "local_fs")]
     app.add_singleton_model(RepoMetadataModel::new);
     app.add_singleton_model(FileSearchModel::new);
@@ -119,11 +105,9 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     crate::terminal::available_shells::register(app);
     AltScreenReporting::register(app);
     app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
-    app.add_singleton_model(|_| RestoredAgentConversations::new_seeded(vec![]));
     app.add_singleton_model(|_| WorkspaceRegistry::new());
     app.add_singleton_model(UndoCloseStack::new);
     app.add_singleton_model(|_| IgnoredSuggestionsModel::new(vec![]));
-    app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
 }
 

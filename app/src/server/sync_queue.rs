@@ -19,7 +19,6 @@ use super::graphql::GraphQLError;
 use super::ids::{ClientId, HashableId, ObjectUid, ServerId, SyncId, ToServerId};
 use super::server_api::auth::UserAuthenticationError;
 use super::server_api::object::ObjectClient;
-use crate::ai::execution_profiles::CloudAIExecutionProfileModel;
 use crate::cloud_object::model::actions::{
     ObjectAction, ObjectActionHistory, ObjectActionSubtype, ObjectActionType,
 };
@@ -143,11 +142,6 @@ pub enum QueueItem {
     },
     UpdatePreference {
         model: Arc<CloudPreferenceModel>,
-        id: SyncId,
-        revision: Option<Revision>,
-    },
-    UpdateAIExecutionProfile {
-        model: Arc<CloudAIExecutionProfileModel>,
         id: SyncId,
         revision: Option<Revision>,
     },
@@ -347,8 +341,7 @@ impl SyncQueue {
             // Update requests will depend on any existing create/updates to the same object
             QueueItem::UpdateNotebook { id, .. }
             | QueueItem::UpdateFolder { id, .. }
-            | QueueItem::UpdatePreference { id, .. }
-            | QueueItem::UpdateAIExecutionProfile { id, .. } => self.get_update_dependencies(id),
+            | QueueItem::UpdatePreference { id, .. } => self.get_update_dependencies(id),
 
             // These queue item types do not have inferred dependencies.
             QueueItem::CreateObject { .. }
@@ -403,7 +396,6 @@ impl SyncQueue {
                 QueueItem::UpdatePreference { id, .. }
                 | QueueItem::UpdateNotebook { id, .. }
                 | QueueItem::UpdateFolder { id, .. }
-                | QueueItem::UpdateAIExecutionProfile { id, .. }
                     if id.uid() == item_id =>
                 {
                     Some(QueueDependency::QueueItem(*queue_item_id))
@@ -458,8 +450,7 @@ impl SyncQueue {
         for (_item_id, item) in &mut self.queue {
             match item {
                 QueueItem::UpdateNotebook { id, revision, .. }
-                | QueueItem::UpdatePreference { id, revision, .. }
-                | QueueItem::UpdateAIExecutionProfile { id, revision, .. } => {
+                | QueueItem::UpdatePreference { id, revision, .. } => {
                     Self::maybe_update_queue_item_with_new_revision(
                         &self.client_id_to_server,
                         id,
@@ -538,20 +529,6 @@ impl SyncQueue {
                 QueueItem::UpdatePreference {
                     model,
                     id,
-                    revision,
-                } => {
-                    self.update_object(
-                        model.clone(),
-                        id,
-                        revision,
-                        object_client,
-                        dequeued_item_id,
-                        ctx,
-                    );
-                }
-                QueueItem::UpdateAIExecutionProfile {
-                    id,
-                    model,
                     revision,
                 } => {
                     self.update_object(
@@ -876,13 +853,6 @@ impl SyncQueue {
                         )) => match json_object_type {
                             JsonObjectType::Preference => {
                                 CloudPreferenceModel::send_create_request(
-                                    object_client_clone,
-                                    create_request,
-                                )
-                                .await
-                            }
-                            JsonObjectType::AIExecutionProfile => {
-                                CloudAIExecutionProfileModel::send_create_request(
                                     object_client_clone,
                                     create_request,
                                 )
@@ -1405,9 +1375,6 @@ impl SyncQueue {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
                 QueueItem::UpdatePreference { id, .. } => {
-                    self.handle_update_failure_response(id, item_id, ctx);
-                }
-                QueueItem::UpdateAIExecutionProfile { id, .. } => {
                     self.handle_update_failure_response(id, item_id, ctx);
                 }
                 QueueItem::RecordObjectAction {

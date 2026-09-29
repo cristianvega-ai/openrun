@@ -8,8 +8,8 @@ use cloud_objects::ids::{GenericStringObjectId, ObjectUid, ServerId, SyncId};
 use warp_graphql::object::CloudObjectWithDescendants;
 
 use crate::{
-    AIExecutionProfile, CloudFolderModel, CloudNotebookModel, JsonSerializer, Preference,
-    ServerAIExecutionProfile, ServerFolder, ServerNotebook, ServerPreference,
+    CloudFolderModel, CloudNotebookModel, JsonSerializer, Preference, ServerFolder, ServerNotebook,
+    ServerPreference,
 };
 
 /// A cloud object from the server.
@@ -18,7 +18,6 @@ pub enum ServerCloudObject {
     Notebook(ServerNotebook),
     Folder(ServerFolder),
     Preference(ServerPreference),
-    AIExecutionProfile(ServerAIExecutionProfile),
 }
 
 impl ServerCloudObject {
@@ -27,9 +26,6 @@ impl ServerCloudObject {
             ServerCloudObject::Notebook(notebook) => &notebook.metadata,
             ServerCloudObject::Folder(folder) => &folder.metadata,
             ServerCloudObject::Preference(preferences) => &preferences.metadata,
-            ServerCloudObject::AIExecutionProfile(ai_execution_profile) => {
-                &ai_execution_profile.metadata
-            }
         }
     }
 
@@ -38,9 +34,6 @@ impl ServerCloudObject {
             ServerCloudObject::Notebook(notebook) => notebook.id.uid(),
             ServerCloudObject::Folder(folder) => folder.id.uid(),
             ServerCloudObject::Preference(preferences) => preferences.id.uid(),
-            ServerCloudObject::AIExecutionProfile(ai_execution_profile) => {
-                ai_execution_profile.id.uid()
-            }
         }
     }
 }
@@ -58,10 +51,6 @@ where
             ServerCloudObject::Folder(server_folder.clone())
         } else if let Some(server_preferences) = value.downcast_ref::<ServerPreference>() {
             ServerCloudObject::Preference(server_preferences.clone())
-        } else if let Some(server_ai_execution_profile) =
-            value.downcast_ref::<ServerAIExecutionProfile>()
-        {
-            ServerCloudObject::AIExecutionProfile(server_ai_execution_profile.clone())
         } else {
             panic!("Unknown server object type");
         }
@@ -187,15 +176,11 @@ fn server_gso_to_cloud_object(
                 GenericServerObject::<GenericStringObjectId, GenericStringModel<Preference, JsonSerializer>>::try_from_gql(gso)?,
             ),
         ),
-        warp_graphql::generic_string_object::GenericStringObjectFormat::JsonAIExecutionProfile => {
-            Ok(ServerCloudObject::AIExecutionProfile(
-                GenericServerObject::<GenericStringObjectId, GenericStringModel<AIExecutionProfile, JsonSerializer>>::try_from_gql(gso)?,
-            ))
-        }
         // Formats unknown to this client build (e.g. the server-only `JsonRunner`) and
         // formats this build no longer models.
         // Returning an error lets callers skip the object rather than failing.
-        warp_graphql::generic_string_object::GenericStringObjectFormat::JsonMCPServer
+        warp_graphql::generic_string_object::GenericStringObjectFormat::JsonAIExecutionProfile
+        | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonMCPServer
         | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonTemplatableMCPServer
         | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonEnvVarCollection
         | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonWorkflowEnum

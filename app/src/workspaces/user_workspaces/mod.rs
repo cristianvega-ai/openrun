@@ -4,7 +4,6 @@ use std::sync::Arc;
 use anyhow::Result;
 use warp_core::features::FeatureFlag;
 use warp_core::settings::ChangeEventReason;
-use warp_core::user_preferences::GetUserPreferences;
 use warp_errors::report_error;
 use warpui::{
     AppContext, Entity, ModelContext, SingletonEntity, Tracked, ViewContext, WeakViewHandle,
@@ -20,7 +19,6 @@ use super::workspace::{
     AdminEnablementSetting, EnterpriseSecretRegex, UgcCollectionEnablementSetting, Workspace,
     WorkspaceUid,
 };
-use crate::ai::llms::{AvailableLLMs, MODELS_BY_FEATURE_CACHE_KEY, ModelsByFeature};
 use crate::auth::{AuthStateProvider, UserUid};
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::cloud_object::{CloudObjectEventEntrypoint, Owner, Space};
@@ -32,16 +30,11 @@ use crate::server::server_api::{team::MockTeamClient, workspace::MockWorkspaceCl
 use crate::settings::PrivacySettings;
 #[cfg(test)]
 use crate::workspaces::workspace::{
-    AIAutonomyPolicy, AiAutonomySettings, BillingMetadata, SplitListSetting, WorkspaceMember,
-    WorkspaceSettings,
+    BillingMetadata, SplitListSetting, WorkspaceMember, WorkspaceSettings,
 };
 pub(crate) mod billing_workspace_settings;
 pub(crate) mod team_workspace_settings;
-#[cfg(test)]
-pub use team_workspace_settings::TeamContextForOperation;
-#[cfg(test)]
-pub(crate) use team_workspace_settings::TeamlessScopeForTest;
-pub use team_workspace_settings::{ResolvedTeamScope, TeamScope};
+pub use team_workspace_settings::TeamScope;
 
 #[derive(Debug)]
 pub enum UserWorkspacesEvent {
@@ -98,10 +91,6 @@ pub struct UserWorkspaces {
     workspaces: Tracked<Vec<Workspace>>,
     window_team_uids: HashMap<WindowId, Option<ServerId>>,
     joinable_teams: Vec<DiscoverableTeam>,
-    /// The model catalog to fall back to when no current workspace exists: before login, or
-    /// for a logged-in user whose only workspace is the server's placeholder, which is
-    /// filtered out of `workspaces`.
-    workspaceless_models_by_feature: Option<ModelsByFeature>,
     team_client: Arc<dyn TeamClient>,
     workspace_client: Arc<dyn WorkspaceClient>,
 }
@@ -141,7 +130,6 @@ impl UserWorkspaces {
             workspaces: cached_workspaces.into(),
             window_team_uids: Default::default(),
             joinable_teams: Default::default(),
-            workspaceless_models_by_feature: None,
             team_client,
             workspace_client,
         }
@@ -162,38 +150,15 @@ impl UserWorkspaces {
         workspace_client: Arc<dyn WorkspaceClient>,
         cached_workspaces: Vec<Workspace>,
         current_workspace_uid: Option<WorkspaceUid>,
-        ctx: &mut ModelContext<Self>,
     ) -> Self {
-        let mut me = Self {
+        Self {
             current_workspace_uid: current_workspace_uid.into(),
             workspaces: cached_workspaces.into(),
             window_team_uids: Default::default(),
             joinable_teams: Default::default(),
-            workspaceless_models_by_feature: None,
             team_client,
             workspace_client,
-        };
-
-        // One-release migration: moving feature_model_choices off of `LLMPreferences` to `Workspace`.
-        // This means that on the first time the user opens a version of warp without a
-        // Workspace.feature_model_choice saved in their sqlite db, we can fall back to reading feature
-        // model choices from the old LLMPreferences cache.
-        // TODO: delete once it's safe to assume every client has fetched at least once since
-        // this migration shipped.
-        if me
-            .current_workspace()
-            .is_some_and(|workspace| workspace.feature_model_choice == ModelsByFeature::default())
-            && let Some(legacy_catalog) = migrate_legacy_feature_model_choices_cache(ctx)
-            && let Some(workspace) = me.current_workspace_mut()
-        {
-            workspace.feature_model_choice = legacy_catalog;
         }
-
-        me
-    }
-
-    pub(crate) fn set_workspaceless_models_by_feature(&mut self, models: ModelsByFeature) {
-        self.workspaceless_models_by_feature = Some(models);
     }
 
     pub fn team_from_uid(&self, team_uid: ServerId) -> Option<&Team> {
@@ -1168,7 +1133,6 @@ impl UserWorkspaces {
                 invite_link: None,
                 pending_email_invites: vec![],
                 invite_link_domain_restrictions: vec![],
-                feature_model_choice: Default::default(),
                 is_eligible_for_discovery: false,
                 visibility: TeamVisibility::Open,
             }],
@@ -1187,7 +1151,6 @@ impl UserWorkspaces {
             }],
             billing_metadata: BillingMetadata::default(),
             settings: workspace_settings,
-            feature_model_choice: Default::default(),
             invite_link_domain_restrictions: vec![],
             pending_email_invites: vec![],
             is_eligible_for_discovery: false,
@@ -1215,74 +1178,6 @@ impl UserWorkspaces {
         } else {
             panic!("No workspace found. Did you call setup_test_workspace()?");
         }
-    }
-
-    pub fn update_ai_autonomy_settings<F>(&mut self, f: F, ctx: &mut ModelContext<Self>)
-    where
-        F: FnOnce(&mut AiAutonomySettings),
-    {
-        self.update_current_workspace(
-            |workspace| {
-                f(&mut workspace.settings.ai_autonomy_settings);
-                let settings = &workspace.settings.ai_autonomy_settings;
-                let team_settings = &mut workspace
-                    .teams
-                    .first_mut()
-                    .expect("test workspace should have a team")
-                    .settings
-                    .ai_autonomy;
-                team_settings.apply_code_diffs.value = settings.apply_code_diffs_setting;
-                team_settings.read_files.value = settings.read_files_setting;
-                team_settings.execute_commands.value = settings.execute_commands_setting;
-                team_settings.write_to_pty.value = settings.write_to_pty_setting;
-                team_settings.read_files_allowlist =
-                    split_test_list(settings.read_files_allowlist.as_ref().map(|items| {
-                        items
-                            .iter()
-                            .map(|path| path.display().to_string())
-                            .collect()
-                    }));
-                team_settings.execute_commands_allowlist = split_test_list(
-                    settings
-                        .execute_commands_allowlist
-                        .as_ref()
-                        .map(|items| items.iter().map(ToString::to_string).collect()),
-                );
-                team_settings.execute_commands_denylist = split_test_list(
-                    settings
-                        .execute_commands_denylist
-                        .as_ref()
-                        .map(|items| items.iter().map(ToString::to_string).collect()),
-                );
-            },
-            ctx,
-        );
-    }
-}
-
-/// Reads the legacy, pre-team-keyed model catalog cache (`MODELS_BY_FEATURE_CACHE_KEY`), for
-/// the one-release migration in [`UserWorkspaces::new`]. Understands both real shapes an older
-/// client could have written: the (more recent) single `ModelsByFeature`, and (older still) a
-/// bare `AvailableLLMs`, which becomes the `agent_mode` field.
-fn migrate_legacy_feature_model_choices_cache(app: &mut AppContext) -> Option<ModelsByFeature> {
-    let value = app
-        .private_user_preferences()
-        .read_value(MODELS_BY_FEATURE_CACHE_KEY)
-        .ok()
-        .flatten()?;
-
-    match serde_json::from_str::<ModelsByFeature>(&value) {
-        Ok(models) => Some(models),
-        Err(e1) => match serde_json::from_str::<AvailableLLMs>(&value) {
-            Ok(agent_mode) => Some(ModelsByFeature {
-                agent_mode,
-                ..Default::default()
-            }),
-            Err(e2) => {
-                log::warn!("Failed to deserialize legacy cached LLMs: {e1}\n{e2}");
-                None
-            }
-        },
     }
 }
 

@@ -17,7 +17,6 @@ fn team(name: &str, member_uids: &[&str]) -> Team {
                 })
                 .collect(),
         ),
-        None,
     )
 }
 
@@ -26,7 +25,6 @@ fn workspace(teams: Vec<Team>) -> Workspace {
         format!("{:0>22}", "workspace").into(),
         "workspace".to_string(),
         Some(teams),
-        None,
     )
 }
 
@@ -197,7 +195,6 @@ mod pending_email_invites_conversion {
 mod team_settings_conversion {
     use warp_graphql::workspace as gqlws;
 
-    use crate::ai::execution_profiles::{ActionPermission, WriteToPtyPermission};
     use crate::workspaces::gql_convert::team_settings_from_gql;
     use crate::workspaces::workspace::{
         AdminEnablementSetting, TeamSettings, UgcCollectionEnablementSetting,
@@ -327,26 +324,6 @@ mod team_settings_conversion {
             AdminEnablementSetting::Enable
         );
 
-        // AI permissions preserve the enforcement bit and compile the merged patterns.
-        assert!(settings.ai_permissions.allow_ai_in_remote_sessions.value);
-        assert!(
-            settings
-                .ai_permissions
-                .allow_ai_in_remote_sessions
-                .is_enforced_by_workspace
-        );
-        assert_eq!(
-            settings
-                .ai_permissions
-                .remote_session_regex_list
-                .iter()
-                .map(|regex| regex.as_str())
-                .collect::<Vec<_>>(),
-            vec!["foo.*"],
-            "only the merged `values` compile into the effective list; the workspace/team \
-             split entries have no Rust-client reader to preserve them for"
-        );
-
         // Secret redaction keeps the merged values and the workspace split entries.
         assert!(settings.secret_redaction.enabled.value);
         assert_eq!(settings.secret_redaction.regexes.values.len(), 1);
@@ -356,87 +333,23 @@ mod team_settings_conversion {
             "ws-secret"
         );
 
-        // AI autonomy maps effective values to permissions (RespectUserSetting ->
-        // None) while preserving the enforcement bit.
-        assert_eq!(
-            settings.ai_autonomy.apply_code_diffs.value,
-            Some(ActionPermission::AlwaysAllow)
-        );
-        assert!(
-            settings
-                .ai_autonomy
-                .apply_code_diffs
-                .is_enforced_by_workspace
-        );
-        assert_eq!(settings.ai_autonomy.read_files.value, None);
-        assert_eq!(
-            settings.ai_autonomy.execute_commands.value,
-            Some(ActionPermission::AlwaysAsk)
-        );
-        assert_eq!(
-            settings.ai_autonomy.write_to_pty.value,
-            Some(WriteToPtyPermission::AlwaysAsk)
-        );
-        assert_eq!(
-            settings.ai_autonomy.read_files_allowlist.values,
-            vec!["/allowed".to_string()]
-        );
-
         // Link sharing keeps each boolean value.
         assert!(settings.link_sharing.anyone_with_link_sharing_enabled.value);
         assert!(!settings.link_sharing.direct_link_sharing_enabled.value);
 
         // Passthrough groups map directly.
-        assert!(settings.llm_settings.enabled);
         assert!(settings.telemetry_settings.force_enabled);
-
-        // Ambient agent settings surface attribution + default host slug.
-        assert_eq!(
-            settings.enable_warp_attribution,
-            AdminEnablementSetting::Enable
-        );
-        assert_eq!(settings.default_host_slug.as_deref(), Some("my-host"));
-
-        // Sandboxed agent denylist is populated from the effective list.
-        assert_eq!(
-            settings.sandboxed_agent.execute_commands_denylist.values,
-            vec!["danger".to_string()]
-        );
-    }
-
-    #[test]
-    fn drops_an_uncompilable_remote_session_pattern_without_failing_the_rest() {
-        // Compilation now happens at convert time (mirroring the workspace-level path), so an
-        // org's one bad pattern must not take down the rest of its list.
-        let mut gql = sample_gql_team_settings();
-        gql.ai_permissions.remote_session_regex_list = str_list(&["foo.*", "("], &[], &[]);
-
-        let settings = team_settings_from_gql(gql);
-
-        assert_eq!(
-            settings
-                .ai_permissions
-                .remote_session_regex_list
-                .iter()
-                .map(|regex| regex.as_str())
-                .collect::<Vec<_>>(),
-            vec!["foo.*"]
-        );
     }
 
     #[test]
     fn team_settings_from_gql_uses_team_payload() {
-        // The team payload carries distinctive values (llm enabled, codebase
-        // context Enable, ugc enforced). `team_settings_from_gql` derives
+        // The team payload carries distinctive values (codebase context Enable, ugc
+        // enforced). `team_settings_from_gql` derives
         // `Team.settings` from this payload only — it takes just the team settings,
         // so it structurally cannot clone workspace settings. This is the parse
         // boundary replacing the old `Team::organization_settings` clone.
         let settings = team_settings_from_gql(sample_gql_team_settings());
 
-        assert!(
-            settings.llm_settings.enabled,
-            "Team.settings must be sourced from the team payload"
-        );
         assert_eq!(
             settings.codebase_context.value,
             AdminEnablementSetting::Enable,

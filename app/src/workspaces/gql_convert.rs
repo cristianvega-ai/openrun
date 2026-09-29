@@ -1,7 +1,4 @@
-use std::path::PathBuf;
-
 use anyhow::{Result, anyhow, bail};
-use regex::Regex;
 use warp_errors::report_error;
 use warp_graphql::billing::{
     AiAutonomyPolicy as GqlAiAutonomyPolicy, AmbientAgentsPolicy as GqlAmbientAgentsPolicy,
@@ -21,20 +18,13 @@ use warp_graphql::user::{
     DiscoverableWorkspaceData as GqlDiscoverableWorkspaceData,
 };
 use warp_graphql::workspace::{
-    AdminEnablementSetting as GqlAdminEnablementSetting, AiAutonomyValue as GqlAiAutonomyValue,
-    AiPermissionsSettings as GqlAiPermissionsSettings,
-    ByoEndpointMetadata as GqlByoEndpointMetadata,
-    ByoEndpointModelMetadata as GqlByoEndpointModelMetadata,
-    ByoFirstPartyKey as GqlByoFirstPartyKey, EmailInvite as GqlEmailInvite, FeatureModelChoice,
-    HostEnablementSetting as GqlHostEnablementSetting,
+    AdminEnablementSetting as GqlAdminEnablementSetting, EmailInvite as GqlEmailInvite,
     InviteLinkDomainRestriction as GqlInviteLinkDomainRestriction,
-    MembershipRole as GqlMembershipRole, StringListSettingInfo as GqlStringListSettingInfo,
-    Team as GqlTeam, TeamByoSettings as GqlTeamByoSettings, TeamMember as GqlTeamMember,
+    MembershipRole as GqlMembershipRole, Team as GqlTeam, TeamMember as GqlTeamMember,
     TeamSettings as GqlTeamSettings, TeamVisibility as GqlTeamVisibility,
     UgcCollectionEnablementSetting as GqlUgcCollectionEnablementSetting, Workspace as GqlWorkspace,
     WorkspaceMember as GqlWorkspaceMember, WorkspaceMemberUsageInfo as GqlWorkspaceMemberUsageInfo,
     WorkspaceSettings as GqlWorkspaceSettings,
-    WriteToPtyAutonomyValue as GqlWriteToPtyAutonomyValue,
 };
 
 use super::team::{
@@ -42,25 +32,19 @@ use super::team::{
 };
 use super::user_workspaces::WorkspacesMetadataResponse;
 use super::workspace::{
-    AIAutonomyPolicy, AdminEnablementSetting, AiAutonomySettings, AiPermissionsSettings,
-    AmbientAgentsPolicy, BillingMetadata, ByoEndpointMetadata, ByoEndpointModelMetadata,
-    ByoFirstPartyKey, CloudConversationStorageSettings, CodebaseContextSettings, CustomerType,
-    EmailInvite, EnforceableSetting, EnterpriseSecretRegex, HostEnablementSetting, InstanceShape,
-    InviteLinkDomainRestriction, LinkSharingSettings, LlmSettings, SandboxedAgentSettings,
-    SecretRedactionSettings, SessionSharingPolicy, SplitListSetting, TeamAiAutonomySettings,
-    TeamAiPermissionsSettings, TeamByoSettings, TeamLinkSharingSettings,
-    TeamSandboxedAgentSettings, TeamSecretRedactionSettings, TeamSettings,
+    AIAutonomyPolicy, AdminEnablementSetting, AmbientAgentsPolicy, BillingMetadata,
+    CloudConversationStorageSettings, CodebaseContextSettings, CustomerType, EmailInvite,
+    EnforceableSetting, EnterpriseSecretRegex, InstanceShape, InviteLinkDomainRestriction,
+    LinkSharingSettings, SecretRedactionSettings, SessionSharingPolicy, SplitListSetting,
+    TeamLinkSharingSettings, TeamSecretRedactionSettings, TeamSettings,
     TelemetryDataCollectionPolicy, TelemetrySettings, Tier, UgcCollectionEnablementSetting,
     UgcCollectionSettings, UgcDataCollectionPolicy, WarpAiPolicy, Workspace, WorkspaceMember,
     WorkspaceMemberUsageInfo, WorkspaceSettings, WorkspaceSizePolicy,
 };
-use crate::ai::execution_profiles::{ActionPermission, WriteToPtyPermission};
-use crate::ai::llms::ModelsByFeature;
 use crate::auth::UserUid;
 use crate::server::cloud_objects::listener::ObjectUpdateMessage;
 use crate::server::graphql::schema::object_action_history_from_gql;
 use crate::server::ids::ServerId;
-use crate::settings::AgentModeCommandExecutionPredicate;
 use crate::workspaces::workspace::{
     ByoApiKeyPolicy, ByoEndpointPolicy, CodebaseContextPolicy, ManagedByokByoePolicy,
     MultiAdminPolicy, NativeWorkspacesPolicy,
@@ -123,56 +107,6 @@ impl From<GqlManagedByokByoePolicy> for ManagedByokByoePolicy {
     fn from(gql_managed_byok_byoe_policy: GqlManagedByokByoePolicy) -> ManagedByokByoePolicy {
         Self {
             enabled: gql_managed_byok_byoe_policy.enabled,
-        }
-    }
-}
-
-impl From<GqlTeamByoSettings> for TeamByoSettings {
-    fn from(gql_team_byo: GqlTeamByoSettings) -> TeamByoSettings {
-        Self {
-            first_party_enabled: gql_team_byo.first_party_enabled,
-            endpoints_enabled: gql_team_byo.endpoints_enabled,
-            allow_user_keys: gql_team_byo.allow_user_keys,
-            allow_user_endpoints: gql_team_byo.allow_user_endpoints,
-            first_party_keys: gql_team_byo
-                .first_party_keys
-                .into_iter()
-                .map(From::from)
-                .collect(),
-            endpoints: gql_team_byo.endpoints.into_iter().map(From::from).collect(),
-        }
-    }
-}
-
-impl From<GqlByoFirstPartyKey> for ByoFirstPartyKey {
-    fn from(gql_key: GqlByoFirstPartyKey) -> ByoFirstPartyKey {
-        Self {
-            provider: gql_key.provider.into(),
-            credential_uid: gql_key.credential_uid.into_inner(),
-        }
-    }
-}
-
-impl From<GqlByoEndpointMetadata> for ByoEndpointMetadata {
-    fn from(gql_endpoint: GqlByoEndpointMetadata) -> ByoEndpointMetadata {
-        Self {
-            uid: gql_endpoint.uid.into_inner(),
-            name: gql_endpoint.name,
-            enabled: gql_endpoint.enabled,
-            credential_uid: gql_endpoint.credential_uid.into_inner(),
-            models: gql_endpoint.models.into_iter().map(From::from).collect(),
-        }
-    }
-}
-
-impl From<GqlByoEndpointModelMetadata> for ByoEndpointModelMetadata {
-    fn from(gql_model: GqlByoEndpointModelMetadata) -> ByoEndpointModelMetadata {
-        Self {
-            config_key: gql_model.config_key,
-            slug: gql_model.slug,
-            alias: gql_model.alias,
-            display_name: gql_model.display_name,
-            enabled: gql_model.enabled,
         }
     }
 }
@@ -354,61 +288,6 @@ impl From<GqlAdminEnablementSetting> for AdminEnablementSetting {
     }
 }
 
-impl From<GqlHostEnablementSetting> for HostEnablementSetting {
-    fn from(gql_host_enablement_setting: GqlHostEnablementSetting) -> HostEnablementSetting {
-        match gql_host_enablement_setting {
-            GqlHostEnablementSetting::Enforce => HostEnablementSetting::Enforce,
-            GqlHostEnablementSetting::RespectUserSetting => {
-                HostEnablementSetting::RespectUserSetting
-            }
-            GqlHostEnablementSetting::Other(value) => {
-                report_error!(
-                    "Invalid HostEnablementSetting. Make sure to update client GraphQL types!",
-                    extra: { "value" => %value },
-                    warp_errors::ReportErrorLogMode::OncePerRun
-                );
-                HostEnablementSetting::RespectUserSetting
-            }
-        }
-    }
-}
-impl From<&GqlAiPermissionsSettings> for AiPermissionsSettings {
-    fn from(gql_ai_permissions_settings: &GqlAiPermissionsSettings) -> AiPermissionsSettings {
-        Self {
-            allow_ai_in_remote_sessions: gql_ai_permissions_settings.allow_ai_in_remote_sessions,
-            remote_session_regex_list: compile_remote_session_regex_list(
-                gql_ai_permissions_settings
-                    .remote_session_regex_list
-                    .clone(),
-            ),
-        }
-    }
-}
-
-/// Compiles each remote-session command pattern into a [`Regex`], dropping (and reporting) any
-/// pattern that fails to compile so one bad entry in an org's configuration cannot suppress the
-/// rest of the list.
-///
-/// Throttled to once per run: an uncompilable pattern is a static configuration problem that
-/// does not resolve itself between polls of the workspaces-metadata query, so reporting it every
-/// time would page the same broken pattern at the poll rate for every affected user.
-fn compile_remote_session_regex_list(patterns: impl IntoIterator<Item = String>) -> Vec<Regex> {
-    patterns
-        .into_iter()
-        .filter_map(|pattern| match Regex::new(&pattern) {
-            Ok(regex) => Some(regex),
-            Err(_) => {
-                report_error!(
-                    "Invalid regex pattern for remote session detection",
-                    extra: { "pattern" => %pattern },
-                    warp_errors::ReportErrorLogMode::OncePerRun
-                );
-                None
-            }
-        })
-        .collect()
-}
-
 impl From<GqlUgcDataCollectionPolicy> for UgcDataCollectionPolicy {
     fn from(gql_ugc_data_collection_policy: GqlUgcDataCollectionPolicy) -> UgcDataCollectionPolicy {
         Self {
@@ -548,134 +427,9 @@ impl From<GqlBillingMetadata> for BillingMetadata {
     }
 }
 
-fn convert_gql_ai_autonomy_value_to_action_permission(
-    gql_ai_autonomy_value: GqlAiAutonomyValue,
-) -> Option<ActionPermission> {
-    match gql_ai_autonomy_value {
-        GqlAiAutonomyValue::AgentDecides => Some(ActionPermission::AgentDecides),
-        GqlAiAutonomyValue::AlwaysAllow => Some(ActionPermission::AlwaysAllow),
-        GqlAiAutonomyValue::AlwaysAsk => Some(ActionPermission::AlwaysAsk),
-        GqlAiAutonomyValue::RespectUserSetting => None,
-        GqlAiAutonomyValue::Other(value) => {
-            report_error!(
-                "Invalid AiAutonomyValue. Make sure to update client GraphQL types!",
-                extra: { "value" => %value },
-                warp_errors::ReportErrorLogMode::OncePerRun
-            );
-            None
-        }
-    }
-}
-
-fn convert_gql_write_to_pty_autonomy_value_to_write_to_pty_permission(
-    gql_write_to_pty_autonomy_value: GqlWriteToPtyAutonomyValue,
-) -> Option<WriteToPtyPermission> {
-    match gql_write_to_pty_autonomy_value {
-        GqlWriteToPtyAutonomyValue::AlwaysAllow => Some(WriteToPtyPermission::AlwaysAllow),
-        GqlWriteToPtyAutonomyValue::AlwaysAsk => Some(WriteToPtyPermission::AlwaysAsk),
-        GqlWriteToPtyAutonomyValue::AskOnFirstWrite => Some(WriteToPtyPermission::AskOnFirstWrite),
-        GqlWriteToPtyAutonomyValue::RespectUserSetting => None,
-        GqlWriteToPtyAutonomyValue::Other(value) => {
-            report_error!(
-                "Invalid WriteToPtyAutonomyValue. Make sure to update client GraphQL types!",
-                extra: { "value" => %value },
-                warp_errors::ReportErrorLogMode::OncePerRun
-            );
-            None
-        }
-    }
-}
-
-pub(crate) trait ToAgentModeCommandExecutionPredicates {
-    fn to_predicates(self) -> Vec<AgentModeCommandExecutionPredicate>;
-}
-
-impl ToAgentModeCommandExecutionPredicates for Vec<String> {
-    fn to_predicates(self) -> Vec<AgentModeCommandExecutionPredicate> {
-        self.into_iter()
-            .filter_map(|pattern| {
-                match AgentModeCommandExecutionPredicate::new_regex(&pattern) {
-                    Ok(predicate) => Some(predicate),
-                    Err(e) => {
-                        report_error!(anyhow!(e).context(
-                            "Couldn't parse GQL-provided command regex into AgentModeCommandExecutionPredicate"
-                        ));
-                        None
-                    }
-                }
-            })
-            .collect()
-    }
-}
-
-pub(crate) trait ToPathBufs {
-    fn to_path_bufs(self) -> Vec<PathBuf>;
-}
-
-impl ToPathBufs for Vec<String> {
-    fn to_path_bufs(self) -> Vec<PathBuf> {
-        self.into_iter().map(PathBuf::from).collect()
-    }
-}
-impl From<warp_graphql::workspace::LlmModelHost> for crate::ai::llms::LLMModelHost {
-    fn from(gql_host: warp_graphql::workspace::LlmModelHost) -> Self {
-        use warp_graphql::workspace::LlmModelHost as GqlLlmModelHost;
-        match gql_host {
-            GqlLlmModelHost::DirectApi => Self::DirectApi,
-            GqlLlmModelHost::AwsBedrock => Self::AwsBedrock,
-            GqlLlmModelHost::CustomEndpoint => Self::CustomEndpoint,
-            GqlLlmModelHost::GeminiEnterprise => Self::GeminiEnterprise,
-            GqlLlmModelHost::Other(value) => {
-                log::warn!(
-                    "Unknown LlmModelHost '{value}'. Make sure to update client GraphQL types!"
-                );
-                Self::Unknown
-            }
-        }
-    }
-}
-
-impl From<warp_graphql::workspace::LlmHostSettings> for super::workspace::LlmHostSettings {
-    fn from(gql_settings: warp_graphql::workspace::LlmHostSettings) -> Self {
-        Self {
-            enabled: gql_settings.enabled,
-            enablement_setting: gql_settings
-                .enablement_setting
-                .map(Into::into)
-                .unwrap_or_default(),
-            gcp_audience: gql_settings.gcp_audience,
-            gcp_sa_email: gql_settings.gcp_sa_email,
-        }
-    }
-}
-
-impl From<warp_graphql::workspace::LlmSettings> for LlmSettings {
-    fn from(gql_settings: warp_graphql::workspace::LlmSettings) -> Self {
-        let mut host_configs = std::collections::HashMap::new();
-        for entry in gql_settings.host_configs {
-            let host: crate::ai::llms::LLMModelHost = entry.host.into();
-            if host_configs
-                .insert(host.clone(), entry.settings.into())
-                .is_some()
-            {
-                log::warn!(
-                    "Duplicate LLMModelHost entry for {:?}, using latest value",
-                    host
-                );
-            }
-        }
-        Self {
-            enabled: gql_settings.enabled,
-            host_configs,
-        }
-    }
-}
-
 impl From<GqlWorkspaceSettings> for WorkspaceSettings {
     fn from(gql_workspace_settings: GqlWorkspaceSettings) -> WorkspaceSettings {
         Self {
-            llm_settings: gql_workspace_settings.llm_settings.into(),
-            team_byo: gql_workspace_settings.team_byo.map(From::from),
             telemetry_settings: TelemetrySettings {
                 force_enabled: gql_workspace_settings.telemetry_settings.force_enabled,
             },
@@ -689,16 +443,6 @@ impl From<GqlWorkspaceSettings> for WorkspaceSettings {
                     .cloud_conversation_storage_settings
                     .setting
                     .into(),
-            },
-            ai_permissions_settings: AiPermissionsSettings {
-                allow_ai_in_remote_sessions: gql_workspace_settings
-                    .ai_permissions_settings
-                    .allow_ai_in_remote_sessions,
-                remote_session_regex_list: compile_remote_session_regex_list(
-                    gql_workspace_settings
-                        .ai_permissions_settings
-                        .remote_session_regex_list,
-                ),
             },
             link_sharing_settings: LinkSharingSettings {
                 anyone_with_link_sharing_enabled: gql_workspace_settings
@@ -722,69 +466,13 @@ impl From<GqlWorkspaceSettings> for WorkspaceSettings {
             },
             is_invite_link_enabled: gql_workspace_settings.is_invite_link_enabled,
             is_discoverable: gql_workspace_settings.is_discoverable,
-            ai_autonomy_settings: AiAutonomySettings {
-                apply_code_diffs_setting: gql_workspace_settings
-                    .ai_autonomy_settings
-                    .apply_code_diffs_setting
-                    .and_then(convert_gql_ai_autonomy_value_to_action_permission),
-                read_files_setting: gql_workspace_settings
-                    .ai_autonomy_settings
-                    .read_files_setting
-                    .and_then(convert_gql_ai_autonomy_value_to_action_permission),
-                read_files_allowlist: gql_workspace_settings
-                    .ai_autonomy_settings
-                    .read_files_allowlist
-                    .map(|allowlist| allowlist.to_path_bufs()),
-                execute_commands_setting: gql_workspace_settings
-                    .ai_autonomy_settings
-                    .execute_commands_setting
-                    .and_then(convert_gql_ai_autonomy_value_to_action_permission),
-                execute_commands_allowlist: gql_workspace_settings
-                    .ai_autonomy_settings
-                    .execute_commands_allowlist
-                    .map(|allowlist| allowlist.to_predicates()),
-                execute_commands_denylist: gql_workspace_settings
-                    .ai_autonomy_settings
-                    .execute_commands_denylist
-                    .map(|denylist| denylist.to_predicates()),
-                write_to_pty_setting: gql_workspace_settings
-                    .ai_autonomy_settings
-                    .write_to_pty_setting
-                    .and_then(convert_gql_write_to_pty_autonomy_value_to_write_to_pty_permission),
-            },
             codebase_context_settings: CodebaseContextSettings {
                 setting: gql_workspace_settings
                     .codebase_context_settings
                     .setting
                     .into(),
             },
-            sandboxed_agent_settings: gql_workspace_settings.sandboxed_agent_settings.map(|s| {
-                SandboxedAgentSettings {
-                    execute_commands_denylist: s
-                        .execute_commands_denylist
-                        .map(|denylist| denylist.to_predicates()),
-                }
-            }),
-            enable_warp_attribution: gql_workspace_settings
-                .ambient_agent_settings
-                .as_ref()
-                .map(|s| s.enable_warp_attribution.clone().into())
-                .unwrap_or_default(),
-            default_host_slug: gql_workspace_settings
-                .ambient_agent_settings
-                .as_ref()
-                .and_then(|s| s.default_host_slug.clone()),
         }
-    }
-}
-
-/// Converts a GraphQL `StringListSettingInfo` into the app list setting,
-/// preserving the workspace/team split entries alongside the merged values.
-fn split_string_list(info: GqlStringListSettingInfo) -> SplitListSetting<String> {
-    SplitListSetting {
-        values: info.values,
-        workspace_entries: info.workspace_entries,
-        team_entries: info.team_entries,
     }
 }
 
@@ -817,24 +505,6 @@ impl From<GqlTeamSettings> for TeamSettings {
                     .codebase_context
                     .is_enforced_by_workspace,
             },
-            ai_permissions: TeamAiPermissionsSettings {
-                allow_ai_in_remote_sessions: EnforceableSetting {
-                    value: gql_team_settings
-                        .ai_permissions
-                        .allow_ai_in_remote_sessions
-                        .value,
-                    is_enforced_by_workspace: gql_team_settings
-                        .ai_permissions
-                        .allow_ai_in_remote_sessions
-                        .is_enforced_by_workspace,
-                },
-                remote_session_regex_list: compile_remote_session_regex_list(
-                    gql_team_settings
-                        .ai_permissions
-                        .remote_session_regex_list
-                        .values,
-                ),
-            },
             secret_redaction: TeamSecretRedactionSettings {
                 enabled: EnforceableSetting {
                     value: gql_team_settings.secret_redaction.enabled.value,
@@ -852,62 +522,6 @@ impl From<GqlTeamSettings> for TeamSettings {
                         gql_team_settings.secret_redaction.regexes.team_entries,
                     ),
                 },
-            },
-            ai_autonomy: TeamAiAutonomySettings {
-                apply_code_diffs: EnforceableSetting {
-                    value: convert_gql_ai_autonomy_value_to_action_permission(
-                        gql_team_settings.ai_autonomy.apply_code_diffs.value,
-                    ),
-                    is_enforced_by_workspace: gql_team_settings
-                        .ai_autonomy
-                        .apply_code_diffs
-                        .is_enforced_by_workspace,
-                },
-                read_files: EnforceableSetting {
-                    value: convert_gql_ai_autonomy_value_to_action_permission(
-                        gql_team_settings.ai_autonomy.read_files.value,
-                    ),
-                    is_enforced_by_workspace: gql_team_settings
-                        .ai_autonomy
-                        .read_files
-                        .is_enforced_by_workspace,
-                },
-                create_plans: EnforceableSetting {
-                    value: convert_gql_ai_autonomy_value_to_action_permission(
-                        gql_team_settings.ai_autonomy.create_plans.value,
-                    ),
-                    is_enforced_by_workspace: gql_team_settings
-                        .ai_autonomy
-                        .create_plans
-                        .is_enforced_by_workspace,
-                },
-                execute_commands: EnforceableSetting {
-                    value: convert_gql_ai_autonomy_value_to_action_permission(
-                        gql_team_settings.ai_autonomy.execute_commands.value,
-                    ),
-                    is_enforced_by_workspace: gql_team_settings
-                        .ai_autonomy
-                        .execute_commands
-                        .is_enforced_by_workspace,
-                },
-                write_to_pty: EnforceableSetting {
-                    value: convert_gql_write_to_pty_autonomy_value_to_write_to_pty_permission(
-                        gql_team_settings.ai_autonomy.write_to_pty.value,
-                    ),
-                    is_enforced_by_workspace: gql_team_settings
-                        .ai_autonomy
-                        .write_to_pty
-                        .is_enforced_by_workspace,
-                },
-                read_files_allowlist: split_string_list(
-                    gql_team_settings.ai_autonomy.read_files_allowlist,
-                ),
-                execute_commands_allowlist: split_string_list(
-                    gql_team_settings.ai_autonomy.execute_commands_allowlist,
-                ),
-                execute_commands_denylist: split_string_list(
-                    gql_team_settings.ai_autonomy.execute_commands_denylist,
-                ),
             },
             link_sharing: TeamLinkSharingSettings {
                 anyone_with_link_sharing_enabled: EnforceableSetting {
@@ -931,25 +545,9 @@ impl From<GqlTeamSettings> for TeamSettings {
                         .is_enforced_by_workspace,
                 },
             },
-            sandboxed_agent: TeamSandboxedAgentSettings {
-                execute_commands_denylist: split_string_list(
-                    gql_team_settings.sandboxed_agent.execute_commands_denylist,
-                ),
-            },
-            llm_settings: gql_team_settings.llm_settings.into(),
             telemetry_settings: TelemetrySettings {
                 force_enabled: gql_team_settings.telemetry_settings.force_enabled,
             },
-            enable_warp_attribution: gql_team_settings
-                .ambient_agent_settings
-                .as_ref()
-                .map(|s| s.enable_warp_attribution.clone().into())
-                .unwrap_or_default(),
-            default_host_slug: gql_team_settings
-                .ambient_agent_settings
-                .as_ref()
-                .and_then(|s| s.default_host_slug.clone()),
-            team_byo: gql_team_settings.team_byo.map(From::from),
         }
     }
 }
@@ -964,16 +562,6 @@ impl From<GqlTeamSettings> for TeamSettings {
 /// unit-testable without constructing a full `GqlWorkspace`.
 pub(crate) fn team_settings_from_gql(team_settings: GqlTeamSettings) -> TeamSettings {
     team_settings.into()
-}
-
-fn feature_model_choice_from_gql(choice: FeatureModelChoice) -> ModelsByFeature {
-    choice.try_into().unwrap_or_else(|e: anyhow::Error| {
-        report_error!(
-            e.context("Failed to convert FeatureModelChoice from server"),
-            ReportErrorLogMode::OncePerRun
-        );
-        ModelsByFeature::default()
-    })
 }
 
 pub(crate) fn team_pending_email_invites_from_gql(
@@ -1015,7 +603,6 @@ impl Team {
             // Team-effective settings come from the team payload, not from a
             // clone of the workspace settings.
             settings: team_settings_from_gql(gql_team.settings),
-            feature_model_choice: feature_model_choice_from_gql(gql_team.feature_model_choice),
             is_eligible_for_discovery: gql_workspace.is_eligible_for_discovery,
             visibility: gql_team.visibility.into(),
         }
@@ -1041,9 +628,6 @@ impl From<GqlWorkspace> for Workspace {
                 .collect(),
             billing_metadata: gql_workspace.billing_metadata.clone().into(),
             settings: gql_workspace.settings.clone().into(),
-            feature_model_choice: feature_model_choice_from_gql(
-                gql_workspace.feature_model_choice.clone(),
-            ),
             invite_link_domain_restrictions: gql_workspace
                 .invite_link_domain_restrictions
                 .clone()

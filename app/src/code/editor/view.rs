@@ -1421,10 +1421,6 @@ impl CodeEditorView {
         ctx.notify();
     }
 
-    pub fn is_selecting(&self) -> bool {
-        self.is_selecting
-    }
-
     /// Extend the selection to the given offset.  This is used for shift-clicking to extend the
     /// selection, and not for dragging the selection.
     fn selection_extend(&mut self, offset: CharOffset, ctx: &mut ViewContext<Self>) {
@@ -2070,12 +2066,7 @@ impl CodeEditorView {
 
         self.active_comment_editor
             .update(ctx, |comment_editor, ctx| {
-                comment_editor.reopen_saved_comment(
-                    id,
-                    Some(location.clone()),
-                    comment_text,
-                    ctx,
-                );
+                comment_editor.reopen_saved_comment(id, Some(location.clone()), comment_text, ctx);
             });
 
         self.model.update(ctx, |editor_model, ctx| {

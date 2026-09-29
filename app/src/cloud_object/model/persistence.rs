@@ -9,7 +9,6 @@ use warp_errors::report_error;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
-use crate::ai::execution_profiles::CloudAIExecutionProfile;
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::notebook_model::CloudNotebook;
 use crate::cloud_object::{
@@ -491,9 +490,6 @@ impl CloudModel {
             ServerCloudObject::Preference(preferences) => {
                 self.upsert_from_server_object(preferences, ctx);
             }
-            ServerCloudObject::AIExecutionProfile(ai_execution_profile) => {
-                self.upsert_from_server_object(ai_execution_profile, ctx);
-            }
         }
     }
 
@@ -935,15 +931,6 @@ impl CloudModel {
         self.objects_by_id
             .values()
             .filter_map(|object| object.into())
-    }
-
-    pub fn get_ai_execution_profile(
-        &self,
-        profile_id: &SyncId,
-    ) -> Option<&CloudAIExecutionProfile> {
-        self.objects_by_id
-            .get(&profile_id.uid())
-            .and_then(|object| object.into())
     }
 
     /// Returns all active (not trashed) notebooks in the space.

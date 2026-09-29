@@ -86,7 +86,6 @@ pub use {
 use self::model::{LocalSelections, Selection, UpdateBufferOption};
 use super::Point;
 use super::soft_wrap::{ClampDirection, DisplayPointAndClampDirection};
-use crate::BlocklistAIHistoryModel;
 use crate::appearance::Appearance;
 use crate::channel::{Channel, ChannelState};
 use crate::editor::RangeExt;
@@ -117,7 +116,7 @@ use crate::util::image::{
 use crate::util::merge_ranges;
 use crate::view_components::DismissibleToast;
 use crate::vim_registers::{RegisterContent, VimRegisters};
-use crate::workspace::{ToastStack, Workspace};
+use crate::workspace::ToastStack;
 
 const CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 const DEFAULT_TAB_SIZE: usize = 4;
@@ -4083,39 +4082,11 @@ impl EditorView {
             return;
         }
 
-        let terminal_view = ctx
-            .windows()
-            .active_window()
-            .and_then(|active_window| {
-                ctx
-                    // Need to get the workspace info since we don't have access to the terminal view
-                    // from the ClearBuffer action.
-                    .views_of_type::<Workspace>(active_window)
-                    .and_then(|views| views.first().cloned())
-            })
-            .and_then(|workspace| {
-                workspace
-                    .as_ref(ctx)
-                    .active_tab_pane_group()
-                    .as_ref(ctx)
-                    .active_session_view(ctx)
-            });
-
-        // If an agent is responding, we don't want ctrl+c to clear the persistent input.
-        let is_agent_responding = terminal_view
-            .and_then(|terminal_view| {
-                BlocklistAIHistoryModel::as_ref(ctx).active_conversation(terminal_view.id())
-            })
-            .is_some_and(|conversation| {
-                conversation.status().is_in_progress() && conversation.exchange_count() > 0
-            });
-
         let mut cleared_buffer_len = 0;
-        if (!self.vim_mode_enabled(ctx)
+        if !self.vim_mode_enabled(ctx)
             || self
                 .vim_mode(ctx)
-                .is_some_and(|vim_mode| matches![vim_mode, VimMode::Normal | VimMode::Insert]))
-            && !is_agent_responding
+                .is_some_and(|vim_mode| matches![vim_mode, VimMode::Normal | VimMode::Insert])
         {
             cleared_buffer_len = self.buffer_size(ctx).as_usize();
             self.clear_buffer(ctx);

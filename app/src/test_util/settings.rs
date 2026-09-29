@@ -21,9 +21,9 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     use crate::settings::app_icon::AppIconSettings;
     use crate::settings::manager::SettingsManager;
     use crate::settings::{
-        AISettings, AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
-        BlockVisibilitySettings, CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings,
-        GPUSettings, InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
+        AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
+        CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings, GPUSettings,
+        InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
         SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings, ThemeSettings,
         VimBannerSettings, init_and_register_user_preferences,
     };
@@ -50,7 +50,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     });
 
     AccessibilitySettings::register(app);
-    app.update(AISettings::register_and_subscribe_to_events);
     app.update(CLIAgentSettings::register_and_subscribe_to_events);
     AliasExpansionSettings::register(app);
     AppEditorSettings::register(app);
@@ -101,9 +100,4 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     WindowSettings::register(app);
     CodeSettings::register(app);
     SemanticSelection::register(app);
-
-    app.update(|ctx| {
-        // Add settings models that are backed by secure storage, not user preferences.
-        ctx.add_singleton_model(ai::api_keys::ApiKeyManager::new);
-    });
 }

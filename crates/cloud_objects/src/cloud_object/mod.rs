@@ -161,14 +161,12 @@ impl ToString for GenericStringObjectFormat {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Hash)]
 pub enum JsonObjectType {
     Preference,
-    AIExecutionProfile,
 }
 
 impl JsonObjectType {
     pub fn as_str(&self) -> &'static str {
         match self {
             JsonObjectType::Preference => "PREFERENCE",
-            JsonObjectType::AIExecutionProfile => "AIEXECUTIONPROFILE",
         }
     }
 }
@@ -179,7 +177,6 @@ impl TryFrom<&str> for JsonObjectType {
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "PREFERENCE" => Ok(JsonObjectType::Preference),
-            "AIEXECUTIONPROFILE" => Ok(JsonObjectType::AIExecutionProfile),
             _ => Err(anyhow!("could not convert unknown json object type")),
         }
     }
@@ -795,9 +792,6 @@ impl From<GenericStringObjectFormat>
             GenericStringObjectFormat::Json(JsonObjectType::Preference) => {
                 GraphQLFormat::JsonPreference
             }
-            GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile) => {
-                GraphQLFormat::JsonAIExecutionProfile
-            }
         }
     }
 }
@@ -1002,6 +996,7 @@ mod tests {
     #[test]
     fn retired_json_object_types_no_longer_parse() {
         for retired in [
+            "AIEXECUTIONPROFILE",
             "CLOUDENVIRONMENT",
             "SCHEDULEDAMBIENTAGENT",
             "CLOUDAGENTCONFIG",
@@ -1015,10 +1010,7 @@ mod tests {
 
     #[test]
     fn remaining_json_object_types_round_trip() {
-        for object_type in [
-            JsonObjectType::Preference,
-            JsonObjectType::AIExecutionProfile,
-        ] {
+        for object_type in [JsonObjectType::Preference] {
             assert_eq!(
                 JsonObjectType::try_from(object_type.as_str()).unwrap(),
                 object_type

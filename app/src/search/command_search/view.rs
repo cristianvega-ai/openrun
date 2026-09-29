@@ -143,7 +143,7 @@ impl CommandSearchView {
             me.handle_search_bar_event(event, ctx);
         });
 
-        let zero_state_handle = ctx.add_typed_action_view(CommandSearchZeroStateView::new);
+        let zero_state_handle = ctx.add_typed_action_view(|_| CommandSearchZeroStateView::new());
         ctx.subscribe_to_view(&zero_state_handle, |me, _handle, event, ctx| {
             me.handle_zero_state_event(event, ctx);
         });

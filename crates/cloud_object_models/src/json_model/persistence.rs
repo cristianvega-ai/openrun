@@ -10,13 +10,10 @@ use cloud_objects::ids::GenericStringObjectId;
 use diesel::SqliteConnection;
 use diesel::result::Error;
 
-use crate::{
-    CloudAIExecutionProfile, CloudAIExecutionProfileModel, CloudPreference, CloudPreferenceModel,
-};
+use crate::{CloudPreference, CloudPreferenceModel};
 
 pub enum PersistedGenericStringObject {
     Preference(CloudPreference),
-    AIExecutionProfile(CloudAIExecutionProfile),
 }
 
 pub fn read_generic_string_objects(
@@ -51,19 +48,6 @@ pub fn read_generic_string_objects(
                             to_cloud_object_metadata(metadata),
                             cloud_object_permissions,
                         ))
-                    })
-                }
-                JsonObjectType::AIExecutionProfile => {
-                    let model = CloudAIExecutionProfileModel::deserialize_owned(&object.data);
-                    model.ok().map(|model| {
-                        PersistedGenericStringObject::AIExecutionProfile(
-                            CloudAIExecutionProfile::new(
-                                object_id,
-                                model,
-                                to_cloud_object_metadata(metadata),
-                                cloud_object_permissions,
-                            ),
-                        )
                     })
                 }
             }

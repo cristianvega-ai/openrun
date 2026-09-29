@@ -9,7 +9,7 @@ use warpui::{AppContext, SingletonEntity};
 use super::UserWorkspaces;
 use crate::auth::AuthStateProvider;
 use crate::workspaces::team::Team;
-use crate::workspaces::workspace::{BillingMetadata, Workspace};
+use crate::workspaces::workspace::BillingMetadata;
 
 impl UserWorkspaces {
     pub fn current_workspace_billing_metadata(&self) -> Option<&BillingMetadata> {
@@ -28,14 +28,6 @@ impl UserWorkspaces {
             .or_else(|| self.current_workspace_billing_metadata())
     }
 
-    pub fn is_custom_llm_enabled_for_team(&self, team: Option<&Team>) -> bool {
-        team.map(Team::is_custom_llm_enabled)
-            .or_else(|| {
-                self.current_workspace()
-                    .map(Workspace::is_custom_llm_enabled)
-            })
-            .unwrap_or(false)
-    }
     /// Whether BYO API key is enabled for the current user, based on the active policies.
     /// Note that the value may be incorrect if called before the team's billing metadata has been fetched.
     /// For solo users (no workspace), this is controlled by the `SoloUserByok` feature flag.

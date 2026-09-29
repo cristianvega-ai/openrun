@@ -8,7 +8,6 @@ use warpui::Element;
 use warpui::color::ColorU;
 use warpui::elements::{ConstrainedBox, Container, CornerRadius, Radius};
 
-use crate::ai::agent::conversation::ConversationStatus;
 use crate::ui_components::icons::Icon;
 
 /// Padding around the status icon rendered by [`render_status_element`].
@@ -61,12 +60,6 @@ pub trait StatusElementStyle {
 impl StatusElementStyle for AgentStatus {
     fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
         AgentStatus::status_icon_and_color(self, theme)
-    }
-}
-
-impl StatusElementStyle for ConversationStatus {
-    fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
-        ConversationStatus::status_icon_and_color(self, theme)
     }
 }
 

@@ -54,12 +54,11 @@ use crate::root_view::QuakeModePinPosition;
 use crate::search::command_search::settings::CommandSearchSettings;
 use crate::server::telemetry::TelemetryEvent;
 use crate::settings::{
-    AliasExpansionSettings, AppEditorSettings, CLIAgentSettings,
-    CodeSettings, CtrlTabBehavior, DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES,
-    ExtraMetaKeys, GPUSettings, GlobalHotkeyMode, InputSettings, InputSettingsChangedEvent,
-    QUAKE_WINDOW_AUTOHIDE_SUPPORTED, QuakeModeSettings, RightClickBehavior, ScrollSettings,
-    ScrollSettingsChangedEvent, SelectionSettings, SelectionSettingsChangedEvent, SshSettings,
-    TabBehavior,
+    AliasExpansionSettings, AppEditorSettings, CLIAgentSettings, CodeSettings, CtrlTabBehavior,
+    DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES, ExtraMetaKeys, GPUSettings, GlobalHotkeyMode,
+    InputSettings, InputSettingsChangedEvent, QUAKE_WINDOW_AUTOHIDE_SUPPORTED, QuakeModeSettings,
+    RightClickBehavior, ScrollSettings, ScrollSettingsChangedEvent, SelectionSettings,
+    SelectionSettingsChangedEvent, SshSettings, TabBehavior,
 };
 use crate::terminal::BlockListSettings;
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
@@ -2242,7 +2241,10 @@ impl FeaturesPageView {
         });
 
         ctx.subscribe_to_model(&GeneralSettings::handle(ctx), |me, _, event, ctx| {
-            if matches!(event, GeneralSettingsChangedEvent::DefaultSessionMode { .. }) {
+            if matches!(
+                event,
+                GeneralSettingsChangedEvent::DefaultSessionMode { .. }
+            ) {
                 Self::update_default_session_mode_dropdown(
                     me.default_session_mode_dropdown.clone(),
                     ctx,

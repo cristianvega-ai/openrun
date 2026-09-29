@@ -4,7 +4,7 @@ use settings::Setting as _;
 use warpui_extras::user_preferences::UserPreferences as _;
 use warpui_extras::user_preferences::in_memory::InMemoryPreferences;
 
-use super::{DefaultSessionMode, RestoreSession, WelcomeTipsFeaturesUsed};
+use super::{DefaultSessionMode, GeneralSettings, RestoreSession, WelcomeTipsFeaturesUsed};
 use crate::resource_center::{Tip, TipAction, TipHint};
 
 #[test]
@@ -82,4 +82,89 @@ fn retired_default_session_modes_read_as_the_default_mode() {
         DefaultSessionMode::from_file_value(&serde_json::json!("not_a_mode")),
         None
     );
+}
+
+#[test]
+fn removed_ai_settings_in_the_settings_file_are_ignored() {
+    use settings::{PrivatePreferences, PublicPreferences, SettingsManager};
+    use warpui::SingletonEntity as _;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.toml");
+    std::fs::write(
+        &path,
+        r#"
+[general]
+restore_session = false
+default_session_mode = "tab_config"
+
+[agents.warp_agent]
+is_any_ai_enabled = false
+
+[agents.warp_agent.active_ai]
+enabled = false
+
+[agents.warp_agent.input]
+include_agent_commands_in_history = true
+
+[agents.warp_agent.other]
+thinking_display_mode = "always_show"
+usage_display_unit = "dollars"
+default_prompt_submission_mode = "queue"
+long_running_command_submission_mode = "send_immediately"
+auto_approve_bypasses_command_denylist = false
+agent_attribution_enabled = false
+
+[agents.profiles]
+agent_mode_command_execution_allowlist = ["ls .*"]
+agent_mode_command_execution_denylist = ["rm .*"]
+agent_mode_execute_readonly_commands = true
+agent_mode_coding_permissions = "always_allow_reading"
+agent_mode_coding_file_read_allowlist = ["/tmp"]
+
+[agents.execution_profiles.default]
+name = "Default"
+read_files = "always_allow"
+
+[cloud_platform.third_party_api_keys]
+aws_bedrock_credentials_enabled = true
+aws_bedrock_auto_login = true
+aws_bedrock_auth_refresh_command = "aws sso login"
+aws_bedrock_profile = "default"
+gemini_enterprise_credentials_enabled = true
+"#,
+    )
+    .unwrap();
+    let (preferences, error) =
+        warpui_extras::user_preferences::toml_backed::TomlBackedUserPreferences::new(path);
+    assert!(error.is_none(), "the settings file itself must still load");
+
+    warpui::App::test((), |mut app| async move {
+        app.update(|ctx| {
+            ctx.add_singleton_model(move |_| PublicPreferences::new(Box::new(preferences)));
+            ctx.add_singleton_model(|_| -> PrivatePreferences {
+                PrivatePreferences::new(Box::<InMemoryPreferences>::default())
+            });
+        });
+        app.add_singleton_model(|_| SettingsManager::default());
+        GeneralSettings::register(&mut app);
+
+        let failed_keys = app.update(|ctx| {
+            SettingsManager::handle(ctx)
+                .update(ctx, |manager, ctx| manager.reload_all_public_settings(ctx))
+        });
+        assert!(
+            failed_keys.is_empty(),
+            "removed AI settings must not fail any setting: {failed_keys:?}"
+        );
+
+        app.read(|ctx| {
+            let settings = GeneralSettings::as_ref(ctx);
+            assert!(!*settings.restore_session);
+            assert_eq!(
+                settings.default_session_mode(),
+                DefaultSessionMode::TabConfig
+            );
+        });
+    });
 }

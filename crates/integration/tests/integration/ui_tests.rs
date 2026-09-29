@@ -250,8 +250,6 @@ integration_tests! {
     test_autosuggestions_are_hidden_when_opening_tab_completions,
 
     test_pass_control_sequences_to_long_running_block,
-    test_execution_profiles_load_from_settings_file,
-    test_execution_profile_model_persists_and_hot_reloads_settings_file,
     test_settings_file_migration_from_native_store,
     test_settings_file_hot_reload_applies_new_values,
 

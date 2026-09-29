@@ -1,7 +1,6 @@
 #![allow(clippy::doc_lazy_continuation)]
 
 mod agent_notifications;
-mod ai;
 mod alloc;
 mod antivirus;
 #[cfg(target_os = "macos")]
@@ -108,10 +107,6 @@ pub mod tab_configs;
 pub mod terminal;
 pub mod themes;
 use agent_notifications::AgentNotificationsModel;
-pub use ai::agent::todos::AIAgentTodoList;
-pub use ai::agent::{AIAgentActionResultType, FileEdit, TodoOperation};
-use ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
-use ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use auth::auth_manager::AuthManager;
 use auth::auth_state::{AuthState, AuthStateProvider};
 use code::editor_management::CodeManager;
@@ -138,7 +133,6 @@ use watcher::HomeDirectoryWatcher;
 use workspace_metadata::PersistedWorkspace;
 
 #[cfg(not(target_family = "wasm"))]
-use crate::ai::aws_credentials::AwsCredentialRefresher as _;
 #[cfg(not(target_family = "wasm"))]
 use crate::view_components::DismissibleToast;
 pub mod workflows;
@@ -186,9 +180,6 @@ use window_settings::WindowSettings;
 use workspace::sync_inputs::SyncedInputState;
 
 use self::features::FeatureFlag;
-use crate::ai::document::ai_document_model::AIDocumentModel;
-use crate::ai::llms::LLMPreferences;
-use crate::ai::restored_conversations::RestoredAgentConversations;
 use crate::antivirus::AntivirusInfo;
 use crate::app_state::AppState;
 use crate::cloud_object::model::actions::{ObjectAction, ObjectActions};
@@ -796,10 +787,8 @@ pub(crate) fn initialize_app(
         restored_user_profiles,
         time_of_next_force_object_refresh,
         object_actions,
-        ai_queries,
         persisted_workspaces,
         workspace_language_servers,
-        multi_agent_conversations,
         persisted_projects,
         persisted_ignored_suggestions,
     ) = sqlite_data
@@ -813,18 +802,14 @@ pub(crate) fn initialize_app(
                 sqlite_data.user_profiles,
                 sqlite_data.time_of_next_force_object_refresh,
                 sqlite_data.object_actions,
-                sqlite_data.ai_queries,
                 sqlite_data.workspace_metadata,
                 sqlite_data.workspace_language_servers,
-                sqlite_data.multi_agent_conversations,
                 sqlite_data.projects,
                 sqlite_data.ignored_suggestions,
             )
         })
         .unwrap_or_else(|| {
             (
-                Default::default(),
-                Default::default(),
                 Default::default(),
                 Default::default(),
                 Default::default(),
@@ -846,34 +831,7 @@ pub(crate) fn initialize_app(
             server_api_provider.as_ref(ctx).get_workspace_client(),
             cached_workspaces,
             current_workspace_uid,
-            ctx,
         )
-    });
-
-    // Initialize ApiKeyManager after UserWorkspaces so it can subscribe to workspace/settings changes
-    ctx.add_singleton_model(|ctx| {
-        #[cfg_attr(target_family = "wasm", allow(unused_mut))]
-        let mut manager = ::ai::api_keys::ApiKeyManager::new(ctx);
-        #[cfg(not(target_family = "wasm"))]
-        manager.subscribe_to_settings_changes(ctx);
-        // The Grok subscription refresher (`ai::grok_subscription`) has no
-        // visibility into workspace policy, so wire the BYO API key policy in
-        // here. The initial value resumes proactive refresh of any tokens
-        // restored from secure storage; TeamsChanged keeps the policy aligned
-        // as team data loads or the workspace changes.
-        #[cfg(not(target_family = "wasm"))]
-        if FeatureFlag::SuperGrok.is_enabled() {
-            use crate::workspaces::user_workspaces::UserWorkspacesEvent;
-            ctx.subscribe_to_model(&UserWorkspaces::handle(ctx), |manager, _, event, ctx| {
-                if matches!(event, UserWorkspacesEvent::TeamsChanged) {
-                    let allowed = UserWorkspaces::as_ref(ctx).is_byo_api_key_enabled(ctx);
-                    manager.set_grok_refresh_allowed(allowed, ctx);
-                }
-            });
-            let allowed = UserWorkspaces::as_ref(ctx).is_byo_api_key_enabled(ctx);
-            manager.set_grok_refresh_allowed(allowed, ctx);
-        }
-        manager
     });
 
     ctx.add_singleton_model(AntivirusInfo::new);
@@ -1079,16 +1037,8 @@ pub(crate) fn initialize_app(
         )
     });
 
-    {
-        let conversations = &multi_agent_conversations;
-        ctx.add_singleton_model(move |_| BlocklistAIHistoryModel::new(ai_queries, conversations));
-    }
-    // Conversations restore lazily from the local DB on demand; startup only
-    // loads metadata.
-    ctx.add_singleton_model(|_| RestoredAgentConversations::new());
     ctx.add_singleton_model(|_| CLIAgentSessionsModel::new());
     ctx.add_singleton_model(AgentNotificationsModel::new);
-    ctx.add_singleton_model(BlocklistAIPermissions::new);
 
     ctx.add_singleton_model(RepoOutlines::new);
 
@@ -1118,17 +1068,12 @@ pub(crate) fn initialize_app(
         )
     });
 
-    ai::custom_endpoints::init(ctx);
-
     // LogManager must be registered before any subsystem (e.g. LSP) that creates file-based loggers.
     ctx.add_singleton_model(|_| simple_logger::manager::LogManager::new());
 
     // CloudViewModel subscribes to UpdateManager so that it can be notified when objects are
     // created on the server.
     ctx.add_singleton_model(CloudViewModel::new);
-
-    // AIDocumentModel subscribes to UpdateManager so that it can be notified when notebooks are created on the server.
-    ctx.add_singleton_model(AIDocumentModel::new);
 
     ctx.add_singleton_model(|_| CodeManager::default());
     ctx.add_singleton_model(|_| OpenedFilesModel::new());
@@ -1203,13 +1148,9 @@ pub(crate) fn initialize_app(
 
     ctx.add_singleton_model(LocalWorkflows::new);
 
-    ctx.add_singleton_model(LLMPreferences::new);
-
     timer.mark_interval_end("SINGLETON_MODELS_REGISTERED");
 
     ctx.add_singleton_model(move |_| timer);
-
-    ctx.add_singleton_model(AIExecutionProfilesModel::new);
 
     ctx.add_singleton_model(DefaultTerminal::new);
 

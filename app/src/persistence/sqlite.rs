@@ -34,16 +34,12 @@ use lsp::supported_servers::LSPServerType;
 use num_traits::FromPrimitive;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
-use warp_errors::{report_error, report_if_error};
+use warp_errors::report_error;
 use warpui::platform::FullscreenState;
 use warpui::windowing::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use warpui::{AppContext, SingletonEntity};
 
-use super::agent::{
-    backfill_conversation_summaries, delete_agent_conversations, read_agent_conversation_metadata,
-    upsert_agent_conversation,
-};
-use super::block_list::{delete_ai_conversation, delete_blocks, save_block, upsert_ai_query};
+use super::block_list::{delete_blocks, save_block};
 use super::model::{
     self, CODE_PANE_KIND, NOTEBOOK_PANE_KIND, NewApp, NewCommand, NewTab, NewTabGroup, NewTeam,
     NewWindow, NewWorkspace, NewWorkspaceMetadata, NewWorkspaceTeam, Project, SETTINGS_PANE_KIND,
@@ -53,7 +49,6 @@ use super::{
     BlockCompleted, FinishedCommandMetadata, ModelEvent, PersistedData, PersistedDataScope,
     PersistenceScope, StartedCommandMetadata, WriterHandles, schema,
 };
-use crate::ai::agent::conversation::AIConversationId;
 use crate::app_state::{
     AppState, BranchSnapshot, CodePaneSnapShot, CodePaneTabSnapshot, CodeReviewPaneSnapshot,
     LeafContents, LeafSnapshot, LeftPanelSnapshot, NotebookPaneSnapshot, PaneFlex,
@@ -68,9 +63,7 @@ use crate::cloud_object::model::actions::{
 use crate::cloud_object::model::generic_string_model::CloudStringObject;
 use crate::cloud_object::{CloudObject, ObjectIdType};
 use crate::code::editor_management::CodeSource;
-use crate::persistence::block_list::{
-    get_all_restored_blocks, process_ai_queries_for_uparrow_prompt, read_recent_ai_queries,
-};
+use crate::persistence::block_list::get_all_restored_blocks;
 use crate::persistence::model::{
     CODE_REVIEW_PANE_KIND, NewPersistedObjectAction, NewTeamSettings, UserProfile,
 };
@@ -116,7 +109,7 @@ pub fn initialize(
     let database_path = database_file_path_for_scope(&scope);
     match init_db(&scope) {
         Ok(mut conn) => {
-            let mut persisted_data = read_persisted_data(&mut conn, ctx, data_scope);
+            let persisted_data = read_persisted_data(&mut conn, ctx, data_scope);
 
             let writer_handles = match start_writer(conn, database_path.clone()) {
                 Ok(writer_handles) => Some(writer_handles),
@@ -129,23 +122,6 @@ pub fn initialize(
                     None
                 }
             };
-
-            // Persist any read-time-derived conversation summaries so the
-            // derivation only happens once per pre-`summary`-column row.
-            if let (Some(persisted_data), Some(writer_handles)) =
-                (persisted_data.as_mut(), writer_handles.as_ref())
-            {
-                let backfills = std::mem::take(&mut persisted_data.conversation_summary_backfills);
-                if !backfills.is_empty() {
-                    log::info!("Backfilling {} conversation summaries", backfills.len());
-                    report_if_error!(
-                        writer_handles
-                            .sender
-                            .send(ModelEvent::BackfillConversationSummaries { backfills })
-                            .context("Error requesting conversation summary backfill")
-                    );
-                }
-            }
 
             (persisted_data, writer_handles)
         }
@@ -547,34 +523,6 @@ fn handle_model_event(event: ModelEvent, connection: &mut SqliteConnection) -> a
         } => {
             sync_object_actions(connection, objects_to_sync).context("error syncing object actions")
         }
-        ModelEvent::UpsertAIQuery { query } => {
-            upsert_ai_query(connection, query).context("error upserting AI query")
-        }
-        ModelEvent::DeleteAIConversation { conversation_id } => {
-            delete_ai_conversation(connection, &conversation_id)
-                .context("error deleting AI conversation")
-        }
-        ModelEvent::UpdateMultiAgentConversation {
-            conversation_id,
-            updated_tasks,
-            conversation_data,
-        } => upsert_agent_conversation(
-            connection,
-            &conversation_id,
-            &updated_tasks,
-            conversation_data,
-        )
-        .map_err(anyhow::Error::from),
-        ModelEvent::BackfillConversationSummaries { backfills } => {
-            backfill_conversation_summaries(connection, backfills)
-                .map_err(anyhow::Error::from)
-                .context("error backfilling conversation summaries")
-        }
-        ModelEvent::DeleteMultiAgentConversations { conversation_ids } => {
-            delete_agent_conversations(connection, conversation_ids)
-                .map_err(anyhow::Error::from)
-                .context("error deleting multi-agent conversation")
-        }
         ModelEvent::AddIgnoredSuggestion {
             suggestion,
             suggestion_type,
@@ -962,17 +910,6 @@ fn save_pane_state(
 
     match &snapshot.contents {
         LeafContents::Terminal(terminal_snapshot) => {
-            let conversation_ids = if terminal_snapshot.conversation_ids_to_restore.is_empty() {
-                None
-            } else {
-                let ids: Vec<String> = terminal_snapshot
-                    .conversation_ids_to_restore
-                    .iter()
-                    .map(|id| id.to_string())
-                    .collect();
-                serde_json::to_string(&ids).ok()
-            };
-
             let terminal = model::NewTerminalPane {
                 id,
                 uuid: terminal_snapshot.uuid.clone(),
@@ -986,15 +923,6 @@ fn save_pane_state(
                     .input_config
                     .as_ref()
                     .and_then(|config| serde_json::to_string(config).ok()),
-                llm_model_override: terminal_snapshot.llm_model_override.clone(),
-                active_profile_id: terminal_snapshot
-                    .active_profile_id
-                    .as_ref()
-                    .and_then(|sync_id| serde_json::to_string(sync_id).ok()),
-                conversation_ids,
-                active_conversation_id: terminal_snapshot
-                    .active_conversation_id
-                    .map(|id| id.to_string()),
             };
 
             diesel::insert_into(schema::terminal_panes::dsl::terminal_panes)
@@ -1335,7 +1263,7 @@ fn save_workspace(conn: &mut SqliteConnection, workspace: WorkspaceMetadata) -> 
         name: workspace.name,
         server_uid: workspace.uid.into(),
         is_selected: true,
-        feature_model_choice_json: serde_json::to_string(&workspace.feature_model_choice).ok(),
+        feature_model_choice_json: None,
     };
 
     diesel::insert_into(workspaces)
@@ -1354,7 +1282,7 @@ fn save_workspace(conn: &mut SqliteConnection, workspace: WorkspaceMetadata) -> 
             name: team.name,
             server_uid: team.uid.into(),
             billing_metadata_json: serde_json::to_string(&team.billing_metadata).ok(),
-            feature_model_choice_json: serde_json::to_string(&team.feature_model_choice).ok(),
+            feature_model_choice_json: None,
         };
         diesel::insert_into(teams)
             .values(&new_team)
@@ -1438,7 +1366,7 @@ fn save_workspaces(
             is_selected: current_workspace_uid
                 .map(|current_uid| workspace.uid == current_uid)
                 .unwrap_or(false),
-            feature_model_choice_json: serde_json::to_string(&workspace.feature_model_choice).ok(),
+            feature_model_choice_json: None,
         })
         .collect();
     diesel::insert_or_ignore_into(workspaces)
@@ -1457,8 +1385,7 @@ fn save_workspaces(
                     server_uid: team.uid.into(),
                     name: team.name.clone(),
                     billing_metadata_json: serde_json::to_string(&team.billing_metadata).ok(),
-                    feature_model_choice_json: serde_json::to_string(&team.feature_model_choice)
-                        .ok(),
+                    feature_model_choice_json: None,
                 })
                 .collect::<Vec<NewTeam>>()
         })
@@ -1594,27 +1521,6 @@ fn upsert_generic_string_objects(
     upsert_generic_string_object_rows(conn, objects)
 }
 
-/// Parse conversation IDs from JSON string.
-fn parse_conversation_ids(ids_json: &Option<String>) -> Vec<AIConversationId> {
-    let Some(ids_str) = ids_json.as_ref() else {
-        return vec![];
-    };
-
-    let Ok(id_strings) = serde_json::from_str::<Vec<String>>(ids_str) else {
-        log::warn!("Failed to deserialize conversation IDs from column");
-        return vec![];
-    };
-
-    id_strings
-        .into_iter()
-        .map(AIConversationId::try_from)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap_or_else(|_| {
-            log::warn!("Failed to parse conversation IDs");
-            vec![]
-        })
-}
-
 /// Reads a tab's pane tree. Returns `None` if every pane in the tab is of a kind that
 /// can no longer be restored.
 fn read_root_node(
@@ -1659,17 +1565,6 @@ fn read_node(
                     let input_config = terminal_pane
                         .input_config
                         .and_then(|config_str| InputConfig::from_persisted(&config_str));
-                    let active_profile_id = terminal_pane
-                        .active_profile_id
-                        .and_then(|profile_str| serde_json::from_str(&profile_str).ok());
-                    // Don't provide a fallback here - let the higher-level code with AppContext handle it
-
-                    let conversation_ids_to_restore =
-                        parse_conversation_ids(&terminal_pane.conversation_ids);
-
-                    let active_conversation_id = terminal_pane
-                        .active_conversation_id
-                        .and_then(|id_str| AIConversationId::try_from(id_str).ok());
 
                     LeafContents::Terminal(TerminalPaneSnapshot {
                         uuid: terminal_pane.uuid,
@@ -1678,10 +1573,6 @@ fn read_node(
                         is_read_only: false,
                         shell_launch_data,
                         input_config,
-                        llm_model_override: terminal_pane.llm_model_override,
-                        active_profile_id,
-                        conversation_ids_to_restore,
-                        active_conversation_id,
                     })
                 }
                 NOTEBOOK_PANE_KIND => {
@@ -1819,7 +1710,6 @@ fn box_persisted_generic_string_object(
 ) -> Box<dyn CloudObject> {
     match object {
         PersistedGenericStringObject::Preference(object) => Box::new(object),
-        PersistedGenericStringObject::AIExecutionProfile(object) => Box::new(object),
     }
 }
 
@@ -2109,18 +1999,12 @@ fn read_sqlite_data(
 
             let members = members_by_team_id.get(&team.id).cloned();
 
-            let feature_model_choice = team
-                .feature_model_choice_json
-                .as_ref()
-                .and_then(|json| serde_json::from_str(json).ok());
-
             TeamMetadata::from_local_cache(
                 ServerId::from_string_lossy(team.server_uid),
                 team.name,
                 team_settings,
                 billing_metadata,
                 members,
-                feature_model_choice,
             )
         })
         .collect();
@@ -2148,15 +2032,10 @@ fn read_sqlite_data(
                     })
                     .cloned()
                     .collect();
-                let feature_model_choice = workspace
-                    .feature_model_choice_json
-                    .as_ref()
-                    .and_then(|json| serde_json::from_str(json).ok());
                 WorkspaceMetadata::from_local_cache(
                     workspace.server_uid.into(),
                     workspace.name,
                     Some(teams_for_workspace),
-                    feature_model_choice,
                 )
             })
         })
@@ -2200,16 +2079,8 @@ fn read_sqlite_data(
 
     let time_of_next_force_object_refresh = read_time_of_next_force_object_refresh(conn)?;
 
-    // Seed up-arrow prompt history.
-    let recent_ai_queries = read_recent_ai_queries(conn)?;
-    let ai_queries = process_ai_queries_for_uparrow_prompt(recent_ai_queries);
-
     let workspace_metadata = get_all_workspace_metadata(conn)?;
     let workspace_language_servers = get_all_workspace_language_servers_by_workspace(conn)?;
-    // Load conversation metadata only; task payloads are hydrated lazily
-    // per-conversation via `read_agent_conversation_by_id`.
-    let (multi_agent_conversations, conversation_summary_backfills) =
-        read_agent_conversation_metadata(conn)?;
     let projects = get_all_projects(conn)?;
     let ignored_suggestions = get_all_ignored_suggestions(conn)?;
 
@@ -2222,13 +2093,10 @@ fn read_sqlite_data(
         user_profiles,
         time_of_next_force_object_refresh,
         object_actions,
-        ai_queries,
         workspace_metadata,
         workspace_language_servers,
-        multi_agent_conversations,
         projects,
         ignored_suggestions,
-        conversation_summary_backfills,
     })
 }
 

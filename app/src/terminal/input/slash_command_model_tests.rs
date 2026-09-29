@@ -1,10 +1,7 @@
-use settings::Setting as _;
-use warp_errors::report_if_error;
 use warpui::{App, SingletonEntity as _};
 
 use super::{ParsedSlashCommandInput, SlashCommandEntryState};
 use crate::search::slash_command_menu::static_commands::commands;
-use crate::settings::AISettings;
 use crate::terminal::input::slash_commands::SlashCommandDataSource as _;
 use crate::terminal::input::tests::{add_window_with_bootstrapped_terminal, initialize_app};
 
@@ -140,7 +137,7 @@ fn test_parse_rename_tab_slash_command_arguments() {
 }
 
 #[test]
-fn test_terminal_commands_remain_active_when_ai_is_disabled() {
+fn test_terminal_commands_are_active() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -153,23 +150,17 @@ fn test_terminal_commands_remain_active_when_ai_is_disabled() {
         let slash_command_data_source =
             input.read(&app, |input, _| input.slash_command_data_source.clone());
 
-        // Disable AI globally.
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
-            report_if_error!(settings.is_any_ai_enabled.set_value(false, ctx));
-        });
-
         slash_command_data_source.read(&app, |data_source, _| {
             let active_command_names: Vec<&str> = data_source
                 .active_commands()
                 .map(|(_, command)| command.name)
                 .collect();
 
-            // Commands that don't require AI should still be active.
             // `/rename-tab` is a good canary because it has no session-context requirements
             // other than ALWAYS.
             assert!(
                 active_command_names.contains(&commands::RENAME_TAB.name),
-                "/rename-tab should remain active when AI is off, got: {active_command_names:?}"
+                "/rename-tab should be active, got: {active_command_names:?}"
             );
 
             assert!(

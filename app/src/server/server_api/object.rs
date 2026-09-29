@@ -101,8 +101,6 @@ use warp_graphql::queries::get_updated_cloud_objects::{
 use warp_graphql::subscriptions::get_warp_drive_updates::GetWarpDriveUpdates;
 use warp_graphql::subscriptions::start_graphql_streaming_operation;
 
-use crate::ai::document::ai_document_model::AIDocumentId;
-use crate::ai::execution_profiles::AIExecutionProfile;
 use crate::channel::ChannelState;
 use crate::cloud_object::model::generic_string_model::{
     GenericStringModel, GenericStringObjectId, Serializer, StringModel,
@@ -129,6 +127,7 @@ use crate::server::server_api::ServerApi;
 use crate::server::sync_queue::SerializedModel;
 use crate::workspaces::gql_convert::object_update_message_from_gql;
 use crate::workspaces::user_profiles::UserProfileWithUID;
+use ai::document::AIDocumentId;
 
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
@@ -591,18 +590,12 @@ impl ObjectClient for ServerApi {
                                     gso,
                                 );
                             }
-                            warp_graphql::generic_string_object::GenericStringObjectFormat::JsonAIExecutionProfile => {
-                                parse_server_gso::<AIExecutionProfile, JsonSerializer>(
-                                    &mut updated_generic_string_objects,
-                                    GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile),
-                                    gso,
-                                );
-                            }
                             // GSO formats unknown to this client build (e.g. the
                             // server-only `JsonRunner`) are skipped so syncing of
                             // known objects still succeeds instead of failing to
                             // decode the whole response.
-                            warp_graphql::generic_string_object::GenericStringObjectFormat::JsonMCPServer
+                            warp_graphql::generic_string_object::GenericStringObjectFormat::JsonAIExecutionProfile
+                            | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonMCPServer
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonTemplatableMCPServer
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonEnvVarCollection
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonWorkflowEnum

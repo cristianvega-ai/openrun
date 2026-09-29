@@ -1449,10 +1449,6 @@ impl PaneGroup {
                                 input_type: InputType::Shell,
                                 is_locked: true,
                             }),
-                            llm_model_override: None,
-                            active_profile_id: None,
-                            conversation_ids_to_restore: Vec::new(),
-                            active_conversation_id: None,
                         })
                     }
                 };

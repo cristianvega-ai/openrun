@@ -5,9 +5,7 @@ use warp_errors::report_if_error;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
 use crate::root_view::has_completed_local_onboarding;
-use crate::settings::{
-    AISettings, FontSettings, PrivacySettings, ThemeSettings, ThinkingDisplayMode,
-};
+use crate::settings::{FontSettings, PrivacySettings, ThemeSettings};
 use crate::themes::theme::ThemeKind;
 
 pub struct SettingsInitializer;
@@ -65,60 +63,6 @@ impl SettingsInitializer {
                     }
                 })
             }
-        }
-
-        // Migrate the old `KeepThinkingExpanded` bool setting to the new
-        // `ThinkingDisplayMode` enum setting.
-        //
-        // The old setting was a boolean (default: false) that controlled whether
-        // agent thinking blocks stayed expanded after streaming. It has been
-        // replaced by a three-option enum: ShowAndCollapse (default),
-        // AlwaysShow, and NeverShow.
-        //
-        // If the user explicitly set `KeepThinkingExpanded` to `true`, migrate
-        // them to `ThinkingDisplayMode::AlwaysShow` so they don't lose their
-        // preference when updating to the new client.
-        //
-        // TODO(jefflloyd): Remove this approximately 6 weeks from 3/19/26.
-        {
-            use warp_core::user_preferences::GetUserPreferences as _;
-
-            AISettings::handle(ctx).update(ctx, |ai_settings, ctx| {
-                // If the new setting already has a value in preferences, the
-                // migration has already run (or the user set it directly).
-                let new_key_exists = ctx
-                    .private_user_preferences()
-                    .read_value("ThinkingDisplayMode")
-                    .unwrap_or_default()
-                    .is_some();
-
-                if new_key_exists {
-                    return;
-                }
-
-                // Read the old boolean setting directly from preferences
-                // because `KeepThinkingExpanded` has been removed from the
-                // `AISettings` struct — there is no typed field left to query.
-                let old_value_was_true = ctx
-                    .private_user_preferences()
-                    .read_value("KeepThinkingExpanded")
-                    .unwrap_or_default()
-                    .and_then(|v| serde_json::from_str::<bool>(&v).ok())
-                    == Some(true);
-
-                if old_value_was_true {
-                    report_if_error!(
-                        ai_settings
-                            .thinking_display_mode
-                            .set_value(ThinkingDisplayMode::AlwaysShow, ctx)
-                    );
-                }
-
-                // Clean up the old key.
-                let _ = ctx
-                    .private_user_preferences()
-                    .remove_value("KeepThinkingExpanded");
-            });
         }
     }
 }

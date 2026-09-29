@@ -11,7 +11,6 @@
 // code from the persistence modules is imported with fully-qualified paths.
 #![allow(ambiguous_glob_reexports)]
 
-pub mod ai_execution_profile;
 pub mod folder;
 pub mod json_model;
 pub mod notebook;
@@ -19,7 +18,6 @@ pub mod preference;
 pub mod server_cloud_object;
 pub mod user_profile;
 
-pub use ai_execution_profile::*;
 pub use folder::*;
 pub use json_model::*;
 pub use notebook::*;

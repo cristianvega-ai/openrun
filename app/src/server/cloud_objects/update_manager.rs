@@ -24,10 +24,6 @@ use warpui::{
 };
 
 use super::listener::ObjectUpdateMessage;
-use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::BlocklistAIHistoryModel;
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use crate::ai::execution_profiles::{AIExecutionProfile, CloudAIExecutionProfileModel};
 #[cfg(not(target_family = "wasm"))]
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::model::actions::{
@@ -43,8 +39,8 @@ use crate::cloud_object::{
     CloudObjectSyncStatus, CreateCloudObjectResult, CreateObjectRequest, GenericCloudObject,
     GenericServerObject, GenericStringObjectFormat, JsonObjectType, NumInFlightRequests,
     ObjectDeleteResult, ObjectIdType, ObjectMetadataUpdateResult, ObjectPermissionsUpdateData,
-    ObjectType, Owner, Revision, ServerAIExecutionProfile, ServerCloudObject, ServerMetadata,
-    ServerPermissions, ServerPreference, Space,
+    ObjectType, Owner, Revision, ServerCloudObject, ServerMetadata, ServerPermissions,
+    ServerPreference, Space,
 };
 use crate::drive::CloudObjectTypeAndId;
 use crate::drive::folders::{CloudFolderModel, FolderId};
@@ -339,20 +335,6 @@ impl UpdateManager {
                         *metadata_ts,
                         ctx,
                     );
-
-                    // If we have created a GSO, update the in-memory models that reference it by client ID.
-                    if server_creation_info.server_id_and_type.id_type
-                        == ObjectIdType::GenericStringObject
-                    {
-                        let client_id = SyncId::ClientId(*client_id);
-                        let server_id = SyncId::ServerId(*server_id);
-
-                        if cloud_model.get_ai_execution_profile(&server_id).is_some() {
-                            AIExecutionProfilesModel::handle(ctx).update(ctx, |model, ctx| {
-                                model.replace_client_id_with_server_id(server_id, client_id, ctx);
-                            });
-                        }
-                    }
                 });
 
                 // Delete the actions on the client ID. Once we get a server ID for an object, we start dequeuing any pending object actions and those
@@ -803,21 +785,6 @@ impl UpdateManager {
                         ctx,
                     );
                     sqlite_events.push(event);
-                }
-                GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile) => {
-                    let typed_objects = objects
-                        .iter()
-                        .filter_map(|obj| {
-                            let server_obj: Option<&ServerAIExecutionProfile> = obj.into();
-                            server_obj.cloned()
-                        })
-                        .collect::<Vec<_>>();
-                    sqlite_events.push(Self::handle_object_updates(
-                        typed_objects,
-                        force_refresh,
-                        !is_first_load,
-                        ctx,
-                    ));
                 }
             }
         }
@@ -1467,26 +1434,7 @@ impl UpdateManager {
                     }
                 });
             }
-            ServerCloudObject::AIExecutionProfile(server_profile) => {
-                // Update in-memory model with the fact that it was rejected. We don't update sqlite
-                // since we don't want to wipe away the user's content.
-                CloudModel::handle(ctx).update(ctx, |cloud_model, ctx| {
-                    if let Some(profile) = cloud_model.get_object_of_type_mut(&server_profile.id) {
-                        profile.set_conflicting_object(Arc::new(server_profile.clone()));
-
-                        // Setting the in-memory model state of the object to in conflict since all further sync
-                        // will be rejected until the conflict is cleared. Note that we don't want to clear the pending status
-                        // in the database as on the next app restart we want to fetch the up-to-date revision of the object
-                        // for refresh in initial load.
-                        profile
-                            .set_pending_content_changes_status(CloudObjectSyncStatus::InConflict);
-
-                        ctx.notify();
-                    }
-                });
-            }
             // folders and preferences are last-write-wins, no need to do anything here
-            // TODO: Figure out how to deal with conflicts for AI rules INT-759
             ServerCloudObject::Folder(_) | ServerCloudObject::Preference(_) => {}
         }
     }
@@ -2031,186 +1979,6 @@ impl UpdateManager {
         );
     }
 
-    /// Add guests to an AI conversation.
-    pub fn add_ai_conversation_guests(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        guest_emails: Vec<String>,
-        access_level: AccessLevel,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "add guests",
-            move |object_client| {
-                let guest_emails = guest_emails.clone();
-                async move {
-                    object_client
-                        .add_object_guests(server_id, guest_emails, access_level)
-                        .await
-                }
-            },
-            |data, ctx| {
-                // Update UserProfiles with any new profiles returned
-                if !data.profiles.is_empty() {
-                    UserProfiles::handle(ctx).update(ctx, |user_profiles, _| {
-                        user_profiles.insert_profiles(&data.profiles);
-                    });
-                }
-                Some(data.permissions)
-            },
-            ctx,
-        );
-    }
-
-    /// Update guest access for an AI conversation.
-    pub fn update_ai_conversation_guests(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        guest_emails: Vec<String>,
-        access_level: AccessLevel,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "update guests",
-            move |object_client| {
-                let guest_emails = guest_emails.clone();
-                async move {
-                    object_client
-                        .update_object_guests(server_id, guest_emails, access_level)
-                        .await
-                }
-            },
-            |permissions, _ctx| Some(permissions),
-            ctx,
-        );
-    }
-
-    /// Remove a guest from an AI conversation.
-    pub fn remove_ai_conversation_guest(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        guest: GuestIdentifier,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "remove guest",
-            move |object_client| {
-                let guest = guest.clone();
-                async move { object_client.remove_object_guest(server_id, guest).await }
-            },
-            |permissions, _ctx| Some(permissions),
-            ctx,
-        );
-    }
-
-    /// Set or remove link sharing permissions for an AI conversation.
-    pub fn set_ai_conversation_link_permissions(
-        &mut self,
-        server_id: ServerId,
-        conversation_id: AIConversationId,
-        access_level: Option<SharingAccessLevel>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_ai_conversation_permissions(
-            conversation_id,
-            "set link permissions",
-            move |object_client| async move {
-                if let Some(access_level) = access_level {
-                    object_client
-                        .set_object_link_permissions(server_id, access_level)
-                        .await
-                        .map(|_| ())
-                } else {
-                    object_client
-                        .remove_object_link_permissions(server_id)
-                        .await
-                        .map(|_| ())
-                }
-            },
-            move |_result, ctx| {
-                // For link permissions, we manually construct the permissions update
-                // since the API only returns success/failure.
-                // Use the unified helper that checks both in-memory and historical metadata.
-                let mut permissions = BlocklistAIHistoryModel::as_ref(ctx)
-                    .get_server_conversation_metadata(&conversation_id)
-                    .map(|metadata| metadata.permissions.clone())?;
-                permissions.anyone_link_sharing =
-                    access_level.map(|level| crate::cloud_object::ServerLinkSharing {
-                        access_level: level.into(),
-                        source: None,
-                    });
-                Some(permissions)
-            },
-            ctx,
-        );
-    }
-
-    /// Helper for updating AI conversation permissions.
-    ///
-    /// This centralizes the common pattern of:
-    /// 1. Making an API request
-    /// 2. Processing the result to extract permissions
-    /// 3. Updating BlocklistAIHistoryModel with new permissions
-    /// 4. Emitting ConversationMetadataUpdated event
-    fn update_ai_conversation_permissions<P, S, R, F>(
-        &mut self,
-        conversation_id: AIConversationId,
-        operation_name: &'static str,
-        mut update_fn: P,
-        mut get_updated_permissions: F,
-        ctx: &mut ModelContext<Self>,
-    ) where
-        P: 'static + FnMut(Arc<dyn ObjectClient>) -> S,
-        S: warpui::r#async::Spawnable + Future<Output = anyhow::Result<R>>,
-        <S as Future>::Output: warpui::r#async::SpawnableOutput,
-        F: 'static + FnMut(R, &mut AppContext) -> Option<ServerPermissions>,
-    {
-        let object_client = self.object_client.clone();
-
-        ctx.spawn_with_retry_on_error(
-            move || {
-                let object_client = object_client.clone();
-                update_fn(object_client)
-            },
-            *ONLINE_ONLY_OPERATION_RETRY_STRATEGY,
-            move |_me, res, ctx| match res {
-                RequestState::RequestSucceeded(data) => {
-                    if let Some(permissions) = get_updated_permissions(data, ctx) {
-                        // Update BlocklistAIHistoryModel (handles both in-memory and historical)
-                        BlocklistAIHistoryModel::handle(ctx).update(ctx, |model, ctx| {
-                            // Get current metadata from either in-memory conversation or historical
-                            let current_metadata = model
-                                .get_server_conversation_metadata(&conversation_id)
-                                .cloned();
-                            if let Some(mut metadata) = current_metadata {
-                                metadata.permissions = permissions;
-                                model.set_server_metadata_for_conversation(
-                                    conversation_id,
-                                    metadata,
-                                    ctx,
-                                );
-                            }
-                        });
-                    }
-                }
-                RequestState::RequestFailedRetryPending(error) => {
-                    log::warn!("Failed to {operation_name} for AI conversation: {error}. Retrying");
-                }
-                RequestState::RequestFailed(error) => {
-                    log::warn!(
-                        "Failed to {operation_name} for AI conversation: {error}. Not retrying"
-                    );
-                }
-            },
-        );
-    }
-
     /// Helper for implementing *pessimistic* permission changes.
     ///
     /// The overall flow for a pessimistic permission change is:
@@ -2526,58 +2294,6 @@ impl UpdateManager {
             // When adding the initiated_by parameter to this function call, InitiatedBy::User was set as a default value.
             // This can be changed to InitiatedBy::System if this action was automatically kicked off by the system and we do not want a user facing toast.
             InitiatedBy::User,
-            ctx,
-        );
-    }
-
-    #[allow(dead_code)]
-    pub fn create_ai_execution_profile(
-        &mut self,
-        ai_execution_profile: AIExecutionProfile,
-        client_id: ClientId,
-        owner: Owner,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.create_object(
-            CloudAIExecutionProfileModel::new(ai_execution_profile),
-            owner,
-            client_id,
-            Default::default(),
-            false,
-            None,
-            // When adding the initiated_by parameter to this function call, InitiatedBy::User was set as a default value.
-            // This can be changed to InitiatedBy::System if this action was automatically kicked off by the system and we do not want a user facing toast.
-            InitiatedBy::User,
-            ctx,
-        );
-    }
-
-    #[allow(dead_code)]
-    pub fn update_ai_execution_profile(
-        &mut self,
-        ai_execution_profile: AIExecutionProfile,
-        ai_execution_profile_id: SyncId,
-        revision_ts: Option<Revision>,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.update_object(
-            CloudAIExecutionProfileModel::new(ai_execution_profile),
-            ai_execution_profile_id,
-            revision_ts,
-            ctx,
-        );
-    }
-
-    pub fn delete_ai_execution_profile(
-        &mut self,
-        ai_execution_profile_id: SyncId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.delete_object_by_user(
-            CloudObjectTypeAndId::GenericStringObject {
-                object_type: GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile),
-                id: ai_execution_profile_id,
-            },
             ctx,
         );
     }

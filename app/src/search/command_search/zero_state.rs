@@ -10,7 +10,6 @@ use warpui::{AppContext, Element, Entity, SingletonEntity, TypedActionView, View
 
 use crate::appearance::Appearance;
 use crate::search::{FilterChipRenderer, QueryFilter};
-use crate::settings::{AISettings, AISettingsChangedEvent};
 
 lazy_static! {
     /// Map of sample queries to the [`QueryFilter`]s they employ.
@@ -39,13 +38,7 @@ pub struct CommandSearchZeroStateView {
 }
 
 impl CommandSearchZeroStateView {
-    pub fn new(ctx: &mut ViewContext<Self>) -> Self {
-        ctx.subscribe_to_model(&AISettings::handle(ctx), |_, _, event, ctx| {
-            if let AISettingsChangedEvent::IsAnyAIEnabled { .. } = event {
-                ctx.notify();
-            }
-        });
-
+    pub fn new() -> Self {
         Self {
             filter_chip_to_mouse_state_handle: QueryFilter::all()
                 .map(|filter| (filter, MouseStateHandle::default()))

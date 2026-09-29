@@ -19,11 +19,6 @@ use warpui::{AddSingletonModel, App, ViewHandle};
 use watcher::HomeDirectoryWatcher;
 
 use super::*;
-use crate::ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
-use crate::ai::document::ai_document_model::AIDocumentModel;
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use crate::ai::llms::LLMPreferences;
-use crate::ai::restored_conversations::RestoredAgentConversations;
 use crate::auth::AuthManager;
 use crate::cloud_object::model::persistence::CloudModel;
 use crate::cloud_object::model::view::CloudViewModel;
@@ -109,10 +104,8 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     app.add_singleton_model(|_| WorkspaceToastStack);
     app.add_singleton_model(|_| ObjectActions::new(Vec::new()));
     app.add_singleton_model(NotebookKeybindings::new);
-    app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
     app.add_singleton_model(AgentNotificationsModel::new);
-    app.add_singleton_model(LLMPreferences::new);
     app.add_singleton_model(|_| SettingsPaneManager::new());
 
     // Initialize repository and directory watchers.
@@ -123,9 +116,7 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
 
     #[cfg(feature = "local_fs")]
     app.add_singleton_model(FileModel::new);
-    app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
     app.add_singleton_model(RepoOutlines::new_for_test);
-    app.add_singleton_model(BlocklistAIPermissions::new);
     app.add_singleton_model(|_| GPUState::new());
     // Register IapManager in a disabled state (no IapState). The settings
     // page's `IapManager::as_ref(ctx).is_enabled()` check panics if the
@@ -137,7 +128,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
             ctx,
         )
     });
-    app.add_singleton_model(|_| RestoredAgentConversations::new_seeded(vec![]));
     let global_resource_handles = GlobalResourceHandles::mock(app);
     app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(global_resource_handles));
     app.add_singleton_model(DefaultTerminal::new);
@@ -161,7 +151,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     crate::crash_recovery::CrashRecovery::register_for_test(app);
 
     app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
-    app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
 
     // Make sure to initialize the keybindings so that they are available for subviews

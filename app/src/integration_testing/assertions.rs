@@ -26,7 +26,6 @@ pub fn join_a_workspace() -> TestStep {
                     invite_link_domain_restrictions: Default::default(),
                     billing_metadata: Default::default(),
                     settings: Default::default(),
-                    feature_model_choice: Default::default(),
                     is_eligible_for_discovery: false,
                     visibility: TeamVisibility::Open,
                 }];
@@ -37,7 +36,6 @@ pub fn join_a_workspace() -> TestStep {
                     open_teams: Default::default(),
                     billing_metadata: Default::default(),
                     settings: Default::default(),
-                    feature_model_choice: Default::default(),
                     invite_link_domain_restrictions: Default::default(),
                     pending_email_invites: Default::default(),
                     is_eligible_for_discovery: false,

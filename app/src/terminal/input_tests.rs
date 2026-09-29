@@ -24,10 +24,6 @@ use watcher::HomeDirectoryWatcher;
 use workflows::workflow::{Argument, Workflow};
 
 use super::*;
-use crate::ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use crate::ai::llms::LLMPreferences;
-use crate::ai::restored_conversations::RestoredAgentConversations;
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_manager::AuthManager;
 use crate::cloud_object::model::persistence::CloudModel;
@@ -43,7 +39,7 @@ use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::import::model::ImportedConfigModel;
-use crate::settings::{AISettings, AliasExpansionSettings, AppEditorSettings, PrivacySettings};
+use crate::settings::{AliasExpansionSettings, AppEditorSettings, PrivacySettings};
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 #[cfg(windows)]
 use crate::system::SystemInfo;
@@ -248,13 +244,10 @@ pub fn initialize_app(app: &mut App) {
     app.add_singleton_model(LocalWorkflows::new);
     app.add_singleton_model(|_| KeybindingChangedNotifier::new());
     app.add_singleton_model(|_| ActiveSession::default());
-    app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
     app.add_singleton_model(AgentNotificationsModel::new);
-    app.add_singleton_model(BlocklistAIPermissions::new);
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     app.add_singleton_model(AuthManager::new_for_test);
-    app.add_singleton_model(LLMPreferences::new);
     app.add_singleton_model(DirectoryWatcher::new);
     app.add_singleton_model(|_| DetectedRepositories::default());
     app.add_singleton_model(|_| crate::code_review::git_repo_model::GitRepoModels::new());
@@ -262,10 +255,6 @@ pub fn initialize_app(app: &mut App) {
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(RepoOutlines::new_for_test);
     app.add_singleton_model(|_| IgnoredSuggestionsModel::new(vec![]));
-    app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
-    app.add_singleton_model(|_| {
-        crate::ai::document::ai_document_model::AIDocumentModel::new_for_test()
-    });
     app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
     app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
 
@@ -288,7 +277,6 @@ pub fn initialize_app(app: &mut App) {
     }
 
     AltScreenReporting::register(app);
-    app.add_singleton_model(|_| RestoredAgentConversations::new_seeded(vec![]));
     app.add_singleton_model(|_| WorkspaceRegistry::new());
     app.add_singleton_model(|_| ToastStack);
     app.add_singleton_model(PersistedWorkspace::new_for_test);
@@ -5232,26 +5220,6 @@ fn submitting_in_shell_prefix_mode_sends_the_prefix_and_returns_to_prompt_mode()
         input.read(&app, |input, ctx| {
             assert_eq!(input.input_type(ctx), InputType::Prompt);
         });
-    });
-}
-
-#[test]
-fn ai_settings_changes_do_not_reset_the_open_rich_input_to_shell_mode() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-        open_rich_input_for_terminal(&terminal, &mut app);
-
-        for enabled in [true, false, true] {
-            AISettings::handle(&app).update(&mut app, |settings, ctx| {
-                report_if_error!(settings.is_any_ai_enabled.set_value(enabled, ctx));
-            });
-            input.read(&app, |input, ctx| {
-                assert_eq!(input.input_type(ctx), InputType::Prompt);
-                assert!(CLIAgentSessionsModel::as_ref(ctx).is_input_open(input.terminal_view_id));
-            });
-        }
     });
 }
 

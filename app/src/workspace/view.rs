@@ -184,11 +184,11 @@ use crate::server::telemetry::{
 };
 use crate::session_management::{SessionNavigationData, SessionSource, TabNavigationData};
 use crate::settings::{
-    AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
-    BlockVisibilitySettings, CLIAgentSettings, CLIAgentSettingsChangedEvent, CodeSettings,
-    CodeSettingsChangedEvent, CtrlTabBehavior, CursorBlink, DebugSettings,
-    FontSettings, GPUSettings, InputSettings, MonospaceFontSize, PaneSettings, SelectionSettings,
-    SshSettings, ThemeSettings, active_theme_kind, respect_system_theme,
+    AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
+    CLIAgentSettings, CLIAgentSettingsChangedEvent, CodeSettings, CodeSettingsChangedEvent,
+    CtrlTabBehavior, CursorBlink, DebugSettings, FontSettings, GPUSettings, InputSettings,
+    MonospaceFontSize, PaneSettings, SelectionSettings, SshSettings, ThemeSettings,
+    active_theme_kind, respect_system_theme,
 };
 use crate::settings_view::keybindings::{KeybindingChangedEvent, KeybindingChangedNotifier};
 use crate::settings_view::pane_manager::SettingsPaneManager;
@@ -1684,8 +1684,7 @@ impl Workspace {
         );
     }
 
-    /// Subscribes to `WarpConfigUpdateEvent::TabConfigErrors` (and the equivalent
-    /// `ModelConfigErrors` for custom model router configs) and shows a persistent
+    /// Subscribes to `WarpConfigUpdateEvent::TabConfigErrors` and shows a persistent
     /// error toast for each file that failed to parse.  Uses `object_id` keyed by
     /// file path so that re-saving the same file auto-dismisses the stale toast.
     fn subscribe_to_tab_config_errors(
@@ -1720,40 +1719,6 @@ impl Workspace {
                         );
                         let message = format!(
                             "Failed to load tab config {friendly_path}: {}",
-                            error.error_message
-                        );
-                        let path = error.file_path.clone();
-                        let toast = DismissibleToast::error(message)
-                            .with_object_id(object_id.clone())
-                            .with_link(
-                                ToastLink::new("Open file".to_string()).with_onclick_action(
-                                    WorkspaceAction::OpenTabConfigErrorFile {
-                                        path,
-                                        toast_object_id: object_id,
-                                    },
-                                ),
-                            );
-                        toast_stack.update(ctx, |toast_stack, ctx| {
-                            toast_stack.add_persistent_toast(toast, ctx);
-                        });
-                    }
-                }
-                WarpConfigUpdateEvent::ModelConfigs => {
-                    toast_stack.update(ctx, |toast_stack, ctx| {
-                        toast_stack.dismiss_toasts_by_prefix("model_config_error:", ctx);
-                    });
-                }
-                WarpConfigUpdateEvent::ModelConfigErrors(errors) => {
-                    let home_dir = dirs::home_dir();
-                    for error in errors {
-                        let object_id = format!("model_config_error:{}", error.file_path.display());
-                        let raw_path = error.file_path.display().to_string();
-                        let friendly_path = user_friendly_path(
-                            &raw_path,
-                            home_dir.as_ref().and_then(|h| h.to_str()),
-                        );
-                        let message = format!(
-                            "Failed to load model config {friendly_path}: {}",
                             error.error_message
                         );
                         let path = error.file_path.clone();

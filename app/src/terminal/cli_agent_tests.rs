@@ -12,8 +12,7 @@ use super::{
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor::line::EditorLineLocation;
 use crate::code_review::comments::{
-    AgentReviewCommentBatch, AttachedReviewComment, AttachedReviewCommentTarget,
-    LineDiffContent,
+    AgentReviewCommentBatch, AttachedReviewComment, AttachedReviewCommentTarget, LineDiffContent,
 };
 use crate::code_review::diff_set::DiffSetHunk;
 use crate::ui_components::icons::Icon;

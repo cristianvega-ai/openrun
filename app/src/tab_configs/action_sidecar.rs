@@ -9,9 +9,9 @@ use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{AppContext, Element, SingletonEntity};
 
 use crate::appearance::Appearance;
-use crate::terminal::general_settings::DefaultSessionMode;
 use crate::tab_configs::TabConfig;
 use crate::terminal::available_shells::AvailableShell;
+use crate::terminal::general_settings::DefaultSessionMode;
 use crate::workspace::WorkspaceAction;
 
 pub(crate) const SIDECAR_WIDTH: f32 = 260.;

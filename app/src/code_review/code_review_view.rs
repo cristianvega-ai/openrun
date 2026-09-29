@@ -113,7 +113,7 @@ use crate::quit_warning::UnsavedStateSummary;
 use crate::send_telemetry_from_ctx;
 #[cfg(feature = "local_fs")]
 use crate::server::telemetry::CodePanelsFileOpenEntrypoint;
-use crate::settings::{AISettings, CodeSettings};
+use crate::settings::CodeSettings;
 use crate::settings_view::SettingsSection;
 use crate::terminal::cli_agent::{
     build_selection_line_range_prompt, build_selection_substring_prompt,
@@ -1354,7 +1354,7 @@ impl CodeReviewView {
     }
 
     pub fn debug_review_comment_state(&self, ctx: &AppContext) -> CodeReviewCommentDebugState {
-        let comment_list = self.comment_list_view.as_ref(ctx).debug_state(ctx);
+        let comment_list = self.comment_list_view.as_ref(ctx).debug_state();
 
         CodeReviewCommentDebugState {
             repo_path: self.repo_path().cloned(),
@@ -1691,12 +1691,7 @@ impl CodeReviewView {
 
         if let Some(comment) = &existing_comment {
             composer.update(ctx, |editor, ctx| {
-                editor.reopen_saved_comment(
-                    &comment.id,
-                    None,
-                    &comment.content,
-                    ctx,
-                );
+                editor.reopen_saved_comment(&comment.id, None, &comment.content, ctx);
             });
         }
 
@@ -1784,12 +1779,7 @@ impl CodeReviewView {
 
                 editor_state.editor().update(ctx, |local_editor, ctx| {
                     local_editor.editor().update(ctx, |editor, ctx| {
-                        editor.open_existing_comment(
-                            &comment.id,
-                            line,
-                            &comment.content,
-                            ctx,
-                        );
+                        editor.open_existing_comment(&comment.id, line, &comment.content, ctx);
                     });
                 });
 
@@ -6408,7 +6398,7 @@ impl CodeReviewView {
         items
     }
 
-    /// New menu items — individually gated, includes discard and AI check.
+    /// New menu items — individually gated, includes discard.
     fn header_menu_items_new(
         &self,
         ctx: &mut ViewContext<Self>,
@@ -6416,16 +6406,6 @@ impl CodeReviewView {
         let mut items = Vec::new();
 
         let has_changes = matches!(self.state(), CodeReviewViewState::Loaded(loaded) if !loaded.to_diff_stats().has_no_changes());
-
-        let is_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
-        if is_ai_enabled && FeatureFlag::DiffSetAsContext.is_enabled() && has_changes {
-            items.push(
-                MenuItemFields::new("Add diff set as context")
-                    .with_icon(Icon::Paperclip)
-                    .with_on_select_action(CodeReviewAction::AddDiffSetAsContext(DiffSetScope::All))
-                    .into_item(),
-            );
-        }
 
         if FeatureFlag::FileAndDiffSetComments.is_enabled() && has_changes {
             let (comment_label, comment_icon) = if self.get_existing_diffset_comment(ctx).is_some()
