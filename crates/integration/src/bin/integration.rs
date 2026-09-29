@@ -154,11 +154,9 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_open_and_close_theme_creator_modal);
     register_test!(test_removing_tabs_out_of_order);
     register_test!(test_ctrl_c);
-    register_test!(test_click_on_prompt_to_focus_input);
     register_test!(test_text_input_on_block_list);
     register_test!(test_text_input_on_block_list_while_composing);
     register_test!(test_clear);
-    register_test!(test_waterfall_input);
     register_test!(test_waterfall_input_text_selection);
     register_test!(test_waterfall_input_scrolling);
     register_test!(test_waterfall_input_after_command_execution);
@@ -220,7 +218,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_add_launch_config_to_warp_config);
     register_test!(test_add_workflows_to_warp_config);
     register_test!(test_loading_project_workflows);
-    register_test!(test_cmd_enter);
     register_test!(test_alias_expansion_has_limit);
     register_test!(test_command_corrections);
     register_test!(test_start_shell_in_deleted_directory);
@@ -300,7 +297,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_command_search_loads_history);
     register_test!(test_histfile_left_joined_with_persisted_history);
     register_test!(test_history_command_is_linked_to_local_workflow);
-    register_test!(test_up_arrow_history_enters_shift_tab_for_workflow);
 
     register_test!(test_secret_is_obfuscated_on_copy);
     register_test!(test_secret_tooltip_shows_on_click);

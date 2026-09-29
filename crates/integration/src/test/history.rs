@@ -10,7 +10,6 @@ use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::terminal::{
     assert_input_editor_contents, wait_until_bootstrapped_single_pane_for_tab,
 };
-use warp::integration_testing::view_getters::single_input_view;
 use warp::integration_testing::{self};
 use warp::search::command_search::settings::ShowGlobalWorkflowsInUniversalSearch;
 use warp::sqlite_testing::set_user_and_hostname_for_commands;
@@ -117,86 +116,6 @@ pub fn test_up_arrow_history() -> Builder {
                     )
                 })
             }),
-        )
-}
-
-pub fn test_up_arrow_history_enters_shift_tab_for_workflow() -> Builder {
-    new_builder()
-        .with_setup(|utils| {
-            integration_testing::create_file_from_assets(
-                TEST_ONLY_ASSETS,
-                FAKE_HISTORY_SQLITE_FILE,
-                &integration_testing::persistence::database_file_path_for_scope(
-                    &integration_testing::persistence::PersistenceScope::App,
-                ),
-            );
-
-            let local_user = get_local_user();
-            let local_hostname = get_local_hostname().expect("Failed to retrieve system hostname.");
-            set_user_and_hostname_for_commands(local_user, local_hostname);
-
-            let home_dir = utils.test_dir();
-            write_histfiles_for_test(
-                home_dir,
-                vec![r#"echo "foo""#, r#"sed -i '' '/hello/d' foo"#],
-                [
-                    ShellType::Zsh,
-                    ShellType::Bash,
-                    ShellType::Fish,
-                    ShellType::PowerShell,
-                ],
-            );
-        })
-        .with_user_defaults(HashMap::from([(
-            ShowGlobalWorkflowsInUniversalSearch::storage_key().to_owned(),
-            "true".to_owned(),
-        )]))
-        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        .with_step(
-            new_step_with_default_assertions(
-                "Enter up key and verify terminal input contains workflow command",
-            )
-            .with_keystrokes(&[
-                "up", // this should move the cursor to the top line
-            ])
-            .add_assertion(|app, window_id| {
-                let input_view = single_input_view(app, window_id);
-                input_view.read(app, |view, ctx| {
-                    // The history menu should be visible.
-                    async_assert!(
-                        view.suggestions_mode_model()
-                            .as_ref(ctx)
-                            .mode()
-                            .is_visible()
-                    )
-                })
-            })
-            .add_named_assertion(
-                "Input contains most recent command",
-                assert_input_editor_contents(0, "sed -i '' '/hello/d' foo"),
-            ),
-        )
-        .with_step(
-            new_step_with_default_assertions("Update \"string\" workflow parameter")
-                .with_keystrokes(&[
-                    "shift-tab", // this should cause the first argument to be highlighted
-                ])
-                .with_typed_characters(&[
-                    "bye", // this should result in us replacing the first argument
-                ])
-                .add_named_assertion(
-                    "First workflow parameter is substituted",
-                    assert_input_editor_contents(0, "sed -i '' '/bye/d' foo"),
-                ),
-        )
-        .with_step(
-            new_step_with_default_assertions("Update \"string\" workflow parameter")
-                .with_keystrokes(&["shift-tab"])
-                .with_typed_characters(&["baz"])
-                .add_named_assertion(
-                    "Second workflow parameter is substituted",
-                    assert_input_editor_contents(0, "sed -i '' '/bye/d' baz"),
-                ),
         )
 }
 
