@@ -4,11 +4,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use warp_util::path::LineAndColumnArg;
-use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity, ViewHandle, WindowId};
+use warpui::{AppContext, Entity, EntityId, SingletonEntity, ViewHandle, WindowId};
 
 use super::buffer_location::LocalOrRemotePath;
 use super::view::CodeView;
-use crate::ai::agent::AIAgentActionId;
 use crate::code_review::code_review_view::CodeReviewView;
 use crate::pane_group::{PaneGroup, PaneId};
 use crate::workspace::PaneViewLocator;
@@ -109,8 +108,6 @@ pub enum CodeSource {
         range_start: Option<LineAndColumnArg>,
         range_end: Option<LineAndColumnArg>,
     },
-    /// Opened from an active AI agent conversation.
-    AIAction { id: AIAgentActionId },
     /// Opened from file tree (local or remote).
     FileTree { location: LocalOrRemotePath },
     /// Opened from command palette file search (local or remote).
@@ -126,7 +123,6 @@ impl CodeSource {
                 default_directory, ..
             } => default_directory.as_ref(),
             Self::Link { .. }
-            | Self::AIAction { .. }
             | Self::FileTree { .. }
             | Self::CommandPalette { .. }
             | Self::Finder { .. } => None,
@@ -135,7 +131,7 @@ impl CodeSource {
 
     pub fn path(&self) -> Option<PathBuf> {
         match self {
-            Self::New { .. } | Self::AIAction { .. } => None,
+            Self::New { .. } => None,
             Self::FileTree { location, .. } | Self::CommandPalette { location, .. } => {
                 match location {
                     LocalOrRemotePath::Local(path) => Some(path.clone()),
@@ -161,7 +157,7 @@ impl CodeSource {
     /// a file — local or remote.
     pub fn location(&self) -> Option<LocalOrRemotePath> {
         match self {
-            Self::New { .. } | Self::AIAction { .. } => None,
+            Self::New { .. } => None,
             Self::FileTree { location } | Self::CommandPalette { location } => {
                 Some(location.clone())
             }
@@ -188,7 +184,6 @@ impl CodeSource {
         match self {
             Self::New { .. } => "new",
             Self::Link { .. } => "link",
-            Self::AIAction { .. } => "ai_action",
             Self::FileTree {
                 location: LocalOrRemotePath::Remote(_),
             } => "remote_file_tree",
@@ -202,19 +197,14 @@ impl CodeSource {
     }
 
     /// Returns `true` if this source should be restored across app restarts.
-    ///
-    /// `AIAction` is ephemeral (tied to a live conversation) and should not
-    /// be restored.
     pub fn is_restorable(&self) -> bool {
         !matches!(
             self,
-            Self::AIAction { .. }
-                | Self::FileTree {
-                    location: LocalOrRemotePath::Remote(_),
-                }
-                | Self::CommandPalette {
-                    location: LocalOrRemotePath::Remote(_),
-                }
+            Self::FileTree {
+                location: LocalOrRemotePath::Remote(_),
+            } | Self::CommandPalette {
+                location: LocalOrRemotePath::Remote(_),
+            }
         )
     }
 }
@@ -224,12 +214,6 @@ struct CodePaneData {
     window_id: WindowId,
     #[allow(unused)]
     locator: PaneViewLocator,
-}
-
-// Allow dead_code here for wasm compilation
-#[allow(dead_code)]
-pub enum CodeManagerEvent {
-    EditCompleted { action_id: AIAgentActionId },
 }
 
 /// Singleton model for managing the state of open code panes. It is responsible for
@@ -283,24 +267,10 @@ impl CodeManager {
             })
             .map(|(_, data)| data.locator)
     }
-
-    // Allow dead_code here for wasm compilation
-    #[allow(dead_code)]
-    pub fn complete_pending_diffs(&mut self, source: CodeSource, ctx: &mut ModelContext<Self>) {
-        if !self.source_to_pane_data.contains_key(&source) {
-            log::warn!("Trying to complete an edit on a source that doesn't exist");
-        }
-
-        let CodeSource::AIAction { id } = source else {
-            return;
-        };
-
-        ctx.emit(CodeManagerEvent::EditCompleted { action_id: id })
-    }
 }
 
 impl Entity for CodeManager {
-    type Event = CodeManagerEvent;
+    type Event = ();
 }
 
 impl SingletonEntity for CodeManager {}

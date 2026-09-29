@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::ops::{Deref, Range, RangeInclusive};
@@ -12,7 +11,6 @@ use pathfinder_color::ColorU;
 use vec1::Vec1;
 use warp_core::semantic_selection::SemanticSelection;
 use warp_core::ui::builder::UiBuilder;
-use warp_core::ui::theme::AnsiColorIdentifier;
 use warp_util::user_input::UserInput;
 use warpui::elements::new_scrollable::{NewScrollableElement, ScrollableAxis};
 use warpui::elements::{
@@ -47,21 +45,18 @@ use super::model::mouse::{MouseAction, MouseButton, MouseState};
 use super::model::session::SessionId;
 use super::model::terminal_model::{SelectedBlocks, WithinBlock, WithinModel};
 use super::view::{
-    BlocklistAIRenderContext, InlineBannerId, RichContentMetadata, SeparatorId, TerminalEditor,
-    TerminalViewRenderContext,
+    InlineBannerId, RichContentMetadata, SeparatorId, TerminalEditor, TerminalViewRenderContext,
 };
 use super::warpify::render::{draw_flag_pole, render_subshell_flag};
 use super::{HEIGHT_FUDGE_FACTOR_LINES, TerminalModel, heights_approx_eq};
-use crate::ai::blocklist::ai_brand_color;
 use crate::appearance::Appearance;
 use crate::features::FeatureFlag;
 use crate::pane_group::SplitPaneState;
 use crate::settings::{DebugSettings, EnforceMinimumContrast, TerminalSpacing};
 use crate::terminal::alt_screen::{should_intercept_mouse, should_intercept_scroll};
-use crate::terminal::block_list_viewport::AutoscrollBehavior;
 use crate::terminal::blockgrid_renderer::BlockGridParams;
 use crate::terminal::input::inline_menu::InlineMenuPositioner;
-use crate::terminal::model::block::{Block, BlockSection, TranscriptScope};
+use crate::terminal::model::block::{Block, BlockSection};
 use crate::terminal::model::blocks::{
     BlockHeight, BlockHeightItem, BlockHeightSummary, BlockList, BlockListPoint, TotalIndex,
 };
@@ -665,9 +660,6 @@ pub struct BlockListElement {
     rich_content_elements: HashMap<EntityId, Box<dyn Element>>,
     rich_content_metadata: HashMap<EntityId, RichContentMetadata>,
 
-    /// Information about blocks and AI blocks used to render blocklist AI-specific decoration.
-    ai_render_context: Rc<RefCell<BlocklistAIRenderContext>>,
-
     /// The last laid out size of the input view.
     input_size_at_last_frame: Vector2F,
 
@@ -769,17 +761,6 @@ pub enum BlockListMenuSource {
     },
     RegularTextRightClick {
         position_in_terminal_view: Vector2F,
-    },
-    RichContentBlockRightClick {
-        rich_content_view_id: EntityId,
-        position_in_terminal_view: Vector2F,
-    },
-    /// We use [`position_in_rich_content`] here because text selection right-click logic for rich
-    /// content views is handled in the [`SelectableArea`] element, within which there is no way of
-    /// determining the origin of the entire [`BlockListElement`].
-    RichContentTextRightClick {
-        rich_content_view_id: EntityId,
-        position_in_rich_content: Vector2F,
     },
     /// Catches all right-clicks that don't fall within the bounds of any type of block. This mostly
     /// refers to the empty space that is exposed when existing blocks have yet to fill the window.
@@ -888,7 +869,6 @@ impl BlockListElement {
             filtered_blocks: None,
             rich_content_elements: HashMap::new(),
             rich_content_metadata: HashMap::new(),
-            ai_render_context: terminal_view_render_context.ai_render_context,
             input_size_at_last_frame,
             block_footer_elements: HashMap::new(),
             cursor_hint_text_element,
@@ -934,11 +914,6 @@ impl BlockListElement {
             self.size
                 .expect("Cannot construct ViewportState prior to element layout."),
             self.input_size_at_last_frame,
-            if self.ai_render_context.borrow().has_active_conversation() {
-                AutoscrollBehavior::WhenScrolledToEnd
-            } else {
-                AutoscrollBehavior::Always
-            },
             self.inline_menu_positioner.clone(),
         )
     }
@@ -1248,25 +1223,9 @@ impl BlockListElement {
                 block_index: index,
                 position_in_terminal_view,
             },
-            None => {
-                let rich_content_view_id = blocklist_point.and_then(|point| {
-                    let model = self.model.lock();
-                    let viewport = self.viewport_state_after_layout(model.block_list());
-                    match viewport.block_height_item_from_point(point) {
-                        Some(BlockHeightItem::RichContent(item)) => Some(item.view_id),
-                        _ => None,
-                    }
-                });
-                match rich_content_view_id {
-                    Some(rich_content_view_id) => BlockListMenuSource::RichContentBlockRightClick {
-                        rich_content_view_id,
-                        position_in_terminal_view,
-                    },
-                    None => BlockListMenuSource::OutsideBlockRightClick {
-                        position_in_terminal_view,
-                    },
-                }
-            }
+            None => BlockListMenuSource::OutsideBlockRightClick {
+                position_in_terminal_view,
+            },
         };
 
         ctx.dispatch_typed_action(TerminalAction::BlockListContextMenu(source));
@@ -1331,7 +1290,7 @@ impl BlockListElement {
 
         if self.is_mouse_position_within_bounds(position) {
             ctx.dispatch_typed_action(TerminalAction::CloseContextMenu);
-            let mut should_redetermine_focus = true;
+            let should_redetermine_focus = true;
 
             match self.coord_to_point(
                 SnackbarPoint::within_snackbar(position),
@@ -1438,8 +1397,8 @@ impl BlockListElement {
                             ));
                         }
                         // While rich content blocks can't be selected like command blocks,
-                        // text selections can still originate in them (i.e. with AI blocks)
-                        Some(BlockHeightItem::RichContent(RichContentItem { view_id, .. })) => {
+                        // text selections can still originate in them.
+                        Some(BlockHeightItem::RichContent(RichContentItem { .. })) => {
                             let bounds = self
                                 .bounds
                                 .expect("Bounds should be set before event dispatching");
@@ -1452,13 +1411,6 @@ impl BlockListElement {
 
                             if self.snackbar_header_state().mouse_down(position, ctx) {
                                 return true;
-                            }
-
-                            if matches!(
-                                self.rich_content_metadata.get(view_id),
-                                Some(RichContentMetadata::AIBlock(_))
-                            ) {
-                                should_redetermine_focus = false;
                             }
 
                             ctx.dispatch_typed_action(TerminalAction::BlockSelect {
@@ -1893,11 +1845,10 @@ impl BlockListElement {
         warp_theme: &WarpTheme,
         block_borders_enabled: bool,
         snackbar_header: &Option<SnackbarHeader>,
-        transcript_scope: &TranscriptScope,
         ctx: &mut PaintContext,
     ) {
-        let block_height = block.height(transcript_scope).as_f64() as f32 * cell_size.y();
-        if block.is_restored() && !transcript_scope.is_conversation() {
+        let block_height = block.height().as_f64() as f32 * cell_size.y();
+        if block.is_restored() {
             ctx.scene
                 .draw_rect_with_hit_recording(RectF::new(
                     grid_origin,
@@ -1986,7 +1937,6 @@ impl BlockListElement {
         draw_border_between_blocks: bool,
         cursor_hint_text: Option<&mut Box<dyn Element>>,
         image_metadata: &HashMap<u32, StoredImageMetadata>,
-        transcript_scope: &TranscriptScope,
         ctx: &mut PaintContext,
         app: &AppContext,
     ) {
@@ -1999,7 +1949,6 @@ impl BlockListElement {
             &block_grid_params.grid_render_params.warp_theme,
             block_borders_enabled,
             snackbar_header,
-            transcript_scope,
             ctx,
         );
 
@@ -2211,25 +2160,11 @@ impl BlockListElement {
                     ctx,
                     terminal_view_id,
                     cursor_hint_text,
-                    if block.is_agent_blocked() {
-                        AnsiColorIdentifier::Yellow
-                            .to_ansi_color(
-                                &block_grid_params
-                                    .grid_render_params
-                                    .warp_theme
-                                    .terminal_colors()
-                                    .normal,
-                            )
-                            .into()
-                    } else if block.is_agent_in_control() {
-                        ai_brand_color(&block_grid_params.grid_render_params.warp_theme)
-                    } else {
-                        block_grid_params
-                            .grid_render_params
-                            .warp_theme
-                            .cursor()
-                            .into()
-                    },
+                    block_grid_params
+                        .grid_render_params
+                        .warp_theme
+                        .cursor()
+                        .into(),
                     app,
                 );
             }
@@ -2652,11 +2587,6 @@ impl Element for BlockListElement {
                     self.visible_items.clone(),
                     constraint.max,
                     self.input_size_at_last_frame,
-                    if self.ai_render_context.borrow().has_active_conversation() {
-                        AutoscrollBehavior::WhenScrolledToEnd
-                    } else {
-                        AutoscrollBehavior::Always
-                    },
                     self.inline_menu_positioner.clone(),
                 )
             };
@@ -3165,8 +3095,6 @@ impl Element for BlockListElement {
         // the next block to be drawn.
         let mut draw_border_above_block = true;
 
-        let transcript_scope = model.block_list().transcript_scope();
-
         let items = self
             .visible_items
             .as_ref()
@@ -3207,8 +3135,7 @@ impl Element for BlockListElement {
                         .map_or(grid_origin, |r| r.origin());
 
                     // TODO(vorporeal): should probably use `Pixels` here
-                    let block_pixel_height =
-                        block.height(transcript_scope).as_f64() as f32 * cell_size.y();
+                    let block_pixel_height = block.height().as_f64() as f32 * cell_size.y();
 
                     let block_bottom_y = grid_origin.y() + block_pixel_height;
                     let selection_bottom_y = snackbar_header
@@ -3230,10 +3157,6 @@ impl Element for BlockListElement {
                             is_bottom_of_continuous_selection,
                         );
 
-                        let can_be_ai_context =
-                            self.ai_render_context.borrow().is_prompt_input_enabled
-                                && block.can_be_ai_context(transcript_scope);
-
                         ctx.scene
                             .draw_rect_with_hit_recording(RectF::new(
                                 header_origin,
@@ -3244,12 +3167,7 @@ impl Element for BlockListElement {
                                     selection_height,
                                 ),
                             ))
-                            .with_background(if can_be_ai_context {
-                                self.warp_theme
-                                    .block_selection_as_context_background_color()
-                            } else {
-                                self.warp_theme.block_selection_color()
-                            })
+                            .with_background(self.warp_theme.block_selection_color())
                             .with_border(
                                 Border::new(border_info.border_width)
                                     .with_sides(
@@ -3258,11 +3176,7 @@ impl Element for BlockListElement {
                                         border_info.has_bottom_border,
                                         true,
                                     )
-                                    .with_border_fill(if can_be_ai_context {
-                                        self.warp_theme.block_selection_as_context_border_color()
-                                    } else {
-                                        self.warp_theme.accent()
-                                    }),
+                                    .with_border_fill(self.warp_theme.accent()),
                             );
                     }
 
@@ -3347,7 +3261,6 @@ impl Element for BlockListElement {
                         draw_border_above_block,
                         self.cursor_hint_text_element.as_mut(),
                         &model.image_id_to_metadata,
-                        transcript_scope,
                         ctx,
                         app,
                     );
@@ -3580,17 +3493,7 @@ impl Element for BlockListElement {
                 .iter()
                 .flat_map(|selection| self.segment_blocklist_selection(selection, block_list));
 
-            let text_selection_color = if self
-                .ai_render_context
-                .borrow()
-                .has_pending_context_selected_text
-            {
-                self.warp_theme
-                    .text_selection_as_context_color()
-                    .into_solid()
-            } else {
-                self.warp_theme.text_selection_color().into_solid()
-            };
+            let text_selection_color = self.warp_theme.text_selection_color().into_solid();
 
             for current_range in selection_ranges {
                 self.render_selection(

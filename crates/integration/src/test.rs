@@ -2,7 +2,6 @@
 //! src/integration.rs and src/bin/integration.rs in order to register them
 //! to be run.
 
-mod agent_mode;
 mod block_filtering;
 mod bootstrapping;
 mod code_review;
@@ -44,7 +43,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 
-pub use agent_mode::*;
 use anyhow::{Result, anyhow};
 pub use block_filtering::*;
 pub use bootstrapping::*;

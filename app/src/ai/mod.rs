@@ -12,17 +12,8 @@ pub(crate) mod custom_endpoints;
 pub(crate) mod custom_model_routers;
 pub(crate) mod document;
 pub(crate) mod execution_context;
+pub mod execution_profiles;
 pub(crate) mod get_relevant_files;
 pub(crate) mod harness_display;
 pub(crate) mod llms;
 pub(crate) mod restored_conversations;
-use warpui::AppContext;
-pub mod execution_profiles;
-pub(crate) mod loading;
-
-pub(crate) use ai::paths;
-
-pub fn init(app: &mut AppContext) {
-    blocklist::keyboard_navigable_buttons::init(app);
-    blocklist::block::number_shortcut_buttons::init(app);
-}

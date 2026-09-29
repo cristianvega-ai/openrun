@@ -17,7 +17,6 @@ use watcher::HomeDirectoryWatcher;
 
 use super::*;
 use crate::ai::blocklist::BlocklistAIHistoryModel;
-use crate::ai::blocklist::local_agent_task_sync_model::LocalAgentTaskSyncModel;
 use crate::ai::document::ai_document_model::AIDocumentModel;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::LLMPreferences;
@@ -108,7 +107,6 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(move |_| BlocklistAIHistoryModel::new(vec![], &conversations));
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
-    app.add_singleton_model(LocalAgentTaskSyncModel::new);
     app.add_singleton_model(crate::ai::blocklist::BlocklistAIPermissions::new);
     app.add_singleton_model(AgentNotificationsModel::new);
     app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));

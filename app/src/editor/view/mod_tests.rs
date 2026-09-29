@@ -4287,7 +4287,6 @@ fn test_paste_clipboard_with_text_only_should_paste_text_normally() {
             // Enable image context options to allow image attachment functionality
             // This simulates the state when Agent Mode is active and image attachments are supported
             editor.image_context_options = ImageContextOptions::Enabled {
-                unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
             };
@@ -4340,7 +4339,6 @@ fn test_paste_clipboard_with_image_only_should_switch_to_agent_mode() {
             let mut editor = EditorView::new(Default::default(), ctx);
             // Enable image context options for testing
             editor.image_context_options = ImageContextOptions::Enabled {
-                unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
             };
@@ -4382,7 +4380,6 @@ fn test_paste_clipboard_with_supported_image_and_text_should_handle_both() {
             let mut editor = EditorView::new(Default::default(), ctx);
             // Enable image context options for testing
             editor.image_context_options = ImageContextOptions::Enabled {
-                unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
             };
@@ -4425,7 +4422,6 @@ fn test_paste_clipboard_with_unsupported_image_and_text_should_show_error() {
             let mut editor = EditorView::new(Default::default(), ctx);
             // Enable image context options for testing
             editor.image_context_options = ImageContextOptions::Enabled {
-                unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
             };

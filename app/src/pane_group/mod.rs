@@ -34,9 +34,6 @@ use warpui::{
     ViewHandle, WindowId,
 };
 
-use crate::ai::blocklist::{BlocklistAIHistoryModel, SerializedBlockListItem};
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use crate::ai::llms::{LLMId, LLMPreferences};
 #[cfg(feature = "local_fs")]
 use crate::app_state::CodePaneSnapShot;
 use crate::app_state::{
@@ -51,8 +48,6 @@ use crate::code::buffer_location::LocalOrRemotePath;
 #[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
 use crate::code::view::{CodeView, CodeViewAction};
-use crate::code_review::comments::{AttachedReviewComment, PendingImportedReviewComment};
-use crate::code_review::diff_state::DiffMode;
 use crate::features::FeatureFlag;
 use crate::launch_configs::launch_config::{self, PaneTemplateType};
 use crate::notebooks::file::FileNotebookView;
@@ -77,12 +72,11 @@ use crate::terminal::input::{InputConfig, InputType};
 use crate::terminal::local_tty::TerminalManager as LocalTtyTerminalManager;
 #[cfg(feature = "local_tty")]
 use crate::terminal::local_tty::{TerminalViewSurfaceConfig, create_terminal_view_surface};
+use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::session::Session;
 use crate::terminal::session_settings::{NewSessionSource, SessionSettings};
 use crate::terminal::view::ssh_file_upload::FileUploadId;
-use crate::terminal::view::{
-    BlockNotification, ExecuteCommandEvent, LeftPanelTargetView, SyncEvent, TerminalViewState,
-};
+use crate::terminal::view::{BlockNotification, LeftPanelTargetView, SyncEvent, TerminalViewState};
 use crate::terminal::{ShellLaunchData, TerminalManager, TerminalModel, TerminalView};
 use crate::undo_close::{UndoCloseStack, UndoCloseStackEvent};
 use crate::util::bindings::{CustomAction, is_binding_pty_compliant};
@@ -92,7 +86,6 @@ use crate::view_components::ToastFlavor;
 use crate::workflows::{WorkflowSelectionSource, WorkflowSource, WorkflowType};
 use crate::workspace::tab_group::TabGroupId;
 use crate::workspace::{self, CommandSearchOptions, PaneViewLocator, TabBarLocation};
-use crate::workspaces::user_workspaces::{ResolvedTeamScope, UserWorkspaces};
 use crate::{cmd_or_ctrl_shift, send_telemetry_from_ctx};
 
 pub mod focus_state;
@@ -396,7 +389,6 @@ pub enum Event {
     LeftPanelToggled {
         is_open: bool,
     },
-    ExecuteCommand(ExecuteCommandEvent),
     PaneTitleUpdated,
     SendNotification {
         notification: BlockNotification,
@@ -513,7 +505,6 @@ pub enum Event {
         pane_id: Option<PaneId>,
     },
     OpenThemeChooser,
-    InvalidatedActiveConversation,
     OpenFilesPalette {
         source: PaletteSource,
     },
@@ -547,22 +538,6 @@ pub enum Event {
     },
     OpenDirectoryInNewTab {
         path: PathBuf,
-    },
-    InsertCodeReviewComments {
-        repo_path: LocalOrRemotePath,
-        comments: Vec<PendingImportedReviewComment>,
-        diff_mode: DiffMode,
-        open_code_review: Option<CodeReviewPanelArg>,
-    },
-    OpenCodeReviewPaneAndScrollToComment {
-        open_code_review: CodeReviewPanelArg,
-        comment: AttachedReviewComment,
-        diff_mode: DiffMode,
-    },
-    ImportAllCodeReviewComments {
-        open_code_review: CodeReviewPanelArg,
-        comments: Vec<AttachedReviewComment>,
-        diff_mode: DiffMode,
     },
     /// Request to open LSP logs in a terminal pane
     OpenLspLogs {
@@ -1173,7 +1148,7 @@ impl PaneGroup {
     #[allow(clippy::too_many_arguments)]
     fn restore_pane_tree(
         root: PaneNodeSnapshot,
-        block_lists: Arc<HashMap<PaneUuid, Vec<SerializedBlockListItem>>>,
+        block_lists: Arc<HashMap<PaneUuid, Vec<SerializedBlock>>>,
         resources: TerminalViewResources,
         ctx: &mut ViewContext<PaneGroup>,
         pane_contents: &mut HashMap<PaneId, Box<dyn AnyPaneContent>>,
@@ -1247,7 +1222,7 @@ impl PaneGroup {
     #[allow(clippy::too_many_arguments)]
     fn restore_pane_leaf(
         leaf: LeafSnapshot,
-        block_lists: Arc<HashMap<PaneUuid, Vec<SerializedBlockListItem>>>,
+        block_lists: Arc<HashMap<PaneUuid, Vec<SerializedBlock>>>,
         resources: TerminalViewResources,
         ctx: &mut ViewContext<PaneGroup>,
         pane_contents: &mut HashMap<PaneId, Box<dyn AnyPaneContent>>,
@@ -1291,8 +1266,6 @@ impl PaneGroup {
                     ctx,
                 );
 
-                let terminal_view_id = terminal_view.id();
-
                 let pane_data = TerminalPane::new(
                     uuid.0,
                     terminal_manager,
@@ -1304,50 +1277,6 @@ impl PaneGroup {
                 let terminal_pane_id = pane_data.terminal_pane_id();
                 let pane_id = terminal_pane_id.into();
                 pane_contents.insert(pane_id, Box::new(pane_data));
-
-                if let Some(llm_override) = &terminal_snapshot.llm_model_override
-                    && let Ok(llm_id) = serde_json::from_str::<LLMId>(llm_override)
-                {
-                    log::info!("Selecting base agent model {llm_id} (from terminal snapshot)");
-                    let scope = ResolvedTeamScope::from_scope(
-                        &UserWorkspaces::as_ref(ctx).team_context_for_view(ctx),
-                    );
-                    LLMPreferences::handle(ctx).update(ctx, |llm_prefs, ctx| {
-                        llm_prefs.update_preferred_agent_mode_llm(
-                            &scope,
-                            &llm_id,
-                            terminal_view_id,
-                            ctx,
-                        );
-                    });
-                }
-
-                if let Some(active_profile_sync_id) = &terminal_snapshot.active_profile_id {
-                    log::info!(
-                        "Attempting to restore active_profile '{active_profile_sync_id}' for terminal {terminal_view_id:?}"
-                    );
-
-                    let profiles_model = AIExecutionProfilesModel::as_ref(ctx);
-
-                    if let Some(profile_id) =
-                        profiles_model.get_profile_id_by_sync_id(active_profile_sync_id, ctx)
-                    {
-                        AIExecutionProfilesModel::handle(ctx).update(ctx, |profiles_model, ctx| {
-                            profiles_model.set_active_profile(
-                                terminal_view_id,
-                                profile_id.clone(),
-                                ctx,
-                            );
-                        });
-                        log::info!(
-                            "Restored active profile {profile_id:?} for terminal {terminal_view_id:?}"
-                        );
-                    } else {
-                        log::warn!(
-                            "Failed to restore active profile for terminal {terminal_view_id:?}"
-                        );
-                    }
-                }
 
                 let focus = InitialFocus {
                     focused_pane: leaf.is_focused.then_some(pane_id),
@@ -1962,7 +1891,7 @@ impl PaneGroup {
         user_default_shell_unsupported_banner_model_handle: ModelHandle<BannerState>,
         server_api: Arc<ServerApi>,
         panes_layout: PanesLayout,
-        block_lists: Arc<HashMap<PaneUuid, Vec<SerializedBlockListItem>>>,
+        block_lists: Arc<HashMap<PaneUuid, Vec<SerializedBlock>>>,
         model_event_sender: Option<SyncSender<ModelEvent>>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
@@ -2388,15 +2317,6 @@ impl PaneGroup {
     /// Definitively close the pane. This does not go through the undo close check where we might hide the pane instead of
     /// discarding it.
     fn discard_pane(&mut self, pane_id: PaneId, ctx: &mut ViewContext<Self>) {
-        if let Some(terminal_view) = self.terminal_view_from_pane_id(pane_id, ctx) {
-            let terminal_view_id = terminal_view.id();
-
-            // Preserve conversations from terminal views before cleaning up the pane
-            BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, _| {
-                history_model.mark_conversations_historical_for_terminal_surface(terminal_view_id);
-            });
-        }
-
         self.cleanup_closed_pane(pane_id, ctx);
     }
 
@@ -3458,7 +3378,7 @@ impl PaneGroup {
         mut env_vars: HashMap<OsString, OsString>,
         terminal_session_uuid: &[u8],
         resources: TerminalViewResources,
-        restored_blocks: Option<&Vec<SerializedBlockListItem>>,
+        restored_blocks: Option<&Vec<SerializedBlock>>,
         user_default_shell_unsupported_banner_model_handle: ModelHandle<BannerState>,
         initial_size: Vector2F,
         model_event_sender: Option<SyncSender<ModelEvent>>,

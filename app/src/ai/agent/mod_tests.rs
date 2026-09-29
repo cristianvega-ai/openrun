@@ -352,7 +352,7 @@ fn format_for_copy_preserves_visual_markdown_sections() {
     };
 
     assert_eq!(
-        output.format_for_copy(None),
+        output.format_for_copy(),
         "Intro\n![Diagram](./diagram.png)\n```mermaid\ngraph TD\nA --> B\n```"
     );
 }

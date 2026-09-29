@@ -1365,3 +1365,29 @@ fn test_sqlite_round_trips_shell_input_config() {
         Some(shell_config)
     );
 }
+
+#[test]
+fn stored_ignored_suggestions_of_removed_types_are_dropped() {
+    use diesel::sql_query;
+    use diesel::sqlite::SqliteConnection;
+    use diesel::{Connection, RunQueryDsl};
+    use diesel_migrations::MigrationHarness;
+
+    use super::get_all_ignored_suggestions;
+    use crate::suggestions::ignored_suggestions_model::SuggestionType;
+
+    let mut conn = SqliteConnection::establish(":memory:").expect("in-memory database");
+    conn.run_pending_migrations(::persistence::MIGRATIONS)
+        .expect("migrations should run");
+    sql_query(
+        "INSERT INTO ignored_suggestions (suggestion, suggestion_type) VALUES \
+         ('git status', 'shell_command'), ('explain this error', 'ai_query')",
+    )
+    .execute(&mut conn)
+    .expect("rows should insert");
+
+    assert_eq!(
+        get_all_ignored_suggestions(&mut conn).expect("suggestions should load"),
+        vec![("git status".to_owned(), SuggestionType::ShellCommand)]
+    );
+}

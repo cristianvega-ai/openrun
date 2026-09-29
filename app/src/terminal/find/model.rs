@@ -340,7 +340,7 @@ impl TerminalFindModel {
         }
     }
 
-    /// Returns the focused rich content (AI) match id, if any.
+    /// Returns the focused rich content match id, if any.
     ///
     /// This works for both sync and async find paths and is used by AI block
     /// rendering to apply the focused-match highlight color.

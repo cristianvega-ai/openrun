@@ -11,14 +11,14 @@ use itertools::Itertools;
 
 use super::model::Block;
 use super::{model, schema};
-use crate::ai::blocklist::{PersistedAIInput, SerializedBlockListItem};
+use crate::ai::blocklist::PersistedAIInput;
 use crate::app_state::PaneUuid;
 use crate::persistence::schema::ai_queries;
-use crate::terminal::model::block::{SerializedAgentViewVisibility, SerializedBlock};
+use crate::terminal::model::block::SerializedBlock;
 
 const MAX_TERMINAL_BLOCKS_TO_PERSIST_PER_SESSION: i64 = 100;
 
-type PersistedBlocks = HashMap<PaneUuid, Vec<SerializedBlockListItem>>;
+type PersistedBlocks = HashMap<PaneUuid, Vec<SerializedBlock>>;
 
 /// An AI query read from the SQLite DB.
 #[derive(Identifiable, Insertable, Queryable, Selectable)]
@@ -181,6 +181,22 @@ fn upsert_ai_query_with_limit(
     })?)
 }
 
+/// Whether a stored block was created by, or attached to, an agent conversation. Sessions saved
+/// before agents were removed can contain such rows; they are not restored.
+fn is_agent_block(block: &Block) -> bool {
+    let has_agent_metadata = block
+        .ai_metadata
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .is_some_and(|value| !value.is_null());
+    let created_in_agent_view = block
+        .agent_view_visibility
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .is_some_and(|value| value.get("Agent").is_some());
+    has_agent_metadata || created_in_agent_view
+}
+
 /// Returns the most recent [`MAX_BLOCK_COUNT_PER_SESSION`] block list items for each session. The
 /// items are in chronological order.
 pub(super) fn get_all_restored_blocks(
@@ -202,13 +218,17 @@ pub(super) fn get_all_restored_blocks(
         .map(|(blocks, terminal_pane)| {
             (
                 PaneUuid(terminal_pane.uuid),
-                blocks.into_iter().map(Into::into).collect(),
+                blocks
+                    .into_iter()
+                    .filter(|block| !is_agent_block(block))
+                    .map(Into::into)
+                    .collect(),
             )
         })
-        .collect::<HashMap<_, Vec<SerializedBlockListItem>>>();
+        .collect::<HashMap<_, Vec<SerializedBlock>>>();
 
     for (_, blocks) in all_block_items_by_pane.iter_mut() {
-        blocks.sort_by_key(|item| item.start_ts());
+        blocks.sort_by_key(|block| block.start_ts);
         // Only keep most recent command blocks
         blocks.drain(
             0..blocks
@@ -298,12 +318,9 @@ fn create_block<'a>(
         user: block.shell_host.as_ref().map(|host| host.user.as_str()),
         host: block.shell_host.as_ref().map(|host| host.hostname.as_str()),
         prompt_snapshot: block.prompt_snapshot.as_ref(),
-        ai_metadata: block.ai_metadata.as_ref(),
+        ai_metadata: None,
         is_local: Some(is_local),
-        agent_view_visibility: block
-            .agent_view_visibility
-            .as_ref()
-            .and_then(|v| serde_json::to_string(v).ok()),
+        agent_view_visibility: None,
     }
 }
 
@@ -314,19 +331,6 @@ pub(super) fn delete_blocks(conn: &mut SqliteConnection, pane_id: Vec<u8>) -> Re
             .execute(conn)?;
         Ok(())
     })
-}
-
-pub(super) fn update_block_agent_view_visibility(
-    conn: &mut SqliteConnection,
-    target_block_id: &str,
-    visibility: &SerializedAgentViewVisibility,
-) -> anyhow::Result<()> {
-    use schema::blocks::dsl::*;
-    let visibility_json = serde_json::to_string(visibility)?;
-    diesel::update(blocks.filter(block_id.eq(target_block_id)))
-        .set(agent_view_visibility.eq(visibility_json))
-        .execute(conn)?;
-    Ok(())
 }
 
 pub(super) fn delete_ai_conversation(
@@ -351,3 +355,7 @@ pub(super) fn delete_ai_conversation(
 #[cfg(test)]
 #[path = "block_list_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "restored_blocks_tests.rs"]
+mod restored_blocks_tests;

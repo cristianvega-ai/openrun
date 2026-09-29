@@ -267,7 +267,7 @@ pub struct AsyncBlockGridMatch {
     pub block_index: BlockIndex,
 }
 
-/// A focused match in a rich content (AI) block.
+/// A focused match in a rich content block.
 ///
 /// Mirrors the data carried by `BlockListMatch::RichContent` in the sync path,
 /// so callers can synthesize a `BlockListMatch` from either path.

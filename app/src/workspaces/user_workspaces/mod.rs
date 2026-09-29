@@ -41,7 +41,7 @@ pub(crate) mod team_workspace_settings;
 pub use team_workspace_settings::TeamContextForOperation;
 #[cfg(test)]
 pub(crate) use team_workspace_settings::TeamlessScopeForTest;
-pub use team_workspace_settings::{ResolvedTeamScope, TeamContext, TeamContextResolver, TeamScope};
+pub use team_workspace_settings::{ResolvedTeamScope, TeamScope};
 
 #[derive(Debug)]
 pub enum UserWorkspacesEvent {

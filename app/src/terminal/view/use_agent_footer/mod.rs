@@ -436,18 +436,17 @@ impl TerminalView {
             input.clear_buffer_and_reset_undo_stack(ctx);
         });
 
-        // Extract pending image attachments and clear them from the context
-        // model before submission.
+        // Extract pending image attachments and clear them before submission.
         let images: Vec<_> = self
-            .ai_context_model
+            .pending_attachments
             .as_ref(ctx)
-            .pending_images()
+            .images()
             .into_iter()
             .cloned()
             .collect();
         if !images.is_empty() {
-            self.ai_context_model.update(ctx, |model, ctx| {
-                model.clear_pending_images(ctx);
+            self.pending_attachments.update(ctx, |model, ctx| {
+                model.clear_images(ctx);
             });
         }
 

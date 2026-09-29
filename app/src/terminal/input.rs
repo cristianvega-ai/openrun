@@ -8,6 +8,7 @@ pub mod inline_history;
 pub mod inline_menu;
 pub mod input_mode_model;
 pub mod message_bar;
+pub mod pending_attachments;
 pub mod repos;
 pub mod slash_command_model;
 pub mod slash_commands;
@@ -86,10 +87,11 @@ use warpui::{
 
 use self::decorations::InputBackgroundJobOptions;
 pub use self::input_mode_model::{InputConfig, InputModeEvent, InputModeModel, InputType};
+use self::pending_attachments::{AttachmentType, PendingAttachmentsEvent, PendingAttachmentsModel};
 use super::alias::is_expandable_alias;
 use super::event::{BlockCompletedEvent, BlockType, UserBlockCompleted};
 use super::ligature_settings::LigatureSettings;
-use super::model::block::{AgentInteractionMetadata, BlockId, BlockMetadata};
+use super::model::block::{BlockId, BlockMetadata};
 use super::model::completions::ShellCompletion;
 use super::model::session::{Session, SessionId, SessionType, Sessions};
 use super::prompt_render_helper::{PromptRenderHelper, SameLinePromptElements};
@@ -108,17 +110,10 @@ use super::{
 };
 #[allow(unused_imports)]
 use crate::ASSETS;
-use crate::ai::agent::{CancellationReason, EntrypointType};
-use crate::ai::blocklist::{
-    AttachmentType, BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
-    BlocklistAIHistoryModel, ai_indicator_height,
-};
-use crate::ai::llms::LLMPreferences;
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::channel::{Channel, ChannelState};
 #[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
-use crate::code_review::diff_state::DiffMode;
 use crate::completer::SessionContext;
 use crate::context_chips::display::{PromptDisplay, PromptDisplayEvent};
 use crate::context_chips::display_chip::{DisplayChipConfig, PromptChipShellCommand};
@@ -210,7 +205,6 @@ use crate::workflows::local_workflows::LocalWorkflows;
 use crate::workflows::{self, WorkflowSelectionSource, WorkflowSource, WorkflowType};
 use crate::workspace::sync_inputs::SyncedInputState;
 use crate::workspace::{CommandSearchOptions, InitContent, ToastStack, WorkspaceAction};
-use crate::workspaces::user_workspaces::{ResolvedTeamScope, UserWorkspaces};
 #[allow(unused_imports)]
 use crate::{AgentModeEntrypoint, ServerApiProvider, cmd_or_ctrl_shift, send_telemetry_from_ctx};
 
@@ -466,26 +460,6 @@ impl InputSuggestionsMode {
     }
 }
 
-/// Where a command execution request originates from.
-#[derive(Clone)]
-pub enum CommandExecutionSource {
-    /// A command execution request from Warp AI++.
-    AI {
-        /// Metadata associated with the execution.
-        metadata: AgentInteractionMetadata,
-    },
-
-    /// A normal command execution request.
-    User,
-}
-
-impl CommandExecutionSource {
-    /// Whether this command execution originates from an AI command.
-    pub fn is_ai_command(&self) -> bool {
-        matches!(self, CommandExecutionSource::AI { .. })
-    }
-}
-
 fn render_prompt_chip_shell_command(
     command: &PromptChipShellCommand,
     shell_type: ShellType,
@@ -560,7 +534,6 @@ pub enum Event {
     CtrlD,
     CtrlC,
     ExecuteCommand(Box<ExecuteCommandEvent>),
-    ExecuteAIQuery,
     EmacsBindingUsed,
     InputFocusedFromMiddleClick,
     EditorFocused,
@@ -571,10 +544,6 @@ pub enum Event {
         layout: external_editor::settings::EditorLayout,
     },
     OpenCodeReviewPane,
-    /// Request to attach a diff set as context to the AI conversation
-    AttachDiffSetContext {
-        diff_mode: DiffMode,
-    },
     OpenFilesPalette {
         source: PaletteSource,
     },
@@ -1087,8 +1056,7 @@ pub struct Input {
     has_pending_command: bool,
     last_word_insertion: LastWordInsertion,
 
-    ai_controller: ModelHandle<BlocklistAIController>,
-    ai_context_model: ModelHandle<BlocklistAIContextModel>,
+    pending_attachments: ModelHandle<PendingAttachmentsModel>,
     input_mode_model: ModelHandle<InputModeModel>,
 
     /// To ensure we only have one run of completions-as-you-type at any given time,
@@ -1448,8 +1416,7 @@ impl Input {
         size_info: SizeInfo,
         menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
         current_prompt: ModelHandle<PromptType>,
-        ai_controller: ModelHandle<BlocklistAIController>,
-        ai_context_model: ModelHandle<BlocklistAIContextModel>,
+        pending_attachments: ModelHandle<PendingAttachmentsModel>,
         input_mode_model: ModelHandle<InputModeModel>,
         terminal_view_id: EntityId,
         current_repo_path: Option<PathBuf>,
@@ -1469,7 +1436,6 @@ impl Input {
 
         let footer_display_chip_config = DisplayChipConfig {
             input_mode_model: input_mode_model.clone(),
-            ai_context_model: ai_context_model.clone(),
             terminal_view_id,
             menu_positioning_provider: menu_positioning_provider.clone(),
             session_context: initial_session_context.clone(),
@@ -1481,7 +1447,6 @@ impl Input {
             PromptDisplay::new(
                 current_prompt.clone(),
                 input_mode_model.clone(),
-                ai_context_model.clone(),
                 terminal_view_id,
                 menu_positioning_provider.clone(),
                 initial_session_context.clone(),
@@ -1734,7 +1699,7 @@ impl Input {
                     })),
                     ..Default::default()
                 };
-                EditorView::new(options, ctx).with_context_model(ai_context_model.clone())
+                EditorView::new(options, ctx).with_pending_attachments(pending_attachments.clone())
             })
         };
 
@@ -1907,26 +1872,29 @@ impl Input {
             me.set_zero_state_hint_text(ctx);
             ctx.notify();
         });
-        ctx.subscribe_to_model(&ai_context_model, |me, context_model, event, ctx| {
-            match event {
-                BlocklistAIContextEvent::UpdatedPendingContext { .. } => {
-                    me.update_image_context_options(ctx);
-                    me.attachment_chips = context_model
-                        .as_ref(ctx)
-                        .pending_attachments()
-                        .iter()
-                        .enumerate()
-                        .map(|(i, attachment)| AttachmentChip {
-                            file_name: attachment.file_name().to_string(),
-                            mouse_state_handle: Default::default(),
-                            attachment_type: attachment.attachment_type(),
-                            index: i,
-                        })
-                        .collect_vec();
+        ctx.subscribe_to_model(
+            &pending_attachments,
+            |me, pending_attachments, event, ctx| {
+                match event {
+                    PendingAttachmentsEvent::Updated => {
+                        me.update_image_context_options(ctx);
+                        me.attachment_chips = pending_attachments
+                            .as_ref(ctx)
+                            .attachments()
+                            .iter()
+                            .enumerate()
+                            .map(|(i, attachment)| AttachmentChip {
+                                file_name: attachment.file_name().to_string(),
+                                mouse_state_handle: Default::default(),
+                                attachment_type: attachment.attachment_type(),
+                                index: i,
+                            })
+                            .collect_vec();
+                    }
                 }
-            }
-            ctx.notify();
-        });
+                ctx.notify();
+            },
+        );
 
         ctx.subscribe_to_model(&CLIAgentSettings::handle(ctx), |me, _, event, ctx| {
             if let CLIAgentSettingsChangedEvent::SubmitRichInputOnCtrlEnter { .. } = event {
@@ -2046,8 +2014,7 @@ impl Input {
             menu_positioning_provider,
             prompt_render_helper,
             prompt_type: current_prompt,
-            ai_controller,
-            ai_context_model,
+            pending_attachments,
             input_mode_model,
             enable_autosuggestions_setting: *editor_settings_handle
                 .as_ref(ctx)
@@ -2489,21 +2456,14 @@ impl Input {
     pub fn update_image_context_options(&mut self, ctx: &mut ViewContext<Self>) {
         let input_mode_model = self.input_mode_model.as_ref(ctx);
 
-        let llm_prefs = LLMPreferences::as_ref(ctx);
+        let num_images_attached = self.pending_attachments.as_ref(ctx).images().len();
 
-        let scope =
-            ResolvedTeamScope::from_scope(&UserWorkspaces::as_ref(ctx).team_context_for_view(ctx));
-        let vision_supported = llm_prefs.vision_supported(&scope, ctx, Some(self.terminal_view_id));
-
-        let num_images_attached = self.ai_context_model.as_ref(ctx).pending_images().len();
-
-        // Image context is available whenever the feature flag is enabled and we're in AI input
-        // mode, including cloud mode
+        // Images can be attached whenever the feature flag is enabled and the prompt input (the
+        // CLI agent rich input) is active.
         let image_context_options = if FeatureFlag::ImageAsContext.is_enabled()
             && matches!(input_mode_model.input_type(), InputType::Prompt)
         {
             ImageContextOptions::Enabled {
-                unsupported_model: !vision_supported,
                 is_processing_attached_images: self.is_processing_attached_images,
                 num_images_attached,
             }
@@ -2519,26 +2479,6 @@ impl Input {
 
     pub fn input_mode_model(&self) -> &ModelHandle<InputModeModel> {
         &self.input_mode_model
-    }
-
-    fn cancel_active_conversation(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-        cancellation_reason: CancellationReason,
-    ) {
-        self.ai_controller.update(ctx, |controller, ctx| {
-            let active_conversation_id = BlocklistAIHistoryModel::as_ref(ctx)
-                .active_conversation(self.terminal_view_id)
-                .filter(|conversation| conversation.status().is_in_progress())
-                .map(|conversation| conversation.id());
-            if let Some(active_conversation_id) = active_conversation_id {
-                controller.cancel_conversation_progress(
-                    active_conversation_id,
-                    cancellation_reason,
-                    ctx,
-                );
-            }
-        });
     }
 
     fn handle_prompt_event(&mut self, event: &PromptDisplayEvent, ctx: &mut ViewContext<Self>) {
@@ -2575,18 +2515,6 @@ impl Input {
                     source: PaletteSource::ContextChip,
                 });
             }
-            PromptDisplayEvent::RunAgentQuery(query) => {
-                self.cancel_active_conversation(ctx, CancellationReason::UserCommandExecuted);
-                let query = query.clone();
-                self.ai_controller.update(ctx, |controller, ctx| {
-                    controller.send_user_query_in_new_conversation(
-                        query,
-                        None,
-                        EntrypointType::UserInitiated,
-                        ctx,
-                    );
-                });
-            }
             PromptDisplayEvent::TryExecuteCommand(command) => {
                 let Some(shell_type) = self
                     .active_session(ctx)
@@ -2598,13 +2526,7 @@ impl Input {
                 let command = render_prompt_chip_shell_command(command, shell_type);
                 // Snapshot the current input so we can restore it after the command completes.
                 let current_input = self.buffer_text(ctx);
-                if self.try_execute_command_from_source(
-                    &command,
-                    CommandExecutionSource::User,
-                    true,
-                    ctx,
-                ) {
-                    self.cancel_active_conversation(ctx, CancellationReason::UserCommandExecuted);
+                if self.try_execute_command_with_history_option(&command, true, ctx) {
                     if !current_input.is_empty() {
                         self.input_contents_before_prompt_chip_command = Some(current_input);
                     }
@@ -3024,7 +2946,7 @@ impl Input {
     }
 
     pub fn try_execute_command(&mut self, command: &str, ctx: &mut ViewContext<Self>) -> bool {
-        self.try_execute_command_from_source(command, CommandExecutionSource::User, true, ctx)
+        self.try_execute_command_with_history_option(command, true, ctx)
     }
 
     /// Applies `selection` only if `session_id` matches the in-flight handoff.
@@ -3063,10 +2985,8 @@ impl Input {
             let char_cursor = original_buffer[..cursor_offset.as_usize()].chars().count();
             command.push_str(&format!(" {char_cursor}:{}", hex::encode(&original_buffer)));
         }
-        let started = self.try_execute_command_from_source(
-            &command,
-            CommandExecutionSource::User,
-            false, /* should_add_command_to_history */
+        let started = self.try_execute_command_with_history_option(
+            &command, false, /* should_add_command_to_history */
             ctx,
         );
         if started {
@@ -3092,10 +3012,9 @@ impl Input {
     ///     3. There is an active, long-running command.
     ///
     /// Returns `true` if the command was executed, `false` otherwise.
-    fn try_execute_command_from_source(
+    fn try_execute_command_with_history_option(
         &mut self,
         command: &str,
-        source: CommandExecutionSource,
         should_add_command_to_history: bool,
         ctx: &mut ViewContext<Self>,
     ) -> bool {
@@ -3179,12 +3098,7 @@ impl Input {
                 });
             }
 
-            self.start_block_and_write_command_to_pty(
-                command,
-                source,
-                should_add_command_to_history,
-                ctx,
-            );
+            self.start_block_and_write_command_to_pty(command, should_add_command_to_history, ctx);
             did_execute = true;
         } else {
             // We don't want to submit the command if precmd has not
@@ -5173,15 +5087,7 @@ impl Input {
                                 return;
                             }
 
-                            let has_active_ai_block =
-                                self.model.lock().block_list().has_active_ai_block(ctx);
-                            // We only focus the input if there is no active AI
-                            // block. Otherwise, the input is incorrectly focused
-                            // when executing an AI query from the history menu.
-                            self.close_input_suggestions(
-                                !has_active_ai_block, /*should_focus_input=*/
-                                ctx,
-                            );
+                            self.close_input_suggestions(true /*should_focus_input=*/, ctx);
                         }
                     }
                     InputSuggestionsMode::Closed => {
@@ -7337,8 +7243,6 @@ impl Input {
             }
             self.emit_input_buffer_submitted_telemetry(ctx);
 
-            self.cancel_active_conversation(ctx, CancellationReason::UserCommandExecuted);
-
             self.input_mode_model.update(ctx, |model, ctx| {
                 model.handle_input_buffer_submitted(ctx);
             });
@@ -7535,9 +7439,7 @@ impl Input {
         // cleared. For the multiline input box case, this also caused contents to go
         // off the screen because we were forcing the long running command to be the same
         // size of the cleared input box.
-        if let BlockType::User(user_block) = &block_completed_event.block_type {
-            // Only clear the input buffer for user-executed commands, not agent-executed ones.
-            let should_clear_buffer = !user_block.was_part_of_agent_interaction;
+        if let BlockType::User(_) = &block_completed_event.block_type {
             let latest_block_id = self.model.lock().block_list().active_block_id().clone();
             // Prefer a prompt-chip restore (e.g. `cd`) over a shell-widget handoff restore.
             let completed_handoff = self
@@ -7558,62 +7460,57 @@ impl Input {
                         .map(|handoff| handoff.restore_text().to_string())
                 });
 
-            if should_clear_buffer {
-                // We want to reinitialize the buffer whenever a command is completed so that
-                // state does not leak from buffer to buffer (e.g. edit history).
-                if self.buffer_block_id != latest_block_id {
-                    self.buffer_block_id = latest_block_id;
-                    self.editor
-                        .update(ctx, |editor, ctx| editor.reinitialize_buffer(None, ctx));
+            // We want to reinitialize the buffer whenever a command is completed so that
+            // state does not leak from buffer to buffer (e.g. edit history).
+            if self.buffer_block_id != latest_block_id {
+                self.buffer_block_id = latest_block_id;
+                self.editor
+                    .update(ctx, |editor, ctx| editor.reinitialize_buffer(None, ctx));
 
-                    // If we have a pending input restore (from a prompt chip command like cd, or
-                    // a ctrl-r/ctrl-t external handoff), restore the input contents instead of
-                    // leaving the buffer empty.
-                    if let Some(restore_text) = pending_input_restore {
-                        self.editor.update(ctx, |editor, ctx| {
-                            editor.set_buffer_text(&restore_text, ctx);
-                            if let Some(handoff) = &completed_handoff {
-                                match (
-                                    handoff.apply_mode,
-                                    &handoff.selection,
-                                    handoff.cursor_offset,
-                                ) {
-                                    (
-                                        ShellWidgetApplyMode::Splice,
-                                        Some(insertion),
-                                        Some(cursor_offset),
-                                    ) => editor.select_and_replace(
-                                        insertion,
+                // If we have a pending input restore (from a prompt chip command like cd, or
+                // a ctrl-r/ctrl-t external handoff), restore the input contents instead of
+                // leaving the buffer empty.
+                if let Some(restore_text) = pending_input_restore {
+                    self.editor.update(ctx, |editor, ctx| {
+                        editor.set_buffer_text(&restore_text, ctx);
+                        if let Some(handoff) = &completed_handoff {
+                            match (
+                                handoff.apply_mode,
+                                &handoff.selection,
+                                handoff.cursor_offset,
+                            ) {
+                                (
+                                    ShellWidgetApplyMode::Splice,
+                                    Some(insertion),
+                                    Some(cursor_offset),
+                                ) => editor.select_and_replace(
+                                    insertion,
+                                    [cursor_offset..cursor_offset],
+                                    PlainTextEditorViewAction::InsertSelectedText,
+                                    ctx,
+                                ),
+                                (_, None, Some(cursor_offset)) => editor
+                                    .select_ranges_by_byte_offset(
                                         [cursor_offset..cursor_offset],
-                                        PlainTextEditorViewAction::InsertSelectedText,
                                         ctx,
                                     ),
-                                    (_, None, Some(cursor_offset)) => editor
-                                        .select_ranges_by_byte_offset(
-                                            [cursor_offset..cursor_offset],
-                                            ctx,
-                                        ),
-                                    (ShellWidgetApplyMode::Replace, Some(_), _)
-                                    | (ShellWidgetApplyMode::Splice, Some(_), None)
-                                    | (_, None, None) => {}
-                                }
+                                (ShellWidgetApplyMode::Replace, Some(_), _)
+                                | (ShellWidgetApplyMode::Splice, Some(_), None)
+                                | (_, None, None) => {}
                             }
-                        });
-                        self.is_editor_empty_on_last_edit = false;
-                    } else {
-                        // This is the one place where buffer contents can change without an `Edit`
-                        // -- this is because the buffer semantically isn't being edited, a new one is
-                        // being constructed. We can guarantee in this case that the buffer was previously
-                        // non-empty and should emit this event, because this code path is executed upon block
-                        // completion in response to an executed command, though this guarantee is not explicitly
-                        // enforced by the code.
-                        self.is_editor_empty_on_last_edit = true;
-                        ctx.emit(Event::InputEmptyStateChanged { is_empty: true });
-                    }
+                        }
+                    });
+                    self.is_editor_empty_on_last_edit = false;
+                } else {
+                    // This is the one place where buffer contents can change without an `Edit`
+                    // -- this is because the buffer semantically isn't being edited, a new one is
+                    // being constructed. We can guarantee in this case that the buffer was previously
+                    // non-empty and should emit this event, because this code path is executed upon block
+                    // completion in response to an executed command, though this guarantee is not explicitly
+                    // enforced by the code.
+                    self.is_editor_empty_on_last_edit = true;
+                    ctx.emit(Event::InputEmptyStateChanged { is_empty: true });
                 }
-            } else {
-                // For agent-executed commands, still update the latest block ID but don't clear the buffer
-                self.buffer_block_id = latest_block_id;
             }
 
             // Generate autosuggestion if the input is not empty (user had type-ahead).
@@ -7681,7 +7578,6 @@ impl Input {
     fn start_block_and_write_command_to_pty(
         &mut self,
         command: &str,
-        source: CommandExecutionSource,
         should_add_command_to_history: bool,
         ctx: &mut ViewContext<Self>,
     ) {
@@ -7733,7 +7629,6 @@ impl Input {
             session_id,
             workflow_command,
             should_add_command_to_history,
-            source,
         })));
         end_trace!();
     }
@@ -8379,7 +8274,10 @@ fn render_prefix_mode_indicator(
     em_width: f32,
     app: &AppContext,
 ) -> Box<dyn Element> {
-    let indicator_size = ai_indicator_height(app);
+    let indicator_size = app.font_cache().line_height(
+        appearance.monospace_font_size(),
+        appearance.line_height_ratio(),
+    );
     Container::new(
         ConstrainedBox::new(
             Align::new(

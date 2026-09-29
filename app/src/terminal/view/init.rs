@@ -1,5 +1,5 @@
 use warpui::AppContext;
-use warpui::keymap::{BindingDescription, EditableBinding, FixedBinding, PerPlatformKeystroke};
+use warpui::keymap::{EditableBinding, FixedBinding, PerPlatformKeystroke};
 use warpui::platform::OperatingSystem;
 use warpui::units::IntoLines;
 
@@ -644,12 +644,4 @@ pub fn init(app: &mut AppContext) {
     )
     .with_enabled(|| cfg!(feature = "local_fs") && ChannelState::enable_debug_features())
     .with_context_predicate(id!("Terminal"))]);
-
-    app.register_editable_bindings([EditableBinding::new(
-        "workspace:add_current_dir_as_project",
-        BindingDescription::new("Add current folder as project"),
-        TerminalAction::AddProjectAtCurrentDirectory,
-    )
-    .with_enabled(|| FeatureFlag::Projects.is_enabled())
-    .with_context_predicate(id!("Workspace") & id!(flags::IS_ANY_AI_ENABLED))]);
 }

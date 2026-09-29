@@ -5,7 +5,6 @@ use anyhow::Context as _;
 use chrono::{DateTime, Local, TimeZone};
 use itertools::Itertools as _;
 use vec1::{Size0Error, Vec1};
-use warp_core::command::ExitCode;
 use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_core::send_telemetry_from_ctx;
@@ -55,7 +54,6 @@ use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::artifacts::Artifact;
 use crate::ai::blocklist::{
     BlocklistAIHistoryEvent, ConversationStatusUpdate, RequestInput, ResponseStreamId,
-    SerializedBlockListItem,
 };
 use crate::ai::llms::LLMPreferences;
 use crate::cloud_object::notebook_model::NotebookId;
@@ -68,9 +66,7 @@ use crate::persistence::model::{
 use crate::server::ids::ServerId;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionStatus;
 use crate::terminal::general_settings::GeneralSettings;
-use crate::terminal::model::block::{
-    AgentInteractionMetadata, AgentViewVisibility, BlockId, SerializedAIMetadata, SerializedBlock,
-};
+use crate::terminal::model::block::BlockId;
 use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::icons::Icon;
 use crate::workspaces::user_profiles::UserProfileWithUID;
@@ -248,25 +244,6 @@ fn usage_metadata_indicates_usage(metadata: &ConversationUsageMetadata) -> bool 
         || !metadata.token_usage.is_empty()
         || metadata.context_window_usage != 0.0
         || metadata.was_summarized
-}
-
-// basic info for creating a dummy command block based on an exchange's inputs
-pub(crate) struct CommandBlockInfo {
-    pub(crate) command: String,
-    pub(crate) output: String,
-    pub(crate) exit_code: ExitCode,
-    pub(crate) ai_metadata: Option<String>,
-    /// The api message ID of the tool call that initiated this command.
-    /// Used to find the corresponding exchange for PWD and start_ts fallback.
-    pub(crate) message_id: String,
-    /// Estimated timestamp when the command started.
-    /// Note that this may not be perfectly accurate, because it may come from the tool call timestamp
-    /// which is when the agent made the tool call, before the command actually started.
-    pub(crate) start_ts: Option<DateTime<Local>>,
-    /// Estimated timestamp when the command finished.
-    /// Note that this may not be perfectly accurate, because it may come from the tool call result timestamp
-    /// which is when the server receives the result, after the command actually finished.
-    pub(crate) completed_ts: Option<DateTime<Local>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1568,13 +1545,10 @@ impl AIConversation {
 
     /// Export the conversation to markdown format.
     /// This is used by both clipboard export and file export.
-    pub fn export_to_markdown(
-        &self,
-        action_model: Option<&crate::ai::blocklist::BlocklistAIActionModel>,
-    ) -> String {
+    pub fn export_to_markdown(&self) -> String {
         let mut result = Vec::new();
         for exchange in self.all_exchanges() {
-            let formatted_exchange = exchange.format_for_copy(action_model);
+            let formatted_exchange = exchange.format_for_copy();
             if !formatted_exchange.is_empty() {
                 result.push(formatted_exchange);
             }
@@ -3573,383 +3547,6 @@ impl AIConversation {
             has_usage: self.has_usage_metadata,
             charged_usage: self.conversation_usage_metadata.total_charged_usage,
         }
-    }
-
-    /// Normalize all newlines to CRLF so restored blocks render lines starting at column 0,
-    /// which is consistent with how we serialize real terminal blocks.
-    fn to_stylized_bytes(s: &str) -> Vec<u8> {
-        let s = s.replace("\r\n", "\n");
-        s.replace('\n', "\r\n").into_bytes()
-    }
-
-    /// Extracts all shell command blocks, in order, from the conversation's API task
-    /// messages.
-    ///
-    /// This includes:
-    /// - RunShellCommand tool calls that completed
-    /// - Attachments from UserQuery/SystemQuery messages
-    /// - Context blocks from UserQuery/SystemQuery/ToolCallResult messages
-    ///
-    /// Returns CommandBlockInfo with command, output, exit_code, and optional ai_metadata.
-    fn extract_command_blocks(&self) -> Vec<CommandBlockInfo> {
-        let mut command_blocks = Vec::new();
-
-        // Get the root task's API messages.
-        let Some(root_task) = self.get_root_task() else {
-            return command_blocks;
-        };
-        let Some(api_task) = root_task.source() else {
-            return command_blocks;
-        };
-
-        // Build a map from message ID to exchange for timestamp lookups.
-        // The exchange's start_time (derived from CurrentTime input context) is combined with
-        // the result message proto ts to pick the earlier time as completed_ts for RunShellCommand blocks.
-        let message_id_to_exchange: HashMap<&str, &AIAgentExchange> = self
-            .all_exchanges()
-            .into_iter()
-            .flat_map(|exchange| {
-                exchange
-                    .added_message_ids
-                    .iter()
-                    .map(move |mid| (&**mid, exchange))
-            })
-            .collect();
-
-        let mut seen_command_ids = HashSet::new();
-        self.extract_command_blocks_from_messages(
-            &api_task.messages,
-            &message_id_to_exchange,
-            &mut command_blocks,
-            &mut seen_command_ids,
-        );
-
-        command_blocks
-    }
-
-    /// Extracts command blocks from a list of messages.
-    ///
-    /// This recurses when it encounters a summarization subagent call, producing the list
-    /// of command blocks as it would have been had no summarization ever occurred.
-    fn extract_command_blocks_from_messages(
-        &self,
-        messages: &[api::Message],
-        message_id_to_exchange: &HashMap<&str, &AIAgentExchange>,
-        command_blocks: &mut Vec<CommandBlockInfo>,
-        seen_command_ids: &mut HashSet<String>,
-    ) {
-        // Build a map from tool_call_id to (RunShellCommandResult, result_message_id, result_proto_timestamp)
-        // for efficient lookup within this message set.
-        let tool_call_results: HashMap<
-            &str,
-            (&api::RunShellCommandResult, &str, Option<DateTime<Local>>),
-        > = messages
-            .iter()
-            .filter_map(|msg| {
-                let result = msg.tool_call_result()?;
-                if let Some(api::message::tool_call_result::Result::RunShellCommand(cmd_result)) =
-                    &result.result
-                {
-                    let ts = msg
-                        .timestamp
-                        .as_ref()
-                        .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos));
-                    Some((
-                        result.tool_call_id.as_str(),
-                        (cmd_result, msg.id.as_str(), ts),
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        for message in messages {
-            let message_id = message.id.clone();
-
-            if let Some(tool_call) = message.tool_call() {
-                // Check if this is a moved-messages subtask (summarization subagent).
-                // If so, extract its command blocks here to maintain chronological order.
-                if let Some(subagent) = tool_call.subagent()
-                    && subagent.is_summarization()
-                {
-                    let subtask_id = TaskId::new(subagent.task_id.clone());
-                    if let Some(subtask) = self.task_store.get(&subtask_id)
-                        && let Some(subtask_source) = subtask.source()
-                    {
-                        // Recursively extract from subtask (in case of nested summarization).
-                        self.extract_command_blocks_from_messages(
-                            &subtask_source.messages,
-                            message_id_to_exchange,
-                            command_blocks,
-                            seen_command_ids,
-                        );
-                    }
-                    // Don't process this message further - it's just a subagent call.
-                    continue;
-                }
-
-                // Extract from RunShellCommand tool calls.
-                if let Some(api::message::tool_call::Tool::RunShellCommand(run_cmd)) =
-                    &tool_call.tool
-                {
-                    let tool_call_id = &tool_call.tool_call_id;
-                    let command = &run_cmd.command;
-
-                    // Find the corresponding tool call result in this message set.
-                    if let Some((cmd_result, result_message_id, result_proto_ts)) =
-                        tool_call_results.get(tool_call_id.as_str())
-                        && let Some(api::run_shell_command_result::Result::CommandFinished(
-                            api::ShellCommandFinished {
-                                output: command_output,
-                                exit_code,
-                                command_id: finished_command_id,
-                                start_ts: proto_start_ts,
-                                finish_ts: proto_finish_ts,
-                            },
-                        )) = &cmd_result.result
-                    {
-                        // Track the command_id so attachment/context blocks for the
-                        // same command are skipped (RunShellCommand blocks have
-                        // better timestamps).
-                        if !finished_command_id.is_empty() {
-                            seen_command_ids.insert(finished_command_id.clone());
-                        }
-
-                        // start_ts: prefer the block timestamp stored on ShellCommandFinished,
-                        // falling back to the tool call message's proto timestamp.
-                        let start_ts = proto_start_ts
-                            .as_ref()
-                            .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
-                            .or_else(|| {
-                                message.timestamp.as_ref().map(|ts| {
-                                    proto_timestamp_to_local_datetime(ts.seconds, ts.nanos)
-                                })
-                            });
-                        if start_ts.is_none() {
-                            report_error!(
-                                "RunShellCommand tool call message has no timestamp",
-                                extra: { "message_id" => %message_id }
-                            );
-                        }
-
-                        // completed_ts: prefer the block timestamp stored on ShellCommandFinished.
-                        // Fall back to the earlier of (1) the exchange start_time for the
-                        // exchange containing the result message (from CurrentTime input
-                        // context) and (2) the result message's proto timestamp.
-                        let completed_ts = proto_finish_ts
-                            .as_ref()
-                            .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
-                            .or_else(|| {
-                                let exchange_ts = message_id_to_exchange
-                                    .get(*result_message_id)
-                                    .map(|exchange| exchange.start_time);
-                                match (*result_proto_ts, exchange_ts) {
-                                    (Some(proto_ts), Some(exchange_ts)) => {
-                                        Some(proto_ts.min(exchange_ts))
-                                    }
-                                    (Some(proto_ts), None) => Some(proto_ts),
-                                    (None, Some(exchange_ts)) => Some(exchange_ts),
-                                    (None, None) => None,
-                                }
-                            });
-
-                        command_blocks.push(CommandBlockInfo {
-                            command: command.clone(),
-                            output: command_output.clone(),
-                            exit_code: ExitCode::from(*exit_code),
-                            ai_metadata: Some(
-                                serde_json::to_string(&Some(Into::<SerializedAIMetadata>::into(
-                                    AgentInteractionMetadata::new_hidden(
-                                        tool_call_id.clone().into(),
-                                        self.id(),
-                                    ),
-                                )))
-                                .unwrap_or_default(),
-                            ),
-                            // Use the tool call message ID (not the result message ID)
-                            // so that to_serialized_blocklist_items looks up the exchange
-                            // where the command was initiated — the right exchange for PWD
-                            // and the start_ts fallback.
-                            message_id: message_id.clone(),
-                            start_ts,
-                            completed_ts,
-                        });
-                    }
-                }
-            }
-
-            // Extract from UserQuery/SystemQuery attachments.
-            let attachments = match message.message.as_ref() {
-                Some(api::message::Message::UserQuery(user_query)) => user_query
-                    .referenced_attachments
-                    .values()
-                    .collect::<Vec<_>>(),
-                Some(api::message::Message::SystemQuery(_)) => {
-                    // SystemQuery doesn't have attachments currently.
-                    vec![]
-                }
-                _ => vec![],
-            };
-
-            let msg_ts = message
-                .timestamp
-                .as_ref()
-                .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos));
-
-            for attachment in attachments {
-                // Attachments have ExecutedShellCommand in their value oneof.
-                if let Some(api::attachment::Value::ExecutedShellCommand(cmd)) = &attachment.value {
-                    // Skip if we've already seen this command_id (e.g. from a
-                    // RunShellCommand tool call or a duplicate attachment).
-                    if !cmd.command_id.is_empty()
-                        && !seen_command_ids.insert(cmd.command_id.clone())
-                    {
-                        continue;
-                    }
-                    let start_ts = cmd
-                        .started_ts
-                        .as_ref()
-                        .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
-                        .or(msg_ts);
-                    let completed_ts = cmd
-                        .finished_ts
-                        .as_ref()
-                        .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
-                        .or(msg_ts);
-                    command_blocks.push(CommandBlockInfo {
-                        command: cmd.command.clone(),
-                        output: cmd.output.clone(),
-                        exit_code: ExitCode::from(cmd.exit_code),
-                        ai_metadata: None,
-                        message_id: message_id.clone(),
-                        start_ts,
-                        completed_ts,
-                    });
-                }
-            }
-
-            // Extract from UserQuery/SystemQuery context blocks.
-            let context_blocks = match message.message.as_ref() {
-                Some(api::message::Message::UserQuery(user_query)) => user_query.context.as_ref(),
-                Some(api::message::Message::SystemQuery(system_query)) => {
-                    system_query.context.as_ref()
-                }
-                _ => None,
-            };
-
-            if let Some(context) = context_blocks {
-                #[allow(deprecated)]
-                for executed_shell_command in &context.executed_shell_commands {
-                    if !executed_shell_command.command.is_empty() {
-                        // Skip if we've already seen this command_id.
-                        if !executed_shell_command.command_id.is_empty()
-                            && !seen_command_ids.insert(executed_shell_command.command_id.clone())
-                        {
-                            continue;
-                        }
-                        let start_ts = executed_shell_command
-                            .started_ts
-                            .as_ref()
-                            .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
-                            .or(msg_ts);
-                        let completed_ts = executed_shell_command
-                            .finished_ts
-                            .as_ref()
-                            .map(|ts| proto_timestamp_to_local_datetime(ts.seconds, ts.nanos))
-                            .or(msg_ts);
-                        command_blocks.push(CommandBlockInfo {
-                            command: executed_shell_command.command.clone(),
-                            output: executed_shell_command.output.clone(),
-                            exit_code: ExitCode::from(executed_shell_command.exit_code),
-                            ai_metadata: None,
-                            message_id: message_id.clone(),
-                            start_ts,
-                            completed_ts,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    /// Converts the conversation into a vector of serialized command blocks.
-    /// When we open a new tab to restore a conversation in, we need to precompute this serialized list of blocks
-    /// to pass into the TerminalModel constructor since command blocks must be created
-    /// before the warp input block to not break bootstrapping.
-    /// Only the command blocks are actually created in the terminal model. During restoration in the TerminalView,
-    /// AI blocks are inserted relative to the command blocks based on timestamp.
-    pub fn to_serialized_blocklist_items(&self) -> Vec<SerializedBlockListItem> {
-        let mut serialized_blocks = Vec::new();
-
-        // Extract all command blocks from the task messages
-        let command_blocks = self.extract_command_blocks();
-        log::info!(
-            "Extracted {} command blocks for conversation {}",
-            command_blocks.len(),
-            self.id()
-        );
-
-        // Build a map from message ID to exchange for quick lookup
-        let mut message_id_to_exchange: HashMap<&str, &AIAgentExchange> = HashMap::new();
-        for exchange in self.root_task_exchanges() {
-            for message_id in &exchange.added_message_ids {
-                // MessageId derefs to str, so use &**message_id to get &str
-                message_id_to_exchange.insert(&**message_id, exchange);
-            }
-        }
-
-        // Get a fallback working directory from the first exchange (used if message ID not found)
-        let fallback_pwd = self
-            .root_task_exchanges()
-            .next()
-            .and_then(|e| e.working_directory.clone());
-
-        // Create serialized blocks from the extracted command blocks
-        for command_block in command_blocks {
-            // Find the exchange that contains this command block's message ID for PWD and
-            // a fallback timestamp. The exchange start time is used as a last-resort fallback
-            // when proto-level timestamps are unavailable, because `restore_block` treats
-            // `start_ts: None` as "block was never started" and skips `start()`/`finish()`,
-            // which leaves the block in an unfinished state with zero height.
-            let (pwd, exchange_time) = message_id_to_exchange
-                .get(command_block.message_id.as_str())
-                .map(|e| (e.working_directory.clone(), Some(e.start_time)))
-                .unwrap_or((fallback_pwd.clone(), None));
-
-            let serialized_block = SerializedBlock {
-                id: BlockId::new(),
-                stylized_command: Self::to_stylized_bytes(&command_block.command),
-                stylized_output: Self::to_stylized_bytes(&command_block.output),
-                pwd,
-                git_head: None,
-                git_branch_name: None,
-                virtual_env: None,
-                conda_env: None,
-                node_version: None,
-                exit_code: command_block.exit_code,
-                did_execute: true,
-                start_ts: command_block.start_ts.or(exchange_time),
-                completed_ts: command_block.completed_ts.or(exchange_time),
-                ps1: None,
-                rprompt: None,
-                honor_ps1: false,
-                session_id: None,
-                shell_host: None,
-                is_background: false,
-                prompt_snapshot: None,
-                ai_metadata: command_block.ai_metadata,
-                is_local: None,
-                agent_view_visibility: Some(
-                    AgentViewVisibility::new_from_conversation(self.id).into(),
-                ),
-            };
-            serialized_blocks.push(SerializedBlockListItem::Command {
-                block: Box::new(serialized_block),
-            });
-        }
-
-        serialized_blocks
     }
 
     pub fn mark_action_as_reverted(

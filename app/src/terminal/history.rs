@@ -8,7 +8,7 @@ use warp_core::command::ExitCode;
 use warp_errors::report_error;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
-use super::model::block::{AgentInteractionMetadata, Block, SerializedAIMetadata, SerializedBlock};
+use super::model::block::{Block, SerializedBlock};
 use super::shell::ShellType;
 use crate::terminal::model::session::{Session, SessionId};
 use crate::util::dedupe_from_last;
@@ -221,17 +221,6 @@ pub struct HistoryEntry {
     pub is_agent_executed: bool,
 }
 
-fn serialized_block_is_agent_executed(block: &SerializedBlock) -> bool {
-    let Some(ai_metadata) = block.ai_metadata.as_ref() else {
-        return false;
-    };
-
-    serde_json::from_str::<SerializedAIMetadata>(ai_metadata)
-        .ok()
-        .map(AgentInteractionMetadata::from)
-        .is_some_and(|metadata| metadata.requested_command_action_id().is_some())
-}
-
 impl HistoryEntry {
     pub fn command_only<S: Into<String>>(command: S) -> Self {
         Self {
@@ -267,7 +256,6 @@ impl HistoryEntry {
         active_block: &Block,
         session: &Session,
         workflow_command: Option<String>,
-        is_agent_executed: bool,
     ) -> Self {
         HistoryEntry {
             session_id: Some(session.id()),
@@ -282,7 +270,7 @@ impl HistoryEntry {
             exit_code: None,
             shell_host: active_block.shell_host().clone(),
             is_for_restored_block: false,
-            is_agent_executed,
+            is_agent_executed: false,
         }
     }
 
@@ -298,7 +286,7 @@ impl HistoryEntry {
             completed_ts: block.completed_ts().copied(),
             exit_code: Some(block.exit_code()),
             is_for_restored_block: true,
-            is_agent_executed: block.requested_command_action_id().is_some(),
+            is_agent_executed: false,
         }
     }
 
@@ -314,7 +302,7 @@ impl HistoryEntry {
             git_head: block.git_head.clone(),
             shell_host: block.shell_host.clone(),
             is_for_restored_block: false,
-            is_agent_executed: serialized_block_is_agent_executed(block),
+            is_agent_executed: false,
         }
     }
 

@@ -43,10 +43,7 @@ use super::agent::{
     backfill_conversation_summaries, delete_agent_conversations, read_agent_conversation_metadata,
     upsert_agent_conversation,
 };
-use super::block_list::{
-    delete_ai_conversation, delete_blocks, save_block, update_block_agent_view_visibility,
-    upsert_ai_query,
-};
+use super::block_list::{delete_ai_conversation, delete_blocks, save_block, upsert_ai_query};
 use super::model::{
     self, CODE_PANE_KIND, NOTEBOOK_PANE_KIND, NewApp, NewCommand, NewTab, NewTabGroup, NewTeam,
     NewWindow, NewWorkspace, NewWorkspaceMetadata, NewWorkspaceTeam, Project, SETTINGS_PANE_KIND,
@@ -594,11 +591,6 @@ fn handle_model_event(event: ModelEvent, connection: &mut SqliteConnection) -> a
             enabled,
         } => upsert_workspace_language_server(connection, &workspace_path, lsp_type, enabled)
             .context("error upserting workspace language server"),
-        ModelEvent::UpdateBlockAgentViewVisibility {
-            block_id,
-            agent_view_visibility,
-        } => update_block_agent_view_visibility(connection, &block_id, &agent_view_visibility)
-            .context("error updating block agent view visibility"),
     }
 }
 
@@ -2265,7 +2257,7 @@ impl From<StartedCommandMetadata> for model::NewCommand {
             git_branch: metadata.git_branch,
             cloud_workflow_id: None,
             workflow_command: metadata.workflow_command,
-            is_agent_executed: Some(metadata.is_agent_executed),
+            is_agent_executed: None,
         }
     }
 }

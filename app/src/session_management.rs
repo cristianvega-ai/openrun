@@ -46,8 +46,8 @@ pub struct SessionNavigationPromptElements {
     pub prompt_chip_snapshot: Option<PromptSnapshot>,
 }
 
-/// Represents the execution context of a session - what command or AI interaction
-/// was last run or is currently running.
+/// Represents the execution context of a session - what command was last run or is
+/// currently running.
 #[derive(Clone, Debug)]
 pub enum CommandContext {
     /// The last executed terminal command
@@ -55,16 +55,8 @@ pub enum CommandContext {
         last_run_command: String,
         mins_since_completion: Option<i64>,
     },
-    /// The last completed AI interaction
-    LastRunAIBlock {
-        prompt: String, // The prompt that initiated the AI interaction
-    },
     /// Currently running terminal command
     RunningCommand { running_command: String },
-    /// Currently running AI interaction
-    RunningAIBlock {
-        prompt: String, // The prompt for the active AI conversation
-    },
     /// No command context (e.g. just launched terminal)
     None,
 }
@@ -76,12 +68,8 @@ impl CommandContext {
             Self::LastRunCommand {
                 last_run_command, ..
             } => Some(format!("Last run command {}", last_run_command.clone())),
-            Self::LastRunAIBlock { prompt } => Some(format!("Last AI interaction: {prompt}")),
             Self::RunningCommand { running_command } => {
                 Some(format!("Currently running {running_command}"))
-            }
-            Self::RunningAIBlock { prompt } => {
-                Some(format!("Currently running AI interaction: {prompt}"))
             }
         }
     }
@@ -162,7 +150,7 @@ impl<'a> RunningSessionSummary<'a> {
             .filter(|session| {
                 matches!(
                     session.command_context(),
-                    CommandContext::RunningCommand { .. } | CommandContext::RunningAIBlock { .. }
+                    CommandContext::RunningCommand { .. }
                 ) && !session.is_read_only()
             })
             .collect();

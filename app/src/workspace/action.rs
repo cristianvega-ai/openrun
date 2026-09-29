@@ -384,7 +384,6 @@ pub enum WorkspaceAction {
     ToggleInBandGenerators,
     ToggleDebugNetworkStatus,
     ToggleShowMemoryStats,
-    RunAISuggestedCommand(String),
     RunCommand(String),
     InsertInInput {
         content: String,
@@ -457,9 +456,6 @@ pub enum WorkspaceAction {
     ToggleGlobalSearch,
     ToggleHiddenFiles,
     OpenGlobalSearch,
-    /// Reset the AWS Bedrock login banner dismissed state (for debugging).
-    #[cfg(debug_assertions)]
-    DebugResetAwsBedrockLoginBannerDismissed,
     /// Take a process sample of the app (equivalent to Activity Monitor > Sample Process).
     #[cfg(target_os = "macos")]
     SampleProcess,
@@ -697,7 +693,6 @@ impl WorkspaceAction {
             | ToggleInBandGenerators
             | ToggleDebugNetworkStatus
             | ToggleShowMemoryStats
-            | RunAISuggestedCommand { .. }
             | RunCommand { .. }
             | InsertInInput { .. }
             | OpenFilePath { .. }
@@ -734,8 +729,6 @@ impl WorkspaceAction {
             | OpenNewWindowForTeam { .. }
             | BrowseTeams
             | ShowTeamSwitcherMenu => false,
-            #[cfg(debug_assertions)]
-            DebugResetAwsBedrockLoginBannerDismissed => false,
             #[cfg(not(target_family = "wasm"))]
             ViewLogs => false,
             #[cfg(target_os = "macos")]

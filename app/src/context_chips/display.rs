@@ -14,7 +14,6 @@ use super::display_chip::{DisplayChip, DisplayChipConfig, PromptDisplayChipEvent
 use super::prompt_type::PromptType;
 use super::{ChipResult, git_line_changes_from_chips};
 
-use crate::ai::blocklist::BlocklistAIContextModel;
 use crate::completer::SessionContext;
 use crate::context_chips::display_chip::{DisplayChipAction, PromptChipShellCommand};
 use crate::terminal::input::MenuPositioningProvider;
@@ -26,7 +25,6 @@ pub struct PromptDisplay {
     prompt: ModelHandle<PromptType>,
     display_chips: Vec<ViewHandle<DisplayChip>>,
     input_mode_model: ModelHandle<InputModeModel>,
-    ai_context_model: ModelHandle<BlocklistAIContextModel>,
     terminal_view_id: EntityId,
     menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
     session_context: Option<SessionContext>,
@@ -50,7 +48,6 @@ pub enum PromptDisplayEvent {
     ToggleMenu { open: bool },
     OpenCodeReview,
     OpenCommandPaletteFiles,
-    RunAgentQuery(String),
     TryExecuteCommand(PromptChipShellCommand),
 }
 
@@ -59,7 +56,6 @@ impl PromptDisplay {
     pub fn new(
         prompt: ModelHandle<PromptType>,
         input_mode_model: ModelHandle<InputModeModel>,
-        ai_context_model: ModelHandle<BlocklistAIContextModel>,
         terminal_view_id: EntityId,
         menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
         session_context: Option<SessionContext>,
@@ -83,7 +79,6 @@ impl PromptDisplay {
             prompt,
             display_chips: vec![],
             input_mode_model,
-            ai_context_model,
             terminal_view_id,
             menu_positioning_provider,
             session_context,
@@ -153,7 +148,6 @@ impl PromptDisplay {
                     next_chip_kind,
                     DisplayChipConfig {
                         input_mode_model: self.input_mode_model.clone(),
-                        ai_context_model: self.ai_context_model.clone(),
                         terminal_view_id: self.terminal_view_id,
                         menu_positioning_provider: self.menu_positioning_provider.clone(),
                         session_context: self.session_context.clone(),
@@ -184,10 +178,6 @@ impl PromptDisplay {
                 }
                 PromptDisplayChipEvent::OpenCommandPaletteFiles => {
                     ctx.emit(PromptDisplayEvent::OpenCommandPaletteFiles);
-                    ctx.notify();
-                }
-                PromptDisplayChipEvent::RunAgentQuery(query) => {
-                    ctx.emit(PromptDisplayEvent::RunAgentQuery(query.clone()));
                     ctx.notify();
                 }
                 PromptDisplayChipEvent::TryExecuteCommand(cmd) => {

@@ -31,7 +31,6 @@ use super::{
     render_text_from_kind,
 };
 
-use crate::ai::blocklist::BlocklistAIContextModel;
 use crate::appearance::Appearance;
 use crate::code::editor::{add_color, remove_color};
 use crate::code_review::code_review_view::CODE_REVIEW_TOOLTIP_TEXT;
@@ -677,7 +676,6 @@ pub struct MenuItem {
 #[derive(Clone)]
 pub struct DisplayChipConfig {
     pub input_mode_model: ModelHandle<InputModeModel>,
-    pub ai_context_model: ModelHandle<BlocklistAIContextModel>,
     pub terminal_view_id: EntityId,
     pub menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
     pub session_context: Option<SessionContext>,
@@ -1024,18 +1022,6 @@ impl DisplayChip {
                         ));
                         me.close_node_version_popup(ctx);
                         ctx.focus_self();
-                    }
-                    NodeVersionPopupEvent::InstallNvm => {
-                        ctx.emit(PromptDisplayChipEvent::RunAgentQuery(if cfg!(windows) {
-                            // nvm-windows has documented issues when installed alongside an existing Node.js installation.
-                            // https://github.com/coreybutler/nvm-windows?tab=readme-ov-file#star-star-uninstall-any-pre-existing-node-installations-star-star
-                            // Prompt the agent to remove this first.
-                            "Uninstall existing Node.js installation and install nvm for me"
-                                .to_string()
-                        } else {
-                            "Install nvm for me".to_string()
-                        }));
-                        me.close_node_version_popup(ctx);
                     }
                     NodeVersionPopupEvent::InstallLatestNodeVersion => {
                         ctx.emit(PromptDisplayChipEvent::TryExecuteCommand(
@@ -1983,7 +1969,6 @@ pub enum PromptDisplayChipEvent {
     OpenCodeReview,
     OpenCommandPaletteFiles,
     TryExecuteCommand(PromptChipShellCommand),
-    RunAgentQuery(String),
 }
 
 impl TypedActionView for DisplayChip {

@@ -10,11 +10,7 @@ use warpui::{
 use super::{
     DetachType, PaneConfiguration, PaneContent, PaneId, PaneStackEvent, PaneView, TerminalPaneId,
 };
-use crate::AIExecutionProfilesModel;
 #[cfg(feature = "local_fs")]
-use crate::ai::blocklist::BlocklistAIHistoryEvent;
-use crate::ai::blocklist::BlocklistAIHistoryModel;
-use crate::ai::llms::LLMPreferences;
 use crate::app_state::{LeafContents, TerminalPaneSnapshot};
 use crate::code::buffer_location::LocalOrRemotePath;
 #[cfg(feature = "local_fs")]
@@ -128,7 +124,7 @@ impl TerminalPane {
         SessionNavigationData::new(
             view.full_prompt(app),
             view.prompt_elements(app),
-            view.session_command_context(app),
+            view.session_command_context(),
             PaneViewLocator {
                 pane_group_id,
                 pane_id: self.id(),
@@ -186,28 +182,6 @@ impl PaneContent for TerminalPane {
 
             group.send_sync_event_to_session(terminal_pane_id, &event, ctx);
         }
-
-        let terminal_view_id = self.terminal_view(ctx).id();
-
-        #[cfg(feature = "local_fs")]
-        {
-            ctx.subscribe_to_model(
-                &BlocklistAIHistoryModel::handle(ctx),
-                move |group, _, event, ctx| {
-                    let Some(model_event_sender) = group.model_event_sender.clone() else {
-                        return;
-                    };
-
-                    handle_ai_history_event(
-                        event,
-                        terminal_view_id,
-                        terminal_pane_id,
-                        model_event_sender,
-                        ctx,
-                    );
-                },
-            );
-        }
     }
 
     fn detach(
@@ -217,14 +191,7 @@ impl PaneContent for TerminalPane {
         ctx: &mut ViewContext<PaneGroup>,
     ) {
         if matches!(detach_type, DetachType::Closed) {
-            // Only immediately clear conversations and delete blocks if the session is being
-            // permanently closed.
-            BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, ctx| {
-                history_model.clear_conversations_for_closed_terminal_surface(
-                    self.terminal_view(ctx).id(),
-                    ctx,
-                );
-            });
+            // Only immediately delete blocks if the session is being permanently closed.
             self.delete_blocks(ctx);
         }
 
@@ -254,11 +221,6 @@ impl PaneContent for TerminalPane {
         ctx.unsubscribe_to_model(&pane_stack);
 
         ctx.unsubscribe_to_view(&self.view);
-
-        #[cfg(feature = "local_fs")]
-        {
-            ctx.unsubscribe_to_model(&BlocklistAIHistoryModel::handle(ctx));
-        }
     }
 
     fn snapshot(&self, app: &AppContext) -> LeafContents {
@@ -268,19 +230,6 @@ impl PaneContent for TerminalPane {
         // Capture the current input_config from the input mode model
         let current_input_config = view.input_config(app.as_ref());
 
-        let llm_model_override =
-            LLMPreferences::as_ref(app).get_base_llm_override(self.terminal_view(app).id());
-
-        let active_profile_id = AIExecutionProfilesModel::as_ref(app)
-            .active_profile(Some(self.terminal_view(app).id()), app)
-            .sync_id();
-
-        // Collect all conversation IDs for this terminal view
-        let conversation_ids_to_restore = BlocklistAIHistoryModel::as_ref(app)
-            .all_live_conversations_for_terminal_surface(self.terminal_view(app).id())
-            .map(|conversation| conversation.id())
-            .collect();
-
         LeafContents::Terminal(TerminalPaneSnapshot {
             uuid: self.uuid.clone(),
             cwd: view.pwd_if_local(app),
@@ -288,9 +237,9 @@ impl PaneContent for TerminalPane {
             is_read_only: view.model.lock().is_read_only(),
             shell_launch_data: view.shell_launch_data_if_local(app),
             input_config: Some(current_input_config),
-            llm_model_override,
-            active_profile_id,
-            conversation_ids_to_restore,
+            llm_model_override: None,
+            active_profile_id: None,
+            conversation_ids_to_restore: Vec::new(),
             active_conversation_id: None,
         })
     }
@@ -362,9 +311,6 @@ fn handle_terminal_view_event(
     if group.pane_contents.contains_key(&pane_id) {
         match event {
             Event::Escape => ctx.emit(pane_group::Event::Escape),
-            Event::ExecuteCommand(event) => {
-                ctx.emit(pane_group::Event::ExecuteCommand(event.clone()));
-            }
             Event::Exited => {
                 // If the shell process exited before it successfully bootstrapped,
                 // keep the pane open.  There might be useful information visible
@@ -505,28 +451,6 @@ fn handle_terminal_view_event(
             Event::OpenCodeReviewPane(arg) => {
                 ctx.emit(pane_group::Event::OpenCodeReviewPane(arg.clone()));
             }
-            Event::OpenCodeReviewPaneAndScrollToComment {
-                open_code_review,
-                comment,
-                diff_mode,
-            } => {
-                ctx.emit(pane_group::Event::OpenCodeReviewPaneAndScrollToComment {
-                    open_code_review: open_code_review.clone(),
-                    comment: comment.clone(),
-                    diff_mode: diff_mode.clone(),
-                });
-            }
-            Event::ImportAllCodeReviewComments {
-                open_code_review,
-                comments,
-                diff_mode,
-            } => {
-                ctx.emit(pane_group::Event::ImportAllCodeReviewComments {
-                    open_code_review: open_code_review.clone(),
-                    comments: comments.clone(),
-                    diff_mode: diff_mode.clone(),
-                });
-            }
             Event::ToggleCodeReviewPane(arg) => {
                 ctx.emit(pane_group::Event::ToggleCodeReviewPane(arg.clone()));
             }
@@ -633,116 +557,9 @@ fn handle_terminal_view_event(
                     force_open: *force_open,
                 });
             }
-            Event::InsertCodeReviewComments {
-                repo_path,
-                comments,
-                diff_mode,
-                open_code_review,
-            } => {
-                ctx.emit(pane_group::Event::InsertCodeReviewComments {
-                    repo_path: repo_path.clone(),
-                    comments: comments.to_owned(),
-                    diff_mode: diff_mode.to_owned(),
-                    open_code_review: open_code_review.clone(),
-                });
-            }
             _ => {}
         }
     } else {
         log::warn!("Session {terminal_pane_id:?} not found");
-    }
-}
-
-#[cfg(feature = "local_fs")]
-fn handle_ai_history_event(
-    event: &BlocklistAIHistoryEvent,
-    terminal_view_id: EntityId,
-    terminal_pane_id: TerminalPaneId,
-    model_event_sender: SyncSender<ModelEvent>,
-    ctx: &mut ViewContext<PaneGroup>,
-) {
-    use crate::ai::blocklist::maybe_build_ai_query_upsert_event;
-
-    if event
-        .terminal_surface_id()
-        .is_some_and(|id| id != terminal_view_id)
-    {
-        return;
-    }
-
-    match event {
-        BlocklistAIHistoryEvent::AppendedExchange { .. }
-        | BlocklistAIHistoryEvent::UpdatedStreamingExchange { .. } => {
-            // Check if session restoration is enabled.
-            if !*GeneralSettings::as_ref(ctx).restore_session
-                || !AppExecutionMode::as_ref(ctx).can_save_session()
-            {
-                return;
-            }
-            let Some(upsert_ai_query_event) =
-                maybe_build_ai_query_upsert_event(event, terminal_view_id, ctx)
-            else {
-                return;
-            };
-            let _ = ctx.spawn(
-                // Sending over a sync sender can block the current thread, so we
-                // do this async.
-                async move { model_event_sender.send(upsert_ai_query_event) },
-                move |_, res, _| {
-                    if let Err(err) = res {
-                        report_error!(
-                            anyhow::Error::new(err).context("Error sending upsert AI query event"),
-                            extra: { "terminal_pane_id" => ?terminal_pane_id }
-                        );
-                    }
-                },
-            );
-        }
-        BlocklistAIHistoryEvent::ClearedConversationsForTerminalSurface { .. }
-        | BlocklistAIHistoryEvent::ClearedActiveConversation { .. } => {
-            ctx.emit(pane_group::Event::InvalidatedActiveConversation);
-        }
-        BlocklistAIHistoryEvent::RemoveConversation {
-            conversation_id, ..
-        } => {
-            let conversation_id = conversation_id.to_string();
-            // On remove, delete all related AI query and multi-agent conversation data for this conversation.
-            let _ = ctx.spawn(
-                async move {
-                    model_event_sender.send(ModelEvent::DeleteAIConversation {
-                        conversation_id: conversation_id.clone(),
-                    })?;
-                    model_event_sender.send(ModelEvent::DeleteMultiAgentConversations {
-                        conversation_ids: vec![conversation_id],
-                    })
-                },
-                |_, res, _| {
-                    if let Err(err) = res {
-                        report_error!(
-                            anyhow::Error::new(err)
-                                .context("Error sending delete events for conversation")
-                        );
-                    }
-                },
-            );
-        }
-        // DeletedConversation SQL cleanup is handled directly in delete_conversation().
-        BlocklistAIHistoryEvent::DeletedConversation { .. }
-        | BlocklistAIHistoryEvent::StartedNewConversation { .. }
-        | BlocklistAIHistoryEvent::UpdatedConversationStatus { .. }
-        | BlocklistAIHistoryEvent::ReassignedExchange { .. }
-        | BlocklistAIHistoryEvent::SetActiveConversation { .. }
-        | BlocklistAIHistoryEvent::UpdatedTodoList { .. }
-        | BlocklistAIHistoryEvent::UpdatedAutoexecuteOverride { .. }
-        | BlocklistAIHistoryEvent::SplitConversation { .. }
-        | BlocklistAIHistoryEvent::RestoredConversations { .. }
-        | BlocklistAIHistoryEvent::CreatedSubtask { .. }
-        | BlocklistAIHistoryEvent::UpgradedTask { .. }
-        | BlocklistAIHistoryEvent::UpdatedConversationTitle { .. }
-        | BlocklistAIHistoryEvent::UpdatedConversationMetadata { .. }
-        | BlocklistAIHistoryEvent::UpdatedConversationArtifacts { .. }
-        | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. }
-        | BlocklistAIHistoryEvent::ConversationTransferredBetweenTerminalSurfaces { .. }
-        | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. } => (),
     }
 }

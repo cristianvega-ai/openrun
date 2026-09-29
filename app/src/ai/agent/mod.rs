@@ -44,7 +44,6 @@ pub use self::base_user_query::BaseUserQuery;
 use super::llms::LLMId;
 use crate::TelemetryEvent;
 use crate::ai::block_context::BlockContext;
-use crate::ai::blocklist::block::view_impl::output::are_all_text_sections_empty;
 use crate::ai::execution_context::WarpAiExecutionContext;
 use crate::code::editor_management::CodeSource;
 use crate::code_review::comments::AgentReviewCommentBatch;
@@ -53,6 +52,10 @@ use crate::server::server_api::{AIApiError, DeserializationError};
 use crate::terminal::model::block::BlockId;
 use crate::terminal::shell::ShellType;
 use crate::util::image::ImageContext;
+
+fn are_all_text_sections_empty(text_sections: &[AIAgentTextSection]) -> bool {
+    text_sections.iter().all(AIAgentTextSection::is_empty)
+}
 
 /// A server supplied ID for a specific AI generated output.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
@@ -569,10 +572,7 @@ impl AIAgentOutput {
 
     /// Format this output for copying to clipboard.
     /// This extracts all content (text, code, and action results) with proper formatting.
-    pub fn format_for_copy(
-        &self,
-        action_model: Option<&crate::ai::blocklist::BlocklistAIActionModel>,
-    ) -> String {
+    pub fn format_for_copy(&self) -> String {
         let mut result = Vec::new();
         let mut last_was_action = false;
 
@@ -601,17 +601,7 @@ impl AIAgentOutput {
                     }
                     last_was_action = false;
                 }
-                AIAgentOutputMessageType::Action(action) => {
-                    // Include action results from the action model if available
-                    if let Some(action_model) = action_model
-                        && let Some(action_result) = action_model.get_action_result(&action.id)
-                    {
-                        result.push(format!("{}", MarkdownActionResult(&action_result.result)));
-                        // Add an extra newline after tool call results for readability
-                        result.push(String::new());
-                        last_was_action = true;
-                    }
-                }
+                AIAgentOutputMessageType::Action(_) => continue,
                 AIAgentOutputMessageType::TodoOperation(operation) => {
                     result.push(format!("{operation}"));
                     last_was_action = false;
@@ -2950,12 +2940,9 @@ impl AIAgentExchange {
     }
 
     /// Format the output part of this exchange for copying to clipboard.
-    pub fn format_output_for_copy(
-        &self,
-        action_model: Option<&crate::ai::blocklist::BlocklistAIActionModel>,
-    ) -> String {
+    pub fn format_output_for_copy(&self) -> String {
         match self.output_status.output() {
-            Some(output) => output.get().format_for_copy(action_model),
+            Some(output) => output.get().format_for_copy(),
             None => String::new(),
         }
     }
@@ -2963,12 +2950,9 @@ impl AIAgentExchange {
     /// Format the entire exchange (both input and output) for copying to clipboard.
     /// Always adds USER: and AGENT: labels.
     /// If `skip_agent_label` is true, skips the AGENT: label (for consecutive agent outputs).
-    pub fn format_for_copy(
-        &self,
-        action_model: Option<&crate::ai::blocklist::BlocklistAIActionModel>,
-    ) -> String {
+    pub fn format_for_copy(&self) -> String {
         let input_text = self.format_input_for_copy();
-        let output_text = self.format_output_for_copy(action_model);
+        let output_text = self.format_output_for_copy();
         let has_user_input = !input_text.is_empty();
         let has_agent_output = !output_text.is_empty();
 

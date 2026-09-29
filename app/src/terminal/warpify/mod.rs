@@ -1,3 +1,4 @@
+pub mod code_snippet;
 pub mod render;
 pub mod settings;
 pub mod success_block;

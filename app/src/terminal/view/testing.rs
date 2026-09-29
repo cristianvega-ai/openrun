@@ -10,8 +10,8 @@ cfg_if::cfg_if! {
         use warpui::{ViewContext};
 
         use crate::{
-            ai::blocklist::SerializedBlockListItem, pane_group::TerminalViewResources,
-            resource_center::TipsCompleted,
+            pane_group::TerminalViewResources, resource_center::TipsCompleted,
+            terminal::model::block::SerializedBlock,
         };
         use crate::terminal::model::session::Sessions;
         use crate::terminal::model_events::ModelEventDispatcher;
@@ -29,7 +29,7 @@ impl TerminalView {
     #[cfg(test)]
     pub fn new_for_test(
         tips_model: ModelHandle<TipsCompleted>,
-        restored_blocks: Option<&[SerializedBlockListItem]>,
+        restored_blocks: Option<&[SerializedBlock]>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         use pathfinder_geometry::vector::vec2f;

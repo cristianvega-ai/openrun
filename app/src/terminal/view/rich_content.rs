@@ -1,10 +1,6 @@
 use warpui::prelude::ChildView;
 use warpui::{Element, EntityId, View, ViewContext, ViewHandle};
 
-use crate::ai::agent::AIAgentExchangeId;
-use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::AIBlock;
-use crate::ai::blocklist::telemetry_banner::TelemetryBanner;
 use crate::terminal::TerminalView;
 use crate::terminal::block_list_viewport::ScrollPositionUpdate;
 use crate::terminal::model::blocks::{RemovableBlocklistItem, RichContentItem};
@@ -30,17 +26,6 @@ pub enum RichContentInsertionPosition {
     /// keep this item at the end by reordering it after any subsequent insertions.
     /// Only one item can be pinned at a time.
     PinToBottom,
-}
-
-/// Metadata for an AI block rich content.
-#[derive(Clone, Debug)]
-pub struct AIBlockMetadata {
-    /// The ID corresponding to the `AIAgentExchange` represented in this block.
-    pub exchange_id: AIAgentExchangeId,
-    /// The ID of the conversation to which this block belongs.
-    pub conversation_id: AIConversationId,
-    /// The ViewHandle for the AI block.
-    pub ai_block_handle: ViewHandle<AIBlock>,
 }
 
 /// Wrapper type to hold rich content views and allow generating typed `ChildView` instances
@@ -95,24 +80,6 @@ impl RichContent {
         self.metadata.as_mut()
     }
 
-    pub fn is_ai_block(&self) -> bool {
-        matches!(self.metadata, Some(RichContentMetadata::AIBlock(_)))
-    }
-
-    pub fn is_telemetry_banner(&self) -> bool {
-        matches!(
-            self.metadata,
-            Some(RichContentMetadata::TelemetryBanner { .. })
-        )
-    }
-
-    pub fn ai_block_metadata(&self) -> Option<&AIBlockMetadata> {
-        match &self.metadata {
-            Some(RichContentMetadata::AIBlock(metadata)) => Some(metadata),
-            _ => None,
-        }
-    }
-
     pub(super) fn to_block_list_element_render_params(
         &self,
     ) -> (EntityId, Box<dyn Element>, Option<RichContentMetadata>) {
@@ -123,19 +90,11 @@ impl RichContent {
 /// `RichContent` view-specific metadata required for rendering in the `BlocklistElement`.
 #[derive(Clone, Debug)]
 pub enum RichContentMetadata {
-    AIBlock(AIBlockMetadata),
-    AIOnboardingBlock {
-        /// The ID corresponding to the `AIAgentExchange` represented in this block.
-        exchange_id: AIAgentExchangeId,
-    },
     SshTmuxDeprecationBanner {
         handle: ViewHandle<SshTmuxDeprecationBanner>,
     },
     WarpifySuccessBlock {
         bootstrap_success_block_handle: ViewHandle<WarpifySuccessBlock>,
-    },
-    TelemetryBanner {
-        telemetry_banner_handle: ViewHandle<TelemetryBanner>,
     },
     HarnessSessionHeader,
 }
@@ -158,19 +117,7 @@ impl TerminalView {
         position: RichContentInsertionPosition,
         ctx: &mut ViewContext<Self>,
     ) {
-        let is_agent_transcript_user_query = match &metadata {
-            Some(RichContentMetadata::AIBlock(AIBlockMetadata {
-                ai_block_handle, ..
-            })) => ai_block_handle.as_ref(ctx).has_user_input(ctx),
-            _ => false,
-        };
-        let item = RichContentItem::new_with_agent_transcript_user_query(
-            content_type,
-            handle.id(),
-            None,
-            false,
-            is_agent_transcript_user_query,
-        );
+        let item = RichContentItem::new(content_type, handle.id());
 
         match position {
             RichContentInsertionPosition::Append {

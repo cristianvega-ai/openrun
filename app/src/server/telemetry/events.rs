@@ -22,7 +22,7 @@ use crate::ai::agent::{
     AIAgentActionId, AIAgentExchangeId, AIAgentInput as FullAIAgentInput, AIIdentifiers,
     EntrypointType, ServerOutputId, SuggestedLoggingId,
 };
-use crate::ai::blocklist::{AIBlockResponseRating, CommandExecutionPermissionAllowedReason};
+use crate::ai::blocklist::CommandExecutionPermissionAllowedReason;
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::channel::Channel;
 use crate::cloud_object::notebook_model::NotebookId;
@@ -1433,14 +1433,6 @@ pub enum TelemetryEvent {
         is_udi_enabled: bool,
     },
     /// Rated a blocklist AI response via thumbs up/down.
-    AgentModeRatedResponse {
-        /// The server-generated ID for the output corresponding to this rating.
-        server_output_id: Option<ServerOutputId>,
-
-        /// The ID of the conversation to which the rated output belongs.
-        conversation_id: AIConversationId,
-        rating: AIBlockResponseRating,
-    },
     AgentModeClickedEntrypoint {
         entrypoint: AgentModeEntrypoint,
     },
@@ -2971,15 +2963,6 @@ impl TelemetryEvent {
                 "num_images": num_images,
                 "is_udi_enabled": is_udi_enabled,
             })),
-            TelemetryEvent::AgentModeRatedResponse {
-                server_output_id,
-                conversation_id,
-                rating,
-            } => Some(json!({
-                "server_output_id": server_output_id,
-                "conversation_id": conversation_id,
-                "rating": rating,
-            })),
             TelemetryEvent::FileExceededContextLimit { identifiers } => Some(json!({
                 "server_output_id": identifiers.server_output_id,
                 "exchange_id": identifiers.client_exchange_id,
@@ -3799,7 +3782,6 @@ impl TelemetryEvent {
             | TelemetryEvent::ToggleSshWarpification { .. }
             | TelemetryEvent::SettingsImportInitiated
             | TelemetryEvent::AgentModeCreatedAIBlock { .. }
-            | TelemetryEvent::AgentModeRatedResponse { .. }
             | TelemetryEvent::StaticPromptSuggestionsBannerShown { .. }
             | TelemetryEvent::StaticPromptSuggestionAccepted { .. }
             | TelemetryEvent::AISuggestedRuleAdded { .. }
@@ -4281,9 +4263,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             | Self::AutoupdateMinidumpCleanupFailed { .. } => EnablementState::Always,
             Self::ToggleCodebaseContext => EnablementState::Always,
             Self::ToggleAutoIndexing => EnablementState::Always,
-            Self::AgentModeRatedResponse => {
-                EnablementState::Flag(FeatureFlag::GlobalAIAnalyticsBanner)
-            }
             Self::FileExceededContextLimit => EnablementState::Always,
             Self::AgentModeError => EnablementState::Always,
             Self::AgentModeRequestRetrySucceeded => EnablementState::Always,
@@ -4712,7 +4691,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::ToggleCodebaseContext => "Toggle Agent Mode Codebase Context",
             Self::ToggleAutoIndexing => "Toggle Codebase Context Autoindexing",
             Self::AttachedImagesToAgentModeQuery => "AgentMode.AttachedImages",
-            Self::AgentModeRatedResponse => "AgentMode.RatedResponse",
             Self::FileExceededContextLimit => "AgentMode.Code.FileExceededContextLimit",
             Self::AgentModeError => "AgentMode.Error",
             Self::AgentModeRequestRetrySucceeded => "AgentMode.RequestRetrySucceeded",
@@ -5162,7 +5140,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::ReceivedSubshellRcFileDcs => "Spawned a subshell to be automatically Warpified",
             Self::ToggleSshWarpification => "Changed the setting for SSH sessions to be warified",
-            Self::AgentModeRatedResponse => "User rated an Agent Mode response",
             Self::WarpifyFooterShown => {
                 "Displayed the warpify footer for a detected subshell or SSH session"
             }

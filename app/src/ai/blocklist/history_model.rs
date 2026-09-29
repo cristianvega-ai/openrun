@@ -16,9 +16,8 @@ use warp_multi_agent_api::response_event::stream_finished::{
 };
 use warpui::{Entity, EntityId, ModelContext, SingletonEntity};
 
-use super::RequestInput;
-use super::controller::response_stream::ResponseStreamId;
 use super::persistence::{PersistedAIInput, PersistedAIInputType};
+use super::{RequestInput, ResponseStreamId, blocklist_filter};
 use crate::GlobalResourceHandlesProvider;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{
@@ -41,7 +40,7 @@ use crate::persistence::model::{AgentConversation, AgentConversationData};
 use crate::persistence::{database_file_path_for_current_scope, establish_ro_connection};
 use crate::server::server_api::ServerApiProvider;
 use crate::terminal::model::block::BlockId;
-use crate::terminal::view::blocklist_filter;
+
 use crate::ui_components::icons::Icon;
 
 mod conversation_loader;

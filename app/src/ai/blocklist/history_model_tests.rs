@@ -3,7 +3,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::{DateTime, Local, Utc};
-use itertools::Itertools;
 use uuid::Uuid;
 use warpui::{App, EntityId};
 
@@ -24,13 +23,12 @@ use crate::ai::agent::{
     UserQueryMode,
 };
 use crate::ai::ambient_agents::AmbientAgentTaskId;
+use crate::ai::blocklist::RequestInput;
 use crate::ai::blocklist::ResponseStreamId;
-use crate::ai::blocklist::controller::RequestInput;
 use crate::ai::llms::LLMId;
 use crate::auth::AuthStateProvider;
 use crate::cloud_object::{Owner, Revision, ServerMetadata, ServerPermissions};
 use crate::features::FeatureFlag;
-use crate::input_suggestions::HistoryInputSuggestion;
 use crate::persistence::ModelEvent;
 use crate::persistence::model::{
     AgentConversation, AgentConversationData, AgentConversationRecord, AgentConversationSummary,
@@ -38,7 +36,6 @@ use crate::persistence::model::{
 };
 use crate::server::ids::ServerId;
 use crate::server::server_api::ServerApiProvider;
-use crate::terminal::model::session::SessionId;
 use crate::test_util::settings::{
     initialize_history_persistence_for_tests, initialize_settings_for_tests,
 };
@@ -657,197 +654,6 @@ fn test_initialize_historical_conversations_skips_unrestorable_and_unlisted_summ
             assert!(model.get_conversation_metadata(&unrestorable_id).is_none());
             assert!(model.get_conversation_metadata(&unlisted_id).is_none());
         });
-    });
-}
-
-#[test]
-fn test_ai_queries_for_terminal_view_up_arrow_history() {
-    App::test((), |mut app| async move {
-        let now = Local::now();
-        let terminal_view_id = EntityId::new();
-        let current_session_id = SessionId::from(0);
-        let all_live_session_ids = HashSet::from([current_session_id]);
-
-        // Create initial persisted queries
-        let conversation_id_1 = AIConversationId::new();
-        let conversation_id_2 = AIConversationId::new();
-
-        let persisted_queries = vec![
-            create_persisted_query(
-                "restored query 1",
-                conversation_id_1,
-                now - chrono::Duration::seconds(10),
-            ),
-            create_persisted_query(
-                "restored query 2",
-                conversation_id_2,
-                now - chrono::Duration::seconds(5),
-            ),
-        ];
-
-        // Create history model with persisted queries as a singleton
-        let history_model =
-            app.add_singleton_model(|_| BlocklistAIHistoryModel::new(persisted_queries, &[]));
-
-        // Helper function to get and sort AI queries using the same logic as Input
-        let get_sorted_queries = |model: &BlocklistAIHistoryModel| -> Vec<String> {
-            model
-                .all_ai_queries(Some(terminal_view_id))
-                .map(|query| HistoryInputSuggestion::AIQuery { entry: query })
-                .sorted_by(|a, b| a.cmp(b, Some(current_session_id), &all_live_session_ids))
-                .map(|suggestion| suggestion.text().to_string())
-                .collect()
-        };
-
-        // Test initial state with just persisted queries
-        let queries = history_model.read(&app, |model, _| get_sorted_queries(model));
-        assert_eq!(queries.len(), 2);
-        assert_eq!(queries[0], "restored query 1");
-        assert_eq!(queries[1], "restored query 2");
-
-        // Start a new conversation and add "live query 1"
-        let conversation_id = history_model.update(&mut app, |history_model, ctx| {
-            history_model.start_new_conversation(terminal_view_id, false, false, false, ctx)
-        });
-
-        let stream_id = ResponseStreamId::new_for_test();
-        history_model.update(&mut app, |history_model, ctx| {
-            let exchange = create_exchange_with_query("live query 1", now, None);
-            let task_id = history_model
-                .conversation(&conversation_id)
-                .unwrap()
-                .get_root_task_id()
-                .clone();
-            let request_input = RequestInput {
-                conversation_id,
-                input_messages: std::collections::HashMap::from([(task_id, exchange.input)]),
-                working_directory: exchange.working_directory,
-                model_id: exchange.model_id,
-                coding_model_id: exchange.coding_model_id,
-                cli_agent_model_id: exchange.cli_agent_model_id,
-                request_start_ts: exchange.start_time,
-                supported_tools_override: None,
-            };
-            history_model
-                .update_conversation_for_new_request_input(
-                    request_input,
-                    stream_id,
-                    terminal_view_id,
-                    ctx,
-                )
-                .unwrap();
-        });
-
-        // Test state after adding live query 1
-        let queries = history_model.read(&app, |model, _| get_sorted_queries(model));
-        assert_eq!(queries.len(), 3);
-        assert_eq!(queries[0], "restored query 1");
-        assert_eq!(queries[1], "restored query 2");
-        assert_eq!(queries[2], "live query 1");
-
-        // Start another new conversation and add "live query 2"
-        let conversation_id = history_model.update(&mut app, |history_model, ctx| {
-            history_model.start_new_conversation(terminal_view_id, false, false, false, ctx)
-        });
-
-        history_model.update(&mut app, |history_model, ctx| {
-            let exchange = create_exchange_with_query(
-                "live query 2",
-                now + chrono::Duration::seconds(1),
-                None,
-            );
-            let stream_id = ResponseStreamId::new_for_test();
-            let task_id = history_model
-                .conversation(&conversation_id)
-                .unwrap()
-                .get_root_task_id()
-                .clone();
-            let request_input = RequestInput {
-                conversation_id,
-                input_messages: std::collections::HashMap::from([(task_id, exchange.input)]),
-                working_directory: exchange.working_directory,
-                model_id: exchange.model_id,
-                coding_model_id: exchange.coding_model_id,
-                cli_agent_model_id: exchange.cli_agent_model_id,
-                request_start_ts: exchange.start_time,
-                supported_tools_override: None,
-            };
-            history_model
-                .update_conversation_for_new_request_input(
-                    request_input,
-                    stream_id,
-                    terminal_view_id,
-                    ctx,
-                )
-                .unwrap();
-        });
-
-        // Test state after adding live query 2
-        let queries = history_model.read(&app, |model, _| get_sorted_queries(model));
-        assert_eq!(queries.len(), 4);
-        assert_eq!(queries[0], "restored query 1");
-        assert_eq!(queries[1], "restored query 2");
-        assert_eq!(queries[2], "live query 1");
-        assert_eq!(queries[3], "live query 2");
-
-        // Clear the blocklist
-        history_model.update(&mut app, |history_model, ctx| {
-            history_model.clear_conversations_for_terminal_surface(terminal_view_id, ctx);
-        });
-
-        // Test state after clearing - should remain the same
-        let queries = history_model.read(&app, |model, _| get_sorted_queries(model));
-        assert_eq!(queries.len(), 4);
-        assert_eq!(queries[0], "restored query 1");
-        assert_eq!(queries[1], "restored query 2");
-        assert_eq!(queries[2], "live query 1");
-        assert_eq!(queries[3], "live query 2");
-
-        // Start a new conversation after clearing and add "new query after clear"
-        let conversation_id = history_model.update(&mut app, |history_model, ctx| {
-            history_model.start_new_conversation(terminal_view_id, false, false, false, ctx)
-        });
-
-        history_model.update(&mut app, |history_model, ctx| {
-            let stream_id = ResponseStreamId::new_for_test();
-            let exchange = create_exchange_with_query(
-                "new query after clear",
-                now + chrono::Duration::seconds(2),
-                None,
-            );
-            let task_id = history_model
-                .conversation(&conversation_id)
-                .unwrap()
-                .get_root_task_id()
-                .clone();
-            let request_input = RequestInput {
-                conversation_id,
-                input_messages: std::collections::HashMap::from([(task_id, exchange.input)]),
-                working_directory: exchange.working_directory,
-                model_id: exchange.model_id,
-                coding_model_id: exchange.coding_model_id,
-                cli_agent_model_id: exchange.cli_agent_model_id,
-                request_start_ts: exchange.start_time,
-                supported_tools_override: None,
-            };
-            history_model
-                .update_conversation_for_new_request_input(
-                    request_input,
-                    stream_id,
-                    terminal_view_id,
-                    ctx,
-                )
-                .unwrap();
-        });
-
-        // Test final state
-        let queries = history_model.read(&app, |model, _| get_sorted_queries(model));
-        assert_eq!(queries.len(), 5);
-        assert_eq!(queries[0], "restored query 1");
-        assert_eq!(queries[1], "restored query 2");
-        assert_eq!(queries[2], "live query 1");
-        assert_eq!(queries[3], "live query 2");
-        assert_eq!(queries[4], "new query after clear");
     });
 }
 

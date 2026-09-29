@@ -14,7 +14,6 @@ pub use convert_from::{
     MessageToAIAgentOutputMessageError, user_inputs_from_messages,
 };
 use futures_lite::Stream;
-pub use r#impl::generate_multi_agent_output;
 use serde::Serialize;
 use warp_core::channel::{Channel, ChannelState};
 use warp_core::features::FeatureFlag;

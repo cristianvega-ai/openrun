@@ -14,7 +14,6 @@ use warpui::{AppContext, EntityId, ViewAsRef as _};
 use super::{
     BlockHeight, BlockHeightItem, BlockHeightSummary, BlockList, BlockListPoint, RichContentItem,
 };
-use crate::ai::blocklist::AIBlock;
 use crate::terminal::GridType;
 use crate::terminal::model::block::BlockSection;
 use crate::terminal::model::index::{Direction, Point, Side};
@@ -377,7 +376,7 @@ impl BlockList {
         selection_type: SelectionType,
         side: Side,
     ) {
-        // A new point-based selection supersedes any rich content (AI) block
+        // A new point-based selection supersedes any rich content block
         // selection (single-selection semantics).
         self.rich_content_selections.clear();
         let mut selection = BlockListSelection::new(point, selection_type, side);
@@ -848,7 +847,7 @@ impl BlockList {
         self.rich_content_selections.clear();
     }
 
-    /// Records that the given rich content (AI) block view currently has an
+    /// Records that the given rich content block view currently has an
     /// active text selection. Rich content blocks manage their own selection
     /// state, so the block list can't derive this from its point-based
     /// [`selection`](Self::selection); tracking it explicitly lets copy/insert
@@ -858,8 +857,8 @@ impl BlockList {
         if self.selection.is_some() {
             // A point-based selection is active. If it already spans this rich
             // content block (e.g. a selection dragged from a command block
-            // *through* this AI block), that point selection remains the source
-            // of truth and already accounts for the AI block's text via its row
+            // *through* this block), that point selection remains the source
+            // of truth and already accounts for the block's text via its row
             // range — don't override it, or we'd drop the command-block portion.
             if self.rich_content_blocks_in_selection().contains(&view_id) {
                 return;
@@ -872,7 +871,7 @@ impl BlockList {
         self.rich_content_selections = vec![view_id];
     }
 
-    /// Clears the tracked text selection for the given rich content (AI) block
+    /// Clears the tracked text selection for the given rich content block
     /// view, if present.
     pub fn clear_rich_content_selection(&mut self, view_id: EntityId) {
         if let Some(position) = self
@@ -925,7 +924,6 @@ impl BlockList {
                 selection_start_cursor.seek(&BlockHeight::from(top_row), SeekBias::Right);
 
                 // Loop over each block, adding their contents to the output.
-                let transcript_scope = self.transcript_scope();
                 while bottom_row >= selection_start_cursor.start().height {
                     let Some(item) = selection_start_cursor.item() else {
                         // We reached the end of the block list.
@@ -937,7 +935,7 @@ impl BlockList {
                             let block_index = selection_start_cursor.start().block_count.into();
                             if let Some(command_block) = self.block_at(block_index) {
                                 // Don't copy hidden or empty blocks.
-                                if command_block.is_empty(transcript_scope) {
+                                if command_block.is_empty() {
                                     selection_start_cursor.next();
                                     continue;
                                 }
@@ -960,12 +958,6 @@ impl BlockList {
                             }
                         }
                         BlockHeightItem::RichContent(RichContentItem { view_id, .. }) => {
-                            if let Some(selected_text) =
-                                read_selected_text_from_ai_block(*view_id, app)
-                            {
-                                selected_texts.push(selected_text);
-                            }
-
                             if let Some(active_window_id) = app.windows().active_window()
                                 && let Some(ssh_block) = app
                                     .view_with_id::<WarpifySuccessBlock>(active_window_id, *view_id)
@@ -994,40 +986,7 @@ impl BlockList {
             Some(ExpandedSelectionRange::Rect { rows }) => {
                 let mut selected_texts: Vec<String> = vec![];
 
-                let mut selection_start_cursor = self
-                    .block_heights()
-                    .cursor::<BlockHeight, BlockHeightSummary>();
-                let original_selection = self
-                    .selection
-                    .as_ref()
-                    .expect("Selection should exist if it can be expanded");
-
-                let head_row = original_selection.head.point.row;
-                let tail_row = original_selection.tail.point.row;
-                let top_row = head_row.min(tail_row);
-                let bottom_row = head_row.max(tail_row);
-
-                selection_start_cursor.seek(&BlockHeight::from(top_row), SeekBias::Right);
-
-                // Loop over each _command block_ row in the rect selection. Add the content to the selected_texts result.
-                // Note that there could be rich content blocks in between the command block rows. Therefore in each iteration
-                // we need to check and append the intermediate rich content selections.
                 for (start, end) in rows {
-                    let current_row = start.absolute_point.row;
-
-                    // Read rich content selected text in the intermediate rich content blocks.
-                    while current_row >= selection_start_cursor.start().height {
-                        if let Some(BlockHeightItem::RichContent(item)) =
-                            selection_start_cursor.item()
-                        {
-                            if let Some(selected_text) =
-                                read_selected_text_from_ai_block(item.view_id, app)
-                            {
-                                selected_texts.push(selected_text);
-                            }
-                        }
-                        selection_start_cursor.next();
-                    }
                     let Some(command_block) = self.block_at(start.within_grid_point.block_index)
                     else {
                         continue;
@@ -1035,19 +994,6 @@ impl BlockList {
                     let start_point = start.within_grid_point.into();
                     let end_point = end.within_grid_point.into();
                     selected_texts.push(command_block.bounds_to_string(start_point, end_point));
-                }
-
-                // Read AI block selected text in the trailing AI blocks.
-                while bottom_row >= selection_start_cursor.start().height {
-                    if let Some(BlockHeightItem::RichContent(item)) = selection_start_cursor.item()
-                    {
-                        if let Some(selected_text) =
-                            read_selected_text_from_ai_block(item.view_id, app)
-                        {
-                            selected_texts.push(selected_text);
-                        }
-                    }
-                    selection_start_cursor.next();
                 }
 
                 Some(selected_texts.join("\n"))
@@ -1064,10 +1010,6 @@ impl BlockList {
 
                 let mut selected_texts = vec![];
                 for view_id in ids {
-                    if let Some(selected_text) = read_selected_text_from_ai_block(view_id, app) {
-                        selected_texts.push(selected_text);
-                    }
-
                     if let Some(active_window_id) = app.windows().active_window() {
                         if let Some(ssh_block) =
                             app.view_with_id::<WarpifySuccessBlock>(active_window_id, view_id)
@@ -1081,7 +1023,6 @@ impl BlockList {
                 }
 
                 // TODO: If `selected_texts` is empty, should we return `None` instead of `Some("")`?
-                // As of 02/18/2025, this scenario can be reproduced by single-clicking anywhere on an AI response block.
                 Some(selected_texts.join("\n"))
             }
         }
@@ -1197,7 +1138,7 @@ impl BlockList {
     fn rich_content_blocks_in_selection(&self) -> Vec<EntityId> {
         let Some(original_selection) = self.selection.as_ref() else {
             // Without a point-based selection, a selection may still be active
-            // inside a rich content (AI) block, which manages its own selection
+            // inside a rich content block, which manages its own selection
             // state. Fall back to the explicitly tracked rich content blocks so
             // their selected text can still be copied.
             return self.rich_content_selections.clone();
@@ -1507,15 +1448,6 @@ impl BlockList {
         }
         end.absolute_point
     }
-}
-
-/// Given the view id of an AI block, return the active selected text in that block.
-fn read_selected_text_from_ai_block(view_id: EntityId, app: &AppContext) -> Option<String> {
-    let active_window_id = app.windows().active_window()?;
-
-    let ai_block = app.view_with_id::<AIBlock>(active_window_id, view_id)?;
-    let ai_block_view = app.view(&ai_block);
-    ai_block_view.selected_text(app)
 }
 
 #[cfg(test)]

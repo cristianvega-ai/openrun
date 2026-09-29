@@ -87,7 +87,6 @@ use self::model::{LocalSelections, Selection, UpdateBufferOption};
 use super::Point;
 use super::soft_wrap::{ClampDirection, DisplayPointAndClampDirection};
 use crate::BlocklistAIHistoryModel;
-use crate::ai::blocklist::{BlocklistAIContextModel, PendingAttachment, PendingFile};
 use crate::appearance::Appearance;
 use crate::channel::{Channel, ChannelState};
 use crate::editor::RangeExt;
@@ -104,6 +103,9 @@ use crate::settings::{
 use crate::settings_view::flags;
 use crate::terminal::grid_size_util::grid_cell_dimensions;
 use crate::terminal::input::InputType;
+use crate::terminal::input::pending_attachments::{
+    PendingAttachment, PendingAttachmentsModel, PendingFile,
+};
 use crate::themes::theme::Fill;
 use crate::ui_components::avatar::{Avatar, AvatarContent};
 use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, keybinding_name_to_keystroke};
@@ -1576,9 +1578,8 @@ pub fn default_cursor_colors(ctx: &AppContext) -> CursorColors {
 
 #[derive(Debug)]
 pub enum ImageContextOptions {
-    /// Attaching image context is enabled, possibly showing an image button if LLM supports vision.
+    /// Attaching images is enabled.
     Enabled {
-        unsupported_model: bool,
         is_processing_attached_images: bool,
         num_images_attached: usize,
     },
@@ -1591,14 +1592,9 @@ impl ImageContextOptions {
     pub fn is_enabled(&self) -> bool {
         match self {
             ImageContextOptions::Enabled {
-                unsupported_model,
                 is_processing_attached_images,
                 num_images_attached,
             } => {
-                if *unsupported_model {
-                    return false;
-                }
-
                 if *is_processing_attached_images {
                     return false;
                 }
@@ -1621,16 +1617,6 @@ impl ImageContextOptions {
             } => *num_images_attached,
             _ => 0,
         }
-    }
-
-    pub fn is_unsupported_model(&self) -> bool {
-        matches!(
-            self,
-            ImageContextOptions::Enabled {
-                unsupported_model: true,
-                ..
-            }
-        )
     }
 }
 
@@ -1744,7 +1730,7 @@ pub struct EditorView {
     show_autosuggestion_keybinding_hint: bool,
     show_autosuggestion_ignore_button: bool,
 
-    context_model: Option<ModelHandle<BlocklistAIContextModel>>,
+    pending_attachments: Option<ModelHandle<PendingAttachmentsModel>>,
 
     /// Options for attaching image context.
     /// Made public to allow terminal input to access image attachment state and limits.
@@ -2849,9 +2835,12 @@ impl EditorView {
         Self::new_internal("", options, ctx)
     }
 
-    pub fn with_context_model(self, context_model: ModelHandle<BlocklistAIContextModel>) -> Self {
+    pub fn with_pending_attachments(
+        self,
+        pending_attachments: ModelHandle<PendingAttachmentsModel>,
+    ) -> Self {
         Self {
-            context_model: Some(context_model),
+            pending_attachments: Some(pending_attachments),
             ..self
         }
     }
@@ -3041,7 +3030,7 @@ impl EditorView {
                 .show_autosuggestion_ignore_button,
             is_prompt_input: false,
             convert_newline_to_space: options.convert_newline_to_space,
-            context_model: None,
+            pending_attachments: None,
             image_context_options: ImageContextOptions::Disabled,
             at_menu_state,
             delegate_paste_handling: options.delegate_paste_handling,
@@ -4706,7 +4695,6 @@ impl EditorView {
 
         let file_picker_config = FilePickerConfiguration::new().allow_multi_select();
 
-        let is_unsupported_model = self.image_context_options.is_unsupported_model();
         let num_images_attached = self.image_context_options.num_images_attached();
 
         ctx.open_file_picker(
@@ -4725,21 +4713,6 @@ impl EditorView {
                             } else {
                                 non_image_paths.push(path.clone());
                             }
-                        }
-
-                        // If the model doesn't support vision, show toast and clear images.
-                        if !image_paths.is_empty() && is_unsupported_model {
-                            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                                toast_stack.add_ephemeral_toast(
-                                    DismissibleToast::error(
-                                        "The selected model does not support images as context."
-                                            .to_string(),
-                                    ),
-                                    window_id,
-                                    ctx,
-                                );
-                            });
-                            image_paths.clear();
                         }
 
                         // Apply image count limits.
@@ -4822,18 +4795,6 @@ impl EditorView {
         ctx: &mut ViewContext<Self>,
     ) {
         if !self.image_context_options.is_enabled() {
-            if self.image_context_options.is_unsupported_model() {
-                let window_id = ctx.window_id();
-                ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                    toast_stack.add_ephemeral_toast(
-                        DismissibleToast::error(
-                            "The selected model does not support images as context".to_owned(),
-                        ),
-                        window_id,
-                        ctx,
-                    );
-                });
-            }
             return;
         }
 
@@ -4937,18 +4898,6 @@ impl EditorView {
         ctx: &mut ViewContext<Self>,
     ) {
         if !self.image_context_options.is_enabled() {
-            if self.image_context_options.is_unsupported_model() {
-                let window_id = ctx.window_id();
-                ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                    toast_stack.add_ephemeral_toast(
-                        DismissibleToast::error(
-                            "The selected model does not support images as context".to_owned(),
-                        ),
-                        window_id,
-                        ctx,
-                    );
-                });
-            }
             return;
         }
 
@@ -5046,9 +4995,9 @@ impl EditorView {
                     });
                 }
 
-                if let Some(context_model) = &this.context_model {
-                    context_model.update(ctx, |context_model, ctx| {
-                        context_model.append_pending_images(pending_images, ctx);
+                if let Some(pending_attachments) = &this.pending_attachments {
+                    pending_attachments.update(ctx, |pending_attachments, ctx| {
+                        pending_attachments.append_images(pending_images, ctx);
                     });
                 }
 
@@ -5078,9 +5027,9 @@ impl EditorView {
             })
             .collect();
 
-        if let Some(context_model) = &self.context_model {
-            context_model.update(ctx, |context_model, ctx| {
-                context_model.append_pending_attachments(attachments, ctx);
+        if let Some(pending_attachments) = &self.pending_attachments {
+            pending_attachments.update(ctx, |pending_attachments, ctx| {
+                pending_attachments.append(attachments, ctx);
             });
         }
     }

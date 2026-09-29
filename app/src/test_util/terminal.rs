@@ -10,10 +10,7 @@ use watcher::HomeDirectoryWatcher;
 
 use super::settings::initialize_history_persistence_for_tests;
 use crate::AgentNotificationsModel;
-use crate::ai::blocklist::local_agent_task_sync_model::LocalAgentTaskSyncModel;
-use crate::ai::blocklist::{
-    BlocklistAIHistoryModel, BlocklistAIPermissions, SerializedBlockListItem,
-};
+use crate::ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
 use crate::ai::document::ai_document_model::AIDocumentModel;
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::LLMPreferences;
@@ -36,8 +33,8 @@ use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
 use crate::system::{SystemInfo, SystemStats};
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
+use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::resizable_data::ResizableData;
-use crate::terminal::view::inline_banner::ByoLlmAuthBannerSessionState;
 use crate::terminal::{History, TerminalView};
 use crate::undo_close::UndoCloseStack;
 use crate::warp_managed_paths_watcher::WarpManagedPathsWatcher;
@@ -82,7 +79,6 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
     app.add_singleton_model(|_| History::default());
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
-    app.add_singleton_model(LocalAgentTaskSyncModel::new);
     app.add_singleton_model(BlocklistAIPermissions::new);
     app.add_singleton_model(AgentNotificationsModel::new);
     app.add_singleton_model(UndoCloseStack::new);
@@ -110,7 +106,6 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
     app.add_singleton_model(|_| WorkspaceRegistry::new());
     app.add_singleton_model(|_| IgnoredSuggestionsModel::new(vec![]));
     app.add_singleton_model(AIDocumentModel::new);
-    app.add_singleton_model(ByoLlmAuthBannerSessionState::new);
     app.add_singleton_model(PersistedWorkspace::new_for_test);
 
     AltScreenReporting::register(app);
@@ -120,7 +115,7 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
 /// Returns the handle to that terminal view.
 pub fn add_window_with_terminal(
     app: &mut App,
-    restored_blocks: Option<&[SerializedBlockListItem]>,
+    restored_blocks: Option<&[SerializedBlock]>,
 ) -> ViewHandle<TerminalView> {
     add_window_with_id_and_terminal(app, restored_blocks).1
 }
@@ -129,7 +124,7 @@ pub fn add_window_with_terminal(
 /// Returns the WindowID and the handle to that terminal view.
 pub fn add_window_with_id_and_terminal(
     app: &mut App,
-    restored_blocks: Option<&[SerializedBlockListItem]>,
+    restored_blocks: Option<&[SerializedBlock]>,
 ) -> (WindowId, ViewHandle<TerminalView>) {
     let tips_model = app.add_model(|_| Default::default());
     app.add_window(WindowStyle::NotStealFocus, |ctx| {

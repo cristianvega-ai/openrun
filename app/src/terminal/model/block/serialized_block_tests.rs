@@ -61,3 +61,15 @@ fn from_json_accepts_integer_array_bytes() {
     assert_eq!(block.stylized_command, b"echo hello");
     assert_eq!(block.stylized_output, b"hello world");
 }
+
+#[test]
+fn from_json_ignores_removed_agent_fields() {
+    let json = BASE64_JSON.replace(
+        r#""ai_metadata": null"#,
+        r#""ai_metadata": "{\"requested_command_action_id\":null,\"conversation_id\":\"0b3c1c1a-5d0a-4f43-9d0e-3c8f8a4f1a11\"}",
+    "agent_view_visibility": {"Agent": {"origin_conversation_id": "0b3c1c1a-5d0a-4f43-9d0e-3c8f8a4f1a11"}}"#,
+    );
+    let block = SerializedBlock::from_json(json.as_bytes()).unwrap();
+    assert_eq!(block.stylized_command, b"echo hello");
+    assert_eq!(block.stylized_output, b"hello world");
+}

@@ -28,37 +28,6 @@ pub const AGENT_MODE_RUNNING_STEP_GROUP_NAME: &str = "Agent mode running";
 /// git diff. Falls back to a fixed /tmp path when unset.
 pub const IMPL_CODE_DIFF_OUTPUT_FILE_ENV_VAR: &str = "IMPL_CODE_DIFF_OUTPUT_FILE";
 
-/// Attach the latest block in the blocklist (command + output) to the AI query.
-pub fn attach_recent_block_as_context() -> TestStep {
-    TestStep::new("Attach last block as context").add_named_assertion(
-        "Attach last block as context",
-        |app, window_id| {
-            let terminal_view = terminal_view(app, window_id, 0, 0);
-            terminal_view.update(app, |view, ctx| {
-                let last_index = {
-                    let model = view.model.lock();
-                    model.block_list().last_non_hidden_block_by_index()
-                };
-                if let Some(idx) = last_index {
-                    view.integration_test_change_block_selection_to_single(idx, ctx);
-                }
-            });
-
-            terminal_view.read(app, |view, ctx| {
-                let count = view
-                    .ai_context_model()
-                    .as_ref(ctx)
-                    .pending_context_block_ids()
-                    .len();
-                async_assert!(
-                    count == 1,
-                    "Expected exactly 1 attached context block, got {count}"
-                )
-            })
-        },
-    )
-}
-
 // This will fail immediately on any error responses.
 pub fn submit_ai_query_and_wait_until_done(query: &str, timeout: Duration) -> TestStep {
     submit_ai_query(query, timeout)

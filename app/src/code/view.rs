@@ -24,7 +24,6 @@ use warpui::fonts::{Properties, Style, Weight};
 use warpui::keymap::EditableBinding;
 use warpui::text::point::Point;
 use warpui::text_layout::ClipConfig;
-use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::UiComponent;
 use warpui::{
     AppContext, Element, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
@@ -32,9 +31,8 @@ use warpui::{
 };
 
 use super::buffer_location::LocalOrRemotePath;
-use super::diff_viewer::DiffViewer;
 use super::editor::view::{CodeEditorEvent, CodeEditorView};
-use super::editor_management::{CodeManager, CodeSource};
+use super::editor_management::CodeSource;
 use super::local_code_editor::{LocalCodeEditorEvent, LocalCodeEditorView};
 use crate::code::editor::scroll::ScrollPosition;
 use crate::code::editor::view::CodeEditorRenderOptions;
@@ -142,8 +140,6 @@ enum TabBarDragPosition {
 pub enum CodeViewAction {
     SaveFile,
     SaveFileAs,
-    AcceptPendingDiffsAndSave,
-    RejectPendingDiffs,
     SetCurrentTabIndex {
         index: usize,
     },
@@ -195,8 +191,6 @@ pub enum CodeViewEvent {
 struct TabDataMouseStateHandles {
     tab_handle: MouseStateHandle,
     close_handle: MouseStateHandle,
-    accept_mouse_state: MouseStateHandle,
-    reject_mouse_state: MouseStateHandle,
     tab_draggable_state: DraggableState,
 }
 
@@ -389,7 +383,6 @@ impl CodeView {
                     })
                 },
                 false,
-                None,
                 ctx,
             );
             if FeatureFlag::HoaCodeReview.is_enabled() {
@@ -429,7 +422,7 @@ impl CodeView {
         });
 
         ctx.add_typed_action_view(|ctx| {
-            let mut local_editor = LocalCodeEditorView::new(editor, None, false, None, ctx);
+            let mut local_editor = LocalCodeEditorView::new(editor, None, false, ctx);
             if FeatureFlag::HoaCodeReview.is_enabled() {
                 local_editor = local_editor
                     .with_selection_as_context(Box::new(get_context_target_terminal_view));
@@ -490,9 +483,9 @@ impl CodeView {
                 ctx.emit(CodeViewEvent::Pane(PaneEvent::AppStateChanged));
             }
             LocalCodeEditorEvent::FailedToLoad { error: err } => {
-                // When code source is New or AIAction, it is possible that the passed in file path
+                // When code source is New, it is possible that the passed in file path
                 // might not exist currently if the intention is to create a new file.
-                if let CodeSource::AIAction { .. } | CodeSource::New { .. } = me.source {
+                if let CodeSource::New { .. } = me.source {
                     return;
                 }
                 log::warn!("Failed to load file. {err:?}");
@@ -524,16 +517,6 @@ impl CodeView {
             LocalCodeEditorEvent::FailedToSave { error: err } => {
                 log::warn!("Failed to load file. {err:?}");
                 CodeView::display_save_failure(ctx.window_id(), ctx);
-            }
-            LocalCodeEditorEvent::DiffAccepted => {
-                CodeManager::handle(ctx).update(ctx, |code_manager, ctx| {
-                    code_manager.complete_pending_diffs(me.source.clone(), ctx);
-                });
-            }
-            LocalCodeEditorEvent::DiffRejected => {
-                CodeManager::handle(ctx).update(ctx, |code_manager, ctx| {
-                    code_manager.complete_pending_diffs(me.source.clone(), ctx);
-                });
             }
             LocalCodeEditorEvent::DiffStatusUpdated => (),
             LocalCodeEditorEvent::UserEdited => (),
@@ -1078,63 +1061,6 @@ impl CodeView {
             content: format!("{file_path}:{start_line}-{end_line} "),
             replace_buffer: false,
         });
-    }
-
-    fn render_request_edit_action_header(
-        &self,
-        tab: &TabData,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let appearance = Appearance::as_ref(app);
-        ConstrainedBox::new(
-            Align::new(
-                Flex::row()
-                    .with_main_axis_size(MainAxisSize::Min)
-                    .with_child(
-                        Container::new(
-                            appearance
-                                .ui_builder()
-                                .button(
-                                    ButtonVariant::Outlined,
-                                    tab.mouse_state_handles.reject_mouse_state.clone(),
-                                )
-                                .with_text_label("Reject".to_string())
-                                .build()
-                                .on_click(|ctx, _, _| {
-                                    ctx.dispatch_typed_action(CodeViewAction::RejectPendingDiffs)
-                                })
-                                .finish(),
-                        )
-                        .with_padding_right(16.)
-                        .finish(),
-                    )
-                    .with_child(
-                        Container::new(
-                            appearance
-                                .ui_builder()
-                                .button(
-                                    ButtonVariant::Outlined,
-                                    tab.mouse_state_handles.accept_mouse_state.clone(),
-                                )
-                                .with_text_label("Accept and save".to_string())
-                                .build()
-                                .on_click(|ctx, _, _| {
-                                    ctx.dispatch_typed_action(
-                                        CodeViewAction::AcceptPendingDiffsAndSave,
-                                    )
-                                })
-                                .finish(),
-                        )
-                        .with_padding_right(16.)
-                        .finish(),
-                    )
-                    .finish(),
-            )
-            .right()
-            .finish(),
-        )
-        .with_height(40.)
-        .finish()
     }
 
     pub fn close_overlays(&mut self, ctx: &mut ViewContext<Self>) {
@@ -2194,18 +2120,10 @@ impl View for CodeView {
         "CodeView"
     }
 
-    fn render(&self, app: &AppContext) -> Box<dyn Element> {
+    fn render(&self, _app: &AppContext) -> Box<dyn Element> {
         let tab = self.tab_at(self.active_tab_index);
         let body = if let Some(tab) = tab {
-            match self.source {
-                CodeSource::AIAction { .. } => Flex::column()
-                    .with_child(self.render_request_edit_action_header(tab, app))
-                    .with_child(
-                        Shrinkable::new(1., ChildView::new(&tab.editor_view).finish()).finish(),
-                    )
-                    .finish(),
-                _ => ChildView::new(&tab.editor_view).finish(),
-            }
+            ChildView::new(&tab.editor_view).finish()
         } else {
             Empty::new().finish()
         };
@@ -2224,43 +2142,6 @@ impl TypedActionView for CodeView {
             }
             CodeViewAction::SaveFileAs => {
                 self.save_as(self.active_tab_index, None, ctx);
-            }
-            CodeViewAction::AcceptPendingDiffsAndSave => {
-                if !matches!(self.source, CodeSource::AIAction { .. }) {
-                    log::warn!("Received Accept and save in code without the AIAction source");
-                    return;
-                }
-
-                // Accepts the diff and marks it complete.
-                if let Some(tab) = self.tab_at(self.active_tab_index) {
-                    tab.editor_view.update(ctx, |code_diff, ctx| {
-                        code_diff.accept_diff(ctx);
-                    });
-                }
-
-                self.save_local(
-                    self.active_tab_index,
-                    Some(Box::new(|outcome, me, ctx| {
-                        if outcome != SaveOutcome::Canceled {
-                            me.close(ctx);
-                        }
-                    })),
-                    ctx,
-                );
-            }
-            CodeViewAction::RejectPendingDiffs => {
-                if !matches!(self.source, CodeSource::AIAction { .. }) {
-                    log::warn!("Received Reject in code without the AIAction source");
-                    return;
-                }
-
-                if let Some(tab) = self.tab_at(self.active_tab_index) {
-                    tab.editor_view.update(ctx, |code_diff, ctx| {
-                        code_diff.reject_diff(ctx);
-                    });
-                }
-
-                self.close(ctx);
             }
             CodeViewAction::SetCurrentTabIndex { index } => {
                 self.set_active_tab_index(*index, ctx);

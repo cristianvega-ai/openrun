@@ -55,9 +55,6 @@ fn history_for(
                     text,
                     linked_workflow_data: entry.linked_workflow_data(),
                 },
-                HistoryInputSuggestion::AIQuery { .. } => {
-                    unreachable!("up-arrow history only contains commands")
-                }
             }
         })
         .collect()

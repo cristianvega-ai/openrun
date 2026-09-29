@@ -53,7 +53,7 @@ use crate::drive::folders::CloudFolder;
 use crate::server::ids::SyncId;
 use crate::suggestions::ignored_suggestions_model::SuggestionType;
 use crate::terminal::history::PersistedCommand;
-use crate::terminal::model::block::{SerializedAgentViewVisibility, SerializedBlock};
+use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::session::SessionId;
 use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
 use crate::workspaces::user_profiles::UserProfileWithUID;
@@ -265,7 +265,6 @@ pub struct StartedCommandMetadata {
     pub session_id: Option<SessionId>,
     pub git_branch: Option<String>,
     pub workflow_command: Option<String>,
-    pub is_agent_executed: bool,
 }
 
 #[derive(Debug)]
@@ -382,9 +381,5 @@ pub enum ModelEvent {
         workspace_path: PathBuf,
         lsp_type: LSPServerType,
         enabled: EnablementState,
-    },
-    UpdateBlockAgentViewVisibility {
-        block_id: String,
-        agent_view_visibility: SerializedAgentViewVisibility,
     },
 }

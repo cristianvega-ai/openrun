@@ -272,46 +272,6 @@ integration_tests! {
     test_settings_search_clear_restores_umbrella_state,
     test_settings_search_preserved_on_sidebar_click,
 
-    test_copy_selection_within_ai_block,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_first_to_last_through_ai_simple,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_copy_on_select_first_to_last_through_ai_simple,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_first_to_last_through_ai_semantic,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_first_to_last_through_ai_lines,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_last_to_first_through_ai_simple,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_last_to_first_through_ai_semantic,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_last_to_first_through_ai_lines,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_first_to_ai_simple,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_first_to_ai_semantic,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_first_to_ai_lines,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_ai_to_first_simple,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_ai_to_first_semantic,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_ai_to_first_lines,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_ai_to_last_simple,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_ai_to_last_semantic,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_ai_to_last_lines,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_last_to_ai_simple,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_last_to_ai_semantic,
-    #[ignore = "Affected by agent_view feature flag UI changes"]
-    test_selection_last_to_ai_lines,
-
     // Middle-click-paste is only implemented for Linux right now.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     test_middle_click_paste,

@@ -24,7 +24,7 @@ use watcher::HomeDirectoryWatcher;
 use workflows::workflow::{Argument, Workflow};
 
 use super::*;
-use crate::ai::blocklist::{AIQueryHistory, BlocklistAIPermissions};
+use crate::ai::blocklist::{BlocklistAIHistoryModel, BlocklistAIPermissions};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::LLMPreferences;
 use crate::ai::restored_conversations::RestoredAgentConversations;
@@ -34,7 +34,7 @@ use crate::cloud_object::model::persistence::CloudModel;
 use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
 use crate::editor::{DisplayPoint, EditorAction, Point, TextStyleOperation};
-use crate::input_suggestions::{HistoryOrder, Item};
+use crate::input_suggestions::Item;
 use crate::network::NetworkStatus;
 use crate::search::files::model::FileSearchModel;
 use crate::search::slash_command_menu::static_commands::commands;
@@ -71,7 +71,6 @@ use crate::terminal::model_events::ModelEvent;
 use crate::terminal::resizable_data::ResizableData;
 use crate::terminal::shell::ShellType;
 use crate::terminal::view::Event as TerminalViewEvent;
-use crate::terminal::view::inline_banner::ByoLlmAuthBannerSessionState;
 use crate::terminal::writeable_pty::command_history::update_command_history;
 use crate::test_util::assert_eventually;
 use crate::test_util::settings::initialize_settings_for_tests;
@@ -292,7 +291,6 @@ pub fn initialize_app(app: &mut App) {
     app.add_singleton_model(|_| RestoredAgentConversations::new_seeded(vec![]));
     app.add_singleton_model(|_| WorkspaceRegistry::new());
     app.add_singleton_model(|_| ToastStack);
-    app.add_singleton_model(ByoLlmAuthBannerSessionState::new);
     app.add_singleton_model(PersistedWorkspace::new_for_test);
     // `LocalShellState` captures the user's interactive login-shell PATH (used
     // for executable resolution). Tests don't exercise that capture, so
@@ -788,79 +786,6 @@ fn test_merge_ai_and_command_history() {
             only_history_commands[4].text(),
             "echo 10 sec earlier [current session]"
         );
-
-        let ai_queries = vec![
-            HistoryInputSuggestion::AIQuery {
-                entry: AIQueryHistory::new_for_test(
-                    "ai 35 sec earlier [different session]",
-                    now - Duration::from_secs(35),
-                    HistoryOrder::DifferentSession,
-                ),
-            },
-            HistoryInputSuggestion::AIQuery {
-                entry: AIQueryHistory::new_for_test(
-                    "ai 25 sec earlier [different session]",
-                    now - Duration::from_secs(25),
-                    HistoryOrder::DifferentSession,
-                ),
-            },
-            HistoryInputSuggestion::AIQuery {
-                entry: AIQueryHistory::new_for_test(
-                    "ai 15 sec earlier [current session]",
-                    now - Duration::from_secs(15),
-                    HistoryOrder::CurrentSession,
-                ),
-            },
-            HistoryInputSuggestion::AIQuery {
-                entry: AIQueryHistory::new_for_test(
-                    "ai 7 sec earlier [current session]",
-                    now - Duration::from_secs(7),
-                    HistoryOrder::CurrentSession,
-                ),
-            },
-        ];
-        let only_ai_commands = ai_queries
-            .clone()
-            .into_iter()
-            .sorted_by(|a, b| a.cmp(b, Some(current_session_id), &all_live_session_ids))
-            .collect::<Vec<_>>();
-        assert_eq!(only_ai_commands.len(), 4);
-        // DifferentSession items sorted by timestamp
-        assert_eq!(
-            only_ai_commands[0].text(),
-            "ai 35 sec earlier [different session]"
-        );
-        assert_eq!(
-            only_ai_commands[1].text(),
-            "ai 25 sec earlier [different session]"
-        );
-        // CurrentSession items sorted by timestamp
-        assert_eq!(
-            only_ai_commands[2].text(),
-            "ai 15 sec earlier [current session]"
-        );
-        assert_eq!(
-            only_ai_commands[3].text(),
-            "ai 7 sec earlier [current session]"
-        );
-
-        let merged = history_commands
-            .into_iter()
-            .chain(ai_queries)
-            .sorted_by(|a, b| a.cmp(b, Some(current_session_id), &all_live_session_ids))
-            .collect::<Vec<_>>();
-        assert_eq!(merged.len(), 9);
-        // DifferentSession items sorted by timestamp
-        assert_eq!(merged[0].text(), "ai 35 sec earlier [different session]");
-        assert_eq!(merged[1].text(), "ai 25 sec earlier [different session]");
-        assert_eq!(merged[2].text(), "echo 20 sec earlier [different session]");
-        assert_eq!(merged[3].text(), "echo 5 sec earlier [other session]");
-        assert_eq!(merged[4].text(), "echo now [different session]");
-        // CurrentSession items sorted by timestamp
-        assert_eq!(merged[5].text(), "echo 30 sec earlier [restored]");
-        assert_eq!(merged[6].text(), "ai 15 sec earlier [current session]");
-        assert_eq!(merged[7].text(), "echo 10 sec earlier [current session]");
-        assert_eq!(merged[8].text(), "ai 7 sec earlier [current session]");
     });
 }
 
@@ -875,7 +800,6 @@ fn user_block_completed_for_test(command: &str) -> BlockType {
         command.to_owned(),
         String::new(),
         String::new(),
-        false,
         None,
         0,
         0,
@@ -1232,7 +1156,6 @@ fn test_histignorespace_support_in_zsh() {
                     session_id,
                     workflow_command: None,
                     should_add_command_to_history: true,
-                    source: CommandExecutionSource::User,
                 },
                 &model,
                 None,
@@ -1246,7 +1169,6 @@ fn test_histignorespace_support_in_zsh() {
                     session_id,
                     workflow_command: None,
                     should_add_command_to_history: true,
-                    source: CommandExecutionSource::User,
                 },
                 &model,
                 None,

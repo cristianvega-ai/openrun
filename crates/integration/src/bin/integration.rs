@@ -409,27 +409,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
 
     register_test!(test_middle_click_paste);
 
-    register_test!(test_copy_selection_within_ai_block);
-    register_test!(test_selection_first_to_last_through_ai_simple);
-    register_test!(test_copy_on_select_first_to_last_through_ai_simple);
-    register_test!(test_selection_first_to_last_through_ai_semantic);
-    register_test!(test_selection_first_to_last_through_ai_lines);
-    register_test!(test_selection_last_to_first_through_ai_simple);
-    register_test!(test_selection_last_to_first_through_ai_semantic);
-    register_test!(test_selection_last_to_first_through_ai_lines);
-    register_test!(test_selection_first_to_ai_simple);
-    register_test!(test_selection_first_to_ai_semantic);
-    register_test!(test_selection_first_to_ai_lines);
-    register_test!(test_selection_ai_to_first_simple);
-    register_test!(test_selection_ai_to_first_semantic);
-    register_test!(test_selection_ai_to_first_lines);
-    register_test!(test_selection_ai_to_last_simple);
-    register_test!(test_selection_ai_to_last_semantic);
-    register_test!(test_selection_ai_to_last_lines);
-    register_test!(test_selection_last_to_ai_simple);
-    register_test!(test_selection_last_to_ai_semantic);
-    register_test!(test_selection_last_to_ai_lines);
-
     register_test!(test_git_prompt_chips);
 
     // These tests are only invoked manually, and not included in the
