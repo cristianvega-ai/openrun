@@ -5132,3 +5132,119 @@ fn terminal_outside_a_repo_never_needs_pr_info() {
         assert_eq!(gh.total_lookups(), lookups_at_leave);
     });
 }
+
+fn record_pty_writes(
+    app: &mut App,
+    terminal: &ViewHandle<TerminalView>,
+) -> Rc<RefCell<Vec<Vec<u8>>>> {
+    let pty_writes: Rc<RefCell<Vec<Vec<u8>>>> = Rc::new(RefCell::new(Vec::new()));
+    let writes = pty_writes.clone();
+    app.update(|ctx| {
+        ctx.subscribe_to_view(terminal, move |_, event, _| {
+            if let Event::WriteBytesToPty { bytes } = event {
+                writes.borrow_mut().push(bytes.to_vec());
+            }
+        });
+    });
+    pty_writes
+}
+
+fn start_cli_agent_session(app: &mut App, terminal: &ViewHandle<TerminalView>) {
+    terminal.update(app, |view, ctx| {
+        CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
+            sessions.set_session(
+                view.view_id,
+                CLIAgentSession {
+                    agent: CLIAgent::Claude,
+                    status: CLIAgentSessionStatus::InProgress,
+                    session_context: CLIAgentSessionContext::default(),
+                    input_state: CLIAgentInputState::Closed,
+                    should_auto_toggle_input: false,
+                    listener: None,
+                    draft_text: None,
+                    received_rich_notification: false,
+                },
+                ctx,
+            );
+        });
+    });
+}
+
+#[test]
+fn send_to_cli_agent_without_a_session_sends_nothing() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let terminal = add_window_with_terminal(&mut app, None);
+        let pty_writes = record_pty_writes(&mut app, &terminal);
+
+        let routing = terminal.update(&mut app, |view, ctx| {
+            view.try_send_text_to_cli_agent_or_rich_input("review this".to_owned(), ctx)
+        });
+
+        assert_eq!(routing, None);
+        assert!(pty_writes.borrow().is_empty());
+        terminal.read(&app, |view, ctx| {
+            assert!(view.input.as_ref(ctx).buffer_text(ctx).is_empty());
+        });
+    });
+}
+
+#[test]
+fn send_to_cli_agent_writes_to_the_pty_while_the_rich_input_is_closed() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let terminal = add_window_with_terminal(&mut app, None);
+        start_cli_agent_session(&mut app, &terminal);
+        let pty_writes = record_pty_writes(&mut app, &terminal);
+
+        let routing = terminal.update(&mut app, |view, ctx| {
+            assert!(!view.is_cli_agent_rich_input_open(ctx));
+            view.try_send_text_to_cli_agent_or_rich_input("review this".to_owned(), ctx)
+        });
+
+        assert_eq!(routing, Some(CliAgentRouting::Pty));
+        assert_eq!(*pty_writes.borrow(), vec![b"review this".to_vec()]);
+        terminal.read(&app, |view, ctx| {
+            assert!(view.input.as_ref(ctx).buffer_text(ctx).is_empty());
+        });
+    });
+}
+
+#[test]
+fn send_to_cli_agent_appends_to_the_rich_input_while_it_is_open() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let terminal = open_cli_agent_rich_input_for_agent(&mut app, CLIAgent::Claude);
+        let pty_writes = record_pty_writes(&mut app, &terminal);
+
+        let routing = terminal.update(&mut app, |view, ctx| {
+            view.try_send_text_to_cli_agent_or_rich_input("review this".to_owned(), ctx)
+        });
+
+        assert_eq!(routing, Some(CliAgentRouting::RichInput));
+        assert!(pty_writes.borrow().is_empty());
+        terminal.read(&app, |view, ctx| {
+            assert_eq!(view.input.as_ref(ctx).buffer_text(ctx), "review this");
+        });
+    });
+}
+
+#[test]
+fn send_diff_hunk_to_cli_agent_writes_the_hunk_location_to_the_pty() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let terminal = add_window_with_terminal(&mut app, None);
+        start_cli_agent_session(&mut app, &terminal);
+        let pty_writes = record_pty_writes(&mut app, &terminal);
+
+        let routing = terminal.update(&mut app, |view, ctx| {
+            view.send_diff_hunk_to_cli_agent_or_rich_input("src/lib.rs", 3, 9, 4, 1, ctx)
+        });
+
+        assert_eq!(routing, Some(CliAgentRouting::Pty));
+        assert_eq!(
+            *pty_writes.borrow(),
+            vec![b"src/lib.rs L3-L9 (+4 -1) -- run `git diff` to see the full context.".to_vec()]
+        );
+    });
+}

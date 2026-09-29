@@ -3,7 +3,9 @@ use warpui::keymap::{EditableBinding, Keystroke, Trigger};
 use warpui::platform::OperatingSystem;
 
 use crate::terminal;
-use crate::util::bindings::{keybinding_name_to_display_string, trigger_to_keystroke};
+use crate::util::bindings::{
+    CustomAction, custom_tag_to_keystroke, keybinding_name_to_display_string, trigger_to_keystroke,
+};
 use crate::workspace::WorkspaceAction;
 
 #[test]
@@ -138,4 +140,18 @@ fn test_terminal_page_scroll_bindings_are_editable() {
             assert_eq!(page_down, Keystroke::parse("pagedown").ok());
         });
     });
+}
+
+#[test]
+fn test_toggle_keybindings_page_defaults_to_cmd_slash_on_mac_only() {
+    // `ctrl-/` is reserved for the PTY on Linux and Windows, so only macOS has a default.
+    let expected = if OperatingSystem::get().is_mac() {
+        Keystroke::parse("cmd-/").ok()
+    } else {
+        None
+    };
+    assert_eq!(
+        custom_tag_to_keystroke(CustomAction::ToggleKeybindingsPage.into()),
+        expected
+    );
 }

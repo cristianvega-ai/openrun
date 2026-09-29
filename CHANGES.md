@@ -135,6 +135,9 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp-internal design links](#warp-internal-design-links) — removed Notion, Figma and Google Docs links from comments and a debug assertion message; `script/offline_audit` now fails on them
 - [Dead tips, icons, tooltips and Warp AI / Drive names](#dead-tips-icons-tooltips-and-warp-ai-drive-names) — removed retired welcome-tip actions, three unused icons and five unreferenced SVGs, the docs-link info tooltip, the log-out remnants and a dead slash-menu action; renamed `BindingGroup::WarpAi` and `warp-drive.svg`
 - [Audit precision, onboarding demo binary and HTTP client trim](#audit-precision-onboarding-demo-binary-and-http-client-trim) — narrowed the audit allowlist, scanned `docker/`, deleted the `onboarding` demo binary, and trimmed the HTTP client API and `reqwest` features to what the LSP downloads use
+- [Audit follow-ups: stale docs, orphaned test file and new tests](#audit-follow-ups-stale-docs-orphaned-test-file-and-new-tests) — fixed the settings-page skill and SSH test README, deleted an orphaned test file, renamed a stale integration test, and added tests for CLI-agent sending, the shortcuts panel, the referral themes and the language-server palette entries
+- [Shell variable serializer tests](#shell-variable-serializer-tests) — tests for `serialize_variables_for_shell` after it left the removed env_vars module (commit a0f567643, task DRV-2)
+- [Log path test comment](#log-path-test-comment) — reworded a channel comment in the log path tests (commit bf304fe57, task AI-33)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3404,3 +3407,40 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 **User-visible impact:** None.
 
 **Notes:** The two binaries named `integration` are intentional: `app/src/bin/integration.rs` is the app under test (`Channel::Integration`) and `crates/integration/src/bin/integration.rs` is the test runner that launches it; both belong to decision 12's `integration`. `reqwest-eventsource` in the wasm section of `app/Cargo.toml` is only a comment about `futures-timer` (WASM-2, decision 18).
+
+## Audit follow-ups: stale docs, orphaned test file and new tests
+**Why:** SWP-18 findings V3 F1 to F4, F5, F8 and F11.
+
+**Removed:**
+- `app/src/terminal/writeable_pty/remote_server_controller_tests.rs`: no `mod` declared it since the SSH remote server removal deleted the file it tested.
+
+**Modified:**
+- `.agents/skills/gui-settings-ui/SKILL.md` no longer names the removed Teams and Environments pages as examples (monolith pages are Keybindings and About).
+- `app/tests/ssh/README.md` gives the `docker build` and `docker run` commands instead of pointing at a deleted `.warp/` workflow.
+- Integration test `test_secrets_are_always_redacted_in_ai_inputs` is now `test_secrets_are_redacted_in_both_safe_mode_display_modes`, which is what it checks.
+
+**Added (tests):**
+- CLI-agent sending in `terminal/view_tests.rs`: with no session nothing is sent; with the rich input closed the text goes to the PTY; with it open the text is appended to the rich input and nothing reaches the PTY; a diff hunk location is written to the PTY.
+- `workspace/view_tests.rs`: `ToggleKeybindingsPage` (Cmd-/) opens and closes the shortcuts panel; `util/bindings_tests.rs`: its default key is Cmd-/ on macOS and none elsewhere (`ctrl-/` belongs to the PTY).
+- `themes/theme_tests.rs`: Nebula and Opal (the former referral themes) are in the theme list with their own themes, and the stored name `ReferralReward` still selects Nebula.
+- `settings_view/mod_tests.rs`: the palette has "Enable/Disable language server downloads".
+
+**User-visible impact:** None.
+
+**Notes:** V3 F11 (no palette entry for `allow_language_server_downloads`) was a false alarm: `projects_page::init_actions_from_parent_view` registers the pair, and the new test now guards it. Still untested and skipped: the commit, push and create-PR dialogs (`git_dialog/*`, `git_actions.rs`), which need a real repository and remote or a `git`/`gh` stub, the `crates/ipc` service, and the SSH ControlMaster executor (V3 F3, F4a, F4b); none is cheap and deterministic to cover here.
+
+## Shell variable serializer tests
+**Why:** `serialize_variables_for_shell` had no direct tests once it moved out of the removed `env_vars` module. This section was missing when the commit landed (SWP-18 V3 F10).
+
+**Modified:**
+- `app/src/terminal/model/session/command_executor/shared_tests.rs` tests the helper's output for bash, zsh, fish and PowerShell, and the empty case; `shared.rs` declares the test module.
+
+**User-visible impact:** None (tests only).
+
+## Log path test comment
+**Why:** The comment in `respects_channel_specific_logfile_name` named the removed Beta/preview channels. This section was missing when the commit landed (SWP-18 V3 F10).
+
+**Modified:**
+- `crates/warp_logging/src/native_tests.rs`: comment only.
+
+**User-visible impact:** None.

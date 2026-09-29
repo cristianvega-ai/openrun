@@ -16,12 +16,12 @@ A settings page is a `PageType` (`app/src/settings_view/settings_page.rs`). It h
 ```rust
 PageType::new_uncategorized(widgets, Some("Scripting"))
 PageType::new_categorized(categories, None)
-PageType::new_monolith(widget, Some("Teams"), /* is_dual_scrollable */ true)
+PageType::new_monolith(widget, Some("About"), /* is_dual_scrollable */ false)
 ```
 
 - **`Uncategorized`** — a flat list of widgets. The common shape.
 - **`Categorized`** — widgets grouped under `Category`s, each with a subheader (rendered via `render_sub_header`) and an optional subtitle.
-- **`Monolith`** — the whole page is a single widget because its content can't be split for search (Keybindings, Teams, About, Environments).
+- **`Monolith`** — the whole page is a single widget because its content can't be split for search (Keybindings, About).
 
 Each widget implements `SettingsWidget` (`settings_page.rs`):
 
@@ -109,7 +109,7 @@ Classify the page before you write it:
 
 - **Single-topic page** — one heading names everything on it, but the content is still made of separately-matchable widgets. Third party CLI agents, Editor and Code Review, Scripting. → **Title in the `PageType` slot.**
 - **Multi-section page** — several independent sections, each with its own heading. Appearance, Features. → **Per-section headings live in widgets/categories** and correctly disappear with their rows. (For `Categorized`, `get_filtered` drops categories whose widgets all filtered out, so their subheaders vanish automatically — that's the behavior you want.)
-- **Monolith page** — Keybindings, Teams, About. There is no partial-match state: the sole widget either matches, and the whole page renders, or it doesn't, and the whole page renders empty and drops out of the sidebar. So a monolith can never strand an orphaned setting under a missing heading — it is **not** affected by bug class 1, but for that reason, *not* because its title is protected. Passing the title through the slot is still the tidier structure, just don't expect it to keep the title on screen during a non-matching search; on a monolith it will not. A page that is really one unfilterable widget must be built as `Monolith`, not `Uncategorized`: otherwise the sidebar shows a permanent, misleading "(1)" on any match.
+- **Monolith page** — Keybindings, About. There is no partial-match state: the sole widget either matches, and the whole page renders, or it doesn't, and the whole page renders empty and drops out of the sidebar. So a monolith can never strand an orphaned setting under a missing heading — it is **not** affected by bug class 1, but for that reason, *not* because its title is protected. Passing the title through the slot is still the tidier structure, just don't expect it to keep the title on screen during a non-matching search; on a monolith it will not. A page that is really one unfilterable widget must be built as `Monolith`, not `Uncategorized`: otherwise the sidebar shows a permanent, misleading "(1)" on any match.
 
 The two are not mutually exclusive: a page can name itself in the title slot **and** have per-section subheaders inside its widgets. Privacy does exactly that — `PageType::new_uncategorized(widgets, Some("Privacy"))` plus `render_sub_header` calls inside individual widgets. The rule is per heading, not per page.
 

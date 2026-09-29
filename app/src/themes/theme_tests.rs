@@ -442,3 +442,35 @@ fn in_memory_theme_generation_test() {
         )
     );
 }
+
+#[test]
+fn referral_themes_are_always_available_as_nebula_and_opal() {
+    let config = WarpThemeConfig::new();
+    let listed: Vec<ThemeKind> = config.theme_items().map(|(kind, _)| kind.clone()).collect();
+    let dark = config.theme(&ThemeKind::Dark);
+
+    for (kind, display_name) in [
+        (ThemeKind::SentReferralReward, "Nebula"),
+        (ThemeKind::ReceivedReferralReward, "Opal"),
+    ] {
+        assert!(
+            listed.contains(&kind),
+            "{display_name} must be in the theme chooser's list"
+        );
+        assert_eq!(kind.to_string(), display_name);
+        assert_ne!(
+            config.theme(&kind),
+            dark,
+            "{display_name} must resolve to its own theme, not the fallback"
+        );
+    }
+}
+
+#[test]
+fn stored_referral_reward_theme_name_still_selects_nebula() {
+    let stored: ThemeKind = serde_json::from_str("\"ReferralReward\"").unwrap();
+    assert_eq!(stored, ThemeKind::SentReferralReward);
+
+    let current: ThemeKind = serde_json::from_str("\"SentReferralReward\"").unwrap();
+    assert_eq!(current, ThemeKind::SentReferralReward);
+}

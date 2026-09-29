@@ -166,7 +166,7 @@ integration_tests! {
     test_copy_secret_respects_safe_mode_setting,
     test_alt_screen_secret_detection,
     test_secret_case_sensitivity,
-    test_secrets_are_always_redacted_in_ai_inputs,
+    test_secrets_are_redacted_in_both_safe_mode_display_modes,
 
     // OSC 8 hyperlink tests (GH6393)
     test_osc8_open_close_renders_visible_text,

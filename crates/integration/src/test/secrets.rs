@@ -240,7 +240,7 @@ pub fn test_secret_case_sensitivity() -> Builder {
         )
 }
 
-pub fn test_secrets_are_always_redacted_in_ai_inputs() -> Builder {
+pub fn test_secrets_are_redacted_in_both_safe_mode_display_modes() -> Builder {
     let phone_number = "123-456-7890";
     let secret_api_key = "sk-1234567890abcdef";
     let expected_redacted_phone = "************";
@@ -252,7 +252,7 @@ pub fn test_secrets_are_always_redacted_in_ai_inputs() -> Builder {
         .set_should_run_test(skip_if_powershell)
         .with_step(initialize_secret_regexes())
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        // Test case 1: Strikethrough mode - secrets should be redacted from CLI agent inputs
+        // Test case 1: Strikethrough mode - secrets are redacted in the block output
         .with_step(toggle_setting(SettingsAction::PrivacyPageToggle(
             PrivacyPageAction::ToggleSafeMode,
         ))) // Enable safe mode (strikethrough by default since hide_secrets_in_block_list defaults to false)

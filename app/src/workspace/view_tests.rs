@@ -3674,3 +3674,29 @@ fn test_tab_group_rename_blur_does_not_commit_unfinished_name() {
         });
     });
 }
+
+#[test]
+fn test_toggle_keybindings_page_opens_and_closes_the_shortcuts_panel() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let workspace = mock_workspace(&mut app);
+
+        workspace.read(&app, |workspace, _| {
+            assert!(!workspace.current_workspace_state.is_resource_center_open);
+        });
+
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::ToggleKeybindingsPage, ctx);
+        });
+        workspace.read(&app, |workspace, _| {
+            assert!(workspace.current_workspace_state.is_resource_center_open);
+        });
+
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::ToggleKeybindingsPage, ctx);
+        });
+        workspace.read(&app, |workspace, _| {
+            assert!(!workspace.current_workspace_state.is_resource_center_open);
+        });
+    });
+}

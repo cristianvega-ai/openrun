@@ -5,9 +5,16 @@
 2. Open the Docker desktop app. This is necessary to create the symbolic links that will make the `docker` CLI available.
 
 ## Running Warp over SSH
-There's a workflow called "Build image and start container for SSH testing" in this repo. After that, you may SSH in by running bash@0.0.0.0 or zsh@0.0.0.0. It'll prompt for a password which is `password` for these VMs.
+Build the image and start a container from the repository root:
 
-After you've built the image, you can just launch the container again with the second command in the workflow.
+```sh
+docker build -t warp-ssh-test app/tests/ssh
+docker run -d -p 22:22 --name warp-ssh-test warp-ssh-test
+```
+
+Then SSH in as `bash@0.0.0.0` or `zsh@0.0.0.0`. It'll prompt for a password, which is `password` for these VMs.
+
+After you've built the image, you can start the container again with `docker start warp-ssh-test`.
 
 Note that you can only have one docker container in your system that has port 22.
 

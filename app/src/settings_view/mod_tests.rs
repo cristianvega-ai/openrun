@@ -1028,3 +1028,43 @@ fn category_header_with_trailing_element_and_no_subtitle_does_not_panic_flex_lay
         });
     });
 }
+
+// ── Command palette entries ─────────────────────────────────────────────────
+
+#[test]
+fn language_server_downloads_has_an_enable_and_disable_palette_pair() {
+    use warpui::keymap::DescriptionContext;
+    use warpui::keymap::macros::id;
+
+    App::test((), |mut app| async move {
+        app.update(|ctx| {
+            projects_page::init_actions_from_parent_view(ctx, &id!("Workspace"), |action| {
+                WorkspaceAction::DispatchToSettingsTab(action)
+            });
+        });
+
+        app.read(|ctx| {
+            let descriptions: Vec<String> = ctx
+                .get_key_bindings()
+                .filter_map(|binding| {
+                    binding.description.map(|description| {
+                        description
+                            .resolve(ctx, DescriptionContext::Default)
+                            .into_owned()
+                    })
+                })
+                .collect();
+            for expected in [
+                "Enable Language Server Downloads",
+                "Disable Language Server Downloads",
+            ] {
+                assert!(
+                    descriptions
+                        .iter()
+                        .any(|description| description == expected),
+                    "missing palette entry {expected:?} in {descriptions:?}"
+                );
+            }
+        });
+    });
+}

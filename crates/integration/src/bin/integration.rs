@@ -304,7 +304,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_copy_secret_respects_safe_mode_setting);
     register_test!(test_alt_screen_secret_detection);
     register_test!(test_secret_case_sensitivity);
-    register_test!(test_secrets_are_always_redacted_in_ai_inputs);
+    register_test!(test_secrets_are_redacted_in_both_safe_mode_display_modes);
 
     // OSC 8 hyperlink tests (GH6393)
     register_test!(test_osc8_open_close_renders_visible_text);
