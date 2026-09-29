@@ -206,7 +206,7 @@ axum.workspace = true
 diesel = { workspace = true, features = ["sqlite", "chrono"] }
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 env_logger.workspace = true
-git2 = { version = "0.20.4", default-features = false, features = [
+git2 = { version = "0.21.0", default-features = false, features = [
     "vendored-libgit2",
 ] }
 libsqlite3-sys = { version = "0.33.0", features = ["bundled"] }

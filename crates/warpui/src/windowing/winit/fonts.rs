@@ -21,14 +21,12 @@ use bimap::BiMap;
 use cosmic_text::{Align, Attrs, AttrsList, BidiParagraphs, LayoutLine, ShapeLine, Shaping, Wrap};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
-use fontdb::Source;
+use fontdb::{Query, Source};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 use pathfinder_geometry::rect::{RectF, RectI};
 use pathfinder_geometry::vector::{Vector2F, Vector2I, vec2f, vec2i};
-use resvg::usvg::fontdb;
-use resvg::usvg::fontdb::Query;
 use vec1::Vec1;
 use warpui_core::fonts::{Style, Weight};
 #[cfg(target_os = "windows")]

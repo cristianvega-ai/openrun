@@ -120,6 +120,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Linux and Windows compile fixes](#linux-and-windows-compile-fixes) — fixed a Windows-only compile error and Linux/Windows-only warnings found by cross-target checks
 - [Editor peer layer, single-variant enums and grid storage mode](#editor-peer-layer-single-variant-enums-and-grid-storage-mode) — removed the unused editor remote-peer layer and its drawing, avatar status icons, `is_excluded_binding`, single-variant enums and `Storage::is_sequential`
 - [Setting surfaces](#setting-surfaces) — removed `SettingSurfaces`, `SettingsMode` and the `surface:` argument of the settings macros
+- [Dependency advisory updates](#dependency-advisory-updates) — bumped the RUSTSEC-flagged crates (`cargo deny check advisories`: 14 errors and 3 yanked warnings down to the 2 unmaintained crates that only the pinned cosmic-text fork still pulls in)
 - [Unused input hint setting, tree budget mode, icons and theme accessors](#unused-input-hint-setting-tree-budget-mode-icons-and-theme-accessors) — removed the no-op `show_hint_text` setting, `BudgetExceededBehavior`, unused icons and theme accessors, and dogfood/preview wording
 - [Input lock state](#input-lock-state) — removed the vestigial `InputConfig::is_locked` and the lock events
 - [Inline menu tabs and UDI names](#inline-menu-tabs-and-udi-names) — removed the unused inline-menu tab machinery and the `UDI` naming
@@ -3272,3 +3273,55 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 
 **Modified:**
 - Ran `./script/format` (22 files, imports only).
+
+## Dependency advisory updates
+**Why:** `cargo deny check advisories` (cargo-deny 0.20.2, advisory DB of 2026-09-29) reported 12 distinct advisories on 11 crate versions (14 errors) plus 3 yanked-crate warnings, all published after the baseline commit. Decision 21: update the flagged crates now, semver-compatible first; anything that needs a code change or a pinned fork is recorded here rather than forced.
+
+**Modified (`Cargo.lock` unless noted):**
+
+| Crate | Before | After | Advisory | How |
+|---|---|---|---|---|
+| anyhow | 1.0.79 | 1.0.104 | RUSTSEC-2026-0190 | `cargo update -p` |
+| crossbeam-epoch | 0.9.15 | 0.9.21 | RUSTSEC-2026-0204 | `cargo update -p` |
+| event-listener | 5.4.0 | 5.4.2 | RUSTSEC-2026-0221 | `cargo update -p` |
+| h2 | 0.4.15 | 0.4.19 | RUSTSEC-2026-0258 | `cargo update -p` |
+| memmap2 | 0.9.7 | 0.9.11 | RUSTSEC-2026-0186 | `cargo update -p memmap2@0.9.7` |
+| rustls | 0.23.39 | 0.23.45 | RUSTSEC-2026-0285 | `cargo update -p` (also `rustls-webpki` 0.103.15, `aws-lc-rs` 1.18.1, `aws-lc-sys` 0.45.0) |
+| spin, spinning, xml-rs | 0.10.0, 0.1.0, 0.8.19 | 0.10.1, 0.1.1, 0.8.29 | yanked | `cargo update -p` |
+| quick-xml 0.30.0 | 0.30.0 | 0.41.0 | RUSTSEC-2026-0194, -0195 | `cargo update -p plist` (plist 1.5.1 to 1.10.0, within the existing `plist = "1"` requirement; drops `safemem`, `line-wrap` and a second `base64`) |
+| quick-xml 0.37.4 | 0.37.4 | 0.41.0 | RUSTSEC-2026-0194, -0195 | `wayland-scanner` 0.31.7 to 0.31.11 (lock only), and `tauri-winrt-notification` `0.7.0` to `0.8.1` in `crates/warpui/Cargo.toml` (Windows toast notifications; the API used by `notifications/windows.rs` is unchanged, `notify-rust` 4.18.1 now pulls the same version). Only one `quick-xml` remains |
+| git2 | 0.20.4 | 0.21.0 | RUSTSEC-2026-0183, -0184 | requirement in `app/Cargo.toml` raised to `0.21.0` (`libgit2-sys` 0.18.8+1.9.7); the only use, `Repository::discover` in `workflows/local_workflows.rs`, compiles unchanged |
+| resvg / usvg / fontdb (SVG) | 0.47.0 / 0.47.0 / 0.23.0 | 0.48.1 / 0.48.1 / 0.24.0 | moves `usvg` off `rustybuzz` and `ttf-parser` | workspace `resvg` requirement raised to `0.48.1`; `crates/warpui_core/src/image_cache.rs` compiles unchanged. resvg 0.48 shapes text with `harfrust` and parses fonts with `skrifa` |
+
+`deny.toml`: removed the `RUSTSEC-2023-0081` (`safemem`) ignore, since plist 1.10 no longer depends on it and cargo-deny flagged it as unmatched.
+
+**Advisories before and after (`cargo deny check advisories`):**
+
+| Advisory | Crate | Before | After |
+|---|---|---|---|
+| RUSTSEC-2026-0190 | anyhow | error | fixed |
+| RUSTSEC-2026-0204 | crossbeam-epoch | error | fixed |
+| RUSTSEC-2026-0221 | event-listener | error | fixed |
+| RUSTSEC-2026-0183, -0184 | git2 | 2 errors | fixed |
+| RUSTSEC-2026-0258 | h2 | error | fixed |
+| RUSTSEC-2026-0186 | memmap2 | error | fixed |
+| RUSTSEC-2026-0194, -0195 | quick-xml 0.30.0 and 0.37.4 | 4 errors | fixed |
+| RUSTSEC-2026-0285 | rustls | error | fixed |
+| yanked | spin, spinning, xml-rs | 3 warnings | fixed |
+| RUSTSEC-2026-0206 (unmaintained) | rustybuzz 0.20.1 | error | **remains** |
+| RUSTSEC-2026-0192 (unmaintained) | ttf-parser 0.25.1 | error | **remains** |
+
+Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed version exists).
+
+**Not fixable here (`rustybuzz` 0.20.1, `ttf-parser` 0.25.1):**
+- Both have no patched release. After the `resvg` bump the SVG path no longer uses them, but they stay in the graph through `cosmic-text` (the `warpdotdev/cosmic-text` git fork, kept at its pinned revision by decision 15, uses `rustybuzz` for shaping and `ttf-parser` directly), `fontdb` 0.23 (a direct dependency of `warpui`, and the version that fork uses, so it cannot move alone) `owned_ttf_parser` (a direct dependency of `warpui`) and `ab_glyph` (through `sctk-adwaita`, Linux windowing).
+- Maintained replacements exist: `harfrust` (the HarfBuzz project's port, named by RUSTSEC-2026-0206; `resvg` 0.48 already uses it) for `rustybuzz`, and `skrifa`/`read-fonts` (Google Fonts "fontations", named by RUSTSEC-2026-0192) for `ttf-parser`.
+- Adopting them means rebasing or re-forking `cosmic-text` onto a release that shapes with `harfrust` and reads fonts with `skrifa` (the fork is based on cosmic-text 0.12 and carries Warp-specific patches that would have to be ported; upstream is now at 0.19; check whether its releases already use `harfrust` and `skrifa` before porting), then bumping `fontdb` to 0.24, replacing `owned_ttf_parser` in `warpui`, and waiting for `sctk-adwaita`/`ab_glyph` to move off `ttf-parser`. That is a text-shaping and font-loading change with visible risk (glyph metrics, fallback, ligatures), so it is a separate task and was not attempted.
+- Both remain reachable at runtime through the terminal's text layout; there is no known exploit, only that they will get no fixes. `cargo deny check advisories` is not part of the blocking `offline-audit` job, which runs `bans licenses sources`.
+
+**User-visible impact:** None expected. SVG rendering (`usvg`/`resvg`) now shapes any SVG text with `harfrust`; the smoke launches showed no change, but SVG text rendering was not compared pixel by pixel. `git2` now bundles libgit2 1.9.7.
+
+**Notes:**
+- The git dependencies on the `warpdotdev/*` forks were not touched (decision 15).
+- `cargo deny check bans licenses sources` and `script/offline_audit` still pass, and no banned crate was added.
+- Checked with `cargo check --workspace --all-targets` and `cargo clippy --workspace --all-targets --tests -- -D warnings` on macOS, `cargo check --workspace --all-targets` for `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu` (the zig cc shims from the cross-target task), `cargo nextest run --workspace`, and both smoke launches.
