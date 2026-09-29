@@ -128,7 +128,7 @@ fn refresh_working_directories_preserves_non_repo_paths_and_dedupes() {
     });
 }
 
-// Regression test for GH-10598: the code review panel's manually selected
+// Regression test: the code review panel's manually selected
 // repository must be remembered per pane group so it survives leaving and
 // returning to an Agent session.
 #[test]
@@ -193,7 +193,7 @@ fn selected_review_repo_is_remembered_per_pane_group() {
     });
 }
 
-// Regression test for GH-10598: closing a tab (i.e. destroying a pane group)
+// Regression test: closing a tab (i.e. destroying a pane group)
 // must clean up the saved code-review-panel selection so it cannot leak into
 // or be confused with a future pane group that happens to reuse an EntityId.
 #[test]

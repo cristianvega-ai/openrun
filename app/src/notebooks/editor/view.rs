@@ -2052,12 +2052,10 @@ impl RichTextEditorView {
             self.model.update(ctx, |model, ctx| {
                 match insertion_mode {
                     InsertionMode::InsertAfter(insertion_offset) => {
-                        // TODO(CLD-557)
                         model.insert_block_after(insertion_offset + 1, block_type, ctx);
                     }
                     InsertionMode::DeleteSlashAndInsertAfter(insertion_offset) => {
                         model.backspace(ctx);
-                        // TODO(CLD-557)
                         model.insert_block_after(insertion_offset + 1, block_type, ctx);
                     }
                     InsertionMode::DeleteSlashAndRestyleLine(cursor_position) => match block_type {
@@ -2832,7 +2830,7 @@ impl TypedActionView for RichTextEditorView {
                 ctx.notify();
             }
             ToggleTaskList(offset) => {
-                // This fixes CLD-1037. Users expect task lists to be interactable even when the notebook is not in-focus.
+                // Users expect task lists to be interactable even when the notebook is not in-focus.
                 if self.is_editable(ctx) {
                     self.model.update(ctx, |model, ctx| {
                         model.toggle_task_list(*offset, ctx);
@@ -3249,7 +3247,7 @@ impl warp_editor::editor::EditorView for RichTextEditorView {
         let mut underline_map = RangeMap::new();
 
         if let Some(hovered_file_path) = &self.hovered_file_path {
-            // Convert content model offsets to render model offsets (CLD-558)
+            // Convert content model offsets to render model offsets
             let render_range =
                 (hovered_file_path.range.start - 1)..(hovered_file_path.range.end - 1);
             override_color_map.insert(render_range.clone(), *URL_COLOR);
@@ -3285,7 +3283,7 @@ impl RichTextAction<RichTextEditorView> for EditorViewAction {
         _view: &WeakViewHandle<RichTextEditorView>,
         _ctx: &AppContext,
     ) -> Option<Self> {
-        // TODO(CORE-346): Ideally, we would only dispatch an action here if the editor or one of
+        // TODO: Ideally, we would only dispatch an action here if the editor or one of
         // its children (like the omnibar) is focused. However, to check if a child view is focused,
         // we need a AppContext. For now, we always dispatch the event and check focus in the
         // event handler.
@@ -3324,7 +3322,7 @@ impl RichTextAction<RichTextEditorView> for EditorViewAction {
 
         match location {
             Location::Text { char_offset, .. } => match click_count {
-                // TODO(CLD-558): We need to align render model with the content model offset.
+                // TODO: We need to align render model with the content model offset.
                 1 if modifiers.shift => Some(EditorViewAction::SelectionUpdate(char_offset + 1)),
                 1 => Some(EditorViewAction::SelectionStart {
                     offset: char_offset + 1,

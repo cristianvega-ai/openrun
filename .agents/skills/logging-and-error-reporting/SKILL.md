@@ -100,27 +100,27 @@ Default to `anyhow` when these hold:
 
 It's not either/or: a typed enum can keep an `anyhow` escape hatch for the genuinely-unexpected case (an `Unexpected(#[from] anyhow::Error)` variant), classifying the known failures precisely while still absorbing the rest. Group variants by **failure mode** (what went wrong / what the caller does about it), not by which crate produced the error.
 
-Real example (`UserAuthenticationError`, `crates/warp_server_client/src/auth/mod.rs`):
+Real example (`ImmediateSaveError`, `app/src/code/mod.rs`), which mixes actionable variants with a wrapped error that classifies itself:
 ```rust
-#[derive(thiserror::Error, Debug)]
-pub enum UserAuthenticationError {
-    #[error("Firebase returned a token error when fetching an ID token")]
-    DeniedAccessToken(FirebaseError),
-    #[error("unexpected error occurred when fetching an ID token: {0:#}")]
-    Unexpected(#[from] anyhow::Error),
-    // …
+#[derive(Debug, thiserror::Error)]
+pub enum ImmediateSaveError {
+    #[error("No FileId")]
+    NoFileId,
+    #[error("failed to save file: {0:#}")]
+    FailedToSave(#[from] FileSaveError),
+    #[error("There is no file tab currently selected")]
+    NoActiveFileTab,
 }
 
-impl ErrorExt for UserAuthenticationError {
+impl ErrorExt for ImmediateSaveError {
     fn is_actionable(&self) -> bool {
         match self {
-            UserAuthenticationError::DeniedAccessToken(_) => false,
-            UserAuthenticationError::Unexpected(e) => e.is_actionable(),
-            // …
+            ImmediateSaveError::NoFileId | ImmediateSaveError::NoActiveFileTab => true,
+            ImmediateSaveError::FailedToSave(err) => err.is_actionable(),
         }
     }
 }
-register_error!(UserAuthenticationError);
+register_error!(ImmediateSaveError);
 ```
 
 ## Choosing the form (variable data out of the message)

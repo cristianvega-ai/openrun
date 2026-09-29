@@ -939,15 +939,10 @@ enum DenyExecutionReason {
     /// Can't execute command because there's an active command in control of the pty.
     ExistingActiveCommand,
 
-    /// With the exception of shared sessions, we should only execute commands if they can be
-    /// recorded in history.
+    /// We should only execute commands if they can be recorded in history.
     ///
     /// Gonna be honest, I (zach b) have the least amount of context on this one, don't really know
     /// why this is the case.
-    ///
-    /// This is not returned as a `CancellationReason::No` for shared sessions even if it may be
-    /// true; we do not record shared sessions in the History model thus they are default not-
-    /// appendable.
     HistoryNotAppendable,
 }
 
@@ -3429,8 +3424,6 @@ impl Input {
     /// if two background-highlighted runs are contiguous, they are merged into a single run.
     /// This is a short-term fix and should be addressed in a more comprehensive way that does
     /// not rely on the styling of the input.
-    ///
-    /// See [CLD-997](https://linear.app/warpdotdev/issue/CLD-997)
     fn build_text_run_ranges_for_workflows(
         &self,
         text_style_runs: &[TextRun],
@@ -7495,7 +7488,7 @@ impl Input {
             && model.block_list().is_bootstrapped()
         {
             // PS1 mode: capture the raw prompt grid so the command palette
-            // can render it with full fidelity (CORE-1683).
+            // can render it with full fidelity.
             prompt_elements.ps1_prompt_grid = Some(block.prompt_grid().clone());
         }
 

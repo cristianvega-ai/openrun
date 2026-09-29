@@ -84,8 +84,8 @@ fn test_non_existent_paths_are_dropped() {
 #[test]
 fn test_worktree_paths_are_kept() {
     let known = vec![
-        PathBuf::from("/users/alice/.warp-dev/worktrees/warp-internal/feature_a"),
-        PathBuf::from("/users/alice/.warp-dev/worktrees/warp-internal/feature_b"),
+        PathBuf::from("/users/alice/.warp-dev/worktrees/example-repo/feature_a"),
+        PathBuf::from("/users/alice/.warp-dev/worktrees/example-repo/feature_b"),
         PathBuf::from("/users/alice/code/primary-repo"),
     ];
     let existing = DirectoryTabColors::default();
@@ -95,8 +95,8 @@ fn test_worktree_paths_are_kept() {
     assert_eq!(
         candidates,
         vec![
-            PathBuf::from("/users/alice/.warp-dev/worktrees/warp-internal/feature_a"),
-            PathBuf::from("/users/alice/.warp-dev/worktrees/warp-internal/feature_b"),
+            PathBuf::from("/users/alice/.warp-dev/worktrees/example-repo/feature_a"),
+            PathBuf::from("/users/alice/.warp-dev/worktrees/example-repo/feature_b"),
             PathBuf::from("/users/alice/code/primary-repo"),
         ]
     );

@@ -3978,7 +3978,7 @@ impl CodeReviewView {
         }
     }
 
-    /// TODO(CODE-1649): de-duplicate entries in the diff set.
+    /// TODO: de-duplicate entries in the diff set.
     fn collect_diff_set(
         &self,
         review_comments: &ReviewCommentBatch,
@@ -4773,7 +4773,7 @@ impl CodeReviewView {
         // which matches what the corners reveal at rest. We only do this when
         // pinned so the at-rest card is visually unchanged. This avoids clipping
         // the diff content (which previously inflated the editor's min height and
-        // broke the selection popup / comment box sizing — see #13091 / #13194).
+        // broke the selection popup / comment box sizing).
         let outer_corner_radius = if is_pinned {
             CornerRadius::default()
         } else {
@@ -5601,7 +5601,7 @@ impl CodeReviewView {
                             }
                             DiffLineType::Delete => {
                                 // Include deletions if they're relevant to the range.
-                                // CODE-1638: Deletion hunks are anchored to the line after the removed line,
+                                // Deletion hunks are anchored to the line after the removed line,
                                 // so allow one extra line past requested_end.
                                 current_line >= requested_start && current_line <= requested_end
                             }

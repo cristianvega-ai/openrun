@@ -6,7 +6,7 @@ pub use warpui_core::windowing::*;
 pub use winit::WindowingSystem;
 
 /// The minimum width a window can be resized to.
-/// TODO(CORE-1891) Instead of being hard-coded, this should be configurable by the user via
+/// TODO: Instead of being hard-coded, this should be configurable by the user via
 /// [`crate::platform::WindowOptions`].
 #[cfg(any(test, feature = "integration_tests"))]
 pub const MIN_WINDOW_WIDTH: f32 = 124.;

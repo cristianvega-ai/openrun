@@ -122,7 +122,7 @@ pub fn test_with_launch_config() -> Builder {
         )
 }
 
-// TODO(CORE-2300): Once we remove FeatureFlag::ShellSelector, we should remove this test.
+// TODO: Once we remove FeatureFlag::ShellSelector, we should remove this test.
 pub fn test_open_launch_config_from_add_tab_menu_legacy() -> Builder {
     new_builder()
         .set_should_run_test(|| !FeatureFlag::ShellSelector.is_enabled())

@@ -1,5 +1,5 @@
 //! Module containing logic to determine to open a file in a text editor, if it is installed.
-//! TODO(PLAT-749): Add support for more editors.
+//! TODO: Add support for more editors.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

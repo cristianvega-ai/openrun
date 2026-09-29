@@ -1,7 +1,7 @@
 use super::*;
 use crate::util::color::OPAQUE;
 
-// TODO(CORE-3626): figure out why the colors returned on Windows are slightly different.
+// TODO: figure out why the colors returned on Windows are slightly different.
 #[test]
 #[cfg(all(not(target_family = "wasm"), not(windows)))]
 fn top_colors_jellyfish_test() {

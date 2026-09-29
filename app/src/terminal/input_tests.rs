@@ -1075,7 +1075,7 @@ fn ctrl_t_apply_mode_forks_between_splice_and_replace_for_the_same_draft() {
 /// complexity of setting up that test. As that module depends on a TerminalModel with a valid
 /// BlockList, it was easier to utilize the boilerplate local to this module. Long-term, some of
 /// these helpers should move into shared test utils to make setup easier.
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_histignorespace_support_in_zsh() {
     let session_id: SessionId = 1.into();
@@ -1567,7 +1567,7 @@ fn test_tab_completion_with_spaces() {
 
         let history_file_commands = vec![
             "cd Documents/zed".to_string(),
-            "curl https://app.warp.dev".to_string(),
+            "curl https://app.example.com".to_string(),
             "cargo check\ncargo run".to_string(),
         ];
         let terminal =
@@ -1801,7 +1801,7 @@ fn test_tab_completion() {
 
         let history_file_commands = vec![
             "cd Documents/zed".to_string(),
-            "curl https://app.warp.dev".to_string(),
+            "curl https://app.example.com".to_string(),
             "cargo check\ncargo run".to_string(),
         ];
         let terminal =
@@ -2048,7 +2048,7 @@ fn test_tab_completion() {
     });
 }
 
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_tab_completion_with_selection() {
     App::test((), |mut app| async move {
@@ -2056,7 +2056,7 @@ fn test_tab_completion_with_selection() {
 
         let history_file_commands = vec![
             "cd Documents/zed".to_string(),
-            "curl https://app.warp.dev".to_string(),
+            "curl https://app.example.com".to_string(),
             "cargo check\ncargo run".to_string(),
         ];
         let terminal =
@@ -3266,7 +3266,7 @@ fn test_cursor_movement() {
 
         let history_file_commands = vec![
             "cd Documents/zed".to_string(),
-            "curl https://app.warp.dev".to_string(),
+            "curl https://app.example.com".to_string(),
             "cargo check\ncargo run".to_string(),
         ];
         let terminal =
@@ -3357,7 +3357,7 @@ fn test_cursor_movement() {
     });
 }
 
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_newline_insertion() {
     App::test((), |mut app| async move {
@@ -3421,7 +3421,7 @@ fn test_should_not_insert_newline_on_enter_in_empty_buffer() {
     })
 }
 
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_should_insert_newline_on_enter() {
     App::test((), |mut app| async move {
@@ -4009,7 +4009,7 @@ fn test_last_word_insertions() {
 
         // last word insertion looks for preceding whitespace character
         let history_file_commands = vec![
-            "https://app.warp.dev".to_string(),
+            "https://app.example.com".to_string(),
             "cargo check\ncargo run --features".to_string(),
         ];
         let terminal =
@@ -4046,7 +4046,7 @@ fn test_last_word_insertions() {
             input.insert_last_word_previous_command(ctx);
         });
         input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "git https://app.warp.dev");
+            assert_eq!(input.buffer_text(ctx), "git https://app.example.com");
         });
 
         // Insert is temporary, undo goes back to initial state before first insertion
@@ -6099,7 +6099,7 @@ fn enter_accepts_inline_menu_item_when_submit_on_ctrl_enter_is_true() {
 }
 
 /// Pre-fix this failed because `update_cli_agent_enter_settings` always set `ctrl_enter: Emit`
-/// regardless of toggle, causing `ctrl_enter()` to hit the `_ => ()` no-op arm (#11588).
+/// regardless of toggle, causing `ctrl_enter()` to hit the `_ => ()` no-op arm.
 #[test]
 fn ctrl_enter_inserts_newline_when_submit_on_ctrl_enter_is_false() {
     use crate::editor::EnterAction;

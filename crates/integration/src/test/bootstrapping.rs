@@ -307,7 +307,6 @@ pub fn test_instant_prompt_bootstrap() -> Builder {
 }
 
 /// Ensure this issue doesn't happen again.
-/// https://github.com/warpdotdev/Warp/issues/2636
 /// Bootstrapping was failing when PROMPT_COMMAND was an array
 pub fn test_bash_bootstraps_with_prompt_command_array() -> Builder {
     new_builder()
@@ -370,7 +369,7 @@ pub fn test_zsh_bootstraps_with_nounset_option() -> Builder {
         ))
 }
 
-/// Regression test for https://github.com/warpdotdev/warp/issues/7099: a `.zshrc` that enables
+/// Regression test: a `.zshrc` that enables
 /// vi-mode key bindings via `autoload -Uz cursor_mode; cursor_mode` (mirroring the reporter's
 /// exact repro; prezto's `init.zsh` does the same thing) must not leak leftover buffer content,
 /// nor corrupt the command text, into the next command -- even when the line editor is in vi
@@ -418,7 +417,7 @@ zle -N zle-line-init
         ))
 }
 
-/// Regression test for CORE-3804: a profile that selects PSReadLine's vi edit mode must not
+/// Regression test: a profile that selects PSReadLine's vi edit mode must not
 /// corrupt submitted commands.
 pub fn test_pwsh_vi_edit_mode_does_not_corrupt_commands() -> Builder {
     new_builder()

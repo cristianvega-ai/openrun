@@ -562,19 +562,19 @@ fn test_line_to_fragments() {
 
 #[test]
 fn test_secrets_serialization() {
-    let mut blockgrid = mock_blockgrid("foo zach@warp.dev bar");
+    let mut blockgrid = mock_blockgrid("foo zach@example.com bar");
     blockgrid.maybe_enable_secret_obfuscation(ObfuscateSecrets::Yes);
     blockgrid.grid_handler_mut().mark_secret_range(
-        Point::new(0, 4)..=Point::new(0, 16),
+        Point::new(0, 4)..=Point::new(0, 19),
         IsObfuscated::Yes,
-        "zach@warp.dev".to_string(),
+        "zach@example.com".to_string(),
     );
 
     assert_eq!(
-        "foo ************* bar",
+        "foo **************** bar",
         blockgrid.grid_handler.bounds_to_string(
             Point::new(0, 0),
-            Point::new(0, 21),
+            Point::new(0, 24),
             false,
             RespectObfuscatedSecrets::Yes,
             false, /* force_secrets_obfuscated */
@@ -593,10 +593,10 @@ fn test_secrets_serialization() {
         .expect("should unobfuscate secret");
 
     assert_eq!(
-        "foo zach@warp.dev bar",
+        "foo zach@example.com bar",
         blockgrid.grid_handler.bounds_to_string(
             Point::new(0, 0),
-            Point::new(0, 21),
+            Point::new(0, 24),
             false,
             RespectObfuscatedSecrets::Yes,
             false, /* force_secrets_obfuscated */
@@ -742,7 +742,7 @@ fn test_find_url_wide_characters() {
 #[test]
 fn test_find_url_omits_trailing_periods() {
     // Test that it omits a single trailing period.
-    let blockgrid = mock_blockgrid("Visit https://github.com/warpdotdev/Warp/issues.");
+    let blockgrid = mock_blockgrid("Visit https://github.com/example-org/app/issues.");
     assert_eq!(
         blockgrid
             .grid_handler
@@ -760,7 +760,7 @@ fn test_find_url_omits_trailing_periods() {
     );
 
     // Test that it omits multiple trailing periods.
-    let blockgrid = mock_blockgrid("Visit https://github.com/warpdotdev/Warp/issues...");
+    let blockgrid = mock_blockgrid("Visit https://github.com/example-org/app/issues...");
     assert_eq!(
         blockgrid
             .grid_handler
@@ -778,13 +778,13 @@ fn test_find_url_omits_trailing_periods() {
     );
 
     // Test that it handles a period in the middle of the URL path somewhere.
-    let blockgrid = mock_blockgrid("Visit https://github.com/warp.dev/Warp/issues.");
+    let blockgrid = mock_blockgrid("Visit https://github.com/example.com/repo/issues.");
     assert_eq!(
         blockgrid
             .grid_handler
             .url_at_point(Point { row: 0, col: 10 }),
         Some(Link {
-            range: Point { row: 0, col: 6 }..=Point { row: 0, col: 44 },
+            range: Point { row: 0, col: 6 }..=Point { row: 0, col: 47 },
             is_empty: false
         })
     );
@@ -793,7 +793,7 @@ fn test_find_url_omits_trailing_periods() {
             .grid_handler
             .url_at_point(Point { row: 0, col: 33 }),
         Some(Link {
-            range: Point { row: 0, col: 6 }..=Point { row: 0, col: 44 },
+            range: Point { row: 0, col: 6 }..=Point { row: 0, col: 47 },
             is_empty: false
         })
     );
@@ -1151,7 +1151,7 @@ fn test_possible_file_paths_across_multiple_wrapped_lines() {
     }
 }
 
-/// Regression test for issue #9193: a long file path that soft-wraps in a
+/// Regression test: a long file path that soft-wraps in a
 /// *wide* terminal must be detected end to end, even when the hover point is
 /// more than a single visual row away from the wrap boundary. The cross-wrap
 /// scan budget used to be smaller than one visual row, so detection stopped at
@@ -1195,7 +1195,7 @@ fn test_possible_file_paths_across_wide_wrapped_line() {
     }
 }
 
-/// Regression test for issue #9193 covering the core purpose of the change: a
+/// Regression test covering the core purpose of the change: a
 /// path that soft-wraps across *more than two* visual rows in a *wide* terminal
 /// must be detected end to end. This combines both conditions that the other
 /// tests only exercise separately — `test_possible_file_paths_across_wide_wrapped_line`
@@ -1246,7 +1246,7 @@ fn test_possible_file_paths_across_wide_multiple_wrapped_lines() {
     }
 }
 
-/// Perf guard for issue #9193: hovering over separator-dense content must not
+/// Perf guard: hovering over separator-dense content must not
 /// produce a candidate list that grows quadratically with the line length. The
 /// candidate search is O(prefix_fragments * suffix_fragments), so it is capped
 /// at `MAX_LINK_PATH_FRAGMENTS` fragments per side regardless of how many

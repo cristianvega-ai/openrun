@@ -1780,7 +1780,7 @@ impl BlockList {
                 }
             }
             GridType::Prompt | GridType::Rprompt => {
-                // TODO(CORE-1680): This code path is currently NOT reachable for the combined grid case.
+                // TODO: This code path is currently NOT reachable for the combined grid case.
                 // Notably, we hit-test any selections on the rprompt grid AS the combined grid, instead
                 // of correctly identifying the difference in selections (we cannot handle partial rprompt selections
                 // correctly). When we resolve the linked issue we will need to update this logic accordingly

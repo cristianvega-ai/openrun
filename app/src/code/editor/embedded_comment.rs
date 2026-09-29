@@ -184,7 +184,7 @@ impl RenderableBlock for RenderableEmbeddedCommentSpace {
 }
 
 /// The embedded item transformation for comments.
-#[cfg_attr(not(test), allow(unused))] // TODO(CODE-1464): use this
+#[cfg_attr(not(test), allow(unused))] // TODO: use this
 pub(super) fn comment_embedded_item_conversion(
     mut mapping: serde_yaml::Mapping,
 ) -> Option<Arc<dyn EmbeddedItem>> {

@@ -111,7 +111,7 @@ fn combo_inner_button_styles(warp_theme: &WarpTheme, state: ButtonState) -> UiCo
 /// as the combo button will provide these. Note that b/c
 /// it is not needed at this time, disabled is not implemented.
 ///
-/// TODO(CORE-2300): Evaluate whether or not this helper makes sense in this
+/// TODO: Evaluate whether or not this helper makes sense in this
 /// location, as it is only used in workspace/view.rs right now (it is here
 /// b/c of access to non-pub fields).
 pub fn combo_inner_button(

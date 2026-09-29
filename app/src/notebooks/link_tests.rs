@@ -142,8 +142,8 @@ fn test_resolve_bare_url() {
             url("http://google.com")
         );
         assert_eq!(
-            resolve(&app, &links, "warp.dev").await,
-            url("http://warp.dev")
+            resolve(&app, &links, "example.com").await,
+            url("http://example.com")
         );
         assert_eq!(
             resolve(&app, &links, "bbc.co.uk").await,
@@ -252,17 +252,17 @@ fn test_resolve_valid_url() {
         let links = init_link_model(&mut app, None);
 
         assert_eq!(
-            resolve(&app, &links, "https://warp.dev").await,
-            url("https://warp.dev")
+            resolve(&app, &links, "https://example.com").await,
+            url("https://example.com")
         );
         assert_eq!(
-            resolve(&app, &links, "mailto:test@warp.dev").await,
-            url("mailto:test@warp.dev")
+            resolve(&app, &links, "mailto:test@example.com").await,
+            url("mailto:test@example.com")
         );
     });
 }
 
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_resolve_file_url() {
     App::test((), |mut app| async move {
@@ -440,7 +440,7 @@ fn test_open_markdown_file_uses_viewer_when_preferred() {
 #[test]
 fn test_open_markdown_file_respects_disabled_viewer_preference() {
     // With `prefer_markdown_viewer = false`, the markdown file would otherwise
-    // resolve to `FileTarget::SystemDefault`. The security fix in #25353 routes
+    // resolve to `FileTarget::SystemDefault`. The security fix routes
     // both `SystemDefault` and `SystemGeneric` through
     // `open_file_path_in_explorer`, so no `OpenFileWithTarget` event is emitted
     // — the file is revealed in Finder / Explorer instead.

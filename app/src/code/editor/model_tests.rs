@@ -74,7 +74,7 @@ async fn layout_model(app: &mut App, model: &ModelHandle<CodeEditorModel>) {
 
 #[test]
 fn test_two_editors_sharing_a_buffer_both_lay_out_a_large_content_replace() {
-    // Regression test for APP-4844: `CodeEditorView::new` can pass an existing shared `Buffer`
+    // Regression test: `CodeEditorView::new` can pass an existing shared `Buffer`
     // into `CodeEditorModel::new`, so two editors can point at the same underlying content (for
     // example, two views of the same open file). Both editors independently subscribe to and
     // clone the `ContentChanged` event's `EditDelta` emitted by a full content replace, so more

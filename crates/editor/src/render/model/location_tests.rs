@@ -345,7 +345,7 @@ fn test_hit_within_list() {
 
 #[test]
 fn test_hit_empty_line() {
-    // This is a regression test for CLD-591.
+    // This is a regression test.
     let mut model =
         RenderState::new_for_test(TEST_STYLES.clone(), 40.0.into_pixels(), 42.0.into_pixels());
     let mut tree = SumTree::new();

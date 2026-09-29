@@ -915,7 +915,7 @@ fn test_insert() {
 
 const BODY_PREFIX: &str = "Latest output: ";
 
-/// Regression test for CORE-1654. Tests the "Insert into Input" functionality from the context menu.
+/// Regression test. Tests the "Insert into Input" functionality from the context menu.
 #[test]
 fn test_insert_into_input() {
     // Note that this is defined as a unit test rather than an integration test since it requires precise selections
@@ -1222,7 +1222,7 @@ fn test_alt_screen_select_with_sgr_mouse() {
     })
 }
 
-// Regression test for WAR-3433 on find bar selection crash.
+// Regression test on find bar selection crash.
 #[test]
 fn test_find_bar_select() {
     App::test((), |mut app| async move {
@@ -2630,7 +2630,7 @@ fn test_banner_for_incompatible_plugins() {
     })
 }
 
-/// Regression test for #9011: the slow-bootstrap banner used to persist
+/// Regression test: the slow-bootstrap banner used to persist
 /// indefinitely when shell integration never sent the bootstrap signal
 /// (e.g. the user's shell `exec`s into `expect` before Warp's integration
 /// runs). The auto-dismiss timer scheduled when the banner opens must
@@ -2663,7 +2663,7 @@ fn test_slow_bootstrap_banner_auto_dismisses() {
     })
 }
 
-/// Regression test for #9011: when the banner is dismissed by another path
+/// Regression test: when the banner is dismissed by another path
 /// (manual user dismissal or a successful bootstrap event), any pending
 /// auto-dismiss timer should be aborted so it can't fire after the fact.
 #[test]
@@ -3271,14 +3271,14 @@ fn test_link_at_range_trims_zero_width_spaces() {
         let terminal = add_window_with_terminal(&mut app, None);
 
         // NOTE: this has two zero-width spaces, one after the '(', and one before the ')'
-        let input_url = "(\u{200b}https://warp.dev\u{200b})";
+        let input_url = "(\u{200b}https://example.com\u{200b})";
         // NOTE: the final character in this string is a zero-width space
-        let non_escaped_url = "https://warp.dev\u{200b}";
-        let escaped_url = "https://warp.dev";
+        let non_escaped_url = "https://example.com\u{200b}";
+        let escaped_url = "https://example.com";
 
         terminal.update(&mut app, |view, _ctx| {
             view.model.lock().simulate_block(
-                r"printf '(%bhttps://warp.dev%b)\n' '\U200b' '\U200b'",
+                r"printf '(%bhttps://example.com%b)\n' '\U200b' '\U200b'",
                 input_url,
             );
         });
@@ -3461,7 +3461,7 @@ fn open_cli_agent_rich_input_for_agent_with_window_id(
 }
 
 /// Verifies that Ctrl-G closes CLI agent rich input when dispatched from the
-/// focused editor context. This is a regression test for #9286 where the
+/// focused editor context. This is a regression test where the
 /// keybinding only matched the terminal context, not the embedded editor.
 #[test]
 fn ctrl_g_closes_cli_agent_rich_input_when_editor_is_focused() {
@@ -3504,7 +3504,7 @@ fn ctrl_g_closes_cli_agent_rich_input_when_editor_is_focused() {
 
 /// Verifies that Ctrl-G closes CLI agent rich input when dispatched from the
 /// terminal context alone (no editor in the responder chain). Regression test
-/// for #9916 where the keybinding only opened rich input but did not close it
+/// where the keybinding only opened rich input but did not close it
 /// in scenarios where focus was outside the embedded editor and the active
 /// block had transitioned out of `LongRunningCommand` — for example, when the
 /// CLI agent has paused waiting for user input.
@@ -3549,7 +3549,7 @@ fn ctrl_g_closes_cli_agent_rich_input_from_terminal_context() {
 }
 
 /// Verifies that Ctrl-G is a true toggle: opens then closes rich input from
-/// the terminal context. Regression test for #9916.
+/// the terminal context. Regression test.
 #[test]
 fn ctrl_g_toggles_cli_agent_rich_input_from_terminal_context() {
     App::test((), |mut app| async move {
@@ -4261,7 +4261,7 @@ fn status_in_progress_auto_opens_rich_input_after_blocked() {
     })
 }
 
-// Regression test for https://github.com/warpdotdev/warp/issues/9059.
+// Regression test:
 // Codex's listener doesn't emit Blocked-state events (it only forwards opaque
 // OSC 9 notifications as Stop), so auto-toggling rich input would trap arrow
 // keys when Codex shows interactive option menus. Auto-toggle must not fire
@@ -4611,7 +4611,7 @@ fn close_cli_agent_rich_input_with_empty_buffer_stores_no_draft() {
     })
 }
 
-/// Regression test for the async-find branch of #11212.
+/// Regression test for the async-find branch.
 ///
 /// Closing the find bar must clear stale rich content block highlights without dropping
 /// the saved query options on the async-find path. `open_find_bar` reads

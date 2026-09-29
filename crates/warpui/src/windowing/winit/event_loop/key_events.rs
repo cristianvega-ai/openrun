@@ -104,7 +104,7 @@ pub fn convert_keyboard_input_event(
         // the physical key to a non-ASCII character even when Ctrl/Cmd is held. That makes
         // bindings like `ctrl-c` / `ctrl-v` fail to match. Fall back to the US-QWERTY
         // position so chord shortcuts work regardless of the active layout — same approach
-        // used by VS Code, JetBrains, and Chromium. Issue #9036.
+        // used by VS Code, JetBrains, and Chromium.
         //
         // Right-Alt is excluded because Windows reports AltGr as Ctrl+Alt; without this
         // guard, AltGr-produced characters (e.g. `€` on a German layout) would be rewritten

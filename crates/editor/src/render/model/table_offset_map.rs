@@ -282,7 +282,7 @@ impl TableOffsetMap {
 // cell/row boundaries into the `SumTree` with new `BufferText` marker types so that
 // per-cell offsets can be derived by seeking to boundaries instead of re-parsing the
 // whole table on every edit. The current embedded-text-plus-cached-parse model is
-// sufficient for read-only tables; see PR #24326 discussion for context.
+// sufficient for read-only tables.
 impl TableCellOffsetMap {
     /// Build a cell offset map from the raw cell `source` text and the parsed `inline`
     /// fragments produced by the Markdown parser.

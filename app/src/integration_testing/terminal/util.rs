@@ -27,10 +27,10 @@ pub fn current_shell_starter_and_version() -> (DirectShellStarter, String) {
         ShellStarterSource::Override(starter) => match starter {
             ShellStarter::Direct(direct_shell_starter) => direct_shell_starter,
             ShellStarter::Wsl(_) => {
-                // TODO(CORE-2302): Support integration tests on Windows (including WSL).
+                // TODO: Support integration tests on Windows (including WSL).
                 todo!("We don't yet support integration tests for WSL shells")
             }
-            // TODO(CORE-2302): Support integration tests on Windows (including WSL).
+            // TODO: Support integration tests on Windows (including WSL).
             ShellStarter::MSYS2(_) => {
                 todo!("We don't yet support integration tests for MSYS2")
             }

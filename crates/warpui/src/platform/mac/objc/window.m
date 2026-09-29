@@ -487,7 +487,7 @@ void init_warp_nswindow(NSWindow<WarpWindowProtocol> *window, bool testMode, boo
         // This is inconsistent with the Cocoa event architecture documentation
         // (https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/EventArchitecture/EventArchitecture.html),
         // but it's unclear how or why the events get redirected.
-        // This breaks drag-and-drop for panes and tabs (see CLD-2581), so we work around it with
+        // This breaks drag-and-drop for panes and tabs, so we work around it with
         // custom dispatching.
         case NSEventTypeLeftMouseUp:
             if (@available(macOS 27, *)) {
@@ -547,7 +547,7 @@ void init_warp_nswindow(NSWindow<WarpWindowProtocol> *window, bool testMode, boo
         // NSEventModifierFlagFunction, so AppKit delivers them here before keyDown:. If we call
         // keyDownImpl and Rust suppresses the keystroke (composing mode), we return NO, and AppKit
         // proceeds to call keyDown: — running interpretKeyEvents a second time for the same event.
-        // See #9709.
+        //
         if ([(WarpHostView *)self.contentView hasMarkedText]) {
             return [super performKeyEquivalent:event];
         }

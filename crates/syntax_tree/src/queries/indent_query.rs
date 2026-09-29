@@ -120,7 +120,7 @@ fn find_indent_query_range(
             // `Tree`'s root node which always spans all valid points. We actually want the leaf
             // node that is spans the `tree_sitter::Point` one column to the left because we need to
             // start summing indentation levels from there.
-            // TODO(INT-614): Remove this special case.
+            // TODO: Remove this special case.
             if node == tree.root_node() {
                 let new_ts_point = arborium::tree_sitter::Point {
                     row: tree_sitter_point.row,

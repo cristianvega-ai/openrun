@@ -1039,7 +1039,7 @@ mod group_roots_by_common_ancestor_tests {
         );
     }
 }
-/// TODO(CORE-3626): write an equivalent test with Windows paths.
+/// TODO: write an equivalent test with Windows paths.
 #[cfg(not(windows))]
 #[test]
 fn test_resolve_command() {

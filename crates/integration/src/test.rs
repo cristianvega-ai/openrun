@@ -177,7 +177,7 @@ pub use workflows::*;
 pub use workspace::*;
 
 use crate::builder::cargo_target_tmpdir;
-use crate::util::{ShellRcType, skip_if_powershell_core_2303};
+use crate::util::{ShellRcType, skip_if_powershell};
 use crate::{Builder, user_defaults};
 
 const ADD_NEXT_OCCURRENCE_KEYBINDING: &str = "ctrl-g";
@@ -393,7 +393,6 @@ pub fn test_completions_with_autocd() -> Builder {
                 ShellType::Bash => {
                     version_compare::compare_to(version, "4", Cmp::Ge).unwrap_or(false)
                 }
-                // TODO(PLAT-751)
                 ShellType::PowerShell => false,
             }
         })
@@ -592,7 +591,7 @@ pub fn test_suggestions_menu_positioning() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_click_on_prompt_to_focus_input() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -791,7 +790,7 @@ pub fn test_clear() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_waterfall_input_alt_grid() -> Builder {
     let mut builder = new_builder()
         .with_user_defaults(HashMap::from([(
@@ -827,7 +826,7 @@ pub fn test_waterfall_input_alt_grid() -> Builder {
     builder
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_waterfall_input() -> Builder {
     new_builder()
         .with_user_defaults(HashMap::from([
@@ -1021,7 +1020,7 @@ pub fn test_waterfall_input_text_selection() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_waterfall_input_scrolling() -> Builder {
     let mut builder = new_builder()
         .with_user_defaults(HashMap::from([
@@ -1266,7 +1265,7 @@ pub fn test_waterfall_input_after_command_execution() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_text_input_on_block_list() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -1354,7 +1353,7 @@ pub fn test_text_input_on_block_list() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_text_input_on_block_list_while_composing() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -1579,7 +1578,7 @@ pub fn test_undo_redo() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_open_context_menu_and_execute_command() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -1776,7 +1775,7 @@ pub fn test_block_metadata_received() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_scroll_to_hidden_block_and_open_context_menu_with_keybinding() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -2234,8 +2233,8 @@ pub fn test_shell_reinitializing() -> Builder {
 /// Verifies that ctrl-c correctly terminates long-running commands.
 pub fn test_ctrl_c() -> Builder {
     new_builder()
-        // TODO(CORE-2734): Unknown failure for Powershell
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Unknown failure for Powershell
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             TestStep::new("Run read")
@@ -2281,7 +2280,7 @@ pub fn test_hover_over_menu() -> Builder {
     }
 
     new_builder()
-        // TODO(REV-569): Fish flaking on linux
+        // TODO: Fish flaking on linux
         .set_should_run_test(|| {
             let (starter, _) = current_shell_starter_and_version();
             !matches!(starter.shell_type(), ShellType::Fish)
@@ -2678,7 +2677,7 @@ pub fn test_case_sensitive_find() -> Builder {
         )
 }
 
-/// Regression test for WAR-4240
+/// Regression test.
 pub fn test_find_bar_autoselects_text() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -3034,8 +3033,8 @@ pub fn test_block_based_snackbar_appears_for_running_command_waterfall_mode() ->
 /// `git log`) is running when input waterfall mode is enabled.
 pub fn test_block_based_snackbar_not_visible_pager_command_waterfall_mode() -> Builder {
     new_builder()
-        // TODO(CORE-2857) There is some flakiness with long-running commands exiting.
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: There is some flakiness with long-running commands exiting.
+        .set_should_run_test(skip_if_powershell)
         .with_user_defaults(user_defaults::input_mode(InputMode::Waterfall))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
@@ -3109,8 +3108,8 @@ pub fn test_block_based_snackbar_small_window() -> Builder {
 pub fn test_multi_block_selections() -> Builder {
     // Check that multi block selections work as expected
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell (Linux)
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_echo(0))
         .with_step(execute_echo(0))
@@ -3406,7 +3405,7 @@ precmd_functions+=(set_title)
 /// the running command updates the block's current working directory mid-command
 /// without waiting for the next prompt. This lets external tools that change
 /// directory (for example `wt switch` from worktrunk) keep Warp's per-block CWD
-/// in sync with the shell. See issue #9125.
+/// in sync with the shell.
 pub fn test_osc7_updates_current_working_directory() -> Builder {
     new_builder()
         .set_should_run_test(|| {
@@ -3550,8 +3549,8 @@ pub fn test_executable_completions() -> Builder {
     new_builder()
         .set_should_run_test(|| {
             let (starter, _version) = current_shell_starter_and_version();
-            // TODO(CORE-2734): Unknown failure for Powershell
-            !matches!(starter.shell_type(), ShellType::Fish) && skip_if_powershell_core_2303()
+            // TODO: Unknown failure for Powershell
+            !matches!(starter.shell_type(), ShellType::Fish) && skip_if_powershell()
         })
         .with_setup(|utils| {
             let dir = utils.test_dir();
@@ -3606,8 +3605,8 @@ pub fn test_function_completions() -> Builder {
     new_builder()
         .set_should_run_test(|| {
             let (starter, _version) = current_shell_starter_and_version();
-            // TODO(CORE-2734): Unknown failure for Powershell
-            !matches!(starter.shell_type(), ShellType::Fish) && skip_if_powershell_core_2303()
+            // TODO: Unknown failure for Powershell
+            !matches!(starter.shell_type(), ShellType::Fish) && skip_if_powershell()
         })
         .with_setup(|utils| {
             let dir = utils.test_dir();
@@ -3792,8 +3791,8 @@ pub fn test_open_new_tab_with_specific_shell_from_new_session_menu() -> Builder 
 
 pub fn test_command_xray_hover() -> Builder {
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell (Linux)
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Type in command")
@@ -3886,7 +3885,7 @@ pub fn test_command_xray_hover() -> Builder {
         )
 }
 
-/// Regression test for WAR-4951
+/// Regression test.
 pub fn test_command_xray_for_partial_command() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -3949,7 +3948,7 @@ pub fn test_command_xray_for_partial_command() -> Builder {
         )
 }
 
-/// Regression test for WAR-4288
+/// Regression test.
 pub fn test_ctrl_r_multi_cursor() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -3974,7 +3973,6 @@ pub fn test_ctrl_r_multi_cursor() -> Builder {
 }
 
 /// This test ensures that the HISTCONTROL env var is not clobbered by our bootstrap process for bash.
-/// See https://linear.app/warpdotdev/issue/WAR-2592 for more details
 pub fn test_histcontrol_env_var() -> Builder {
     let histcontrol_val = "ignorespace";
     new_builder()
@@ -4502,8 +4500,8 @@ pub fn test_create_session_with_new_tab_while_bootstrapping() -> Builder {
     // directory.
     let test_dir = PathBuf::from(cargo_target_tmpdir::get());
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell (Linux)
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
             0,
@@ -5116,8 +5114,8 @@ pub fn test_completions_as_you_type_execute_on_enter() -> Builder {
 
 pub fn test_alias_expansion_has_limit() -> Builder {
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell (Linux)
+        .set_should_run_test(skip_if_powershell)
         .with_user_defaults(HashMap::from([(
             NativeShellCompletionsEnabled::storage_key().to_string(),
             false.to_string(),
@@ -5165,8 +5163,8 @@ pub fn test_alias_expansion_has_limit() -> Builder {
 
 pub fn test_command_corrections() -> Builder {
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell (Linux)
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
             0,
@@ -5203,8 +5201,8 @@ pub fn test_start_shell_in_deleted_directory() -> Builder {
     let initial_dir =
         PathBuf::from(cargo_target_tmpdir::get()).join("test_start_shell_in_deleted_directory");
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell (Linux)
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         // Start the test in a fresh directory within the test temporary files
         // directory, to make the test more hermetic.
@@ -5458,8 +5456,8 @@ pub fn test_git_prompt() -> Builder {
     // here because that would put us in the warp repo. We need to
     // be in a place in the filesystem that's not already a git repo.
     new_builder()
-        // TODO(CORE-2734): Unknown failure for Powershell
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Unknown failure for Powershell
+        .set_should_run_test(skip_if_powershell)
         .use_tmp_filesystem_for_test_root_directory()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
@@ -5555,8 +5553,8 @@ pub fn test_terminal_announces_capabilities_to_shell() -> Builder {
 
 pub fn test_find_query_not_evaluated_on_terminal_mode_change() -> Builder {
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
             0,
@@ -5664,8 +5662,7 @@ pub fn test_custom_open_completions_menu_binding() -> Builder {
         )
 }
 
-/// This is a regression test for:
-/// https://linear.app/warpdotdev/issue/WAR-6095/panic-internal-error-entered-unreachable-code-handled-at-model-layer
+/// This is a regression test for a panic when the prompt has color overrides.
 pub fn test_color_overrides_in_prompt_dont_crash() -> Builder {
     new_builder()
         .set_should_run_test(|| {
@@ -5723,8 +5720,8 @@ pub fn test_copy_prompt_from_block_honor_ps1_disabled() -> Builder {
 pub fn test_copy_prompt_from_block_honor_ps1_enabled() -> Builder {
     let prompt_text = "this is my custom prompt";
     new_builder()
-        // TODO(CORE-2732): Flakey on linux
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on linux
+        .set_should_run_test(skip_if_powershell)
         .with_user_defaults(HashMap::from([(
             HonorPS1::storage_key().to_owned(),
             true.to_string(),
@@ -5820,8 +5817,8 @@ pub fn test_copy_block_command_and_output_honor_ps1_enabled() -> Builder {
     let prompt_text = "this is my custom prompt";
     let command = "echo WARP_PS1_COPY_E2E_OUTPUT";
     new_builder()
-        // TODO(CORE-2732): Flakey on linux
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on linux
+        .set_should_run_test(skip_if_powershell)
         .with_user_defaults(HashMap::from([(
             HonorPS1::storage_key().to_owned(),
             true.to_string(),
@@ -6251,8 +6248,8 @@ pub fn test_block_bulk_deletion_using_escape_codes() -> Builder {
 /// are only sent if the terminal is the focused terminal.
 pub fn test_escape_sequences_sent_to_focused_terminal() -> Builder {
     new_builder()
-        // TODO(CORE-2857) There is some flakiness with long-running commands exiting.
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: There is some flakiness with long-running commands exiting.
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(TestStep::new("Create a new session").with_keystrokes(&[cmd_or_ctrl_shift("d")]))
         .with_step(
@@ -6481,7 +6478,7 @@ pub fn test_alt_screen_context_menu_without_sgr_without_mouse_reporting() -> Bui
     builder
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_pane_group_state_single_pane() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -6518,7 +6515,7 @@ pub fn test_pane_group_state_single_pane() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_pane_group_state_multi_pane() -> Builder {
     new_builder()
         .with_step(

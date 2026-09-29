@@ -139,7 +139,7 @@ pub fn base_config_dir() -> PathBuf {
 ///
 /// This is the appropriate home for files like our sqlite database, which
 /// contains durable but non-critical and non-portable data like what windows
-/// the user had open and cached state of known Warp Drive objects.
+/// the user had open.
 pub fn state_dir() -> PathBuf {
     let Some(project_dirs) = project_dirs() else {
         return PathBuf::new();
@@ -165,7 +165,7 @@ pub fn secure_state_dir() -> Option<PathBuf> {
 
     #[cfg(target_os = "macos")]
     if let Some(app_group_root) = app_group_container_path() {
-        // The macOS project_path is the bundle ID (i.e. `dev.warp.Warp-Stable`).
+        // The macOS project_path is the bundle ID (i.e. `dev.warp.WarpOss`).
         let project_dirs = project_dirs()?;
         return Some(
             app_group_root

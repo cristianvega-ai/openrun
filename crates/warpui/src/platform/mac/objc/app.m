@@ -286,8 +286,8 @@ static BOOL isSystemInitiatedTermination(void) {
     }
 
     if (!forceTermination) {
-        // Make sure the rust app doesn't have any reasons to interrupt quit, e.g. needs to relaunch
-        // for autoupdate, but launching the new process failed.
+        // Make sure the rust app doesn't have any reasons to interrupt quit, e.g. a relaunch was requested
+        // but launching the new process failed.
         okToTerminate = warp_app_should_terminate_app(application, systemInitiated);
     }
 
@@ -297,7 +297,7 @@ static BOOL isSystemInitiatedTermination(void) {
             // `NSTerminateNow` here (including the hide-then-reterminate dance
             // below, which returns `NSTerminateCancel`) makes macOS treat Warp
             // as blocking the logout/shutdown, which can abort a scheduled OS
-            // update and leave the app in a stuck-looking state (#12441).
+            // update and leave the app in a stuck-looking state.
             return NSTerminateNow;
         }
         // We want to hide the application before we start the teardown

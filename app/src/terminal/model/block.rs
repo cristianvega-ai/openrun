@@ -68,8 +68,6 @@ pub const LONG_RUNNING_BOTTOM_PADDING_LINES: f32 = 0.2;
 /// by SIGPIPE (error code 141) to have failed. We also don't consider the exit code for any
 /// commands that didn't start execution (i.e. `preexec` was never called), as the exit code is
 /// only for the last point of execution.
-/// Note: we should keep this in sync with the command-corrections list:
-/// https://github.com/warpdotdev/command-corrections/blob/main/src/lib.rs#L109
 pub(super) fn has_block_failed(exit_code: ExitCode, block_state: BlockState) -> bool {
     block_state == BlockState::DoneWithExecution && !exit_code.was_successful()
 }
@@ -909,7 +907,7 @@ impl Block {
         self.header_grid.start_command_grid();
         self.header_grid.finish_command_grid();
 
-        // TODO(CORE-2826): We disable reset grid checks for background blocks.
+        // TODO: We disable reset grid checks for background blocks.
         self.disable_reset_grid_checks();
         self.output_grid.start();
         self.state = BlockState::Background;
@@ -1998,7 +1996,7 @@ impl Block {
                         ),
                     }
                 })
-                // TODO(CORE-1663): Separating the rprompt with a newline is not correct product-wise. Ideally, the
+                // TODO: Separating the rprompt with a newline is not correct product-wise. Ideally, the
                 // rprompt should be offset the right number of "empty spaces", on the same line. For this, we'd need to
                 // combine the rprompt into the combined grid as well (a much larger refactor).
                 .filter(|content| !content.is_empty()),
@@ -2538,7 +2536,7 @@ impl Block {
         // This condition is a hack to fix a bug with shells that don't support bracketed paste,
         // e.g. legacy Bash versions, 4.4 or earlier.
         // https://lists.gnu.org/archive/html/info-gnu/2016-09/msg00012.html
-        // The bug happens when multi-line commands are submitted, see CORE-1698. Without bracketed
+        // The bug happens when multi-line commands are submitted. Without bracketed
         // paste, we get multiple blocks per [`crate::terminal::input::Event::ExecuteCommand`]. We
         // generally assume the code path on ExecuteCommand is responsible for starting the active
         // block. So, `self.started()` should always be true by this point. However, this assumption

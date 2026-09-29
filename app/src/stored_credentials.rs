@@ -4,8 +4,7 @@ use warp_core::user_preferences::GetUserPreferences as _;
 use warpui::AppContext;
 use warpui_extras::secure_storage::{self, AppContextExt as _};
 
-/// Secure-storage key under which the Warp account user and its Firebase refresh token were
-/// stored.
+/// Secure-storage key under which the credentials of the removed account system were stored.
 const ACCOUNT_CREDENTIALS_KEY: &str = "User";
 
 /// Private-preferences key under which earlier versions stored a random anonymous id.

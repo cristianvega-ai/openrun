@@ -47,7 +47,7 @@ fn test_list_entries_follows_symlinks_and_succeeds() {
                     .expect("guest listing should succeed against a real local shell");
 
                 let mut entries = HashSet::<EngineDirEntry>::from_iter(entries);
-                // TODO(CORE-2000): The ls script we use to list entries adds a spurious "."
+                // TODO: The ls script we use to list entries adds a spurious "."
                 // directory when run in the VirtualFS. As a temporary workaround, we remove
                 // this entry in the test, matching the equivalent remote-session tests.
                 entries.remove(&EngineDirEntry::test_dir("."));

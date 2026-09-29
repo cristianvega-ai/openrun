@@ -831,7 +831,7 @@ impl ImageCache {
     /// cache key inside `image()` (i.e., after any `max_dimension`
     /// adjustment), not only the originally requested bounds.
     // Called by the debounce eviction pass added in the main changeset.
-    /// TODO(APP-3877): remove `#[allow(dead_code)]` once the debounce eviction pass wires this up.
+    /// TODO: remove `#[allow(dead_code)]` once the debounce eviction pass wires this up.
     #[allow(dead_code)]
     fn evict_size(
         &self,

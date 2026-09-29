@@ -315,8 +315,7 @@ impl AltScreenElement {
         if !is_synthetic && self.model.lock().is_term_mode_set(TermMode::MOUSE_MOTION) {
             // Note: it is counter-intuitive to use "pressed" as a state here for mouse hover motions, however,
             // we're largely just following standards from Alacritty/other terminals and the original terminal specs.
-            // We intend to combine the mouse button and mouse action enums to avoid "weird" or "impossible" combinations,
-            // see Linear issue at https://linear.app/warpdotdev/issue/CORE-1039/combine-the-mousebutton-and-mouseaction-enums-to-avoid-impossible.
+            // We intend to combine the mouse button and mouse action enums to avoid "weird" or "impossible" combinations.
             let mouse_state =
                 MouseState::new(MouseButton::Move, MouseAction::Pressed, Default::default());
             ctx.dispatch_typed_action(TerminalAction::AltMouseAction(mouse_state.set_point(point)));

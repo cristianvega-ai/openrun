@@ -308,7 +308,7 @@ async fn suggestions_for_last_argument(
                 // complete on the option's arguments only if the option is variadic.
                 // Otherwise, the option's arguments are already satisfied and we
                 // should complete the positional.
-                // TODO(CORE-646): If the option is variadic, the user could be trying
+                // TODO: If the option is variadic, the user could be trying
                 // to complete the option's arguments or the positional argument, so
                 // we should show suggestions for both.
                 //
@@ -594,8 +594,7 @@ async fn generate_suggestions_for_argument(
         };
     }
 
-    // These are processed in the order that argument.argument_types is defined
-    // (https://github.com/warpdotdev/command-signatures/blob/5e89fb22995cd5ca9f5609d75193018a2a194c59/completion-metadata/src/fig_types.rs#L288).
+    // These are processed in the order that argument.argument_types is defined.
     // That's why we can just flat map here without thinking about order.
     // Even if there are multiple generators, they will appear one after the other and we will
     // simply concatenate their results (extracting the non-default priorities).

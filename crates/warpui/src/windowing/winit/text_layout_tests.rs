@@ -347,7 +347,7 @@ fn test_layout_text_first_line_indent_large() -> Result<()> {
     Ok(())
 }
 
-// TODO(PLAT-779): check all line bounds once bidirectional wrapping is fixed in cosmic-text.
+// TODO: check all line bounds once bidirectional wrapping is fixed in cosmic-text.
 // See https://github.com/pop-os/cosmic-text/issues/252.
 #[test]
 fn test_layout_text_first_line_indent_small_bidirectional() -> Result<()> {
@@ -426,7 +426,7 @@ fn test_layout_text_first_line_indent_small_bidirectional() -> Result<()> {
     Ok(())
 }
 
-// TODO(PLAT-779): check all line bounds once bidirectional wrapping is fixed in cosmic-text.
+// TODO: check all line bounds once bidirectional wrapping is fixed in cosmic-text.
 // See https://github.com/pop-os/cosmic-text/issues/252.
 #[test]
 fn test_layout_text_first_line_indent_medium_bidirectional() -> Result<()> {
@@ -489,7 +489,7 @@ fn test_layout_text_first_line_indent_medium_bidirectional() -> Result<()> {
     Ok(())
 }
 
-// TODO(PLAT-779): check all line bounds once bidirectional wrapping is fixed in cosmic-text.
+// TODO: check all line bounds once bidirectional wrapping is fixed in cosmic-text.
 // See https://github.com/pop-os/cosmic-text/issues/252.
 #[test]
 fn test_layout_text_first_line_indent_large_bidirectional() -> Result<()> {

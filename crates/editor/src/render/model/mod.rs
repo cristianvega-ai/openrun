@@ -2194,7 +2194,7 @@ impl RenderState {
         self.viewport
             .set_size(size_info.viewport_size, self.width(), self.height());
 
-        // TODO(CLD-85): re-layout according to the high-level design (async, debounced, avoid
+        // TODO: re-layout according to the high-level design (async, debounced, avoid
         // where possible).
         // In order to do this, we need to:
         // - Extract debouncing logic from the main app crate
@@ -2724,7 +2724,7 @@ impl RenderState {
             log::trace!("Initial blocks:\n{}", content.describe());
             let mut cursor = content.cursor::<CharOffset, CharOffset>();
 
-            // TODO(CLD-558): Ideally, we'd use the content-level offset as is.
+            // TODO: Ideally, we'd use the content-level offset as is.
             let effective_start = pending_edit
                 .old_offset
                 .start
@@ -2753,7 +2753,7 @@ impl RenderState {
                 new_tree.push(item);
             }
 
-            // TODO(CLD-558): Ideally, we'd use the content-level offset as is.
+            // TODO: Ideally, we'd use the content-level offset as is.
             let effective_end = pending_edit
                 .old_offset
                 .end
@@ -3230,7 +3230,7 @@ impl RenderState {
 
     /// Saves the text selection bounding box into the position cache.
     pub(super) fn record_text_selection(&self, ctx: &mut RenderContext) {
-        // Todo (kc CLD-1018): Save all positions, and not just one.
+        // TODO: Save all positions, and not just one.
         let selection = self.selections().first().clone();
 
         let Some(start) = self.character_bounds(selection.start()) else {
@@ -3242,7 +3242,7 @@ impl RenderState {
         let origin = start.origin().min(end.origin());
         let lower_right = start.lower_right().max(end.lower_right());
 
-        // Bound the origin of the text selection cached position by the viewport (CLD-1220).
+        // Bound the origin of the text selection cached position by the viewport.
         let mut screen_origin = ctx.content_to_screen(origin);
         let mut screen_lower_right = ctx.content_to_screen(lower_right);
 

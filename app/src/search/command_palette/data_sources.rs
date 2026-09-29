@@ -177,7 +177,7 @@ impl DataSourceStore {
                 .as_ref(app)
                 .query_result(*pane_view_locator, app),
             ItemSummary::LaunchConfiguration => {
-                // TODO(CLD-205): Launch configurations are not supported in the recent section of the
+                // TODO: Launch configurations are not supported in the recent section of the
                 // zero state yet.
                 None
             }

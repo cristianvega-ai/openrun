@@ -179,7 +179,7 @@ pub(super) fn get_shell_environment_variables(options: &PtyOptions) -> Vec<u16> 
             );
         }
         ShellStarter::Wsl(_) => {
-            // TODO(CORE-3107): Hook this up to a new setting "Working directory for new sessions" setting for WSL.
+            // TODO: Hook this up to a new setting "Working directory for new sessions" setting for WSL.
             let mut wslenv = wsl_env_allowlist(options.start_dir.is_some());
             if let Some(user_val) = env.get(&map_key(WSLENV.into())) {
                 wslenv.push(":");

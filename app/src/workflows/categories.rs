@@ -462,7 +462,7 @@ impl CategoriesView {
     fn load_project_workflows(&mut self, path: PathBuf, ctx: &mut ViewContext<Self>) {
         let _ = ctx.spawn(
             async move {
-                // TODO(CORE-1372): This should probably be delegating to the
+                // TODO: This should probably be delegating to the
                 // `LocalWorkflows` singleton model to load and cache the
                 // project workflows at the given path.
                 super::local_workflows::load_project_workflows(&path)

@@ -108,6 +108,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Telemetry framework](#telemetry-framework) — deleted the event enum, registration macros, context provider and event store, plus the last telemetry-only plumbing (`workflow_selection_source`, `anonymous_id`, `TelemetryConfig`, `--print-telemetry-events`)
 - [Dead SQLite tables and columns](#dead-sqlite-tables-and-columns) — one migration drops the AI, MCP, Warp Drive, team, account and experiment tables, the pane kinds and columns that went with them, and the pane-tree rows of removed pane kinds
 - [Server configuration and channel collapse](#server-configuration-and-channel-collapse) — `Channel` is now `{Oss, Integration}`; deleted the server, telemetry, autoupdate and crash-reporting channel config, the `WARP_*` server-URL overrides, the Warp headers and IAP logic in `http_client`, and the dogfood/preview/release flag lists
+- [Comments, provenance references and test fixtures](#comments-provenance-references-and-test-fixtures) — removed ticket, issue and PR references, `warpdotdev` links and mentions of removed features from kept comments, replaced `warp.dev` sample URLs in tests with `example.com`, and scrubbed the SQLite fixtures
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2887,3 +2888,29 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `LocalShellState::get_interactive_path_env_var` still has callers (code review and workspace metadata), so it stays.
 - Left for FLAGS-1: the now-unreferenced `FeatureFlag` variants and their Cargo features.
 - Left for DOCS-1: comments outside these files that mention dogfood or preview channels.
+- The integration sqlite fixtures under `crates/integration/tests/data/` are older than the migration and are migrated on startup by the tests that use them. SWP-14 later migrated and scrubbed them (see "Comments, provenance references and test fixtures"); `test_json_object.sqlite` keeps a few legacy cloud-object rows so it still exercises dropping populated tables.
+
+## Comments, provenance references and test fixtures
+**Why:** the fork must not point readers at Warp's private trackers, repositories or hosts, and comments, tests and fixtures must not describe features that are gone. Everything here is comments, docs, test data and one test-helper rename; no production logic changes.
+
+**Removed:**
+- Ticket and tracker references in kept comments, `TODO(...)` tags, test names, `#[ignore = "..."]` reasons and log prefixes: Linear ids (`CORE-`, `CLD-`, `APP-`, `WAR-`, `PLAT-`, `INT-`, `REV-`, `CODE-`, `GH-`), `linear.app/warpdotdev` links, `github.com/warpdotdev/...` issue and PR links, bare `#NNNN` issue and PR numbers, `warpdotdev/warp#NNNN`, `specs/...` citations and a Sentry issue id. About 450 lines in about 190 files. Where the removed reference carried the only explanation the comment was rewritten or dropped with its dangling lead-in ("see:", "as outlined in ...").
+- The same kind of references in the bootstrap shell scripts (`bash.sh`, `bash_body.sh`, `zsh_body.sh`, `pwsh.ps1`); the code is unchanged.
+- Comments that named removed features: Warp Drive, shared sessions, Agent Mode, Cloud Agent, autoupdate, the `warp-server` checkout in `.dockerignore`, the Firebase refresh token in `stored_credentials.rs`, the Linear follow-up step in the `promote-feature` skill and the Linear ticket ids in the `gui-settings-ui` skill.
+- The `warp-server/` line of `.dockerignore`.
+
+**Modified:**
+- Test data: `warp.dev` samples (`https://warp.dev`, `www.warp.dev`, `@warp.dev`, `app.warp.dev`) became `example.com`; `warpdotdev`, `warp-internal` and `warp-server` in fixtures became `example`, `example-repo` and `example-server` (about 25 test files). The secret-redaction Firebase domain fixture is now `example-app.firebaseapp.com`. The fixture rewrites did not change any assertion or offset.
+- `.agents/skills/logging-and-error-reporting/SKILL.md` used `UserAuthenticationError` from the deleted `warp_server_client` as its typed-error example; it now shows `ImmediateSaveError` (`app/src/code/mod.rs`).
+- `skip_if_powershell_core_2303` in `crates/integration/src/util.rs` is now `skip_if_powershell` (the name carried a ticket id).
+- `crates/integration/tests/INTEGRATION_TESTING.md`, `app/src/persistence/README.md` and `crates/languages/grammars/README.md` lost their Warp links and channel data directory names (`dev.warp.WarpOss` now).
+- SQLite fixtures in `crates/integration/tests/data/`: the eight fixtures that still held real Warp data (cloud notebooks and workflows, team and user rows, emails, internal repo names, Linear links) were run through the app's migrations with foreign keys on, then `VACUUM`ed so no deleted rows remain in free pages. `test_json_object.sqlite` is the exception: it is the legacy cloud-object fixture, so it stays at its old schema and keeps only the generic object rows, with all notebooks, workflows, folders, users and teams deleted. `deleted_cwd.sqlite` and `small_window.sqlite` had nothing to scrub and are unchanged.
+- `script/offline_audit.allowlist` lists the kept exceptions with their reasons: the `FIREBASE_AUTH_DOMAIN` redaction regex and its tests, the fake Google API key in the redaction tests, the `@firebase/auth` path fixture in the LSP tests, the pre-migration seed and `test_json_object.sqlite` (`firebase_uid` column), and the unchanged install paths (`/opt/warpdotdev`, `Software\Warp.dev`; MASTER decisions 13 and 17).
+
+**User-visible impact:** none.
+
+**Notes:**
+- `script/offline_audit --report` hosts findings went from 1,552 in 130 files to 73 in 35 files (after rebasing onto CFG-1). What is left belongs to other tasks: `authors` in 32 manifests and the `about.toml` comment (SWP-15), the top-level docs (SWP-16), `WARP_SERVER_ROOT_URL` in `warp_cli` and the `http_client` origin check (SRV-1), flag names and comments in `warp_features` (FLAGS-1) and `WARP_LOCAL_SKIP_METAL` (SWP-17).
+- Confirmed dead but not removed: the editor's remote-peer layer (`EditorView::{register_remote_peer, unregister_remote_peer, set_remote_peer_selection_data, apply_remote_operations}`, their model and buffer counterparts, `Peer`, `PeerSelectionData`, `registered_peers`) has no caller. Removing it cascades into the remote-selection drawing in `editor/view/element.rs` and the CRDT operation types that the buffer tests still exercise, so it is left for AI-33.
+- `app/src/search/action/data_source.rs::is_excluded_binding` excludes the deleted `workspace:search_drive` action; it is dead but removing it turns three `filter_map`s into `map`s, so it stays for AI-33. `flake.nix` still copies the deleted `specs/` directory into the vendored `warp-workflows` crate (SWP-16/packaging).
+- The `ui_tests::test_restore_snapshot_with_code_file` integration test is `#[ignore]`d upstream and fails with and without this change.

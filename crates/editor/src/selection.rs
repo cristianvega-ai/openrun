@@ -536,7 +536,7 @@ impl SelectionModel {
         clear_selections: bool,
         ctx: &mut ModelContext<Self>,
     ) {
-        // TODO(INT-266): Support multiselect with semantic selection.
+        // TODO: Support multiselect with semantic selection.
         let offsets = match &mode {
             SelectionMode::Character => SelectionOffsets {
                 head: offset,
@@ -874,7 +874,7 @@ impl SelectionModel {
         ctx: &impl ModelAsRef,
     ) -> NavigationResult {
         let render = self.render.as_ref(ctx);
-        // TODO(CLD-558): This shouldn't need the +/- 1
+        // TODO: This shouldn't need the +/- 1
         let point = render.offset_to_softwrap_point(start.saturating_sub(&1.into()));
 
         let next_point = match direction {
@@ -939,7 +939,7 @@ impl SelectionModel {
             return NavigationResult::for_offset(start.saturating_sub(&1.into()));
         }
 
-        // TODO(CLD-558): This shouldn't need the +/- 1
+        // TODO: This shouldn't need the +/- 1
         let start_point = render.offset_to_softwrap_point(start.saturating_sub(&1.into()));
         let end_offset = match direction {
             TextDirection::Backwards => {
@@ -970,7 +970,7 @@ impl SelectionModel {
                         _ => {
                             let next_row_start =
                                 SoftWrapPoint::new(start_point.row() + 1, Pixels::zero());
-                            // TODO(CLD-558): This should have a -1.
+                            // TODO: This should have a -1.
                             render.softwrap_point_to_offset(next_row_start)
                         }
                     }

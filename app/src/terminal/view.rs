@@ -2089,7 +2089,7 @@ impl TerminalView {
                 ]),
                 // Here, we use DismissalType::Temporary and DismissalType::Permanent variants
                 // as stand-ins for changing bindings vs. leaving them as-is.
-                // TODO(Linear PLAT-512): update Banner to support generic event type.
+                // TODO: update Banner to support generic event type.
                 vec![
                     BannerTextButton::new(
                         String::from("Yes, use Emacs-style bindings"),
@@ -4745,7 +4745,7 @@ impl TerminalView {
                 // box to respond to whether or not they want to update oh my zsh.
                 //
                 // Skipped while a tab or tab-group rename editor is focused. Taking focus
-                // would end the rename and lose user inputs (#14241).
+                // would end the rename and lose user inputs.
                 let inline_rename_editor_is_focused = WorkspaceRegistry::as_ref(ctx)
                     .get(self.window_id, ctx)
                     .is_some_and(|workspace| {
@@ -6110,7 +6110,6 @@ impl TerminalView {
         }
         session_metadata.set_git_branches(git_branches.iter().flatten().map(|s| s.as_str()));
 
-        // https://github.com/warpdotdev/command-corrections/blob/df7848d4fb3da7883623e959889a296a07d88053/src/rules/cd/mod.rs#L31-L36
         // We don't currently support dynamic rules over SSH, so we should not attempt to correct commands if
         // inside ssh session.
         let is_ssh_command = SshWarpifyCommand::matches(input).is_some();
@@ -6858,7 +6857,7 @@ impl TerminalView {
             return;
         }
 
-        // Prioritize selected text in the input over selected blocks (APP-4330):
+        // Prioritize selected text in the input over selected blocks:
         // it's possible to have both a block and input text selected at the same
         // time, and in that case the user almost always means to copy the input.
         let selected_input_text = self.input.read(ctx, |input, ctx| {
@@ -7677,7 +7676,7 @@ impl TerminalView {
                     // If the context menu is already open, we just want to close
                     // the context menu for the existing selections instead of changing
                     // the selections
-                    // TODO(INT-922): It doesn't look like this code is actually being reached. Is this behavior intended?
+                    // TODO: It doesn't look like this code is actually being reached. Is this behavior intended?
                     if self.is_context_menu_open() {
                         self.close_context_menu(ctx, true);
                         return;
@@ -7844,7 +7843,7 @@ impl TerminalView {
     ) {
         // If the input suggestions are showing, remove them and don't update block selection.
         // The mouse up event is excluded here as scrollbar and text selection in input suggestion
-        // could cause it to misfire (see WAR-274 and WAR-407).
+        // could cause it to misfire.
         if self.selected_blocks.is_empty()
             && self
                 .input
@@ -9055,7 +9054,6 @@ impl TerminalView {
     /// WARNING: this method takes a lock on the TerminalModel.
     /// Caller must ensure the model is not already locked!
     ///
-    /// TODO: https://linear.app/warpdotdev/issue/CORE-277
     pub fn redetermine_global_focus(&mut self, ctx: &mut ViewContext<Self>) {
         self.redetermine_global_focus_with_policy(SelectionFocusPolicy::HoldsFocus, ctx);
     }
@@ -13320,7 +13318,7 @@ impl View for TerminalView {
             // Ctrl+G toggle binding can close rich input regardless of which
             // descendant view currently holds focus, and even when the
             // active block has transitioned out of `LongRunningCommand`
-            // (e.g., the CLI agent has paused waiting for user input). See #9916.
+            // (e.g., the CLI agent has paused waiting for user input).
             if CLIAgentSessionsModel::as_ref(app).is_input_open(self.view_id) {
                 context.set.insert(flags::CLI_AGENT_RICH_INPUT_OPEN);
             }

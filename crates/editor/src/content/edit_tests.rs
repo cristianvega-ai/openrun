@@ -72,7 +72,7 @@ fn test_highlight_urls() {
             block_style: BufferBlockStyle::PlainText,
         },
         StyledBufferRun {
-            run: "https://warp.dev".to_string(),
+            run: "https://example.com".to_string(),
             text_styles: TextStylesWithMetadata::default(),
             block_style: BufferBlockStyle::PlainText,
         },
@@ -86,8 +86,8 @@ fn test_highlight_urls() {
                 link: "https://google.com".to_string()
             },
             ParsedUrl {
-                url_range: 23..39,
-                link: "https://warp.dev".to_string()
+                url_range: 23..42,
+                link: "https://example.com".to_string()
             }
         ]
     );
@@ -96,7 +96,7 @@ fn test_highlight_urls() {
 #[test]
 fn test_highlight_urls_unicode() {
     let test_runs = vec![StyledBufferRun {
-        run: "This (not https://example.com) is a 🔥 link about a 🇨🇦 🏡:\u{a0}https://warp.dev"
+        run: "This (not https://example.com) is a 🔥 link about a 🇨🇦 🏡:\u{a0}https://example.com"
             .to_string(),
         text_styles: Default::default(),
         block_style: BufferBlockStyle::PlainText,
@@ -109,8 +109,8 @@ fn test_highlight_urls_unicode() {
                 link: "https://example.com".to_string()
             },
             ParsedUrl {
-                url_range: 57..73,
-                link: "https://warp.dev".to_string()
+                url_range: 57..76,
+                link: "https://example.com".to_string()
             }
         ]
     )
@@ -140,13 +140,13 @@ fn test_links_not_auto_highlighted() {
     // prevent auto-linking other URLs.
     let runs = &[
         StyledBufferRun {
-            run: "first link is https://warp.dev ".to_string(),
+            run: "first link is https://example.com ".to_string(),
             text_styles: Default::default(),
             block_style: BufferBlockStyle::PlainText,
         },
         StyledBufferRun {
             run: "http://example.com".to_string(),
-            text_styles: TextStylesWithMetadata::default().link("https://warp.dev".to_string()),
+            text_styles: TextStylesWithMetadata::default().link("https://example.com".to_string()),
             block_style: BufferBlockStyle::PlainText,
         },
         StyledBufferRun {
@@ -160,11 +160,11 @@ fn test_links_not_auto_highlighted() {
         highlight_urls(runs),
         &[
             ParsedUrl {
-                url_range: 14..30,
-                link: "https://warp.dev".to_string()
+                url_range: 14..33,
+                link: "https://example.com".to_string()
             },
             ParsedUrl {
-                url_range: 60..78,
+                url_range: 63..81,
                 link: "https://google.com".to_string()
             }
         ]
@@ -186,7 +186,7 @@ fn test_highlight_url_before_link() {
             block_style: BufferBlockStyle::PlainText,
         },
         StyledBufferRun {
-            run: "https://warp.dev".to_string(),
+            run: "https://example.com".to_string(),
             text_styles: Default::default(),
             block_style: BufferBlockStyle::PlainText,
         },
@@ -200,8 +200,8 @@ fn test_highlight_url_before_link() {
                 link: "https://example.com".to_string()
             },
             ParsedUrl {
-                url_range: 28..44,
-                link: "https://warp.dev".to_string()
+                url_range: 28..47,
+                link: "https://example.com".to_string()
             }
         ]
     )
@@ -218,7 +218,7 @@ fn test_text_around_link_not_auto_highlighted() {
         },
         StyledBufferRun {
             run: "alink".to_string(),
-            text_styles: TextStylesWithMetadata::default().link("https://warp.dev".to_string()),
+            text_styles: TextStylesWithMetadata::default().link("https://example.com".to_string()),
             block_style: BufferBlockStyle::PlainText,
         },
         StyledBufferRun {
@@ -233,7 +233,7 @@ fn test_text_around_link_not_auto_highlighted() {
 
 #[test]
 fn test_layout_delta_never_takes_ownership_of_new_lines_with_multiple_owners() {
-    // Regression test for APP-4844: `EditDelta::new_lines` is wrapped in an `Arc` so that
+    // Regression test: `EditDelta::new_lines` is wrapped in an `Arc` so that
     // cloning a delta (e.g. to stash it in `DelayRendering::edits`, or because multiple editors
     // share the same underlying buffer) is O(1) instead of O(file size). `layout_delta` must not
     // depend on `new_lines` having a single owner to stay cheap: it takes `&self` and only ever
@@ -309,7 +309,7 @@ fn test_layout_delta_never_takes_ownership_of_new_lines_with_multiple_owners() {
 
 #[test]
 fn test_layout_partial_url() {
-    // Regression test for laying out a partially-styled autodetected URL (CLD-871).
+    // Regression test for laying out a partially-styled autodetected URL.
     App::test((), |app| async move {
         let runs = vec![
             StyledBufferRun {
@@ -1115,7 +1115,7 @@ fn test_table_inline_style_runs_preserve_markdown_cell_styles() {
             );
             let body_style = text_layout.paragraph_styles(&BufferBlockStyle::table(Vec::new()));
             let table = crate::content::text::table_from_internal_format_with_inline_markdown(
-                "Header\tValue\nText\t**Bold** *Italic* [Link](https://warp.dev) `code`\n",
+                "Header\tValue\nText\t**Bold** *Italic* [Link](https://example.com) `code`\n",
                 Vec::new(),
             );
 
@@ -1327,7 +1327,7 @@ fn identifiable_text_block(content_len: usize) -> StyledBufferBlock {
 
 #[test]
 fn test_layout_delta_chunk_boundary_preserves_order_hidden_collapsing_and_trailing_newline() {
-    // Regression test for APP-5392: bounding EditDelta::layout_delta's parallel fan-out into
+    // Regression test: bounding EditDelta::layout_delta's parallel fan-out into
     // chunks must not change its observable behavior. This delta spans multiple chunks (given
     // MAX_LAYOUT_TASKS_PER_PARALLEL_CHUNK), with a hidden run that straddles a chunk boundary.
     App::test((), |app| async move {
@@ -1499,7 +1499,7 @@ fn isolated_hidden_code_block(run_count: usize, content_len: usize) -> StyledBuf
 
 #[test]
 fn test_layout_delta_block_location_is_global_across_chunk_boundaries() {
-    // Regression test for APP-5392: BlockLocation must be computed from the delta's global
+    // Regression test: BlockLocation must be computed from the delta's global
     // index, not a chunk-local one. A hidden block's gutter-button count only depends on its
     // BlockLocation when it's genuinely Middle with a large enough hidden run (2 buttons) vs.
     // Start/End (always 1 button), so an isolated hidden block at a later chunk's first index
@@ -1596,7 +1596,7 @@ fn test_layout_delta_block_location_is_global_across_chunk_boundaries() {
 
 #[test]
 fn test_layout_delta_trailing_newline_carries_over_when_final_chunk_fully_fails() {
-    // Regression test for APP-5392: when every task in the final chunk fails, the
+    // Regression test: when every task in the final chunk fails, the
     // trailing-newline result must still come from the last *successful* task in an earlier
     // chunk, matching the old single-pass find_last() semantics over the whole (possibly
     // filtered) sequence, rather than resetting to the default because the last chunk
@@ -1675,7 +1675,7 @@ fn test_layout_delta_trailing_newline_carries_over_when_final_chunk_fully_fails(
 
 #[test]
 fn test_layout_temporary_blocks_preserves_order_across_chunk_boundary() {
-    // layout_temporary_blocks shares chunk_layout_tasks with EditDelta::layout_delta (APP-5392);
+    // layout_temporary_blocks shares chunk_layout_tasks with EditDelta::layout_delta;
     // verify a batch spanning multiple chunks still groups its blocks by destination line in
     // their original order.
     App::test((), |app| async move {

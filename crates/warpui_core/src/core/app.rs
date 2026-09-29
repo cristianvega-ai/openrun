@@ -930,7 +930,7 @@ impl AppContext {
     /// this method handles dispatching the right handler for the button clicked. The response is
     /// encoded as a 0-based index into the list of buttons on the modal, and the callback will be
     /// at the same index in the Vec of callbacks.
-    /// TODO(CORE-2323): Implement native Windows OS modal
+    /// TODO: Implement native Windows OS modal
     #[cfg_attr(target_os = "windows", allow(dead_code))]
     pub(crate) fn process_platform_modal_response(
         &mut self,

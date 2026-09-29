@@ -6,7 +6,7 @@ fn load_family(db: &mut FontDB, name: &str) -> FamilyId {
     db.insert_font_family(family).expect("family should insert")
 }
 
-// Regression test for #12923: a font resolves to its own FontId by CGFont identity, so two
+// Regression test: a font resolves to its own FontId by CGFont identity, so two
 // different fonts (which could share a PostScript name — a user-installed font vs. a bundled one)
 // never map to each other. A CGFontKey compares equal only for the same underlying font.
 #[test]

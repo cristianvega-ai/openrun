@@ -612,7 +612,7 @@ pub struct Workspace {
     show_tab_group_right_click_menu: Option<(TabGroupId, TabContextMenuAnchor)>,
     /// Open multi-tab selection menu (right-click on any tab in a multi-tab selection).
     show_tab_selection_right_click_menu: Option<(usize, TabContextMenuAnchor)>,
-    // TODO(CORE-2300): this used to be add_tab_dropdown_menu.
+    // TODO: this used to be add_tab_dropdown_menu.
     // Because we are rolling out the change behind a feature flag,
     // keep this comment here until the feature flag is removed.
     // Otherwise people might be confused as to why there is a right click
@@ -996,7 +996,7 @@ impl Workspace {
                     self.finish_tab_group_rename(ctx);
                 }
                 // Blur discards rather than commits. Focus can leave this editor without
-                // the user ever ending the rename — #14241 is one such case — and
+                // the user ever ending the rename, and
                 // committing then writes a half-typed fragment as the group's real,
                 // persisted name. Discarding loses nothing the user cannot retype, and
                 // Enter remains the way to confirm.
@@ -2584,7 +2584,7 @@ impl Workspace {
                 window_snapshot, ..
             } => {
                 if !should_default_open {
-                    // Stale "panel open" snapshot would leave a click-eating dismiss underlay (#9505).
+                    // Stale "panel open" snapshot would leave a click-eating dismiss underlay.
                     false
                 } else if *TabSettings::as_ref(ctx).show_vertical_tab_panel_in_restored_windows {
                     true
@@ -9440,7 +9440,7 @@ impl Workspace {
 
                 self.activate_tab(tab_index_to_focus, ctx);
 
-                // TODO(CODE-266): This should focus the correct pane in the tab,
+                // TODO: This should focus the correct pane in the tab,
                 // but for some reason application focus is not being moved to
                 // the correct pane.
                 if let Some(tab) = self.tabs.get_mut(tab_index_to_focus) {
@@ -13247,7 +13247,7 @@ impl Workspace {
             panels_view.add_child(Self::render_panel_separator(app));
         }
         // The outer workspace container in `render` already paints the terminal
-        // background fill, so don't paint it again here (see APP-4328).
+        // background fill, so don't paint it again here.
         panels_view = panels_view.with_child(Shrinkable::new(1.0, terminal_view).finish());
         prev_panel_added = true;
 
@@ -15533,7 +15533,7 @@ impl View for Workspace {
                 (true, NewSessionMenuAnchor::Pointer(_))
                 | (false, NewSessionMenuAnchor::AddTabButton(_))
                 | (false, NewSessionMenuAnchor::Pointer(_)) => {
-                    // TODO(CORE-2300): In the new version of the shell selector, this is not a
+                    // TODO: In the new version of the shell selector, this is not a
                     // context menu but a dropdown. Since it is quite wide, we need to reposition
                     // it so it does not render outside the bounds of the window.
                     let bounds = if FeatureFlag::ShellSelector.is_enabled() {
@@ -15603,7 +15603,7 @@ impl View for Workspace {
                 }
             }
 
-            // Action sidecar for actionable items (Terminal, Agent, Cloud Agent, tab configs).
+            // Action sidecar for actionable items (Terminal, tab configs).
             if let Some(sidecar_item) = &self.tab_config_action_sidecar_item {
                 let anchor_label = self.new_session_dropdown_menu.read(app, |menu, _| {
                     menu.hovered_index().and_then(|idx| {

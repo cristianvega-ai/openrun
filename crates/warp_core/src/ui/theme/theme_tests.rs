@@ -165,7 +165,7 @@ fn blend_coloru_test() {
     );
 }
 
-/// TODO(CORE-3626): write an equivalent test with Windows paths.
+/// TODO: write an equivalent test with Windows paths.
 #[cfg(not(windows))]
 #[test]
 fn test_deserialize_image() {

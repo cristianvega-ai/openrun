@@ -318,7 +318,7 @@ pub fn test_xray_describe_with_directories() {
     );
 }
 
-/// Regression test for linear issues WAR-4244 and WAR-4245
+/// Regression test.
 #[test]
 pub fn test_xray_describe_with_non_ascii_chars() {
     let registry = create_test_command_registry([git_signature()]);

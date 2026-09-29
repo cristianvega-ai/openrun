@@ -88,18 +88,3 @@ cargo clippy -p warp --all-targets --tests -- -D warnings
 ```
 
 If the promotion changes behavior beyond flag lists or configuration, run affected tests before Clippy. Format once after all other changes are complete. Do not rerun earlier checks after formatting or add a full presubmit unless explicitly required; CI owns broader platform and workspace coverage.
-
-### Create a follow-up Linear issue
-
-After the PR lands, create a Linear issue to remind the team to remove the flag. Use the Linear MCP tool:
-
-```
-save_issue(
-  title: "Remove FeatureFlag::YourFeature after stabilization",
-  team: <your team>,
-  assignee: "me",
-  description: "FeatureFlag::YourFeature was promoted to Stable in <PR link>. Remove the flag and dead code branches after 1–2 release cycles. Follow the `remove-feature-flag` skill.",
-  labels: ["tech-debt"],
-  priority: 4  // Low
-)
-```

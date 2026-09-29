@@ -1,6 +1,5 @@
-//! Tests for `2026-09-29-000000_drop_dead_tables`, which drops the AI, MCP, Warp Drive, team,
-//! account and experiment tables, the pane kinds and columns that went with them, and the pane
-//! tree entries of removed pane kinds.
+//! Tests for `2026-09-29-000000_drop_dead_tables`, which drops the unused tables, the pane kinds
+//! and columns that went with them, and the pane tree entries of removed pane kinds.
 
 use diesel::connection::SimpleConnection as _;
 use diesel::sql_types::{BigInt, Text};

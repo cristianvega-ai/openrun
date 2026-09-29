@@ -85,8 +85,7 @@ pub(super) fn compute_block_size(
         )
     } else {
         // A windowless backend has no font since it doesn't render with one. We skip the
-        // font-based size computation and hardcode a terminal size, so that viewers of the
-        // shared session see a reasonable terminal width.
+        // font-based size computation and hardcode a reasonable terminal size.
         SizeInfo::new_without_font_metrics(24, 120)
     };
     let maximum_grid_size = *TerminalSettings::as_ref(ctx).maximum_grid_size.value();

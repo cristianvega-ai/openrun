@@ -18,7 +18,7 @@ pub(super) fn register_uri_handler() {
     //   (Default) = "WarpLocal"
     //   URL Protocol = ""
     //   DefaultIcon
-    //      (Default) = "{path_to_channel_icon},0" TODO(CORE-2860): Add icon file path here.
+    //      (Default) = "{path_to_channel_icon},0" TODO: Add icon file path here.
     //   shell
     //      open
     //         command
@@ -40,7 +40,7 @@ pub(super) fn register_uri_handler() {
                 return;
             };
 
-            // TODO(CORE-2861): Add the `DefaultIcon` Default value here with the file path to
+            // TODO: Add the `DefaultIcon` Default value here with the file path to
             // Warp's icon once we figure out distribution on Windows.
 
             let command_key = match parent_key.create("shell\\open\\command") {

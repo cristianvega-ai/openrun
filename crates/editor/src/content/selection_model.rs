@@ -73,7 +73,7 @@ impl BufferSelectionModel {
     }
 
     // The following two are temporary methods until multiple selections are supported.
-    // Todo (kc CLD-1018): This should no longer be needed once we move to multi-selection.
+    // TODO: This should no longer be needed once we move to multi-selection.
     pub fn selection(&self) -> &Selection {
         self.selections.first()
     }
@@ -121,7 +121,7 @@ impl BufferSelectionModel {
         if head >= tail { tail..head } else { head..tail }
     }
 
-    // Todo (kc CLD-1018): This should no longer be needed once we move to multi-selection.
+    // TODO: This should no longer be needed once we move to multi-selection.
     pub fn selection_to_first_offset_range(&self) -> Range<CharOffset> {
         self.selection_to_offset_range(self.selection())
     }
@@ -208,7 +208,7 @@ impl BufferSelectionModel {
         }
     }
 
-    // Todo (kc CLD-1018): This should no longer be needed once we move to multi-selection.
+    // TODO: This should no longer be needed once we move to multi-selection.
     pub fn first_selection_head(&self) -> CharOffset {
         self.resolve_anchor(self.selections.first().head())
             .expect("anchor should exist")
@@ -225,7 +225,7 @@ impl BufferSelectionModel {
             .selection_map(|s| self.resolve_anchor(s.head()).expect("anchor should exist"))
     }
 
-    // Todo (kc CLD-1018): This should no longer be needed once we move to multi-selection.
+    // TODO: This should no longer be needed once we move to multi-selection.
     pub fn first_selection_tail(&self) -> CharOffset {
         self.resolve_anchor(self.selection().tail())
             .expect("anchor should exist")

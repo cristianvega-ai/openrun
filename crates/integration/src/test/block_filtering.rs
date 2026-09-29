@@ -25,7 +25,7 @@ use crate::test::integration_testing::terminal::{
 };
 use crate::test::{TestStep, new_step_with_default_assertions, toggle_setting};
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_keybinding() -> Builder {
     new_builder()
         .set_should_run_test(|| cfg!(target_os = "macos"))
@@ -47,7 +47,7 @@ pub fn test_block_filtering_keybinding_with_long_running_command() -> Builder {
         .with_step(LongRunningCommandTestCase::exit_long_running_command())
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_toolbelt_icon() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -70,7 +70,7 @@ pub fn test_block_filtering_toolbelt_icon() -> Builder {
         .with_step(SimpleTestCase::perform_filter_query())
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_context_menu() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -98,7 +98,7 @@ pub fn test_block_filtering_context_menu() -> Builder {
         .with_step(SimpleTestCase::perform_filter_query())
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_toggle_filter() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -165,7 +165,7 @@ pub fn test_block_filtering_toggle_filter() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_toggle_filter_while_find_active() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -228,7 +228,7 @@ pub fn test_block_filtering_toggle_filter_while_find_active() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_filter_then_find() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -258,7 +258,7 @@ pub fn test_block_filtering_filter_then_find() -> Builder {
 
 pub fn test_block_filtering_with_secrets() -> Builder {
     new_builder()
-        // TODO(REV-569): Fish flaking on linux
+        // TODO: Fish flaking on linux
         .set_should_run_test(|| {
             let (starter, _) = current_shell_starter_and_version();
             !matches!(
@@ -301,7 +301,7 @@ pub fn test_block_filtering_with_secrets() -> Builder {
         )
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_active_block() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -312,7 +312,7 @@ pub fn test_block_filtering_active_block() -> Builder {
         .with_step(LongRunningCommandTestCase::exit_long_running_command())
 }
 
-// TODO(CORE-2721): Block count / index Failed b/c of in-band generators
+// TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_clear_blocklist() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))

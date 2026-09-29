@@ -326,7 +326,6 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
       # bound to its default of up-history. If the active keymap when Warp sends its pre-command ^P
       # ends up being one we didn't rebind, the clear becomes a no-op and any leftover bootstrap bytes
       # still sitting in the line editor's buffer get echoed alongside the next command.
-      # See https://github.com/warpdotdev/warp/issues/7099.
       local warp_keymap
       for warp_keymap in main emacs viins vicmd; do
         bindkey -M "$warp_keymap" '^P' warp_kill_buffer_and_reset_insert_mode 2>/dev/null || :
@@ -1383,7 +1382,6 @@ esac
   # Restore the built-in bracketed-paste widget. This works around a buggy interaction we observed
   # with the bracketed-paste-magic plugin (included in oh-my-zsh by default), zsh's "allexport"
   # option (set -a), and Warp's bootstrapping code.
-  # https://github.com/warpdotdev/warp/issues/11520
   zle -A .bracketed-paste bracketed-paste
 
   precmd_functions+=(warp_precmd warp_update_prompt_vars)

@@ -450,8 +450,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         title="$1"
       fi
       # Set the title. Be sure to make the title a %s argument to prevent title content from ending up
-      # in the block output, see:
-      # https://linear.app/warpdotdev/issue/WAR-6064/bash-commands-having-esc-write-the-command-to-the-block-output
+      # in the block output.
       printf "\033]0;%s\a" "$title"
     }
 
@@ -1357,8 +1356,6 @@ esac
     # don't get truncated when we spawn the shell, but once bootstrap has
     # completed, we want the values to be what they would have been if we hadn't
     # set initial values.
-    #
-    # For more context, see: https://github.com/warpdotdev/Warp/issues/1262
     if [[ $HISTFILESIZE == "$WARP_INITIAL_HISTFILESIZE" ]]; then
         unset HISTFILESIZE
     fi
@@ -1415,7 +1412,7 @@ esac
     # bash-preexec uses a DEBUG trap to trigger the preexec functions, it will run our preexec
     # functions before the command at PROMPT_COMMAND[1], PROMPT_COMMAND[2], etc. This means our
     # Preexec hook gets called without the user submitting a command, putting the input block into
-    # a broken state, e.g. see https://github.com/warpdotdev/Warp/issues/2636
+    # a broken state.
     # If they end up fixing this, we may be able to remove this at some point, check this:
     #   https://github.com/rcaloras/bash-preexec/issues/130
     #

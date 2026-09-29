@@ -14,8 +14,6 @@ pub struct NotebookKeybindings {
     // Cache of editable keybinding names, to render in tooltips. This cache is necessary because
     // looking up a keybinding requires a [`AppContext`], so it can't be done when
     // rendering.
-    //
-    // Inspired by https://github.com/warpdotdev/warp-internal/pull/5676 (see the `Workspace` view)
     run_commands_keybinding: Option<String>,
 }
 

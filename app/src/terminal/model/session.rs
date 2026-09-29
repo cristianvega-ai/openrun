@@ -424,13 +424,13 @@ pub enum IsSSHWrapperSession {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HostInfo {
-    // TODO(CORE-2219): This should be an enum instead of a string
+    // TODO: This should be an enum instead of a string
     pub os_category: Option<String>,
     pub linux_distribution: Option<String>,
 }
 
 impl HostInfo {
-    // TODO(CORE-2219): Once we have a struct instead of a string type,
+    // TODO: Once we have a struct instead of a string type,
     // we should instead implement this as either
     //   From<StructName> for command_corrections::PlatformType
     //   TryFrom<StructName for command_corrections::PlatformType

@@ -310,7 +310,7 @@ pub fn test_expand_command_aliases_multiple_commands() {
 
         // Multiple commands should all have their aliases expanded.
         // It is a known issue that only the last command is expanded currently.
-        // TODO(INT-830): fix this case, it should expand to "ENV1=VAL1 ENV2=VAL2 test && ENV3=VAL3 ENV3=VAL3 test "
+        // TODO: fix this case, it should expand to "ENV1=VAL1 ENV2=VAL2 test && ENV3=VAL3 ENV3=VAL3 test "
         let result = warpui_core::r#async::block_on(expand_command_aliases(
             "ENV1=VAL1 ENV2=VAL2 aliasForTest && ENV3=VAL3 ENV3=VAL3 aliasForTest ",
             false,

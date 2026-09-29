@@ -43,14 +43,13 @@ lazy_static! {
 
     /// The minimum supported driver version for Vulkan-backed Intel UHD integrated graphics.
     ///
-    /// Some issues we've seen: PLAT-744 and PLAT-599.
     /// Mesa changelog mentions a fix for flickering on Intel UHD:
     /// https://docs.mesa3d.org/relnotes/21.3.6.html#:~:text=Flickering%20Intel%20Uhd%20620%20Graphics
     static ref MIN_SUPPORTED_INTEL_UHD_VERSION: Version<'static> = Version::from("21.3.6")
         .expect("should not fail to parse version");
 
-    /// Nvidia drivers version 535 have problems with Wayland window managers, e.g. PLAT-667 and
-    /// PLAT-674.
+    /// Nvidia drivers version 535 have problems with Wayland window managers, e.g. flickering and
+    /// failures to present.
     static ref MIN_SUPPORTED_NVIDIA_VERSION: Version<'static> = Version::from("545")
         .expect("should not fail to parse version");
 
@@ -460,7 +459,6 @@ fn is_newer_nondx12_nvidia_adapter_on_windows(adapter_info: &wgpu::AdapterInfo) 
 
 /// Returns whether this adapter is the integrated OpenGL driver for Windows running in Parallels.
 /// It caused problems with theme background images.
-/// https://linear.app/warpdotdev/issue/CORE-3692/background-images-broken-in-parallels
 fn is_gl_to_metal_adapter_on_windows_in_parallels(adapter_info: &wgpu::AdapterInfo) -> bool {
     cfg!(windows)
         && adapter_info.backend == Backend::Gl
@@ -471,11 +469,11 @@ fn is_gl_to_metal_adapter_on_windows_in_parallels(adapter_info: &wgpu::AdapterIn
 
 /// Returns whether or not the provided adapter is an unsupported Intel UHD Mesa driver version for
 /// warpui to render properly. Affected adapters include:
-/// - `Intel(R) HD Graphics 620` (KBL GT2) — flickering (PLAT-744)
-/// - `Intel(R) UHD Graphics (ICL GT1)` — stuck at "Starting zsh..." on Mesa 21.2.6 (GH #14325)
-/// - `Intel(R) UHD Graphics (TGL GT1)` — window flashing/flicker on older Mesa (PLAT-599, GH #4533)
+/// - `Intel(R) HD Graphics 620` (KBL GT2) — flickering
+/// - `Intel(R) UHD Graphics (ICL GT1)` — stuck at "Starting zsh..." on Mesa 21.2.6
+/// - `Intel(R) UHD Graphics (TGL GT1)` — window flashing/flicker on older Mesa
 /// - `Intel(R) Xe Graphics (TGL GT2)` — frozen window; every `get_current_texture` call returns a
-///   validation error on Mesa 21.2.6 (GH #14577)
+///   validation error on Mesa 21.2.6
 ///
 /// See the Mesa 21.3.6 changelog for the upstream fix:
 /// <https://docs.mesa3d.org/relnotes/21.3.6.html#:~:text=Flickering%20Intel%20Uhd%20620%20Graphics>
@@ -530,7 +528,6 @@ fn is_intel_uhd_620_adapter_on_windows_with_vulkan_backend(
 /// Public reports of latency/stutter bugs on Intel integrated GPU drivers (including the UHD 770):
 /// https://github.com/IGCIT/Intel-GPU-Community-Issue-Tracker-IGCIT/issues/1002
 /// https://github.com/libsdl-org/SDL/issues/5628
-/// See also https://github.com/warpdotdev/warp/issues/4856
 fn is_intel_uhd_770_adapter_on_windows(adapter_info: &wgpu::AdapterInfo) -> bool {
     cfg!(windows)
         && matches!(adapter_info.backend, Backend::Dx12 | Backend::Vulkan)
@@ -544,8 +541,6 @@ fn is_intel_uhd_770_adapter_on_windows(adapter_info: &wgpu::AdapterInfo) -> bool
 /// the window bounds when window decorations are disabled. The offset matches the size of the
 /// window decorations (e.g. title bar height). Enabling native window decorations fixes the
 /// alignment.
-///
-/// See: https://github.com/warpdotdev/Warp/issues/6120
 pub fn adapter_has_rendering_offset_bug(adapter_info: &wgpu::AdapterInfo) -> bool {
     if !cfg!(windows) {
         return false;
@@ -556,8 +551,7 @@ pub fn adapter_has_rendering_offset_bug(adapter_info: &wgpu::AdapterInfo) -> boo
         return false;
     }
 
-    // Known affected Intel integrated GPU models. This list is based on user reports from
-    // https://github.com/warpdotdev/Warp/issues/6120.
+    // Known affected Intel integrated GPU models. This list is based on user reports.
     let affected_models = [
         "Intel(R) HD Graphics 2500",
         "Intel(R) HD Graphics 4000",
@@ -578,9 +572,7 @@ pub fn adapter_has_rendering_offset_bug(adapter_info: &wgpu::AdapterInfo) -> boo
 ///
 /// The V3D Vulkan driver on Raspberry Pi and similar ARM SBCs have panics and flickering issues.
 /// The logs have warnings about these drivers missing the `FULL_DRAW_INDEX_UINT32` downlevel flag
-/// but if it's unclear if that is the actual cause. See:
-/// https://github.com/warpdotdev/warp/issues/10618
-/// https://github.com/warpdotdev/warp/issues/4879
+/// but it's unclear if that is the actual cause.
 fn is_v3d_vulkan_adapter(adapter_info: &wgpu::AdapterInfo) -> bool {
     cfg!(target_os = "linux")
         && adapter_info.backend == wgpu::Backend::Vulkan

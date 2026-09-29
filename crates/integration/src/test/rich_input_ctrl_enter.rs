@@ -1,4 +1,4 @@
-//! Integration tests for the Rich Input Ctrl+Enter submit toggle (issue #11588).
+//! Integration tests for the Rich Input Ctrl+Enter submit toggle.
 //!
 //! These tests drive the full keystroke-dispatch path and complement the unit
 //! tests in `app/src/terminal/input_tests.rs`.
@@ -24,7 +24,7 @@ use crate::Builder;
 /// With `submit_on_ctrl_enter = true`, Enter inserts a newline and Ctrl+Enter
 /// submits (buffer cleared).  This is the full-stack wiring guard for the
 /// toggle: it proves that the setting actually propagates to editor behaviour
-/// (issue #11588).
+///.
 pub fn test_rich_input_toggle_on_enter_inserts_newline_and_ctrl_enter_submits() -> Builder {
     new_builder()
         .with_user_defaults(HashMap::from([(
@@ -57,7 +57,7 @@ pub fn test_rich_input_toggle_on_enter_inserts_newline_and_ctrl_enter_submits() 
 // Setting = true: Enter while slash-commands menu is open accepts the menu
 // ---------------------------------------------------------------------------
 
-/// Regression (#11588): with toggle ON, typing `/` opens the slash-commands
+/// Regression: with toggle ON, typing `/` opens the slash-commands
 /// menu and pressing Enter must route to menu acceptance, not newline insertion.
 pub fn test_rich_input_enter_accepts_menu_item_when_toggle_is_true() -> Builder {
     new_builder()

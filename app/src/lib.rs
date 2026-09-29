@@ -247,7 +247,7 @@ impl LaunchMode {
 
 /// If the given event is a key down event containing alt modifiers, and those
 /// alt modifiers should be treated as meta keys, then remove the alts and
-/// prefix the keys with an escape. See WAR-472.
+/// prefix the keys with an escape.
 fn apply_extra_meta_keys(event: &mut Event, extra_metas: ExtraMetaKeys) {
     if let Event::KeyDown {
         keystroke, details, ..
@@ -1038,7 +1038,7 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
             // `ApproveTerminateResult::Cancel`, which macOS interprets as Warp
             // refusing to quit. That can abort a scheduled OS update while the
             // quit-warning modal has no visible window to attach to, leaving
-            // Warp waiting on a prompt nobody can see (#12441).
+            // Warp waiting on a prompt nobody can see.
             if source == TerminationRequestSource::System {
                 return ApproveTerminateResult::Terminate;
             }

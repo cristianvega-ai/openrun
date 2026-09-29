@@ -32,7 +32,7 @@ const ZSH_META: u8 = 0x83;
 /// you can type `git` in a shell instead of `git.exe`.
 /// This is the contents of `$env:PATHEXT` on a default Windows 11 installation. See docs:
 /// https://renenyffenegger.ch/notes/Windows/development/environment-variables/PATHEXT
-/// TODO(CORE-2948) Fetch this dynamically instead.
+/// TODO: Fetch this dynamically instead.
 const PATHEXT: [&str; 12] = [
     ".COM", ".EXE", ".BAT", ".CMD", ".VBS", ".VBE", ".JS", ".JSE", ".WSF", ".WSH", ".MSC", ".CPL",
 ];

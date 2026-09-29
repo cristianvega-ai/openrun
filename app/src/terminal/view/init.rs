@@ -201,9 +201,9 @@ pub fn init(app: &mut AppContext) {
         // Ctrl-G: toggle CLI agent rich input.
         // Three contexts match this binding:
         // 1. Terminal context when CLI agent footer is visible (opens rich input)
-        // 2. EditorView context when rich input is already open (closes rich input, fix for #9286)
+        // 2. EditorView context when rich input is already open (closes rich input)
         // 3. Terminal context when rich input is open (closes rich input regardless
-        //    of focus location or active-block state; fix for #9916)
+        //    of focus location or active-block state)
         EditableBinding::new(
             OPEN_CLI_AGENT_RICH_INPUT_KEYBINDING,
             "Toggle CLI Agent Rich Input",
@@ -221,7 +221,7 @@ pub fn init(app: &mut AppContext) {
             | (id!("EditorView") & !id!("IMEOpen") & id!(flags::CLI_AGENT_RICH_INPUT_OPEN))
             // Case 3: Close from terminal context when rich input is open (covers
             // cases where the active block is no longer long-running and focus is
-            // not on the editor — see #9916).
+            // not on the editor).
             | (id!("Terminal") & !id!("IMEOpen") & id!(flags::CLI_AGENT_RICH_INPUT_OPEN)),
         ),
         EditableBinding::new(

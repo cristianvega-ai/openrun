@@ -1190,7 +1190,7 @@ fn test_banner_insertion_and_removal() {
     );
 }
 
-/// Regression test for WAR-6056, an issue where removing a banner would leave
+/// Regression test, an issue where removing a banner would leave
 /// the active gap in an incorrect state, causing a panic on the next window resize.
 #[test]
 fn test_gap_after_banner() {

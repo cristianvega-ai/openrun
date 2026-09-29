@@ -60,7 +60,7 @@ impl GridHandler {
         // If this is the alt screen, we can skip reflowing the grid and simply
         // adjust the size of rows. We also do this for CLI agent TUIs so pane
         // resizes don't append old frames into block scrollback before the app
-        // redraws (GH #9838).
+        // redraws.
         if self.ansi_handler_state.is_alt_screen
             || (self.full_grid_clear_behavior == FullGridClearBehavior::Clear && !self.finished)
         {

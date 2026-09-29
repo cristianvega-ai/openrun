@@ -21,7 +21,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
     function Warp-Send-JsonMessage([System.Collections.Hashtable]$table) {
         $json = ConvertTo-Json -InputObject $table -Compress
         # Sends a message to the controlling terminal as an OSC control sequence.
-        # TODO(CORE-2718): Determine if we need to hex encode the payload.
+        # TODO: Determine if we need to hex encode the payload.
         # Note that because the JSON string may contain characters that we don't control (including
         # unicode), we encode it as hexadecimal string to avoid prematurely calling unhook if
         # one of the bytes in JSON is 9c (ST) or other (CAN, SUB, ESC).
@@ -224,7 +224,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
             }
         }
 
-        # TODO(PLAT-681) - finish the information here
+        # TODO: finish the information here
         # for keywords, see 'Get-Help about_Language_Keywords'
         $bootstrappedMsg = @{
             hook = 'Bootstrapped'
@@ -461,7 +461,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
         # precmd payload (except for pwd), since we don't re-render the prompt after generator commands
         # are run.
         if ($script:generatorCommand -eq $true) {
-            # TODO(CORE-2639): handle user PreCmds here
+            # TODO: handle user PreCmds here
 
             $script:generatorCommand = $false
 
@@ -482,7 +482,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
             }
             Warp-Send-JsonMessage $precmdMsg
         } else {
-            # TODO(CORE-2678): Figure out resetting bindkeys here
+            # TODO: Figure out resetting bindkeys here
 
             $virtualEnv = ''
             $condaEnv = ''
@@ -587,10 +587,10 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
                     exit_code = $exitCode
                     next_block_id = $nextBlockId
                     pwd = $PWD.Path
-                    # TODO(PLAT-687) - honor the PS1
+                    # TODO: honor the PS1
                     ps1 = ''
                     honor_ps1 = $honor_ps1
-                    # TODO(PLAT-687) - pwsh does not by default support rprompt, but
+                    # TODO: pwsh does not by default support rprompt, but
                     # oh-my-posh does. If there is a way to easily extract the oh-my-posh
                     # rprompt, we might want to use it here
                     rprompt = ''
@@ -754,7 +754,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
         # 'Block started' hook to the Rust app.
         $script:generatorCommand = $true
 
-        # TODO(CORE-2639) If we ever start supporting user precmd or preexec
+        # TODO: If we ever start supporting user precmd or preexec
         # (which doesn't really exist in powershell, but :shrug:), we need
         # to properly handle them here like we do in bashzshfish
 
@@ -975,7 +975,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
     # 1. Capturing it with '$_warp_original_clear = (Get-Command Clear-Host).Definition'
     # 2. Invoking it with 'Invoke-Expression $_warp_original_clear'
 
-    # TODO(PLAT-781): On windows, these two functions should both clear the visible screen
+    # TODO: On windows, these two functions should both clear the visible screen
     # AND the scrollback
     function Clear-Host() {
         $inputBufferMsg = @{
@@ -1077,7 +1077,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
     # This is a workaround for oh-my-posh's "transient prompt" feature. When enabled, it causes the
     # whole screen to clear on every command execution. It is implemented by overwriting the Enter
     # and ctrl-c key handlers. Resetting those back to default effectively disables it.
-    # TODO(CORE-3234) - Find a workaround which allows transient prompt to work.
+    # TODO: Find a workaround which allows transient prompt to work.
     $enterHandler = Get-PSReadLineKeyHandler | Where-Object -Property Key -EQ -Value 'Enter'
     if ($enterHandler -ne $null -and $enterHandler.Function -eq 'OhMyPoshEnterKeyHandler') {
         Set-PSReadLineKeyHandler -Chord Enter -Function AcceptLine

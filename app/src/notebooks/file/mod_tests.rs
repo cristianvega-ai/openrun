@@ -335,7 +335,7 @@ fn test_file_notebook_mermaid_blocks_default_to_rendered() {
     });
 }
 
-/// APP-5243: retrying and then discarding a failed open must not panic, and each attempt must
+/// retrying and then discarding a failed open must not panic, and each attempt must
 /// release the file state it opened rather than stacking it on the shared [`FileModel`].
 #[cfg(feature = "local_fs")]
 #[test]

@@ -15,7 +15,7 @@
         # Normally we'd disable this in-line, but there are issues with using inline
         # diagnostic controls in pwsh_init_shell.ps1
         'PSAvoidUsingWriteHost'
-        # TODO(CORE-2985): Evaluate if we want to turn this on.
+        # TODO: Evaluate if we want to turn this on.
         # Disabling this for now, most of our Warp functions should not be invoked by
         # users directly anyway.
         'PSProvideCommentHelp'

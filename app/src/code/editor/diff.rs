@@ -399,7 +399,7 @@ impl DiffModel {
         };
 
         // First check if this is a pure deletion. Note that deletion maps to line AFTER the removed line.
-        // CODE-1638: Use line_number + 1 to align with deletion_mapping's off-by-one convention.
+        // Use line_number + 1 to align with deletion_mapping's off-by-one convention.
         if let Some(removed_range) = self.status.deletion_mapping.get(&line_number) {
             return Some(removed_range.start + index);
         }

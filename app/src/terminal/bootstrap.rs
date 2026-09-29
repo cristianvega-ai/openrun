@@ -40,7 +40,7 @@ pub fn is_container_subshell(session_info: &SessionInfo) -> bool {
 /// itself).
 ///
 /// We use RC-file based bootstrap for PowerShell because chars written to the PTY get randomly
-/// ignored. See PLAT-757 in Linear.
+/// ignored.
 ///
 /// We use RC-file based bootstrap for `poetry shell` subshells because the underlying library used
 /// to spawn a subshell by `poetry shell` uses blocking PTY reads and writes, which results in a
@@ -134,7 +134,6 @@ fn init_subshell_script_for_shell(
         ShellType::Fish => {
             load_and_escape_script("bundled/bootstrap/fish_init_subshell.sh", assets)
         }
-        // TODO(PLAT-750)
         ShellType::PowerShell => todo!(),
     };
     let shell_init_script =

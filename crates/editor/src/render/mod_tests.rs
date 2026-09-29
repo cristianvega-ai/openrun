@@ -290,7 +290,7 @@ Paragraph (9 characters, 1 lines, 24.00px tall)
 
 #[test]
 fn test_undo_at_block_boundary() {
-    // This is a regression test for CLD-1178.
+    // This is a regression test.
     init_logging();
     App::test((), |mut app| async move {
         let app = &mut app;

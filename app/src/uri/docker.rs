@@ -56,9 +56,9 @@ pub fn open_docker_container(url: &Url, ctx: &mut AppContext) -> Result<()> {
 
     let shell_path = query_params
         .get("shell")
-        // TODO(CORE-2658): Make this filter less restrictive without reducing security.
+        // TODO: Make this filter less restrictive without reducing security.
         .filter(|shell_path| is_posix_portable_pathname(shell_path))
-        // TODO(CORE-2658): Our Docker extension lets users specify any shell, but we're only accepting
+        // TODO: Our Docker extension lets users specify any shell, but we're only accepting
         // shells we can bootstrap. We should probably change the Docker extension to only surface
         // shells we can bootstrap.
         .filter(|shell_path| ShellType::from_name(shell_path).is_some())
@@ -76,7 +76,7 @@ pub fn open_docker_container(url: &Url, ctx: &mut AppContext) -> Result<()> {
     };
 
     // Command example: docker exec -it --user 'admin' 'container_id' 'zsh'.
-    // TODO(CORE-2658): This [`ShellFamily::shell_escape`] function is built with `bash` in mind but we need to
+    // TODO: This [`ShellFamily::shell_escape`] function is built with `bash` in mind but we need to
     // properly escape for all our officially supported shells.
     // Assume MacOS/Linux and therefore POSIX shell. Running Docker on Windows requires WSL anyway.
     let mut docker_exec_command = String::from("docker exec -it");

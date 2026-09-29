@@ -3880,7 +3880,7 @@ fn uses_outer_group_container(display_granularity: VerticalTabsDisplayGranularit
 ///   * the tab is currently being renamed (inline editor), or
 ///   * the tab contains more than one visible pane.
 ///
-/// The third condition is what fixes issue #9098: previously the header was
+/// The third condition is what fixes an earlier bug: previously the header was
 /// only shown when a custom title existed, so multi-pane tabs with auto-
 /// generated names (the CLI session naming flow) rendered without any
 /// tab-level identifier — only their first row's title was visible, which
@@ -4708,7 +4708,7 @@ fn render_summary_tab_item(
         );
     }
 
-    // Branch region. Each branch line gets the existing 4px top margin from APP-3875.
+    // Branch region. Each branch line gets the existing 4px top margin.
     for (idx, branch_entry) in summary
         .branch_entries
         .iter()

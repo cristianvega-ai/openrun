@@ -312,7 +312,7 @@ pub enum TargetDirError {
 
 /// Retrieves the target directory.
 pub fn app_target_dir(profile: &str) -> Result<PathBuf, TargetDirError> {
-    // TODO(CORE-2805): Make sure this works in distribution.
+    // TODO: Make sure this works in distribution.
     // Ideally we would use `CARGO_TARGET_DIR` but this isn't always available.
     // See https://github.com/rust-lang/cargo/issues/9661.
     let manifest_dir = std::env!("CARGO_MANIFEST_DIR");
@@ -603,8 +603,7 @@ pub fn is_network_resource(path: &Path) -> bool {
 /// Convert to the preferred executable inside the Git Bash installation dir.
 ///
 /// Git Bash installations include an exe in both "./bin/bash.exe" and "./usr/bin/bash.exe". The
-/// "./bin/bash.exe" has some problems as it spawns "./usr/bin/bash.exe" as a child process, see:
-/// https://github.com/warpdotdev/warp-internal/pull/13955
+/// "./bin/bash.exe" has some problems as it spawns "./usr/bin/bash.exe" as a child process.
 pub fn canonicalize_git_bash_path(mut path: PathBuf) -> PathBuf {
     if !path.ends_with(Path::new("Git").join("bin").join("bash.exe")) {
         return path;

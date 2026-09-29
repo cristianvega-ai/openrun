@@ -153,7 +153,7 @@ macro_rules! generate_can_bootstrap_ssh_wrapper_test_for_shell {
         /// successfully.
         pub fn $fn_name() -> Builder {
             new_builder()
-                // TODO(CORE-2333) PowerShell has no SSH wrapper.
+                // TODO: PowerShell has no SSH wrapper.
                 .set_should_run_test(|| {
                     let (starter, _) = current_shell_starter_and_version();
                     starter.shell_type() != ShellType::PowerShell
@@ -188,7 +188,7 @@ macro_rules! generate_long_running_block_ssh_test_for_shell {
         /// successfully.
         pub fn $fn_name() -> Builder {
             new_builder()
-                // TODO(CORE-2333) PowerShell has no SSH wrapper.
+                // TODO: PowerShell has no SSH wrapper.
                 .set_should_run_test(|| {
                     let (starter, _) = current_shell_starter_and_version();
                     starter.shell_type() != ShellType::PowerShell
@@ -227,12 +227,12 @@ generate_long_running_block_ssh_test_for_shell!(test_ssh_into_sh, "sh", prompt_r
 generate_long_running_block_ssh_test_for_shell!(test_ssh_into_ash, "ash", prompt_regex: r"\n\$ $");
 
 /// Tests a regression with the startup shell setting and SSH proxies.
-/// See WAR-6337 for details - if `$SHELL` is not set to a valid executable file
+/// If `$SHELL` is not set to a valid executable file
 /// path, SSH fails to execute proxy commands (like the one this test uses for
 /// gcloud).
 pub fn test_ssh_with_shell_override() -> Builder {
     new_builder()
-        // TODO(CORE-2333) PowerShell has no SSH wrapper.
+        // TODO: PowerShell has no SSH wrapper.
         .set_should_run_test(|| {
             let (starter, _) = current_shell_starter_and_version();
             starter.shell_type() != ShellType::PowerShell

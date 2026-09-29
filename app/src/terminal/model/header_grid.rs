@@ -118,7 +118,7 @@ pub struct HeaderGrid {
     /// printed by the shell). Note that we only ignore it for the prompt grid (we do NOT ignore it for the
     /// combined grid, which needs to get the updated prompt bytes from the shell, to support in-band generators
     /// with remote subshells correctly).
-    /// TODO(CORE-2403): Rename this field to should_populate_prompt_preview_grid.
+    /// TODO: Rename this field to should_populate_prompt_preview_grid.
     ignore_next_prompt_preview: bool,
     /// The height of the Warp prompt in lines (non-PS1).
     warp_prompt_height_lines: f32,
@@ -718,7 +718,7 @@ impl HeaderGrid {
                     log::warn!(
                         "Prompt end point should not be None after resize, if Some previously!"
                     );
-                    // TODO(CORE-2241): Root-cause why we're ever reaching this code block.
+                    // TODO: Root-cause why we're ever reaching this code block.
                     self.cached_prompt_end_point = None;
                     // To be on the cautious side: reset the command start point to the start too!
                     self.cached_command_start_point = Some(CommandStartPoint::CommandStart {

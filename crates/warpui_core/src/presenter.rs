@@ -353,7 +353,7 @@ impl Presenter {
         // In theory, after_layout would be a good place for Elements to update app state with the
         // results of layout (for example, if a View stored the heights of its children to
         // implement scrolling). However, it's not safe to pass a AppContext to after_layout
-        // because the presenter is mutably borrowed. Doing so can cause crashes like CORE-1544.
+        // because the presenter is mutably borrowed. Doing so can cause crashes.
         // In the future, we might:
         // * Decouple after_layout from the presenter so it can take a AppContext
         // * Extend the AfterLayoutContext API to allow state updates, but not other effects

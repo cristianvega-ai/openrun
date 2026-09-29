@@ -13,7 +13,7 @@ pub(crate) fn look_for_wayland_compositor() -> Option<String> {
     // First, try to determine the compositor by looking at the Wayland display
     // socket and seeing which process is listening on it.
     //
-    // TODO(CORE-3034): Re-enable this codepath once we've understood and
+    // TODO: Re-enable this codepath once we've understood and
     // addressed the lsof performance issues.
     // if let Some(compositor_name) = get_wayland_compositor_from_socket() {
     //     return Some(compositor_name);
@@ -58,7 +58,7 @@ pub(crate) fn look_for_wayland_compositor() -> Option<String> {
 /// display socket and seeing which process is listening on it, or [`None`] if
 /// we were unable to compute it for any reason.
 ///
-/// TODO(CORE-3034): Re-enable this codepath and remove the allow(dead_code)
+/// TODO: Re-enable this codepath and remove the allow(dead_code)
 /// attribute.
 #[allow(dead_code)]
 fn get_wayland_compositor_from_socket() -> Option<String> {

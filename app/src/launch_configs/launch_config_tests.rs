@@ -512,7 +512,7 @@ fn test_config_with_active_tab_being_filtered() {
 }
 
 // ---------------------------------------------------------------------------
-// Tab groups (#13898)
+// Tab groups
 // ---------------------------------------------------------------------------
 
 fn terminal_tab(cwd: &str, group_id: Option<TabGroupId>) -> TabSnapshot {

@@ -44,14 +44,14 @@ async fn run_guest_listing(
             match super::parse_ls_script_output(output.output()) {
                 Some(entries) => {
                     log::debug!(
-                        "[APP-3993 wsl-list] ok entries={} elapsed_ms={elapsed_ms}",
+                        "[wsl-list] ok entries={} elapsed_ms={elapsed_ms}",
                         entries.len()
                     );
                     Some(entries)
                 }
                 None => {
                     log::warn!(
-                        "[APP-3993 wsl-list] malformed or truncated output elapsed_ms={elapsed_ms}, falling back to host listing"
+                        "[wsl-list] malformed or truncated output elapsed_ms={elapsed_ms}, falling back to host listing"
                     );
                     None
                 }
@@ -59,19 +59,19 @@ async fn run_guest_listing(
         }
         Ok(Ok(_)) => {
             log::warn!(
-                "[APP-3993 wsl-list] non-zero exit elapsed_ms={elapsed_ms}, falling back to host listing"
+                "[wsl-list] non-zero exit elapsed_ms={elapsed_ms}, falling back to host listing"
             );
             None
         }
         Ok(Err(err)) => {
             log::warn!(
-                "[APP-3993 wsl-list] failed elapsed_ms={elapsed_ms}, falling back to host listing: {err:#}"
+                "[wsl-list] failed elapsed_ms={elapsed_ms}, falling back to host listing: {err:#}"
             );
             None
         }
         Err(_timed_out) => {
             log::warn!(
-                "[APP-3993 wsl-list] timed out elapsed_ms={elapsed_ms}, falling back to host listing"
+                "[wsl-list] timed out elapsed_ms={elapsed_ms}, falling back to host listing"
             );
             None
         }

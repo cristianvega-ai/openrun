@@ -549,7 +549,7 @@ fn tabs_granularity_does_not_use_outer_group_container() {
     ));
 }
 
-// Regression coverage for #9098 ("Tab names not rendered in tab bar, only
+// Regression coverage for the ("Tab names not rendered in tab bar, only
 // first tab shows name"). The header gate previously read `has_custom_title
 // || is_being_renamed`, which collapsed to `false` for every tab without a
 // user-set rename — leaving multi-pane tabs with auto-generated names
@@ -571,7 +571,7 @@ fn tab_group_header_shows_while_renaming() {
 
 #[test]
 fn tab_group_header_shows_for_multi_pane_tabs_without_custom_title() {
-    // The #9098 case: an auto-named multi-pane tab. Each row only shows the
+    // The case of an auto-named multi-pane tab. Each row only shows the
     // per-pane title (e.g. `travelplan` + `main`), so without a group header
     // there is no way to tell two such tabs apart in the sidebar.
     assert!(should_show_tab_group_header(false, false, 2));
@@ -592,7 +592,7 @@ fn tab_group_header_hidden_for_single_pane_without_custom_title() {
 
 #[test]
 fn tab_group_header_distinguishes_two_auto_named_multi_pane_tabs() {
-    // Models the screenshot in #9098: tab 1 has a custom title
+    // Models a user's screenshot: tab 1 has a custom title
     // ("Humanfigure"), tabs 2 and 3 are auto-named multi-pane groups
     // ("travelplan + main", "deponti + release/development"). Before the
     // fix only tab 1 showed a header; after the fix every multi-pane tab
@@ -710,7 +710,7 @@ fn terminal_search_fragments_include_rendered_terminal_badges() {
         Some("main".to_string()),
         terminal_kind_badge_label(Some(CLIAgent::Claude)),
         Some(terminal_pull_request_badge_label(
-            "https://github.com/warpdotdev/warp-internal/pull/12345",
+            "https://github.com/example/example-repo/pull/12345",
         )),
         Some(GitLineChanges {
             files_changed: 1,
@@ -841,14 +841,14 @@ fn collect_normalized_unique_summary_texts_dedupes_after_whitespace_normalizatio
 fn collect_normalized_unique_summary_texts_preserves_first_seen_order() {
     assert_eq!(
         collect_normalized_unique_summary_texts([
-            "~/warp-internal",
-            "~/warp-server",
-            "~/warp-internal",
+            "~/example-repo",
+            "~/example-server",
+            "~/example-repo",
             "~/warp-terraform",
         ]),
         vec![
-            "~/warp-internal".to_string(),
-            "~/warp-server".to_string(),
+            "~/example-repo".to_string(),
+            "~/example-server".to_string(),
             "~/warp-terraform".to_string(),
         ]
     );
@@ -1083,7 +1083,7 @@ fn summary_search_fragments_include_hidden_overflow_values() {
             label("code review"),
             label("hidden work"),
         ],
-        working_directories: vec!["~/warp-internal".to_string(), "~/warp-server".to_string()],
+        working_directories: vec!["~/example-repo".to_string(), "~/example-server".to_string()],
         branch_entries: vec![
             VerticalTabsSummaryBranchEntry {
                 repo_path: PathBuf::from("/tmp/repo-a"),

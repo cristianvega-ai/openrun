@@ -154,8 +154,7 @@ impl WindowManager {
     /// In X11, the scale factor is a per-screen setting. Note that a "screen" in X11 is not the
     /// same thing as a physical monitor, but a grouping of monitors into a single coordinate
     /// space. All our app's windows must be on the same screen, and hence will have the same scale
-    /// factor. For more in-depth explanation:
-    /// https://github.com/warpdotdev/warp-internal/pull/8431#discussion_r1460629912
+    /// factor.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn get_x11_backing_scale_factor(&self) -> f32 {
         use crate::platform::WindowContext;
@@ -1336,8 +1335,7 @@ fn create_window(
 
     #[cfg(windows)]
     {
-        // WARNING: Do not use [`WindowAttributes::with_no_redirection_bitmap`] as that caused:
-        // https://github.com/warpdotdev/Warp/issues/8935
+        // WARNING: Do not use [`WindowAttributes::with_no_redirection_bitmap`] as that caused problems.
 
         use winit::platform::windows::{IconExtWindows, WindowAttributesExtWindows};
 

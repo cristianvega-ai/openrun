@@ -535,7 +535,7 @@ impl LayOutArgs {
 /// Rayon fans a chunk's tasks out across every CPU core, and each task can allocate a CoreText
 /// frame plus derived `Line`/`Glyph` vectors that stay live until the whole chunk's parallel
 /// collection completes. Bounding the chunk size caps how many of those allocations can be live
-/// at once (APP-5392), rather than growing with the size of the input. Inputs at or under this
+/// at once, rather than growing with the size of the input. Inputs at or under this
 /// size (the overwhelming majority) still produce exactly one chunk, so they keep taking a
 /// single full-width parallel pass.
 const MAX_LAYOUT_TASKS_PER_PARALLEL_CHUNK: usize = 64;
@@ -1088,7 +1088,7 @@ fn calculate_hidden_block_line_count(
 ///
 /// In theory, this function shouldn't error, but we've had panics where there
 /// were no paragraphs. So a `Result` is returned for now so that we can bubble
-/// up the error and add appropriate logging. See CLD-2093.
+/// up the error and add appropriate logging.
 fn layout_text_block(
     text_block: &StyledTextBlock,
     layout: &TextLayout,

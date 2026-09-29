@@ -149,7 +149,6 @@ pub enum FeatureFlag {
 
     /// Enables support for ACLs in Session Sharing. Should be disabled if the
     /// corresponding `use_acls` flag in the session sharing server is disabled.
-    /// https://github.com/warpdotdev/session-sharing-server/blob/b6590ebd0b0e7f6847d6b2228b4e77d63939ce22/server/Cargo.toml#L13
     SessionSharingAcls,
 
     /// Enables the full-screen "zen mode" setting, where we hide the tab bar if there's only one
@@ -956,7 +955,7 @@ pub enum FeatureFlag {
     /// Gates Ctrl+R / Command Search history ranking on match quality and usage priors (recency,
     /// session, exit status) plus whitespace space-AND tokenization, instead of Skim's raw
     /// fuzzy-match score against the whole query as a single pattern. Disabling this is a full
-    /// return to the pre-APP-5650 history search behavior, not an approximation of it.
+    /// return to the earlier history search behavior, not an approximation of it.
     HistorySearchRankingV2,
 
     /// Advertises client support for server-issued task-message updates that

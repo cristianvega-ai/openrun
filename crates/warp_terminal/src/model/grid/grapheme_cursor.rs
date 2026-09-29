@@ -249,7 +249,7 @@ impl GraphemeCursorItem<'_> {
     /// Returns a reference to the cell that holds the content for the grapheme
     /// under the cursor.
     ///
-    /// TODO(CORE-2955): Fix the fact that many callers look at `cell().c` to
+    /// TODO: Fix the fact that many callers look at `cell().c` to
     ///                  get the cell content, which is incorrect for cells
     ///                  which have additional content in `CellExtra`.
     pub fn cell(&self) -> &Cell {
@@ -258,7 +258,7 @@ impl GraphemeCursorItem<'_> {
 
     /// Returns the character in the cell under the grapheme cursor.
     ///
-    /// TODO(CORE-2955): Fix the fact that many callers look at `cell().c` to
+    /// TODO: Fix the fact that many callers look at `cell().c` to
     ///                  get the cell content, which is incorrect for cells
     ///                  which have additional content in `CellExtra`.
     pub fn content_char(&self) -> char {

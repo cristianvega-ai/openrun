@@ -16,7 +16,7 @@ use crate::completer::matchers::MatchStrategy;
 use crate::completer::suggest::{MatchedSuggestion, Priority, Suggestion, SuggestionType};
 use crate::parsers::ParsedToken;
 
-/// TODO(CORE-3074): This only applies to Unix.
+/// TODO: This only applies to Unix.
 const ROOT_DIR_STR: &str = "/";
 
 lazy_static! {

@@ -194,7 +194,7 @@ pub trait CoreEditorModel: Entity {
     fn truncate(&mut self, len: usize, ctx: &mut ModelContext<Self::T>) {
         self.update_content(
             |mut content, ctx| {
-                let byte_offset: ByteOffset = (len + 1).into(); // TODO(CLD-558)
+                let byte_offset: ByteOffset = (len + 1).into();
                 let char_offset = byte_offset.to_buffer_char_offset(content.buffer());
                 let max_offset = content.buffer().max_charoffset();
                 if char_offset < max_offset {
@@ -631,7 +631,7 @@ pub trait CoreEditorModel: Entity {
     }
 
     fn selection_head(&self, ctx: &AppContext) -> CharOffset {
-        // TODO(CLD-558): This matches how we shift the selection by 1.
+        // TODO: This matches how we shift the selection by 1.
         self.buffer_selection_model()
             .as_ref(ctx)
             .first_selection_head()
@@ -639,12 +639,10 @@ pub trait CoreEditorModel: Entity {
     }
 
     fn logical_line_start(&self, offset: CharOffset, ctx: &AppContext) -> CharOffset {
-        // TODO(CLD-558)
         self.content().as_ref(ctx).containing_line_start(offset) - 1
     }
 
     fn logical_line_end(&self, offset: CharOffset, ctx: &AppContext) -> CharOffset {
-        // TODO(CLD-558)
         self.content().as_ref(ctx).containing_line_end(offset) - 1
     }
 

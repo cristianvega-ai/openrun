@@ -91,7 +91,7 @@ impl LocalShellState {
                 ShellStarter::Direct(starter) | ShellStarter::MSYS2(starter) => starter,
                 ShellStarter::Wsl(_) => return LocalShellState::NotLoaded,
             },
-            // TODO(CORE-3020): Implement WSL for the Local Shell model.
+            // TODO: Implement WSL for the Local Shell model.
             ShellStarterSourceOrWslName::WSLName { .. } => return LocalShellState::NotLoaded,
         };
 

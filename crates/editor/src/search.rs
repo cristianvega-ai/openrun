@@ -394,7 +394,7 @@ impl Searcher {
                     *MATCH_FILL
                 };
 
-                // TODO(CLD-558): This matches how we shift the selection by 1.
+                // TODO: This matches how we shift the selection by 1.
                 Decoration::new(m.start - 1, m.end - 1).with_background(fill)
             })
             .collect()

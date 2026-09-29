@@ -17,6 +17,18 @@ hosts | *Cargo.toml | github\.com/warpdotdev/ | build-time git dependencies on t
 hosts | crates/persistence/migrations/* | firebase | historical migrations stay untouched (MASTER decision 14); DB-1 drops the tables
 hosts | crates/warpui_extras/src/secure_storage/linux.rs | releases\.warp\.dev/channel_versions\.json | secure-storage key material, not a network call; changing it would orphan stored secrets (MASTER decision 13)
 hosts | app/assets/windows/*/dxcompiler.dll | * | third-party DirectX compiler binary; `sEntry` matches `sentry` case-insensitively
+hosts | crates/secret_redaction/src/lib.rs | firebase | the redaction regex for leaked Firebase auth domains is a secret pattern, not a network call
+hosts | crates/secret_redaction/src/lib_tests.rs | firebase | tests of that redaction regex
+hosts | crates/secret_redaction/src/lib_tests.rs | AIza | fake Google API key that the redaction tests must detect
+hosts | crates/lsp/src/config_tests.rs | firebase | path of an npm package (`node_modules/@firebase/auth`) used as a URI fixture
+hosts | crates/persistence/test_data/pre_drop_dead_tables_seed.sql | firebase | seeds the columns of the pre-DB-1 schema that the migration drops
+hosts | crates/integration/tests/data/test_json_object.sqlite | firebase_uid | legacy cloud-object fixture: its pre-DB-1 schema (users.firebase_uid) is dropped by the startup migration
+hosts | crates/warp_core/src/paths.rs | /opt/warpdotdev | example install path in a doc comment (MASTER decision 17)
+hosts | flake.nix | /opt/warpdotdev | install paths stay unchanged (MASTER decision 17)
+hosts | resources/linux/* | warpdotdev | install paths stay unchanged (MASTER decision 17)
+hosts | script/linux/* | warpdotdev | install paths stay unchanged (MASTER decision 17)
+hosts | script/windows/windows-installer.iss | Warp\.dev | registry base stays unchanged (MASTER decision 17)
+hosts | crates/warpui_extras/src/user_preferences/registry_backed.rs | Warp\.dev | registry base stays unchanged (MASTER decision 17)
 
 # --- network-capable Rust (9.2) ---
 net-rust | crates/http_client/* | * | the shared HTTP client; its consumers are audited individually

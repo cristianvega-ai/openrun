@@ -306,10 +306,7 @@ pub fn test_completes_paths_with_space() {
     );
 }
 
-#[cfg_attr(
-    windows,
-    ignore = "CORE-3696: path sorting comparison function needs separators"
-)]
+#[cfg_attr(windows, ignore = "path sorting comparison function needs separators")]
 #[test]
 pub fn test_completes_dotfiles() {
     let pwd = TypedPathBuf::from(TEST_WORK_DIR);
@@ -1130,7 +1127,7 @@ pub fn test_complete_last_arg_after_non_variadic_option() {
     );
 }
 
-/// TODO(CORE-646): The following two tests are ignored because they are failing. They
+/// TODO: The following two tests are ignored because they are failing. They
 /// test the scenario where an option argument is optional or variadic, and so
 /// it is ambiguous whether the user is trying to complete the option argument
 /// or the next command argument. In this scenario, we should show suggestions
@@ -1194,7 +1191,6 @@ pub fn test_complete_last_arg_after_variadic_option() {
 /// TODO: we should fix these failing tests. These tests are currently failing
 /// because we don't have a way of computing the positional index correctly
 /// when nesting arguments under options.
-/// See more here: https://linear.app/warpdotdev/issue/WAR-3660/fix-completions-for-arguments-under-options
 #[ignore]
 #[test]
 pub fn test_completions_after_arguments_under_option() {
@@ -1643,7 +1639,7 @@ pub fn test_completions() {
     #[cfg(unix)]
     assert!(complete_at_end_of_line("cd /", &ctx).contains(&TEST_ROOT_DIR.to_owned()));
 
-    // TODO(CORE-3696): test Windows root directory separately
+    // TODO: test Windows root directory separately
     // #[cfg(windows)]
     // assert!(complete_at_end_of_line("cd C:", &ctx).contains(&TEST_ROOT_DIR.to_owned()));
 
@@ -2248,7 +2244,7 @@ pub fn test_case_sensitivity_ordering() {
     );
 }
 
-/// Regression test for Linear issue CORE-1885.
+/// Regression test.
 #[test]
 pub fn test_autocd_completions_with_tilde() {
     let pwd = TypedPathBuf::from(TEST_WORK_DIR);
@@ -2287,7 +2283,6 @@ fn test_option_name_with_missing_required_value() {
     );
 }
 
-/// TODO(CORE-2795)
 #[test]
 fn test_powershell_parser_directives_for_flags() {
     let registry = create_test_command_registry([add_content_signature()]);
@@ -2364,7 +2359,6 @@ fn test_powershell_parser_directives_for_flags() {
     );
 }
 
-/// TODO(CORE-2795)
 #[test]
 fn test_powershell_parser_directives_for_case_insensitivity() {
     let registry = create_test_command_registry([add_content_signature()]);

@@ -354,7 +354,7 @@ async fn renamed_file_content_at_head_reads_old_path() {
         .expect("git commit");
 
     // Rename in the working tree only — `old.txt` no longer exists at this path, so `git
-    // show HEAD:new.txt` would fail (the bug in APP-5111).
+    // show HEAD:new.txt` would fail.
     std::fs::rename(repo_path.join("old.txt"), repo_path.join("new.txt"))
         .expect("rename old.txt to new.txt");
 

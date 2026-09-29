@@ -1421,7 +1421,7 @@ impl TerminalModel {
 
     /// A variant of [`Self::string_at_range`] for when the text is a link that
     /// we want to open. In that case, the existence of zero-width spaces can
-    /// case a double-encode of the url when we attempt to open it (see CORE-1573).
+    /// case a double-encode of the url when we attempt to open it.
     /// Here, we pull the text at the given range, and then trim whitespace
     /// (including zero-width spaces) from the end before returning the url.
     pub fn link_at_range<T: RangeInModel>(
@@ -1656,7 +1656,7 @@ impl TerminalModel {
     ///
     /// If the alternate screen is not active, this has no effect. This guards
     /// against programs that set or unset the alternate screen mode multiple
-    /// times, like `info`  (see WAR-5897).
+    /// times, like `info` .
     fn exit_alt_screen(&mut self, restore_cursor: bool) {
         if !self.alt_screen_active {
             log::info!("Tried to exit the alternate screen, but it was already inactive");

@@ -330,7 +330,7 @@ fn non_codex_session_rich_after_rich_notification() {
 
 /// Constructs a session with permission-scoped state already populated, as if
 /// a `PermissionRequest` had just been received and the agent is now Blocked.
-/// Used by the GH-9525 regression tests below.
+/// Used by the regression tests below.
 fn blocked_claude_session_with_permission_state() -> CLIAgentSession {
     CLIAgentSession {
         agent: CLIAgent::Claude,
@@ -353,7 +353,7 @@ fn blocked_claude_session_with_permission_state() -> CLIAgentSession {
 
 #[test]
 fn stop_clears_permission_scoped_state() {
-    // GH-9525: after a PermissionRequest sets `summary`, the Stop event must
+    // After a PermissionRequest sets `summary`, the Stop event must
     // clear it. Otherwise the tab title falls back to the stale permission
     // text instead of reflecting the now-completed session.
     let mut session = blocked_claude_session_with_permission_state();
@@ -453,7 +453,7 @@ fn prompt_submit_clears_permission_scoped_state() {
 
 #[test]
 fn tool_complete_clears_permission_scoped_state() {
-    // GH-11082: answering an AskUserQuestion emits only ToolComplete (the
+    // Answering an AskUserQuestion emits only ToolComplete (the
     // plugin sends no PermissionReplied for it), so the Blocked -> InProgress
     // transition here must also clear the stale summary. Otherwise the tab
     // title keeps showing "Wants to run AskUserQuestion: ..." until the next

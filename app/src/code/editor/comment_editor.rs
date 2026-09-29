@@ -98,7 +98,7 @@ impl CommentEditor {
         me
     }
 
-    #[allow(unused)] // TODO(CODE-1464): use this
+    #[allow(unused)] // TODO: use this
     pub fn new_embedded(
         ctx: &mut ViewContext<Self>,
         comment_model: ModelHandle<EditorCommentsModel>,
@@ -144,7 +144,7 @@ impl CommentEditor {
         self.laid_out_size.borrow().as_ref().cloned()
     }
 
-    #[allow(unused)] // TODO(CODE-1464): use this
+    #[allow(unused)] // TODO: use this
     pub fn set_laid_out_size(&self, value: Vector2F) {
         self.laid_out_size.replace(Some(value));
     }

@@ -421,7 +421,7 @@ impl<T: EventLoopSender> PtyController<T> {
         shell_type: ShellType,
         ctx: &mut ModelContext<Self>,
     ) {
-        // TODO(CORE-2099): Figure out a more robust solution here. Fish users
+        // TODO: Figure out a more robust solution here. Fish users
         // can redefine these functions via fish functions. Ideally this won't
         // break if the user redefines the `source` or `.` built-in.
         match shell_type {

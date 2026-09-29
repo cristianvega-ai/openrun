@@ -47,7 +47,7 @@ use warpui_core::{
 
 use super::new_builder;
 use crate::Builder;
-use crate::util::skip_if_powershell_core_2303;
+use crate::util::skip_if_powershell;
 
 const SOURCE_WINDOW_KEY: &str = "source window";
 const TARGET_WINDOW_KEY: &str = "target window";
@@ -599,7 +599,7 @@ pub fn test_cycle_active_tab_color_with_keybinding() -> Builder {
 
 pub fn test_active_session_follows_focus() -> Builder {
     new_builder()
-        .set_should_run_test(skip_if_powershell_core_2303)
+        .set_should_run_test(skip_if_powershell)
         .with_setup(|utils| {
             fs::create_dir(utils.test_dir().join("dir1")).expect("Couldn't create subdirectory");
             fs::create_dir(utils.test_dir().join("dir2")).expect("Couldn't create subdirectory");

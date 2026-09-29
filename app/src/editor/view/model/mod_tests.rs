@@ -607,7 +607,7 @@ fn test_selection_change_doesnt_materialize_ephemeral_edit() {
     })
 }
 
-// Regression test for CORE-1549.
+// Regression test.
 #[test]
 fn test_restoring_invalid_selections() {
     App::test((), |mut app| async move {

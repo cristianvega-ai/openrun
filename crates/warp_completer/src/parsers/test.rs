@@ -110,7 +110,6 @@ fn posix_noncompliant_commands_continue_parsing_flags_after_double_dash() {
     );
 }
 
-/// TODO(CORE-2797)
 #[test]
 pub fn test_classify_command_classifies_known_command_with_flags() {
     let registry = create_test_command_registry([test_signature()]);
@@ -173,7 +172,6 @@ pub fn test_classify_command_classifies_known_command_with_flags() {
     )
 }
 
-/// TODO(CORE-2797)
 ///
 /// With exact option matching, `-r` correctly matches the `-r` switch (no arguments),
 /// so the parser advances past it and discovers the `one` subcommand. The command path
@@ -450,7 +448,6 @@ fn test_classify_command_case_sensitive() {
     )
 }
 
-/// TODO(CORE-2810)
 #[test]
 fn test_classify_command_case_insensitive() {
     let registry = create_test_command_registry([test_signature()]);

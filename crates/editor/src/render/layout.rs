@@ -24,7 +24,7 @@ pub(crate) const HYPERLINK_COLOR: u32 = 0x7aa6daff;
 ///
 /// The editor lays out at an effectively infinite width, so one logical line becomes one unwrapped
 /// shaping call. Without a cap, a single multi-megabyte line allocates a text frame plus per-`char`
-/// glyph and caret-position vectors bounded only by that line's length (APP-5392). Text past the
+/// glyph and caret-position vectors bounded only by that line's length. Text past the
 /// cap is dropped before shaping, which is safe because callers track buffer offsets from their own
 /// content length rather than from the shaped frame, and consumers that map an offset or coordinate
 /// into a frame already clamp to its end. The cap sits far past what can be read on screen, so a

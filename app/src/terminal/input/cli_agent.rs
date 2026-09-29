@@ -152,8 +152,8 @@ impl Input {
         let default_colors = TextColors::from_appearance(appearance);
 
         // Only override while the CLI agent rich input is actually open - the
-        // same editor is reused for the normal terminal input and for other
-        // modes (shared sessions), and those shouldn't see the override.
+        // same editor is reused for the normal terminal input, which shouldn't see the
+        // override.
         let rich_input_open =
             CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id);
 

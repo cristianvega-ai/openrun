@@ -617,7 +617,7 @@ fn arrow_down_collapsed_umbrella_respects_search_filter() {
     assert_eq!(next, SettingsSection::Scripting);
 }
 
-// ── PageType filter lifecycle across a rebuild (APP-4922) ────────────────────
+// ── PageType filter lifecycle across a rebuild ────────────────────
 // Rebuilding a page's PageType resets its widget filter to every widget, so an
 // active query has to be reapplied for only matching widgets to render. No page
 // rebuilds itself on navigation any more (each subpage owns its own view), but

@@ -771,7 +771,7 @@ fn test_split_grid_exceed_rows() {
     assert!(bottom_grid.is_none());
 }
 
-/// Regression test for (CORE-1950), checks whether the grid splitting operation correctly
+/// Regression test: checks whether the grid splitting operation correctly
 /// splits visible rows (appropriately handling scrollback history).
 #[test]
 fn test_split_grid_scrollback_visible_rows() {

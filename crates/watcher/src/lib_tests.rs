@@ -1,6 +1,6 @@
 use super::*;
 
-/// APP-5243 / WARP-CLIENT-DEV-XT3: an empty path must never reach the platform watcher, because
+/// An empty path must never reach the platform watcher, because
 /// macOS turns it into a null-`CFError` release that traps and kills the process.
 #[test]
 fn empty_paths_never_reach_the_platform_watcher() {

@@ -1036,7 +1036,7 @@ impl PaneGroup {
 
                 let (view, terminal_manager) = PaneGroup::create_session(
                     // Use cwd from the template iff such path exists, otherwise None
-                    // TODO(CORE-3187): On Windows, support WSL directory restoration.
+                    // TODO: On Windows, support WSL directory restoration.
                     Some(cwd).filter(|p| p.exists()),
                     HashMap::new(),
                     uuid.as_bytes(),

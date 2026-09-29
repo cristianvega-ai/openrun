@@ -737,7 +737,6 @@ impl CodeEditorModel {
         let selection_model = self.selection_model.clone();
         self.update_content(
             |mut content, ctx| {
-                // TODO(CLD-558).
                 let buffer = content.buffer();
                 let start =
                     Point::new(replace_range.start as u32 + 1, 0).to_buffer_char_offset(buffer);
@@ -774,7 +773,7 @@ impl CodeEditorModel {
                 let buffer = self.buffer().as_ref(ctx);
 
                 let (modified, mut content) = if let Some(line_number) = line.line_number() {
-                    // TODO(CLD-558) Buffer lines are 1-indexed.
+                    // TODO: Buffer lines are 1-indexed.
                     let start_offset =
                         Point::new(line_number.as_u32() + 1, 0).to_buffer_char_offset(buffer);
                     let end_offset =
@@ -1636,7 +1635,6 @@ impl CodeEditorModel {
                     .into_iter()
                     .map(|line| {
                         LineDecoration::new(
-                            // TODO(CLD-558)
                             LineCount::from(line - 1),
                             LineCount::from(line),
                             overlay,
@@ -1694,7 +1692,7 @@ impl CodeEditorModel {
         self.begin_selection(offset, SelectionMode::Character, !multiselect, ctx);
     }
 
-    // TODO(CLD-1593): This would need to be changed in the future when we have a syntax tree representation.
+    // TODO: This would need to be changed in the future when we have a syntax tree representation.
     pub fn select_word_at(
         &mut self,
         offset: CharOffset,
@@ -1714,12 +1712,10 @@ impl CodeEditorModel {
         self.begin_selection(offset, SelectionMode::Line, !multiselect, ctx);
     }
 
-    // TODO(CLD-1593)
     pub fn forward_word(&mut self, select: bool, ctx: &mut ModelContext<Self>) {
         self.forward_word_with_unit(select, word_unit(ctx), ctx)
     }
 
-    // TODO(CLD-1593)
     pub fn backward_word(&mut self, select: bool, ctx: &mut ModelContext<Self>) {
         self.backward_word_with_unit(select, word_unit(ctx), ctx)
     }
@@ -1871,7 +1867,6 @@ impl CodeEditorModel {
     // The character offset at the start of the input row.
     pub fn start_of_line_offset(&self, row: usize, ctx: &AppContext) -> CharOffset {
         let buffer = self.content().as_ref(ctx);
-        // TODO(CLD-558)
         Point::new(row as u32, 0)
             .to_buffer_char_offset(buffer)
             .saturating_sub(&CharOffset::from(1))
@@ -3372,7 +3367,7 @@ impl CodeEditorModel {
                 .indented_line_tab_stops(Point::new(position.row, 0).to_buffer_char_offset(buffer))
                 .unwrap_or(0);
 
-            // TODO(CLD-558): point and buffer indices off by one
+            // TODO: point and buffer indices off by one
             position.row = position.row.saturating_sub(1);
 
             let mut levels_to_indent = self
@@ -3871,7 +3866,6 @@ impl CoreEditorModel for CodeEditorModel {
         {
             let selection_head = selection_model.first_selection_head();
             let mut position = selection_head.to_buffer_point(content);
-            // TODO(CLD-558)
             position.row = position.row.saturating_sub(1);
 
             // Do not apply more than 1 indentation unit if the cursor is not in the leading indentation

@@ -1211,7 +1211,7 @@ impl RichTextAction<CodeEditorView> for CodeEditorViewAction {
 
         match location {
             Location::Text { char_offset, .. } => match click_count {
-                // TODO(CLD-558): We need to align render model with the content model offset.
+                // TODO: We need to align render model with the content model offset.
                 1 if modifiers.shift => {
                     Some(CodeEditorViewAction::SelectionUpdate(char_offset + 1))
                 }

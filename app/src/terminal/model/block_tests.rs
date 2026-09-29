@@ -1415,7 +1415,7 @@ fn test_command_is_not_empty_combined_grid() {
     );
 }
 
-/// Regression test (CORE-1947): checks Warp prompt case for is_command_empty. Specifically,
+/// Regression test: checks Warp prompt case for is_command_empty. Specifically,
 /// even if the combined grid's content _exactly_ matches the prompt grid's content (which is used
 /// for PS1 preview), we should NOT consider the command to be empty. The underlying cursor check should
 /// be against (0, 0) in the combined grid, for the Warp prompt case, rather than checking against the

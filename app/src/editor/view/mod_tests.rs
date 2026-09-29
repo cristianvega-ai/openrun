@@ -511,7 +511,7 @@ fn test_smart_select_with_drag() {
 
         app.add_window(WindowStyle::NotStealFocus, |ctx| {
             let mut editor = EditorView::new_with_base_text(
-                "word ~/.warp/themes/foo-bar.yaml andy@warp.dev",
+                "word ~/.warp/themes/foo-bar.yaml andy@example.com",
                 Default::default(),
                 ctx,
             );
@@ -2173,7 +2173,7 @@ fn test_partial_autosuggestion() -> Result<()> {
         })?;
 
         // Case 3: Test out word boundaries within same line
-        // Using example supplied by user in Github issue #488
+        // Using an example supplied by a user report.
         view.update(&mut app, |view, ctx| {
             view.select_all(ctx);
             view.user_insert("grep", ctx);

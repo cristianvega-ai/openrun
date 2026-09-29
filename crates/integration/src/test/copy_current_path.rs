@@ -68,7 +68,7 @@ pub fn test_copy_current_path_copies_terminal_pwd() -> Builder {
 }
 
 /// Running "Copy current path" while a code editor pane is focused copies the active tab's
-/// file path. Regression coverage for issue #14518.
+/// file path.
 pub fn test_copy_current_path_copies_code_editor_file_path() -> Builder {
     new_builder()
         .with_setup(|utils| {

@@ -3035,7 +3035,7 @@ impl SettingsWidget for WindowOpacityWidget {
         let opacity_value = *window_settings.background_opacity;
         let mut col = Flex::column().with_child(render_body_item::<AppearancePageAction>(
             format!("Window Opacity: {opacity_value}"),
-            // TODO(CORE-3384) add AdditionalInfo here.
+            // TODO: add AdditionalInfo here.
             None,
             ToggleState::Enabled,
             appearance,

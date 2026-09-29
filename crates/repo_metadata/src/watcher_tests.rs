@@ -298,7 +298,7 @@ impl RepositorySubscriber for TestSubscriber {
 }
 
 #[test]
-#[ignore = "flaky test: CODE-1748"]
+#[ignore = "flaky test"]
 fn test_task_queue_processes_all_tasks() {
     VirtualFS::test("task_queue_processes_all_tasks", |dirs, mut vfs| {
         stub_git_repository(&mut vfs, "repo1");
@@ -442,7 +442,7 @@ fn test_scan_queue_handles_nonexistent_subscriber() {
 }
 
 #[test]
-#[ignore = "CODE-1071 - test is flaky and needs to be fixed"]
+#[ignore = "test is flaky and needs to be fixed"]
 fn test_file_updates_delivered() {
     env_logger::init();
 

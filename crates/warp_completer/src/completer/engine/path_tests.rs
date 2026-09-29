@@ -83,10 +83,7 @@ fn dir_entry(file_name: &str) -> EngineDirEntry {
     }
 }
 
-#[cfg_attr(
-    windows,
-    ignore = "CORE-3696: path sorting comparison function needs separators"
-)]
+#[cfg_attr(windows, ignore = "path sorting comparison function needs separators")]
 #[test]
 pub fn test_sorted_paths_relative_to() {
     let ctx = MockPathCompletionContext::default().with_entries_in_pwd([
@@ -254,10 +251,7 @@ pub fn test_sorted_directories_relative_to() {
 
 /// Verify that path suggestions are sorted case-insensitively so that uppercase entries
 /// don't always appear before lowercase ones.
-#[cfg_attr(
-    windows,
-    ignore = "CORE-3696: path sorting comparison function needs separators"
-)]
+#[cfg_attr(windows, ignore = "path sorting comparison function needs separators")]
 #[test]
 pub fn test_sorted_paths_case_insensitive_ordering() {
     let ctx = MockPathCompletionContext::default().with_entries_in_pwd([

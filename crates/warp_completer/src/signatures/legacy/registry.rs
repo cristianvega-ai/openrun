@@ -188,7 +188,7 @@ impl CommandRegistry {
     ///
     /// NOTE this function does not handle the case where the `Signature` has multiple arguments
     /// and an argument other than the first should be a top level command. Fig also does not
-    /// support this case, see CORE-2154 for more details.
+    /// support this case.
     fn maybe_load_replacement_signature(
         &self,
         signature: &Signature,

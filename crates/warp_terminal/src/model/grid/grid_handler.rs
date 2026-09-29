@@ -63,7 +63,7 @@ const BRACKET_PAIRS: [(char, char); 4] = [('(', ')'), ('[', ']'), ('{', '}'), ('
 /// path is one logical line split over several rows, so this must be large
 /// enough to span a whole path; it is sized to filesystem `PATH_MAX` (typically
 /// 4096). With too small a budget a long wrapped path is only detected up to the
-/// first wrap boundary (see issue #9193).
+/// first wrap boundary.
 ///
 /// This budget alone does NOT bound the per-hover cost: the candidate search
 /// below is O(prefix_fragments * suffix_fragments), so a separator-dense region
@@ -2477,7 +2477,7 @@ impl GridHandler {
 
         // We ensure that we don't copy "extra" empty cells over - only copy till the end of the "real content".
         // This ensures the user does not see "extra lines" in the typeahead blocks.
-        // TODO(CORE-1847): explore if we can remove this logic and simply rely on the cursor (need to fix
+        // TODO: explore if we can remove this logic and simply rely on the cursor (need to fix
         // the cursor position for typeahead block first).
         let bottommost_nonempty_other = other.bottommost_nonempty_row();
         let rightmost_nonempty_other = other.rightmost_nonempty_cell(None);

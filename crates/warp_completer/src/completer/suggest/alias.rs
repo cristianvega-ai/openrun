@@ -63,7 +63,7 @@ pub struct AliasExpansionResult<'a> {
 ///
 /// For example, given alias kgp="kubectl get pod", "kgp" will NOT be expanded, but "kgp " will.
 ///
-/// TODO(INT-830): handle alias expansion with multiple commands. Current alias expansion logic
+/// TODO: handle alias expansion with multiple commands. Current alias expansion logic
 /// was implemented for completions, where only the last command needs to be expanded.
 /// For example, given "kgp && kgp ", we expect it to expand to "kubectl get pod && kubectl get pod ",
 /// but currently it will expand to "kgp && kubectl get pod ".

@@ -169,7 +169,7 @@ fn transferred_tab_workspace(
 
 #[test]
 fn test_tab_bar_traffic_light_space_regression_for_resource_center_overlap() {
-    // Regression for #10139: the Resource Center/right panel can be open on
+    // Regression test: the Resource Center/right panel can be open on
     // Windows/Linux, but vertical-tabs and right-panel state should not decide
     // whether the tab bar reserves space for titlebar controls.
     let cases = [
@@ -2108,7 +2108,7 @@ fn test_vertical_tabs_panel_restored_open_when_show_in_restored_windows_enabled(
 
 #[test]
 fn test_vertical_tabs_panel_closed_when_disabled_even_if_persisted_open() {
-    // Regression for #9505: when `vertical_tabs_panel_open=true` is persisted
+    // Regression test: when `vertical_tabs_panel_open=true` is persisted
     // and the user then disables vertical tabs, restoring the workspace must
     // not honor the stale snapshot — otherwise a dismiss underlay paints over
     // the window and silently swallows every click.
@@ -3703,7 +3703,7 @@ fn test_pin_tab_on_grouped_tab_extracts_then_pins() {
     });
 }
 
-/// Regression test for #14241.
+/// Regression test.
 ///
 /// Creating a tab group opens the inline name editor and also spawns a terminal. About
 /// a second later that terminal's bootstrap block becomes visible and takes focus, which

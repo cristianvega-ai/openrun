@@ -73,7 +73,6 @@ impl ZeroState {
     fn valid_query_filters() -> impl Iterator<Item = QueryFilter> + use<> {
         let mut valid_filters = vec![];
 
-        // Don't show Files filter if the user is a viewer of a shared session
         if FeatureFlag::CommandPaletteFileSearch.is_enabled() {
             valid_filters.push(QueryFilter::Files);
         }

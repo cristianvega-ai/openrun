@@ -117,7 +117,7 @@ fn wait_for<T>(deadline_ms: u64, label: &str, mut predicate: impl FnMut() -> Opt
 
 /// Repeatedly logging a moderately sized message must eventually cause the
 /// active log file to be rotated to `.1` and a fresh active file to replace it.
-/// This is the headline behavior #7723 asks for.
+/// This is the headline behavior of the rotation option.
 #[test]
 fn simple_logger_with_rotation_rolls_active_file_over_when_threshold_exceeded() {
     let mut manager = LogManager::new();

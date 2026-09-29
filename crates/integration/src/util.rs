@@ -216,9 +216,9 @@ pub fn per_shell_output(
     None
 }
 
-/// Indicates a test that currently does not work in powershell. As part of CORE-2303, we should
+/// Indicates a test that currently does not work in powershell. We should
 /// eventually be removing all uses of this function.
-pub fn skip_if_powershell_core_2303() -> bool {
+pub fn skip_if_powershell() -> bool {
     let (starter, _) = current_shell_starter_and_version();
     !matches!(starter.shell_type(), ShellType::PowerShell)
 }

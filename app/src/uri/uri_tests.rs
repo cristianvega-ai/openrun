@@ -508,7 +508,7 @@ fn test_settings_section_for_simple_subpage() {
     assert!(settings_section_for_simple_subpage("not_a_subpage").is_none());
 }
 
-// Regression coverage for issue #9005: shell scripts opened via `file://` should run,
+// Regression coverage: shell scripts opened via `file://` should run,
 // not open in the editor. Exercised through the pure routing helper to avoid standing
 // up a full `AppContext`.
 

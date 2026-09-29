@@ -94,7 +94,7 @@ fn compile_metal_shaders() {
     // explicit `-mmacosx-version-min`, `xcrun metal` on recent Xcode toolchains
     // emits AIR for the current SDK (e.g. `air64_v27-apple-macosx15.0.0`)
     // regardless of the env var, and older Metal driver stacks reject the
-    // resulting `.metallib` during pipeline state creation. See #11700.
+    // resulting `.metallib` during pipeline state creation.
     let min_macos_version = env::var("MACOSX_DEPLOYMENT_TARGET")
         .expect("MACOSX_DEPLOYMENT_TARGET must be set for macOS builds");
     let min_version_arg = format!("-mmacosx-version-min={min_macos_version}");

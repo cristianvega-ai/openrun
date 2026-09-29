@@ -12,12 +12,12 @@ use warpui_core::integration::{AssertionCallback, AssertionOutcome, TestStep};
 use warpui_core::{async_assert, async_assert_eq};
 
 use super::{Builder, new_builder};
-use crate::util::skip_if_powershell_core_2303;
+use crate::util::skip_if_powershell;
 
 pub fn test_typeahead() -> Builder {
     new_builder()
-        // TODO(CORE-2732): Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Flakey on Powershell (Linux)
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             TestStep::new("Execute sleep 4")
@@ -285,7 +285,7 @@ time.sleep(100)
 }
 
 #[cfg(windows)]
-// TODO(CORE-2302): enable this test for windows
+// TODO: enable this test for windows
 pub fn test_background_output() -> Builder {
     new_builder()
 }

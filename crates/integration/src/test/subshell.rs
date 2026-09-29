@@ -20,7 +20,7 @@ use warpui_core::windowing::state::ApplicationStage;
 use warpui_core::{UpdateModel, async_assert};
 
 use super::{Builder, new_builder};
-use crate::util::skip_if_powershell_core_2303;
+use crate::util::skip_if_powershell;
 
 /// Generates an integration test that asserts that a local subshell of the given shell type can be
 /// successfully bootstrapped.
@@ -33,8 +33,8 @@ macro_rules! generate_can_bootstrap_local_subshell_for_shell {
                 // cleaning up files after the test, so we use a temp dir
                 // to hedge against this.
                 .use_tmp_filesystem_for_test_root_directory()
-                // TODO(CORE-2730): Re-enable once powershell has subshell support
-                .set_should_run_test(skip_if_powershell_core_2303)
+                // TODO: Re-enable once powershell has subshell support
+                .set_should_run_test(skip_if_powershell)
                 .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
                 .with_step(enter_local_subshell_command($shell))
                 .with_step(assert_warpify_footer_is_showing())
@@ -53,7 +53,7 @@ macro_rules! generate_can_bootstrap_remote_subshell_for_shell {
         /// Ensure a local subshell bootstraps successfully.
         pub fn $fn_name() -> Builder {
             new_builder()
-                // TODO(CORE-2333) PowerShell has no SSH wrapper.
+                // TODO: PowerShell has no SSH wrapper.
                 .set_should_run_test(|| {
                     let (starter, _) = current_shell_starter_and_version();
                     starter.shell_type() != ShellType::PowerShell
@@ -78,7 +78,7 @@ macro_rules! generate_can_bootstrap_remote_subshell_for_shell {
 
 generate_can_bootstrap_remote_subshell_for_shell!(test_can_bootstrap_remote_zsh_subshell, "zsh");
 generate_can_bootstrap_remote_subshell_for_shell!(test_can_bootstrap_remote_bash_subshell, "bash");
-// TODO(CORE-348): Consider upgrading the fish version in the testing VM so we can enable this
+// TODO: Consider upgrading the fish version in the testing VM so we can enable this
 // test.
 // generate_can_bootstrap_remote_subshell_for_shell!(test_can_bootstrap_remote_fish_subshell, "fish");
 
@@ -88,8 +88,8 @@ pub fn test_can_auto_bootstrap() -> Builder {
     const SUBSHELL_COMMAND: &str = "zsh";
 
     new_builder()
-        // TODO(CORE-2730): Re-enable once powershell has subshell support
-        .set_should_run_test(skip_if_powershell_core_2303)
+        // TODO: Re-enable once powershell has subshell support
+        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(TestStep::new("foo").add_assertion(|app, window_id| {
             app.update_model(

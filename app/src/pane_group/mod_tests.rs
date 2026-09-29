@@ -833,9 +833,8 @@ fn test_terminal_pane_headers() {
 }
 
 /// Tests that focusing two different panes in quick succession does not cause
-/// an infinite loop of focus changes, as outlined in this PR's description:
-/// https://github.com/warpdotdev/warp-internal/pull/8990
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+/// an infinite loop of focus changes.
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_pane_focus_does_not_have_an_infinite_event_loop() {
     App::test((), |mut app| async move {
@@ -1056,7 +1055,7 @@ fn test_focused_pane_is_synchronized_with_application_focus() {
     });
 }
 
-/// APP-5243: closing a file pane only hides it while undo-close is available, and the same view is
+/// closing a file pane only hides it while undo-close is available, and the same view is
 /// reattached without reopening its file. Releasing the file on close would therefore leave a
 /// restored pane rendering content that can never update again. The file is released only once the
 /// pane is permanently discarded.

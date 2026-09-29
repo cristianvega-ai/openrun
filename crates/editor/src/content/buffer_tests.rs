@@ -3178,7 +3178,7 @@ fn test_inline_markdown_roundtrips() {
         "*Complicated **text*** with *nest**ing***",
         "This `is not a [link](https://example.com) due to` precedence",
         "A **`bold code span`** too",
-        "[link1](https://warp.dev)[**link2**](https://example.com)",
+        "[link1](https://example.com)[**link2**](https://example.org)",
         "Combined *~~italic and strikethrough~~*",
         "Overlapping *~~abc~~def*",
         "This is <u>underlined</u>",
@@ -3287,7 +3287,7 @@ fn test_markdown_styled_whitespace() {
             );
         });
 
-        // Regression test for handling multibyte characters around the rearranged whitespace (CLD-962).
+        // Regression test for handling multibyte characters around the rearranged whitespace.
         let buffer3 = app.add_model(|_| Buffer::new(Box::new(|_, _| IndentBehavior::Ignore)));
         let selection3 = app.add_model(|_| BufferSelectionModel::new(buffer3.clone()));
 
@@ -3592,7 +3592,7 @@ fn test_import_markdown() {
 #[test]
 fn test_import_empty_markdown() {
     App::test((), |mut app| async move {
-        // This is a regression test for CLD-601, where parsing an empty Markdown file would put the
+        // This is a regression test where parsing an empty Markdown file would put the
         // buffer in an invalid state.
         let (buffer, selection) =
             Buffer::mock_from_markdown("", None, Box::new(|_, _| IndentBehavior::Ignore), &mut app);
@@ -4673,7 +4673,7 @@ fn test_enter_at_start_of_empty_text() {
 
 #[test]
 fn test_enter_after_empty_block() {
-    // This is a regression test for the issue described in https://github.com/warpdotdev/warp-internal/pull/6953#discussion_r1319189935.
+    // This is a regression test for the issue described in https://github.com/example/example-repo/pull/6953#discussion_r1319189935.
     App::test((), |mut app| async move {
         let buffer = app.add_model(|_| Buffer::new(Box::new(|_, _| IndentBehavior::Ignore)));
         let selection = app.add_model(|_| BufferSelectionModel::new(buffer.clone()));
@@ -7691,7 +7691,7 @@ fn test_nonatomic_undo_mixed() {
     });
 }
 
-// Regression test for CLD-655
+// Regression test.
 #[test]
 fn test_undo_with_invalidated_selection_range() {
     App::test((), |mut app| async move {
@@ -7811,7 +7811,7 @@ fn test_link_style_exact() {
             let edit_result = buffer.select_and_style_link(
                 CharOffset::from(3)..CharOffset::from(7),
                 "ne\nb".to_string(),
-                "www.warp.dev".to_string(),
+                "www.example.com".to_string(),
                 selection.clone(),
                 ctx,
             );
@@ -7824,7 +7824,7 @@ fn test_link_style_exact() {
             );
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>li<a><a_www.warp.dev>ne\\nb<a>lock"
+                "<text><a_www.google.com>li<a><a_www.example.com>ne\\nb<a>lock"
             );
 
             let delta = edit_result.delta.expect("Should exist");
@@ -7843,7 +7843,7 @@ fn test_link_style_exact() {
                             StyledBufferRun {
                                 run: "ne\n".to_string(),
                                 text_styles: TextStylesWithMetadata::default()
-                                    .link("www.warp.dev".to_string()),
+                                    .link("www.example.com".to_string()),
                                 block_style: BufferBlockStyle::PlainText
                             }
                         ],
@@ -7855,7 +7855,7 @@ fn test_link_style_exact() {
                             StyledBufferRun {
                                 run: "b".to_string(),
                                 text_styles: TextStylesWithMetadata::default()
-                                    .link("www.warp.dev".to_string()),
+                                    .link("www.example.com".to_string()),
                                 block_style: BufferBlockStyle::PlainText
                             },
                             StyledBufferRun {
@@ -7879,7 +7879,7 @@ fn test_link_style_exact() {
             buffer.redo(selection.clone(), ctx);
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>li<a><a_www.warp.dev>ne\\nb<a>lock"
+                "<text><a_www.google.com>li<a><a_www.example.com>ne\\nb<a>lock"
             );
         });
     });
@@ -7957,7 +7957,7 @@ fn test_link_style_different_tag() {
             let edit_result = buffer.select_and_style_link(
                 CharOffset::from(3)..CharOffset::from(7),
                 "normal long text".to_string(),
-                "www.warp.dev".to_string(),
+                "www.example.com".to_string(),
                 selection.clone(),
                 ctx,
             );
@@ -7970,7 +7970,7 @@ fn test_link_style_different_tag() {
             );
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>g<a>n<a_www.warp.dev>normal long text<a>ock"
+                "<text><a_www.google.com>g<a>n<a_www.example.com>normal long text<a>ock"
             );
 
             let delta = edit_result.delta.expect("Should exist");
@@ -7993,7 +7993,7 @@ fn test_link_style_different_tag() {
                         StyledBufferRun {
                             run: "normal long text".to_string(),
                             text_styles: TextStylesWithMetadata::default()
-                                .link("www.warp.dev".to_string()),
+                                .link("www.example.com".to_string()),
                             block_style: BufferBlockStyle::PlainText
                         },
                         StyledBufferRun {
@@ -8016,7 +8016,7 @@ fn test_link_style_different_tag() {
             buffer.redo(selection.clone(), ctx);
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>g<a>n<a_www.warp.dev>normal long text<a>ock"
+                "<text><a_www.google.com>g<a>n<a_www.example.com>normal long text<a>ock"
             );
         });
     });
@@ -8053,7 +8053,7 @@ fn test_link_style_overlapping() {
             let edit_result = buffer.select_and_style_link(
                 CharOffset::from(3)..CharOffset::from(7),
                 "ne\nb".to_string(),
-                "www.warp.dev".to_string(),
+                "www.example.com".to_string(),
                 selection.clone(),
                 ctx,
             );
@@ -8066,7 +8066,7 @@ fn test_link_style_overlapping() {
             );
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>li<a><a_www.warp.dev>ne\\nb<a>lock"
+                "<text><a_www.google.com>li<a><a_www.example.com>ne\\nb<a>lock"
             );
 
             let delta = edit_result.delta.expect("Should exist");
@@ -8085,7 +8085,7 @@ fn test_link_style_overlapping() {
                             StyledBufferRun {
                                 run: "ne\n".to_string(),
                                 text_styles: TextStylesWithMetadata::default()
-                                    .link("www.warp.dev".to_string()),
+                                    .link("www.example.com".to_string()),
                                 block_style: BufferBlockStyle::PlainText
                             }
                         ],
@@ -8097,7 +8097,7 @@ fn test_link_style_overlapping() {
                             StyledBufferRun {
                                 run: "b".to_string(),
                                 text_styles: TextStylesWithMetadata::default()
-                                    .link("www.warp.dev".to_string()),
+                                    .link("www.example.com".to_string()),
                                 block_style: BufferBlockStyle::PlainText
                             },
                             StyledBufferRun {
@@ -8121,7 +8121,7 @@ fn test_link_style_overlapping() {
             buffer.redo(selection.clone(), ctx);
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>li<a><a_www.warp.dev>ne\\nb<a>lock"
+                "<text><a_www.google.com>li<a><a_www.example.com>ne\\nb<a>lock"
             );
         });
     });
@@ -8158,7 +8158,7 @@ fn test_link_style_surrounded() {
             let edit_result = buffer.select_and_style_link(
                 CharOffset::from(3)..CharOffset::from(5),
                 "ne".to_string(),
-                "www.warp.dev".to_string(),
+                "www.example.com".to_string(),
                 selection.clone(),
                 ctx,
             );
@@ -8171,7 +8171,7 @@ fn test_link_style_surrounded() {
             );
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>li<a><a_www.warp.dev>ne<a>\\nblock"
+                "<text><a_www.google.com>li<a><a_www.example.com>ne<a>\\nblock"
             );
 
             let delta = edit_result.delta.expect("Should exist");
@@ -8189,7 +8189,7 @@ fn test_link_style_surrounded() {
                         StyledBufferRun {
                             run: "ne".to_string(),
                             text_styles: TextStylesWithMetadata::default()
-                                .link("www.warp.dev".to_string()),
+                                .link("www.example.com".to_string()),
                             block_style: BufferBlockStyle::PlainText
                         },
                         StyledBufferRun {
@@ -8212,7 +8212,7 @@ fn test_link_style_surrounded() {
             buffer.redo(selection.clone(), ctx);
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>li<a><a_www.warp.dev>ne<a>\\nblock"
+                "<text><a_www.google.com>li<a><a_www.example.com>ne<a>\\nblock"
             );
         });
     });
@@ -8470,13 +8470,13 @@ fn test_unstyle_link_overlapping() {
             buffer.select_and_style_link(
                 CharOffset::from(4)..CharOffset::from(7),
                 "e\nb".to_string(),
-                "www.warp.dev".to_string(),
+                "www.example.com".to_string(),
                 selection.clone(),
                 ctx,
             );
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>lin<a><a_www.warp.dev>e\\nb<a>lock"
+                "<text><a_www.google.com>lin<a><a_www.example.com>e\\nb<a>lock"
             );
 
             let prev_selection = buffer.to_rendered_selection_set(selection.clone(), ctx);
@@ -8495,7 +8495,7 @@ fn test_unstyle_link_overlapping() {
             );
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>l<a>ine<a_www.warp.dev>\\nb<a>lock"
+                "<text><a_www.google.com>l<a>ine<a_www.example.com>\\nb<a>lock"
             );
 
             let delta = edit_result.delta.expect("Should exist");
@@ -8519,7 +8519,7 @@ fn test_unstyle_link_overlapping() {
                             StyledBufferRun {
                                 run: "\n".to_string(),
                                 text_styles: TextStylesWithMetadata::default()
-                                    .link("www.warp.dev".to_string()),
+                                    .link("www.example.com".to_string()),
                                 block_style: BufferBlockStyle::PlainText
                             },
                         ],
@@ -8531,7 +8531,7 @@ fn test_unstyle_link_overlapping() {
                             StyledBufferRun {
                                 run: "b".to_string(),
                                 text_styles: TextStylesWithMetadata::default()
-                                    .link("www.warp.dev".to_string()),
+                                    .link("www.example.com".to_string()),
                                 block_style: BufferBlockStyle::PlainText
                             },
                             StyledBufferRun {
@@ -8549,13 +8549,13 @@ fn test_unstyle_link_overlapping() {
             buffer.undo(selection.clone(), ctx);
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>lin<a><a_www.warp.dev>e\\nb<a>lock"
+                "<text><a_www.google.com>lin<a><a_www.example.com>e\\nb<a>lock"
             );
 
             buffer.redo(selection.clone(), ctx);
             assert_eq!(
                 buffer.content.debug(),
-                "<text><a_www.google.com>l<a>ine<a_www.warp.dev>\\nb<a>lock"
+                "<text><a_www.google.com>l<a>ine<a_www.example.com>\\nb<a>lock"
             );
         });
     });
@@ -9705,7 +9705,7 @@ fn test_code_block_styling_over_styled_text() {
     });
 }
 
-// Regression test for CLD-751.
+// Regression test.
 #[test]
 fn test_insert_link_at_end_of_line() {
     App::test((), |mut app| async move {
@@ -9844,7 +9844,7 @@ fn test_copy_paste_behavior() {
     });
 }
 
-// Regression test for CLD-771.
+// Regression test.
 #[test]
 fn test_invalidate_content() {
     App::test((), |mut app| async move {
@@ -9893,7 +9893,7 @@ fn test_invalidate_content() {
     });
 }
 
-// Regression test for CLD-782.
+// Regression test.
 #[test]
 fn test_export_markdown_multiple_indentation_level() {
     App::test((), |mut app| async move {
@@ -9992,7 +9992,7 @@ fn test_mixed_linebreak_paste() {
     });
 }
 
-// Regression test for CLD-862
+// Regression test.
 #[test]
 fn test_code_block_not_inherit_text_styling() {
     App::test((), |mut app| async move {
@@ -11493,7 +11493,7 @@ fn test_unstyling_code_block_do_not_leak_syntax_color() {
     });
 }
 
-// Regression test for CLD-1218.
+// Regression test.
 #[test]
 fn test_undo_should_not_leak_syntax_color() {
     App::test((), |mut app| async move {
@@ -11589,7 +11589,7 @@ fn test_insert_new_block_should_not_leak_style() {
     });
 }
 
-// Regression test for CLD-1106.
+// Regression test.
 #[test]
 fn test_deletion_range_include_block_marker_should_not_leak_style() {
     App::test((), |mut app| async move {
@@ -11860,7 +11860,7 @@ fn test_styled_blocks_from_buffer_start() {
 
 #[test]
 fn test_styled_block_default_boundaries() {
-    // As part of CLD-1178, this tests the StyledBufferBlocks iterator at block boundaries.
+    // This tests the StyledBufferBlocks iterator at block boundaries.
     App::test((), |mut app| async move {
         let buffer = app.add_model(|_| Buffer::new(Box::new(|_, _| IndentBehavior::Ignore)));
         let selection = app.add_model(|_| BufferSelectionModel::new(buffer.clone()));

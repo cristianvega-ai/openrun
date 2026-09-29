@@ -7,7 +7,7 @@ description: GUI desktop app only. How to build a Settings page in the Warp clie
 
 **Scope — GUI desktop app only.** This skill covers the settings modal in `app/src/settings_view/`, part of Warp's desktop app. For general UI conventions see `gui-ui-guidelines`.
 
-Settings pages look simple, so they get written by pattern-matching the nearest neighbor — and the nearest neighbor is often wrong. The same two mistakes have produced five Linear tickets (APP-5060, APP-5058, APP-4910, APP-4922, APP-5059, one of which turned out to be a false positive). Read this before writing a settings page so the sixth doesn't happen.
+Settings pages look simple, so they get written by pattern-matching the nearest neighbor — and the nearest neighbor is often wrong. The same two mistakes keep recurring. Read this before writing a settings page so they don't happen again.
 
 ## The model
 
@@ -109,7 +109,7 @@ Classify the page before you write it:
 
 - **Single-topic page** — one heading names everything on it, but the content is still made of separately-matchable widgets. Third party CLI agents, Editor and Code Review, Scripting. → **Title in the `PageType` slot.**
 - **Multi-section page** — several independent sections, each with its own heading. Appearance, Features. → **Per-section headings live in widgets/categories** and correctly disappear with their rows. (For `Categorized`, `get_filtered` drops categories whose widgets all filtered out, so their subheaders vanish automatically — that's the behavior you want.)
-- **Monolith page** — Keybindings, Teams, About. There is no partial-match state: the sole widget either matches, and the whole page renders, or it doesn't, and the whole page renders empty and drops out of the sidebar. So a monolith can never strand an orphaned setting under a missing heading — it is **not** affected by bug class 1, but for that reason, *not* because its title is protected. Passing the title through the slot is still the tidier structure, just don't expect it to keep the title on screen during a non-matching search; on a monolith it will not. A page that is really one unfilterable widget must be built as `Monolith`, not `Uncategorized`: otherwise the sidebar shows a permanent, misleading "(1)" on any match ([APP-5530]).
+- **Monolith page** — Keybindings, Teams, About. There is no partial-match state: the sole widget either matches, and the whole page renders, or it doesn't, and the whole page renders empty and drops out of the sidebar. So a monolith can never strand an orphaned setting under a missing heading — it is **not** affected by bug class 1, but for that reason, *not* because its title is protected. Passing the title through the slot is still the tidier structure, just don't expect it to keep the title on screen during a non-matching search; on a monolith it will not. A page that is really one unfilterable widget must be built as `Monolith`, not `Uncategorized`: otherwise the sidebar shows a permanent, misleading "(1)" on any match.
 
 The two are not mutually exclusive: a page can name itself in the title slot **and** have per-section subheaders inside its widgets. Privacy does exactly that — `PageType::new_uncategorized(widgets, Some("Privacy"))` plus `render_sub_header` calls inside individual widgets. The rule is per heading, not per page.
 
@@ -121,13 +121,13 @@ Worked positive example: **Scripting** (`scripting_page.rs`) is a small page don
 
 **Cause:** the only heading was rendered inside a widget — via `build_sub_header` / `render_page_title` in that widget's `render`, or via a header-only widget that exists just to draw a title. Filtering removes the widget, and the heading goes with it.
 
-Canonical fix — commit `ddadcee` ([APP-5060], #14519). Before, a widget's `render` opened with a `build_sub_header(appearance, "<Title>", …)` call followed by all of the page's rows. After, the heading moved to page chrome and the rows became focused widgets:
+Canonical fix. Before, a widget's `render` opened with a `build_sub_header(appearance, "<Title>", …)` call followed by all of the page's rows. After, the heading moved to page chrome and the rows became focused widgets:
 
 ```rust
 PageType::new_uncategorized(widgets, Some(PageTitle::new(PAGE_TITLE)))
 ```
 
-The same commit (#14524) deleted a header-only widget whose entire job was `build_sub_header(appearance, self.title, None)` and replaced it with a title passed through `PageType`. **A header-only widget is always this bug.** If a widget renders nothing but a title, delete it and use the title slot.
+The same change deleted a header-only widget whose entire job was `build_sub_header(appearance, self.title, None)` and replaced it with a title passed through `PageType`. **A header-only widget is always this bug.** If a widget renders nothing but a title, delete it and use the title slot.
 
 ## Bug class 2 — the unfilterable mega-widget
 
@@ -135,7 +135,7 @@ The same commit (#14524) deleted a header-only widget whose entire job was `buil
 
 **Cause:** one widget renders many unrelated settings and declares one mega `search_terms()` blob covering all of them. The widget is the filter unit, so it's all-or-nothing.
 
-Before (`CLIAgentWidget`, pre-#14524) — one widget, one blob, seven settings:
+Before (`CLIAgentWidget`, before the fix) — one widget, one blob, seven settings:
 
 ```rust
 fn search_terms(&self) -> &str {

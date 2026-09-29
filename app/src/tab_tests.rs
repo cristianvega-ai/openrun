@@ -22,7 +22,7 @@ fn groups(ids: &[TabGroupId]) -> HashMap<TabGroupId, TabGroup> {
         .collect()
 }
 
-// GH-13073: a tab that is the sole member of its group must NOT be offered
+// A tab that is the sole member of its group must NOT be offered
 // "New group with tab" (it would just recreate an identical single-tab group);
 // it offers "Remove from group" instead.
 #[test]
@@ -103,7 +103,7 @@ fn tab_activate_binding_name_omits_unbound_and_out_of_bounds_tabs() {
     assert_eq!(tab_activate_binding_name(0, 0), None);
 }
 
-// GH-13073 follow-up: a tab that shares a group with siblings SHOULD still be
+// Follow-up: a tab that shares a group with siblings SHOULD still be
 // offered "New group with tab" so it can be pulled out into its own new group
 // (à la Chrome), and it offers "Remove from group" as well.
 #[test]

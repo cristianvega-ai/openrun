@@ -64,8 +64,8 @@ impl SessionContext {
     ) -> Vec<EngineDirEntry> {
         match self.session.session_type() {
             SessionType::Local => {
-                // The host cannot resolve an `IO_REPARSE_TAG_LX_SYMLINK` over `\\wsl$`
-                // (APP-3993): it can't classify a symlink-to-directory correctly, and it can't
+                // The host cannot resolve an `IO_REPARSE_TAG_LX_SYMLINK` over `\\wsl$`:
+                // it can't classify a symlink-to-directory correctly, and it can't
                 // traverse *through* a symlinked directory to list its contents at all. So a WSL
                 // session asks the guest for the listing directly, following symlinks (`-L`) so
                 // both problems are avoided at the source, rather than patching up a host listing

@@ -70,7 +70,7 @@ pub enum CustomEvent {
     #[cfg_attr(any(target_os = "macos"), allow(dead_code))]
     InternetDisconnected,
     /// The system theme (light/dark) changed.
-    /// TODO(CORE-2274): theming on Windows
+    /// TODO: theming on Windows
     #[cfg_attr(any(target_os = "macos", target_os = "windows"), allow(dead_code))]
     SystemThemeChanged,
     /// Send a platform-native notification.

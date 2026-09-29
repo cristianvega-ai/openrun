@@ -13,7 +13,7 @@ fn rect_from_points(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> RectF {
     RectF::from_points(vec2f(min_x, min_y), vec2f(max_x, max_y))
 }
 
-// TODO(CORE-2002): Make test non-Mac specific by switching to using bundled Roboto font.
+// TODO: Make test non-Mac specific by switching to using bundled Roboto font.
 #[test]
 #[cfg_attr(
     not(target_os = "macos"),

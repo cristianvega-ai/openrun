@@ -95,7 +95,7 @@ fn test_enable_ssh_wrapper_false_migrates_to_enable_ssh_warpification_false() {
     });
 }
 
-/// Post-#13228 behavior: the one-time legacy-wrapper migration honors a historical
+/// Current behavior: the one-time legacy-wrapper migration honors a historical
 /// opt-out once, and a user who then re-enables Warpify SSH keeps it. The trigger's
 /// reset-to-default persists, so the migration does not fire again to clobber the
 /// user's choice.
@@ -157,7 +157,7 @@ fn test_legacy_wrapper_migration_is_one_time_and_preserves_reenabled_warpificati
                 *WarpifySettings::as_ref(ctx)
                     .enable_ssh_warpification
                     .value(),
-                "re-enabled Warpify SSH persists across launches (#13228)"
+                "re-enabled Warpify SSH persists across launches"
             );
         });
     });

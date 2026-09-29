@@ -104,7 +104,7 @@ impl FilePickerConfiguration {
         self.allows_files
     }
 
-    // TODO(CORE-2324): open file picker on Windows
+    // TODO: open file picker on Windows
 
     pub fn allows_folder(&self) -> bool {
         self.allows_folder

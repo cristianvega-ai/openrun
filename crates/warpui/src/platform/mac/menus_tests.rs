@@ -1,4 +1,4 @@
-//! Memory-behavior repros for APP-4154 batch 1.C (warpui-platform-nsstring).
+//! Memory-behavior repros for the NSString allocation sites in the menu code.
 //!
 //! Covers two kinds of fix in `menus.rs`:
 //!

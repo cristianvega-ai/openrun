@@ -1200,8 +1200,8 @@ fn stored_ignored_suggestions_of_removed_types_are_dropped() {
     );
 }
 
-/// A database at the schema before the migration that dropped the AI, Warp Drive, team and
-/// account tables, with rows in every dropped table and column (see the file for the layout).
+/// A database at the schema before the migration that dropped the unused
+/// tables, with rows in every dropped table and column (see the file for the layout).
 const PRE_DROP_DEAD_TABLES_SEED: &str =
     include_str!("../../../crates/persistence/test_data/pre_drop_dead_tables_seed.sql");
 

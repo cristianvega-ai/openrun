@@ -614,7 +614,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace")),
     ]);
 
-    // TODO(PLAT-113): Support a11y on non-MacOS platforms
+    // TODO: Support a11y on non-MacOS platforms
     if cfg!(target_os = "macos") {
         app.register_editable_bindings([
             EditableBinding::new(
@@ -645,7 +645,7 @@ pub fn init(app: &mut AppContext) {
 
     // Pane rename — same shape as RenameActiveTab but acts on the focused pane
     // in the active tab. Ships with no default keybinding so it surfaces in
-    // Settings → Keyboard shortcuts as remappable; resolves issue #9351, where
+    // Settings → Keyboard shortcuts as remappable, where
     // the action existed only in the right-click context menu and was not
     // reachable via the binding registry.
     app.register_editable_bindings([EditableBinding::new(

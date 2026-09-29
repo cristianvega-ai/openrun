@@ -146,7 +146,7 @@ fn test_parse_text_styles() {
 
 #[test]
 fn test_parse_numeric_font_weights_preserve_custom_weight() {
-    // Regression test for #14429: numeric CSS font weights on pasted HTML must round-trip to the
+    // Regression test: numeric CSS font weights on pasted HTML must round-trip to the
     // matching `CustomWeight`, not collapse to bold-or-plain. Prior behavior mapped every
     // weight > 400 to Bold and everything else to no weight, dropping Light/Medium/Black/etc.
     let cases = [
@@ -606,7 +606,7 @@ fn test_code_and_inline_code() {
     );
 }
 
-// Test for CLD-860
+// Confluence exports code blocks as nested `span` elements.
 #[test]
 fn test_confluence_code_block() {
     let confluence_code_block = r#"<span data-code-lang="shell" data-ds--code--code-block="" class="prismjs css-1vd0zfg"><code class="language-shell"><span class="comment linenumber ds-line-number" data-ds--line-number="1" style="flex-shrink: 0; box-sizing: border-box; padding-left: 8px; margin-right: 8px; text-align: right; user-select: none; display: inline-block !important; min-width: calc(1ch + 16px) !important; font-style: normal !important; color: var(--ds-text-subtlest, #505F79) !important; padding-right: 8px !important; float: left;"></span><span class="">This is a code block</span></code></span>"#;

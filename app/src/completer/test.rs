@@ -218,7 +218,7 @@ fn windows_to_unix_shell_encoding(
     unix_path
 }
 
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 pub fn test_session_context_lists_directory_entries_remotely() {
     App::test((), |_app| async move {
@@ -255,7 +255,7 @@ pub fn test_session_context_lists_directory_entries_remotely() {
                 let mut entries = HashSet::<EngineDirEntry>::from_iter(Arc::unwrap_or_clone(
                     warpui::r#async::block_on(ctx.list_directory_entries(cwd)),
                 ));
-                // TODO(CORE-2000): The ls script we use to list entries in remote
+                // TODO: The ls script we use to list entries in remote
                 // sessions adds a spurious "." directory when run in the VirtualFS.
                 // As a temporary workaround, we remove this file in the test.
                 entries.remove(&EngineDirEntry::test_dir("."));
@@ -274,7 +274,7 @@ pub fn test_session_context_lists_directory_entries_remotely() {
     });
 }
 
-/// Regression test for APP-5190: in a remote/Warpified session a symlink pointing at a
+/// Regression test: in a remote/Warpified session a symlink pointing at a
 /// directory is classified as a directory (so it completes with a trailing separator and is
 /// offered for `cd`), while a symlink to a file completes as a file.
 #[cfg(unix)]
@@ -295,7 +295,7 @@ pub fn test_session_context_follows_symlinked_directories_remotely() {
                 let mut entries = HashSet::<EngineDirEntry>::from_iter(Arc::unwrap_or_clone(
                     warpui::r#async::block_on(ctx.list_directory_entries(cwd)),
                 ));
-                // TODO(CORE-2000): The ls script we use to list entries in remote
+                // TODO: The ls script we use to list entries in remote
                 // sessions adds a spurious "." directory when run in the VirtualFS.
                 // As a temporary workaround, we remove this file in the test.
                 entries.remove(&EngineDirEntry::test_dir("."));
@@ -361,7 +361,7 @@ fn perform_special_characters_in_path_test(session: Session, file_names: Vec<&st
                 let mut entries = HashSet::<EngineDirEntry>::from_iter(Arc::unwrap_or_clone(
                     warpui::r#async::block_on(ctx.list_directory_entries(test_dir)),
                 ));
-                // TODO(CORE-2000): The ls script we use to list entries in remote
+                // TODO: The ls script we use to list entries in remote
                 // sessions adds a spurious "." directory when run in the VirtualFS.
                 // As a temporary workaround, we remove this file in the test.
                 entries.remove(&EngineDirEntry::test_dir("."));
@@ -393,8 +393,8 @@ pub fn test_session_context_lists_directory_entries_locally_with_special_charact
     perform_special_characters_in_path_test(Session::test(), file_names);
 }
 
-/// Regression test for CORE-1927.
-#[cfg_attr(windows, ignore = "TODO(CORE-3626)")]
+/// Regression test.
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 pub fn test_session_context_lists_directory_entries_remotely_with_special_characters_in_path() {
     #[cfg(unix)]

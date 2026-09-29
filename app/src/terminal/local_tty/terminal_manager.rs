@@ -522,7 +522,7 @@ fn on_shell_determined<S: TerminalSurface>(
     });
 
     // Initialize the terminal attributes poller.
-    // TODO(CORE-2297): Implement TerminalPoller on Windows.
+    // TODO: Implement TerminalPoller on Windows.
     #[cfg(unix)]
     {
         let terminal_attributes_poller = ctx.add_model(|_| TerminalAttributesPoller::new(fd));
@@ -562,10 +562,7 @@ impl<S> TerminalManager<S> {
         session_id: SessionId,
     ) -> Result<(), SendError<Message>> {
         let shell_type = shell_starter.shell_type();
-        if shell_type == crate::terminal::shell::ShellType::Zsh
-            // For more on why this is necessary on Git Bash, see https://linear.app/warpdotdev/issue/CORE-3202.
-            || shell_starter.is_msys2()
-        {
+        if shell_type == crate::terminal::shell::ShellType::Zsh || shell_starter.is_msys2() {
             let init_shell_script = crate::terminal::bootstrap::init_shell_script_for_shell(
                 shell_type,
                 &crate::ASSETS,

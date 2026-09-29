@@ -686,7 +686,7 @@ fn failed_lazy_loaded_path_registration_is_retried() {
     });
 }
 
-// ── Ancestor grouping (APP-4106) ────────────────────────────────────
+// ── Ancestor grouping ────────────────────────────────────
 #[test]
 fn sibling_roots_are_preserved() {
     VirtualFS::test("file_tree_sibling_roots", |dirs, mut vfs| {
@@ -821,21 +821,21 @@ fn click_on_file_under_absorbed_descendant_keeps_file_selected() {
     VirtualFS::test(
         "file_tree_click_file_preserves_selection",
         |dirs, mut vfs| {
-            vfs.mkdir("code/warp-server")
+            vfs.mkdir("code/example-server")
                 .with_files(vec![Stub::FileWithContent(
-                    "code/warp-server/main.rs",
+                    "code/example-server/main.rs",
                     "fn main() {}\n",
                 )]);
             let code = dirs.tests().join("code");
-            let warp_server = code.join("warp-server");
-            let main_rs = warp_server.join("main.rs");
+            let example_server = code.join("example-server");
+            let main_rs = example_server.join("main.rs");
 
             App::test((), |mut app| async move {
                 let (_, repository_metadata_model) = initialize_app(&mut app);
                 let (_, file_tree_view) =
                     app.add_window(WindowStyle::NotStealFocus, FileTreeView::new);
 
-                // Seed with `code` as the only root and expand warp-server so
+                // Seed with `code` as the only root and expand example-server so
                 // main.rs is materialized in the flattened items.
                 file_tree_view.update(&mut app, |view, ctx| {
                     view.set_is_active(true, ctx);
@@ -844,10 +844,15 @@ fn click_on_file_under_absorbed_descendant_keeps_file_selected() {
                 await_repository_indexed(&mut app, &repository_metadata_model, &code).await;
 
                 file_tree_view.update(&mut app, |view, ctx| {
-                    view.toggle_folder_expansion(&std_path(&code), &std_path(&warp_server), ctx);
+                    view.toggle_folder_expansion(&std_path(&code), &std_path(&example_server), ctx);
                 });
-                await_directory_loaded(&mut app, &repository_metadata_model, &code, &warp_server)
-                    .await;
+                await_directory_loaded(
+                    &mut app,
+                    &repository_metadata_model,
+                    &code,
+                    &example_server,
+                )
+                .await;
 
                 // Simulate a click on main.rs (select_id is what the click
                 // action and the active-file scroll both go through).
@@ -868,13 +873,13 @@ fn click_on_file_under_absorbed_descendant_keeps_file_selected() {
 
                 // Now `DirectoriesChanged` fires as a side effect of the file
                 // opening in a code view — the working-directories-model adds
-                // the file's repo/parent (warp-server) to the active set.
+                // the file's repo/parent (example-server) to the active set.
                 file_tree_view.update(&mut app, |view, ctx| {
-                    view.set_root_directories(vec![warp_server.clone(), code.clone()], ctx);
+                    view.set_root_directories(vec![example_server.clone(), code.clone()], ctx);
                 });
 
                 file_tree_view.read(&app, |view, _ctx| {
-                    // Selection is still on main.rs, not on warp-server.
+                    // Selection is still on main.rs, not on example-server.
                     let selected = view.selected_item.clone().expect("selection");
                     let root_dir = view.root_directories.get(&std_path(&code)).unwrap();
                     let path = root_dir.items.get(selected.index).unwrap().path();
@@ -894,13 +899,13 @@ fn pending_focus_target_does_not_re_scroll_after_first_apply() {
     // rebuilds (e.g. from repo-metadata updates) must keep the
     // selection but NOT re-scroll, so user scrolling is respected.
     VirtualFS::test("file_tree_pending_respects_user_scroll", |dirs, mut vfs| {
-        vfs.mkdir("tree/warp-server")
+        vfs.mkdir("tree/example-server")
             .with_files(vec![Stub::FileWithContent(
-                "tree/warp-server/main.rs",
+                "tree/example-server/main.rs",
                 "fn main() {}\n",
             )]);
         let tree = dirs.tests().join("tree");
-        let warp_server = tree.join("warp-server");
+        let example_server = tree.join("example-server");
 
         App::test((), |mut app| async move {
             let (_, repository_metadata_model) = initialize_app(&mut app);
@@ -908,7 +913,7 @@ fn pending_focus_target_does_not_re_scroll_after_first_apply() {
 
             file_tree_view.update(&mut app, |view, ctx| {
                 view.set_is_active(true, ctx);
-                view.set_root_directories(vec![warp_server.clone(), tree.clone()], ctx);
+                view.set_root_directories(vec![example_server.clone(), tree.clone()], ctx);
             });
             await_repository_indexed(&mut app, &repository_metadata_model, &tree).await;
 
@@ -919,7 +924,7 @@ fn pending_focus_target_does_not_re_scroll_after_first_apply() {
             });
 
             // Simulate a later rebuild (e.g. metadata update). Selection
-            // should still land on warp-server, but `scrolled` must stay
+            // should still land on example-server, but `scrolled` must stay
             // true (no re-scroll).
             file_tree_view.update(&mut app, |view, _ctx| {
                 view.rebuild_flattened_items();
@@ -930,7 +935,7 @@ fn pending_focus_target_does_not_re_scroll_after_first_apply() {
                 let selected = view.selected_item.clone().expect("selection");
                 let root_dir = view.root_directories.get(&std_path(&tree)).unwrap();
                 let path = root_dir.items.get(selected.index).unwrap().path();
-                assert_eq!(path, &std_path(&warp_server));
+                assert_eq!(path, &std_path(&example_server));
                 let pending = view.pending_focus_target.as_ref().expect("pending");
                 assert!(pending.scrolled, "scrolled flag stays set after re-apply");
             });
@@ -941,31 +946,31 @@ fn pending_focus_target_does_not_re_scroll_after_first_apply() {
 #[test]
 fn focus_follows_absorbed_descendant_once_its_item_is_materialized() {
     VirtualFS::test("file_tree_focus_follow_deferred", |dirs, mut vfs| {
-        vfs.mkdir("tree/warp-server")
+        vfs.mkdir("tree/example-server")
             .with_files(vec![Stub::FileWithContent(
-                "tree/warp-server/main.rs",
+                "tree/example-server/main.rs",
                 "fn main() {}\n",
             )]);
         let tree = dirs.tests().join("tree");
-        let warp_server = tree.join("warp-server");
+        let example_server = tree.join("example-server");
 
         App::test((), |mut app| async move {
             let (_, repository_metadata_model) = initialize_app(&mut app);
             let (_, file_tree_view) = app.add_window(WindowStyle::NotStealFocus, FileTreeView::new);
 
-            // User cd's into warp-server with ~/tree as the ancestor root.
-            // The warp-server entry should be materialized by indexing and
+            // User cd's into example-server with ~/tree as the ancestor root.
+            // The example-server entry should be materialized by indexing and
             // selected as the focus-follow target.
             file_tree_view.update(&mut app, |view, ctx| {
                 view.set_is_active(true, ctx);
-                view.set_root_directories(vec![warp_server.clone(), tree.clone()], ctx);
+                view.set_root_directories(vec![example_server.clone(), tree.clone()], ctx);
             });
             await_repository_indexed(&mut app, &repository_metadata_model, &tree).await;
 
             file_tree_view.read(&app, |view, _ctx| {
                 // Single displayed root, descendant absorbed.
                 assert_eq!(view.displayed_directories, vec![std_path(&tree)]);
-                // Selection landed on warp-server's directory header.
+                // Selection landed on example-server's directory header.
                 let selected = view.selected_item.clone().expect("selection set");
                 assert_eq!(selected.root, std_path(&tree));
                 let root_dir = view.root_directories.get(&std_path(&tree)).unwrap();
@@ -973,7 +978,7 @@ fn focus_follows_absorbed_descendant_once_its_item_is_materialized() {
                     .items
                     .get(selected.index)
                     .expect("selected index in range");
-                assert_eq!(selected_item.path(), &std_path(&warp_server));
+                assert_eq!(selected_item.path(), &std_path(&example_server));
                 // Pending target is preserved across rebuilds so later
                 // repo-metadata updates don't override the cwd-follow
                 // selection. It clears when the user interacts explicitly
@@ -983,7 +988,7 @@ fn focus_follows_absorbed_descendant_once_its_item_is_materialized() {
                     .as_ref()
                     .expect("pending target preserved");
                 assert_eq!(pending.root, std_path(&tree));
-                assert_eq!(pending.path, std_path(&warp_server));
+                assert_eq!(pending.path, std_path(&example_server));
                 // The initial apply scrolled; later applies must not
                 // re-scroll so user scrolling is respected.
                 assert!(pending.scrolled, "initial apply scrolls the tree");
@@ -997,10 +1002,10 @@ fn focus_follows_absorbed_descendant_once_its_item_is_materialized() {
                     root: std_path(&tree),
                     index: 0,
                 };
-                // Sanity: the first item is the root header, not warp-server.
+                // Sanity: the first item is the root header, not example-server.
                 assert_ne!(
                     root_dir.items.first().unwrap().path(),
-                    &std_path(&warp_server)
+                    &std_path(&example_server)
                 );
                 view.select_id(&id, ctx);
             });
