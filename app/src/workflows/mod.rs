@@ -23,7 +23,7 @@ pub enum WorkflowSource {
     Project,
 
     /// A hardcoded workflow type that allows Warp to surface features as Workflows (e.g.
-    /// a command to see our network log)
+    /// a command to tail the diagnostic log)
     App,
 }
 

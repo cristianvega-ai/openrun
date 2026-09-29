@@ -34,7 +34,6 @@ use crate::interval_timer::IntervalTimer;
 use crate::launch_configs::launch_config;
 use crate::pane_group::{NewTerminalOptions, PanesLayout};
 use crate::persistence::ModelEvent;
-use crate::server::server_api::{ServerApi, ServerApiProvider};
 use crate::settings::{QuakeModeSettings, ThemeSettings, apply_onboarding_settings};
 use crate::settings_view::{SettingsSection, flags};
 use crate::terminal::available_shells::AvailableShell;
@@ -1141,7 +1140,6 @@ enum OnboardingState {
 
 pub struct RootView {
     onboarding_state: OnboardingState,
-    pub server_api: Arc<ServerApi>,
     pub model_event_sender: Option<SyncSender<ModelEvent>>,
     mouse_states: TrafficLightMouseStates,
     /// The window ID is needed because the "maximize" button needs to change its icon based on
@@ -1157,8 +1155,6 @@ impl RootView {
         workspace_setting: NewWorkspaceSource,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        let server_api = ServerApiProvider::as_ref(ctx).get();
-
         let model_event_sender = global_resource_handles.model_event_sender.clone();
         let workspace_args = WorkspaceArgs {
             global_resource_handles,
@@ -1185,7 +1181,6 @@ impl RootView {
 
         let root_view = Self {
             onboarding_state,
-            server_api: server_api.clone(),
             model_event_sender,
             mouse_states: Default::default(),
             window_id: ctx.window_id(),

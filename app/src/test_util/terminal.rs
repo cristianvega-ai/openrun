@@ -3,7 +3,6 @@ use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
 use warp_core::ui::appearance::Appearance;
-use warp_server_client::iap::IapManager;
 use warpui::platform::WindowStyle;
 use warpui::{App, ViewHandle, WindowId};
 use watcher::HomeDirectoryWatcher;
@@ -15,7 +14,6 @@ use crate::code_review::git_repo_model::GitRepoModels;
 use crate::context_chips::prompt::Prompt;
 use crate::network::NetworkStatus;
 use crate::search::files::model::FileSearchModel;
-use crate::server::server_api::ServerApiProvider;
 use crate::settings::PrivacySettings;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
@@ -35,18 +33,6 @@ use crate::workspace_metadata::PersistedWorkspace;
 /// Initializes all of the necessary models to use a terminal view.
 pub fn initialize_app_for_terminal_view(app: &mut App) {
     initialize_history_persistence_for_tests(app);
-
-    app.add_singleton_model(|_| ServerApiProvider::new_for_test());
-    // Register a disabled `IapManager` (no IAP state) so code paths that read
-    // the singleton (e.g. the shared-session viewer network) don't panic in
-    // tests. With `None` state it is an inert no-op.
-    app.add_singleton_model(|ctx| {
-        IapManager::new(
-            None,
-            Box::new(|_| futures::FutureExt::boxed(futures::future::ready(None::<String>))),
-            ctx,
-        )
-    });
     app.add_singleton_model(|_| NetworkStatus::new());
     app.add_singleton_model(|_| SystemStats::new());
     app.add_singleton_model(|_| Prompt::mock());

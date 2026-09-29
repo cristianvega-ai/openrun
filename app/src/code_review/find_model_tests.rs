@@ -18,7 +18,6 @@ use crate::code_review::GlobalCodeReviewModel;
 use crate::code_review::code_review_view::CodeReviewView;
 use crate::code_review::diff_state::DiffStateModel;
 use crate::pane_group::WorkingDirectoriesModel;
-use crate::server::server_api::ServerApiProvider;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::vim_registers::VimRegisters;
@@ -156,7 +155,6 @@ fn initialize_test_app(app: &mut App) {
 
     // CodeReviewView reads the server API when comments are populated, so register the same
     // singletons the other code_review tests use.
-    app.add_singleton_model(|_| ServerApiProvider::new_for_test());
 }
 
 fn create_find_model_with_query(

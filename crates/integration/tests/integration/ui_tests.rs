@@ -58,7 +58,7 @@ integration_tests! {
     test_restore_snapshot_with_deleted_cwd,
     test_session_restoration_with_multiple_shells,
     test_restore_snapshot_with_background_output,
-    test_restore_snapshot_with_legacy_cloud_object,
+    test_restore_snapshot_with_legacy_object_row,
     test_restore_snapshot_with_markdown_file,
     test_restore_snapshot_with_settings_page,
     // TODO(kevin): figure out why the file name doesn't match.

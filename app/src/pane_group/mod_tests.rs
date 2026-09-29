@@ -7,7 +7,6 @@ use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
 use warp_core::features::FeatureFlag;
-use warp_server_client::iap::IapManager;
 use warpui::platform::{WindowBounds, WindowStyle};
 use warpui::windowing::WindowManager;
 use warpui::windowing::state::ApplicationStage;
@@ -21,7 +20,6 @@ use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::resource_center::TipsCompleted;
 use crate::search::files::model::FileSearchModel;
-use crate::server::server_api::ServerApiProvider;
 use crate::settings::PrivacySettings;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
@@ -43,17 +41,6 @@ use crate::{AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandle
 
 fn initialize_app(app: &mut App) {
     initialize_settings_for_tests(app);
-
-    app.add_singleton_model(|_ctx| ServerApiProvider::new_for_test());
-    // Disabled (`None`) IapManager so shared-session viewer code that reads the
-    // singleton doesn't panic in tests; it is an inert no-op.
-    app.add_singleton_model(|ctx| {
-        IapManager::new(
-            None,
-            Box::new(|_| futures::FutureExt::boxed(futures::future::ready(None::<String>))),
-            ctx,
-        )
-    });
     app.add_singleton_model(|_ctx| PtySpawner::new_for_test());
     app.add_singleton_model(|_| NetworkStatus::new());
     app.add_singleton_model(|_| SystemStats::new());
@@ -118,7 +105,6 @@ fn mock_pane_group(app: &mut App, options: MockOptions) -> ViewHandle<PaneGroup>
             PaneGroup::new_with_panes_layout(
                 tips_model,
                 user_default_shell_changed_banner_dismissal_model_handle,
-                ServerApiProvider::as_ref(ctx).get(),
                 options.layout,
                 block_lists,
                 None,
@@ -196,7 +182,10 @@ impl pane::PaneContent for PreAttachReturnsFalsePane {
     }
 
     fn snapshot(&self, _app: &AppContext) -> LeafContents {
-        LeafContents::NetworkLog
+        LeafContents::CodeReview(crate::app_state::CodeReviewPaneSnapshot::Local {
+            terminal_uuid: Vec::new(),
+            repo_path: std::path::PathBuf::new(),
+        })
     }
 
     fn has_application_focus(&self, _ctx: &mut ViewContext<PaneGroup>) -> bool {
@@ -1005,7 +994,6 @@ fn test_focused_pane_is_synchronized_with_application_focus() {
                     PaneGroup::new_with_panes_layout(
                         tips_model,
                         user_default_shell_changed_banner_dismissal_model_handle,
-                        ServerApiProvider::as_ref(ctx).get(),
                         panes_layout,
                         block_lists,
                         None,

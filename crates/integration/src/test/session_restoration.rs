@@ -326,7 +326,7 @@ pub fn test_restore_snapshot_with_background_output() -> Builder {
 /// Tests restoring a database that still holds a legacy cloud object row.
 ///
 /// The row is ignored and the app starts normally.
-pub fn test_restore_snapshot_with_legacy_cloud_object() -> Builder {
+pub fn test_restore_snapshot_with_legacy_object_row() -> Builder {
     new_builder()
         .with_setup(|_utils| {
             integration_testing::create_file_from_assets(

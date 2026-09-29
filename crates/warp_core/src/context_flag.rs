@@ -11,7 +11,6 @@ pub enum ContextFlag {
     CreateNewSession,
     CloseWindow,
     ForceSidePanelOpen,
-    NetworkLogConsole,
     RunWorkflow,
     LaunchConfigurations,
     AllowSettingsModalToClose,

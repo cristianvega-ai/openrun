@@ -103,6 +103,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Teams and workspaces](#teams-and-workspaces) — deleted `app/src/workspaces/` (`UserWorkspaces`, `Team`, `Workspace`, billing metadata and team policies, the workspace poller), the Teams settings page and its modals, the title-bar team switcher, `warp://team` links, the window team id, team-enforced secret redaction and the workspace/team sqlite reads and writes
 - [User model](#user-model) — deleted `app/src/auth/`, `AuthStateProvider`, `AuthManager` and the user, anonymous-id and account-credential types; the app has no user entity at all
 - [Remote images and remote asset fetching](#remote-images-and-remote-asset-fetching) — remote `http(s)` markdown images render as alt text plus a link instead of being downloaded; removed `asset_cache::url_source`, the URL asset cache, the URL-based fallback-font loader and the `reqwest` dependency of `asset_cache`
+- [Network log console and the ServerApi provider](#network-log-console-and-the-serverapi-provider) — deleted the in-app network log pane, its Privacy-page entry and binding, `ServerApiProvider`/`ServerApi`, the IAP manager and the staging-access toast; nothing outside `server/telemetry/` is left in `app/src/server/`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2730,3 +2731,25 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Fallback fonts: no user impact. The Warp web client was the only registrant of downloadable Noto families (removed with the web target), so scripts the primary font lacks still depend on the operating system's fallback fonts.
 - A click anywhere on the blocked image's line opens the link, not only on the text.
 - `warp_errors` still pulls `reqwest` in through its `reqwest-errors` feature (enabled by `warp_core`), so `cargo tree -i reqwest` lists `asset_cache` only as a transitive dependent through `warpui_core`; `asset_cache` itself declares no `reqwest`.
+## Network log console and the ServerApi provider
+**Why:** The app makes no calls to Warp servers, so nothing is left for `ServerApi` to send and no request for the network log console to show. `ServerApiProvider` had shrunk to a logged-out `BaseClient` that the workspace, the pane group and the terminal views carried around without ever calling.
+
+**Removed:**
+- `app/src/server/{server_api, ids, network_log_view, network_log_pane_manager}.rs`: `ServerApi`, `ServerApiProvider`, the `send_graphql_request` helper, the `ServerId` re-export, `NetworkLogView` and `NetworkLogPaneManager`. `app/src/server/` now holds only `telemetry/`, which TEL-4 deletes.
+- The network log pane: `pane_group/pane/network_log_pane.rs`, `LeafContents::NetworkLog` (with `LeafContents::is_persisted` and the matching skips in `save_app_state`), `IPaneType::NetworkLog`, the `PaneId` constructors, `Workspace::open_network_log_pane`, `WorkspaceAction::OpenNetworkLogPane`, the "Show Warp network log" editable binding (`input:insert_network_logging_workflow`), the Privacy page "Network log console" widget with `LaunchNetworkLogging` and `SettingsViewEvent::LaunchNetworkLogging`, and `ContextFlag::NetworkLogConsole` (no code enabled it).
+- `server_api` fields and parameters: `PaneGroup`, `TerminalViewResources`, `Workspace`, `RootView`, `PaneGroup::{new_with_panes_layout, new_from_existing_pane}`; `ServerApiProvider` and `IapManager` registrations in `lib.rs` and in every test setup (`test_util/terminal.rs`, `workspace/view_tests.rs`, `pane_group/mod_tests.rs` and the other test modules).
+- The `NetworkLogModel` and IAP registrations in `lib.rs`: the IAP token refresh and its "IAP credential refresh failed" toast, and `Workspace::observe_server_api` with the "Staging API call failed" toast.
+- `TelemetryEvent::{InviteTeammates, TierLimitHit}` and `TierLimitHitEvent`, whose `ServerId` payload type went.
+- `TypedPane::Other` and `SummaryPaneKind::Other` in the vertical tabs, which only the network log pane produced.
+
+**Modified:**
+- The vertical-tabs test dummy pane (`IPaneType::Dummy`) is classified as a file pane.
+- `WorkflowSource::App`'s doc names the diagnostic-log workflow instead of the network log.
+
+**Persisted state:** none. The network log pane was never written to sqlite. A `input:insert_network_logging_workflow` entry in a user's keybindings file is ignored like any other unknown action.
+
+**User-visible impact:** the Privacy settings page no longer offers the network log console. It was only shown when a context flag that nothing set was on, so no one saw it before either.
+
+**Notes:**
+- `http_client`'s request and response hook setters (`set_before_request_fn`, `set_after_response_fn`) and the `serialized_payload` plumbing existed for the network log and have no callers now (CFG-1).
+- `ChannelState::{iap_config, uses_staging_server}` and `LocalShellState::get_interactive_path_env_var` lost their last callers here (CFG-1).
