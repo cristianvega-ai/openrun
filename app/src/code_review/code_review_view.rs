@@ -665,12 +665,10 @@ impl CodeReviewView {
             }
         }
 
-        // Always reload diffs on open, re-reading the filesystem. We pass
-        // should_fetch_base: false because re-opening the panel doesn't
-        // need to fetch the base branch from origin.
+        // Always reload diffs on open, re-reading the filesystem.
         self.diff_state_model.update(ctx, |model, ctx| {
             model.set_code_review_metadata_refresh_enabled(true, ctx);
-            model.load_diffs_for_current_repo(false, ctx);
+            model.load_diffs_for_current_repo(ctx);
         });
     }
 
@@ -1470,7 +1468,7 @@ impl CodeReviewView {
         }
 
         self.diff_state_model.update(ctx, |model, ctx| {
-            model.set_diff_mode(mode, false, ctx);
+            model.set_diff_mode(mode, ctx);
         });
         self.update_diff_selector_selection(ctx);
         self.invalidate_all(None, ctx);
@@ -6479,7 +6477,7 @@ impl TypedActionView for CodeReviewView {
             }
             CodeReviewAction::RefreshGitState => {
                 self.diff_state_model.update(ctx, |model, ctx| {
-                    model.load_diffs_for_current_repo(false, ctx);
+                    model.load_diffs_for_current_repo(ctx);
                     model.refresh_metadata_after_git_operation(ctx);
                 });
                 self.refresh_pr_info(ctx);

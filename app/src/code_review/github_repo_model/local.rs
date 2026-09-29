@@ -1,6 +1,8 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
+use futures::future::{BoxFuture, FutureExt as _};
 use settings::Setting as _;
 use warp_errors::report_if_error;
 use warpui::r#async::SpawnedFutureHandle;
@@ -20,6 +22,42 @@ const PR_INFO_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 const GITHUB_INFO_PERIODIC_REFRESH: Duration = Duration::from_secs(60);
 const REPOSITORY_INFO_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// The `gh` lookups this model performs. Production shells out to the user's
+/// `gh`, which talks to GitHub; tests substitute a stub so no process runs.
+pub(crate) trait GitHubCli: Send + Sync + 'static {
+    fn pr_for_branch(
+        &self,
+        repo_path: PathBuf,
+        path_env: Option<String>,
+    ) -> BoxFuture<'static, anyhow::Result<Option<PrInfo>>>;
+
+    fn repository_info(
+        &self,
+        repo_path: PathBuf,
+        path_env: Option<String>,
+    ) -> BoxFuture<'static, anyhow::Result<Option<RepositoryInfo>>>;
+}
+
+struct SystemGitHubCli;
+
+impl GitHubCli for SystemGitHubCli {
+    fn pr_for_branch(
+        &self,
+        repo_path: PathBuf,
+        path_env: Option<String>,
+    ) -> BoxFuture<'static, anyhow::Result<Option<PrInfo>>> {
+        async move { get_pr_for_branch(&repo_path, path_env.as_deref()).await }.boxed()
+    }
+
+    fn repository_info(
+        &self,
+        repo_path: PathBuf,
+        path_env: Option<String>,
+    ) -> BoxFuture<'static, anyhow::Result<Option<RepositoryInfo>>> {
+        async move { get_repository_info(&repo_path, path_env.as_deref()).await }.boxed()
+    }
+}
+
 /// Per-repository model that owns the GitHub-sourced metadata lifecycle for a
 /// single repo — the values fetched through the (relatively expensive) `gh`
 /// CLI rather than local `git`:
@@ -28,6 +66,9 @@ const REPOSITORY_INFO_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 ///
 /// `GitHubRepoModel` is created lazily when a consumer asks for it via
 /// [`crate::code_review::git_repo_model::GitRepoModels::subscribe_github_repo`].
+/// The only consumers are a terminal whose prompt or CLI-agent footer shows the
+/// GitHub PR chip and the open code-review panel. `gh` talks to GitHub, so
+/// nothing here runs unless one of them holds a handle.
 /// While at least one strong `ModelHandle<GitHubRepoModel>` is alive, the model:
 ///   - tracks the current branch by subscribing to its sibling
 ///     [`GitRepoStatusModel`] for `MetadataChanged` events,
@@ -47,6 +88,8 @@ const REPOSITORY_INFO_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 /// status alive for as long as GitHub info is needed.
 pub struct LocalGitHubRepoModel {
     repo_path: PathBuf,
+    gh: Arc<dyn GitHubCli>,
+    periodic_refresh_interval: Duration,
     /// Strong handle to the sibling git-status model. Keeps it alive so we
     /// always have a branch source.
     git_status: ModelHandle<GitRepoStatusModel>,
@@ -89,6 +132,32 @@ impl LocalGitHubRepoModel {
         git_status: ModelHandle<GitRepoStatusModel>,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
+        Self::new_with_cli(
+            repo_path,
+            git_status,
+            Arc::new(SystemGitHubCli),
+            GITHUB_INFO_PERIODIC_REFRESH,
+            ctx,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_github_cli(
+        repo_path: PathBuf,
+        git_status: ModelHandle<GitRepoStatusModel>,
+        gh: Arc<dyn GitHubCli>,
+        ctx: &mut ModelContext<Self>,
+    ) -> Self {
+        Self::new_with_cli(repo_path, git_status, gh, GITHUB_INFO_PERIODIC_REFRESH, ctx)
+    }
+
+    fn new_with_cli(
+        repo_path: PathBuf,
+        git_status: ModelHandle<GitRepoStatusModel>,
+        gh: Arc<dyn GitHubCli>,
+        periodic_refresh_interval: Duration,
+        ctx: &mut ModelContext<Self>,
+    ) -> Self {
         let branch = git_status
             .as_ref(ctx)
             .metadata(ctx)
@@ -118,6 +187,8 @@ impl LocalGitHubRepoModel {
 
         let mut model = Self {
             repo_path,
+            gh,
+            periodic_refresh_interval,
             git_status,
             branch,
             pr_info: None,
@@ -143,9 +214,10 @@ impl LocalGitHubRepoModel {
 
     /// Schedules a periodic timer that refreshes PR info and repository info.
     fn schedule_periodic_refresh(&mut self, ctx: &mut ModelContext<Self>) {
+        let interval = self.periodic_refresh_interval;
         let handle = ctx.spawn(
-            async {
-                async_io::Timer::after(GITHUB_INFO_PERIODIC_REFRESH).await;
+            async move {
+                async_io::Timer::after(interval).await;
             },
             |me, _, ctx| {
                 me.refresh_pr_info(ctx);
@@ -184,6 +256,7 @@ impl LocalGitHubRepoModel {
             return;
         }
         let repo_path = self.repo_path.clone();
+        let gh = self.gh.clone();
         #[cfg(feature = "local_tty")]
         let path_future = {
             // Use the shell's interactive PATH so `gh` can be found when Warp
@@ -198,7 +271,7 @@ impl LocalGitHubRepoModel {
         let abort_handle = ctx.spawn(
             async move {
                 let path_env = path_future.await;
-                let fetch = get_pr_for_branch(&repo_path, path_env.as_deref());
+                let fetch = gh.pr_for_branch(repo_path, path_env);
                 let timeout = async_io::Timer::after(PR_INFO_FETCH_TIMEOUT);
                 futures::pin_mut!(fetch);
                 match futures::future::select(fetch, timeout).await {
@@ -226,6 +299,7 @@ impl LocalGitHubRepoModel {
             return;
         }
         let repo_path = self.repo_path.clone();
+        let gh = self.gh.clone();
         #[cfg(feature = "local_tty")]
         let path_future = {
             // Use the shell's interactive PATH so `gh` can be found when Warp
@@ -239,7 +313,7 @@ impl LocalGitHubRepoModel {
         self.repository_info_abort_handle = Some(ctx.spawn(
             async move {
                 let path_env = path_future.await;
-                let fetch = get_repository_info(&repo_path, path_env.as_deref());
+                let fetch = gh.repository_info(repo_path, path_env);
                 let timeout = async_io::Timer::after(REPOSITORY_INFO_FETCH_TIMEOUT);
                 futures::pin_mut!(fetch);
                 match futures::future::select(fetch, timeout).await {
@@ -345,6 +419,8 @@ impl LocalGitHubRepoModel {
     pub(crate) fn new_for_test(git_status: ModelHandle<GitRepoStatusModel>) -> Self {
         Self {
             repo_path: PathBuf::from("/test"),
+            gh: Arc::new(SystemGitHubCli),
+            periodic_refresh_interval: GITHUB_INFO_PERIODIC_REFRESH,
             git_status,
             branch: None,
             pr_info: None,

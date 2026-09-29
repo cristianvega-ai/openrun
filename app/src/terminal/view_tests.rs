@@ -1,8 +1,13 @@
 use std::cell::RefCell;
 use std::pin::pin;
 use std::rc::Rc;
+use std::sync::Arc;
 
+use repo_metadata::DirectoryWatcher;
+use repo_metadata::repositories::DetectedRepositories;
 use warp_terminal::model::escape_sequences::{BRACKETED_PASTE_END, BRACKETED_PASTE_START, C0};
+use warp_util::local_or_remote_path::LocalOrRemotePath;
+use warp_util::standardized_path::StandardizedPath;
 use warpui::notification::UserNotification;
 use warpui::{App, EntityIdSet, Presenter, WindowInvalidation};
 
@@ -28,11 +33,13 @@ use crate::terminal::cli_agent_sessions::{
     CLIAgentSessionsModel,
 };
 use crate::terminal::input::{InputConfig, InputType};
+use crate::terminal::local_shell::LocalShellState;
 use crate::terminal::model::ansi::{self, BootstrappedValue, InitShellValue, PreexecValue};
 use crate::terminal::model::blocks::{TotalIndex, insert_block};
 use crate::terminal::model::grid::Dimensions as _;
 use crate::terminal::model::terminal_model::WithinBlock;
 use crate::terminal::{CLIAgent, MockTerminalManager, TerminalModel, should_right_click_paste};
+use crate::test_util::github_cli::CountingGitHubCli;
 use crate::test_util::terminal::{
     add_window_with_id_and_terminal, initialize_app_for_terminal_view,
 };
@@ -4921,5 +4928,207 @@ fn visible_bootstrap_block_leaves_focus_on_tab_group_rename_editor() {
         assert!(workspace.read(&app, |workspace, ctx| {
             workspace.is_inline_rename_editor_focused(ctx)
         }));
+    });
+}
+
+/// Registers a fresh directory as a watched git repository and returns its
+/// canonical path, so `GitRepoModels` can build models for it.
+fn register_watched_repo(app: &mut App) -> (tempfile::TempDir, PathBuf) {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let repo = dunce::canonicalize(temp_dir.path()).expect("canonical repo path");
+    let standardized =
+        StandardizedPath::from_local_canonicalized(repo.as_path()).expect("standardized path");
+    DetectedRepositories::handle(app).update(app, |repos, _| {
+        repos.insert_test_repo_root(standardized.clone());
+    });
+    DirectoryWatcher::handle(app).update(app, |watcher, ctx| {
+        watcher
+            .add_directory(standardized, ctx)
+            .expect("watch the repo directory");
+    });
+    (temp_dir, repo)
+}
+
+/// A terminal in a watched repo whose `gh` calls are counted instead of run.
+fn terminal_in_repo_with_counting_gh(
+    app: &mut App,
+    prompt_chips: Vec<ContextChipKind>,
+) -> (
+    tempfile::TempDir,
+    ViewHandle<TerminalView>,
+    Arc<CountingGitHubCli>,
+) {
+    initialize_app_for_terminal_view(app);
+    app.add_singleton_model(|_| LocalShellState::NotLoaded);
+    let gh = Arc::new(CountingGitHubCli::default());
+    GitRepoModels::handle(app).update(app, |models, _| {
+        models.set_github_cli_for_test(gh.clone());
+    });
+    Prompt::handle(app).update(app, |prompt, ctx| {
+        prompt
+            .update(prompt_chips, false, WarpPromptSeparator::None, ctx)
+            .expect("set the prompt chips");
+    });
+    let (temp_dir, repo) = register_watched_repo(app);
+    let terminal = add_window_with_terminal(app, None);
+    terminal.update(app, |view, ctx| {
+        view.current_repo_path = Some(LocalOrRemotePath::Local(repo));
+        view.update_git_status_subscription(ctx);
+    });
+    (temp_dir, terminal, gh)
+}
+
+#[test]
+fn repo_terminal_without_a_pr_chip_never_starts_gh() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = terminal_in_repo_with_counting_gh(
+            &mut app,
+            vec![ContextChipKind::WorkingDirectory, ContextChipKind::Username],
+        );
+
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.needs_pr_info(ctx));
+            assert!(!view.should_subscribe_to_git_status(ctx));
+            assert!(view.git_repo_status.is_none());
+            assert!(view.github_repo_model.is_none());
+        });
+
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+        assert_eq!(gh.total_lookups(), 0, "no chip means no `gh` process");
+    });
+}
+
+#[test]
+fn open_cli_agent_rich_input_in_a_repo_does_not_start_gh() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = terminal_in_repo_with_counting_gh(
+            &mut app,
+            vec![ContextChipKind::WorkingDirectory, ContextChipKind::Username],
+        );
+
+        // An open rich input in a repo used to force git and PR polling.
+        terminal.update(&mut app, |view, ctx| {
+            CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
+                sessions.set_session(
+                    view.view_id,
+                    CLIAgentSession {
+                        agent: CLIAgent::Droid,
+                        status: CLIAgentSessionStatus::InProgress,
+                        session_context: CLIAgentSessionContext::default(),
+                        input_state: CLIAgentInputState::Closed,
+                        should_auto_toggle_input: false,
+                        listener: None,
+                        draft_text: None,
+                        received_rich_notification: false,
+                    },
+                    ctx,
+                );
+            });
+            view.open_cli_agent_rich_input(ctx);
+            assert!(view.has_active_cli_agent_input_session(ctx));
+        });
+        terminal.update(&mut app, |view, ctx| {
+            view.update_git_status_subscription(ctx)
+        });
+
+        terminal.read(&app, |view, ctx| {
+            assert!(
+                view.input_mode_model.as_ref(ctx).is_prompt_input_enabled(),
+                "the rich input must be open for this test to cover the old trigger"
+            );
+            assert!(
+                !view.needs_pr_info(ctx),
+                "the default CLI-agent footer has no PR chip"
+            );
+            assert!(view.github_repo_model.is_none());
+        });
+
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+        assert_eq!(gh.total_lookups(), 0);
+    });
+}
+
+#[test]
+fn git_branch_chip_reads_local_git_but_never_runs_gh() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = terminal_in_repo_with_counting_gh(
+            &mut app,
+            vec![
+                ContextChipKind::WorkingDirectory,
+                ContextChipKind::GitDiffStats,
+            ],
+        );
+
+        terminal.read(&app, |view, ctx| {
+            assert!(view.should_subscribe_to_git_status(ctx));
+            assert!(!view.needs_pr_info(ctx));
+            assert!(view.git_repo_status.is_some());
+            assert!(view.github_repo_model.is_none());
+        });
+
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+        assert_eq!(gh.total_lookups(), 0, "local git chips must not call `gh`");
+    });
+}
+
+#[test]
+fn pr_chip_starts_gh_and_removing_it_stops_gh() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = terminal_in_repo_with_counting_gh(
+            &mut app,
+            vec![
+                ContextChipKind::WorkingDirectory,
+                ContextChipKind::GithubPullRequest,
+            ],
+        );
+
+        terminal.read(&app, |view, ctx| {
+            assert!(view.needs_pr_info(ctx));
+            assert!(view.github_repo_model.is_some());
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "a visible PR chip must look up the repository"
+        );
+
+        Prompt::handle(&app).update(&mut app, |prompt, ctx| {
+            prompt
+                .update(
+                    [ContextChipKind::WorkingDirectory],
+                    false,
+                    WarpPromptSeparator::None,
+                    ctx,
+                )
+                .expect("remove the PR chip");
+        });
+        // The mock prompt does not forward settings changes, so re-evaluate
+        // the way the view does on `PromptEvent::Changed`.
+        terminal.update(&mut app, |view, ctx| {
+            view.update_git_status_subscription(ctx)
+        });
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.needs_pr_info(ctx));
+            assert!(view.github_repo_model.is_none());
+            assert!(view.git_repo_status.is_none());
+        });
+    });
+}
+
+#[test]
+fn terminal_outside_a_repo_never_needs_pr_info() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) =
+            terminal_in_repo_with_counting_gh(&mut app, vec![ContextChipKind::GithubPullRequest]);
+
+        terminal.update(&mut app, |view, ctx| {
+            view.current_repo_path = None;
+            view.update_git_status_subscription(ctx);
+            assert!(!view.needs_pr_info(ctx));
+            assert!(!view.should_subscribe_to_git_status(ctx));
+            assert!(view.github_repo_model.is_none());
+        });
+        let lookups_at_leave = gh.total_lookups();
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
+        assert_eq!(gh.total_lookups(), lookups_at_leave);
     });
 }

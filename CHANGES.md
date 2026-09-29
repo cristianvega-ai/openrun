@@ -130,6 +130,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Ignored agent-view integration tests](#ignored-agent-view-integration-tests) — un-ignored the integration tests that pass, deleted four whose assertions describe the old UI
 - [Synchronous find path](#synchronous-find-path) — removed the synchronous block-list find and the `Option` around the async find controller
 - [Import formatting](#import-formatting) — ran `./script/format` so the CI format check passes
+- [Background git and GitHub traffic](#background-git-and-github-traffic) — `gh` and remote `git` now run only while a PR chip or the code-review panel is in use, or on an explicit action; removed the leftover "agent context" triggers and the dead `git fetch origin`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3325,3 +3326,18 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 - The git dependencies on the `warpdotdev/*` forks were not touched (decision 15).
 - `cargo deny check bans licenses sources` and `script/offline_audit` still pass, and no banned crate was added.
 - Checked with `cargo check --workspace --all-targets` and `cargo clippy --workspace --all-targets --tests -- -D warnings` on macOS, `cargo check --workspace --all-targets` for `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu` (the zig cc shims from the cross-target task), `cargo nextest run --workspace`, and both smoke launches.
+## Background git and GitHub traffic
+**Why:** MASTER decision 20. The final audit (SWP-18) found that every terminal inside a git repository ran `gh pr view` and `gh repo view` at startup and once a minute, even with no PR chip shown, and that `gh` contacts `api.github.com` when it is logged in. The cause was two leftovers of the removed agent context: `needs_git_status_for_agent_context` and `needs_pr_info_for_agent_context` turned the polling on whenever the rich input was open in a repo. The code-review diff model also carried a `git fetch origin <branch>` path that nothing could reach.
+
+**Removed:**
+- `TerminalView::{needs_git_status_for_agent_context, needs_pr_info_for_agent_context}`. The git-status and PR-info subscriptions now depend on the chips only.
+- `LocalDiffStateModel::{set_diff_mode_and_fetch_base, get_or_fetch_merge_base}` and the `should_fetch_base` parameter that ran `git fetch origin` (every caller passed `false`). The app no longer has any `git fetch`.
+
+**Modified:**
+- `TerminalView::needs_pr_info` is true only when the terminal is in a git repository and the active prompt or the CLI-agent footer contains the GitHub pull request chip (or the default prompt is re-validating a suppressed PR chip, which fails locally until `gh` is installed and logged in).
+- `LocalGitHubRepoModel` runs its lookups through a small `GitHubCli` trait (production: the user's `gh`), so tests can count lookups without starting a process. `GitRepoModels` can be given a stub for tests.
+- README, CONTRIBUTING and AGENTS.md describe this fourth network path: the user's own remotes and GitHub through `gh` and `git`, only while that UI is in use. `script/offline_audit` gains a `net-git` check that fails on any Rust `["fetch" | "pull" | "clone" | "ls-remote" | "push" | "remote", ...]` git argument list other than the `git push` in `app/src/util/git.rs`.
+
+**User-visible impact:** A repository terminal whose prompt has no pull request chip, and no open code-review panel, runs no `gh` at all. The default prompt includes the chip, so a default setup still polls once a minute while a `gh` login exists; removing the chip from the prompt (right-click the prompt, then Edit prompt) stops it. Local `git status` for the other chips is unchanged.
+
+**Notes:** Tests: `terminal::view::tests::{repo_terminal_without_a_pr_chip_never_starts_gh, open_cli_agent_rich_input_in_a_repo_does_not_start_gh, git_branch_chip_reads_local_git_but_never_runs_gh, pr_chip_starts_gh_and_removing_it_stops_gh, terminal_outside_a_repo_never_needs_pr_info}`, `code_review::code_review_view::tests::gh_lookups_run_only_while_the_panel_is_open` and, for the model, `a_live_model_looks_up_the_pr_and_repository_and_keeps_polling`, `dropping_the_model_stops_all_gh_lookups`, `a_model_without_a_branch_only_looks_up_the_repository`. Judgment call: "a visible PR chip" is approximated by "the chip is in the active prompt or footer", because whether a PR exists is only known after asking `gh`.

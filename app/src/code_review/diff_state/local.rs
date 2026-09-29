@@ -472,34 +472,17 @@ impl LocalDiffStateModel {
         // Noop on WASM builds.
     }
 
-    pub fn set_diff_mode(
-        &mut self,
-        mode: DiffMode,
-        should_fetch_base: bool,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    pub fn set_diff_mode(&mut self, mode: DiffMode, ctx: &mut ModelContext<Self>) {
         if self.mode != mode {
             self.mode = mode;
-            self.load_diffs_for_current_repo(should_fetch_base, ctx);
+            self.load_diffs_for_current_repo(ctx);
         }
-    }
-
-    /// Like [`Self::set_diff_mode`], but also arranges for the next diff load
-    /// to fetch the base branch from origin if it is not available locally.
-    /// This is intended for the `insert_code_review_comments` flow where the
-    /// requested base branch may never have been checked out.
-    pub fn set_diff_mode_and_fetch_base(&mut self, mode: DiffMode, ctx: &mut ModelContext<Self>) {
-        self.set_diff_mode(mode, true, ctx);
     }
 
     /// Loads the actual diffs for the current repo.
     /// See [`DiffStateModel::refresh_diff_metadata_for_current_repo`] for a version that only refreshes diff _metadata.
     #[cfg(feature = "local_fs")]
-    pub fn load_diffs_for_current_repo(
-        &mut self,
-        should_fetch_base: bool,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    pub fn load_diffs_for_current_repo(&mut self, ctx: &mut ModelContext<Self>) {
         // Cancels in-flight per-file invalidation tasks so that stale queue results cannot
         // race with the new full reload.
         self.queue_full_invalidation();
@@ -519,19 +502,13 @@ impl LocalDiffStateModel {
         let mode = self.mode.clone();
         self.state = InternalDiffState::Loading;
         self.computing_diffs_abort_handle = Some(ctx.spawn(
-            async move {
-                Self::load_diffs_for_repo(current_repository_path, mode, should_fetch_base).await
-            },
+            async move { Self::load_diffs_for_repo(current_repository_path, mode).await },
             Self::handle_updated_state_for_repo,
         ));
     }
 
     #[cfg(not(feature = "local_fs"))]
-    pub fn load_diffs_for_current_repo(
-        &mut self,
-        _should_fetch_base: bool,
-        _ctx: &mut ModelContext<Self>,
-    ) {
+    pub fn load_diffs_for_current_repo(&mut self, _ctx: &mut ModelContext<Self>) {
         // Noop on WASM builds.
     }
 
@@ -821,7 +798,7 @@ impl LocalDiffStateModel {
             },
             |me, result, ctx| match result {
                 Ok(_) => {
-                    me.load_diffs_for_current_repo(false, ctx);
+                    me.load_diffs_for_current_repo(ctx);
                     me.refresh_diff_metadata_for_current_repo(false, ctx);
                 }
                 Err(err) => {
@@ -1014,7 +991,7 @@ impl LocalDiffStateModel {
         }
 
         if commit_updated || remote_ref_updated {
-            self.load_diffs_for_current_repo(false, ctx);
+            self.load_diffs_for_current_repo(ctx);
             // Don't emit MetadataRefreshed here — metadata hasn't been
             // recomputed yet. NewDiffsComputed handles the immediate UI
             // refresh, and the throttled metadata refresh will emit
@@ -1023,7 +1000,7 @@ impl LocalDiffStateModel {
         } else if index_lock_detected {
             if self.file_invalidation.invalidate_all_pending {
                 // Lock was released while a full invalidation was pending — reload now.
-                self.load_diffs_for_current_repo(false, ctx);
+                self.load_diffs_for_current_repo(ctx);
                 return true;
             }
             // Lock just appeared — suppress the per-file queue (data may be stale
@@ -1037,7 +1014,7 @@ impl LocalDiffStateModel {
         // by forcing a full reload. Without this, all subsequent file
         // invalidations would be silently deferred forever.
         if self.file_invalidation.invalidate_all_pending {
-            self.load_diffs_for_current_repo(false, ctx);
+            self.load_diffs_for_current_repo(ctx);
             return true;
         }
 
@@ -1064,7 +1041,7 @@ impl LocalDiffStateModel {
         });
 
         if gitignore_modified {
-            self.load_diffs_for_current_repo(false, ctx);
+            self.load_diffs_for_current_repo(ctx);
         } else {
             self.enqueue_file_invalidations(changed_files, ctx);
         }
@@ -1406,32 +1383,6 @@ impl LocalDiffStateModel {
         Self::get_merge_base(repo_path, &branch).await
     }
 
-    /// Like [`Self::get_merge_base`], but if the branch ref doesn't exist
-    /// locally, attempts to fetch it from the `origin` remote so that
-    /// `git merge-base` can succeed even when the base branch was never
-    /// checked out in this working copy.
-    async fn get_or_fetch_merge_base(repo_path: &Path, branch: &str) -> Result<String> {
-        // Fast path: the ref already exists locally (local branch or remote-tracking ref).
-        if let Ok(merge_base) = Self::get_merge_base(repo_path, branch).await {
-            return Ok(merge_base);
-        }
-
-        // The ref may not be present locally. Try the remote-tracking ref
-        // before hitting the network.
-        let origin_branch = format!("origin/{branch}");
-        if let Ok(merge_base) = Self::get_merge_base(repo_path, &origin_branch).await {
-            return Ok(merge_base);
-        }
-
-        // Fetch the branch from origin. This creates / updates the remote-tracking
-        // ref `origin/<branch>` without altering the working tree.
-        log::warn!("Base branch '{branch}' not found locally, fetching from origin");
-        run_git_command(repo_path, &["fetch", "origin", branch]).await?;
-
-        // Retry with the now-available remote-tracking ref.
-        Self::get_merge_base(repo_path, &origin_branch).await
-    }
-
     async fn load_metadata_for_repo(
         repo_path: PathBuf,
         include_base_branch: bool,
@@ -1486,23 +1437,16 @@ impl LocalDiffStateModel {
         mode: DiffMode,
         repo_path: PathBuf,
     ) -> Option<GitDiffData> {
-        let diffs = Self::load_diffs_for_repo(repo_path, mode, false).await;
+        let diffs = Self::load_diffs_for_repo(repo_path, mode).await;
         diffs.changes.ok().map(|diff| diff.into())
     }
 
-    async fn load_diffs_for_repo(
-        repo_path: PathBuf,
-        mode: DiffMode,
-        should_fetch_base: bool,
-    ) -> DiffsWithBaseContent {
+    async fn load_diffs_for_repo(repo_path: PathBuf, mode: DiffMode) -> DiffsWithBaseContent {
         let diffs = match mode {
             DiffMode::Head => Self::diff_state_against_head(&repo_path).await,
-            DiffMode::MainBranch => {
-                Self::diff_state_against_base_branch(&repo_path, should_fetch_base).await
-            }
+            DiffMode::MainBranch => Self::diff_state_against_base_branch(&repo_path).await,
             DiffMode::OtherBranch(branch) => {
-                Self::diff_state_against_specific_branch(&repo_path, branch, should_fetch_base)
-                    .await
+                Self::diff_state_against_specific_branch(&repo_path, branch).await
             }
         };
 
@@ -1543,7 +1487,7 @@ impl LocalDiffStateModel {
         }
 
         if should_reload_diffs {
-            self.load_diffs_for_current_repo(false, ctx);
+            self.load_diffs_for_current_repo(ctx);
         }
         if let Some(metadata) = self.metadata.clone() {
             ctx.emit(DiffStateModelEvent::MetadataRefreshed(Box::new(metadata)));
@@ -1682,14 +1626,11 @@ impl LocalDiffStateModel {
         })
     }
 
-    async fn diff_state_against_base_branch(
-        repo_path: &Path,
-        should_fetch_base: bool,
-    ) -> Result<GitDiffWithBaseContent> {
+    async fn diff_state_against_base_branch(repo_path: &Path) -> Result<GitDiffWithBaseContent> {
         // First detect the main branch
         let main_branch = detect_main_branch(repo_path).await?;
 
-        Self::diff_state_against_specific_branch(repo_path, main_branch, should_fetch_base).await
+        Self::diff_state_against_specific_branch(repo_path, main_branch).await
     }
 
     /// Returns the per-file status by running a scoped `git status` (Head mode)
@@ -1913,15 +1854,9 @@ impl LocalDiffStateModel {
     async fn diff_state_against_specific_branch(
         repo_path: &Path,
         branch: String,
-        should_fetch_base: bool,
     ) -> Result<GitDiffWithBaseContent> {
         // Get the merge base between HEAD and the specified branch.
-        let merge_base_result = if should_fetch_base {
-            Self::get_or_fetch_merge_base(repo_path, &branch).await
-        } else {
-            Self::get_merge_base(repo_path, &branch).await
-        };
-        let merge_base = match merge_base_result {
+        let merge_base = match Self::get_merge_base(repo_path, &branch).await {
             Ok(merge_base) => merge_base,
             Err(err) => {
                 log::warn!("Could not determine merge base against branch {branch}: {err:?}");

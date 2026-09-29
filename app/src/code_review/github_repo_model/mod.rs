@@ -2,6 +2,8 @@ use warpui::{AppContext, Entity, ModelContext, ModelHandle};
 
 #[cfg(feature = "local_fs")]
 mod local;
+#[cfg(all(test, feature = "local_fs"))]
+pub(crate) use local::GitHubCli;
 #[cfg(feature = "local_fs")]
 pub use local::LocalGitHubRepoModel;
 
@@ -24,7 +26,7 @@ pub enum GitHubRepoEvent {
 /// Per-repo GitHub-info model, mirroring
 /// [`crate::code_review::git_repo_model::GitRepoStatusModel`].
 ///
-/// Consumers (prompt chips, code review, agent context) hold a
+/// Consumers (the GitHub PR prompt chip and the code-review panel) hold a
 /// `ModelHandle<GitHubRepoModel>` and subscribe to its [`GitHubRepoEvent`]s.
 /// The model is only constructible where a local filesystem is available.
 pub enum GitHubRepoModel {

@@ -33,7 +33,7 @@ pub enum GitRepoStatusEvent {
 /// Per-repo git status model, mirroring
 /// [`crate::code_review::diff_state::DiffStateModel`].
 ///
-/// Consumers (prompt chips, tabs, code review, agent context) hold a
+/// Consumers (prompt chips, tabs, code review) hold a
 /// `ModelHandle<GitRepoStatusModel>` and subscribe to its [`GitRepoStatusEvent`]s.
 /// The model is only constructible where a local filesystem is available.
 pub enum GitRepoStatusModel {

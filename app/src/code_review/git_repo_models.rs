@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+#[cfg(all(test, feature = "local_fs"))]
+use std::sync::Arc;
 
 #[cfg(feature = "local_fs")]
 use repo_metadata::repositories::DetectedRepositories;
@@ -8,6 +10,8 @@ use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle
 use super::git_repo_model::GitRepoStatusModel;
 #[cfg(feature = "local_fs")]
 use super::git_repo_model::new_local_git_repo_status_model;
+#[cfg(all(test, feature = "local_fs"))]
+use super::github_repo_model::GitHubCli;
 use super::github_repo_model::GitHubRepoModel;
 #[cfg(feature = "local_fs")]
 use super::github_repo_model::LocalGitHubRepoModel;
@@ -25,13 +29,24 @@ pub struct GitRepoModels {
     // strong handle is dropped.
     git_status_models: HashMap<LocalOrRemotePath, WeakModelHandle<GitRepoStatusModel>>,
     github_repo_models: HashMap<LocalOrRemotePath, WeakModelHandle<GitHubRepoModel>>,
+    /// Replaces the `gh` runner of newly created GitHub-info models, so tests
+    /// can count lookups without running a process.
+    #[cfg(all(test, feature = "local_fs"))]
+    github_cli_override: Option<Arc<dyn GitHubCli>>,
 }
 impl GitRepoModels {
     pub fn new() -> Self {
         Self {
             git_status_models: HashMap::new(),
             github_repo_models: HashMap::new(),
+            #[cfg(all(test, feature = "local_fs"))]
+            github_cli_override: None,
         }
+    }
+
+    #[cfg(all(test, feature = "local_fs"))]
+    pub(crate) fn set_github_cli_for_test(&mut self, github_cli: Arc<dyn GitHubCli>) {
+        self.github_cli_override = Some(github_cli);
     }
 
     /// Get or create the per-repo status model for `repo`, backed by a local
@@ -120,8 +135,17 @@ impl GitRepoModels {
                     // branch info.
                     let git_status = self.subscribe(repo, ctx)?;
                     let repo_path = repo_path.clone();
-                    let inner =
-                        ctx.add_model(|ctx| LocalGitHubRepoModel::new(repo_path, git_status, ctx));
+                    #[cfg(all(test, feature = "local_fs"))]
+                    let github_cli_override = self.github_cli_override.clone();
+                    let inner = ctx.add_model(|ctx| {
+                        #[cfg(all(test, feature = "local_fs"))]
+                        if let Some(github_cli) = github_cli_override {
+                            return LocalGitHubRepoModel::new_with_github_cli(
+                                repo_path, git_status, github_cli, ctx,
+                            );
+                        }
+                        LocalGitHubRepoModel::new(repo_path, git_status, ctx)
+                    });
                     ctx.add_model(|ctx| {
                         ctx.subscribe_to_model(&inner, |me, _, event, ctx| {
                             GitHubRepoModel::forward_event(me, event, ctx)

@@ -1,3 +1,5 @@
+#[cfg(feature = "local_fs")]
+pub mod github_cli;
 pub mod settings;
 pub mod terminal;
 mod virtual_fs;

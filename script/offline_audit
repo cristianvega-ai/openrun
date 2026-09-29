@@ -73,8 +73,13 @@ NETWORK_RUST_PATTERNS = [
 COMMAND_PATTERN = (
     r'Command::new\("(curl|wget|git|gh|npm|npx|pip3?|go|brew|apt(-get)?|yum|dnf|pacman)"'
 )
-# `git` and `gh` subprocesses are user-initiated operations against the user's own remotes.
+# `git` and `gh` subprocesses run against the user's own remotes and repositories, only while a
+# pull request chip or the code-review panel is showing, or on an explicit user action (push, create a pull request).
 ALLOWED_COMMANDS = {"git", "gh"}
+
+# Remote git operations. Only `push` is allowed, in `app/src/util/git.rs` (an explicit user action);
+# `fetch`, `pull`, `clone` and `ls-remote` must not be started by the app at all.
+GIT_REMOTE_PATTERN = r'\["(fetch|pull|clone|ls-remote|push|remote)"[,\]]'
 
 SCRIPT_PATTERNS = [r"curl ", r"wget ", r"Invoke-WebRequest"]
 SCRIPT_DIRS = ["app/assets", "resources", "script"]
@@ -273,9 +278,15 @@ def check_network(allow):
             result.add(path, line, clip(text))
     if allowed_commands:
         result.notes.append(
-            "allowed subprocesses (user-initiated): "
+            "allowed subprocesses (only while their UI is in use, or on user action): "
             + ", ".join("%s x%d" % item for item in sorted(allowed_commands.items()))
         )
+
+    for path, line, text in rg_lines(args + ["-e", GIT_REMOTE_PATTERN]):
+        if is_comment(text):
+            continue
+        if not allow.allows("net-git", path, text):
+            result.add(path, line, clip(text))
 
     script_paths = [d for d in SCRIPT_DIRS if os.path.exists(os.path.join(ROOT, d))]
     if script_paths:

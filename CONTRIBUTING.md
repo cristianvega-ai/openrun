@@ -53,7 +53,7 @@ Maintainers review PRs. You do not need to request reviewers yourself. If a PR h
 
 ## Staying offline
 
-The app must make no network calls of its own beyond the three that remain: opt-in language server downloads, links the user opens, and the opt-in loopback `warpctrl` local control.
+The app must make no network calls of its own beyond the four that remain: opt-in language server downloads, links the user opens, the opt-in loopback `warpctrl` local control, and the user's own `git` remotes and GitHub through `gh`, run only while a pull request chip is showing or the code-review panel is open, or on an explicit user action (push, create a pull request). Never start `gh` or a remote `git` command (`fetch`, `pull`, `push`, `clone`, `ls-remote`) from a timer or a startup hook that has no visible UI behind it.
 
 - Don't add code that contacts a server, a telemetry or crash-reporting service, or an update channel.
 - Don't add dependencies on HTTP, WebSocket or telemetry crates. `deny.toml` bans most of them.

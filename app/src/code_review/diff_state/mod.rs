@@ -505,30 +505,21 @@ impl DiffStateModel {
 
     // ── Write API ─────────────────────────────────────────────────────
 
-    pub(crate) fn set_diff_mode(
-        &self,
-        mode: DiffMode,
-        should_fetch_base: bool,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    pub(crate) fn set_diff_mode(&self, mode: DiffMode, ctx: &mut ModelContext<Self>) {
         match self {
             Self::Local(local) => {
                 local.update(ctx, |local, ctx| {
-                    local.set_diff_mode(mode, should_fetch_base, ctx);
+                    local.set_diff_mode(mode, ctx);
                 });
             }
         }
     }
 
-    pub(crate) fn load_diffs_for_current_repo(
-        &self,
-        should_fetch_base: bool,
-        ctx: &mut ModelContext<Self>,
-    ) {
+    pub(crate) fn load_diffs_for_current_repo(&self, ctx: &mut ModelContext<Self>) {
         match self {
             Self::Local(local) => {
                 local.update(ctx, |local, ctx| {
-                    local.load_diffs_for_current_repo(should_fetch_base, ctx);
+                    local.load_diffs_for_current_repo(ctx);
                 });
             }
         }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use chrono::Local;
 use lsp::LspManagerModel;
+use repo_metadata::DirectoryWatcher;
 use repo_metadata::repositories::DetectedRepositories;
 use warp_core::ui::appearance::Appearance;
 use warp_editor::content::buffer::InitialBufferState;
@@ -28,6 +29,8 @@ use crate::code_review::git_repo_model::GitRepoModels;
 use crate::pane_group::WorkingDirectoriesModel;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::terminal::local_shell::LocalShellState;
+use crate::test_util::assert_eventually;
+use crate::test_util::github_cli::CountingGitHubCli;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::vim_registers::VimRegisters;
 use crate::workspace::ActiveSession;
@@ -785,6 +788,71 @@ fn test_active_comments_not_marked_outdated() {
             assert!(
                 !relocated[0].outdated,
                 "Comment should NOT be marked as outdated when line content is found"
+            );
+        });
+    });
+}
+
+#[test]
+fn gh_lookups_run_only_while_the_panel_is_open() {
+    App::test((), |mut app| async move {
+        initialize_test_app(&mut app);
+        app.add_singleton_model(DirectoryWatcher::new_for_testing);
+        let gh = Arc::new(CountingGitHubCli::default());
+        GitRepoModels::handle(&app).update(&mut app, |models, _| {
+            models.set_github_cli_for_test(gh.clone());
+        });
+
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        let repo_path = dunce::canonicalize(temp_dir.path()).expect("canonical repo path");
+        let standardized =
+            warp_util::standardized_path::StandardizedPath::from_local_canonicalized(&repo_path)
+                .expect("standardized path");
+        DetectedRepositories::handle(&app).update(&mut app, |repos, _| {
+            repos.insert_test_repo_root(standardized.clone());
+        });
+        DirectoryWatcher::handle(&app).update(&mut app, |watcher, ctx| {
+            watcher
+                .add_directory(standardized, ctx)
+                .expect("watch the repo directory");
+        });
+
+        let (window_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| TestView);
+        let diff_state_model = app.add_model(DiffStateModel::new_for_test);
+        let view = app.add_view(window_id, |ctx| {
+            CodeReviewView::new(
+                Some(LocalOrRemotePath::Local(repo_path)),
+                diff_state_model,
+                None,
+                None,
+                ctx,
+            )
+        });
+
+        // A panel that was never opened has no GitHub model and runs no `gh`.
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
+        view.read(&app, |view, _| assert!(view.github_repo_model.is_none()));
+        assert_eq!(gh.total_lookups(), 0);
+
+        view.update(&mut app, |view, ctx| view.on_open(ctx));
+        let model = view.read(&app, |view, _| {
+            view.github_repo_model
+                .as_ref()
+                .expect("an open panel subscribes to GitHub info")
+                .downgrade()
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "an open code-review panel must look up the repository"
+        );
+
+        // Closing the panel releases the only handle, which stops all lookups.
+        view.update(&mut app, |view, ctx| view.on_close(ctx));
+        view.read(&app, |view, _| assert!(view.github_repo_model.is_none()));
+        app.read(|ctx| {
+            assert!(
+                model.upgrade(ctx).is_none(),
+                "the GitHub model must be torn down when the panel closes"
             );
         });
     });
