@@ -1,4 +1,3 @@
-use settings::{RespectUserSyncSetting, SyncToCloud};
 use warpui::async_assert;
 use warpui::integration::AssertionCallback;
 
@@ -37,12 +36,8 @@ where
 /// Asserts that there is a json preference object in the SQLite db with the given storage key and
 /// JSON-serialized value.
 pub fn assert_cloud_preference_exists(storage_key: &str, value: &str) -> AssertionCallback {
-    let expected_preference = Preference::new(
-        storage_key.to_owned(),
-        value,
-        SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-    )
-    .expect("error creating preference");
+    let expected_preference =
+        Preference::new(storage_key.to_owned(), value).expect("error creating preference");
     Box::new(move |app, _window_id| {
         let stored_preference =
             app.get_singleton_model_handle::<CloudModel>()

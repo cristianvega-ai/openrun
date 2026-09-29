@@ -6,7 +6,6 @@ use chrono::{DateTime, Utc};
 use cloud_object_client::MockObjectClient;
 use cloud_object_models::JsonSerializer;
 use futures_lite::future;
-use settings::{RespectUserSyncSetting, SyncToCloud};
 use warp_core::features::FeatureFlag;
 use warp_graphql::object_permissions::AccessLevel;
 use warp_graphql::scalars::time::ServerTimestamp;
@@ -604,12 +603,8 @@ fn test_sync_state_after_creation_item_not_in_sync_queue_generic_object() {
             app,
             object_id.into(),
             CloudPreferenceModel::new(
-                Preference::new(
-                    "foo".to_owned(),
-                    "{\"test_key\": \"test_value\"}",
-                    SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-                )
-                .expect("error creating preference"),
+                Preference::new("foo".to_owned(), "{\"test_key\": \"test_value\"}")
+                    .expect("error creating preference"),
             ),
             client_id,
             server_api,
@@ -1159,7 +1154,6 @@ fn test_bulk_create_generic_string_objects() {
                     Preference::new(
                         "storage_key_1".to_string(),
                         "{\"test_key\": \"test_value_1\"}",
-                        SyncToCloud::Globally(RespectUserSyncSetting::Yes),
                     )
                     .expect("error creating preference"),
                 ),
@@ -1172,7 +1166,6 @@ fn test_bulk_create_generic_string_objects() {
                     Preference::new(
                         "storage_key_2".to_string(),
                         "{\"test_key\": \"test_value_2\"}",
-                        SyncToCloud::Globally(RespectUserSyncSetting::Yes),
                     )
                     .expect("error creating preference"),
                 ),
@@ -1310,12 +1303,8 @@ fn test_sync_state_after_update_item_not_in_sync_queue_generic_string_object() {
             &update_manager_struct.update_manager,
             client_id,
             CloudPreferenceModel::new(
-                Preference::new(
-                    "foo".to_owned(),
-                    "{\"test_key\": \"test_value\"}",
-                    SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-                )
-                .expect("error creating preference"),
+                Preference::new("foo".to_owned(), "{\"test_key\": \"test_value\"}")
+                    .expect("error creating preference"),
             ),
         );
         // update the test json object's data
@@ -1324,12 +1313,8 @@ fn test_sync_state_after_update_item_not_in_sync_queue_generic_string_object() {
             .update(&mut app, |update_manager, ctx| {
                 update_manager.update_object(
                     CloudPreferenceModel::new(
-                        Preference::new(
-                            "foo".to_owned(),
-                            "{\"test_key\": \"test_value_2\"}",
-                            SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-                        )
-                        .expect("error creating preference"),
+                        Preference::new("foo".to_owned(), "{\"test_key\": \"test_value_2\"}")
+                            .expect("error creating preference"),
                     ),
                     SyncId::ClientId(client_id),
                     None,
@@ -2398,7 +2383,6 @@ fn test_pending_metadata_update_with_polling() {
                     Preference::new(
                         "test_storage_key".to_string(),
                         "{\"test_key\": \"test_value\"}",
-                        SyncToCloud::Globally(RespectUserSyncSetting::Yes),
                     )
                     .expect("error creating preference"),
                 ),

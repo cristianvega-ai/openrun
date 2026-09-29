@@ -1,5 +1,5 @@
 use settings::macros::define_settings_group;
-use settings::{RespectUserSyncSetting, Setting, SupportedPlatforms, SyncToCloud};
+use settings::{Setting, SupportedPlatforms};
 use warpui::AppContext;
 use warpui::platform::SystemTheme;
 
@@ -18,7 +18,6 @@ define_settings_group!(ThemeSettings, settings: [
         // to set the default theme to Phenomenon.
         default: ThemeKind::default(),
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "appearance.themes.theme",
@@ -29,7 +28,6 @@ define_settings_group!(ThemeSettings, settings: [
         type: bool,
         default: false,
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         storage_key: "SystemTheme",
@@ -40,7 +38,6 @@ define_settings_group!(ThemeSettings, settings: [
         type: SelectedSystemThemes,
         default: SelectedSystemThemes::default(),
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         storage_key: "SelectedSystemThemes",

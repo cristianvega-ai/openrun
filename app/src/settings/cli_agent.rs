@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use regex::Regex;
 use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
-use settings::{RespectUserSyncSetting, Setting, SupportedPlatforms, SyncToCloud};
+use settings::{Setting, SupportedPlatforms};
 use warp_core::settings::macros::define_settings_group;
 use warp_errors::report_if_error;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
@@ -101,7 +101,6 @@ define_settings_group!(CLIAgentSettings, settings: [
         type: bool,
         default: true,
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "agents.third_party.should_render_cli_agent_toolbar",
@@ -115,7 +114,6 @@ define_settings_group!(CLIAgentSettings, settings: [
         type: bool,
         default: true,
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "agents.third_party.auto_toggle_composer",
@@ -128,7 +126,6 @@ define_settings_group!(CLIAgentSettings, settings: [
         type: bool,
         default: false,
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "agents.third_party.auto_open_composer_on_cli_agent_start",
@@ -143,7 +140,6 @@ define_settings_group!(CLIAgentSettings, settings: [
         type: bool,
         default: false,
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "agents.third_party.auto_dismiss_composer_after_submit",
@@ -156,7 +152,6 @@ define_settings_group!(CLIAgentSettings, settings: [
         type: bool,
         default: false,
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "agents.third_party.submit_on_ctrl_enter",
@@ -171,7 +166,6 @@ define_settings_group!(CLIAgentSettings, settings: [
         type: ToolbarCommandMap,
         default: ToolbarCommandMap::default(),
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "agents.third_party.cli_agent_toolbar_enabled_commands",
@@ -184,7 +178,6 @@ define_settings_group!(CLIAgentSettings, settings: [
         type: bool,
         default: true,
         supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
         surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "agents.warp_agent.other.show_agent_notifications",

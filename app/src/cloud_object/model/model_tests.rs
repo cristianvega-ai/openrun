@@ -6,7 +6,6 @@ use cloud_object_client::MockObjectClient;
 use lazy_static::lazy_static;
 use mockall::Sequence;
 use rand::Rng;
-use settings::{RespectUserSyncSetting, SyncToCloud};
 use warpui::{App, ModelHandle};
 
 use super::*;
@@ -444,7 +443,6 @@ fn test_create_json_object() {
             Preference::new(
                 "test_storage_key".to_owned(),
                 "{\"test_key\": \"test_value\"}",
-                SyncToCloud::Globally(RespectUserSyncSetting::Yes),
             )
             .expect("error creating preference"),
         ),

@@ -151,31 +151,6 @@ pub enum SupportedPlatforms {
     OR(Box<SupportedPlatforms>, Box<SupportedPlatforms>),
 }
 
-/// An enum representing the different ways a setting can be synced to the cloud.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SyncToCloud {
-    /// The setting is synced to the cloud as a single global value that applies to on all supported platforms.
-    Globally(RespectUserSyncSetting),
-
-    /// The setting is synced to the cloud as a value that is unique to each platform.
-    PerPlatform(RespectUserSyncSetting),
-
-    /// The setting is not synced to the cloud.
-    Never,
-}
-
-/// Whether for this setting we respect the user toggle for settings sync.
-/// There are some cases we want to sync settings regardless of the user setting,
-/// such as for the value of whether cloud syncing is enabled, whether telemetry is enabled, etc.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RespectUserSyncSetting {
-    /// Only sync if the user has settings sync enabled
-    Yes,
-
-    /// Sync regardless of the user's setting
-    No,
-}
-
 /// A surface the settings system can run in. Used by [`SettingSurfaces`] to
 /// decide which settings apply to a surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -317,9 +292,6 @@ pub trait Setting {
 
     /// Returns the platforms that this setting is supported on.
     fn supported_platforms() -> SupportedPlatforms;
-
-    /// Returns whether and how this setting is synced to the cloud via Warp Drive.
-    fn sync_to_cloud() -> SyncToCloud;
 
     /// Returns whether this setting is private (not shown in the user-visible settings file).
     ///
@@ -567,9 +539,8 @@ pub trait SettingChangeEvent: Setting {
 /// Shared persistence operations for typed settings backed by secure storage.
 ///
 /// Implementors remain responsible for routing their [`Setting`] lifecycle
-/// methods through this trait and for keeping the setting private and
-/// non-synced when the value must not be exposed through ordinary settings
-/// storage.
+/// methods through this trait and for keeping the setting private when the
+/// value must not be exposed through ordinary settings storage.
 pub trait SecureSetting: Setting {
     /// Writes this setting's serialized value through its selected secure-storage path.
     fn write_secure_storage_value(

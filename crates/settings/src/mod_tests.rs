@@ -2,14 +2,13 @@ mod reload_all_public_settings_tests {
     use warpui_core::SingletonEntity;
 
     use crate::manager::SettingsManager;
-    use crate::{Setting, SupportedPlatforms, SyncToCloud, *};
+    use crate::{Setting, SupportedPlatforms, *};
 
     define_settings_group!(ReloadTestSettings, settings: [
         public_flag: PublicFlag {
             type: bool,
             default: false,
             supported_platforms: SupportedPlatforms::ALL,
-            sync_to_cloud: SyncToCloud::Never,
             surface: crate::SettingSurfaces::GUI,
             private: false,
             toml_path: "test.public_flag",
@@ -18,7 +17,6 @@ mod reload_all_public_settings_tests {
             type: bool,
             default: false,
             supported_platforms: SupportedPlatforms::ALL,
-            sync_to_cloud: SyncToCloud::Never,
             surface: crate::SettingSurfaces::GUI,
             private: true,
         },
@@ -339,7 +337,6 @@ mod write_to_preferences_tests {
             type: StructWithOptionals,
             default: StructWithOptionals::default(),
             supported_platforms: SupportedPlatforms::ALL,
-            sync_to_cloud: SyncToCloud::Never,
             surface: crate::SettingSurfaces::GUI,
             private: false,
             toml_path: "test.struct_setting",
@@ -422,7 +419,6 @@ mod write_to_preferences_tests {
                 type: QuakeLike,
                 default: QuakeLike::default(),
                 supported_platforms: SupportedPlatforms::ALL,
-                sync_to_cloud: SyncToCloud::Never,
                 surface: crate::SettingSurfaces::GUI,
                 private: false,
                 toml_path: "test.quake_like_setting",

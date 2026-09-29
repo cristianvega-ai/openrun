@@ -94,8 +94,9 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Terminal view and model: AI blocks, agent block state and the remaining AI plumbing](#terminal-view-and-model-ai-blocks-agent-block-state-and-the-remaining-ai-plumbing) — deleted the AI block views (`ai/blocklist/{block, inline_action, code_block, ...}`) and the AI controller, action, context and task-sync models from the terminal view; removed `AgentViewVisibility`, `TranscriptScope`, block `ai_metadata`, `InteractionMode` and the agent fields of `SerializedBlock` from the terminal model; sessions saved with agent blocks restore without them; image and file attachments for the CLI composer moved to a small non-AI model; dropped the Bedrock login banners, the AI query history suggestions and the agent diff accept flow of the code editor
 - [Default session mode and code review comments: types that outlive `app/src/ai`](#default-session-mode-and-code-review-comments-types-that-outlive-appsrcai) — `DefaultSessionMode` moved from `AISettings` to `GeneralSettings`; deleted the dead GitHub-imported review comment path and `CommentOrigin`
 - [App AI core: `app/src/ai`, `AISettings`, the AI server client and app-side AI persistence](#app-ai-core-appsrcai-aisettings-the-ai-server-client-and-app-side-ai-persistence) — deleted `app/src/ai` (82 files), the AI settings group, `server_api/ai.rs`, the agent persistence, the AI execution profile cloud object type and the workspace/team AI fields; `crate::ai` no longer exists
-
 - [AI crates and dependencies](#ai-crates-and-dependencies) — deleted the `ai`, `ai_types` and `warp_multi_agent_client` crates, the Warp agent protocol and MCP/AWS SDK dependencies, and the AI types of `persistence` (tables stay until DB-1)
+- [Per-setting cloud-sync attribute](#per-setting-cloud-sync-attribute) — removed the sync-mode attribute, its `Setting` accessor and its macro argument from every setting definition
+
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -868,7 +869,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - `crates/settings`:
   - The `SettingsManager` cloud APIs: `clear_cloud_settings_local_state`, `all_storage_keys`, `sync_regardless_of_users_syncing_setting`, `is_current_value_syncable`, `cloud_syncing_mode_for_storage_key`, `supported_platforms_for_storage_key`, `is_private_for_storage_key`, `read_local_setting_value` and `are_equal_settings`.
   - The clear and syncability callbacks, `SettingsEvent::LocalPreferencesUpdated` and the `from_cloud_sync` flag of `update_setting_with_storage_key`.
-  - `Setting::{set_value_from_cloud_sync, current_value_is_syncable, is_setting_syncable_on_current_platform}` and `SettingsMode::should_sync_to_cloud`.
+  - `Setting::{set_value_from_cloud_sync, current_value_is_syncable, is_setting_syncable_on_current_platform}` and the `SettingsMode` cloud-sync check.
 - `AppExecutionMode::can_sync_preferences` in `warp_core`.
 - Filters that only decided what to upload:
   - Custom-theme path portability: `Theme`/`SystemThemes::current_value_is_syncable`, `ThemeKind::is_custom_theme_reference_syncable` and `custom_theme_path_is_portable`.
@@ -894,7 +895,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - Settings are local only. The TOML settings file, user defaults and the settings UI work as before.
 - There is no "Settings sync" switch on the Account page or in the command palette, and no "not synced" icons next to settings.
 - A saved `account.is_settings_sync_enabled` value is ignored.
-- The `SyncToCloud`/`RespectUserSyncSetting` attributes and `Setting::sync_to_cloud()` stay for SYNC-1, as do the comments on setting definitions that explain each setting's sync choice. The runtime no longer reads the attribute: `SettingsManager` doesn't store it.
+- The per-setting sync attribute and its `Setting` accessor stay for SYNC-1, as do the comments on setting definitions that explain each setting's sync choice. The runtime no longer reads the attribute: `SettingsManager` doesn't store it.
 - `WarpDrivePrivacySettings` stays. It stores the telemetry and cloud-conversation-storage toggles, which are not about settings sync.
 - `ChangeEventReason::CloudSync` stays. Team-driven enterprise secret redaction uses it (TEAM-1).
 - Left for DRV-5: the `Preference` cloud-object type. That covers `cloud_object_models`, `JsonObjectType::Preference`, its sync-queue and update-manager handling, and persisted rows.
@@ -2488,3 +2489,23 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Workspace crates without dependents after the deletions: `channel_versions` and `field_mask` (SRV-1 or SWP-17 to delete). `cloud_object_models` still lists unused `log`, `url`, `warp_core` and `warp_util` (DRV-5). `warp_graphql` still holds the AI conversation and usage query types (`list_ai_conversations`, `get_conversation_usage`, `get_ai_conversation_format`, `ConversationUsageMetadata`, `ContextWindowSegment`), now without users (SRV-1).
 - The `agent_mode_evals`, `jemalloc`, `local_fs` and `test-util` Cargo features of `warp` lost their `ai/*` and `warp_multi_agent_client/*` entries; the features themselves stay for AI-32.
 - `deny.toml` keeps its bans on `warp_multi_agent_api`, `rmcp` and `oauth2` so they cannot return.
+
+## Per-setting cloud-sync attribute
+**Why:** settings cloud sync was removed earlier (see "Settings cloud sync"), so the per-setting sync attribute no longer had a reader. Every setting still declared it, and the macros, the `Setting` trait and the tests carried it.
+
+**Removed:**
+- The sync-mode attribute types of the `settings` crate (the global/per-platform/never enum and its respect-user-setting flag) and the `Setting` trait accessor for them.
+- The sync-mode field of `define_setting!`, `maybe_define_setting!` and `define_settings_group!`, and the positional sync-mode argument of `implement_setting_for_enum!`, in the macro arms, the doc examples and about 300 setting definitions (`app/src/settings/*`, `terminal/*settings*.rs`, `workspace/tab_settings.rs`, `window_settings.rs`, `undo_close`, `search/command_search`, `util/file/external_editor`, `warp_core::semantic_selection`).
+- The hand-written sync-mode accessor of `LocalControlModeSetting` and the tests that asserted the attribute (`mode_is_private_and_never_cloud_synced` is now `mode_is_private`; `test_deprecated_ssh_wrapper_migration_triggers_are_not_synced`).
+- Comments that explained a setting's sync choice (`default_tab_config_path`, `github_pr_chip_default_validation`, the deprecated SSH wrapper settings and their migration).
+
+**Modified:**
+- `cloud_object_models::Preference::new` no longer takes a syncing mode and always builds a `Platform::Global` preference. DRV-5 deletes the type.
+
+**Persisted state:** none. Type names, `toml_path`, storage keys, defaults, platforms, surfaces and privacy of every setting are unchanged, and the attribute was never part of the settings-file format, so existing settings files load as before.
+
+**User-visible impact:** none.
+
+**Notes:**
+- `ChangeEventReason::CloudSync` (`settings` crate) and its one use in `workspaces/user_workspaces/mod.rs` remain for TEAM-1 and AUTH-2.
+- `privacy.rs` still has comments about cloud-synced values for the Warp Drive privacy settings; those go with SRV-1 and AUTH-2.

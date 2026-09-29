@@ -5,7 +5,6 @@ use cloud_objects::cloud_object::{
 use cloud_objects::ids::GenericStringObjectId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use settings::SyncToCloud;
 
 use crate::{JsonModel, JsonSerializer};
 
@@ -79,18 +78,11 @@ pub struct Preference {
 }
 
 impl Preference {
-    /// Creates a new preference object with the given storage key and value and the appropriate
-    /// platform key for the given syncing mode.
+    /// Creates a new global preference object with the given storage key and value.
     /// Used when creating a new preference the first time.  For preferences synced from the
     /// cloud they will desererialize directly from JSON.
-    pub fn new(storage_key: String, value: &str, syncing_mode: SyncToCloud) -> Result<Self> {
-        let platform = match syncing_mode {
-            SyncToCloud::PerPlatform(_) => Platform::current_platform(),
-            SyncToCloud::Globally(_) => Platform::Global,
-            SyncToCloud::Never => Err(anyhow!(
-                "Cannot create a preference with SyncToCloud::Never"
-            ))?,
-        };
+    pub fn new(storage_key: String, value: &str) -> Result<Self> {
+        let platform = Platform::Global;
         match serde_json::from_str(value) {
             Ok(value) => Ok(Self {
                 storage_key,
