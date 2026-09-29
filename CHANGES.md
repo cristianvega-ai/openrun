@@ -114,6 +114,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [WASM-2 skipped: dormant cfg(wasm) branches stay](#wasm-2-skipped-dormant-cfgwasm-branches-stay) — the user chose to keep the roughly 2,000 `cfg(wasm)` branches; the WASM-2-tagged leftovers stay on purpose
 - [Feature flags and Cargo features](#feature-flags-and-cargo-features) — every `FeatureFlag` folded into its fixed OSS value (289 variants to 3), 261 Cargo features and the `gui`/`standalone`/`agent_mode_evals` features removed; flag skills and gate commands updated
 - [Cargo and license metadata](#cargo-and-license-metadata) — crate `authors` inherit one generic workspace value instead of `Warp Team <dev@warp.dev>`; `deny.toml` and `about.toml` comments explain the remaining warpdotdev git sources; dropped the unused `dev-remote` profile and the `brotli`/`jq` flake inputs
+- [Script cleanup: channel arguments and stale tests](#script-cleanup-channel-arguments-and-stale-tests) — bundle, run and icon scripts build `warp-oss` only and take no channel argument; `check_license_config_sync` works without Python 3.11; two stale script tests fixed; fixture author made generic
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3040,3 +3041,28 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Vendoring the git dependencies (D7) was not chosen, so `deny.toml` keeps the `warpdotdev` allowance.
 - `script/check_license_config_sync` needs Python 3.11 (`tomllib`); the default `python3` on this machine is older, so it was not run. The `licenses` lists of `deny.toml` and `about.toml` were not touched.
 - `crates/warpui/build.rs` (`WARP_LOCAL_SKIP_METAL`) is left to SWP-17.
+
+## Script cleanup: channel arguments and stale tests
+**Why:** After the channel collapse the bundle and packaging scripts already built only `warp-oss`, but they still accepted a `--channel` argument that could only be `oss`, threaded a channel name through helper scripts that ignored it, and left leftovers of the deleted binaries. Two script tests still expected the removed `standalone` Cargo feature and the old array output of `warpctrl instance list`. `script/check_license_config_sync` could not run on the default `python3` here (3.9).
+
+**Removed:**
+- `--channel` / `-c` in `script/macos/bundle` and `script/linux/bundle`, and the `$CHANNEL` parameter of `script/windows/bundle.ps1` (which also passed `/DReleaseChannel`). Unknown arguments are still passed through, so an old `--channel oss` is ignored rather than rejected.
+- The channel parameter of `script/prepare_bundled_resources` (it was assigned and never used), `script/windows/prepare_bundled_resources.ps1` and `script/compile_icon`. `compile_icon` takes only the app bundle path and skips with a warning when `app/channels/oss/icon/AppIcon.icon` is missing.
+- `script/windows/bundle.ps1`: the `CARGO_BIN_NAME` and `WARP_APP_NAME` environment variables (nothing reads them), a duplicate `$BUNDLE_ID` assignment that used an undefined variable, and the executable-rename branch that could never run.
+- `script/windows/windows-installer.iss`: the `integration` / `Unknown` channel mapping for the single-instance mutex. The mutex is `Local\WarpOss_SingleInstance`, the same name the app creates for `Channel::Oss`.
+
+**Modified:**
+- `script/check_license_config_sync` picks the first interpreter among `python3`, `python3.13`, `python3.12` and `python3.11` that has `tomllib` or the `tomli` package. If none does, it exits 1 with a message that Python 3.11 or newer is needed. It now reports "License config in sync." here (via `python3.12`).
+- `script/macos/run` hard-codes `warpctrl-oss`; `script/test_prepare_bundled_resources` drops the `dev` argument; `script/update_plist` and `script/linux/linuxdeploy-plugin-warp` use `oss` in their examples; the `RELEASE_CHANNEL` comments in `script/linux/bundle_*` say it selects the assets directory under `app/channels/` (it stays `oss` and is still exported for `bundle_install`).
+- `script/test_warpctrl_early_dispatch` runs `cargo run --bin warp-oss` without `-p warp`, and accepts the current `{"instances": []}` output.
+- `script/linux/test_bundle_warpctrl` expects `release_bundle,smoke_feature` (the `standalone` feature is gone).
+- `crates/integration/tests/data/test_workflow.yaml` — `author: Warp Team` became `author: Test Author` in both workflows. The two tests that load the file (`test_loading_project_workflows`, the local workflows test) assert only the workflow count.
+
+**User-visible impact:** None at runtime. Bundle IDs (`dev.warp.WarpOss`), app and DMG names (`WarpOss`), the `warposs` URL scheme, `warp-oss` / `warpctrl-oss` wrapper names, Linux package names and `/opt/warpdotdev/...`, and the Windows `Software\Warp.dev\` registry base and `AppId` are unchanged (decisions 13 and 17). Developers who passed `--channel oss` to a bundle script see no difference.
+
+**Notes:**
+- Verified without a release build: `bash -n` on every edited script; shellcheck (no new findings, one fewer); the macOS and Linux bundle scripts with a stub `cargo`/`rustup` (`--check-only` for both, the macOS app path through plist, resources, icon and wrapper steps up to `create-dmg`, and the Linux `warpctrl` artifact with `--skip-build`); `script/test_prepare_bundled_resources`, `script/macos/test_create_warpctrl_wrapper`, `script/linux/test_bundle_warpctrl` and `script/test_warpctrl_early_dispatch`. The PowerShell scripts and the Inno Setup file were edited by reading only (`pwsh` and `iscc` are not installed).
+- `script/Entitlements.plist` still names the `2BBY89MBSN.dev.warp` keychain access group. It ties the signed app to the existing secure-storage items (decision 13), so it stays.
+- `app/Cargo.toml` `[package.metadata.bundle.bin.warp-oss]` `short_description` still says "cloud-backed terminal for individuals and teams"; it is packaging metadata outside `script/` and is left for the docs cleanup.
+- `resources/bundled` no longer exists, so `prepare_bundled_resources` prints "No bundled directory found" and continues; this predates this section.
+- `crates/warp_cli/src/local_control_tests.rs` uses the strings `"dev"` and `"dev.warp.Warp"` as sample channel and app-id values in a test fixture; they are data, not a channel.

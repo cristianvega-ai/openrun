@@ -6,6 +6,7 @@ discovery_dir="$(mktemp -d)"
 trap 'rm -rf "$discovery_dir"' EXIT
 
 python3 - "$workspace_root" "$discovery_dir" <<'PY'
+import json
 import os
 import pathlib
 import subprocess
@@ -19,8 +20,6 @@ result = subprocess.run(
     [
         "cargo",
         "run",
-        "-p",
-        "warp",
         "--bin",
         "warp-oss",
         "--",
@@ -40,7 +39,11 @@ if result.returncode != 0:
     sys.stderr.write(result.stderr)
     sys.stderr.write(result.stdout)
     raise SystemExit(result.returncode)
-if result.stdout.strip() != "[]":
+try:
+    instances = json.loads(result.stdout).get("instances")
+except (ValueError, AttributeError):
+    instances = None
+if instances != []:
     sys.stderr.write(result.stderr)
     sys.stderr.write(f"unexpected warpctrl output: {result.stdout!r}\n")
     raise SystemExit(1)

@@ -3,36 +3,30 @@
 # Compile a .icon bundle using actool and update the app's Info.plist
 # to support macOS Sequoia's icon tinting feature.
 #
-# Usage: compile_icon <channel> <app_bundle_path>
-#   channel: The release channel (oss)
+# Usage: compile_icon <app_bundle_path>
 #   app_bundle_path: Path to the .app bundle (e.g., Warp.app)
 
 set -e
 
-if [ "$#" -ne 2 ]; then
-    echo "Usage: compile_icon <channel> <app_bundle_path>"
+if [ "$#" -ne 1 ]; then
+    echo "Usage: compile_icon <app_bundle_path>"
     exit 1
 fi
 
-CHANNEL="$1"
-APP_BUNDLE_PATH="$2"
+APP_BUNDLE_PATH="$1"
 
 # Determine the repository root directory
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ICON_BUNDLE_PATH="$REPO_ROOT/app/channels/$CHANNEL/icon/AppIcon.icon"
+ICON_BUNDLE_PATH="$REPO_ROOT/app/channels/oss/icon/AppIcon.icon"
 
-# Only compile if the .icon bundle exists for this channel.
+# Only compile if the .icon bundle exists.
 if [[ ! -d "$ICON_BUNDLE_PATH" ]]; then
-    if [[ "$CHANNEL" = "oss" ]]; then
-        echo "Warning: no .icon bundle found for $CHANNEL channel at $ICON_BUNDLE_PATH; skipping adaptive icon compilation." >&2
-        exit 0
-    fi
-    echo "Error: .icon bundle not found at $ICON_BUNDLE_PATH" >&2
-    exit 1
+    echo "Warning: no .icon bundle found at $ICON_BUNDLE_PATH; skipping adaptive icon compilation." >&2
+    exit 0
 fi
 
-echo "Compiling .icon bundle for $CHANNEL channel"
+echo "Compiling .icon bundle"
 
 BUNDLED_RESOURCES_DIR="$APP_BUNDLE_PATH/Contents/Resources"
 PARTIAL_INFO_PLIST="$(dirname "$APP_BUNDLE_PATH")/partial-icon-info.plist"

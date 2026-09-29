@@ -48,7 +48,7 @@ PATH="$temp_dir/bin:$PATH" \
   --features smoke_feature
 
 grep -qx -- '--features' "$temp_dir/cargo-args"
-grep -qx -- 'release_bundle,standalone,smoke_feature' "$temp_dir/cargo-args"
+grep -qx -- 'release_bundle,smoke_feature' "$temp_dir/cargo-args"
 
 profile_dir="$temp_dir/target/$target/release-cli"
 mkdir -p "$profile_dir"

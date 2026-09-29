@@ -8,9 +8,6 @@ Param (
     [Alias('check-only')]
     [Switch]$CHECK_ONLY,
 
-    [ValidateSet('oss')]
-    [String]$CHANNEL = 'oss',
-
     [Alias('release-tag')]
     [String]$RELEASE_TAG = '',
     [String]$FEATURES = 'release_bundle',
@@ -98,10 +95,7 @@ if ($CARGO_PROFILE -eq 'dev') {
 } else {
     $CARGO_TARGET_OUTPUT_DIR = "$CARGO_TARGET_DIR" + '\' + $PLATFORM_TARGET + '\' + "$CARGO_PROFILE"
 }
-$BUNDLE_ID = "dev.warp.$app_name"
 
-# Update parameters based on the target release channel.
-#
 # APP_NAME here must match the value used in Rust as the
 # application name; see app/src/channel.rs.
 #
@@ -141,20 +135,11 @@ if ($CHECK_ONLY) {
 }
 
 if (-Not $SKIP_BUILD_BINARY) {
-    Write-Output "Building Warp for channel $CHANNEL and bundle id $BUNDLE_ID"
-    $env:CARGO_BIN_NAME = $CHANNEL
-    $env:WARP_APP_NAME = $APP_NAME
+    Write-Output "Building Warp with bundle id $BUNDLE_ID"
     cargo build -p $CARGO_PACKAGE --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --features "$FEATURES" --target $PLATFORM_TARGET
     if (-Not $?) {
         Write-Error "Failed to build Warp $WARP_BIN binary with profile $CARGO_PROFILE"
         exit 1
-    }
-
-    # If we desire an executable name different from the cargo bin, rename it.
-    if ("$WARP_BIN.exe" -ne $BINARY_NAME) {
-        $binarySource = "$CARGO_TARGET_OUTPUT_DIR\$WARP_BIN.exe"
-        Write-Output "Renaming executable $WARP_BIN.exe to $BINARY_NAME"
-        Move-Item -Path "$binarySource" -Destination "$BINARY_PATH" -Force
     }
 }
 
@@ -186,7 +171,7 @@ if ($env:SKIP_SETTINGS_SCHEMA -ne '1' -and -not $env:SETTINGS_SCHEMA_EXECUTABLE 
 }
 $BUNDLED_RESOURCES_DIR = "$CARGO_TARGET_OUTPUT_DIR\resources"
 Write-Output 'Preparing bundled resources...'
-& "$WINDOWS_INSTALLER_DIR\prepare_bundled_resources.ps1" -DestinationDir "$BUNDLED_RESOURCES_DIR" -Channel "$CHANNEL"
+& "$WINDOWS_INSTALLER_DIR\prepare_bundled_resources.ps1" -DestinationDir "$BUNDLED_RESOURCES_DIR"
 if (-Not $?) {
     Write-Error 'Failed to prepare bundled resources'
     exit 1
@@ -194,7 +179,6 @@ if (-Not $?) {
 Write-Output 'Building Warp installer'
 $ISCC_ARGS = @(
     "$INSTALLER_SCRIPT",
-    "/DReleaseChannel=$CHANNEL",
     "/DMyAppExeName=$BINARY_NAME",
     "/DTargetProfileDir=$CARGO_TARGET_OUTPUT_DIR",
     "/DMyAppName=$APP_NAME",

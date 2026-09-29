@@ -217,8 +217,6 @@ UNIVERSAL_BINARY=true
 BUILD_BINARY=true
 TARGET_ARCH=""
 DMG_NAME_SUFFIX=""
-# The only supported channel is oss.
-RELEASE_CHANNEL="oss"
 FEATURES="release_bundle,extern_plist"
 REGISTER_SERVICES=true
 DEBUG=false
@@ -303,20 +301,6 @@ while (( "$#" )); do
     -o|--open)
       OPEN_AFTER_BUNDLE=true
       shift
-      ;;
-    # Specify the release channel (oss is the only supported value)
-    -c|--channel)
-      if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-        RELEASE_CHANNEL=$2
-        if [[ "$RELEASE_CHANNEL" != "oss" ]]; then
-          echo "Error: --channel must be 'oss', got '$RELEASE_CHANNEL'" >&2
-          exit 1
-        fi
-        shift 2
-      else
-        echo "Error: Argument for $1 is missing" >&2
-        exit 1
-      fi
       ;;
     # Set a specific Git release tag for the build
     --release-tag)
@@ -498,7 +482,7 @@ if [[ "$ARTIFACT" == "app" ]]; then
   fi
 
   pushd app > /dev/null
-  echo "Building and bundling $DEFAULT_TARGET for channel $RELEASE_CHANNEL and bundle id $BUNDLE_ID with profile $CARGO_PROFILE"
+  echo "Building and bundling $DEFAULT_TARGET and bundle id $BUNDLE_ID with profile $CARGO_PROFILE"
   cargo bundle --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --target "$DEFAULT_TARGET" --features "$FEATURES"
   popd > /dev/null
 
@@ -625,12 +609,11 @@ if [[ "$ARTIFACT" == "app" ]]; then
       export SETTINGS_SCHEMA_EXECUTABLE="$BUNDLE_DIR/$WARP_APP_NAME.app/Contents/MacOS/$WARP_BIN"
     fi
   fi
-  "$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "$BUNDLED_RESOURCES_DIR" "$RELEASE_CHANNEL"
+  "$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "$BUNDLED_RESOURCES_DIR"
 
-  "$WORKSPACE_ROOT_DIR/script/compile_icon" "$RELEASE_CHANNEL" "$BUNDLE_DIR/$WARP_APP_NAME.app"
+  "$WORKSPACE_ROOT_DIR/script/compile_icon" "$BUNDLE_DIR/$WARP_APP_NAME.app"
 
-  # Determine CLI wrapper script path based on release channel (e.g. "warp-oss").
-  CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/warp-$RELEASE_CHANNEL"
+  CLI_SCRIPT_PATH="$BUNDLED_RESOURCES_DIR/bin/warp-oss"
 
   echo "Creating Resources/bin directory and CLI wrapper script..."
   mkdir -p "$BUNDLED_RESOURCES_DIR/bin"
@@ -675,7 +658,7 @@ elif [[ "$ARTIFACT" == "warpctrl" ]]; then
 
     export "INFO_PLIST_PATH=$(realpath "$WARP_PLIST_PATH")"
     pushd app > /dev/null
-    echo "Building $DEFAULT_TARGET for channel $RELEASE_CHANNEL with profile $CARGO_PROFILE"
+    echo "Building $DEFAULT_TARGET with profile $CARGO_PROFILE"
     cargo build --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --target "$DEFAULT_TARGET" --features "$FEATURES"
     popd > /dev/null
   else
@@ -709,7 +692,7 @@ elif [[ "$ARTIFACT" == "warpctrl" ]]; then
       export SETTINGS_SCHEMA_EXECUTABLE="$OUT_DIR/$WARP_BIN"
     fi
   fi
-  "$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "$BUNDLED_RESOURCES_DIR" "$RELEASE_CHANNEL"
+  "$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "$BUNDLED_RESOURCES_DIR"
 
 
   # Set the primary binary path to output.

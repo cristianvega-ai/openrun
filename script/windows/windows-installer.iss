@@ -22,11 +22,7 @@
 #define AssetsDir "..\..\app\assets\windows"
 
 // The mutex name must match what the Rust app creates in single_instance_manager.rs:
-#define ChannelPascalCase \
-  (ReleaseChannel == "integration") ? "Integration" : \
-  ((ReleaseChannel == "oss") ? "Oss" : \
-  "Unknown")
-#define AppMutexName "Local\Warp" + ChannelPascalCase + "_SingleInstance"
+#define AppMutexName "Local\WarpOss_SingleInstance"
 
 
 [Setup]
@@ -145,7 +141,6 @@ var
   CmdScriptContent: string;
 begin
   { After a successful install, write a helper script that runs Warp from the command line. }
-  { We use this to add a "warp-" prefix (e.g. "warp-preview.cmd" vs. "preview.exe") }
   if CurStep = ssPostInstall then begin
     { Add Warp to PATH if requested }
     if IsTaskSelected('addToPath') then
@@ -155,7 +150,7 @@ begin
     if not DirExists(BinDir) then
       CreateDir(BinDir);
 
-    { Determine the channel-specific script name (e.g. "warp-oss.cmd"). }
+    { The helper script is named "warp-oss.cmd". }
     CmdScriptName := 'warp-{#ReleaseChannel}.cmd';
 
     { Create the helper CMD script }

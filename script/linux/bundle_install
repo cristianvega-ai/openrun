@@ -8,7 +8,7 @@
 #   - WORKSPACE_ROOT_DIR: The root directory of the Cargo workspace.
 #   - CARGO_TARGET_OUTPUT_DIR: The cargo target directory containing build output.
 #   - OPT_DIR: The absolute path to our install directory (under /opt) on the target machine.
-#   - RELEASE_CHANNEL: The release channel we're bundling (always "oss").
+#   - RELEASE_CHANNEL: The channel assets directory under app/channels/ (always "oss").
 #   - BUNDLE_ID: The app ID for the bundle (e.g.: "dev.warp.WarpOss").
 #   - EXECUTABLE_PATH: The path to the compiled executable we want to install.
 #   - BINARY_NAME: The name that the compiled executable should have on the target machine.
@@ -40,4 +40,4 @@ for size in 16x16 32x32 64x64 128x128 256x256 512x512; do
 done
 
 # Prepare the bundled resources directory.
-"$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "${TARGET_DIR}/${OPT_DIR}/resources" "$RELEASE_CHANNEL"
+"$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "${TARGET_DIR}/${OPT_DIR}/resources"

@@ -14,10 +14,7 @@
 
 Param(
     [Parameter(Mandatory = $true)]
-    [String]$DestinationDir,
-
-    [Parameter(Mandatory = $false)]
-    [String]$Channel = ''
+    [String]$DestinationDir
 )
 
 $ErrorActionPreference = 'Stop'

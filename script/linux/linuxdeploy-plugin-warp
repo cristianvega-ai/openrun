@@ -13,7 +13,7 @@
 #
 # Required environment variables:
 #   WARP_BINARY_NAME:           Name of the binary (e.g. "warp-oss").
-#   WARP_PACKAGE_NAME:          Package directory name (e.g. "warp-terminal-dev").
+#   WARP_PACKAGE_NAME:          Package directory name (e.g. "warp-terminal-oss").
 #   WARP_BUNDLED_RESOURCES_DIR: Path to the staged resources directory to copy.
 
 set -e

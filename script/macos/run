@@ -18,7 +18,6 @@ cd "${REPO_ROOT}"
 : "${FEATURES?FEATURES must be set (invoke via ./script/run)}"
 
 WARP_BIN_NAME="warp-oss"
-WARP_CHANNEL="oss"
 
 # Resolve Cargo's actual target directory rather than assuming ./target. This
 # honors a shared CARGO_TARGET_DIR / build.target-dir (e.g. set in
@@ -100,11 +99,11 @@ if [ "${GENERATE_SCHEMA:-false}" != "true" ]; then
 else
   export SETTINGS_SCHEMA_EXECUTABLE="$WARP_APP_PATH/Contents/MacOS/$WARP_BIN_NAME"
 fi
-NO_LICENSES=1 "${REPO_ROOT}/script/prepare_bundled_resources" "$WARP_APP_PATH/Contents/Resources" "$WARP_CHANNEL"
+NO_LICENSES=1 "${REPO_ROOT}/script/prepare_bundled_resources" "$WARP_APP_PATH/Contents/Resources"
 
-"${REPO_ROOT}/script/compile_icon" "$WARP_CHANNEL" "$WARP_APP_PATH"
+"${REPO_ROOT}/script/compile_icon" "$WARP_APP_PATH"
 
-WARPCTRL_SCRIPT_PATH="$WARP_APP_PATH/Contents/Resources/bin/warpctrl-$WARP_CHANNEL"
+WARPCTRL_SCRIPT_PATH="$WARP_APP_PATH/Contents/Resources/bin/warpctrl-oss"
 echo "Creating warpctrl wrapper script at $WARPCTRL_SCRIPT_PATH..."
 "${REPO_ROOT}/script/macos/create_warpctrl_wrapper" \
   "$WARPCTRL_SCRIPT_PATH" \

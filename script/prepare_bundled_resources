@@ -6,13 +6,12 @@
 # destination directory. It is used by macOS and Linux build scripts.
 #
 # Usage:
-#   prepare_bundled_resources <destination_directory> [channel]
+#   prepare_bundled_resources <destination_directory>
 #
 # Arguments:
 #   destination_directory:  The directory where resources should be installed.
 #                           Resources will be copied to subdirectories within
 #                           this path (e.g., $DEST_DIR/bundled).
-#   channel:                (Optional) Release channel (oss).
 #
 # Environment variables:
 #   SKIP_SETTINGS_SCHEMA: Set to "1" to skip generating the JSON settings
@@ -27,14 +26,13 @@
 
 set -e
 
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-  echo "Error: Expected 1-2 arguments but received $#" >&2
-  echo "Usage: $0 <destination_directory> [channel]" >&2
+if [ $# -ne 1 ]; then
+  echo "Error: Expected 1 argument but received $#" >&2
+  echo "Usage: $0 <destination_directory>" >&2
   exit 1
 fi
 
 DEST_DIR="$1"
-CHANNEL="${2:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RESOURCES_SRC="$REPO_ROOT/resources"

@@ -17,7 +17,7 @@ cleanup() {
 # Run cleanup() when the script terminates (whether it succeeded or failed).
 trap cleanup EXIT
 
-# The only supported channel is oss.
+# Selects the per-channel assets under app/channels/.
 RELEASE_CHANNEL="oss"
 FEATURES="release_bundle"
 EXTRA_FEATURES=""
@@ -50,19 +50,6 @@ while (( "$#" )); do
       # Discard the --nouniversal argument, which is only used for macOS
       # bundles.
       shift
-      ;;
-    -c|--channel)
-      if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-        RELEASE_CHANNEL=$2
-        if [[ "$RELEASE_CHANNEL" != "oss" ]]; then
-          echo "Error: --channel must be 'oss', got '$RELEASE_CHANNEL'" >&2
-          exit 1
-        fi
-        shift 2
-      else
-        echo "Error: Argument for $1 is missing" >&2
-        exit 1
-      fi
       ;;
     --release-tag)
       if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
@@ -210,7 +197,7 @@ fi
 
 # Build the binary.
 if [[ "$BUILD" == "true" ]]; then
-  echo "Building and bundling Warp for channel $RELEASE_CHANNEL and bundle id $BUNDLE_ID"
+  echo "Building and bundling Warp with bundle id $BUNDLE_ID"
   cargo build -p warp --profile "$CARGO_PROFILE" --bin "$WARP_BIN" --features "$FEATURES" ${TARGET_TRIPLE:+--target $TARGET_TRIPLE}
 
   echo "Making debug copy of '$EXECUTABLE_PATH' at '$DEBUG_EXECUTABLE_PATH'"
@@ -272,7 +259,7 @@ fi
 if [[ "$ARTIFACT" == "warpctrl" ]]; then
   echo "Preparing standalone resources directory"
   BUNDLED_RESOURCES_DIR="$OUT_DIR/resources"
-  "$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "$BUNDLED_RESOURCES_DIR" "$RELEASE_CHANNEL"
+  "$WORKSPACE_ROOT_DIR/script/prepare_bundled_resources" "$BUNDLED_RESOURCES_DIR"
 fi
 
 

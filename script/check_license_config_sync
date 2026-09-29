@@ -2,17 +2,42 @@
 #
 # Verifies that the accepted license lists in deny.toml and about.toml are in
 # sync. Exits non-zero with a diff if they diverge.
+#
+# Needs Python 3.11+ (`tomllib`), or any Python with the `tomli` package.
 
 set -e
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-python3 -c "
-import tomllib, sys
+# Use the first interpreter that can parse TOML.
+PYTHON=""
+for candidate in python3 python3.13 python3.12 python3.11; do
+  if command -v "$candidate" >/dev/null 2>&1 &&
+    "$candidate" -c 'import importlib.util as u, sys; sys.exit(0 if u.find_spec("tomllib") or u.find_spec("tomli") else 1)' 2>/dev/null; then
+    PYTHON="$candidate"
+    break
+  fi
+done
 
-with open('$REPO_ROOT/deny.toml', 'rb') as f:
+if [[ -z "$PYTHON" ]]; then
+  echo "Error: $0 needs Python 3.11 or newer (for tomllib), or Python with the 'tomli' package installed." >&2
+  echo "The default python3 is: $(python3 --version 2>&1 || echo 'not found')" >&2
+  exit 1
+fi
+
+"$PYTHON" - "$REPO_ROOT" <<'PY'
+import sys
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+repo_root = sys.argv[1]
+
+with open(f'{repo_root}/deny.toml', 'rb') as f:
     deny = set(tomllib.load(f)['licenses']['allow'])
-with open('$REPO_ROOT/about.toml', 'rb') as f:
+with open(f'{repo_root}/about.toml', 'rb') as f:
     about = set(tomllib.load(f)['accepted'])
 
 if deny != about:
@@ -25,4 +50,4 @@ if deny != about:
     sys.exit(1)
 
 print('License config in sync.')
-"
+PY
