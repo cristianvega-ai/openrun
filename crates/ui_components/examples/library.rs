@@ -35,11 +35,6 @@ impl AssetProvider for Assets {
 }
 
 fn main() -> warpui_core::platform::app::TerminationResult {
-    // Initialize the TLS provider so reqwest can make HTTPS requests.
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("must be able to initialize crypto provider for TLS support");
-
     let app_builder = warpui::platform::AppBuilder::new(
         platform::AppCallbacks::default(),
         Box::new(ASSETS),

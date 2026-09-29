@@ -4,7 +4,6 @@ use std::time::Duration;
 #[cfg(not(target_family = "wasm"))]
 use async_compat::{Compat, CompatExt};
 use bytes::Bytes;
-use futures::Stream;
 use http::HeaderValue;
 pub use http::header::AUTHORIZATION;
 use http::header::HeaderName;
@@ -211,23 +210,6 @@ impl<'a> RequestBuilder<'a> {
         }
     }
 
-    pub fn form<T: Serialize + ?Sized>(self, form: &T) -> RequestBuilder<'a> {
-        Self {
-            wrapped: self.wrapped.form(form),
-            ..self
-        }
-    }
-
-    /// Attach a `multipart/form-data` body.
-    /// Not available on wasm because reqwest's multipart builder API is native-only.
-    #[cfg(not(target_family = "wasm"))]
-    pub fn multipart(self, form: reqwest::multipart::Form) -> RequestBuilder<'a> {
-        Self {
-            wrapped: self.wrapped.multipart(form),
-            ..self
-        }
-    }
-
     /// Prevents the system from sleeping due to idle while this request is in progress.
     ///
     /// The provided reason will be used in user-visible logging, so make sure it is
@@ -336,10 +318,6 @@ impl Response {
         self.0.bytes().await
     }
 
-    pub fn bytes_stream(self) -> impl Stream<Item = reqwest::Result<Bytes>> {
-        self.0.bytes_stream()
-    }
-
     pub fn headers(&self) -> &http::HeaderMap {
         self.0.headers()
     }
@@ -348,3 +326,7 @@ impl Response {
         self.0.url()
     }
 }
+
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

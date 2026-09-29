@@ -134,6 +134,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Offline indicator and network reachability watchers](#offline-indicator-and-network-reachability-watchers) — removed the tab-bar "Some features may be unavailable offline" icon, the `NetworkStatus` model and the macOS, Linux, Windows and web reachability watchers
 - [Warp-internal design links](#warp-internal-design-links) — removed Notion, Figma and Google Docs links from comments and a debug assertion message; `script/offline_audit` now fails on them
 - [Dead tips, icons, tooltips and Warp AI / Drive names](#dead-tips-icons-tooltips-and-warp-ai-drive-names) — removed retired welcome-tip actions, three unused icons and five unreferenced SVGs, the docs-link info tooltip, the log-out remnants and a dead slash-menu action; renamed `BindingGroup::WarpAi` and `warp-drive.svg`
+- [Audit precision, onboarding demo binary and HTTP client trim](#audit-precision-onboarding-demo-binary-and-http-client-trim) — narrowed the audit allowlist, scanned `docker/`, deleted the `onboarding` demo binary, and trimmed the HTTP client API and `reqwest` features to what the LSP downloads use
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3386,3 +3387,20 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 **User-visible impact:** None, except that the CLI-agent bindings are grouped under an id that no longer says Warp AI in the command-search grouping code.
 
 **Notes:** Kept on purpose: the legacy settings-slug map in `settings_view/mod.rs` (`"Account"`, `"Oz"`, `"Teams"`, ...) is backward compatibility for stored or deep-linked slugs and is tested (V1 F9). `TipAction::Workflows` stays, as its own comment explains. Many other `Icon` variants have no caller (the icon set is a general library); only the ones tied to removed features were deleted.
+
+## Audit precision, onboarding demo binary and HTTP client trim
+**Why:** SWP-18 findings F11 to F14.
+
+**Removed:**
+- The `onboarding` demo binary (`crates/onboarding/src/bin/main.rs`, its `bin` feature and `[[bin]]`), with the dependencies only it used (`anyhow`, `rust-embed`, `warpui`, `warp_logging`). MASTER decision 12 allows only `warp-oss` and `integration`.
+- `http_client::RequestBuilder::{form, multipart}` and `Response::bytes_stream`, which had no callers, and the `reqwest` features they needed (`form`, `multipart`, `query`, `stream`) plus `brotli`. The workspace `reqwest` now enables `blocking`, `gzip` and `json`, which is what `node_runtime`, `lsp` and `local_control` use.
+- The TLS provider setup and the `rustls` dev-dependency of the `ui_components` library example (the example makes no requests).
+
+**Modified:**
+- `script/offline_audit.allowlist`: the migrations entry is split into the two historical migrations and the DB-1 `down.sql` (which recreates the dropped tables and their `firebase_uid` columns); the two `warpdotdev` globs for `resources/linux/*` and `script/linux/*` now match only the install paths (`opt/warpdotdev`, `%{prefix}/warpdotdev`), so a new `github.com/warpdotdev/...` URL there is a finding.
+- `script/offline_audit` scans `docker/` for `curl`/`wget` too; `docker/linux-dev/Dockerfile` (a developer image that installs curl, the GitHub CLI key and rustup while it is built) has one allowlist entry saying so.
+- `crates/http_client/src/lib_tests.rs`: a test that builds the HTTPS client and gets a refused loopback connection back as an error, which shows reqwest 0.13 needs no explicit TLS provider.
+
+**User-visible impact:** None.
+
+**Notes:** The two binaries named `integration` are intentional: `app/src/bin/integration.rs` is the app under test (`Channel::Integration`) and `crates/integration/src/bin/integration.rs` is the test runner that launches it; both belong to decision 12's `integration`. `reqwest-eventsource` in the wasm section of `app/Cargo.toml` is only a comment about `futures-timer` (WASM-2, decision 18).

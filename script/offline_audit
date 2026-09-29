@@ -84,7 +84,7 @@ ALLOWED_COMMANDS = {"git", "gh"}
 GIT_REMOTE_PATTERN = r'\["(fetch|pull|clone|ls-remote|push|remote)"[,\]]'
 
 SCRIPT_PATTERNS = [r"curl ", r"wget ", r"Invoke-WebRequest"]
-SCRIPT_DIRS = ["app/assets", "resources", "script"]
+SCRIPT_DIRS = ["app/assets", "resources", "script", "docker"]
 
 LINK_PATTERNS = [r"open_url\(", r"hyperlink\(", r"with_href\(", r"OpenLink"]
 

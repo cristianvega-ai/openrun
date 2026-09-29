@@ -15,7 +15,9 @@ hosts | deny.toml | * | allow-org for the build-time git forks, and the names of
 hosts | about.toml | * | comment naming the warpdotdev-hosted git sources that cargo-about skips (MASTER decision 15)
 hosts | Cargo.lock | github\.com/warpdotdev/ | build-time git dependencies on the warpdotdev forks are kept (MASTER decision 15)
 hosts | *Cargo.toml | github\.com/warpdotdev/ | build-time git dependencies on the warpdotdev forks are kept (MASTER decision 15)
-hosts | crates/persistence/migrations/* | firebase | historical migrations stay untouched (MASTER decision 14); DB-1 drops the tables
+hosts | crates/persistence/migrations/2022-07-29-164418_add_users/up.sql | firebase | historical migration, untouched (MASTER decision 14); DB-1 drops the table it creates
+hosts | crates/persistence/migrations/2023-08-07-205653_add_user_profiles_table/up.sql | firebase | historical migration, untouched (MASTER decision 14); DB-1 drops the table it creates
+hosts | crates/persistence/migrations/2026-09-29-000000_drop_dead_tables/down.sql | firebase | DB-1 down migration: recreates the dropped legacy tables, including their firebase_uid columns, to restore the old schema on rollback
 hosts | crates/warpui_extras/src/secure_storage/linux.rs | releases\.warp\.dev/channel_versions\.json | secure-storage key material, not a network call; changing it would orphan stored secrets (MASTER decision 13)
 hosts | app/assets/windows/*/dxcompiler.dll | * | third-party DirectX compiler binary; `sEntry` matches `sentry` case-insensitively
 hosts | crates/secret_redaction/src/lib.rs | firebase | the redaction regex for leaked Firebase auth domains is a secret pattern, not a network call
@@ -27,8 +29,8 @@ hosts | crates/persistence/test_data/pre_drop_dead_tables_seed.sql | firebase | 
 hosts | crates/integration/tests/data/test_json_object.sqlite | firebase_uid | legacy cloud-object fixture: its pre-DB-1 schema (users.firebase_uid) is dropped by the startup migration
 hosts | crates/warp_core/src/paths.rs | /opt/warpdotdev | example install path in a doc comment (MASTER decision 17)
 hosts | flake.nix | /opt/warpdotdev | install paths stay unchanged (MASTER decision 17)
-hosts | resources/linux/* | warpdotdev | install paths stay unchanged (MASTER decision 17)
-hosts | script/linux/* | warpdotdev | install paths stay unchanged (MASTER decision 17)
+hosts | resources/linux/* | opt/warpdotdev|%\{prefix\}/warpdotdev | install paths stay unchanged (MASTER decision 17); any other warpdotdev mention here is a finding
+hosts | script/linux/* | opt/warpdotdev | install paths stay unchanged (MASTER decision 17); any other warpdotdev mention here is a finding
 hosts | script/windows/windows-installer.iss | Warp\.dev | registry base stays unchanged (MASTER decision 17)
 hosts | crates/warpui_extras/src/user_preferences/registry_backed.rs | Warp\.dev | registry base stays unchanged (MASTER decision 17)
 
@@ -51,4 +53,5 @@ net-script | script/linux/install_build_deps | * | protoc download at build time
 net-script | script/linux/install_linuxdeploy | * | AppImage tooling download at build time
 net-script | script/macos/bootstrap | * | Homebrew and rustup installers
 net-script | script/windows/bootstrap.ps1 | * | rustup installer
+net-script | docker/linux-dev/Dockerfile | * | developer container image: installs curl, the GitHub CLI apt key and rustup while the image is built; never shipped in the app
 net-script | script/offline_audit | * | holds the audit patterns
