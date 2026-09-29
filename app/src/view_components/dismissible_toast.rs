@@ -412,10 +412,6 @@ pub struct DismissibleToast<A: Action + Clone> {
     pub(crate) on_body_click: Option<OnBodyClickCallback<A>>,
 }
 
-pub enum ToastType {
-    CloudObjectNotFound,
-}
-
 impl<A: Action + Clone> DismissibleToast<A> {
     pub fn new(main_text: String, flavor: ToastFlavor) -> Self {
         Self {

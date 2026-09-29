@@ -2010,59 +2010,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cloud_object_client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-channel",
- "async-trait",
- "chrono",
- "cloud_object_models",
- "cloud_objects",
- "mockall",
- "serde",
- "serde_json",
- "uuid",
- "warp_core",
- "warp_graphql",
-]
-
-[[package]]
-name = "cloud_object_models"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cloud_object_persistence",
- "cloud_objects",
- "diesel",
- "log",
- "persistence",
- "serde",
- "serde_json",
- "settings",
- "url",
- "warp_core",
- "warp_graphql",
- "warp_util",
-]
-
-[[package]]
-name = "cloud_object_persistence"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "chrono",
- "cloud_objects",
- "diesel",
- "log",
- "persistence",
- "serde",
- "warp_core",
- "warp_graphql",
-]
-
-[[package]]
 name = "cloud_objects"
 version = "0.1.0"
 dependencies = [
@@ -11320,9 +11267,6 @@ dependencies = [
  "cfg_aliases 0.2.1",
  "chrono",
  "clap",
- "cloud_object_client",
- "cloud_object_models",
- "cloud_object_persistence",
  "cloud_objects",
  "cocoa 0.26.0",
  "code_outline",
@@ -11929,8 +11873,6 @@ dependencies = [
  "bounded-vec-deque",
  "cfg-if",
  "chrono",
- "cloud_object_client",
- "cloud_object_models",
  "cloud_objects",
  "command",
  "cynic",

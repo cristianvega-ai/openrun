@@ -44,8 +44,6 @@ use super::transfer_ownership_confirmation_modal::{
 use crate::appearance::Appearance;
 use crate::auth::auth_state::AuthState;
 use crate::auth::{AuthStateProvider, UserUid};
-use crate::cloud_object::CloudObjectEventEntrypoint;
-use crate::cloud_object::model::persistence::CloudModel;
 use crate::drive::cloud_action_confirmation_dialog::{
     CloudActionConfirmationDialog, CloudActionConfirmationDialogEvent,
     CloudActionConfirmationDialogVariant,
@@ -55,7 +53,6 @@ use crate::menu::{self, Menu, MenuItem, MenuItemFields};
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::network::NetworkStatus;
 use crate::send_telemetry_from_ctx;
-use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::ids::ServerId;
 use crate::server::telemetry::TelemetryEvent;
 use crate::themes::theme::Blend;
@@ -73,6 +70,7 @@ use crate::workspaces::team::{
 use crate::workspaces::update_manager::{TeamUpdateManager, TeamUpdateManagerEvent};
 use crate::workspaces::user_workspaces::{UserWorkspaces, UserWorkspacesEvent};
 use crate::workspaces::workspace::{CustomerType, Workspace, WorkspaceUid};
+use cloud_objects::cloud_object::CloudObjectEventEntrypoint;
 
 const TEAM_MEMBERS_HEADER_POSITION_ID: &str = "team_settings:team_members_header";
 // Styling for team create page
@@ -340,7 +338,7 @@ impl Tabs for TeamsInviteOption {
         TeamsPageAction::ChangeInviteViewOption(selection)
     }
 
-    fn label(&self, _team: &Team, _cloud_model: &CloudModel) -> String {
+    fn label(&self, _team: &Team) -> String {
         self.tab_name()
     }
 }
@@ -543,7 +541,6 @@ pub struct TeamsPageView {
     // Note that rather than storing just the current workspace, we're storing the entire
     // ModelHandle<UserWorkspaces>. That's because eventually we'll be handling more than one workspace.
     user_workspaces: ModelHandle<UserWorkspaces>,
-    cloud_model: ModelHandle<CloudModel>,
     invite_view: TeamsInviteOption,
     team_members_mouse_states: Vec<ItemMouseStates>,
     team_approved_domains_mouse_states: Vec<ItemMouseStates>,
@@ -810,12 +807,6 @@ impl TeamsPageView {
             ctx.notify();
         });
 
-        let cloud_model = CloudModel::handle(ctx);
-        ctx.observe(&cloud_model, |me, _, ctx| {
-            me.update_team_members_state(ctx);
-            me.update_approved_domains_state(ctx);
-        });
-
         let appearance = Appearance::as_ref(ctx);
         let font_size = appearance.ui_font_size();
         let create_team_editor = Self::editor(
@@ -983,7 +974,6 @@ impl TeamsPageView {
                 num_chips: 0,
             },
             user_workspaces,
-            cloud_model,
             invite_view: TeamsInviteOption::default(),
             team_members_mouse_states,
             team_approved_domains_mouse_states,
@@ -1122,10 +1112,6 @@ impl TeamsPageView {
             UserWorkspacesEvent::JoinTeamWithTeamDiscoverySuccess => {
                 self.discovery_join_target = None;
                 self.workspace_discovery_screen.show_options();
-                // Force refresh of Warp Drive objects after joining a team
-                UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
-                    update_manager.refresh_updated_objects(ctx);
-                });
 
                 let message = self
                     .user_workspaces
@@ -1142,9 +1128,6 @@ impl TeamsPageView {
                 self.show_error("Failed to join team", Some(err), ctx);
             }
             UserWorkspacesEvent::JoinTeamInWorkspaceSuccess { team_uid } => {
-                UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
-                    update_manager.refresh_updated_objects(ctx);
-                });
                 let team_name = self
                     .user_workspaces
                     .as_ref(ctx)
@@ -1169,9 +1152,6 @@ impl TeamsPageView {
             UserWorkspacesEvent::JoinWorkspaceFromDiscoverySuccess => {
                 self.discovery_join_target = None;
                 self.workspace_discovery_screen = WorkspaceDiscoveryScreen::Options;
-                UpdateManager::handle(ctx).update(ctx, move |update_manager, ctx| {
-                    update_manager.refresh_updated_objects(ctx);
-                });
                 self.show_success("Successfully joined workspace", ctx);
             }
             UserWorkspacesEvent::JoinWorkspaceFromDiscoveryRejected(err) => {
@@ -2289,7 +2269,6 @@ impl TeamsWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let _cloud_model = view.cloud_model.as_ref(app);
         let current_user_email = view.auth_state.user_email().unwrap_or_default();
         let has_admin_permissions =
             TeamsPageView::has_admin_permissions(team_metadata, workspace, &current_user_email);

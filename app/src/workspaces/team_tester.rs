@@ -13,7 +13,7 @@ impl TeamTesterStatus {
         Self::new(ctx)
     }
 
-    /// Emit an event to start or force-refresh the cloud object and workspace metadata pollers.
+    /// Emit an event to start or force-refresh the workspace metadata poller.
     /// Polling is started when a user logs in; this method is also called with
     /// `force_refresh: true` when data is known to be invalidated (e.g. joining a team via an
     /// intent link).

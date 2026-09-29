@@ -1,5 +1,4 @@
 use warp::features::FeatureFlag;
-use warp::integration_testing::cloud_object::assert_cloud_preference_exists;
 use warp::integration_testing::step::{
     new_step_with_default_assertions, new_step_with_default_assertions_for_pane,
 };
@@ -324,10 +323,10 @@ pub fn test_restore_snapshot_with_background_output() -> Builder {
         )
 }
 
-/// Tests restoring a snapshot that includes a test json object.
+/// Tests restoring a database that still holds a legacy cloud object row.
 ///
-/// The test json object has as its contents the string "egpmggresq"
-pub fn test_restore_snapshot_with_test_json_object() -> Builder {
+/// The row is ignored and the app starts normally.
+pub fn test_restore_snapshot_with_legacy_cloud_object() -> Builder {
     new_builder()
         .with_setup(|_utils| {
             integration_testing::create_file_from_assets(
@@ -338,10 +337,7 @@ pub fn test_restore_snapshot_with_test_json_object() -> Builder {
                 ),
             );
         })
-        .with_step(
-            TestStep::new("Verify json object contents")
-                .add_assertion(assert_cloud_preference_exists("HonorPS1", "false")),
-        )
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
 }
 
 /// Tests restoring a snapshot that includes a Markdown file pane.

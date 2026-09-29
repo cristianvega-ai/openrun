@@ -67,13 +67,13 @@ use warp_graphql::queries::get_workspaces_metadata_for_user::{
 
 use super::ServerApi;
 use crate::auth::UserUid;
-use crate::cloud_object::CloudObjectEventEntrypoint;
 use crate::server::graphql::{get_request_context, get_user_facing_error_message};
 use crate::server::ids::ServerId;
 use crate::workspaces::gql_convert::workspaces_metadata_response_from_gql;
 use crate::workspaces::team::{DiscoveryOptions, MembershipRole};
 use crate::workspaces::user_workspaces::{CreateTeamResponse, WorkspacesMetadataResponse};
 use crate::workspaces::workspace::{Workspace, WorkspaceUid};
+use cloud_objects::cloud_object::CloudObjectEventEntrypoint;
 
 #[cfg_attr(test, automock)]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]

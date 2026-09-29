@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod object;
 pub mod team;
 pub mod workspace;
 
@@ -9,7 +8,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use auth::AuthClient;
-use object::ObjectClient;
 use team::TeamClient;
 use warp_core::context_flag::ContextFlag;
 use warp_server_client::auth::{AuthClientImpl, AuthEvent};
@@ -181,10 +179,6 @@ impl ServerApiProvider {
     }
 
     pub fn get_team_client(&self) -> Arc<dyn TeamClient> {
-        self.server_api.clone()
-    }
-
-    pub fn get_cloud_objects_client(&self) -> Arc<dyn ObjectClient> {
         self.server_api.clone()
     }
 }

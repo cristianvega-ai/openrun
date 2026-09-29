@@ -98,7 +98,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Per-setting cloud-sync attribute](#per-setting-cloud-sync-attribute) — removed the sync-mode attribute, its `Setting` accessor and its macro argument from every setting definition
 - [Docs, skills, comments and icons: leftover AI mentions](#docs-skills-comments-and-icons-leftover-ai-mentions) — removed the AI and skills text from `AGENTS.md`, `README.md`, `FAQ.md`, `CONTRIBUTING.md`, the repo-local skills and the Nix flake; rewrote stale Agent Mode, Warp AI and AI-block comments; deleted 37 unused AI icon variants and 36 SVGs
 - [Warp help, docs and feedback links](#warp-help-docs-and-feedback-links) — removed the Help menu, every warp.dev docs, Slack, privacy, feedback and issue link from the UI, and the resource-center main page; the resource center is now the keyboard-shortcuts panel
-
+- [Cloud-object infrastructure: model, sync queue, update manager and listener](#cloud-object-infrastructure-model-sync-queue-update-manager-and-listener) — deleted `CloudModel`, `CloudViewModel`, `ObjectActions`, `UpdateManager`, the real-time listener, the sync queue, the object API client and the object `ModelEvent`s; the persisted cloud-object rows are no longer read or written; the three `cloud_object_*` crates are gone
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2565,3 +2565,35 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `app/src/cloud_object/mod.rs` builds a link from the server root URL (DRV-5 deletes the module).
 - The `TelemetryEvent` variants `ResourceCenterOpened`, `ResourceCenterTipsCompleted` and `ResourceCenterTipsSkipped`, and `KeybindingsPageOpened`'s payload, are TEL-4's. `FeatureFlag::AvatarInTabBar` still guards dead `else` branches in `workspace/view.rs` and `app_menus.rs` (FLAGS-1).
 - Comments that cite warpdotdev GitHub issues or Linear tickets are SWP-14's.
+
+## Cloud-object infrastructure: model, sync queue, update manager and listener
+**Why:** Warp Drive objects (folders, notebooks, preferences and the retired generic types) were cached locally, queued for upload, patched from a server websocket and shown through the Drive views. With Drive, sync and accounts gone (user decision 1), nothing creates or consumes these objects, so the model and every service that kept it in step with the server go too.
+
+**Removed:**
+- `app/src/cloud_object/` (`CloudObject`, `CloudModel`, `CloudViewModel`, `ObjectActions`, `CloudNotebook`, the generic string object model and `Preference`), `server/cloud_objects/` (`UpdateManager`, `Listener` and `ObjectUpdateMessage`, the fakes and the test utilities), `server/sync_queue{,_tests}.rs`, `server_api/object.rs` (`ObjectClient` and its `ServerApi` implementation, `ServerApiProvider::get_cloud_objects_client`), `server/graphql/schema/` (the object GraphQL conversions), `workspaces/user_profiles.rs` (`UserProfiles`), `drive/{folders, sharing, cloud_object_styling}` (`CloudFolder`, `FolderId`, `DriveObjectType`, `warp_drive_icon_color`) and `integration_testing/cloud_object/`. `workspaces::gql_convert::object_update_message_from_gql` went with the listener.
+- `ModelEvent::{UpsertNotebooks, UpsertFolders, UpsertGenericStringObject(s), UpsertNotebook, UpsertFolder, MarkObjectAsSynced, IncrementRetryCount, UpdateObjectAfterServerCreation, DeleteObjects, UpdateObjectMetadata, UpsertUserProfiles, ClearUserProfiles, RecordTimeOfNextRefresh, InsertObjectAction, SyncObjectActions}` with their writers, `PersistedData::{cloud_objects, user_profiles, time_of_next_force_object_refresh, object_actions}` and the matching reads of `read_sqlite_data`, which also lost its `user_uid` parameter. `PersistedDataScope::gui_only_data` had no other user.
+- Singleton registrations of `CloudModel`, `CloudViewModel`, `ObjectActions`, `UserProfiles`, `SyncQueue`, `UpdateManager` and `Listener` from `lib.rs` and the test setup helpers, and the queue rebuild from unsynced objects and actions at startup. There were no unsynced-object warnings left on quit.
+- `crates/cloud_object_models`, `crates/cloud_object_client` and `crates/cloud_object_persistence`: only the app depended on them (`warp_server_client` listed two of them without using them), so they go now instead of with SRV-1. Their `[workspace.dependencies]` entries, the dependencies of `app` and `warp_server_client`, and the `cloud_object_models/agent_mode_evals` and `cloud_object_client/test-util` entries of the feature lists are removed. `crates/cloud_objects` stays for the team code and SRV-1.
+- `UserWorkspaces::{team_spaces, spaces_for_window, personal_drive, space_to_owner, owner_to_space}`, `TeamUpdateManager`'s removal of a left team's objects, the `CloudModel` observer and the "refresh Warp Drive objects" calls of the teams page, and the `CloudModel` argument of the tab-menu label.
+- `ToastType::CloudObjectNotFound` and `ToastStack::add_ephemeral_toast_by_type`, `LISTENER_RETRY_STRATEGY`, the `server_id_traits!` macro of `server/ids.rs` and the ids tests.
+- Telemetry variants whose payload types went: `DuplicateObject`, `ExportObject`, `CopyObjectToClipboard`, `WebCloudObjectOpenedOnDesktop`, `OpenedSharingDialog`, `EditNotebook`, `TelemetryCloudObjectType`, `TelemetrySpace`, `CloudObjectTelemetryMetadata`, `SharingDialogSource` and the unused `AgentModeCitation`.
+- Tests of the removed model: `model_tests`, `actions_tests`, `update_manager_tests`, `sync_queue_tests`, the leaving/joining-team object tests and the spaces test of `user_workspaces_tests`, `test_deserialize_corrupted_guests`, and the integration tests `test_websocket_*` with `cloud_objects.sqlite`.
+
+**Modified:**
+- The command palette's Workflows filter chip and workflow search items take their colour from `search::command_palette::render_util::workflow_icon_color` (the same red as before) instead of `warp_drive_icon_color`.
+- `NotebookTelemetryMetadata` (used by the local markdown file viewer) is `{location, markdown_table_count}`; it no longer carries a notebook id, team or space.
+- `open_team_settings_with_email_invite_in_new_window` shows the teams page at once instead of waiting for the cloud-object initial load.
+- `ServerId` is the only re-export left in `server/ids.rs`; `CloudObjectEventEntrypoint` is imported from `cloud_objects` by the team code that still takes it (TEAM-1 removes it).
+- `test_restore_snapshot_with_test_json_object` became `test_restore_snapshot_with_legacy_cloud_object`: it opens a database that still holds a cloud object row and checks that the app starts.
+
+**Persisted state:** the sqlite tables `object_metadata`, `object_permissions`, `object_actions`, `cloud_objects_refreshes`, `notebooks`, `folders`, `generic_string_objects`, `workflows` and `user_profiles` are untouched and no longer read or written; their rows, including any stored preference, notebook or folder, are ignored (DB-1 drops the tables; no migration here). `save_app_state` still clears the pane tables that hold foreign keys to `pane_leaves`. The `persistence` crate keeps its diesel models and schema for the DB-1 migration.
+
+**User-visible impact:** none for terminal use. Previously synced Drive content stays in the local database, unread, and nothing contacts the object endpoints or the Drive websocket.
+
+**Notes:**
+- Left for TEAM-1: the team code that lost its callers here and now warns as dead: `server/team_scope.rs`, `workspaces/user_workspaces/team_workspace_settings.rs` (`TeamContext*`), `UserWorkspaces::{set_team_for_window, switch_window_to_team, team_from_uid_across_all_workspaces, transfer_team_ownership, sole_team*, has_workspaces, ...}`, `SoleTeamError`, `UserWorkspacesEvent::TransferTeamOwnership*`, `TeamClient::transfer_team_ownership`, `drive/cloud_action_confirmation_dialog.rs` (only the teams page uses it) and `TeamUpdateManager`'s `CloudObjectEventEntrypoint` parameters.
+- Left for SRV-1: `crates/cloud_objects` and the GraphQL object types in `crates/graphql`, `warp_server_client::{drive, ids}`.
+- Left for DB-1: the diesel models and schema of the tables above (`persistence::model::{ObjectPermissions, ObjectMetadata, UserProfile, NewPersistedObjectAction, ...}`) and `blocks.cloud_workflow_id`.
+- Left for TEL-4: `AnonymousUserHitCloudObjectLimit`, `DriveSharingOnboardingBlockShown` and the other Drive telemetry variants with plain payloads.
+- Left for FLAGS-1: `FeatureFlag::SharedWithMe` and the other Drive flags.
+- Left for WASM-1: `workspace/home.rs` still lists Warp Drive among the web home page features.

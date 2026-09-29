@@ -9,6 +9,17 @@ use crate::themes::theme::Blend;
 use crate::ui_components::icons::Icon;
 use crate::util::color::{ContrastingColor, MinimumAllowedContrast};
 
+/// The accent color of workflow search items and of the Workflows filter chip.
+pub fn workflow_icon_color(appearance: &Appearance) -> ColorU {
+    let color: Fill = appearance.theme().terminal_colors().normal.red.into();
+    color
+        .on_background(
+            appearance.theme().surface_1(),
+            MinimumAllowedContrast::NonText,
+        )
+        .into()
+}
+
 /// Helper function to render an icon for any search item within the command palette with consistent
 /// styling.
 pub fn render_search_item_icon(

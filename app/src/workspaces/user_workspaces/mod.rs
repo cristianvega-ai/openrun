@@ -19,9 +19,7 @@ use super::workspace::{
     AdminEnablementSetting, EnterpriseSecretRegex, UgcCollectionEnablementSetting, Workspace,
     WorkspaceUid,
 };
-use crate::auth::{AuthStateProvider, UserUid};
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{CloudObjectEventEntrypoint, Owner, Space};
+use crate::auth::UserUid;
 use crate::server::ids::ServerId;
 use crate::server::server_api::team::TeamClient;
 use crate::server::server_api::workspace::WorkspaceClient;
@@ -32,6 +30,7 @@ use crate::settings::PrivacySettings;
 use crate::workspaces::workspace::{
     BillingMetadata, SplitListSetting, WorkspaceMember, WorkspaceSettings,
 };
+use cloud_objects::cloud_object::CloudObjectEventEntrypoint;
 pub(crate) mod billing_workspace_settings;
 pub(crate) mod team_workspace_settings;
 pub use team_workspace_settings::TeamScope;
@@ -382,21 +381,6 @@ impl UserWorkspaces {
         }
     }
 
-    // Returns a Vec of the user's active spaces, based on their
-    // team membership.
-    pub fn team_spaces(&self) -> Vec<Space> {
-        if let Some(workspace) = self.current_workspace() {
-            workspace
-                .teams
-                .iter()
-                .map(|team| Space::Team { team_uid: team.uid })
-                .collect()
-        } else {
-            // If the user has no workspace, they have no team spaces.
-            vec![]
-        }
-    }
-
     pub fn total_teammates_in_joinable_teams(&self) -> i64 {
         self.joinable_teams
             .iter()
@@ -406,76 +390,6 @@ impl UserWorkspaces {
 
     pub fn num_joinable_teams(&self) -> usize {
         self.joinable_teams.len()
-    }
-
-    pub fn spaces_for_window(&self, window_id: WindowId, ctx: &AppContext) -> Vec<Space> {
-        if AuthStateProvider::as_ref(ctx)
-            .get()
-            .is_user_web_anonymous_user()
-            .unwrap_or_default()
-        {
-            return vec![Space::Shared];
-        }
-        let mut spaces = vec![];
-        if let Some(team) = self.team_for_window(window_id) {
-            spaces.push(Space::Team { team_uid: team.uid });
-        }
-
-        if FeatureFlag::SharedWithMe.is_enabled()
-            && CloudModel::as_ref(ctx).has_directly_shared_objects(self, ctx)
-        {
-            spaces.push(Space::Shared);
-        }
-        spaces.push(Space::Personal);
-
-        spaces
-    }
-
-    // Returns the [`Owner`] for the user's personal drive. If the user is not authenticated, this
-    // returns `None`.
-    pub fn personal_drive(&self, ctx: &AppContext) -> Option<Owner> {
-        AuthStateProvider::as_ref(ctx)
-            .get()
-            .user_id()
-            .map(|user_uid| Owner::User { user_uid })
-    }
-
-    // Maps a [`Space`] into an [`Owner`], based on the user's team memberships. If the space
-    // does not directly identify an owner (it's the space for shared objects), returns `None`.
-    pub fn space_to_owner(&self, space: Space, ctx: &AppContext) -> Option<Owner> {
-        match space {
-            Space::Team { team_uid } => Some(Owner::Team { team_uid }),
-            Space::Personal => self.personal_drive(ctx),
-            Space::Shared => None,
-        }
-    }
-
-    // Maps an [`Owner`] into a [`Space`], based on the user's team memberships.
-    // This is always possible, as unknown owners imply the shared space.
-    pub fn owner_to_space(&self, owner: Owner, ctx: &AppContext) -> Space {
-        match owner {
-            Owner::User { user_uid } => {
-                if !FeatureFlag::SharedWithMe.is_enabled() {
-                    return Space::Personal;
-                }
-
-                let current_user = AuthStateProvider::as_ref(ctx).get().user_id();
-                if Some(user_uid) == current_user {
-                    Space::Personal
-                } else {
-                    Space::Shared
-                }
-            }
-            Owner::Team { team_uid } => {
-                if !FeatureFlag::SharedWithMe.is_enabled()
-                    || self.team_from_uid_across_all_workspaces(team_uid).is_some()
-                {
-                    Space::Team { team_uid }
-                } else {
-                    Space::Shared
-                }
-            }
-        }
     }
 
     pub fn has_teams(&self) -> bool {

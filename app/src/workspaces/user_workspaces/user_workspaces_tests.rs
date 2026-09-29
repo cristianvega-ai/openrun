@@ -44,18 +44,11 @@ use warpui::{AddSingletonModel, App, Element, TypedActionView, View, ViewHandle,
 use warpui_extras::user_preferences;
 
 use super::*;
-use crate::auth::AuthManager;
-use crate::cloud_object::model::persistence::CloudModel;
-use crate::cloud_object::{CloudObject, CloudObjectGuest};
-use crate::drive::folders::{CloudFolder, CloudFolderModel};
-use crate::drive::sharing::SharingAccessLevel;
+use crate::auth::{AuthManager, AuthStateProvider};
 use crate::features::FeatureFlag;
 use crate::network::NetworkStatus;
-use crate::server::cloud_objects::update_manager::UpdateManager;
-use crate::server::ids::ClientId;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::team::{MockTeamClient, TeamClient};
-use crate::server::sync_queue::SyncQueue;
 use crate::settings::CodeSettings;
 use crate::system::SystemStats;
 use crate::workspaces::gql_convert::workspaces_metadata_response_from_gql;
@@ -64,7 +57,6 @@ use crate::workspaces::team_tester::TeamTesterStatus;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::workspaces::workspace::{Workspace, WorkspaceMember, WorkspaceMemberUsageInfo};
-use cloud_objects::drive::sharing::{Subject, UserKind};
 
 #[derive(Default)]
 struct CachedResources {
@@ -97,8 +89,6 @@ fn initialize_app_with_auth(
     app.add_singleton_model(|_| NetworkStatus::new());
     app.add_singleton_model(|_| SystemStats::new());
     app.add_singleton_model(TeamTesterStatus::new);
-    app.add_singleton_model(SyncQueue::mock);
-    app.add_singleton_model(CloudModel::mock);
     app.add_singleton_model(|ctx| {
         UserWorkspaces::mock(
             team_client.clone(),
@@ -108,7 +98,6 @@ fn initialize_app_with_auth(
         )
     });
     app.add_singleton_model(|ctx| TeamUpdateManager::new(team_client.clone(), None, ctx));
-    app.add_singleton_model(UpdateManager::mock);
     app.add_singleton_model(PrivacySettings::mock);
     app.add_singleton_model(|_| ServerApiProvider::new_for_test());
     app.add_singleton_model(|_| auth_state_provider);
@@ -748,66 +737,6 @@ fn test_team_contexts_represent_a_registered_teamless_window() {
 }
 
 #[test]
-fn test_spaces_for_window_orders_selected_team_shared_and_personal() {
-    let _flag = FeatureFlag::SharedWithMe.override_enabled(true);
-    let first_team = team_for_test();
-    let mut selected_team = team_for_test();
-    selected_team.uid = 456.into();
-    selected_team.name = "selected".to_string();
-    let mut workspace = workspace_for_test(&first_team);
-    workspace.teams.push(selected_team.clone());
-
-    App::test((), |mut app| async move {
-        initialize_window_team_test_app(&mut app, vec![workspace]);
-        app.add_singleton_model(CloudModel::mock);
-        app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-
-        let window_id = WindowId::new();
-        UserWorkspaces::handle(&app).update(&mut app, |user_workspaces, ctx| {
-            user_workspaces.set_team_for_window(window_id, selected_team.uid, ctx);
-        });
-
-        let current_user_uid = app.read(|ctx| {
-            AuthStateProvider::as_ref(ctx)
-                .get()
-                .user_id()
-                .expect("test user should be authenticated")
-        });
-        let mut shared_object = CloudFolder::new_local(
-            CloudFolderModel::new("shared folder", false),
-            Owner::User {
-                user_uid: UserUid::new("other-user"),
-            },
-            None,
-            ClientId::default(),
-        );
-        shared_object
-            .permissions_mut()
-            .guests
-            .push(CloudObjectGuest {
-                subject: Subject::User(UserKind::Account(current_user_uid)),
-                access_level: SharingAccessLevel::View,
-                source: None,
-            });
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(shared_object.id, shared_object);
-        });
-
-        app.read(|ctx| {
-            assert_eq!(
-                UserWorkspaces::as_ref(ctx).spaces_for_window(window_id, ctx),
-                vec![
-                    Space::Team {
-                        team_uid: selected_team.uid
-                    },
-                    Space::Shared,
-                    Space::Personal,
-                ]
-            );
-        });
-    })
-}
-#[test]
 fn test_unassigned_window_is_initialized_after_workspace_metadata_loads() {
     let team = team_for_test();
     let workspace = workspace_for_test(&team);
@@ -840,87 +769,6 @@ fn test_unassigned_window_is_initialized_after_workspace_metadata_loads() {
         });
     })
 }
-
-#[test]
-fn test_joining_team_moves_objects() {
-    let _flag = FeatureFlag::SharedWithMe.override_enabled(true);
-
-    let team = Team {
-        uid: 123.into(),
-        name: "test".to_string(),
-        color: None,
-        invite_link: None,
-        members: vec![],
-        pending_email_invites: vec![],
-        invite_link_domain_restrictions: vec![],
-        billing_metadata: Default::default(),
-        settings: Default::default(),
-        is_eligible_for_discovery: false,
-        visibility: TeamVisibility::Open,
-    };
-    let team_uid = team.uid;
-    let workspace = Workspace {
-        uid: "workspace_uid123456789".to_string().into(),
-        name: "test".to_string(),
-        teams: vec![team.clone()],
-        open_teams: vec![],
-        billing_metadata: Default::default(),
-        settings: Default::default(),
-        invite_link_domain_restrictions: vec![],
-        pending_email_invites: vec![],
-        is_eligible_for_discovery: false,
-        members: vec![],
-        total_requests_used_since_last_refresh: 0,
-    };
-
-    let shared_object = CloudFolder::new_local(
-        CloudFolderModel::new("shared folder", false),
-        Owner::Team { team_uid },
-        None,
-        ClientId::default(),
-    );
-    let object_id = shared_object.id;
-
-    App::test((), |mut app| async move {
-        initialize_app(
-            &mut app,
-            CachedResources { workspaces: vec![] },
-            Arc::new(MockTeamClient::new()),
-            Arc::new(MockWorkspaceClient::new()),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(object_id, shared_object);
-        });
-
-        // At first, the object is shared.
-        app.read(|ctx| {
-            assert!(!UserWorkspaces::as_ref(ctx).has_teams());
-
-            let space = CloudModel::as_ref(ctx)
-                .get_by_uid(&object_id.uid())
-                .unwrap()
-                .space(ctx);
-            assert_eq!(space, Space::Shared);
-        });
-
-        // Now, the user joins the owning team.
-        UserWorkspaces::handle(&app).update(&mut app, |user_workspaces, ctx| {
-            user_workspaces.update_workspaces(vec![workspace], ctx);
-        });
-
-        // This migrates the object into the team drive.
-        app.read(|ctx: &AppContext| {
-            let space = CloudModel::as_ref(ctx)
-                .get_by_uid(&object_id.uid())
-                .unwrap()
-                .space(ctx);
-            assert_eq!(space, Space::Team { team_uid });
-        });
-    })
-}
-
-/// Reconciliation can move a window onto a different team, and the default host has to move
-/// with it rather than keep answering for the team the window was on before.
 
 #[test]
 fn test_team_switcher_hidden_with_zero_teams() {
@@ -970,84 +818,6 @@ fn test_team_switcher_visible_with_multiple_teams() {
                 UserWorkspaces::as_ref(ctx).can_switch_teams(),
                 "2 teams: switcher should be visible"
             );
-        });
-    })
-}
-
-#[test]
-fn test_leaving_team_moves_objects() {
-    let _flag = FeatureFlag::SharedWithMe.override_enabled(true);
-
-    let team = Team {
-        uid: 123.into(),
-        name: "test".to_string(),
-        color: None,
-        invite_link: None,
-        members: vec![],
-        pending_email_invites: vec![],
-        invite_link_domain_restrictions: vec![],
-        billing_metadata: Default::default(),
-        settings: Default::default(),
-        is_eligible_for_discovery: false,
-        visibility: TeamVisibility::Open,
-    };
-    let team_uid = team.uid;
-    let workspace = Workspace {
-        uid: "workspace_uid123456789".to_string().into(),
-        name: "test".to_string(),
-        teams: vec![team.clone()],
-        open_teams: vec![],
-        billing_metadata: Default::default(),
-        settings: Default::default(),
-        invite_link_domain_restrictions: vec![],
-        pending_email_invites: vec![],
-        is_eligible_for_discovery: false,
-        members: vec![],
-        total_requests_used_since_last_refresh: 0,
-    };
-
-    let shared_object = CloudFolder::new_local(
-        CloudFolderModel::new("shared folder", false),
-        Owner::Team { team_uid },
-        None,
-        ClientId::default(),
-    );
-    let object_id = shared_object.id;
-
-    App::test((), |mut app| async move {
-        initialize_app(
-            &mut app,
-            CachedResources {
-                workspaces: vec![workspace],
-            },
-            Arc::new(MockTeamClient::new()),
-            Arc::new(MockWorkspaceClient::new()),
-        );
-        CloudModel::handle(&app).update(&mut app, |cloud_model, _| {
-            cloud_model.add_object(object_id, shared_object);
-        });
-
-        // At first, the object is in the team drive.
-        app.read(|ctx| {
-            let space = CloudModel::as_ref(ctx)
-                .get_by_uid(&object_id.uid())
-                .unwrap()
-                .space(ctx);
-            assert_eq!(space, Space::Team { team_uid });
-        });
-
-        // Now, the user leaves the owning team. However, the object is still shared with them.
-        UserWorkspaces::handle(&app).update(&mut app, |user_workspaces, ctx| {
-            user_workspaces.update_workspaces(vec![], ctx);
-        });
-
-        // This migrates the object into the shared space.
-        app.read(|ctx| {
-            let space = CloudModel::as_ref(ctx)
-                .get_by_uid(&object_id.uid())
-                .unwrap()
-                .space(ctx);
-            assert_eq!(space, Space::Shared);
         });
     })
 }

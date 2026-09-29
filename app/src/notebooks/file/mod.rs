@@ -73,7 +73,7 @@ pub enum MarkdownDisplayMode {
     Raw,
 }
 
-/// View for a read-only notebook backed by a file, rather than Warp Drive.
+/// View for a read-only notebook backed by a file.
 pub struct FileNotebookView {
     /// Cached for displaying the title and breadcrumbs.
     location: Option<FileLocation>,
@@ -379,14 +379,13 @@ impl FileNotebookView {
 
     #[cfg(feature = "local_fs")]
     fn open_telemetry_metadata(&self, ctx: &ViewContext<Self>) -> NotebookTelemetryMetadata {
-        NotebookTelemetryMetadata::new(None, None, NotebookLocation::LocalFile, None)
-            .with_markdown_table_count(
-                self.editor
-                    .as_ref(ctx)
-                    .model()
-                    .as_ref(ctx)
-                    .markdown_table_count(ctx),
-            )
+        NotebookTelemetryMetadata::new(NotebookLocation::LocalFile).with_markdown_table_count(
+            self.editor
+                .as_ref(ctx)
+                .model()
+                .as_ref(ctx)
+                .markdown_table_count(ctx),
+        )
     }
 
     fn set_context(&mut self, path: &Path, session: Arc<Session>, ctx: &mut ViewContext<Self>) {
@@ -583,12 +582,7 @@ impl FileNotebookView {
         send_telemetry_from_ctx!(
             TelemetryEvent::NotebookAction(NotebookActionEvent {
                 action,
-                metadata: NotebookTelemetryMetadata::new(
-                    None,
-                    None,
-                    NotebookLocation::LocalFile,
-                    None
-                )
+                metadata: NotebookTelemetryMetadata::new(NotebookLocation::LocalFile)
             }),
             ctx
         );
