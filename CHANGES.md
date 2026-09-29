@@ -101,6 +101,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Telemetry call sites: terminal, editor and code layer](#telemetry-call-sites-terminal-editor-and-code-layer) — deleted every telemetry emission in terminal, pane group, editor, code, code review, search, URI, prompt, persistence, undo-close, view components, system, quit warning and repo metadata, with the parameters, fields and helpers that only fed them
 - [Telemetry call sites: workspace, settings and the rest](#telemetry-call-sites-workspace-settings-and-the-rest) — deleted the `send_telemetry_*!` calls, the telemetry-only enums, helpers, fields and parameters in `workspace/`, `settings_view/`, `settings/`, `themes/`, `resource_center/`, `workflows/`, `notebooks/`, `launch_configs/`, `tab_configs/`, `lib.rs` and `root_view.rs`
 - [Teams and workspaces](#teams-and-workspaces) — deleted `app/src/workspaces/` (`UserWorkspaces`, `Team`, `Workspace`, billing metadata and team policies, the workspace poller), the Teams settings page and its modals, the title-bar team switcher, `warp://team` links, the window team id, team-enforced secret redaction and the workspace/team sqlite reads and writes
+- [User model](#user-model) — deleted `app/src/auth/`, `AuthStateProvider`, `AuthManager` and the user, anonymous-id and account-credential types; the app has no user entity at all
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2677,3 +2678,34 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Left for DB-1: the tables and columns above, and the diesel `Window.team_uid`.
 - Left for AUTH-2: `warp_server_auth::user_uid` is no longer re-exported from `app/src/auth`.
 - Left for WASM-2: `workspace/home.rs` still describes the web home page.
+
+## User model
+**Why:** The offline build has no accounts (decision 6), so there is no user to model. After the login flows went, the user entity, its auth singletons and the anonymous id were dead weight that every test setup still had to register.
+
+**Removed:**
+- `app/src/auth/`: `AuthManager` (an empty singleton) and the `AuthStateProvider` re-export. `AuthStateProvider` (a `warp_server_auth` singleton) is gone with its registration in `lib.rs` and its test setups.
+- `warp_server_auth`: `User`, `UserMetadata`, `PersonalObjectLimits`, `AnonymousUserType`, `PrincipalType` (with `global_skills`), the anonymous id (`anonymous_id.rs`), and the `AuthState` accessors built on them (`is_logged_in`, `is_anonymous_or_logged_out`, `is_onboarded`, `user_id`, `user_email`, `user_photo_url`, `username_for_display`, `needs_reauth`, `personal_object_limits`, `global_skills`, `anonymous_id` and the rest). `AuthState` now only holds credentials; its test constructors for a test user, a logged-out user and an anonymous user are gone.
+- `Credentials::SessionCookie`, `LoginToken` (and `Credentials::login_token`), the anonymous-user `FirebaseToken::Custom` (the enum collapsed into `RefreshToken`), `Credentials::api_key_owner_type` and the `owner_type` of API-key credentials.
+- `warp_server_client`: the `AuthClient` trait and `AuthClientImpl` (`get_user`, `create_anonymous_user`, `mint_custom_token`, user settings and "set user is onboarded" calls), `FetchUserResult`, `SyncedUserSettings`, `MintCustomTokenError`, the login-only variants of `UserAuthenticationError`, `AuthSession::exchange_credentials`, `BaseClient::{anonymous_id, user_id, is_service_account}`, and the `mockall` dependency that only the client mock used.
+- `ServerApiProvider::get_auth_client`; `ServerApiProvider::new` no longer takes an `AuthState` and builds its own logged-out one, so no code outside `server/` refers to auth.
+- `PrivacySettings`: the cloud-conversation-storage switch (`WarpDrivePrivacySettings`, `IsCloudConversationStorageEnabled`, `agents.cloud_conversation_storage_enabled`, `PrivacySettingsSnapshot`) and the server call it made for logged-in users, with the cloud-model and "different device" comments.
+- Feature flags and Cargo features `ForceLogin`, `SkipFirebaseAnonymousUser` (`skip_firebase_anonymous_user`), `AccountFirstOnboarding` (`account_first_onboarding`) and the `loginless_conversion` feature. (`skip_login` and `fast_dev` went with the login flows.)
+- The `IsAnonymousUser` keymap context flag (no binding used it), the `DidNonAnonymousUserLogIn` private setting, and the anonymous id that earlier versions kept in the `ExperimentId` private preference.
+
+**Modified:**
+- `is_onboarded()` no longer exists. The code-toolbelt "Open files and review code diffs" tooltip in the pane header asked it and, without an account, always read "not onboarded", so the tooltip showed until dismissed; the check is dropped and the tooltip behaves as before (it is not tied to `HasCompletedOnboarding`, which would have hidden it for good since the workspace only opens after onboarding).
+- `SettingsInitializer::handle_app_launch` (the former new-user defaults hook) was already keyed to "has not completed onboarding" (`HasCompletedOnboarding`) by the account removal; it is unchanged, and now has tests: a fresh profile gets the new-user defaults and a profile that completed onboarding keeps its settings.
+- `stored_credentials::remove_stored_account_credentials_once` also deletes the stored anonymous id (`ExperimentId`) from the private preferences, once per data profile.
+- `RootView`'s `AuthOnboardingState`, `AuthOnboardingTarget` and `RootViewEvent::AuthOnboardingStateChanged` are now `OnboardingState`, `OnboardingTarget` and `OnboardingStateChanged`.
+- `Credentials::Test` and `AuthState::new_for_test` are available under `test`, `integration_tests` and `test-util`; `warp_server_client/test-util` now enables `warp_server_auth/test-util`.
+
+**Persisted state:** nothing in sqlite changes. A stored `agents.cloud_conversation_storage_enabled` setting, `CloudConversationStorageEnabled` preference, `DidNonAnonymousUserLogIn` preference or `ExperimentId` preference is ignored (the anonymous id is deleted at the next launch of a profile that has not run the credential cleanup yet). New test: a settings file that still has `agents.cloud_conversation_storage_enabled` does not fail any setting.
+
+**User-visible impact:** none. The "Cloud conversation storage" TOML key no longer exists; it had no effect without a server.
+
+**Notes:**
+- Left for SRV-1: `warp_server_auth` (now `AuthState` with credentials only, `Credentials`, `UserUid`) and `warp_server_client`'s `AuthSession`/`BaseClient`/`AuthEvent` and Firebase refresh, all reachable only through `ServerApiProvider`'s logged-out `AuthState`; the `get_user`, `create_anonymous_user`, `mint_custom_token`, `get_user_settings`, `update_user_settings` and `set_user_is_onboarded` operations in `crates/graphql`, which have no callers now; the `workspace/view.rs` staging-access toast on `AuthEvent::StagingAccessBlocked`.
+- Left for TEL-4: the `anonymous_id` methods of the telemetry traits and event store (`warp_core/src/telemetry.rs`, `warpui_core/src/telemetry/`, `onboarding/src/telemetry_provider.rs`) and the sign-up / anonymous-user / login telemetry variants.
+- Left for DB-1: `users`, `user_profiles` and `current_user_information` (`user_uid`, `firebase_uid` columns).
+- Left for FLAGS-1: the `default_adeberry_theme` cargo feature is not in the default set, so the `DefaultAdeberryTheme` new-user theme override never runs in a release build; it is kept as it was.
+- `crates/cloud_objects` still uses `UserUid` (owners, guests, subjects); it goes with the crate in SRV-1.

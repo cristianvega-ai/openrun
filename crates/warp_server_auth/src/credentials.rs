@@ -3,14 +3,10 @@
 //! The primary representation is [`Credentials`], which is the source of truth for how a user is
 //! authenticated to Warp.
 //!
-//! Credentials can be split into two halves:
-//! * [`LoginToken`], which is a long-lived token that we use to fetch user information.
-//!   When using Firebase, this is an OAuth2 refresh token.
-//! * [`AuthToken`], which is a short-lived token that's included in all other server requests.
-//!   When using Firebase, this is an OAuth2 access token.
-use warp_graphql::object_permissions::OwnerType;
-
-use super::user::FirebaseAuthTokens;
+//! The short-lived [`AuthToken`] derived from them is included in server requests.
+//! When using Firebase, this is an OAuth2 access token.
+use chrono::{DateTime, FixedOffset, Local};
+use serde::{Deserialize, Serialize};
 
 /// Represents the different ways a user can authenticate with Warp.
 #[derive(Clone, Debug)]
@@ -18,17 +14,11 @@ pub enum Credentials {
     /// Firebase authentication with ID token and refresh token.
     Firebase(FirebaseAuthTokens),
     /// API key for direct server authentication.
-    ApiKey {
-        key: String,
-        /// The owner type for this API key. Only set after user info is fetched from the server.
-        owner_type: Option<OwnerType>,
-    },
+    ApiKey { key: String },
     /// Request-scoped or externally managed bearer token.
     Bearer(String),
-    /// Authentication derived from an ambient browser session cookie.
-    SessionCookie,
     /// Test credentials used in unit tests and integration tests.
-    #[cfg(any(test, feature = "integration_tests"))]
+    #[cfg(any(test, feature = "integration_tests", feature = "test-util"))]
     Test,
 }
 
@@ -39,8 +29,7 @@ impl Credentials {
             Credentials::Firebase(tokens) => Some(tokens),
             Credentials::ApiKey { .. } => None,
             Credentials::Bearer(_) => None,
-            Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests"))]
+            #[cfg(any(test, feature = "integration_tests", feature = "test-util"))]
             Credentials::Test => None,
         }
     }
@@ -51,20 +40,7 @@ impl Credentials {
             Credentials::ApiKey { key, .. } => Some(key),
             Credentials::Firebase(_) => None,
             Credentials::Bearer(_) => None,
-            Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests"))]
-            Credentials::Test => None,
-        }
-    }
-
-    /// Returns the owner type if this is an API key credential.
-    pub fn api_key_owner_type(&self) -> Option<OwnerType> {
-        match self {
-            Credentials::ApiKey { owner_type, .. } => *owner_type,
-            Credentials::Firebase(_) => None,
-            Credentials::Bearer(_) => None,
-            Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests"))]
+            #[cfg(any(test, feature = "integration_tests", feature = "test-util"))]
             Credentials::Test => None,
         }
     }
@@ -75,8 +51,7 @@ impl Credentials {
             Credentials::Firebase(tokens) => Some(&tokens.refresh_token),
             Credentials::ApiKey { .. } => None,
             Credentials::Bearer(_) => None,
-            Credentials::SessionCookie => None,
-            #[cfg(any(test, feature = "integration_tests"))]
+            #[cfg(any(test, feature = "integration_tests", feature = "test-util"))]
             Credentials::Test => None,
         }
     }
@@ -87,8 +62,7 @@ impl Credentials {
             Credentials::Firebase(tokens) => AuthToken::Firebase(tokens.id_token.clone()),
             Credentials::ApiKey { key, .. } => AuthToken::ApiKey(key.clone()),
             Credentials::Bearer(token) => AuthToken::Bearer(token.clone()),
-            Credentials::SessionCookie => AuthToken::NoAuth,
-            #[cfg(any(test, feature = "integration_tests"))]
+            #[cfg(any(test, feature = "integration_tests", feature = "test-util"))]
             Credentials::Test => AuthToken::NoAuth,
         }
     }
@@ -97,25 +71,9 @@ impl Credentials {
     pub fn is_externally_managed(&self) -> bool {
         match self {
             Credentials::Bearer(_) => true,
-            Credentials::Firebase(_) | Credentials::ApiKey { .. } | Credentials::SessionCookie => {
-                false
-            }
-            #[cfg(any(test, feature = "integration_tests"))]
+            Credentials::Firebase(_) | Credentials::ApiKey { .. } => false,
+            #[cfg(any(test, feature = "integration_tests", feature = "test-util"))]
             Credentials::Test => false,
-        }
-    }
-
-    /// Get the long-lived login token for these credentials. Returns `None` if there is no such token.
-    pub fn login_token(&self) -> Option<LoginToken> {
-        match self {
-            Credentials::Firebase(tokens) => Some(LoginToken::Firebase(FirebaseToken::Refresh(
-                RefreshToken::new(&tokens.refresh_token),
-            ))),
-            Credentials::ApiKey { key, .. } => Some(LoginToken::ApiKey(key.clone())),
-            Credentials::Bearer(_) => None,
-            Credentials::SessionCookie => Some(LoginToken::SessionCookie),
-            #[cfg(any(test, feature = "integration_tests"))]
-            Credentials::Test => None,
         }
     }
 }
@@ -129,7 +87,7 @@ pub enum AuthToken {
     ApiKey(String),
     /// Request-scoped or externally managed bearer token.
     Bearer(String),
-    /// No authentication token available (e.g. session cookie auth or test credentials).
+    /// No authentication token available (e.g. test credentials).
     #[cfg_attr(
         not(any(test, feature = "integration_tests", feature = "test-util")),
         allow(dead_code)
@@ -139,7 +97,7 @@ pub enum AuthToken {
 
 impl AuthToken {
     /// Returns the token string to use in an Authorization header, or `None` if auth is not
-    /// header-based (e.g. session cookie) or there is no auth.
+    /// header-based or there is no auth.
     pub fn as_bearer_token(&self) -> Option<&str> {
         match self {
             AuthToken::Firebase(token) => Some(token),
@@ -160,73 +118,7 @@ impl AuthToken {
     }
 }
 
-/// Long-lived credentials exchanged for user information.
-#[derive(Debug)]
-pub enum LoginToken {
-    /// A Firebase token to be exchanged for auth tokens.
-    Firebase(FirebaseToken),
-    /// An API key for direct server authentication.
-    ApiKey(String),
-    /// Authentication derived from an ambient browser session cookie.
-    SessionCookie,
-}
-
-/// The type of firebase token that can be used to authenticate a user.
-/// For logged in users and anonymous users, we use a refresh token.
-/// We use a short-lived custom token when we first create and fetch a new anonymous user.
-/// In both cases the token can be exchanged for a short lived access token.
-#[derive(Debug)]
-pub enum FirebaseToken {
-    /// The token type for a logged in user.
-    Refresh(RefreshToken),
-
-    /// The token type for an anonymous user.
-    Custom(String),
-}
-
-impl FirebaseToken {
-    /// Returns the url for trading this long lived token into an access token.
-    pub fn access_token_url(&self, api_key: &str) -> String {
-        // See https://firebase.google.com/docs/reference/rest/auth for info on these
-        // authentication endpoints.
-        match self {
-            FirebaseToken::Refresh(_) => {
-                format!("https://securetoken.googleapis.com/v1/token?key={api_key}")
-            }
-            FirebaseToken::Custom(_) => {
-                format!(
-                    "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}"
-                )
-            }
-        }
-    }
-
-    /// Returns the POST body for to include when trading this long lived token into an access token.
-    pub fn access_token_request_body(&self) -> Vec<(&str, &str)> {
-        match self {
-            FirebaseToken::Refresh(refresh_token) => vec![
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token.get()),
-            ],
-            FirebaseToken::Custom(custom_token) => {
-                vec![("returnSecureToken", "true"), ("token", custom_token)]
-            }
-        }
-    }
-
-    /// Returns the proxy URL for trading this long lived token into an access token.
-    /// Used when the initial request to Firebase fails and we want to try and proxy the request
-    /// through our server.
-    pub fn proxy_url(&self, server_root: &str, api_key: &str) -> String {
-        match self {
-            FirebaseToken::Refresh(_) => format!("{server_root}/proxy/token?key={api_key}"),
-            FirebaseToken::Custom(_) => {
-                format!("{server_root}/proxy/customToken?key={api_key}")
-            }
-        }
-    }
-}
-
+/// A long-lived Firebase refresh token, exchanged for a short-lived access token.
 #[derive(Debug, Clone)]
 pub struct RefreshToken(String);
 
@@ -238,4 +130,62 @@ impl RefreshToken {
     pub fn get(&self) -> &str {
         self.0.as_str()
     }
+
+    /// Returns the url for trading this token into an access token.
+    pub fn access_token_url(&self, api_key: &str) -> String {
+        // See https://firebase.google.com/docs/reference/rest/auth for info on these
+        // authentication endpoints.
+        format!("https://securetoken.googleapis.com/v1/token?key={api_key}")
+    }
+
+    /// Returns the POST body to include when trading this token into an access token.
+    pub fn access_token_request_body(&self) -> Vec<(&str, &str)> {
+        vec![
+            ("grant_type", "refresh_token"),
+            ("refresh_token", self.get()),
+        ]
+    }
+
+    /// Returns the proxy URL for trading this token into an access token.
+    /// Used when the initial request to Firebase fails and we want to try and proxy the request
+    /// through our server.
+    pub fn proxy_url(&self, server_root: &str, api_key: &str) -> String {
+        format!("{server_root}/proxy/token?key={api_key}")
+    }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FirebaseAuthTokens {
+    /// ID tokens are Firebase tokens, which are short-lived tokens that are used to authenticate
+    /// requests to the server. These are obtained by exchanging long-lived refresh tokens.
+    pub id_token: String,
+    /// Refresh tokens are long-lived tokens that can be exchanged for short-lived access tokens
+    /// (stored in the id_token field). We use the refresh token to get a new ID token when the
+    /// current one expires.
+    pub refresh_token: String,
+    /// When the ID token expires. If the token has expired, or will expire soon, we should
+    /// fetch a new ID token using the user's refresh token.
+    pub expiration_time: DateTime<FixedOffset>,
+}
+
+impl FirebaseAuthTokens {
+    pub fn from_response(
+        id_token: String,
+        refresh_token: String,
+        expires_in: String,
+    ) -> Result<Self, anyhow::Error> {
+        let local_time = Local::now();
+        Ok(Self {
+            id_token,
+            expiration_time: local_time.with_timezone(local_time.offset())
+                + chrono::Duration::seconds(
+                    expires_in.parse::<i64>().map_err(anyhow::Error::from)?,
+                ),
+            refresh_token,
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "credentials_tests.rs"]
+mod tests;

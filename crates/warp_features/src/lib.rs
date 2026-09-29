@@ -246,9 +246,6 @@ pub enum FeatureFlag {
     /// Enables suggested workflows for Agent Mode.
     SuggestedAgentModeWorkflows,
 
-    /// Forces users to login.
-    ForceLogin,
-
     /// Enables prediction of Agent Mode queries.
     PredictAMQueries,
 
@@ -792,11 +789,6 @@ pub enum FeatureFlag {
     /// Requires HOANotifications to also be enabled.
     GeminiNotifications,
 
-    /// When enabled, the "Skip for now" login flow does not create a Firebase
-    /// anonymous user. The user remains fully logged out (no credentials) and
-    /// login-gated features are disabled until they sign in.
-    SkipFirebaseAnonymousUser,
-
     /// Enables tab configs — user-definable TOML templates for launching custom tab layouts.
     TabConfigs,
 
@@ -924,10 +916,6 @@ pub enum FeatureFlag {
     /// orchestration (`run_agents`) confirmation card and plan-card config
     /// block for choosing a runner when starting remote child agents.
     CloudAgentRunners,
-
-    /// Gates the account-first onboarding flow, including the reordered
-    /// pre-auth slides and post-auth account offer.
-    AccountFirstOnboarding,
 
     /// Accepts well-known non-UUID managed MCP ids (e.g. `"linear"`) as
     /// `warp_id` values in MCP configs and as bare identifiers in CLI

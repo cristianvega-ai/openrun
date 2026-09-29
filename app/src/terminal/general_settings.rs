@@ -216,13 +216,6 @@ define_settings_group!(GeneralSettings, settings: [
         surface: settings::SettingSurfaces::GUI,
         private: true,
     },
-    did_non_anonymous_user_log_in: DidNonAnonymousUserLogIn {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::GUI,
-        private: true,
-    },
     auto_open_code_review_pane_on_first_agent_change: AutoOpenCodeReviewPaneOnFirstAgentChange {
         type: bool,
         default: false,

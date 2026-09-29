@@ -75,7 +75,7 @@ fn public_api_get_sends_bearer_auth() {
             .with_body(r#"{"value":"success"}"#)
             .create()
     };
-    let auth_state = AuthState::new_logged_out_for_test();
+    let auth_state = AuthState::new();
     auth_state.set_credentials(Some(Credentials::Bearer("bearer-token".to_string())));
     let (base_client, _) = base_client_with_auth(auth_state, None, false);
 

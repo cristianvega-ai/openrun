@@ -384,7 +384,6 @@ agent_mode_debug = []
 agent_mode_primary_xml = []
 agent_mode_pre_plan_xml = []
 agent_onboarding = []
-account_first_onboarding = []
 agent_shared_sessions = []
 ask_user_question = []
 async_find = []
@@ -414,7 +413,6 @@ default = [
     "dynamic_workflow_enums",
     "rect_selection",
     "reload_stale_conversation_files",
-    "loginless_conversion",
     "warp_packs",
     "ai_rules",
     "suggested_rules",
@@ -502,7 +500,6 @@ default = [
     "agent_tips",
     "pluggable_notifications",
     "agent_onboarding",
-    "account_first_onboarding",
     "global_search",
     "cloud_conversations",
     "list_skills",
@@ -571,7 +568,6 @@ default = [
     "codex_notifications",
     "codex_plugin",
     "trim_trailing_blank_lines",
-    "skip_firebase_anonymous_user",
     "settings_file",
     "directory_tab_colors",
     "git_credential_refresh",
@@ -753,7 +749,6 @@ shared_session_long_running_commands = []
 blocklist_markdown_table_rendering = []
 blocklist_markdown_images = []
 minimalist_ui = []
-loginless_conversion = []
 external_agent_mode_context = []
 avatar_in_tab_bar = []
 ssh_drag_and_drop = []
@@ -888,7 +883,6 @@ handoff_local_cloud = []
 hoa_notifications = []
 open_code_notifications = []
 transfer_control_tool = []
-skip_firebase_anonymous_user = []
 custom_model_routers = []
 solo_user_byok = []
 gpt_configurable_context_window = []

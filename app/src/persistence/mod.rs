@@ -177,12 +177,7 @@ impl Entity for PersistenceWriter {
 
 impl SingletonEntity for PersistenceWriter {}
 
-/// TODO: all of this data should eventually be indexed by user_id so that
-/// the logged in user sees the data for their user (and if another user logs in,
-/// they see their respective data). To do this, we can simply return a mapping
-/// of user ID->SqliteData and get the respective AppState after the user logs in.
-///
-/// For now, to address the global scoping here, we clear all persisted data on logout.
+/// The data read from the local database at startup.
 pub struct PersistedData {
     /// Session restoration data. `None` when the launch mode's
     /// [`PersistedDataScope`] excludes it entirely (the daemon).

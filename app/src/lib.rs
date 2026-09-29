@@ -6,7 +6,6 @@ mod alloc;
 mod app_menus;
 mod app_services;
 mod app_state;
-mod auth;
 mod banner;
 mod chip_configurator;
 mod code;
@@ -102,8 +101,6 @@ pub mod tab_configs;
 pub mod terminal;
 pub mod themes;
 use agent_notifications::AgentNotificationsModel;
-use auth::auth_manager::AuthManager;
-use auth::auth_state::{AuthState, AuthStateProvider};
 use code::editor_management::CodeManager;
 use code::opened_files::OpenedFilesModel;
 use code_review::GlobalCodeReviewModel;
@@ -696,8 +693,6 @@ pub(crate) fn initialize_app(
     }
 
     stored_credentials::remove_stored_account_credentials_once(ctx);
-    let auth_state = Arc::new(AuthState::initialize(ctx));
-    timer.mark_interval_end("AUTH_MANAGER_SET_USER");
 
     // NetworkLogModel must be registered before ServerApiProvider so that
     // `NetworkLogModel::install_on_clients` can reach it when forwarding items
@@ -713,14 +708,9 @@ pub(crate) fn initialize_app(
     let iap_state: Option<Arc<IapState>> = None;
 
     ctx.add_singleton_model({
-        let auth_state = auth_state.clone();
         let iap_state = iap_state.clone();
-        move |ctx| ServerApiProvider::new(auth_state, iap_state, ctx)
+        move |ctx| ServerApiProvider::new(iap_state, ctx)
     });
-
-    ctx.add_singleton_model(|_ctx| AuthStateProvider::new(auth_state.clone()));
-
-    ctx.add_singleton_model(AuthManager::new);
 
     ctx.add_singleton_model(|_ctx| GPUState::new());
 
@@ -784,7 +774,6 @@ pub(crate) fn initialize_app(
                 Default::default(),
             )
         });
-
 
     ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
 

@@ -1,22 +1,12 @@
 use std::fmt::Display;
-use std::sync::Arc;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use settings::macros::{define_settings_group, maybe_define_setting, register_settings_events};
-use settings::{Setting, SupportedPlatforms};
+use settings::macros::{maybe_define_setting, register_settings_events};
+use settings::{ChangeEventReason, Setting, SupportedPlatforms};
 use warp_errors::report_error;
 pub use warp_terminal::model::secrets::RegexDisplayInfo;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
-
-use crate::auth::AuthStateProvider;
-use crate::auth::auth_state::AuthState;
-use crate::server::server_api::ServerApiProvider;
-use crate::server::server_api::auth::AuthClient;
-#[cfg(any(test, feature = "test-util"))]
-use crate::server::server_api::auth::MockAuthClient;
-
-pub const CLOUD_CONVERSATION_STORAGE_ENABLED_DEFAULTS_KEY: &str = "CloudConversationStorageEnabled";
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "A custom regex pattern for detecting and redacting secrets.")]
@@ -62,19 +52,6 @@ impl PartialEq for CustomSecretRegex {
 
 impl settings_value::SettingsValue for CustomSecretRegex {}
 
-define_settings_group!(WarpDrivePrivacySettings, settings: [
-    is_cloud_conversation_storage_enabled: IsCloudConversationStorageEnabled {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::ALL,
-        private: false,
-        storage_key: "CloudConversationStorageEnabled",
-        toml_path: "agents.cloud_conversation_storage_enabled",
-        description: "Whether conversations are stored in the cloud.",
-    },
-]);
-
 maybe_define_setting!(CustomSecretRegexList, group: PrivacySettings, {
     type: Vec<CustomSecretRegex>,
     default: Vec::new(),
@@ -95,28 +72,10 @@ maybe_define_setting!(HasInitializedDefaultSecretRegexes, group: PrivacySettings
 
 /// Singleton model for managing the user's privacy settings.
 pub struct PrivacySettings {
-    auth_state: Arc<AuthState>,
-    auth_client: Arc<dyn AuthClient>,
-    pub is_cloud_conversation_storage_enabled: bool,
     pub has_initialized_default_secret_regexes: HasInitializedDefaultSecretRegexes,
     /// List of user defined secret regexes.
     /// It's a [Vec<CustomSecretRegex>], but also a user setting.
     pub user_secret_regex_list: CustomSecretRegexList,
-}
-
-/// A snapshot of a user's [`PrivacySettings`] settings at some point in time.
-#[derive(Clone, Copy)]
-pub struct PrivacySettingsSnapshot {
-    // This is an option so that, if a user has not set this value (and it's set to its default value of true),
-    // the default value won't override a value that the user previously set on a different device.
-    // This is set to a non-option once the user manually changes this setting.
-    cloud_conversation_storage_enabled: Option<bool>,
-}
-
-impl PrivacySettingsSnapshot {
-    pub fn cloud_conversation_storage_enabled(&self) -> Option<bool> {
-        self.cloud_conversation_storage_enabled
-    }
 }
 
 impl PrivacySettings {
@@ -139,116 +98,24 @@ impl PrivacySettings {
 
     /// Returns a new PrivacySettings object initialized from locally cached values.
     fn new(ctx: &mut ModelContext<Self>) -> Self {
-        let auth_state = AuthStateProvider::as_ref(ctx).get().clone();
-        let auth_client = ServerApiProvider::as_ref(ctx).get_auth_client();
-
-        // Initialize from `WarpDrivePrivacySettings`, which is the source of truth for these
-        // booleans.
-        let warp_drive_privacy = WarpDrivePrivacySettings::as_ref(ctx);
-        let is_cloud_conversation_storage_enabled = *warp_drive_privacy
-            .is_cloud_conversation_storage_enabled
-            .value();
-
-        // Listen for changes to the cloud model and update ourselves when they happen.
-        ctx.subscribe_to_model(
-            &WarpDrivePrivacySettings::handle(ctx),
-            |me, _, event, ctx| {
-                let privacy_settings = WarpDrivePrivacySettings::as_ref(ctx);
-                match event {
-                    WarpDrivePrivacySettingsChangedEvent::IsCloudConversationStorageEnabled {
-                        ..
-                    } => {
-                        me.set_is_cloud_conversation_storage_enabled(
-                            *privacy_settings
-                                .is_cloud_conversation_storage_enabled
-                                .value(),
-                            ctx,
-                        );
-                    }
-                }
-            },
-        );
-
         let user_secret_regex_list: CustomSecretRegexList =
             CustomSecretRegexList::new_from_storage(ctx);
         let has_initialized_default_secret_regexes: HasInitializedDefaultSecretRegexes =
             HasInitializedDefaultSecretRegexes::new_from_storage(ctx);
 
         Self {
-            auth_state,
-            auth_client,
-            is_cloud_conversation_storage_enabled,
             user_secret_regex_list,
             has_initialized_default_secret_regexes,
         }
-    }
-
-    pub fn refresh_to_default(&mut self) {
-        // TODO(zach): this seems incorrect - should we also update the values on disk?
-        self.is_cloud_conversation_storage_enabled = true;
     }
 
     /// Constructor for tests only.
     #[cfg(any(test, feature = "test-util"))]
     pub fn mock(_ctx: &mut ModelContext<Self>) -> Self {
         Self {
-            auth_state: Arc::new(AuthState::new_for_test()),
-            auth_client: Arc::new(MockAuthClient::new()),
-            is_cloud_conversation_storage_enabled: true,
             user_secret_regex_list: CustomSecretRegexList::new(None),
             has_initialized_default_secret_regexes: HasInitializedDefaultSecretRegexes::new(None),
         }
-    }
-
-    /// Returns a snapshot of the user's privacy settings.
-    ///
-    /// The returned snapshot is not stateful, thus its values should be used shortly after the
-    /// snapshot is returned.
-    pub fn get_snapshot(&self) -> PrivacySettingsSnapshot {
-        PrivacySettingsSnapshot {
-            cloud_conversation_storage_enabled: (!self.is_cloud_conversation_storage_enabled)
-                .then_some(false),
-        }
-    }
-
-    pub fn set_is_cloud_conversation_storage_enabled(
-        &mut self,
-        new_value: bool,
-        ctx: &mut ModelContext<PrivacySettings>,
-    ) {
-        let old_value = self.is_cloud_conversation_storage_enabled;
-        if new_value == old_value {
-            return;
-        }
-
-        self.is_cloud_conversation_storage_enabled = new_value;
-
-        WarpDrivePrivacySettings::handle(ctx).update(ctx, |settings, ctx| {
-            log::info!("Setting is_cloud_conversation_storage_enabled to {new_value}");
-            let _ = settings
-                .is_cloud_conversation_storage_enabled
-                .set_value(new_value, ctx);
-        });
-
-        if self.auth_state.is_logged_in() {
-            let auth_client = self.auth_client.clone();
-            let _ = ctx.spawn(
-                async move {
-                    auth_client
-                        .set_is_cloud_conversation_storage_enabled(new_value)
-                        .await
-                },
-                |_, _, _| (),
-            );
-        }
-
-        ctx.emit(
-            PrivacySettingsChangedEvent::UpdateIsCloudConversationStorageEnabled {
-                old_value,
-                new_value,
-            },
-        );
-        ctx.notify();
     }
 
     pub fn remove_user_secret_regex(&mut self, idx: &usize, ctx: &mut ModelContext<Self>) {
@@ -328,10 +195,6 @@ impl PrivacySettings {
 /// Events emitted when PrivacySettings is updated.
 #[derive(Clone, Copy)]
 pub enum PrivacySettingsChangedEvent {
-    UpdateIsCloudConversationStorageEnabled {
-        old_value: bool,
-        new_value: bool,
-    },
     CustomSecretRegexList {
         change_event_reason: ChangeEventReason,
     },
@@ -345,7 +208,3 @@ impl Entity for PrivacySettings {
 }
 
 impl SingletonEntity for PrivacySettings {}
-
-#[cfg(test)]
-#[path = "privacy_tests.rs"]
-mod tests;

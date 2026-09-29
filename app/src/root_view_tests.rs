@@ -1,14 +1,13 @@
 use warp_core::features::FeatureFlag;
 use warp_core::user_preferences::GetUserPreferences as _;
 use warpui::platform::WindowStyle;
-use warpui::{App, SingletonEntity, ViewHandle};
+use warpui::{App, ViewHandle};
 
 use super::{
-    AuthOnboardingState, HAS_COMPLETED_ONBOARDING_KEY, NewWorkspaceSource, RootView,
+    HAS_COMPLETED_ONBOARDING_KEY, NewWorkspaceSource, OnboardingState, RootView,
     has_completed_local_onboarding,
 };
 use crate::GlobalResourceHandles;
-use crate::auth::AuthStateProvider;
 
 fn set_local_onboarding_completed(app: &mut App, completed: bool) {
     app.update(|ctx| {
@@ -44,19 +43,13 @@ fn root_view_new_uses_local_onboarding_state() {
 
     App::test((), |mut app| async move {
         crate::workspace::view::tests::initialize_app(&mut app);
-        app.update(|ctx| {
-            let auth_state = AuthStateProvider::as_ref(ctx).get();
-            auth_state.set_credentials(None);
-            auth_state.set_user(None);
-        });
-
         set_local_onboarding_completed(&mut app, false);
         let root_view = new_root_view(&mut app);
         app.read(|ctx| {
             assert!(!has_completed_local_onboarding(ctx));
             assert!(matches!(
-                root_view.as_ref(ctx).auth_onboarding_state,
-                AuthOnboardingState::Onboarding { .. }
+                root_view.as_ref(ctx).onboarding_state,
+                OnboardingState::Onboarding { .. }
             ));
         });
 
@@ -65,8 +58,8 @@ fn root_view_new_uses_local_onboarding_state() {
         app.read(|ctx| {
             assert!(has_completed_local_onboarding(ctx));
             assert!(matches!(
-                root_view.as_ref(ctx).auth_onboarding_state,
-                AuthOnboardingState::Terminal(_)
+                root_view.as_ref(ctx).onboarding_state,
+                OnboardingState::Terminal(_)
             ));
         });
     });
@@ -81,16 +74,13 @@ fn onboarding_slides_wrap_terminal_workspace() {
         let root_view = new_root_view(&mut app);
 
         root_view.update(&mut app, |root_view, ctx| {
-            root_view.auth_onboarding_state =
-                AuthOnboardingState::Terminal(plain_workspace.clone());
-            root_view
-                .auth_onboarding_state
-                .try_open_onboarding_slides(ctx);
+            root_view.onboarding_state = OnboardingState::Terminal(plain_workspace.clone());
+            root_view.onboarding_state.try_open_onboarding_slides(ctx);
         });
         app.read(|ctx| {
             assert!(matches!(
-                root_view.as_ref(ctx).auth_onboarding_state,
-                AuthOnboardingState::Onboarding { .. }
+                root_view.as_ref(ctx).onboarding_state,
+                OnboardingState::Onboarding { .. }
             ));
         });
     });

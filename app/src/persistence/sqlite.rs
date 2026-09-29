@@ -27,8 +27,8 @@ use warpui::windowing::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use super::block_list::{delete_blocks, save_block};
 use super::model::{
     self, CODE_PANE_KIND, NOTEBOOK_PANE_KIND, NewApp, NewCommand, NewTab, NewTabGroup, NewWindow,
-    NewWorkspaceMetadata, Project, SETTINGS_PANE_KIND,
-    TERMINAL_PANE_KIND, Tab, TabGroup, Window, WorkspaceMetadata as WorkspaceMetadataModel,
+    NewWorkspaceMetadata, Project, SETTINGS_PANE_KIND, TERMINAL_PANE_KIND, Tab, TabGroup, Window,
+    WorkspaceMetadata as WorkspaceMetadataModel,
 };
 use super::{
     BlockCompleted, FinishedCommandMetadata, ModelEvent, PersistedData, PersistedDataScope,

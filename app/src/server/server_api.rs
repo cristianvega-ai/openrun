@@ -1,13 +1,11 @@
-pub mod auth;
-
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use auth::AuthClient;
 use warp_core::context_flag::ContextFlag;
-use warp_server_client::auth::{AuthClientImpl, AuthEvent};
+use warp_server_auth::auth_state::AuthState;
+use warp_server_client::auth::AuthEvent;
 use warp_server_client::base_client::{
     AuthenticatedGraphqlConfig, BaseClient, GraphqlRoutingConfig,
 };
@@ -15,8 +13,6 @@ use warp_server_client::iap::{IapManager, IapState};
 use warp_server_client::network_logging::NetworkLogModel;
 use warpui::r#async::BoxFuture;
 use warpui::{Entity, ModelContext, SingletonEntity};
-
-use crate::auth::auth_state::AuthState;
 
 impl Deref for ServerApi {
     type Target = BaseClient;
@@ -37,7 +33,6 @@ pub struct ServerApi {
 
 impl ServerApi {
     fn new(
-        auth_state: Arc<AuthState>,
         event_sender: async_channel::Sender<AuthEvent>,
         iap_state: Option<Arc<IapState>>,
         ctx: &mut ModelContext<ServerApiProvider>,
@@ -54,7 +49,7 @@ impl ServerApi {
         }
         Self::new_with_parts(
             Arc::new(client),
-            auth_state,
+            Arc::new(AuthState::new()),
             event_sender,
             iap_token_provider,
         )
@@ -110,20 +105,15 @@ impl ServerApi {
 /// or any of its implemented trait objects.
 pub struct ServerApiProvider {
     server_api: Arc<ServerApi>,
-    auth_client: Arc<dyn AuthClient>,
 }
 
 impl ServerApiProvider {
     /// Constructs a new ServerApiProvider.
     #[cfg_attr(target_family = "wasm", allow(unused_variables))]
-    pub fn new(
-        auth_state: Arc<AuthState>,
-        iap_state: Option<Arc<IapState>>,
-        ctx: &mut ModelContext<Self>,
-    ) -> Self {
+    pub fn new(iap_state: Option<Arc<IapState>>, ctx: &mut ModelContext<Self>) -> Self {
         let (event_sender, event_receiver) = async_channel::bounded(10);
 
-        let server_api = ServerApi::new(auth_state.clone(), event_sender, iap_state, ctx);
+        let server_api = ServerApi::new(event_sender, iap_state, ctx);
 
         ctx.spawn_stream_local(
             event_receiver,
@@ -141,22 +131,16 @@ impl ServerApiProvider {
             },
             |_, _| {},
         );
-        let server_api = Arc::new(server_api);
-        let auth_client = Arc::new(AuthClientImpl::new(server_api.base_client.clone()));
         Self {
-            server_api,
-            auth_client,
+            server_api: Arc::new(server_api),
         }
     }
 
     /// Constructs a new SeverApiProvider for tests.
     #[cfg(test)]
     pub fn new_for_test() -> Self {
-        let server_api = Arc::new(ServerApi::new_for_test());
-        let auth_client = Arc::new(AuthClientImpl::new(server_api.base_client.clone()));
         Self {
-            server_api,
-            auth_client,
+            server_api: Arc::new(ServerApi::new_for_test()),
         }
     }
 
@@ -164,10 +148,6 @@ impl ServerApiProvider {
     /// Prefer retrieving a specific trait object related to the methods you're calling.
     pub fn get(&self) -> Arc<ServerApi> {
         self.server_api.clone()
-    }
-
-    pub fn get_auth_client(&self) -> Arc<dyn AuthClient> {
-        self.auth_client.clone()
     }
 }
 

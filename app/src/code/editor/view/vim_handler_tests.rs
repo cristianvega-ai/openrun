@@ -21,7 +21,6 @@ use warpui::{
     ViewHandle, WindowId, WindowInvalidation,
 };
 
-use crate::auth::AuthStateProvider;
 use crate::code::editor::find::view::CodeEditorFind;
 use crate::code::editor::view::{CodeEditorRenderOptions, CodeEditorView, CodeEditorViewAction};
 use crate::editor::{EditorAction, EditorView};
@@ -47,7 +46,6 @@ fn initialize_code_editor_app(app: &mut App) {
     initialize_settings_for_tests(app);
 
     // Add required singleton models for CodeEditorView
-    app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     app.add_singleton_model(|_| Appearance::mock());
     app.add_singleton_model(|_| SyncedInputState::mock());
     app.add_singleton_model(|_| VimRegisters::new());
@@ -56,7 +54,6 @@ fn initialize_code_editor_app(app: &mut App) {
     // Add mocks required by rich text editor (used in the CommentEditor)
     app.add_singleton_model(|_| ActiveSession::default());
     app.add_singleton_model(NotebookKeybindings::new);
-
 
     // Enable vim mode in editor settings
     app.update_model(

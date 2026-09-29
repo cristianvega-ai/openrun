@@ -7,10 +7,7 @@ use firebase::FetchAccessTokenResponse;
 use instant::Duration;
 use warp_core::channel::ChannelState;
 use warp_server_auth::auth_state::AuthState;
-use warp_server_auth::credentials::{
-    AuthToken, Credentials, FirebaseToken, LoginToken, RefreshToken,
-};
-use warp_server_auth::user::FirebaseAuthTokens;
+use warp_server_auth::credentials::{AuthToken, Credentials, FirebaseAuthTokens, RefreshToken};
 use warpui_core::r#async::BoxFuture;
 
 use super::UserAuthenticationError;
@@ -87,7 +84,7 @@ impl AuthSession {
         };
 
         match credentials {
-            Credentials::ApiKey { key, .. } => Ok(AuthToken::ApiKey(key)),
+            Credentials::ApiKey { key } => Ok(AuthToken::ApiKey(key)),
             Credentials::Bearer(token) => Ok(AuthToken::Bearer(token)),
             Credentials::Firebase(auth_tokens) => {
                 let expiration_time = auth_tokens.expiration_time;
@@ -98,8 +95,9 @@ impl AuthSession {
                     >= expiration_time
                 {
                     let refresh_token = auth_tokens.refresh_token.clone();
-                    let firebase_token = FirebaseToken::Refresh(RefreshToken::new(refresh_token));
-                    let result = self.fetch_auth_tokens(firebase_token).await;
+                    let result = self
+                        .fetch_auth_tokens(RefreshToken::new(refresh_token))
+                        .await;
 
                     if let Err(UserAuthenticationError::DeniedAccessToken(_)) = result {
                         let _ = self.event_sender.send(AuthEvent::NeedsReauth).await;
@@ -118,33 +116,14 @@ impl AuthSession {
                     Ok(AuthToken::Firebase(auth_tokens.id_token))
                 }
             }
-            Credentials::SessionCookie => Ok(AuthToken::NoAuth),
-            #[cfg(feature = "integration_tests")]
+            #[cfg(any(test, feature = "integration_tests", feature = "test-util"))]
             Credentials::Test => Ok(AuthToken::NoAuth),
-        }
-    }
-
-    /// Exchanges a long-lived token for fresh [`Credentials`].
-    pub async fn exchange_credentials(
-        &self,
-        token: LoginToken,
-    ) -> StdResult<Credentials, UserAuthenticationError> {
-        match token {
-            LoginToken::Firebase(firebase_token) => {
-                let tokens = self.fetch_auth_tokens(firebase_token).await?;
-                Ok(Credentials::Firebase(tokens))
-            }
-            LoginToken::ApiKey(key) => Ok(Credentials::ApiKey {
-                key,
-                owner_type: None,
-            }),
-            LoginToken::SessionCookie => Ok(Credentials::SessionCookie),
         }
     }
 
     fn fetch_auth_tokens(
         &self,
-        token: FirebaseToken,
+        token: RefreshToken,
     ) -> BoxFuture<'static, StdResult<FirebaseAuthTokens, UserAuthenticationError>> {
         let client = self.client.clone();
         Box::pin(async move {

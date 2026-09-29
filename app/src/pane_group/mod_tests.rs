@@ -15,8 +15,6 @@ use warpui::{App, ModelHandle};
 use watcher::HomeDirectoryWatcher;
 
 use super::*;
-use crate::auth::AuthStateProvider;
-use crate::auth::auth_manager::AuthManager;
 use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
 use crate::network::NetworkStatus;
@@ -56,8 +54,6 @@ fn initialize_app(app: &mut App) {
             ctx,
         )
     });
-    app.add_singleton_model(|_| AuthStateProvider::new_for_test());
-    app.add_singleton_model(AuthManager::new_for_test);
     app.add_singleton_model(|_ctx| PtySpawner::new_for_test());
     app.add_singleton_model(|_| NetworkStatus::new());
     app.add_singleton_model(|_| SystemStats::new());

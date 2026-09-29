@@ -61,13 +61,13 @@ fn refreshable_base_client() -> (BaseClient, async_channel::Receiver<AuthEvent>)
 fn externally_authenticated_base_client(
     bearer_token: &str,
 ) -> (BaseClient, async_channel::Receiver<AuthEvent>) {
-    let auth_state = AuthState::new_logged_out_for_test();
+    let auth_state = AuthState::new();
     auth_state.set_credentials(Some(Credentials::Bearer(bearer_token.to_string())));
     base_client(auth_state)
 }
 
 fn missing_credentials_base_client() -> (BaseClient, async_channel::Receiver<AuthEvent>) {
-    base_client(AuthState::new_logged_out_for_test())
+    base_client(AuthState::new())
 }
 
 fn assert_no_events(event_receiver: &async_channel::Receiver<AuthEvent>) {

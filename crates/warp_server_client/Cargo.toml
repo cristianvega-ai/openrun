@@ -9,12 +9,11 @@ license.workspace = true
 [features]
 agent_mode_evals = ["dep:rand"]
 integration_tests = ["warp_server_auth/integration_tests"]
-test-util = ["cloud_objects/test-util", "dep:mockall"]
+test-util = ["cloud_objects/test-util", "warp_server_auth/test-util"]
 
 [dependencies]
 anyhow.workspace = true
 async-channel.workspace = true
-async-trait.workspace = true
 base64.workspace = true
 bincode.workspace = true
 blocking.workspace = true
@@ -33,7 +32,6 @@ instant.workspace = true
 itertools.workspace = true
 lasso.workspace = true
 log.workspace = true
-mockall = { workspace = true, optional = true }
 parking_lot.workspace = true
 pathfinder_geometry.workspace = true
 reqwest.workspace = true
@@ -58,7 +56,6 @@ tempfile.workspace = true
 websocket.workspace = true
 
 [dev-dependencies]
-mockall.workspace = true
 mockito.workspace = true
 warp_core = { workspace = true, features = ["test-util"] }
 warp_server_auth = { workspace = true, features = ["test-util"] }

@@ -170,7 +170,7 @@ gemini_enterprise_credentials_enabled = true
 }
 
 #[test]
-fn removed_team_and_workspace_settings_in_the_settings_file_are_ignored() {
+fn removed_team_workspace_and_cloud_settings_in_the_settings_file_are_ignored() {
     use settings::{PrivatePreferences, PublicPreferences, SettingsManager};
     use warpui::SingletonEntity as _;
 
@@ -191,6 +191,9 @@ is_shared_workflows_enabled = true
 
 [teams.settings]
 enterprise_secret_redaction_enabled = true
+
+[agents]
+cloud_conversation_storage_enabled = false
 "#,
     )
     .unwrap();
@@ -214,7 +217,7 @@ enterprise_secret_redaction_enabled = true
         });
         assert!(
             failed_keys.is_empty(),
-            "removed team and workspace settings must not fail any setting: {failed_keys:?}"
+            "removed team, workspace and cloud settings must not fail any setting: {failed_keys:?}"
         );
 
         app.read(|ctx| {

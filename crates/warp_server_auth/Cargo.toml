@@ -18,11 +18,4 @@ lasso.workspace = true
 log.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
-uuid.workspace = true
-warp_core.workspace = true
 warp_errors.workspace = true
-warp_graphql.workspace = true
-warpui_core.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true

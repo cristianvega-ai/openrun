@@ -14,8 +14,8 @@ use warp_errors::{report_error, report_if_error};
 use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::elements::{
     Align, ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Empty, Expanded,
-    Flex, MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius,
-    Rect, Shrinkable, Text,
+    Flex, MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius, Rect,
+    Shrinkable, Text,
 };
 use warpui::fonts::Weight;
 use warpui::keymap::ContextPredicate;
@@ -595,7 +595,7 @@ impl SecretRedactionWidget {
         .finish()
     }
 
-    /// Renders regex content using the RegexDisplayInfo trait 
+    /// Renders regex content using the RegexDisplayInfo trait
     fn render_regex_content<T: RegexDisplayInfo>(
         &self,
         regex_info: &T,

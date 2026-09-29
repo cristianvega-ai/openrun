@@ -11,7 +11,7 @@ use warp_server_auth::credentials::AuthToken;
 #[cfg(feature = "agent_mode_evals")]
 use warp_server_auth::credentials::Credentials;
 
-use crate::auth::{AuthEvent, AuthSession, UserUid};
+use crate::auth::{AuthEvent, AuthSession};
 
 /// Header key for the cloud agent task ID attached to ambient-agent requests.
 pub const CLOUD_AGENT_ID_HEADER: &str = "X-Warp-Cloud-Agent-ID";
@@ -139,10 +139,7 @@ impl BaseClient {
             // inserts in warp-server at eval startup:
             // wk-1.<user_id as 64-char zero-padded lowercase hex>.
             let eval_key = format!("wk-1.{eval_user_id:0>64x}");
-            auth_state.set_credentials(Some(Credentials::ApiKey {
-                key: eval_key,
-                owner_type: None,
-            }));
+            auth_state.set_credentials(Some(Credentials::ApiKey { key: eval_key }));
         }
         let auth_session = Arc::new(AuthSession::new(
             client.clone(),
@@ -189,19 +186,6 @@ impl BaseClient {
 
     pub fn auth_session(&self) -> Arc<AuthSession> {
         self.auth_session.clone()
-    }
-
-    pub fn anonymous_id(&self) -> String {
-        self.auth_state.anonymous_id()
-    }
-
-    pub fn user_id(&self) -> Option<UserUid> {
-        self.auth_state.user_id()
-    }
-
-    /// Returns whether the authenticated principal is a service account.
-    pub fn is_service_account(&self) -> bool {
-        self.auth_state.is_service_account()
     }
 
     pub fn access_token_ignoring_validity(&self) -> Option<String> {

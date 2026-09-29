@@ -6,7 +6,9 @@ use warpui::App;
 use warpui_extras::secure_storage::{self, AppContextExt as _};
 use warpui_extras::user_preferences;
 
-use super::{ACCOUNT_CREDENTIALS_KEY, remove_stored_account_credentials_once};
+use warp_core::user_preferences::GetUserPreferences as _;
+
+use super::{ACCOUNT_CREDENTIALS_KEY, ANONYMOUS_ID_KEY, remove_stored_account_credentials_once};
 
 #[derive(Default)]
 struct RecordingSecureStorage {
@@ -44,7 +46,7 @@ impl secure_storage::SecureStorage for RecordingSecureStorage {
 }
 
 #[test]
-fn removes_stored_account_credentials_only_once() {
+fn removes_stored_account_credentials_and_anonymous_id_only_once() {
     App::test((), |mut app| async move {
         let removals = Arc::new(Mutex::new(0));
         app.update(|ctx| {
@@ -71,7 +73,17 @@ fn removes_stored_account_credentials_only_once() {
         });
 
         app.read(|ctx| {
+            ctx.private_user_preferences()
+                .write_value(ANONYMOUS_ID_KEY, "anonymous-id".to_owned())
+                .unwrap();
+
             remove_stored_account_credentials_once(ctx);
+            assert_eq!(
+                ctx.private_user_preferences()
+                    .read_value(ANONYMOUS_ID_KEY)
+                    .unwrap(),
+                None
+            );
             assert!(matches!(
                 ctx.secure_storage().read_value(ACCOUNT_CREDENTIALS_KEY),
                 Err(secure_storage::Error::NotFound)

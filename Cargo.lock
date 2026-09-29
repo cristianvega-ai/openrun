@@ -11835,12 +11835,7 @@ dependencies = [
  "log",
  "parking_lot",
  "serde",
- "serde_json",
- "uuid",
- "warp_core",
  "warp_errors",
- "warp_graphql",
- "warpui_core",
 ]
 
 [[package]]
@@ -11850,7 +11845,6 @@ dependencies = [
  "aha-reqwest-eventsource",
  "anyhow",
  "async-channel",
- "async-trait",
  "base64 0.22.1",
  "bincode",
  "blocking",
@@ -11870,7 +11864,6 @@ dependencies = [
  "itertools 0.14.0",
  "lasso",
  "log",
- "mockall",
  "mockito",
  "parking_lot",
  "pathfinder_geometry",
