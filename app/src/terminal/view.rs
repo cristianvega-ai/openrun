@@ -2819,12 +2819,9 @@ impl TerminalView {
         ctx.subscribe_to_model(
             &AgentConversationsModel::handle(ctx),
             |me, _, event, ctx| {
-                let should_refresh_details_panel = matches!(
-                    event,
-                    AgentConversationsModelEvent::ConversationUpdated { .. }
-                );
+                let AgentConversationsModelEvent::ConversationUpdated = event;
                 // Only refresh panel if it's currently open (avoids unnecessary work)
-                if should_refresh_details_panel && me.is_conversation_details_panel_open {
+                if me.is_conversation_details_panel_open {
                     me.fetch_and_update_conversation_details_panel(ctx);
                     ctx.notify();
                 }
@@ -3293,10 +3290,8 @@ impl TerminalView {
                 })
         });
 
-        // Conversation details panel (cloud Oz runs and any active local AI conversation).
         let conversation_details_panel = ctx.add_typed_action_view(|ctx| {
             crate::ai::conversation_details_panel::ConversationDetailsPanel::new(
-                false, // don't show "Open" button since we're already viewing the conversation
                 320.0, // initial width
                 ctx,
             )
@@ -10640,8 +10635,6 @@ impl TerminalView {
     /// Send a desktop notification that agent mode needs attention or has finished,
     /// otherwise insert a callout banner if notifications are unset.
     /// May become separate triggers if we show sub-tasks in the UI.
-    /// Note that this does NOT handle agent mode toast notifications in-app.
-    /// Those are handled in the workspace view on AgentManagementEvent::ConversationNeedsAttention.
     fn maybe_send_agent_mode_desktop_notification(
         &mut self,
         conversation_id: &AIConversationId,

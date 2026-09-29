@@ -65,16 +65,12 @@ pub enum DropdownStyle {
     /// No border, smaller text, smaller padding
     #[allow(dead_code)]
     Naked,
-    /// Similar to Secondary but with ActionButton-like hover behavior:
-    /// background fill on hover instead of border color change.
-    /// TODO this should probably replace the default `Secondary` theme
-    ActionButtonSecondary,
 }
 
 impl DropdownStyle {
     fn ui_component_styles(&self) -> UiComponentStyles {
         match self {
-            DropdownStyle::Secondary | DropdownStyle::ActionButtonSecondary => UiComponentStyles {
+            DropdownStyle::Secondary => UiComponentStyles {
                 padding: Some(Coords {
                     top: 5.,
                     bottom: 5.,
@@ -442,13 +438,6 @@ where
         })
     }
 
-    pub fn set_menu_max_height(&mut self, height: f32, ctx: &mut ViewContext<Self>) {
-        self.dropdown.update(ctx, |menu, ctx| {
-            menu.set_height(height);
-            ctx.notify();
-        })
-    }
-
     fn selected_item(&self, ctx: &mut ViewContext<Self>) -> Option<MenuItem<DropdownAction>> {
         self.dropdown
             .read(ctx, |dropdown, _| dropdown.selected_item())
@@ -509,7 +498,6 @@ where
                 match self.style {
                     DropdownStyle::Secondary => ButtonVariant::Outlined,
                     DropdownStyle::Naked => ButtonVariant::Text,
-                    DropdownStyle::ActionButtonSecondary => ButtonVariant::Secondary,
                 },
                 self.top_bar_mouse_state.clone(),
             )
@@ -527,7 +515,7 @@ where
                     vec2f(15., 15.),
                 )
                 .with_inner_padding(match self.style {
-                    DropdownStyle::Secondary | DropdownStyle::ActionButtonSecondary => 10.,
+                    DropdownStyle::Secondary => 10.,
                     DropdownStyle::Naked => 6.,
                 }),
             )

@@ -6,8 +6,7 @@ use warpui::{AppContext, Entity, ModelHandle, SingletonEntity};
 
 use crate::AgentConversationsModel;
 use crate::ai::agent_conversations_model::{
-    AgentConversationEntry, AgentConversationListEntryState, AgentManagementFilters,
-    query_conversation_entries,
+    AgentConversationEntry, AgentConversationListEntryState, query_conversation_entries,
 };
 use crate::ai::blocklist::conversation_selection::ConversationSelectionHandle;
 use crate::search::SyncDataSource;
@@ -41,7 +40,7 @@ impl ConversationMenuDataSource {
         let policy = self.conversation_selection.as_ref(app);
         let scope = (self.team_context_resolver)(app);
         AgentConversationsModel::as_ref(app)
-            .get_entries(&AgentManagementFilters::default(), &scope, app)
+            .get_entries(&scope, app)
             .into_iter()
             .filter_map(|entry| match policy.classify_entry(&entry, app) {
                 AgentConversationListEntryState::Available => Some((entry, false)),

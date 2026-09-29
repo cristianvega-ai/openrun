@@ -151,7 +151,10 @@ fn save_toolbar_selection<V: View>(
     let selection = if toolbar_items_match_defaults(&left, &right) {
         HeaderToolbarChipSelection::Default
     } else {
-        HeaderToolbarChipSelection::Custom { left, right }
+        HeaderToolbarChipSelection::Custom {
+            left: left.into(),
+            right: right.into(),
+        }
     };
 
     TabSettings::handle(ctx).update(ctx, |settings, ctx| {

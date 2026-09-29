@@ -106,3 +106,24 @@ fn test_code_pane_snapshot_with_multiple_tabs() {
     assert_eq!(tabs[2].path, None);
     assert!(matches!(source, Some(CodeSource::Link { .. })));
 }
+
+#[test]
+fn test_left_panel_snapshot_with_removed_conversation_list_tab_falls_back_to_file_tree() {
+    let stored =
+        r#"{"left_panel_displayed_tab":"ConversationListView","pane_group_id":"pg","width":320}"#;
+    let snapshot: LeftPanelSnapshot =
+        serde_json::from_str(stored).expect("a removed tab must not discard the snapshot");
+    assert_eq!(
+        snapshot.left_panel_displayed_tab,
+        LeftPanelDisplayedTab::FileTree
+    );
+    assert_eq!(snapshot.width, 320);
+    assert_eq!(snapshot.pane_group_id, "pg");
+
+    let stored = r#"{"left_panel_displayed_tab":"GlobalSearch","pane_group_id":"pg","width":320}"#;
+    let snapshot: LeftPanelSnapshot = serde_json::from_str(stored).unwrap();
+    assert_eq!(
+        snapshot.left_panel_displayed_tab,
+        LeftPanelDisplayedTab::GlobalSearch
+    );
+}

@@ -746,14 +746,6 @@ impl AIConversation {
         self.conversation_usage_metadata.platform_credits_spent
     }
 
-    /// Test-only helper that sets the conversation's credit total directly,
-    /// without wiring up a full `StreamFinished` event.
-    #[cfg(test)]
-    pub(crate) fn set_credits_spent_for_test(&mut self, credits: f32) {
-        self.conversation_usage_metadata.credits_spent = credits;
-        self.conversation_usage_metadata.platform_credits_spent = 0.0;
-    }
-
     /// Test-only helper that sets (or clears) the conversation's dollar-cost
     /// baseline directly, mirroring what `set_server_metadata` would derive
     /// from a real snapshot, without wiring up a full snapshot.
@@ -4489,6 +4481,25 @@ impl From<&ConversationStatus> for AgentStatus {
 }
 
 impl ConversationStatus {
+    /// Returns true if the updating the conversation with this status should trigger some
+    /// notification to the user.
+    ///
+    /// Exhaustive match so a new `ConversationStatus` variant forces a
+    /// deliberate decision about whether it should fire a notification.
+    pub fn should_trigger_notification(&self) -> bool {
+        match self {
+            ConversationStatus::Success
+            | ConversationStatus::Blocked { .. }
+            | ConversationStatus::Error => true,
+            // Streaming hasn't reached a notable state; a recovering
+            // conversation is still active; user-cancellations are
+            // self-evident.
+            ConversationStatus::InProgress
+            | ConversationStatus::TransientError
+            | ConversationStatus::Cancelled => false,
+        }
+    }
+
     pub fn render_icon(&self, appearance: &Appearance) -> warpui::elements::Icon {
         match self {
             ConversationStatus::InProgress => in_progress_icon(appearance),

@@ -14,7 +14,7 @@ use warpui::elements::{
     Border, ChildView, ClippedScrollStateHandle, ConstrainedBox, Container, CornerRadius,
     CrossAxisAlignment, DragBarSide, Empty, Expanded, Flex, MainAxisAlignment, MainAxisSize,
     MouseStateHandle, ParentElement, Radius, Resizable, ResizableStateHandle, SelectableArea,
-    SelectionHandle, Text, Wrap, resizable_state_handle,
+    SelectionHandle, Text, resizable_state_handle,
 };
 use warpui::fonts::{Properties, Weight};
 use warpui::keymap::FixedBinding;
@@ -24,23 +24,11 @@ use warpui::{
     AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
 
-use crate::ai::agent::api::ServerConversationToken;
-use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
-use crate::ai::agent_conversations_model::entry::PrincipalType;
-use crate::ai::agent_conversations_model::{AgentConversationEntry, AgentRunDisplayStatus};
-use crate::ai::agent_management::details_action_buttons::{
-    ActionButtonsConfig, AgentDetailsButtonEvent, ConversationActionButtonsRow,
-};
-use crate::ai::agent_management::telemetry::{AgentManagementTelemetryEvent, OpenedFrom};
-use crate::ai::ambient_agents::task::TaskPrincipalInfo;
-use crate::ai::ambient_agents::{AmbientAgentTaskId, cancel_task_with_toast};
+use crate::ai::agent::conversation::{AIConversation, ConversationStatus};
 use crate::ai::artifacts::{Artifact, ArtifactButtonsRow, ArtifactButtonsRowEvent};
-use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::ai::blocklist::view_util::{format_usage, usage_label};
 use crate::appearance::Appearance;
 use crate::auth::UserUid;
-use crate::send_telemetry_from_ctx;
-use crate::server::server_api::ai::AmbientAgentTask;
 use crate::settings::ai::{AISettings, AISettingsChangedEvent};
 use crate::ui_components::agent_status::StatusColorStyle;
 use crate::ui_components::avatar::{Avatar, AvatarContent};
@@ -50,13 +38,10 @@ use crate::ui_components::icons::Icon;
 use crate::util::bindings::CustomAction;
 use crate::util::time_format::{format_approx_duration_from_now, human_readable_precise_duration};
 use crate::view_components::DismissibleToast;
-#[cfg(not(target_family = "wasm"))]
-use crate::view_components::action_button::PrimaryTheme;
-use crate::view_components::action_button::{ActionButton, ButtonSize};
 use crate::view_components::copyable_text_field::{
     COPY_FEEDBACK_DURATION, CopyableTextFieldConfig, render_copyable_text_field,
 };
-use crate::workspace::{ForkedConversationDestination, ToastStack, WorkspaceAction};
+use crate::workspace::ToastStack;
 use crate::workspaces::user_profiles::{UserProfileWithUID, UserProfiles};
 
 const FIELD_SPACING: f32 = 16.0;
@@ -65,52 +50,12 @@ const STATUS_ICON_SIZE: f32 = 12.0;
 const LABEL_VALUE_GAP: f32 = 4.0;
 const SECTION_HEADER_GAP: f32 = 8.0;
 
-/// Panel rendering mode.
-#[derive(Debug, Clone, PartialEq)]
-enum PanelMode {
-    Conversation {
-        /// Working directory where the conversation took place.
-        directory: Option<String>,
-        /// Unique identifier for the conversation (server token).
-        server_conversation_id: Option<String>,
-        /// Internal conversation ID (for action buttons).
-        ai_conversation_id: Option<AIConversationId>,
-        /// Status of the conversation.
-        status: Option<ConversationStatus>,
-    },
-    Task {
-        /// Unique identifier for the task.
-        task_id: Option<AmbientAgentTaskId>,
-        /// Working directory from the linked conversation, if available.
-        directory: Option<String>,
-        /// User-visible status derived from task and conversation state.
-        display_status: Option<AgentRunDisplayStatus>,
-        /// Error message, if we have one.
-        error_message: Option<String>,
-        /// Server conversation ID (for copy link).
-        conversation_id: Option<String>,
-    },
-}
-
-impl Default for PanelMode {
-    fn default() -> Self {
-        PanelMode::Conversation {
-            directory: None,
-            server_conversation_id: None,
-            ai_conversation_id: None,
-            status: None,
-        }
-    }
-}
-
 /// Groups mouse state handles for the panel.
 #[derive(Default)]
 struct PanelMouseStates {
     close_button: MouseStateHandle,
     copy_directory: MouseStateHandle,
     copy_conversation_id: MouseStateHandle,
-    copy_run_id: MouseStateHandle,
-    copy_error: MouseStateHandle,
     copy_initial_query: MouseStateHandle,
 }
 
@@ -119,8 +64,6 @@ struct PanelMouseStates {
 enum CopyButtonKind {
     Directory,
     ConversationId,
-    RunId,
-    Error,
     InitialQuery,
 }
 
@@ -131,10 +74,6 @@ struct PrincipalInfo {
     pub display_name: String,
     /// Optional photo URL for the avatar.
     pub photo_url: Option<String>,
-    /// UID of the principal, when known (used for building Oz links).
-    pub uid: Option<String>,
-    /// Whether this principal is a service account.
-    pub is_service_account: bool,
 }
 
 impl PrincipalInfo {
@@ -143,8 +82,6 @@ impl PrincipalInfo {
         Self {
             display_name,
             photo_url,
-            uid: None,
-            is_service_account: false,
         }
     }
 
@@ -167,20 +104,6 @@ impl PrincipalInfo {
         Self {
             display_name,
             photo_url,
-            uid: Some(profile.firebase_uid.to_string()),
-            is_service_account: false,
-        }
-    }
-}
-
-impl From<&TaskPrincipalInfo> for PrincipalInfo {
-    fn from(p: &TaskPrincipalInfo) -> Self {
-        Self {
-            display_name: p.display_name.clone().unwrap_or_else(|| p.uid.clone()),
-            photo_url: None,
-            uid: Some(p.uid.clone()),
-            is_service_account: PrincipalType::parse(&p.creator_type)
-                .is_some_and(|pt| pt.is_service_account()),
         }
     }
 }
@@ -189,15 +112,18 @@ impl From<&TaskPrincipalInfo> for PrincipalInfo {
 /// Any field that is left as None will not be rendered.
 #[derive(Debug, Clone, Default)]
 pub struct ConversationDetailsData {
-    mode: PanelMode,
+    /// Working directory where the conversation took place.
+    directory: Option<String>,
+    /// Unique identifier for the conversation (server token).
+    server_conversation_id: Option<String>,
+    /// Status of the conversation.
+    status: Option<ConversationStatus>,
     title: String,
     /// Information about the creator.
     creator: Option<PrincipalInfo>,
-    /// Principal the cloud run executed as.
-    executor: Option<PrincipalInfo>,
     /// When the conversation was created.
     created_at: Option<DateTime<Local>>,
-    /// Total credits spent on the conversation/task.
+    /// Total credits spent on the conversation.
     credits: Option<f32>,
     /// Total token count used, when the source provides it.
     total_tokens: Option<u32>,
@@ -207,18 +133,12 @@ pub struct ConversationDetailsData {
     run_time: Option<Duration>,
     /// Artifacts created during the conversation (plans, PRs, branches).
     artifacts: Vec<Artifact>,
-    /// Action to dispatch when "Open" button is clicked.
-    open_action: Option<WorkspaceAction>,
-    /// Source prompt that initiated this conversation/task.
+    /// Source prompt that initiated this conversation.
     source_prompt: Option<String>,
-    /// Copy link URL (session link if sandbox running, otherwise conversation link).
-    copy_link_url: Option<String>,
 }
 
 impl ConversationDetailsData {
-    /// Build details data from an in-memory `AIConversation`. Used both by the WASM
-    /// transcript/shared-session details panel and by the native pane-level details panel
-    /// when the active conversation is a local (non-cloud) Warp Agent run.
+    /// Build details data from an in-memory `AIConversation`.
     pub fn from_conversation(conversation: &AIConversation, app: &AppContext) -> Self {
         let mut directory = None;
         let mut conversation_id = None;
@@ -272,10 +192,6 @@ impl ConversationDetailsData {
             directory = first_exchange.working_directory.clone();
         }
 
-        let copy_link_url = conversation_id
-            .as_ref()
-            .map(|id| ServerConversationToken::new(id.clone()).conversation_link());
-
         let usage_totals = conversation.usage_totals();
         let total_tokens: u32 = conversation
             .token_usage()
@@ -284,17 +200,13 @@ impl ConversationDetailsData {
             .sum();
 
         ConversationDetailsData {
-            mode: PanelMode::Conversation {
-                directory,
-                server_conversation_id: conversation_id,
-                ai_conversation_id: None,
-                status: Some(conversation.status().clone()),
-            },
+            directory,
+            server_conversation_id: conversation_id,
+            status: Some(conversation.status().clone()),
             title: conversation
                 .title()
                 .unwrap_or_else(|| "Conversation".to_string()),
             creator,
-            executor: None,
             created_at,
             credits: Some(conversation.credits_spent()),
             total_tokens: (total_tokens > 0).then_some(total_tokens),
@@ -303,146 +215,10 @@ impl ConversationDetailsData {
                 .map(|usage| usage.total_cost_in_cents()),
             run_time,
             artifacts: conversation.artifacts().to_vec(),
-            open_action: None,
             source_prompt: conversation.initial_query(),
-            copy_link_url,
-        }
-    }
-
-    pub fn from_agent_conversation_entry(
-        entry: &AgentConversationEntry,
-        task: Option<&AmbientAgentTask>,
-        open_action: Option<WorkspaceAction>,
-        copy_link_url: Option<String>,
-    ) -> Self {
-        let creator = entry
-            .display
-            .creator
-            .name
-            .clone()
-            .map(|name| PrincipalInfo::new(name, None));
-        let executor = entry.display.executor.as_ref().and_then(|e| {
-            let display_name = e.name.clone().or_else(|| e.uid.clone())?;
-            Some(PrincipalInfo {
-                display_name,
-                photo_url: None,
-                uid: e.uid.clone(),
-                is_service_account: e.principal_type.is_some_and(|pt| pt.is_service_account()),
-            })
-        });
-        let created_at = Some(entry.display.created_at.with_timezone(&Local));
-        let source_prompt = entry.display.initial_query.clone();
-
-        if let Some(task_id) = entry.identity.ambient_agent_task_id {
-            let error_message = task.and_then(|task| {
-                task.state
-                    .is_failure_like()
-                    .then(|| task.status_message.as_ref().map(|m| m.message.clone()))
-                    .flatten()
-            });
-            // Fall back to the entry's denormalized total when the task record isn't
-            // currently loaded, so the panel stays consistent with the card metadata
-            // (which always reads `entry.display.request_usage`).
-            let credits = task
-                .and_then(AmbientAgentTask::credits_used)
-                .or(entry.display.request_usage);
-            let cost_in_cents = task
-                .and_then(AmbientAgentTask::cost_in_cents)
-                .or(entry.display.cost_in_cents);
-            return ConversationDetailsData {
-                mode: PanelMode::Task {
-                    task_id: Some(task_id),
-                    directory: entry.display.working_directory.clone(),
-                    display_status: Some(entry.display.status.clone()),
-                    error_message,
-                    conversation_id: entry
-                        .identity
-                        .server_conversation_token
-                        .as_ref()
-                        .map(|token| token.as_str().to_string()),
-                },
-                title: entry.display.title.clone(),
-                creator,
-                executor,
-                created_at,
-                credits,
-                total_tokens: None,
-                cost_in_cents,
-                run_time: task.and_then(AmbientAgentTask::run_time),
-                artifacts: entry.display.artifacts.clone(),
-                open_action,
-                source_prompt,
-                copy_link_url,
-            };
-        }
-
-        ConversationDetailsData {
-            mode: PanelMode::Conversation {
-                directory: entry.display.working_directory.clone(),
-                server_conversation_id: entry
-                    .identity
-                    .server_conversation_token
-                    .as_ref()
-                    .map(|token| token.as_str().to_string()),
-                ai_conversation_id: entry.identity.local_conversation_id,
-                status: Some(entry.display.status.to_conversation_status()),
-            },
-            title: entry.display.title.clone(),
-            creator,
-            executor: None,
-            created_at,
-            credits: entry.display.request_usage,
-            total_tokens: None,
-            cost_in_cents: entry.display.cost_in_cents,
-            run_time: None,
-            artifacts: entry.display.artifacts.clone(),
-            open_action,
-            source_prompt,
-            copy_link_url,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[allow(dead_code)]
-    /// Used to populate the details panel from the management view, where we don't always have access
-    /// to the full `AIConversation`.
-    pub fn from_conversation_metadata(
-        ai_conversation_id: AIConversationId,
-        title: String,
-        creator_name: Option<String>,
-        created_at: DateTime<Local>,
-        directory: Option<String>,
-        credits_used: Option<f32>,
-        conversation_id: Option<String>,
-        artifacts: Vec<Artifact>,
-        open_action: Option<WorkspaceAction>,
-        status: Option<ConversationStatus>,
-        initial_query: Option<String>,
-        copy_link_url: Option<String>,
-    ) -> Self {
-        ConversationDetailsData {
-            mode: PanelMode::Conversation {
-                directory,
-                server_conversation_id: conversation_id,
-                ai_conversation_id: Some(ai_conversation_id),
-                status,
-            },
-            title,
-            creator: creator_name.map(|name| PrincipalInfo::new(name, None)),
-            executor: None,
-            created_at: Some(created_at),
-            credits: credits_used,
-            total_tokens: None,
-            cost_in_cents: None,
-            run_time: None,
-            open_action,
-            artifacts,
-            source_prompt: initial_query,
-            copy_link_url,
         }
     }
 }
-
 /// Events emitted by the ConversationDetailsPanel.
 #[derive(Debug, Clone)]
 pub enum ConversationDetailsPanelEvent {
@@ -455,13 +231,9 @@ pub enum ConversationDetailsPanelAction {
     Close,
     CopyDirectory,
     CopyConversationId,
-    CopyRunId,
-    CopyError,
     CopyInitialQuery,
     Focus,
     CopySelectedText,
-    #[cfg(not(target_family = "wasm"))]
-    ContinueLocally,
 }
 
 pub fn init(app: &mut AppContext) {
@@ -482,12 +254,6 @@ pub struct ConversationDetailsPanel {
     artifact_buttons_row: ViewHandle<ArtifactButtonsRow>,
     resizable_state_handle: ResizableStateHandle,
     scroll_state: ClippedScrollStateHandle,
-    action_buttons: ViewHandle<ConversationActionButtonsRow>,
-    /// Whether to show the "Open conversation" button (we don't want to show a navigate to
-    /// conversation button in the transcript view, but do in the management details view).
-    show_open_button: bool,
-    #[cfg(not(target_family = "wasm"))]
-    continue_locally_button: ViewHandle<ActionButton>,
     /// Tracks when each copy button was last clicked (for checkmark feedback).
     copy_feedback_times: HashMap<CopyButtonKind, Instant>,
     /// Selection state for cmd+C copy.
@@ -502,27 +268,14 @@ fn trimmed_initial_query(source_prompt: &Option<String>) -> Option<&str> {
 
 impl ConversationDetailsPanel {
     /// Create a new panel.
-    /// - `show_open_button`: whether to show the "Open" button (management view: true, transcript: false)
     /// - `initial_width`: starting width of the panel in pixels
-    pub fn new(show_open_button: bool, initial_width: f32, ctx: &mut ViewContext<Self>) -> Self {
+    pub fn new(initial_width: f32, ctx: &mut ViewContext<Self>) -> Self {
         let artifact_buttons_row =
             ctx.add_typed_action_view(|ctx| ArtifactButtonsRow::new(&[], ctx));
         ctx.subscribe_to_view(&artifact_buttons_row, |this, _, event, ctx| {
             this.handle_artifact_buttons_event(event, ctx)
         });
 
-        let action_buttons = ctx.add_typed_action_view(ConversationActionButtonsRow::new);
-        ctx.subscribe_to_view(&action_buttons, Self::handle_action_buttons_event);
-
-        #[cfg(not(target_family = "wasm"))]
-        let continue_locally_button = ctx.add_typed_action_view(|_| {
-            ActionButton::new("Continue locally", PrimaryTheme)
-                .with_tooltip("Fork this conversation locally")
-                .with_size(ButtonSize::Small)
-                .on_click(|ctx| {
-                    ctx.dispatch_typed_action(ConversationDetailsPanelAction::ContinueLocally);
-                })
-        });
         ctx.subscribe_to_model(&AISettings::handle(ctx), |_, _, event, ctx| {
             if matches!(
                 event,
@@ -537,10 +290,6 @@ impl ConversationDetailsPanel {
             data: ConversationDetailsData::default(),
             mouse_states: PanelMouseStates::default(),
             artifact_buttons_row,
-            action_buttons,
-            show_open_button,
-            #[cfg(not(target_family = "wasm"))]
-            continue_locally_button,
             resizable_state_handle: resizable_state_handle(initial_width),
             scroll_state: ClippedScrollStateHandle::default(),
             copy_feedback_times: HashMap::new(),
@@ -555,44 +304,8 @@ impl ConversationDetailsPanel {
         ctx: &mut ViewContext<Self>,
     ) {
         self.set_artifacts(&data, ctx);
-        self.set_action_buttons(&data, ctx);
         self.data = data;
         ctx.notify();
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    fn local_continuation_info(&self, app: &AppContext) -> Option<AIConversationId> {
-        if !AISettings::as_ref(app).is_any_ai_enabled(app) {
-            return None;
-        }
-
-        match &self.data.mode {
-            PanelMode::Conversation {
-                ai_conversation_id,
-                status,
-                ..
-            } => {
-                let status = status.as_ref()?;
-                if status.is_in_progress() {
-                    return None;
-                }
-                Some(*ai_conversation_id.as_ref()?)
-            }
-            PanelMode::Task {
-                display_status,
-                conversation_id,
-                ..
-            } => {
-                let status = display_status.as_ref()?;
-                if status.is_working() {
-                    return None;
-                }
-
-                let server_token = ServerConversationToken::new(conversation_id.as_ref()?.clone());
-                BlocklistAIHistoryModel::as_ref(app)
-                    .find_conversation_id_by_server_token(&server_token)
-            }
-        }
     }
 
     fn set_artifacts(&mut self, data: &ConversationDetailsData, ctx: &mut ViewContext<Self>) {
@@ -625,158 +338,6 @@ impl ConversationDetailsPanel {
             }
             ArtifactButtonsRowEvent::DownloadFile { artifact_uid } => {
                 crate::ai::artifacts::download_file_artifact(artifact_uid, ctx);
-            }
-        }
-    }
-
-    fn action_buttons_config_from_data(
-        &self,
-        data: &ConversationDetailsData,
-    ) -> Option<ActionButtonsConfig> {
-        let open_action = self
-            .show_open_button
-            .then(|| data.open_action.clone())
-            .flatten();
-        match &data.mode {
-            PanelMode::Task {
-                task_id,
-                display_status,
-                ..
-            } => {
-                let task_id = *task_id.as_ref()?;
-                let display_status = display_status.as_ref()?;
-                Some(ActionButtonsConfig::for_task(
-                    task_id,
-                    display_status,
-                    open_action,
-                    data.copy_link_url.clone(),
-                ))
-            }
-            PanelMode::Conversation {
-                ai_conversation_id, ..
-            } => {
-                let conversation_id = *ai_conversation_id.as_ref()?;
-                Some(ActionButtonsConfig::for_conversation(
-                    conversation_id,
-                    open_action,
-                    data.copy_link_url.clone(),
-                ))
-            }
-        }
-    }
-
-    fn set_action_buttons(&mut self, data: &ConversationDetailsData, ctx: &mut ViewContext<Self>) {
-        let config = self
-            .action_buttons_config_from_data(data)
-            .unwrap_or_default();
-        self.action_buttons
-            .update(ctx, |row, ctx| row.set_config(config, ctx));
-    }
-
-    fn handle_action_buttons_event(
-        &mut self,
-        _: ViewHandle<ConversationActionButtonsRow>,
-        event: &AgentDetailsButtonEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            AgentDetailsButtonEvent::Open => {
-                // Send telemetry based on panel mode
-                match &self.data.mode {
-                    PanelMode::Conversation {
-                        ai_conversation_id: Some(conversation_id),
-                        ..
-                    } => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::ConversationOpened {
-                                conversation_id: conversation_id.to_string(),
-                                opened_from: OpenedFrom::DetailsPanel,
-                            },
-                            ctx
-                        );
-                    }
-                    PanelMode::Task {
-                        task_id: Some(task_id),
-                        ..
-                    } => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::CloudRunOpened {
-                                task_id: task_id.to_string(),
-                                opened_from: OpenedFrom::DetailsPanel,
-                            },
-                            ctx
-                        );
-                    }
-                    _ => {}
-                }
-
-                if let Some(action) = &self.data.open_action {
-                    ctx.dispatch_typed_action(action);
-                }
-            }
-            AgentDetailsButtonEvent::CancelTask { task_id } => {
-                send_telemetry_from_ctx!(
-                    AgentManagementTelemetryEvent::CloudRunCancelled {
-                        task_id: task_id.to_string(),
-                    },
-                    ctx
-                );
-
-                cancel_task_with_toast(*task_id, ctx);
-            }
-            AgentDetailsButtonEvent::ForkConversation { conversation_id } => {
-                send_telemetry_from_ctx!(
-                    AgentManagementTelemetryEvent::ConversationForked {
-                        conversation_id: conversation_id.to_string(),
-                    },
-                    ctx
-                );
-
-                ctx.dispatch_typed_action(&WorkspaceAction::ForkAIConversation {
-                    conversation_id: *conversation_id,
-                    fork_from_exchange: None,
-                    summarize_after_fork: false,
-                    summarization_prompt: None,
-                    initial_prompt: None,
-                    initial_attachments: vec![],
-                    destination: ForkedConversationDestination::NewTab,
-                });
-            }
-            AgentDetailsButtonEvent::ViewDetails { .. } => {
-                // ViewDetails not shown in the details panel because we're already viewing it,
-                // only in management view cards
-            }
-            AgentDetailsButtonEvent::CopyLink { link } => {
-                match &self.data.mode {
-                    PanelMode::Conversation {
-                        ai_conversation_id: Some(conversation_id),
-                        ..
-                    } => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::ConversationLinkCopied {
-                                conversation_id: conversation_id.to_string(),
-                                copied_from: OpenedFrom::DetailsPanel,
-                            },
-                            ctx
-                        );
-                    }
-                    PanelMode::Task {
-                        task_id: Some(task_id),
-                        ..
-                    } => {
-                        send_telemetry_from_ctx!(
-                            AgentManagementTelemetryEvent::SessionLinkCopied {
-                                task_id: task_id.to_string(),
-                                copied_from: OpenedFrom::DetailsPanel,
-                            },
-                            ctx
-                        );
-                    }
-                    _ => {}
-                }
-
-                ctx.clipboard()
-                    .write(ClipboardContent::plain_text(link.clone()));
             }
         }
     }
@@ -842,103 +403,6 @@ impl ConversationDetailsPanel {
         )
     }
 
-    fn render_executor_section(&self, appearance: &Appearance) -> Option<Box<dyn Element>> {
-        let executor = self.data.executor.as_ref()?;
-        if !executor.is_service_account {
-            return None;
-        }
-        // Hide when the executor is the same person as the creator.
-        if self
-            .data
-            .creator
-            .as_ref()
-            .is_some_and(|c| match (&c.uid, &executor.uid) {
-                (Some(c_uid), Some(e_uid)) => c_uid == e_uid,
-                _ => c.display_name == executor.display_name,
-            })
-        {
-            return None;
-        }
-        let theme = appearance.theme();
-        let ui_font_size = appearance.ui_font_size();
-
-        let label_text = Text::new(
-            "Agent".to_string(),
-            appearance.ui_font_family(),
-            ui_font_size,
-        )
-        .with_color(blended_colors::text_sub(theme, theme.surface_1()))
-        .finish();
-
-        let agent_name_element = Text::new(
-            executor.display_name.clone(),
-            appearance.ui_font_family(),
-            ui_font_size,
-        )
-        .with_color(theme.foreground().into())
-        .with_selectable(true)
-        .finish();
-
-        Some(
-            Flex::column()
-                .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                .with_child(
-                    Container::new(label_text)
-                        .with_margin_bottom(LABEL_VALUE_GAP)
-                        .finish(),
-                )
-                .with_child(agent_name_element)
-                .finish(),
-        )
-    }
-
-    fn render_error_field(
-        &self,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Option<Box<dyn Element>> {
-        let error_message = match &self.data.mode {
-            PanelMode::Task { error_message, .. } => error_message.as_ref()?,
-            _ => return None,
-        };
-        let theme = appearance.theme();
-        let ui_font_size = appearance.ui_font_size();
-
-        let label_text = Text::new(
-            "Error".to_string(),
-            appearance.ui_font_family(),
-            ui_font_size,
-        )
-        .with_color(blended_colors::text_sub(theme, theme.surface_1()))
-        .finish();
-
-        let value_field = render_copyable_text_field(
-            CopyableTextFieldConfig::new(error_message.clone())
-                .with_font_size(ui_font_size)
-                .with_text_color(theme.ansi_fg_red())
-                .with_wrap_text(true)
-                .with_icon_size(16.)
-                .with_mouse_state(self.mouse_state_for_copy_button(CopyButtonKind::Error))
-                .with_last_copied_at(self.copy_feedback_times.get(&CopyButtonKind::Error)),
-            |ctx| {
-                ctx.dispatch_typed_action(ConversationDetailsPanelAction::CopyError);
-            },
-            app,
-        );
-
-        Some(
-            Flex::column()
-                .with_cross_axis_alignment(CrossAxisAlignment::Start)
-                .with_child(
-                    Container::new(label_text)
-                        .with_margin_bottom(LABEL_VALUE_GAP)
-                        .finish(),
-                )
-                .with_child(value_field)
-                .finish(),
-        )
-    }
-
     fn render_status_section(&self, appearance: &Appearance) -> Option<Box<dyn Element>> {
         let theme = appearance.theme();
         let ui_font_size = appearance.ui_font_size();
@@ -953,18 +417,9 @@ impl ConversationDetailsPanel {
         .with_style(Properties::default().weight(Weight::Semibold))
         .finish();
 
-        let (icon, color, display_text): (Icon, _, String) = match &self.data.mode {
-            PanelMode::Task { display_status, .. } => {
-                let status = display_status.as_ref()?;
-                let (icon, color) = status.status_icon_and_color(theme);
-                (icon, color, status.to_string())
-            }
-            PanelMode::Conversation { status, .. } => {
-                let status = status.as_ref()?;
-                let (icon, color) = status.status_icon_and_color(theme, StatusColorStyle::Standard);
-                (icon, color, status.to_string())
-            }
-        };
+        let status = self.data.status.as_ref()?;
+        let (icon, color) = status.status_icon_and_color(theme, StatusColorStyle::Standard);
+        let display_text = status.to_string();
 
         let status_icon = ConstrainedBox::new(icon.to_warpui_icon(color.into()).finish())
             .with_width(STATUS_ICON_SIZE)
@@ -976,7 +431,7 @@ impl ConversationDetailsPanel {
             .with_selectable(true)
             .finish();
 
-        let status_badge = Container::new(
+        let status_element = Container::new(
             Flex::row()
                 .with_cross_axis_alignment(CrossAxisAlignment::Center)
                 .with_child(Container::new(status_icon).with_margin_right(4.).finish())
@@ -987,8 +442,6 @@ impl ConversationDetailsPanel {
         .with_background(coloru_with_opacity(color, 10))
         .with_corner_radius(CornerRadius::with_all(Radius::Pixels(4.)))
         .finish();
-
-        let status_element: Box<dyn Element> = status_badge;
 
         Some(
             Flex::column()
@@ -1150,8 +603,6 @@ impl ConversationDetailsPanel {
         match kind {
             CopyButtonKind::Directory => self.mouse_states.copy_directory.clone(),
             CopyButtonKind::ConversationId => self.mouse_states.copy_conversation_id.clone(),
-            CopyButtonKind::RunId => self.mouse_states.copy_run_id.clone(),
-            CopyButtonKind::Error => self.mouse_states.copy_error.clone(),
             CopyButtonKind::InitialQuery => self.mouse_states.copy_initial_query.clone(),
         }
     }
@@ -1187,7 +638,7 @@ impl View for ConversationDetailsPanel {
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
             .with_main_axis_size(MainAxisSize::Min);
 
-        // Header row with optional action buttons and close button
+        // Header row with the close button
         let close_button = icon_button(
             appearance,
             Icon::X,
@@ -1201,57 +652,11 @@ impl View for ConversationDetailsPanel {
         .with_cursor(Cursor::PointingHand)
         .finish();
 
-        let mut header_row = Flex::row()
+        let header_row = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
             .with_main_axis_alignment(MainAxisAlignment::End)
-            .with_cross_axis_alignment(CrossAxisAlignment::Center);
-        // Add continue locally button (left-aligned) and action icon buttons (right-aligned).
-        let has_action_buttons = !self.action_buttons.as_ref(app).is_empty();
-
-        #[cfg(not(target_family = "wasm"))]
-        let has_local_continuation_info = self.local_continuation_info(app).is_some();
-        #[cfg(target_family = "wasm")]
-        let has_local_continuation_info = false;
-
-        if has_local_continuation_info {
-            let mut buttons_wrap = Wrap::row().with_spacing(8.).with_run_spacing(8.);
-
-            #[cfg(not(target_family = "wasm"))]
-            if has_local_continuation_info {
-                buttons_wrap.add_child(ChildView::new(&self.continue_locally_button).finish());
-            }
-
-            header_row.add_child(
-                Expanded::new(
-                    1.,
-                    Container::new(buttons_wrap.finish())
-                        .with_margin_right(8.)
-                        .finish(),
-                )
-                .finish(),
-            );
-        }
-
-        if has_action_buttons {
-            header_row.add_child(ChildView::new(&self.action_buttons).finish());
-            // Vertical divider between action buttons and close button
-            header_row.add_child(
-                Container::new(
-                    ConstrainedBox::new(
-                        Container::new(Empty::new().finish())
-                            .with_border(Border::left(1.).with_border_fill(theme.outline()))
-                            .finish(),
-                    )
-                    .with_height(16.)
-                    .finish(),
-                )
-                .with_margin_left(8.)
-                .with_margin_right(4.)
-                .finish(),
-            );
-        }
-
-        header_row.add_child(close_button);
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(close_button);
         content.add_child(
             Container::new(header_row.finish())
                 .with_margin_bottom(HEADER_SPACING)
@@ -1304,15 +709,6 @@ impl View for ConversationDetailsPanel {
             );
         }
 
-        // Executor section
-        if let Some(executor_section) = self.render_executor_section(appearance) {
-            content.add_child(
-                Container::new(executor_section)
-                    .with_margin_bottom(FIELD_SPACING)
-                    .finish(),
-            );
-        }
-
         if let Some(artifacts_section) = self.render_artifacts_section(appearance) {
             content.add_child(
                 Container::new(artifacts_section)
@@ -1321,76 +717,34 @@ impl View for ConversationDetailsPanel {
             );
         }
 
-        // Mode-specific fields
-        match &self.data.mode {
-            PanelMode::Conversation {
-                directory,
-                server_conversation_id: conversation_id,
-                ai_conversation_id: _,
-                status: _,
-            } => {
-                if let Some(directory) = directory {
-                    content.add_child(
-                        Container::new(self.render_field_with_copy(
-                            "Directory",
-                            directory,
-                            ConversationDetailsPanelAction::CopyDirectory,
-                            CopyButtonKind::Directory,
-                            appearance,
-                            app,
-                        ))
-                        .with_margin_bottom(FIELD_SPACING)
-                        .finish(),
-                    );
-                }
+        if let Some(directory) = &self.data.directory {
+            content.add_child(
+                Container::new(self.render_field_with_copy(
+                    "Directory",
+                    directory,
+                    ConversationDetailsPanelAction::CopyDirectory,
+                    CopyButtonKind::Directory,
+                    appearance,
+                    app,
+                ))
+                .with_margin_bottom(FIELD_SPACING)
+                .finish(),
+            );
+        }
 
-                if let Some(id) = conversation_id {
-                    content.add_child(
-                        Container::new(self.render_field_with_copy(
-                            "Conversation ID",
-                            id,
-                            ConversationDetailsPanelAction::CopyConversationId,
-                            CopyButtonKind::ConversationId,
-                            appearance,
-                            app,
-                        ))
-                        .with_margin_bottom(FIELD_SPACING)
-                        .finish(),
-                    );
-                }
-            }
-            PanelMode::Task {
-                directory, task_id, ..
-            } => {
-                if let Some(directory) = directory {
-                    content.add_child(
-                        Container::new(self.render_field_with_copy(
-                            "Directory",
-                            directory,
-                            ConversationDetailsPanelAction::CopyDirectory,
-                            CopyButtonKind::Directory,
-                            appearance,
-                            app,
-                        ))
-                        .with_margin_bottom(FIELD_SPACING)
-                        .finish(),
-                    );
-                }
-                if let Some(task_id) = task_id {
-                    content.add_child(
-                        Container::new(self.render_field_with_copy(
-                            "Run ID",
-                            &task_id.to_string(),
-                            ConversationDetailsPanelAction::CopyRunId,
-                            CopyButtonKind::RunId,
-                            appearance,
-                            app,
-                        ))
-                        .with_margin_bottom(FIELD_SPACING)
-                        .finish(),
-                    );
-                }
-            }
+        if let Some(id) = &self.data.server_conversation_id {
+            content.add_child(
+                Container::new(self.render_field_with_copy(
+                    "Conversation ID",
+                    id,
+                    ConversationDetailsPanelAction::CopyConversationId,
+                    CopyButtonKind::ConversationId,
+                    appearance,
+                    app,
+                ))
+                .with_margin_bottom(FIELD_SPACING)
+                .finish(),
+            );
         }
 
         if let Some(credits) = self.data.credits {
@@ -1426,17 +780,6 @@ impl View for ConversationDetailsPanel {
                     .with_margin_bottom(FIELD_SPACING)
                     .finish(),
             );
-        }
-
-        // Task-only fields
-        if let PanelMode::Task { .. } = &self.data.mode {
-            if let Some(error_field) = self.render_error_field(appearance, app) {
-                content.add_child(
-                    Container::new(error_field)
-                        .with_margin_bottom(FIELD_SPACING)
-                        .finish(),
-                );
-            }
         }
 
         if let Some(source_section) = self.render_source_section(appearance, app) {
@@ -1515,52 +858,18 @@ impl TypedActionView for ConversationDetailsPanel {
             ConversationDetailsPanelAction::Close => {
                 ctx.emit(ConversationDetailsPanelEvent::Close);
             }
-            ConversationDetailsPanelAction::CopyDirectory => match &self.data.mode {
-                PanelMode::Conversation {
-                    directory: Some(directory),
-                    ..
-                }
-                | PanelMode::Task {
-                    directory: Some(directory),
-                    ..
-                } => {
+            ConversationDetailsPanelAction::CopyDirectory => {
+                if let Some(directory) = &self.data.directory {
                     ctx.clipboard()
                         .write(ClipboardContent::plain_text(directory.clone()));
                     self.record_copy(CopyButtonKind::Directory, ctx);
                 }
-                _ => {}
-            },
+            }
             ConversationDetailsPanelAction::CopyConversationId => {
-                if let PanelMode::Conversation {
-                    server_conversation_id: Some(id),
-                    ..
-                } = &self.data.mode
-                {
+                if let Some(id) = &self.data.server_conversation_id {
                     ctx.clipboard()
                         .write(ClipboardContent::plain_text(id.clone()));
                     self.record_copy(CopyButtonKind::ConversationId, ctx);
-                }
-            }
-            ConversationDetailsPanelAction::CopyRunId => {
-                if let PanelMode::Task {
-                    task_id: Some(task_id),
-                    ..
-                } = &self.data.mode
-                {
-                    ctx.clipboard()
-                        .write(ClipboardContent::plain_text(task_id.to_string()));
-                    self.record_copy(CopyButtonKind::RunId, ctx);
-                }
-            }
-            ConversationDetailsPanelAction::CopyError => {
-                if let PanelMode::Task {
-                    error_message: Some(error),
-                    ..
-                } = &self.data.mode
-                {
-                    ctx.clipboard()
-                        .write(ClipboardContent::plain_text(error.clone()));
-                    self.record_copy(CopyButtonKind::Error, ctx);
                 }
             }
             ConversationDetailsPanelAction::CopyInitialQuery => {
@@ -1578,21 +887,10 @@ impl TypedActionView for ConversationDetailsPanel {
                     ctx.clipboard().write(ClipboardContent::plain_text(text));
                 }
             }
-            #[cfg(not(target_family = "wasm"))]
-            ConversationDetailsPanelAction::ContinueLocally => {
-                if let Some(conversation_id) = self.local_continuation_info(ctx) {
-                    send_telemetry_from_ctx!(
-                        AgentManagementTelemetryEvent::DetailsPanelContinueLocally,
-                        ctx
-                    );
-                    ctx.dispatch_typed_action(&WorkspaceAction::ContinueConversationLocally {
-                        conversation_id,
-                    });
-                }
-            }
         }
     }
 }
+
 #[cfg(test)]
 #[path = "conversation_details_panel_tests.rs"]
 mod tests;

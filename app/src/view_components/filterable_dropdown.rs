@@ -17,8 +17,8 @@ use warpui::{
 };
 
 use super::dropdown::{
-    DROPDOWN_PADDING, DropdownAction, DropdownItem, DropdownItemAction, MenuHeaderTextFormatter,
-    TOP_MENU_BAR_HEIGHT, TOP_MENU_BAR_MAX_WIDTH,
+    DROPDOWN_PADDING, DropdownAction, DropdownItem, DropdownItemAction, TOP_MENU_BAR_HEIGHT,
+    TOP_MENU_BAR_MAX_WIDTH,
 };
 use crate::appearance::Appearance;
 use crate::editor::{
@@ -40,17 +40,14 @@ pub struct FilterableDropdown<A: DropdownItemAction = ()> {
     disabled: bool,
     top_bar_mouse_state: MouseStateHandle,
     top_bar_max_width: f32,
-    main_axis_size: MainAxisSize,
     dropdown: ViewHandle<Menu<DropdownAction>>,
     filter_editor: ViewHandle<EditorView>,
     self_handle: WeakViewHandle<Self>,
     selected_item: Option<MenuItem<DropdownAction>>,
     items: Vec<MenuItem<DropdownAction>>,
     static_menu_header: Option<&'static str>,
-    button_variant: ButtonVariant,
     style_override: Option<UiComponentStyles>,
     hovered_style_override: Option<UiComponentStyles>,
-    menu_header_text_override: Option<MenuHeaderTextFormatter>,
     /// Optional placeholder shown in the closed top bar when no item is
     /// selected. Setting a placeholder also opts the dropdown into allowing an
     /// empty selection: `set_filtered_items` will not auto-highlight the first
@@ -114,14 +111,11 @@ where
             self_handle: ctx.handle(),
             top_bar_mouse_state: Default::default(),
             top_bar_max_width: TOP_MENU_BAR_MAX_WIDTH,
-            main_axis_size: MainAxisSize::Max,
             selected_item: None,
             items: Default::default(),
             static_menu_header: None,
-            button_variant: ButtonVariant::Outlined,
             style_override: None,
             hovered_style_override: None,
-            menu_header_text_override: None,
             placeholder: None,
             has_pinned_footer: false,
             menu_width: None,
@@ -130,13 +124,6 @@ where
             match_menu_width_to_top_bar: false,
             _action_type: PhantomData,
         }
-    }
-
-    pub fn set_menu_header_text_override<F>(&mut self, formatter: F)
-    where
-        F: Fn(&str) -> String + 'static,
-    {
-        self.menu_header_text_override = Some(Box::new(formatter));
     }
 
     pub fn set_footer<F>(&mut self, builder: F, ctx: &mut ViewContext<Self>)
@@ -152,25 +139,8 @@ where
         });
     }
 
-    /// Set the main_axis_size behavior for the dropdown header button.
-    ///
-    /// Default is MainAxisSize::Max, set to MainAxisSize::Min if you want to wrap the dropdown to
-    /// the text that's filling it.
-    pub fn set_main_axis_size(
-        &mut self,
-        main_axis_size: MainAxisSize,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.main_axis_size = main_axis_size;
-        ctx.notify();
-    }
-
     pub fn set_style(&mut self, style: UiComponentStyles) {
         self.style_override = Some(style);
-    }
-
-    pub fn set_button_variant(&mut self, button_variant: ButtonVariant) {
-        self.button_variant = button_variant;
     }
 
     pub fn add_items(&mut self, items: Vec<DropdownItem<A>>, ctx: &mut ViewContext<Self>) {
@@ -199,21 +169,6 @@ where
             self.selected_item = None;
             ctx.notify();
         }
-    }
-
-    /// Set items from rich menu items (MenuItem). This preserves the rich menu items for
-    /// filtering and passes the filtered items to the internal dropdown.
-    ///
-    /// Rich menu items already carry erased [`DropdownAction`]s. The dropdown dispatches selected
-    /// item actions through normal action propagation, so callers should ensure each action is
-    /// handled by an appropriate view in the containing view hierarchy.
-    pub fn set_rich_items(
-        &mut self,
-        items: Vec<MenuItem<DropdownAction>>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.items = items;
-        self.set_filtered_items(ctx);
     }
 
     #[expect(dead_code)]
@@ -377,12 +332,7 @@ where
             None => match self.selected_item.clone() {
                 Some(MenuItem::Item(fields)) => {
                     let label = fields.label();
-                    let text = if let Some(formatter) = &self.menu_header_text_override {
-                        formatter(label)
-                    } else {
-                        label.to_string()
-                    };
-                    (text, fields.override_font_family(), false)
+                    (label.to_string(), fields.override_font_family(), false)
                 }
                 _ => match &self.placeholder {
                     Some(placeholder) => (placeholder.clone(), None, true),
@@ -411,14 +361,14 @@ where
 
         let mut top_bar = appearance
             .ui_builder()
-            .button(self.button_variant, self.top_bar_mouse_state.clone())
+            .button(ButtonVariant::Outlined, self.top_bar_mouse_state.clone())
             .with_text_and_icon_label(
                 TextAndIcon::new(
                     TextAndIconAlignment::TextFirst,
                     selected_item_text,
                     icons::Icon::ChevronDown
                         .to_warpui_icon(appearance.theme().active_ui_text_color()),
-                    self.main_axis_size,
+                    MainAxisSize::Max,
                     MainAxisAlignment::SpaceBetween,
                     vec2f(15., 15.),
                 )

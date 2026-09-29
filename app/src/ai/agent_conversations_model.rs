@@ -10,7 +10,6 @@ pub use entry::{
 use fuzzy_match::FuzzyMatchResult;
 use itertools::Itertools;
 pub use query::query_conversation_entries;
-use serde::{Deserialize, Serialize};
 use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::WarpTheme;
@@ -21,104 +20,11 @@ use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
-use crate::ai::ambient_agents::AgentSource;
-use crate::ai::artifacts::Artifact;
-use crate::ai::blocklist::{
-    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate,
-};
+use crate::ai::blocklist::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 use crate::ai::conversation_navigation::ConversationNavigationData;
-use crate::auth::AuthStateProvider;
 use crate::ui_components::icons::Icon;
 use crate::workspace::{RestoreConversationLayout, WorkspaceAction};
 use crate::workspaces::user_workspaces::TeamScope;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum SessionStatus {
-    Available,
-    Expired,
-    Unavailable,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum StatusFilter {
-    #[default]
-    All,
-    Working,
-    Done,
-    Failed,
-}
-
-impl StatusFilter {
-    /// Returns `true` if a status transition from `prev_bucket` to `new_bucket` flips
-    /// whether an item is included by this filter. `All` matches every bucket so it
-    /// is never crossed; the other variants are crossed when exactly one of the buckets
-    /// equals this filter.
-    pub(crate) fn is_membership_crossed(
-        self,
-        prev_bucket: StatusFilter,
-        new_bucket: StatusFilter,
-    ) -> bool {
-        match self {
-            StatusFilter::All => false,
-            StatusFilter::Working | StatusFilter::Done | StatusFilter::Failed => {
-                (prev_bucket == self) != (new_bucket == self)
-            }
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum SourceFilter {
-    #[default]
-    All,
-    Specific(AgentSource),
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum CreatorFilter {
-    #[default]
-    All,
-    Specific {
-        name: String,
-        uid: String,
-    },
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum ArtifactFilter {
-    #[default]
-    All,
-    PullRequest,
-    Plan,
-    Screenshot,
-    File,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum CreatedOnFilter {
-    #[default]
-    All,
-    Last24Hours,
-    Past3Days,
-    LastWeek,
-}
-
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum OwnerFilter {
-    All,
-    #[default]
-    PersonalOnly,
-}
-
-#[derive(Default, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct AgentManagementFilters {
-    pub owners: OwnerFilter,
-    pub status: StatusFilter,
-    pub source: SourceFilter,
-    pub created_on: CreatedOnFilter,
-    pub creator: CreatorFilter,
-    pub artifact: ArtifactFilter,
-}
 
 /// Frontend-specific classification of a normalized conversation-list entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,24 +51,6 @@ pub struct AgentConversationQueryResult {
     pub title_match: Option<FuzzyMatchResult>,
 }
 
-impl AgentManagementFilters {
-    pub fn reset_all_but_owner(&mut self) {
-        self.status = StatusFilter::default();
-        self.source = SourceFilter::default();
-        self.created_on = CreatedOnFilter::default();
-        self.creator = CreatorFilter::default();
-        self.artifact = ArtifactFilter::default();
-    }
-
-    pub fn is_filtering(&self) -> bool {
-        self.status != StatusFilter::default()
-            || self.source != SourceFilter::default()
-            || self.created_on != CreatedOnFilter::default()
-            || self.creator != CreatorFilter::default() && self.owners != OwnerFilter::PersonalOnly
-            || self.artifact != ArtifactFilter::default()
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AgentRunDisplayStatus {
     ConversationInProgress,
@@ -184,16 +72,6 @@ impl AgentRunDisplayStatus {
             ConversationStatus::Blocked { blocked_action } => Self::ConversationBlocked {
                 blocked_action: blocked_action.clone(),
             },
-        }
-    }
-
-    pub fn status_filter(&self) -> StatusFilter {
-        match self {
-            AgentRunDisplayStatus::ConversationInProgress => StatusFilter::Working,
-            AgentRunDisplayStatus::ConversationSucceeded => StatusFilter::Done,
-            AgentRunDisplayStatus::ConversationError
-            | AgentRunDisplayStatus::ConversationBlocked { .. }
-            | AgentRunDisplayStatus::ConversationCancelled => StatusFilter::Failed,
         }
     }
 
@@ -253,57 +131,15 @@ pub struct ConversationMetadata {
     pub nav_data: ConversationNavigationData,
 }
 
-pub(crate) fn artifacts_match_filter(
-    artifacts: &[Artifact],
-    artifact_filter: &ArtifactFilter,
-) -> bool {
-    match artifact_filter {
-        ArtifactFilter::All => true,
-        ArtifactFilter::PullRequest => artifacts
-            .iter()
-            .any(|artifact| matches!(artifact, Artifact::PullRequest { .. })),
-        ArtifactFilter::Plan => artifacts
-            .iter()
-            .any(|artifact| matches!(artifact, Artifact::Plan { .. })),
-        ArtifactFilter::Screenshot => artifacts
-            .iter()
-            .any(|artifact| matches!(artifact, Artifact::Screenshot { .. })),
-        ArtifactFilter::File => artifacts
-            .iter()
-            .any(|artifact| matches!(artifact, Artifact::File { .. })),
-    }
-}
-
-/// This model serves as a unified interface for reading local agent conversations. It backs
-/// both the agent management view and the conversation list view.
+/// This model serves as a unified interface for reading local agent conversations.
 pub struct AgentConversationsModel {
     /// A map of conversation IDs to local conversations.
     conversations: HashMap<AIConversationId, ConversationMetadata>,
-    is_loading: bool,
 }
 
 pub enum AgentConversationsModelEvent {
-    /// Conversation data was loaded or refreshed.
-    ConversationsLoaded,
-    /// Conversation status data was updated
-    ConversationUpdated { kind: ConversationUpdateKind },
-    /// Conversation artifacts were updated (plans, PRs, etc.)
-    ConversationArtifactsUpdated { conversation_id: AIConversationId },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConversationUpdateKind {
-    /// The conversation was re-loaded into a terminal view.
-    Restored,
-    /// The conversation's status was set.
-    StatusSet {
-        prev_filter: StatusFilter,
-        new_filter: StatusFilter,
-    },
-    /// Conversation metadata or capabilities changed.
-    MetadataChanged,
-    /// Conversation title changed.
-    TitleChanged,
+    /// Conversation status, title or metadata was updated.
+    ConversationUpdated,
 }
 
 impl Entity for AgentConversationsModel {
@@ -318,7 +154,6 @@ impl AgentConversationsModel {
         if !FeatureFlag::AgentManagementView.is_enabled() {
             return Self {
                 conversations: HashMap::new(),
-                is_loading: false,
             };
         }
 
@@ -334,20 +169,13 @@ impl AgentConversationsModel {
 
         let mut model = Self {
             conversations: HashMap::new(),
-            is_loading: true,
         };
 
         // Only sync local conversations if we're not in CLI mode.
         if AppExecutionMode::as_ref(ctx).can_fetch_agent_runs_for_management() {
             model.sync_conversations(ctx);
-        } else {
-            model.is_loading = false;
         }
         model
-    }
-
-    pub fn is_loading(&self) -> bool {
-        self.is_loading
     }
 
     /// Sync all conversations to the AgentConversationsModel.
@@ -367,38 +195,28 @@ impl AgentConversationsModel {
             let metadata = ConversationMetadata { nav_data };
             self.conversations.insert(conversation_id, metadata);
         }
-        self.is_loading = false;
-
-        ctx.emit(AgentConversationsModelEvent::ConversationsLoaded);
     }
 
-    /// Returns normalized, owned entries for agent management/navigation surfaces.
+    /// Returns normalized, owned entries for navigation surfaces, most recently updated first.
     pub fn get_entries<S: TeamScope + ?Sized>(
         &self,
-        filters: &AgentManagementFilters,
         _scope: &S,
         app: &AppContext,
     ) -> Vec<AgentConversationEntry> {
-        self.unfiltered_entries(app)
+        self.entries(app)
             .into_iter()
-            .filter(|entry| entry.matches_filters(filters))
             .sorted_by(|a, b| b.display.last_updated.cmp(&a.display.last_updated))
             .collect()
     }
 
-    pub fn has_items<S: TeamScope + ?Sized>(&self, _scope: &S, app: &AppContext) -> bool {
-        !self.unfiltered_entries(app).is_empty()
-    }
-
-    /// Returns normalized entries before user-selected filters are applied.
-    fn unfiltered_entries(&self, app: &AppContext) -> Vec<AgentConversationEntry> {
+    fn entries(&self, app: &AppContext) -> Vec<AgentConversationEntry> {
         let history_model = BlocklistAIHistoryModel::as_ref(app);
         let mut entries = Vec::new();
         let mut emitted_conversation_ids = HashSet::new();
 
         for metadata in self.conversations.values() {
             let conversation_id = metadata.nav_data.id;
-            let entry = entry::entry_for_conversation(metadata, history_model, app);
+            let entry = entry::entry_for_conversation(metadata, history_model);
             emitted_conversation_ids.insert(conversation_id);
             entries.push(entry);
         }
@@ -413,7 +231,6 @@ impl AgentConversationsModel {
                 metadata,
                 nav_data,
                 history_model,
-                app,
             ));
         }
 
@@ -429,7 +246,7 @@ impl AgentConversationsModel {
         let AgentConversationEntryId::Conversation(conversation_id) = id;
         self.conversations
             .get(conversation_id)
-            .map(|metadata| entry::entry_for_conversation(metadata, history_model, app))
+            .map(|metadata| entry::entry_for_conversation(metadata, history_model))
             .or_else(|| {
                 history_model
                     .get_conversation_metadata(conversation_id)
@@ -438,7 +255,7 @@ impl AgentConversationsModel {
                             ConversationNavigationData::from_historical_conversation_metadata(
                                 metadata,
                             );
-                        entry::entry_for_historical_metadata(metadata, nav_data, history_model, app)
+                        entry::entry_for_historical_metadata(metadata, nav_data, history_model)
                     })
             })
     }
@@ -461,22 +278,6 @@ impl AgentConversationsModel {
                         conversation_id: server_token,
                     })
                 }),
-        }
-    }
-
-    pub fn resolve_copy_link(
-        subject: AgentConversationNavigationSubject,
-        app: &AppContext,
-    ) -> Option<String> {
-        let model = Self::as_ref(app);
-        match subject {
-            AgentConversationNavigationSubject::Entry(id) => model
-                .get_entry_by_id(&id, app)
-                .and_then(|entry| model.resolve_entry_copy_link(&entry)),
-            AgentConversationNavigationSubject::ServerToken(server_token) => model
-                .entry_for_server_token(&server_token, app)
-                .and_then(|entry| model.resolve_entry_copy_link(&entry))
-                .or_else(|| Some(server_token.conversation_link())),
         }
     }
 
@@ -541,14 +342,6 @@ impl AgentConversationsModel {
             })
     }
 
-    fn resolve_entry_copy_link(&self, entry: &AgentConversationEntry) -> Option<String> {
-        entry
-            .identity
-            .server_conversation_token
-            .as_ref()
-            .map(ServerConversationToken::conversation_link)
-    }
-
     fn entry_for_server_token(
         &self,
         server_token: &ServerConversationToken,
@@ -585,30 +378,12 @@ impl AgentConversationsModel {
                 self.sync_conversations(ctx);
             }
 
-            // Status changes - just trigger re-render since status is looked up at render time
-            BlocklistAIHistoryEvent::UpdatedConversationStatus {
-                update, new_status, ..
-            } => {
-                let kind = match update {
-                    ConversationStatusUpdate::Restored => ConversationUpdateKind::Restored,
-                    ConversationStatusUpdate::Changed { prev_status } => {
-                        ConversationUpdateKind::StatusSet {
-                            prev_filter: AgentRunDisplayStatus::from_conversation_status(
-                                prev_status,
-                            )
-                            .status_filter(),
-                            new_filter: AgentRunDisplayStatus::from_conversation_status(new_status)
-                                .status_filter(),
-                        }
-                    }
-                };
-                ctx.emit(AgentConversationsModelEvent::ConversationUpdated { kind });
-            }
-
-            BlocklistAIHistoryEvent::UpdatedConversationTitle { .. } => {
-                ctx.emit(AgentConversationsModelEvent::ConversationUpdated {
-                    kind: ConversationUpdateKind::TitleChanged,
-                });
+            // Status and title changes: the terminal view re-renders since these are looked up at
+            // render time.
+            BlocklistAIHistoryEvent::UpdatedConversationStatus { .. }
+            | BlocklistAIHistoryEvent::UpdatedConversationTitle { .. }
+            | BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. } => {
+                ctx.emit(AgentConversationsModelEvent::ConversationUpdated);
             }
 
             // Task/exchange-level changes that don't affect conversation navigation.
@@ -623,44 +398,9 @@ impl AgentConversationsModel {
             | BlocklistAIHistoryEvent::UpdatedStreamingExchange { .. }
             | BlocklistAIHistoryEvent::ConversationTransferredBetweenTerminalSurfaces { .. }
             | BlocklistAIHistoryEvent::ConversationUsageMetadataUpdated { .. }
+            | BlocklistAIHistoryEvent::UpdatedConversationArtifacts { .. }
             | BlocklistAIHistoryEvent::UpdatedConversationMetadata { .. } => {}
-
-            BlocklistAIHistoryEvent::UpdatedConversationArtifacts {
-                conversation_id, ..
-            } => {
-                ctx.emit(AgentConversationsModelEvent::ConversationArtifactsUpdated {
-                    conversation_id: *conversation_id,
-                });
-            }
-
-            BlocklistAIHistoryEvent::ConversationServerTokenAssigned { .. } => {
-                ctx.emit(AgentConversationsModelEvent::ConversationUpdated {
-                    kind: ConversationUpdateKind::MetadataChanged,
-                });
-            }
         }
-    }
-
-    /// Returns all (name, uid) pairs for creators of conversations.
-    ///
-    /// We use this function to populate the available creator filter list.
-    pub fn get_all_creators<S: TeamScope + ?Sized>(
-        &self,
-        _scope: &S,
-        app: &AppContext,
-    ) -> Vec<(String, String)> {
-        let mut creators: Vec<(String, String)> = Vec::new();
-
-        // Include the current user since they may have local conversations
-        let auth_state = AuthStateProvider::as_ref(app).get();
-        if let (Some(name), Some(uid)) = (auth_state.display_name(), auth_state.user_id()) {
-            creators.push((name, uid.to_string()));
-        }
-
-        creators.sort_by(|a, b| a.0.cmp(&b.0));
-        creators.dedup_by(|a, b| a.0 == b.0);
-
-        creators
     }
 }
 

@@ -1,26 +1,22 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::{DateTime, Utc};
 use warpui::{
     AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle,
     WindowId,
 };
 
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::ai::blocklist::agent_view::{AgentViewController, AgentViewControllerEvent};
-use crate::terminal::model::session::active_session::ActiveSession;
 
 /// Contains the handles needed to track an active agent view.
 struct ActiveAgentViewHandles {
     controller: WeakModelHandle<AgentViewController>,
-    active_session: WeakModelHandle<ActiveSession>,
 }
 
 #[derive(Clone)]
 pub enum ActiveAgentViewsEvent {
     /// A conversation was closed (exited from the agent view or its pane was removed).
-    ConversationClosed { conversation_id: AIConversationId },
+    ConversationClosed,
     /// A conversation was entered within a terminal view.
     TerminalViewFocused,
     /// A window was closed and its focused state was removed.
@@ -44,8 +40,6 @@ pub struct ActiveAgentViewsModel {
     last_focused_terminal_state: Option<FocusedTerminalState>,
     /// Map from terminal_view_id to agent view handles (for interactive conversations).
     agent_view_handles: HashMap<EntityId, ActiveAgentViewHandles>,
-    /// Tracks when each conversation was last opened/focused for sorting purposes.
-    last_opened_times: HashMap<AIConversationId, DateTime<Utc>>,
 }
 
 impl Entity for ActiveAgentViewsModel {
@@ -60,7 +54,6 @@ impl ActiveAgentViewsModel {
             focused_terminal_states: HashMap::new(),
             last_focused_terminal_state: None,
             agent_view_handles: HashMap::new(),
-            last_opened_times: HashMap::new(),
         }
     }
 
@@ -87,7 +80,6 @@ impl ActiveAgentViewsModel {
     pub fn register_agent_view_controller(
         &mut self,
         controller: &ModelHandle<AgentViewController>,
-        active_session: &ModelHandle<ActiveSession>,
         terminal_view_id: EntityId,
         ctx: &mut ModelContext<Self>,
     ) {
@@ -105,7 +97,6 @@ impl ActiveAgentViewsModel {
             terminal_view_id,
             ActiveAgentViewHandles {
                 controller: controller.downgrade(),
-                active_session: active_session.downgrade(),
             },
         );
 
@@ -113,18 +104,14 @@ impl ActiveAgentViewsModel {
             AgentViewControllerEvent::EnteredAgentView {
                 conversation_id, ..
             } => {
-                model.last_opened_times.insert(*conversation_id, Utc::now());
-
                 // Update the focused conversation in whichever window owns this terminal view.
                 model.update_focused_conversation_for_terminal(
                     terminal_view_id,
                     Some(*conversation_id),
                 );
-                // Emit so subscribers can move this conversation to the Active section.
                 ctx.emit(ActiveAgentViewsEvent::TerminalViewFocused);
             }
             AgentViewControllerEvent::ExitedAgentView {
-                conversation_id,
                 is_exit_before_new_entrance,
                 ..
             } => {
@@ -133,14 +120,9 @@ impl ActiveAgentViewsModel {
                     return;
                 }
 
-                model.last_opened_times.remove(conversation_id);
-
                 // Clear the focused conversation in whichever window owns this terminal view.
                 model.update_focused_conversation_for_terminal(terminal_view_id, None);
-                // Emit so subscribers can move this conversation to the Past section.
-                ctx.emit(ActiveAgentViewsEvent::ConversationClosed {
-                    conversation_id: *conversation_id,
-                });
+                ctx.emit(ActiveAgentViewsEvent::ConversationClosed);
             }
             _ => {}
         });
@@ -171,8 +153,8 @@ impl ActiveAgentViewsModel {
                 self.last_focused_terminal_state = None;
             }
 
-            if let Some(conversation_id) = closed_conversation_id {
-                ctx.emit(ActiveAgentViewsEvent::ConversationClosed { conversation_id });
+            if closed_conversation_id.is_some() {
+                ctx.emit(ActiveAgentViewsEvent::ConversationClosed);
             }
         }
     }
@@ -220,31 +202,6 @@ impl ActiveAgentViewsModel {
             .and_then(|state| state.active_conversation_id)
     }
 
-    /// Returns the focused conversation ID if it's a new/empty conversation view.
-    /// Only returns Some if the focused agent view was just created to start a new
-    /// conversation (i.e. has no exchanges yet).
-    pub fn maybe_get_focused_new_conversation(
-        &self,
-        window_id: WindowId,
-        ctx: &AppContext,
-    ) -> Option<AIConversationId> {
-        let state = self.focused_terminal_states.get(&window_id)?;
-        let terminal_id = state.focused_terminal_id;
-
-        let is_new = self
-            .agent_view_handles
-            .get(&terminal_id)
-            .and_then(|handles| handles.controller.upgrade(ctx))
-            .map(|c| c.as_ref(ctx).agent_view_state().is_new())
-            .unwrap_or(false);
-
-        if is_new {
-            state.active_conversation_id
-        } else {
-            None
-        }
-    }
-
     /// Remove the focused state for a window
     /// (called when said window is closed and cleaned up from the undo stack).
     pub fn remove_focused_state_for_window(
@@ -288,56 +245,6 @@ impl ActiveAgentViewsModel {
             .is_some()
     }
 
-    /// Returns the active session for a conversation if it's currently active
-    /// (i.e., has an expanded agent view).
-    pub fn get_active_session_for_conversation(
-        &self,
-        conversation_id: AIConversationId,
-        ctx: &AppContext,
-    ) -> Option<ModelHandle<ActiveSession>> {
-        for handles in self.agent_view_handles.values() {
-            let Some(controller) = handles.controller.upgrade(ctx) else {
-                continue;
-            };
-            let is_active = controller
-                .as_ref(ctx)
-                .agent_view_state()
-                .active_conversation_id()
-                .is_some_and(|id| id == conversation_id);
-            if is_active {
-                return handles.active_session.upgrade(ctx);
-            }
-        }
-        None
-    }
-
-    /// Returns the controller for a conversation if it's currently active
-    /// (i.e., has an expanded agent view).
-    pub fn get_controller_for_conversation(
-        &self,
-        conversation_id: AIConversationId,
-        ctx: &AppContext,
-    ) -> Option<ModelHandle<AgentViewController>> {
-        for handles in self.agent_view_handles.values() {
-            if let Some(controller) = handles.controller.upgrade(ctx) {
-                let is_active = controller
-                    .as_ref(ctx)
-                    .agent_view_state()
-                    .active_conversation_id()
-                    .is_some_and(|id| id == conversation_id);
-                if is_active {
-                    return Some(controller);
-                }
-            }
-        }
-        None
-    }
-
-    /// Returns the last opened time for a conversation, used for sorting active conversations.
-    pub fn get_last_opened_time(&self, id: &AIConversationId) -> Option<DateTime<Utc>> {
-        self.last_opened_times.get(id).copied()
-    }
-
     /// Returns the terminal view ID that has an active conversation with the given ID.
     pub fn get_terminal_view_id_for_conversation(
         &self,
@@ -359,31 +266,6 @@ impl ActiveAgentViewsModel {
         }
 
         None
-    }
-
-    /// Get all currently active conversation IDs.
-    /// A conversation is active if it is open and a query has been sent since it was last opened.
-    pub fn get_all_active_conversation_ids(&self, ctx: &AppContext) -> HashSet<AIConversationId> {
-        let history_model = BlocklistAIHistoryModel::as_ref(ctx);
-        let mut ids = HashSet::new();
-
-        for handles in self.agent_view_handles.values() {
-            if let Some(controller) = handles.controller.upgrade(ctx) {
-                let state = controller.as_ref(ctx).agent_view_state();
-                if let Some(conversation_id) = state.active_conversation_id() {
-                    let Some(conversation) = history_model.conversation(&conversation_id) else {
-                        continue;
-                    };
-                    if !conversation.is_entirely_passive()
-                        && state.was_conversation_modified_since_opening(history_model)
-                    {
-                        ids.insert(conversation_id);
-                    }
-                }
-            }
-        }
-
-        ids
     }
 
     /// Get all currently open conversation IDs.

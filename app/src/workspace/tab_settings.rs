@@ -256,8 +256,8 @@ pub enum HeaderToolbarChipSelection {
     #[default]
     Default,
     Custom {
-        left: Vec<super::header_toolbar_item::HeaderToolbarItemKind>,
-        right: Vec<super::header_toolbar_item::HeaderToolbarItemKind>,
+        left: settings_value::LenientVec<super::header_toolbar_item::HeaderToolbarItemKind>,
+        right: settings_value::LenientVec<super::header_toolbar_item::HeaderToolbarItemKind>,
     },
 }
 
@@ -266,7 +266,7 @@ impl HeaderToolbarChipSelection {
         use super::header_toolbar_item::HeaderToolbarItemKind;
         match self {
             Self::Default => HeaderToolbarItemKind::default_left(),
-            Self::Custom { left, .. } => left.clone(),
+            Self::Custom { left, .. } => left.to_vec(),
         }
     }
 
@@ -274,7 +274,7 @@ impl HeaderToolbarChipSelection {
         use super::header_toolbar_item::HeaderToolbarItemKind;
         match self {
             Self::Default => HeaderToolbarItemKind::default_right(),
-            Self::Custom { right, .. } => right.clone(),
+            Self::Custom { right, .. } => right.to_vec(),
         }
     }
 

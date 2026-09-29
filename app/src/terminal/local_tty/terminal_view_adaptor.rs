@@ -131,15 +131,9 @@ pub(crate) fn create_terminal_view_surface(
             }
 
             let agent_view_controller = view.as_ref(ctx).agent_view_controller().clone();
-            let active_session = view.as_ref(ctx).active_session().clone();
             let terminal_view_id = view.id();
             ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
-                model.register_agent_view_controller(
-                    &agent_view_controller,
-                    &active_session,
-                    terminal_view_id,
-                    ctx,
-                );
+                model.register_agent_view_controller(&agent_view_controller, terminal_view_id, ctx);
             });
         },
     }

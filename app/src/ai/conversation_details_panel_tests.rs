@@ -5,7 +5,7 @@ use persistence::model::{AgentConversationData, ChargedUsageTotals, Conversation
 use warp_multi_agent_api as api;
 use warpui::{App, EntityId, SingletonEntity};
 
-use super::{ConversationDetailsData, PanelMode};
+use super::ConversationDetailsData;
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{
     AIAgentHarness, AIConversation, AIConversationId, ServerAIConversationMetadata,
@@ -58,7 +58,6 @@ fn test_from_conversation_prefers_server_creator_profile() {
                 creator.photo_url.as_deref(),
                 Some("https://example.com/zl.png")
             );
-            assert_eq!(creator.uid.as_deref(), Some("creator-profile-uid"));
         });
     });
 }
@@ -208,27 +207,11 @@ fn test_from_conversation_populates_local_conversation_fields() {
                 .expect("conversation should be present");
             let data = ConversationDetailsData::from_conversation(conversation, ctx);
 
-            // Mode should be Conversation with the working directory and no server-side
-            // conversation id (since this conversation was restored without a server token).
-            match &data.mode {
-                PanelMode::Conversation {
-                    directory: panel_directory,
-                    server_conversation_id,
-                    ai_conversation_id,
-                    status,
-                } => {
-                    assert_eq!(panel_directory.as_deref(), Some(directory));
-                    assert!(server_conversation_id.is_none());
-                    // `from_conversation` does not have access to the in-memory
-                    // AIConversationId; that field is populated only by the
-                    // management view path (`from_conversation_metadata`).
-                    assert!(ai_conversation_id.is_none());
-                    assert!(status.is_some());
-                }
-                PanelMode::Task { .. } => {
-                    panic!("expected Conversation mode for a local conversation")
-                }
-            }
+            // The working directory comes from the first exchange, and there is no server-side
+            // conversation id since this conversation was restored without a server token.
+            assert_eq!(data.directory.as_deref(), Some(directory));
+            assert!(data.server_conversation_id.is_none());
+            assert!(data.status.is_some());
 
             assert_eq!(data.title, "test query");
             assert_eq!(data.source_prompt.as_deref(), Some("test query"));
@@ -253,35 +236,6 @@ fn test_from_conversation_uses_charged_usage_dollar_total() {
             let data = ConversationDetailsData::from_conversation(&conversation, ctx);
 
             assert_eq!(data.cost_in_cents, Some(36.0));
-        });
-    });
-}
-
-// A local conversation has no runner to report, so the panel must not carry
-// one into the platform row.
-#[test]
-fn test_conversation_mode_carries_no_runner() {
-    App::test((), |mut app| async move {
-        let conversation_id = AIConversationId::new();
-        let conversation = create_restored_conversation(
-            conversation_id,
-            "root-task",
-            "/tmp/local-conversation",
-            AgentConversationData {
-                server_conversation_token: None,
-                conversation_usage_metadata: None,
-                reverted_action_ids: None,
-                forked_from_server_conversation_token: None,
-                artifacts_json: None,
-                root_task_is_optimistic: None,
-                run_id: None,
-                autoexecute_override: None,
-            },
-        );
-
-        app.update(|ctx| {
-            let data = ConversationDetailsData::from_conversation(&conversation, ctx);
-            assert!(matches!(data.mode, PanelMode::Conversation { .. }));
         });
     });
 }

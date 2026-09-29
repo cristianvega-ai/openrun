@@ -3,14 +3,9 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use iso8601_duration::Duration as Iso8601Duration;
 use serde::{Deserialize, Serialize};
-use warp_errors::report_error;
-use warpui::{SingletonEntity, View, ViewContext};
 
 use super::AmbientAgentTaskId;
 use crate::ai::artifacts::{Artifact, deserialize_artifacts};
-use crate::server::server_api::ServerApiProvider;
-use crate::view_components::DismissibleToast;
-use crate::workspace::ToastStack;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentSource {
@@ -23,7 +18,6 @@ pub enum AgentSource {
     GitHubAction,
     GitHubWebhook,
     CloudMode,
-    Orchestration,
     Jira,
     GitLabWebhook,
     RunScorer,
@@ -45,7 +39,6 @@ impl AgentSource {
             AgentSource::GitHubAction => "GITHUB_ACTION",
             AgentSource::GitHubWebhook => "GITHUB_WEBHOOK",
             AgentSource::CloudMode => "CLOUD_MODE",
-            AgentSource::Orchestration => "ORCHESTRATION",
             AgentSource::Jira => "JIRA",
             AgentSource::GitLabWebhook => "GITLAB_WEBHOOK",
             AgentSource::RunScorer => "RUN_SCORER",
@@ -53,47 +46,6 @@ impl AgentSource {
             // name SELF_IMPROVEMENT (mirrors AgentWebhook/"API" above).
             AgentSource::Autofix => "SELF_IMPROVEMENT",
             AgentSource::BenchmarkTrial => "BENCHMARK_TRIAL",
-        }
-    }
-
-    pub fn display_name(&self) -> &str {
-        match self {
-            AgentSource::Linear => "Linear",
-            AgentSource::AgentWebhook => "API",
-            AgentSource::Slack => "Slack",
-            AgentSource::Cli => "CLI",
-            AgentSource::Interactive | AgentSource::CloudMode => "Warp App",
-            AgentSource::WebApp => "Oz Web",
-            AgentSource::GitHubAction => "GitHub Action",
-            AgentSource::GitHubWebhook => "GitHub",
-            AgentSource::Orchestration => "Orchestration",
-            AgentSource::Jira => "Jira",
-            AgentSource::GitLabWebhook => "GitLab",
-            AgentSource::RunScorer => "Scorer",
-            AgentSource::Autofix => "Self-improvement",
-            AgentSource::BenchmarkTrial => "Benchmark",
-        }
-    }
-
-    /// Returns true if this source represents a user-initiated conversation
-    /// (as opposed to automated/programmatic sources like CLI or scheduled runs).
-    pub fn is_user_initiated(&self) -> bool {
-        match self {
-            AgentSource::Linear
-            | AgentSource::Slack
-            | AgentSource::Interactive
-            | AgentSource::WebApp
-            | AgentSource::CloudMode
-            | AgentSource::Jira => true,
-            AgentSource::Cli
-            | AgentSource::AgentWebhook
-            | AgentSource::GitHubAction
-            | AgentSource::GitHubWebhook
-            | AgentSource::Orchestration
-            | AgentSource::GitLabWebhook
-            | AgentSource::RunScorer
-            | AgentSource::Autofix
-            | AgentSource::BenchmarkTrial => false,
         }
     }
 }
@@ -133,7 +85,6 @@ where
             "GITHUB_ACTION" => Some(AgentSource::GitHubAction),
             "GITHUB_WEBHOOK" => Some(AgentSource::GitHubWebhook),
             "CLOUD_MODE" => Some(AgentSource::CloudMode),
-            "ORCHESTRATION" => Some(AgentSource::Orchestration),
             "JIRA" => Some(AgentSource::Jira),
             "GITLAB_WEBHOOK" => Some(AgentSource::GitLabWebhook),
             "RUN_SCORER" => Some(AgentSource::RunScorer),
@@ -189,20 +140,6 @@ pub struct AmbientAgentTask {
 
     #[serde(default, deserialize_with = "deserialize_artifacts")]
     pub artifacts: Vec<Artifact>,
-
-    /// The last event sequence number recorded for this run by the server.
-    /// Used by orchestration event delivery to resume from the correct
-    /// cursor on restart. Populated by `GET /agent/runs/{run_id}` when the
-    /// server supports it; `None` on older servers.
-    #[serde(default)]
-    pub last_event_sequence: Option<i64>,
-
-    /// The server-recorded `run_id`s of direct children of this run. Used
-    /// by orchestration event-delivery restore to discover children whose
-    /// records may not exist locally (e.g. remote-worker children in the
-    /// driver case). Empty on older servers.
-    #[serde(default)]
-    pub children: Vec<String>,
 
     /// Server-computed: whether a debug agent may be bootstrapped into this run's retained
     /// environment-setup-failure session right now (REMOTE-2661). `#[serde(default)]` so an
@@ -375,28 +312,6 @@ pub struct RequestUsage {
     pub inference_cost_usd: Option<f64>,
     pub compute_cost_usd: Option<f64>,
     pub platform_cost_usd: Option<f64>,
-}
-
-/// Cancel an ambient agent task and show a toast with the result.
-pub fn cancel_task_with_toast<V: View>(task_id: AmbientAgentTaskId, ctx: &mut ViewContext<V>) {
-    let ai_client = ServerApiProvider::handle(ctx).as_ref(ctx).get_ai_client();
-    let window_id = ctx.window_id();
-    ctx.spawn(
-        async move { ai_client.cancel_ambient_agent_task(&task_id).await },
-        move |_view, result, ctx| {
-            let message = match result {
-                Ok(()) => "Task cancelled".to_string(),
-                Err(e) => {
-                    report_error!(&e);
-                    format!("Failed to cancel task: {e}")
-                }
-            };
-            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                let toast = DismissibleToast::default(message);
-                toast_stack.add_ephemeral_toast(toast, window_id, ctx);
-            });
-        },
-    );
 }
 
 #[cfg(test)]

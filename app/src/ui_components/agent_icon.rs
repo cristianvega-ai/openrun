@@ -1,18 +1,12 @@
-//! Source-facing helpers that centralize the derivation of the agent-icon shape
-//! ([`IconWithStatusVariant`]) from the underlying state models. The invariant the
-//! helpers enforce: any single logical agent run renders as the same brand color, glyph,
-//! and ambient-vs-local treatment regardless of which surface is rendering it (vertical
-//! tabs, pane header, conversation list, notifications mailbox).
+//! Source-facing helper that centralizes the derivation of the agent-icon shape
+//! ([`IconWithStatusVariant`]) from the CLI-agent session model. The invariant it
+//! enforces: a CLI agent session renders as the same brand color and glyph regardless of
+//! which surface is rendering it (vertical tabs, pane header, notifications mailbox).
 //!
-//! Each helper is a thin adapter over one data source. Surfaces call the helper for
-//! whichever source they hold and feed the resulting variant into
-//! [`render_icon_with_status`]. The pure inner functions in this module are exercised
-//! directly by the cross-surface consistency tests in `agent_icon_tests.rs`.
-use ai::harness::Harness;
+//! The pure inner function in this module is exercised directly by the tests in
+//! `agent_icon_tests.rs`.
 use warpui::{AppContext, SingletonEntity};
 
-use crate::ai::agent_conversations_model::AgentConversationEntry;
-use crate::ai::harness_display;
 use crate::terminal::CLIAgent;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::view::TerminalView;
@@ -20,57 +14,23 @@ use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::icon_with_status::IconWithStatusVariant;
 
 /// Returns the agent-icon variant for a live [`TerminalView`], or `None` when the terminal is
-/// not an agent surface (plain terminal / shell / empty conversation).
-///
-/// Resolution order:
-/// 1. A [`CLIAgentSessionsModel`] session with a known agent wins. Plugin-backed sessions
-///    surface rich status; command-detected sessions don't.
-/// 2. A selected local conversation falls through to the conversation waterfall.
-/// 3. Everything else returns `None` so the caller renders a plain-terminal indicator.
+/// not running a CLI agent session with a known agent (plain terminal / shell), in which case
+/// the caller renders a plain-terminal indicator. Plugin-backed sessions surface rich status;
+/// command-detected sessions don't.
 pub(crate) fn terminal_view_agent_icon_variant(
     terminal_view: &TerminalView,
     app: &AppContext,
 ) -> Option<IconWithStatusVariant> {
-    let cli_agent_session = CLIAgentSessionsModel::as_ref(app).session(terminal_view.id());
-
-    let inputs = TerminalIconInputs {
-        is_ambient: false,
-        cli_session: cli_agent_session.map(|session| CLISessionInputs {
-            agent: session.agent,
-            has_listener: session.listener.is_some(),
-            status: session.status.to_agent_status(),
-            supports_rich_status: session.supports_rich_status(),
-        }),
-        selected_conversation_status: terminal_view
-            .selected_conversation_status_for_display(app)
-            .as_ref()
-            .map(AgentStatus::from),
-        has_selected_conversation: terminal_view
-            .selected_conversation_display_title(app)
-            .is_some(),
-    };
-    agent_icon_variant_from_terminal_inputs(&inputs)
+    let session = CLIAgentSessionsModel::as_ref(app).session(terminal_view.id())?;
+    cli_session_icon_variant(&CLISessionInputs {
+        agent: session.agent,
+        has_listener: session.listener.is_some(),
+        status: session.status.to_agent_status(),
+        supports_rich_status: session.supports_rich_status(),
+    })
 }
 
-pub(crate) fn agent_conversation_entry_icon_variant(
-    entry: &AgentConversationEntry,
-) -> IconWithStatusVariant {
-    let status = AgentStatus::from(&entry.display.status.to_conversation_status());
-    agent_icon_variant_for_run(Harness::Oz, status, false)
-}
-
-/// Primitive inputs to the terminal-view waterfall, gathered once from the live
-/// [`TerminalView`] / [`AppContext`].
-struct TerminalIconInputs {
-    is_ambient: bool,
-    cli_session: Option<CLISessionInputs>,
-    /// The conversation status that the terminal view would surface in its status-icon slot.
-    selected_conversation_status: Option<AgentStatus>,
-    /// Whether the terminal view currently has a selected conversation (ambient or local).
-    has_selected_conversation: bool,
-}
-
-/// CLI-session-derived inputs for the terminal waterfall.
+/// CLI-session-derived inputs for the icon derivation.
 struct CLISessionInputs {
     agent: CLIAgent,
     /// Whether the session is backed by a plugin listener. Plugin-backed sessions report
@@ -82,60 +42,18 @@ struct CLISessionInputs {
     supports_rich_status: bool,
 }
 
-/// Pure waterfall from primitive inputs to an [`IconWithStatusVariant`]. Mirrors the
-/// resolution order documented on [`terminal_view_agent_icon_variant`].
-fn agent_icon_variant_from_terminal_inputs(
-    inputs: &TerminalIconInputs,
-) -> Option<IconWithStatusVariant> {
-    // 1. CLI session with a known (non-Unknown) agent wins. Status is only meaningful when
-    //    the session is plugin-backed and the handler exposes rich status.
-    if let Some(session) = inputs
-        .cli_session
-        .as_ref()
-        .filter(|s| !matches!(s.agent, CLIAgent::Unknown))
-    {
-        let status =
-            (session.has_listener && session.supports_rich_status).then_some(session.status);
-        return Some(IconWithStatusVariant::CLIAgent {
-            agent: session.agent,
-            status,
-            is_ambient: inputs.is_ambient,
-        });
+/// Pure derivation from primitive inputs to an [`IconWithStatusVariant`]. A session with a
+/// known (non-Unknown) agent gets its brand icon; status is only meaningful when the session
+/// is plugin-backed and the handler exposes rich status.
+fn cli_session_icon_variant(session: &CLISessionInputs) -> Option<IconWithStatusVariant> {
+    if matches!(session.agent, CLIAgent::Unknown) {
+        return None;
     }
-
-    // 2. Selected conversation OR ambient (Oz) terminal: Oz agent variant.
-    if inputs.has_selected_conversation || inputs.is_ambient {
-        return Some(IconWithStatusVariant::OzAgent {
-            status: inputs.selected_conversation_status,
-            is_ambient: inputs.is_ambient,
-        });
-    }
-
-    None
-}
-
-/// Pure run-card logic: maps a [`Harness`], status, and ambient flag into an
-/// [`IconWithStatusVariant`]. Falls back to the Oz variant for [`Harness::Oz`] and
-/// [`Harness::Unknown`], the latter so a future-server harness this client doesn't
-/// recognize doesn't render an unbranded gray circle.
-pub(crate) fn agent_icon_variant_for_run(
-    harness: Harness,
-    status: AgentStatus,
-    is_ambient: bool,
-) -> IconWithStatusVariant {
-    let cli_agent =
-        harness_display::cli_agent(harness).filter(|agent| !matches!(agent, CLIAgent::Unknown));
-    match cli_agent {
-        Some(agent) => IconWithStatusVariant::CLIAgent {
-            agent,
-            status: Some(status),
-            is_ambient,
-        },
-        None => IconWithStatusVariant::OzAgent {
-            status: Some(status),
-            is_ambient,
-        },
-    }
+    let status = (session.has_listener && session.supports_rich_status).then_some(session.status);
+    Some(IconWithStatusVariant::CLIAgent {
+        agent: session.agent,
+        status,
+    })
 }
 
 #[cfg(test)]

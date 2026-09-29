@@ -3,7 +3,6 @@
 pub(crate) mod active_agent_views_model;
 pub(crate) mod agent;
 pub(crate) mod agent_conversations_model;
-pub(crate) mod agent_management;
 pub mod ambient_agents;
 pub(crate) mod artifact_download;
 pub mod artifacts;
@@ -37,5 +36,4 @@ pub fn init(app: &mut AppContext) {
     blocklist::keyboard_navigable_buttons::init(app);
     blocklist::block::number_shortcut_buttons::init(app);
     conversation_details_panel::init(app);
-    agent_management::init(app);
 }

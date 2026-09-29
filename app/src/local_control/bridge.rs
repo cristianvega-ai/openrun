@@ -110,12 +110,10 @@ impl LocalControlBridge {
             | ActionKind::SurfaceCodeReviewToggle
             | ActionKind::SurfaceProjectExplorerOpen
             | ActionKind::SurfaceGlobalSearchOpen
-            | ActionKind::SurfaceConversationListOpen
             | ActionKind::SurfaceLeftPanelToggle
             | ActionKind::SurfaceRightPanelToggle
             | ActionKind::SurfaceVerticalTabsOpen
             | ActionKind::SurfaceVerticalTabsToggle
-            | ActionKind::SurfaceAgentManagementOpen
             | ActionKind::FileOpen => app_state::handle(
                 &self.instance_id,
                 request.action.kind,

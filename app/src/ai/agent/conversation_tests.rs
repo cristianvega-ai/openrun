@@ -1042,3 +1042,37 @@ fn is_done_only_includes_success_error_cancelled() {
         .is_done()
     );
 }
+
+// should_trigger_notification: pure-function tests pinning which statuses
+// fire user-facing notifications. Terminal-error and blocked surface;
+// in-progress, waiting-for-events, and user-cancelled do not.
+
+#[test]
+fn should_trigger_notification_returns_true_for_success() {
+    assert!(ConversationStatus::Success.should_trigger_notification());
+}
+
+#[test]
+fn should_trigger_notification_returns_true_for_blocked() {
+    assert!(
+        ConversationStatus::Blocked {
+            blocked_action: "approve diff".to_owned(),
+        }
+        .should_trigger_notification()
+    );
+}
+
+#[test]
+fn should_trigger_notification_returns_true_for_error() {
+    assert!(ConversationStatus::Error.should_trigger_notification());
+}
+
+#[test]
+fn should_trigger_notification_returns_false_for_in_progress() {
+    assert!(!ConversationStatus::InProgress.should_trigger_notification());
+}
+
+#[test]
+fn should_trigger_notification_returns_false_for_cancelled() {
+    assert!(!ConversationStatus::Cancelled.should_trigger_notification());
+}

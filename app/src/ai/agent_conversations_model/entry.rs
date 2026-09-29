@@ -1,21 +1,12 @@
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use warpui::{AppContext, SingletonEntity};
+use warpui::AppContext;
 
-use super::{
-    AgentManagementFilters, AgentRunDisplayStatus, ArtifactFilter, ConversationMetadata,
-    CreatedOnFilter, CreatorFilter, OwnerFilter, SessionStatus, SourceFilter, StatusFilter,
-    artifacts_match_filter,
-};
+use super::{AgentRunDisplayStatus, ConversationMetadata};
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::ambient_agents::{AgentSource, AmbientAgentTaskId};
-use crate::ai::artifacts::Artifact;
 use crate::ai::blocklist::history_model::{AIConversationMetadata, BlocklistAIHistoryModel};
 use crate::ai::conversation_navigation::ConversationNavigationData;
-use crate::auth::{AuthStateProvider, UserUid};
 use crate::workspace::RestoreConversationLayout;
-use crate::workspaces::user_profiles::{UserProfileWithUID, UserProfiles};
 
 /// Stable projection identity used by list and navigation surfaces.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -45,86 +36,33 @@ pub enum AgentConversationNavigationSubject {
     ServerToken(ServerConversationToken),
 }
 
-/// Normalized row data for agent conversation list, management, and navigation surfaces.
+/// Normalized row data for agent conversation navigation surfaces.
 ///
-/// The entry keeps local conversation identity, ambient run identity, cloud token identity,
-/// display fields, and available actions together so callers do not recompute navigation
-/// policy from stale partial sources.
+/// The entry keeps local conversation identity, cloud token identity, display fields and the
+/// availability of the backing data together so callers do not recompute navigation policy from
+/// stale partial sources.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AgentConversationEntry {
     pub id: AgentConversationEntryId,
     pub identity: AgentConversationIdentity,
-    pub provenance: AgentConversationProvenance,
     pub display: AgentConversationDisplayData,
     pub backing: AgentConversationBackingData,
-    pub capabilities: AgentConversationCapabilities,
 }
 
-/// Cross-system identifiers that may refer to the same underlying conversation/run.
+/// Identifiers that may refer to the same underlying conversation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AgentConversationIdentity {
     pub local_conversation_id: Option<AIConversationId>,
-    pub ambient_agent_task_id: Option<AmbientAgentTaskId>,
     pub server_conversation_token: Option<ServerConversationToken>,
-    pub session_id: Option<Uuid>,
 }
 
 /// Display-only fields for rendering a conversation entry without consulting source models.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AgentConversationDisplayData {
     pub title: String,
-    pub initial_query: Option<String>,
-    pub created_at: DateTime<Utc>,
     pub last_updated: DateTime<Utc>,
     pub status: AgentRunDisplayStatus,
-    pub creator: AgentConversationPrincipal,
-    pub executor: Option<AgentConversationPrincipal>,
-    pub request_usage: Option<f32>,
-    pub cost_in_cents: Option<f32>,
-    pub run_time: Option<String>,
-    pub session_status: Option<SessionStatus>,
-    pub source: Option<AgentSource>,
     pub working_directory: Option<String>,
-    pub artifacts: Vec<Artifact>,
-}
-
-/// Type of principal that created or executed a run.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PrincipalType {
-    User,
-    ServiceAccount,
-}
-
-impl PrincipalType {
-    /// Parse from the wire-format string sent by the server.
-    pub fn parse(s: &str) -> Option<Self> {
-        if s.eq_ignore_ascii_case("user") {
-            Some(PrincipalType::User)
-        } else if s.eq_ignore_ascii_case("service_account") || s.eq_ignore_ascii_case("agent") {
-            Some(PrincipalType::ServiceAccount)
-        } else {
-            None
-        }
-    }
-
-    pub fn is_service_account(self) -> bool {
-        self == PrincipalType::ServiceAccount
-    }
-}
-
-/// Principal information normalized across local conversations and ambient runs.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AgentConversationPrincipal {
-    pub name: Option<String>,
-    pub uid: Option<String>,
-    pub principal_type: Option<PrincipalType>,
-}
-
-/// Source category that explains why an entry exists and which backing systems can refresh it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AgentConversationProvenance {
-    LocalInteractive,
-    CloudSyncedConversation,
 }
 
 /// Availability flags for the source data that contributed to an entry.
@@ -135,77 +73,7 @@ pub struct AgentConversationBackingData {
     pub has_cloud_data: bool,
 }
 
-/// Actions that should be exposed for an entry after applying current navigation policy.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AgentConversationCapabilities {
-    pub can_open: bool,
-    pub can_copy_link: bool,
-    pub can_share: bool,
-    pub can_delete: bool,
-    pub can_fork_locally: bool,
-    pub can_cancel: bool,
-}
-
 impl AgentConversationEntry {
-    pub(super) fn matches_filters(&self, filters: &AgentManagementFilters) -> bool {
-        self.matches_owner_and_creator(&filters.owners, &filters.creator)
-            && self.matches_status(&filters.status)
-            && self.matches_source(&filters.source)
-            && self.matches_created_on(&filters.created_on)
-            && self.matches_artifact(&filters.artifact)
-    }
-
-    fn matches_owner_and_creator(
-        &self,
-        owner_filter: &OwnerFilter,
-        creator_filter: &CreatorFilter,
-    ) -> bool {
-        if matches!(owner_filter, OwnerFilter::PersonalOnly) {
-            return true;
-        }
-
-        match creator_filter {
-            CreatorFilter::All => true,
-            CreatorFilter::Specific { name, .. } => {
-                self.display.creator.name.as_ref() == Some(name)
-            }
-        }
-    }
-
-    fn matches_status(&self, status_filter: &StatusFilter) -> bool {
-        match status_filter {
-            StatusFilter::All => true,
-            StatusFilter::Working | StatusFilter::Done | StatusFilter::Failed => {
-                self.display.status.status_filter() == *status_filter
-            }
-        }
-    }
-
-    fn matches_source(&self, source_filter: &SourceFilter) -> bool {
-        match source_filter {
-            SourceFilter::All => true,
-            SourceFilter::Specific(source) => self.display.source.as_ref() == Some(source),
-        }
-    }
-
-    fn matches_created_on(&self, created_on_filter: &CreatedOnFilter) -> bool {
-        let now = Utc::now();
-        let created_cutoff = match created_on_filter {
-            CreatedOnFilter::All => None,
-            CreatedOnFilter::Last24Hours => Some(now - chrono::Duration::hours(24)),
-            CreatedOnFilter::Past3Days => Some(now - chrono::Duration::days(3)),
-            CreatedOnFilter::LastWeek => Some(now - chrono::Duration::days(7)),
-        };
-        match created_cutoff {
-            Some(cutoff) => self.display.created_at >= cutoff,
-            None => true,
-        }
-    }
-
-    fn matches_artifact(&self, artifact_filter: &ArtifactFilter) -> bool {
-        artifacts_match_filter(&self.display.artifacts, artifact_filter)
-    }
-
     pub fn has_open_action(
         &self,
         restore_layout: Option<RestoreConversationLayout>,
@@ -218,17 +86,6 @@ impl AgentConversationEntry {
         )
         .is_some()
     }
-}
-
-fn current_user_name(app: &AppContext) -> Option<String> {
-    AuthStateProvider::as_ref(app).get().username_for_display()
-}
-
-fn current_user_uid(app: &AppContext) -> Option<String> {
-    AuthStateProvider::as_ref(app)
-        .get()
-        .user_id()
-        .map(|uid| uid.to_string())
 }
 
 fn conversation_title(
@@ -251,103 +108,15 @@ fn conversation_display_status(
         .unwrap_or(AgentRunDisplayStatus::ConversationSucceeded)
 }
 
-fn conversation_request_usage(
-    metadata: &ConversationMetadata,
-    history_model: &BlocklistAIHistoryModel,
-) -> Option<f32> {
-    history_model
-        .conversation(&metadata.nav_data.id)
-        .map(|conversation| conversation.credits_spent())
-        .or_else(|| {
-            history_model
-                .get_conversation_metadata(&metadata.nav_data.id)
-                .and_then(|metadata| metadata.credits_spent)
-        })
-}
-
-fn conversation_cost_in_cents(
-    metadata: &ConversationMetadata,
-    history_model: &BlocklistAIHistoryModel,
-) -> Option<f32> {
-    history_model
-        .conversation(&metadata.nav_data.id)
-        .and_then(|conversation| conversation.usage_totals().charged_usage)
-        .map(|usage| usage.total_cost_in_cents())
-        .or_else(|| {
-            history_model
-                .get_conversation_metadata(&metadata.nav_data.id)
-                .and_then(|metadata| metadata.server_conversation_metadata.as_ref())
-                .and_then(|metadata| metadata.usage.total_charged_usage.as_ref())
-                .map(|usage| usage.total_cost_in_cents())
-        })
-}
-fn conversation_artifacts(
-    metadata: &ConversationMetadata,
-    history_model: &BlocklistAIHistoryModel,
-) -> Vec<Artifact> {
-    history_model
-        .conversation(&metadata.nav_data.id)
-        .map(|conversation| conversation.artifacts().to_vec())
-        .or_else(|| {
-            history_model
-                .get_conversation_metadata(&metadata.nav_data.id)
-                .map(|metadata| metadata.artifacts.clone())
-        })
-        .unwrap_or_default()
-}
-
-fn principal_from_user_profile(profile: &UserProfileWithUID) -> AgentConversationPrincipal {
-    let name = profile
-        .display_name
-        .as_ref()
-        .filter(|name| !name.is_empty())
-        .or_else(|| (!profile.email.is_empty()).then_some(&profile.email))
-        .cloned()
-        .or_else(|| Some(profile.firebase_uid.to_string()));
-
-    AgentConversationPrincipal {
-        name,
-        uid: Some(profile.firebase_uid.to_string()),
-        principal_type: Some(PrincipalType::User),
-    }
-}
-
-fn conversation_creator(
-    metadata: &ConversationMetadata,
-    history_model: &BlocklistAIHistoryModel,
-    app: &AppContext,
-) -> AgentConversationPrincipal {
-    let server_metadata = history_model.get_server_conversation_metadata(&metadata.nav_data.id);
-    if let Some(profile) = server_metadata.and_then(|metadata| metadata.creator.as_ref()) {
-        return principal_from_user_profile(profile);
-    }
-
-    if let Some(uid) = server_metadata.and_then(|metadata| metadata.metadata.creator_uid.as_ref()) {
-        return AgentConversationPrincipal {
-            name: UserProfiles::as_ref(app).displayable_identifier_for_uid(UserUid::new(uid)),
-            uid: Some(uid.clone()),
-            principal_type: Some(PrincipalType::User),
-        };
-    }
-
-    AgentConversationPrincipal {
-        name: current_user_name(app),
-        uid: current_user_uid(app),
-        principal_type: Some(PrincipalType::User),
-    }
-}
-
 pub(super) fn entry_for_conversation(
     metadata: &ConversationMetadata,
     history_model: &BlocklistAIHistoryModel,
-    app: &AppContext,
 ) -> AgentConversationEntry {
     let conversation_metadata = history_model.get_conversation_metadata(&metadata.nav_data.id);
     entry_for_conversation_parts(
         metadata.nav_data.clone(),
         conversation_metadata,
         history_model,
-        app,
     )
 }
 
@@ -355,16 +124,14 @@ pub(super) fn entry_for_historical_metadata(
     metadata: &AIConversationMetadata,
     nav_data: ConversationNavigationData,
     history_model: &BlocklistAIHistoryModel,
-    app: &AppContext,
 ) -> AgentConversationEntry {
-    entry_for_conversation_parts(nav_data, Some(metadata), history_model, app)
+    entry_for_conversation_parts(nav_data, Some(metadata), history_model)
 }
 
 fn entry_for_conversation_parts(
     nav_data: ConversationNavigationData,
     conversation_metadata: Option<&AIConversationMetadata>,
     history_model: &BlocklistAIHistoryModel,
-    app: &AppContext,
 ) -> AgentConversationEntry {
     let metadata = ConversationMetadata { nav_data };
     let conversation_id = metadata.nav_data.id;
@@ -380,64 +147,30 @@ fn entry_for_conversation_parts(
             history_model,
         )
         .is_some();
-    let provenance = if has_cloud_data {
-        AgentConversationProvenance::CloudSyncedConversation
-    } else {
-        AgentConversationProvenance::LocalInteractive
-    };
-
     AgentConversationEntry {
         id: AgentConversationEntryId::Conversation(conversation_id),
         identity: AgentConversationIdentity {
             local_conversation_id: Some(conversation_id),
-            ambient_agent_task_id: conversation_metadata
-                .and_then(|metadata| metadata.server_conversation_metadata.as_ref())
-                .and_then(|metadata| metadata.ambient_agent_task_id),
             server_conversation_token: server_conversation_token_for_conversation(
                 conversation_id,
                 Some(&metadata.nav_data),
                 history_model,
             ),
-            session_id: None,
         },
-        provenance,
         display: AgentConversationDisplayData {
             title: conversation_title(&metadata, history_model),
-            initial_query: metadata.nav_data.initial_query.clone(),
-            created_at: metadata.nav_data.last_updated.into(),
             last_updated: metadata.nav_data.last_updated.into(),
-            status: status.clone(),
-            creator: conversation_creator(&metadata, history_model, app),
-            executor: None,
-            request_usage: conversation_request_usage(&metadata, history_model),
-            cost_in_cents: conversation_cost_in_cents(&metadata, history_model),
-            run_time: None,
-            session_status: None,
-            source: Some(AgentSource::Interactive),
+            status,
             working_directory: metadata
                 .nav_data
                 .latest_working_directory
                 .clone()
                 .or_else(|| metadata.nav_data.initial_working_directory.clone()),
-            artifacts: conversation_artifacts(&metadata, history_model),
         },
         backing: AgentConversationBackingData {
             has_loaded_conversation,
             has_local_persisted_data,
             has_cloud_data,
-        },
-        capabilities: AgentConversationCapabilities {
-            can_open: has_local_persisted_data || has_cloud_data,
-            can_copy_link: server_conversation_token_for_conversation(
-                conversation_id,
-                Some(&metadata.nav_data),
-                history_model,
-            )
-            .is_some(),
-            can_share: history_model.can_conversation_be_shared(&conversation_id),
-            can_delete: has_local_persisted_data,
-            can_fork_locally: has_local_persisted_data,
-            can_cancel: status.is_cancellable(),
         },
     }
 }

@@ -728,21 +728,6 @@ define_settings_group!(AISettings, settings: [
         description: "Whether to show the \"Use Agent\" footer for terminal commands.",
     }
 
-    // This is not a user-visible setting - it tracks whether a paid user has dismissed the
-    // agent management help page by clicking "View Agents".
-    //
-    // When false and user is on a paid plan, the help page is shown.
-    // When true, the help page is hidden (user dismissed it).
-    // Free users never see the help page by default regardless of this setting.
-    did_dismiss_cloud_setup_guide: DidDismissAgentManagementHelpPage {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: true,
-    }
-
     // Whether the ambient agent trial widget has been dismissed by the user.
     //
     // Not a user-visible setting - we model it as a setting so we can track state.
@@ -796,18 +781,6 @@ define_settings_group!(AISettings, settings: [
         private: false,
         toml_path: "agents.warp_agent.other.auto_approve_bypasses_command_denylist",
         description: "Whether auto-approve bypasses the command denylist.",
-    }
-
-    // Controls whether the conversation history view appears in the tools panel.
-    show_conversation_history: ShowConversationHistory {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: false,
-        toml_path: "agents.warp_agent.other.show_conversation_history",
-        description: "Whether conversation history appears in the tools panel.",
     }
 
 
@@ -869,22 +842,6 @@ impl AISettings {
         *self.is_any_ai_enabled
             && !is_anonymous_or_logged_out
             && !self.is_ai_disabled_due_to_remote_session_org_policy(app)
-    }
-
-    /// Returns whether conversation history is available for the current
-    /// account and AI state.
-    ///
-    /// The stored `show_conversation_history` preference is kept separately so
-    /// an onboarding choice can take effect automatically after signup and AI
-    /// enablement without asking the user to toggle the setting again.
-    pub fn is_conversation_history_available(&self, app: &AppContext) -> bool {
-        self.is_any_ai_enabled(app)
-    }
-
-    /// Returns whether conversation history should currently appear in the
-    /// tools panel.
-    pub fn is_conversation_history_enabled(&self, app: &AppContext) -> bool {
-        *self.show_conversation_history && self.is_conversation_history_available(app)
     }
 
     pub fn default_session_mode(&self, app: &AppContext) -> DefaultSessionMode {

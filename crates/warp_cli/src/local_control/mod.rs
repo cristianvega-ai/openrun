@@ -421,10 +421,6 @@ pub enum SurfaceCommand {
     #[command(subcommand)]
     GlobalSearch(SurfaceOpenCommand),
 
-    /// Open the conversation list.
-    #[command(subcommand)]
-    ConversationList(SurfaceOpenCommand),
-
     /// Toggle the left panel.
     #[command(subcommand)]
     LeftPanel(SurfaceToggleCommand),
@@ -436,10 +432,6 @@ pub enum SurfaceCommand {
     /// Open or toggle vertical tabs.
     #[command(subcommand)]
     VerticalTabs(SurfaceOpenToggleCommand),
-
-    /// Open agent management.
-    #[command(subcommand)]
-    AgentManagement(SurfaceOpenCommand),
 }
 
 #[derive(Debug, Clone, Subcommand)]

@@ -125,13 +125,3 @@ fn ambient_agent_task_deserializes_github_webhook_source() {
 
     assert_eq!(task.source, Some(AgentSource::GitHubWebhook));
 }
-
-#[test]
-fn ambient_agent_task_deserializes_orchestration_source() {
-    let mut task = task_json_with_run_time("run_time", json!("PT1S"));
-    task["source"] = json!("ORCHESTRATION");
-
-    let task: AmbientAgentTask = serde_json::from_value(task).unwrap();
-
-    assert_eq!(task.source, Some(AgentSource::Orchestration));
-}

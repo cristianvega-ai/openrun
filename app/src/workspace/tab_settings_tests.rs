@@ -1,4 +1,5 @@
 use settings::Setting;
+use settings_value::SettingsValue as _;
 use warpui::{App, SingletonEntity};
 
 use super::*;
@@ -98,21 +99,59 @@ fn header_toolbar_chip_selection_custom_without_code_review_reports_absent() {
         left: vec![
             HeaderToolbarItemKind::TabsPanel,
             HeaderToolbarItemKind::ToolsPanel,
-        ],
-        right: vec![HeaderToolbarItemKind::NotificationsMailbox],
+        ]
+        .into(),
+        right: vec![HeaderToolbarItemKind::NotificationsMailbox].into(),
     };
     assert!(!config.contains_item(&HeaderToolbarItemKind::CodeReview));
     assert!(config.contains_item(&HeaderToolbarItemKind::TabsPanel));
     assert!(config.contains_item(&HeaderToolbarItemKind::ToolsPanel));
     assert!(config.contains_item(&HeaderToolbarItemKind::NotificationsMailbox));
-    assert!(!config.contains_item(&HeaderToolbarItemKind::AgentManagement));
+}
+
+#[test]
+fn header_toolbar_chip_selection_skips_removed_items_in_settings_file() {
+    let stored = serde_json::json!({
+        "custom": {
+            "left": ["tabs_panel", "agent_management", "tools_panel"],
+            "right": ["agent_management", "code_review"],
+        }
+    });
+    let selection = HeaderToolbarChipSelection::from_file_value(&stored)
+        .expect("a removed toolbar item must not discard the whole selection");
+    assert_eq!(
+        selection.left_items(),
+        vec![
+            HeaderToolbarItemKind::TabsPanel,
+            HeaderToolbarItemKind::ToolsPanel
+        ]
+    );
+    assert_eq!(
+        selection.right_items(),
+        vec![HeaderToolbarItemKind::CodeReview]
+    );
+
+    let selection: HeaderToolbarChipSelection = serde_json::from_value(serde_json::json!({
+        "Custom": {
+            "left": ["TabsPanel", "AgentManagement", "ToolsPanel"],
+            "right": ["AgentManagement", "CodeReview"],
+        }
+    }))
+    .expect("a removed toolbar item must not fail the serde parse");
+    assert_eq!(
+        selection.left_items(),
+        vec![
+            HeaderToolbarItemKind::TabsPanel,
+            HeaderToolbarItemKind::ToolsPanel
+        ]
+    );
 }
 
 #[test]
 fn header_toolbar_chip_selection_custom_with_code_review_on_left_reports_present() {
     let config = HeaderToolbarChipSelection::Custom {
-        left: vec![HeaderToolbarItemKind::CodeReview],
-        right: vec![],
+        left: vec![HeaderToolbarItemKind::CodeReview].into(),
+        right: vec![].into(),
     };
     assert!(config.contains_item(&HeaderToolbarItemKind::CodeReview));
 }
@@ -120,8 +159,8 @@ fn header_toolbar_chip_selection_custom_with_code_review_on_left_reports_present
 #[test]
 fn header_toolbar_chip_selection_custom_empty_reports_all_absent() {
     let config = HeaderToolbarChipSelection::Custom {
-        left: vec![],
-        right: vec![],
+        left: vec![].into(),
+        right: vec![].into(),
     };
     for item in HeaderToolbarItemKind::all_items() {
         assert!(!config.contains_item(&item));

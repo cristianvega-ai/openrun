@@ -1,20 +1,16 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use chrono::{DateTime, Duration, Utc};
-use parking_lot::Mutex;
-use persistence::model::{AgentConversationData, ChargedUsageTotals, ConversationUsageMetadata};
+use chrono::{Duration, Utc};
+use persistence::model::{AgentConversationData, ConversationUsageMetadata};
 use warp_core::features::FeatureFlag;
-use warpui::{App, EntityId, ModelHandle, SingletonEntity};
+use warpui::{App, EntityId, SingletonEntity};
 
-use super::entry::{
-    AgentConversationEntryId, AgentConversationNavigationSubject, AgentConversationProvenance,
-};
+use super::entry::{AgentConversationEntryId, AgentConversationNavigationSubject};
 use super::query::{DEFAULT_RESULT_COUNT, MAX_SEARCH_RESULTS};
 use super::{
-    AgentConversationsModel, AgentConversationsModelEvent, AgentManagementFilters, ArtifactFilter,
-    ConversationMetadata, ConversationUpdateKind, OwnerFilter, StatusFilter,
+    AgentConversationsModel, AgentConversationsModelEvent, ConversationMetadata,
     query_conversation_entries,
 };
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
@@ -23,9 +19,6 @@ use crate::ai::agent::conversation::{
     AIAgentHarness, AIConversation, AIConversationId, ConversationStatus,
     ServerAIConversationMetadata,
 };
-use crate::ai::ambient_agents::task::TaskPrincipalInfo;
-use crate::ai::ambient_agents::{AmbientAgentTask, AmbientAgentTaskId, AmbientAgentTaskState};
-use crate::ai::artifacts::Artifact;
 use crate::ai::blocklist::history_model::{
     BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate,
 };
@@ -37,192 +30,58 @@ use crate::test_util::ai_agent_tasks::{create_api_task, create_message};
 use crate::workspace::{WorkspaceAction, WorkspaceRegistry};
 use crate::workspaces::user_workspaces::TeamlessScopeForTest;
 
-/// Creates a test task with specified creator UID and updated_at time
-fn create_test_task(
-    task_id: &str,
-    creator_uid: &str,
-    updated_at: DateTime<Utc>,
-) -> AmbientAgentTask {
-    AmbientAgentTask {
-        task_id: task_id.parse().unwrap(),
-        parent_run_id: None,
-        title: format!("Task {task_id}"),
-        state: AmbientAgentTaskState::Succeeded,
-        prompt: "test".to_string(),
-        created_at: updated_at,
-        started_at: Some(updated_at),
-        updated_at,
-        run_time: Some("PT1S".parse().unwrap()),
-        status_message: None,
-        source: None,
-        execution_location: None,
-        session_id: None,
-        session_link: None,
-        creator: Some(TaskPrincipalInfo {
-            creator_type: "USER".to_string(),
-            uid: creator_uid.to_string(),
-            display_name: Some(format!("User {creator_uid}")),
-        }),
-        executor: None,
-        conversation_id: None,
-        request_usage: None,
-        artifacts: vec![],
-        is_sandbox_running: false,
-        last_event_sequence: None,
-        children: vec![],
-        debug_agent_available: false,
-        scope: None,
-    }
-}
-
-type CapturedConversationUpdate = Mutex<Option<ConversationUpdateKind>>;
-
-/// Test-only handler that mirrors the production view subscription: extracts the
-/// `ConversationUpdated` payload and stashes it on a shared cell that test cases assert
-/// against.
-fn handle_agent_conversation_model_event(
-    captured: &CapturedConversationUpdate,
-    event: &AgentConversationsModelEvent,
-) {
-    if let AgentConversationsModelEvent::ConversationUpdated { kind } = event {
-        *captured.lock() = Some(*kind);
-    }
-}
-
-/// Subscribes a [`handle_agent_conversation_model_event`] capture cell to `model` and
-/// returns the cell so individual cases can assert on the most recent emission without
-/// re-implementing the subscription bookkeeping.
-fn subscribe_to_conversation_updated(
+/// Subscribes a counter to `model` and returns it so individual cases can assert how many
+/// `ConversationUpdated` events were emitted.
+fn count_conversation_updated_events(
     app: &mut App,
-    model: &ModelHandle<AgentConversationsModel>,
-) -> Arc<CapturedConversationUpdate> {
-    let captured = Arc::new(Mutex::new(None));
-    let captured_clone = captured.clone();
+    model: &warpui::ModelHandle<AgentConversationsModel>,
+) -> Arc<AtomicUsize> {
+    let count = Arc::new(AtomicUsize::new(0));
+    let count_clone = count.clone();
     app.update(|ctx| {
         ctx.subscribe_to_model(model, move |_, event, _| {
-            handle_agent_conversation_model_event(&captured_clone, event);
+            let AgentConversationsModelEvent::ConversationUpdated = event;
+            count_clone.fetch_add(1, Ordering::SeqCst);
         });
     });
-    captured
+    count
 }
 
 #[test]
-fn test_restored_conversation_emits_restored_kind() {
+fn test_status_updates_emit_conversation_updated() {
     App::test((), |mut app| async move {
         let _interactive_management_guard =
             FeatureFlag::InteractiveConversationManagementView.override_enabled(true);
         let agent_model = app.add_singleton_model(|_| create_test_model());
-        let captured = subscribe_to_conversation_updated(&mut app, &agent_model);
+        let count = count_conversation_updated_events(&mut app, &agent_model);
 
-        agent_model.update(&mut app, |model, ctx| {
-            model.handle_history_event(
-                &BlocklistAIHistoryEvent::UpdatedConversationStatus {
-                    conversation_id: AIConversationId::new(),
-                    terminal_surface_id: EntityId::new(),
-                    update: ConversationStatusUpdate::Restored,
-                    new_status: ConversationStatus::Success,
-                },
-                ctx,
-            );
-        });
-
-        let captured = *captured.lock();
-        assert_eq!(captured, Some(ConversationUpdateKind::Restored));
-    });
-}
-
-#[test]
-fn test_status_transition_emits_status_set_with_filter_buckets() {
-    App::test((), |mut app| async move {
-        let _interactive_management_guard =
-            FeatureFlag::InteractiveConversationManagementView.override_enabled(true);
-        let agent_model = app.add_singleton_model(|_| create_test_model());
-        let captured = subscribe_to_conversation_updated(&mut app, &agent_model);
-
-        agent_model.update(&mut app, |model, ctx| {
-            model.handle_history_event(
-                &BlocklistAIHistoryEvent::UpdatedConversationStatus {
-                    conversation_id: AIConversationId::new(),
-                    terminal_surface_id: EntityId::new(),
-                    update: ConversationStatusUpdate::Changed {
-                        prev_status: ConversationStatus::InProgress,
+        for update in [
+            ConversationStatusUpdate::Restored,
+            ConversationStatusUpdate::Changed {
+                prev_status: ConversationStatus::InProgress,
+            },
+        ] {
+            agent_model.update(&mut app, |model, ctx| {
+                model.handle_history_event(
+                    &BlocklistAIHistoryEvent::UpdatedConversationStatus {
+                        conversation_id: AIConversationId::new(),
+                        terminal_surface_id: EntityId::new(),
+                        update,
+                        new_status: ConversationStatus::Success,
                     },
-                    new_status: ConversationStatus::Success,
-                },
-                ctx,
-            );
-        });
+                    ctx,
+                );
+            });
+        }
 
-        let captured = *captured.lock();
-        assert_eq!(
-            captured,
-            Some(ConversationUpdateKind::StatusSet {
-                prev_filter: StatusFilter::Working,
-                new_filter: StatusFilter::Done,
-            }),
-        );
+        assert_eq!(count.load(Ordering::SeqCst), 2);
     });
-}
-
-#[test]
-fn test_same_bucket_re_emission_emits_status_set_with_equal_filters() {
-    App::test((), |mut app| async move {
-        let _interactive_management_guard =
-            FeatureFlag::InteractiveConversationManagementView.override_enabled(true);
-        let agent_model = app.add_singleton_model(|_| create_test_model());
-        let captured = subscribe_to_conversation_updated(&mut app, &agent_model);
-
-        agent_model.update(&mut app, |model, ctx| {
-            model.handle_history_event(
-                &BlocklistAIHistoryEvent::UpdatedConversationStatus {
-                    conversation_id: AIConversationId::new(),
-                    terminal_surface_id: EntityId::new(),
-                    update: ConversationStatusUpdate::Changed {
-                        prev_status: ConversationStatus::InProgress,
-                    },
-                    new_status: ConversationStatus::InProgress,
-                },
-                ctx,
-            );
-        });
-
-        let captured = *captured.lock();
-        assert_eq!(
-            captured,
-            Some(ConversationUpdateKind::StatusSet {
-                prev_filter: StatusFilter::Working,
-                new_filter: StatusFilter::Working,
-            }),
-        );
-    });
-}
-
-/// Helper to generate a unique UUID for task IDs
-fn make_uuid(index: usize) -> String {
-    format!("550e8400-e29b-41d4-a716-{:012}", index)
 }
 
 fn create_test_model() -> AgentConversationsModel {
     AgentConversationsModel {
         conversations: HashMap::new(),
-        is_loading: true,
     }
-}
-
-#[test]
-fn local_conversation_sync_finishes_initial_load() {
-    App::test((), |mut app| async move {
-        let _interactive_management_guard =
-            FeatureFlag::InteractiveConversationManagementView.override_enabled(true);
-        add_entry_projection_test_models(&mut app);
-        let model = app.add_singleton_model(|_| create_test_model());
-
-        model.update(&mut app, |model, ctx| model.sync_conversations(ctx));
-
-        model.read(&app, |model, _| {
-            assert!(!model.is_loading());
-        });
-    });
 }
 
 #[test]
@@ -239,7 +98,7 @@ fn conversation_query_caps_recent_entries_and_places_newest_last() {
         }
 
         app.update(|ctx| {
-            let entries = model.get_entries(&all_owner_filters(), &TeamlessScopeForTest, ctx);
+            let entries = model.get_entries(&TeamlessScopeForTest, ctx);
             let results = query_conversation_entries(entries, "");
 
             assert_eq!(results.len(), DEFAULT_RESULT_COUNT);
@@ -279,7 +138,7 @@ fn conversation_query_filters_titles_and_caps_best_fuzzy_results() {
         }
 
         app.update(|ctx| {
-            let entries = model.get_entries(&all_owner_filters(), &TeamlessScopeForTest, ctx);
+            let entries = model.get_entries(&TeamlessScopeForTest, ctx);
             let results = query_conversation_entries(entries, "deploy");
 
             assert_eq!(results.len(), MAX_SEARCH_RESULTS);
@@ -306,7 +165,7 @@ fn conversation_query_orders_equal_fuzzy_scores_by_recency() {
         }
 
         app.update(|ctx| {
-            let entries = model.get_entries(&all_owner_filters(), &TeamlessScopeForTest, ctx);
+            let entries = model.get_entries(&TeamlessScopeForTest, ctx);
             let results = query_conversation_entries(entries, "deploy");
 
             assert!(results.windows(2).all(|window| {
@@ -367,13 +226,6 @@ fn create_restored_conversation(
         .expect("restored conversation should build")
 }
 
-fn all_owner_filters() -> AgentManagementFilters {
-    AgentManagementFilters {
-        owners: OwnerFilter::All,
-        ..Default::default()
-    }
-}
-
 fn add_entry_projection_test_models(app: &mut App) {
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new(vec![], &[]));
@@ -407,7 +259,6 @@ fn mock_server_permissions() -> ServerPermissions {
 fn create_server_conversation_metadata(
     title: &str,
     server_token: &str,
-    ambient_agent_task_id: Option<AmbientAgentTaskId>,
 ) -> ServerAIConversationMetadata {
     ServerAIConversationMetadata {
         title: title.to_string(),
@@ -429,7 +280,7 @@ fn create_server_conversation_metadata(
         metadata: mock_server_metadata(),
         creator: None,
         permissions: mock_server_permissions(),
-        ambient_agent_task_id,
+        ambient_agent_task_id: None,
         server_conversation_token: ServerConversationToken::new(server_token.to_string()),
         artifacts: Vec::new(),
     }
@@ -448,7 +299,7 @@ fn test_get_entries_includes_local_only_entry() {
         );
 
         app.update(|ctx| {
-            let entries = model.get_entries(&all_owner_filters(), &TeamlessScopeForTest, ctx);
+            let entries = model.get_entries(&TeamlessScopeForTest, ctx);
 
             assert_eq!(entries.len(), 1);
             let entry = &entries[0];
@@ -457,46 +308,8 @@ fn test_get_entries_includes_local_only_entry() {
                 AgentConversationEntryId::Conversation(conversation_id)
             );
             assert_eq!(entry.identity.local_conversation_id, Some(conversation_id));
-            assert_eq!(entry.identity.ambient_agent_task_id, None);
-            assert_eq!(
-                entry.provenance,
-                AgentConversationProvenance::LocalInteractive
-            );
+            assert!(!entry.backing.has_cloud_data);
             assert_eq!(entry.display.title, "Local conversation");
-        });
-    });
-}
-
-#[test]
-fn test_local_conversation_entry_uses_charged_usage_dollar_total() {
-    App::test((), |mut app| async move {
-        add_entry_projection_test_models(&mut app);
-
-        let mut conversation = AIConversation::new(false, false);
-        conversation.set_credits_spent_for_test(20.0);
-        conversation.set_charged_usage_for_test(Some(ChargedUsageTotals {
-            input_cost_in_cents: 10.0,
-            output_cost_in_cents: 12.0,
-            platform_cost_in_cents: 8.0,
-            web_search_cost_in_cents: 6.0,
-            ..Default::default()
-        }));
-        let conversation_id = conversation.id();
-        BlocklistAIHistoryModel::handle(&app).update(&mut app, |model, ctx| {
-            model.restore_conversations(EntityId::new(), vec![conversation], ctx);
-        });
-
-        let mut model = create_test_model();
-        model.conversations.insert(
-            conversation_id,
-            create_test_conversation_metadata(conversation_id, "Local conversation"),
-        );
-
-        app.update(|ctx| {
-            let entries = model.get_entries(&all_owner_filters(), &TeamlessScopeForTest, ctx);
-
-            assert_eq!(entries[0].display.request_usage, Some(20.0));
-            assert_eq!(entries[0].display.cost_in_cents, Some(36.0));
         });
     });
 }
@@ -510,14 +323,13 @@ fn test_get_entries_includes_cloud_metadata_only_entry() {
             model.merge_cloud_conversation_metadata(vec![create_server_conversation_metadata(
                 "Cloud conversation",
                 token,
-                None,
             )]);
         });
 
         let model = create_test_model();
 
         app.update(|ctx| {
-            let entries = model.get_entries(&all_owner_filters(), &TeamlessScopeForTest, ctx);
+            let entries = model.get_entries(&TeamlessScopeForTest, ctx);
 
             assert_eq!(entries.len(), 1);
             let entry = &entries[0];
@@ -528,10 +340,6 @@ fn test_get_entries_includes_cloud_metadata_only_entry() {
                     .as_ref()
                     .map(|t| t.as_str()),
                 Some(token)
-            );
-            assert_eq!(
-                entry.provenance,
-                AgentConversationProvenance::CloudSyncedConversation
             );
             assert!(entry.backing.has_cloud_data);
             assert!(!entry.backing.has_loaded_conversation);
@@ -573,17 +381,13 @@ fn test_resolve_open_action_opens_metadata_only_cloud_conversation_by_server_tok
             model.merge_cloud_conversation_metadata(vec![create_server_conversation_metadata(
                 "Cloud conversation",
                 token,
-                None,
             )]);
         });
         app.add_singleton_model(|_| create_test_model());
 
         app.update(|ctx| {
-            let entries = AgentConversationsModel::as_ref(ctx).get_entries(
-                &all_owner_filters(),
-                &TeamlessScopeForTest,
-                ctx,
-            );
+            let entries =
+                AgentConversationsModel::as_ref(ctx).get_entries(&TeamlessScopeForTest, ctx);
             let entry = entries
                 .iter()
                 .find(|entry| {
@@ -616,43 +420,7 @@ fn test_resolve_open_action_opens_metadata_only_cloud_conversation_by_server_tok
 }
 
 #[test]
-fn test_resolve_copy_link_returns_none_for_local_only_unsynced_conversation() {
-    App::test((), |mut app| async move {
-        add_entry_projection_test_models(&mut app);
-
-        let conversation_id = AIConversationId::new();
-        app.add_singleton_model(|_| {
-            let mut model = create_test_model();
-            model.conversations.insert(
-                conversation_id,
-                create_test_conversation_metadata(conversation_id, "Local only"),
-            );
-            model
-        });
-
-        app.update(|ctx| {
-            let link = AgentConversationsModel::resolve_copy_link(
-                AgentConversationNavigationSubject::Entry(AgentConversationEntryId::Conversation(
-                    conversation_id,
-                )),
-                ctx,
-            );
-
-            assert_eq!(link, None);
-
-            let entry = AgentConversationsModel::as_ref(ctx)
-                .get_entry_by_id(
-                    &AgentConversationEntryId::Conversation(conversation_id),
-                    ctx,
-                )
-                .expect("conversation entry should exist");
-            assert!(!entry.capabilities.can_copy_link);
-        });
-    });
-}
-
-#[test]
-fn test_server_token_assignment_updates_copy_link_resolution() {
+fn test_server_token_assignment_updates_entry_token() {
     App::test((), |mut app| async move {
         let _interactive_management_guard =
             FeatureFlag::InteractiveConversationManagementView.override_enabled(true);
@@ -687,26 +455,14 @@ fn test_server_token_assignment_updates_copy_link_resolution() {
             );
             model
         });
-        let saw_conversation_updated = Arc::new(AtomicBool::new(false));
+        let count = count_conversation_updated_events(&mut app, &agent_model);
 
+        let entry_id = AgentConversationEntryId::Conversation(conversation_id);
         app.update(|ctx| {
-            let saw_conversation_updated = saw_conversation_updated.clone();
-            ctx.subscribe_to_model(&agent_model, move |_, event, _| {
-                if matches!(
-                    event,
-                    AgentConversationsModelEvent::ConversationUpdated { .. }
-                ) {
-                    saw_conversation_updated.store(true, Ordering::SeqCst);
-                }
-            });
-
-            let link = AgentConversationsModel::resolve_copy_link(
-                AgentConversationNavigationSubject::Entry(AgentConversationEntryId::Conversation(
-                    conversation_id,
-                )),
-                ctx,
-            );
-            assert_eq!(link, None);
+            let entry = AgentConversationsModel::as_ref(ctx)
+                .get_entry_by_id(&entry_id, ctx)
+                .expect("conversation entry should exist");
+            assert_eq!(entry.identity.server_conversation_token, None);
         });
 
         let token = "assigned-token-after-entry-build";
@@ -725,69 +481,15 @@ fn test_server_token_assignment_updates_copy_link_resolution() {
         });
 
         app.update(|ctx| {
-            assert!(saw_conversation_updated.load(Ordering::SeqCst));
+            assert_eq!(count.load(Ordering::SeqCst), 1);
 
-            let link = AgentConversationsModel::resolve_copy_link(
-                AgentConversationNavigationSubject::Entry(AgentConversationEntryId::Conversation(
-                    conversation_id,
-                )),
-                ctx,
-            );
+            let entry = AgentConversationsModel::as_ref(ctx)
+                .get_entry_by_id(&entry_id, ctx)
+                .expect("conversation entry should exist");
             assert_eq!(
-                link,
-                Some(ServerConversationToken::new(token.to_string()).conversation_link())
+                entry.identity.server_conversation_token,
+                Some(ServerConversationToken::new(token.to_string()))
             );
         });
     });
-}
-
-#[test]
-fn test_file_artifact_filter_matches_only_items_with_file_artifacts() {
-    let artifacts_with_file = vec![Artifact::File {
-        artifact_uid: "artifact-file-1".to_string(),
-        filepath: "outputs/report.txt".to_string(),
-        filename: "report.txt".to_string(),
-        mime_type: "text/plain".to_string(),
-        description: Some("Daily summary".to_string()),
-        size_bytes: Some(42),
-    }];
-    let artifacts_with_pr = vec![Artifact::PullRequest {
-        url: "https://github.com/org/repo/pull/1".to_string(),
-        branch: "main".to_string(),
-        repo: Some("repo".to_string()),
-        number: Some(1),
-    }];
-
-    assert!(super::artifacts_match_filter(
-        &artifacts_with_file,
-        &ArtifactFilter::File,
-    ));
-    assert!(!super::artifacts_match_filter(
-        &artifacts_with_pr,
-        &ArtifactFilter::File,
-    ));
-    assert!(super::artifacts_match_filter(
-        &artifacts_with_file,
-        &ArtifactFilter::All,
-    ));
-}
-
-#[test]
-fn test_agent_management_filters_ignore_retired_fields() {
-    // Persisted filters written before the environment and harness filters were removed still
-    // carry those keys; they must be dropped rather than failing the whole payload.
-    let persisted = r#"{
-        "owners": "PersonalOnly",
-        "status": "All",
-        "source": "All",
-        "created_on": "All",
-        "creator": "All",
-        "artifact": "All",
-        "environment": {"Specific": "env-1"},
-        "harness": "claude"
-    }"#;
-    let decoded: AgentManagementFilters =
-        serde_json::from_str(persisted).expect("retired filter keys must be ignored");
-    assert_eq!(decoded, AgentManagementFilters::default());
-    assert!(!decoded.is_filtering());
 }
