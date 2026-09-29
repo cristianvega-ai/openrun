@@ -149,40 +149,6 @@ pub enum SupportedPlatforms {
     OR(Box<SupportedPlatforms>, Box<SupportedPlatforms>),
 }
 
-/// A surface the settings system can run in. Used by [`SettingSurfaces`] to
-/// decide which settings apply to a surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SettingsMode {
-    /// The desktop GUI application.
-    Gui,
-}
-
-/// The set of surfaces a setting applies to.
-///
-/// Declared per-setting via the required `surface:` attribute in
-/// `define_settings_group!` and used at schema /
-/// default-file generation time to decide which settings belong in a given
-/// surface's file. Combine surfaces with [`SettingSurfaces::ALL`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SettingSurfaces(u8);
-
-impl SettingSurfaces {
-    /// The desktop GUI application only.
-    pub const GUI: Self = Self(1 << 0);
-    /// The headless terminal-UI front-end only.
-    pub const TUI: Self = Self(1 << 1);
-    /// Every surface (currently GUI and TUI).
-    pub const ALL: Self = Self(Self::GUI.0 | Self::TUI.0);
-
-    /// Whether the given runtime [`SettingsMode`] is included in this set.
-    pub fn includes(self, mode: SettingsMode) -> bool {
-        let bit = match mode {
-            SettingsMode::Gui => Self::GUI.0,
-        };
-        self.0 & bit != 0
-    }
-}
-
 impl SupportedPlatforms {
     pub fn matches_current_platform(&self) -> bool {
         match self {

@@ -10,7 +10,6 @@ define_settings_group!(InputModeSettings, settings: [
         // to set it to InputMode::Waterfall.
         default: InputMode::PinnedToBottom,
         supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::GUI,
         private: false,
         storage_key: "InputMode",
         toml_path: "appearance.input.input_mode",

@@ -9,7 +9,6 @@ define_settings_group!(LinuxAppConfiguration,
             // Default to true on WSL and false on all other platforms.
             default: !linux::is_wsl(),
             supported_platforms: SupportedPlatforms::LINUX,
-            surface: settings::SettingSurfaces::GUI,
             private: false,
             toml_path: "system.force_x11",
             description: "Whether to force X11 instead of Wayland on Linux.",

@@ -15,7 +15,6 @@
 
 use std::path::PathBuf;
 
-use settings::SettingsMode;
 use settings::schema::SettingSchemaEntry;
 use warpui_extras::user_preferences::UserPreferences as _;
 use warpui_extras::user_preferences::toml_backed::TomlBackedUserPreferences;
@@ -69,11 +68,6 @@ fn main() {
         // Skip private settings — they live in the platform-native store and
         // never appear in the user-visible TOML file.
         if entry.is_private {
-            continue;
-        }
-
-        // Skip settings that don't apply to the GUI.
-        if !(entry.surfaces_fn)().includes(SettingsMode::Gui) {
             continue;
         }
 

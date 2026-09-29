@@ -6,7 +6,6 @@ define_settings_group!(ScrollSettings, settings: [
         type: f32,
         default: 3.0,
         supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "general.mouse_scroll_multiplier",
         description: "The scroll speed multiplier for mouse scroll events.",

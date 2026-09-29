@@ -7,7 +7,6 @@ define_settings_group!(LigatureSettings, settings: [
         type: bool,
         default: false,
         supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::GUI,
         private: false,
         toml_path: "appearance.text.ligature_rendering_enabled",
         description: "Whether to render font ligatures in the terminal.",

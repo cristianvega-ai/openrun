@@ -56,7 +56,6 @@ maybe_define_setting!(CustomSecretRegexList, group: PrivacySettings, {
     type: Vec<CustomSecretRegex>,
     default: Vec::new(),
     supported_platforms: SupportedPlatforms::ALL,
-    surface: settings::SettingSurfaces::GUI,
     private: false,
     toml_path: "privacy.custom_secret_regex_list",
     description: "Custom regex patterns for detecting and redacting secrets.",
@@ -66,7 +65,6 @@ maybe_define_setting!(HasInitializedDefaultSecretRegexes, group: PrivacySettings
     type: bool,
     default: false,
     supported_platforms: SupportedPlatforms::ALL,
-    surface: settings::SettingSurfaces::GUI,
     private: true,
 });
 

@@ -15,7 +15,6 @@ define_settings_group!(VimBannerSettings, settings: [
         type: BannerState,
         default: BannerState::NotDismissed,
         supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::GUI,
         private: true,
     },
 ]);

@@ -119,6 +119,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Clippy and dead-code fixes](#clippy-and-dead-code-fixes) — restored a clean `cargo clippy --workspace --all-targets --tests -- -D warnings`
 - [Linux and Windows compile fixes](#linux-and-windows-compile-fixes) — fixed a Windows-only compile error and Linux/Windows-only warnings found by cross-target checks
 - [Editor peer layer, single-variant enums and grid storage mode](#editor-peer-layer-single-variant-enums-and-grid-storage-mode) — removed the unused editor remote-peer layer and its drawing, avatar status icons, `is_excluded_binding`, single-variant enums and `Storage::is_sequential`
+- [Setting surfaces](#setting-surfaces) — removed `SettingSurfaces`, `SettingsMode` and the `surface:` argument of the settings macros
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3142,3 +3143,15 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **User-visible impact:** None.
 
 **Notes:** `apply_remote_operations` and the CRDT operation types stay: the buffer tests exercise them as the buffer's merge logic.
+
+## Setting surfaces
+**Why:** `SettingSurfaces` let a setting say whether it belongs to the GUI, the terminal-UI front-end or both. The TUI front-end is gone, so every setting was `GUI` or `ALL` and the annotation carried no information.
+
+**Removed:**
+- `settings::SettingSurfaces` (with `GUI`, `TUI`, `ALL`), `settings::SettingsMode`, the required `surface:` argument of `define_settings_group!`, `define_setting!` and `implement_setting_for_enum!` (about 240 call sites), and `SettingSchemaEntry::surfaces_fn`.
+- The surface filter in `generate_default_settings`, and the `surface_annotation_matches_setting_schema_entry_metadata` test.
+
+**Modified:**
+- The generated settings JSON schema no longer has an `x-warp-surfaces` key on each setting.
+
+**User-visible impact:** None. `settings.toml` and the default settings file are unchanged; only the generated JSON schema loses one extension key.

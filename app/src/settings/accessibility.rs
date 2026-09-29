@@ -7,7 +7,6 @@ define_settings_group!(AccessibilitySettings, settings: [
         type: AccessibilityVerbosity,
         default: AccessibilityVerbosity::default(),
         supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::GUI,
         private: false,
         storage_key: "AccessibilityVerbosity",
         toml_path: "accessibility.accessibility_verbosity",

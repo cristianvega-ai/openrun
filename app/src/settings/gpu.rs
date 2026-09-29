@@ -9,7 +9,6 @@ define_settings_group!(GPUSettings, settings: [
         // more unstable.
        default: cfg!(any(target_os = "linux", target_os = "freebsd", windows)),
        supported_platforms: SupportedPlatforms::ALL,
-       surface: settings::SettingSurfaces::GUI,
        private: false,
        toml_path: "system.prefer_low_power_gpu",
        description: "Whether to prefer the integrated (low-power) GPU.",
@@ -18,7 +17,6 @@ define_settings_group!(GPUSettings, settings: [
        type: Option<GraphicsBackend>,
        default: None,
        supported_platforms: SupportedPlatforms::WINDOWS,
-       surface: settings::SettingSurfaces::GUI,
        private: false,
        toml_path: "system.preferred_graphics_backend",
        description: "The preferred graphics backend on Windows.",

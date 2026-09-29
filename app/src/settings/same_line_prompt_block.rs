@@ -40,7 +40,6 @@ define_settings_group!(SameLinePromptBlockSettings, settings: [
         type: SLPBlockState,
         default: SLPBlockState::NotShown,
         supported_platforms: SupportedPlatforms::ALL,
-        surface: settings::SettingSurfaces::GUI,
         private: true,
     },
 ]);

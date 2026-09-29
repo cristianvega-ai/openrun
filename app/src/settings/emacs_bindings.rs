@@ -15,7 +15,6 @@ define_settings_group!(EmacsBindingsSettings, settings: [
         type: BannerState,
         default: BannerState::NotDismissed,
         supported_platforms: SupportedPlatforms::LINUX,
-        surface: settings::SettingSurfaces::GUI,
         private: true,
     },
 ]);
