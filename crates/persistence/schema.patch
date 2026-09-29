@@ -1,6 +1,6 @@
 --- a/crates/persistence/src/schema.rs
 +++ b/crates/persistence/src/schema.rs
-@@ -245,13 +245,13 @@
+@@ -196,13 +196,13 @@
  
  diesel::table! {
      object_metadata (id) {

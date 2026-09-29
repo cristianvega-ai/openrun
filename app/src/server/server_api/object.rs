@@ -127,7 +127,6 @@ use crate::server::server_api::ServerApi;
 use crate::server::sync_queue::SerializedModel;
 use crate::workspaces::gql_convert::object_update_message_from_gql;
 use crate::workspaces::user_profiles::UserProfileWithUID;
-use ai::document::AIDocumentId;
 
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
@@ -284,10 +283,6 @@ impl ObjectClient for ServerApi {
         let notebook: SerializedNotebook = serde_json::from_str(serialized.model_as_str())
             .context("Failed to deserialize notebook model")?;
 
-        let ai_document_id = notebook
-            .ai_document_id
-            .and_then(|id| AIDocumentId::try_from(id).ok());
-
         let variables = CreateNotebookVariables {
             input: CreateNotebookInput {
                 data: Some(notebook.data),
@@ -295,7 +290,7 @@ impl ObjectClient for ServerApi {
                 initial_folder_id: request.initial_folder_id.map(|folder_id| folder_id.into()),
                 owner: request.owner.into(),
                 title: request.title,
-                ai_document_id: ai_document_id.map(|id| id.to_string()),
+                ai_document_id: notebook.ai_document_id,
                 conversation_id: notebook.conversation_id,
             },
             request_context: get_request_context(),

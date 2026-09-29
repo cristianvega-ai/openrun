@@ -1263,7 +1263,6 @@ fn save_workspace(conn: &mut SqliteConnection, workspace: WorkspaceMetadata) -> 
         name: workspace.name,
         server_uid: workspace.uid.into(),
         is_selected: true,
-        feature_model_choice_json: None,
     };
 
     diesel::insert_into(workspaces)
@@ -1282,7 +1281,6 @@ fn save_workspace(conn: &mut SqliteConnection, workspace: WorkspaceMetadata) -> 
             name: team.name,
             server_uid: team.uid.into(),
             billing_metadata_json: serde_json::to_string(&team.billing_metadata).ok(),
-            feature_model_choice_json: None,
         };
         diesel::insert_into(teams)
             .values(&new_team)
@@ -1366,7 +1364,6 @@ fn save_workspaces(
             is_selected: current_workspace_uid
                 .map(|current_uid| workspace.uid == current_uid)
                 .unwrap_or(false),
-            feature_model_choice_json: None,
         })
         .collect();
     diesel::insert_or_ignore_into(workspaces)
@@ -1385,7 +1382,6 @@ fn save_workspaces(
                     server_uid: team.uid.into(),
                     name: team.name.clone(),
                     billing_metadata_json: serde_json::to_string(&team.billing_metadata).ok(),
-                    feature_model_choice_json: None,
                 })
                 .collect::<Vec<NewTeam>>()
         })

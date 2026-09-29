@@ -1477,7 +1477,7 @@ impl UpdateManager {
             let new_notebook = CloudNotebookModel {
                 title: notebook.model().title.to_owned(),
                 data: data.to_string(),
-                ai_document_id: notebook.model().ai_document_id,
+                ai_document_id: notebook.model().ai_document_id.clone(),
                 conversation_id: notebook.model().conversation_id.clone(),
             };
             self.update_object(new_notebook, notebook_id, revision, ctx);

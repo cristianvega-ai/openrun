@@ -1,33 +1,6 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    active_mcp_servers (id) {
-        id -> Integer,
-        mcp_server_uuid -> Text,
-    }
-}
-
-diesel::table! {
-    agent_conversations (id) {
-        id -> Integer,
-        conversation_id -> Text,
-        conversation_data -> Text,
-        last_modified_at -> Timestamp,
-        summary -> Nullable<Text>,
-    }
-}
-
-diesel::table! {
-    agent_tasks (id) {
-        id -> Integer,
-        conversation_id -> Text,
-        task_id -> Text,
-        task -> Binary,
-        last_modified_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     ai_document_panes (id) {
         id -> Integer,
         kind -> Text,
@@ -42,21 +15,6 @@ diesel::table! {
     ai_memory_panes (id) {
         id -> Integer,
         kind -> Text,
-    }
-}
-
-diesel::table! {
-    ai_queries (id) {
-        id -> Integer,
-        exchange_id -> Text,
-        conversation_id -> Text,
-        start_ts -> Timestamp,
-        input -> Text,
-        working_directory -> Nullable<Text>,
-        output_status -> Text,
-        model_id -> Text,
-        planning_model_id -> Text,
-        coding_model_id -> Text,
     }
 }
 
@@ -197,24 +155,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    mcp_environment_variables (mcp_server_uuid) {
-        mcp_server_uuid -> Binary,
-        environment_variables -> Text,
-    }
-}
-
-diesel::table! {
-    mcp_server_installations (id) {
-        id -> Text,
-        templatable_mcp_server -> Text,
-        template_version_ts -> Timestamp,
-        variable_values -> Text,
-        restore_running -> Bool,
-        last_modified_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     mcp_server_panes (id) {
         id -> Integer,
         kind -> Text,
@@ -326,14 +266,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    project_rules (id) {
-        id -> Integer,
-        path -> Text,
-        project_root -> Text,
-    }
-}
-
-diesel::table! {
     projects (path) {
         path -> Text,
         added_ts -> Timestamp,
@@ -402,7 +334,6 @@ diesel::table! {
         name -> Text,
         server_uid -> Text,
         billing_metadata_json -> Nullable<Text>,
-        feature_model_choice_json -> Nullable<Text>,
     }
 }
 
@@ -415,10 +346,6 @@ diesel::table! {
         is_active -> Bool,
         shell_launch_data -> Nullable<Text>,
         input_config -> Nullable<Text>,
-        llm_model_override -> Nullable<Text>,
-        active_profile_id -> Nullable<Text>,
-        conversation_ids -> Nullable<Text>,
-        active_conversation_id -> Nullable<Text>,
     }
 }
 
@@ -507,7 +434,6 @@ diesel::table! {
         name -> Text,
         server_uid -> Text,
         is_selected -> Bool,
-        feature_model_choice_json -> Nullable<Text>,
     }
 }
 

@@ -11,19 +11,12 @@ agent_mode_evals = []
 test-util = ["cloud_objects/test-util"]
 
 [dependencies]
-ai.workspace = true
 anyhow.workspace = true
-cfg-if.workspace = true
 cloud_objects.workspace = true
-lazy_static.workspace = true
 log.workspace = true
-regex.workspace = true
-schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_regex = "1.1.0"
 settings.workspace = true
-settings_value = { workspace = true, features = ["derive"] }
 url.workspace = true
 warp_core.workspace = true
 warp_graphql.workspace = true

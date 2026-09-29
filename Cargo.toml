@@ -27,8 +27,6 @@ publish = false
 
 [workspace.dependencies]
 # Local workspace crates. This lets us reference them in other crates without specifying a path.
-ai = { path = "crates/ai" }
-ai_types = { path = "crates/ai_types" }
 asset_cache = { path = "crates/asset_cache" }
 asset_macro = { path = "crates/asset_macro" }
 channel_versions = { path = "crates/channel_versions", default-features = false }
@@ -80,7 +78,6 @@ warp_files = { path = "crates/warp_files" }
 warp_graphql = { path = "crates/graphql" }
 warp_graphql_schema = { path = "crates/warp_graphql_schema" }
 warp_logging = { path = "crates/warp_logging" }
-warp_multi_agent_client = { path = "crates/warp_multi_agent_client" }
 warp_ripgrep = { path = "crates/warp_ripgrep" }
 warp_search_core = { path = "crates/warp_search_core" }
 warp_server_auth = { path = "crates/warp_server_auth" }
@@ -154,7 +151,6 @@ gloo = { version = "0.11.0", default-features = false, features = [
   "utils",
 ] }
 graphql-ws-client = { version = "0.11.1", default-features = false }
-hashbrown = "0.17.1"
 hex = "0.4.3"
 # This matches the version of hyper used by reqwest.
 hyper = "1.6.0"
@@ -168,7 +164,6 @@ image = { version = "0.25.9", default-features = false, features = [
   "webp",
 ] }
 instant = { version = "0.1.12", features = ["wasm-bindgen"] }
-iso8601-duration = { version = "0.2.0", features = ["chrono", "serde"] }
 itertools = "0.14.0"
 jsonschema = { version = "0.45", default-features = false }
 lasso = { version = "0.7.3", features = ["multi-threaded"] }
@@ -206,7 +201,6 @@ pathfinder_geometry = "0.5.1"
 pin-project = "1.0.10"
 pprof = "0.15.0"
 prost = "0.14.3"
-prost-build = "0.14.3"
 prost-reflect = "0.16.3"
 prost-types = "0.14.3"
 rand = "0.8.6"
@@ -238,7 +232,6 @@ similar = { version = "2.7", features = ["inline"] }
 simplelog = "0.12.2"
 smallvec = "1.6.1"
 smol_str = "0.2.2"
-strsim = "0.11"
 strum = "0.27"
 strum_macros = "0.27"
 tempfile = "3.8.0"
@@ -293,7 +286,6 @@ version-compare = "0.1"
 vte = { git = "https://github.com/warpdotdev/vte.git", rev = "4b399c87b63ba88f45709edaa6383fc519f6c900", default-features = false }
 walkdir = "2"
 warp-workflows = { git = "https://github.com/warpdotdev/workflows", rev = "793a98ddda6ef19682aed66364faebd2829f0e01" }
-warp_multi_agent_api = { git = "https://github.com/warpdotdev/warp-proto-apis.git", rev = "f5c1878026bc11f429260c5e798e7bab6ed4e118" }
 wasm-bindgen = "0.2.89"
 wasm-bindgen-futures = "0.4.42"
 web-sys = { version = "0.3.69", features = [
@@ -405,8 +397,6 @@ pprof_util.opt-level = 3
 # Vastly improve runtime performance of some font and text layout logic
 # at the cost of a small increase in compile time for this crate.
 ttf-parser.opt-level = 3
-# Improve the performance of Agent Mode diff application, particularly in tests.
-strsim.opt-level = 3
 # Improve performance of SSE stream parsing.
 eventsource-stream.opt-level = 3
 memchr.opt-level = 3
@@ -491,7 +481,4 @@ yaml-rust = { git = "https://github.com/warpdotdev/yaml-rust.git", rev = "516847
 tikv-jemallocator = { git = "https://github.com/warpdotdev/jemallocator.git", rev = "2ee30bfdf7059223b54810e4ea6c666f0a379e0b" }
 tikv-jemalloc-sys = { git = "https://github.com/warpdotdev/jemallocator.git", rev = "2ee30bfdf7059223b54810e4ea6c666f0a379e0b" }
 
-[patch."https://github.com/warpdotdev/warp-proto-apis.git"]
-# Uncomment for local development of warp-proto-apis
-# warp_multi_agent_api = { path = "../warp-proto-apis/apis/multi_agent/v1/gen/rust" }
 

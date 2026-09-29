@@ -95,6 +95,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Default session mode and code review comments: types that outlive `app/src/ai`](#default-session-mode-and-code-review-comments-types-that-outlive-appsrcai) — `DefaultSessionMode` moved from `AISettings` to `GeneralSettings`; deleted the dead GitHub-imported review comment path and `CommentOrigin`
 - [App AI core: `app/src/ai`, `AISettings`, the AI server client and app-side AI persistence](#app-ai-core-appsrcai-aisettings-the-ai-server-client-and-app-side-ai-persistence) — deleted `app/src/ai` (82 files), the AI settings group, `server_api/ai.rs`, the agent persistence, the AI execution profile cloud object type and the workspace/team AI fields; `crate::ai` no longer exists
 
+- [AI crates and dependencies](#ai-crates-and-dependencies) — deleted the `ai`, `ai_types` and `warp_multi_agent_client` crates, the Warp agent protocol and MCP/AWS SDK dependencies, and the AI types of `persistence` (tables stay until DB-1)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2463,3 +2464,27 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Left for DRV-5: the cloud-object client and `UpdateManager` items that have no caller now (see the dead-code warnings in `server/cloud_objects/update_manager.rs`, `cloud_object/model/{actions,view}.rs`, `workspaces/user_profiles.rs`).
 - Left for TEL-4: the remaining AI telemetry variants (`AIExecutionProfile*`, `KnowledgePane*` and others whose payloads are plain data), and `CommentResolved`, `CommentsReceived`, `CommentsAttached`.
 - Left for AI-32 and AI-33: `FeatureFlag::{CustomModelRouters, FileBackedExecutionProfiles, SelectionAsContext, DiffSetAsContext}` and their Cargo features, the `diff_type` and `is_new_file` state of `LocalCodeEditorView` (the agent edit proposal; code-review editors pass `None`), `AgentStatus::Cancelled` and the remaining dead-code warnings.
+
+## AI crates and dependencies
+**Why:** after `app/src/ai` went (AI-29), the AI library crates and everything they pulled in had no users. Removing them takes the Warp agent protocol, the MCP client and the AWS SDK out of the build.
+
+**Removed:**
+- Crates: `crates/ai` (agent-facing library: documents, skills, index, MCP and OAuth listeners, AWS credentials, telemetry), `crates/ai_types` and `crates/warp_multi_agent_client`, with their `[workspace.dependencies]` entries, the `ai/*` and `warp_multi_agent_client/*` Cargo features of `warp`, and the `ai` test-util dev-dependency.
+- Dependencies: the git dependency `warp_multi_agent_api` (`warp-proto-apis`, from `warp`, `persistence`, `integration` and the workspace, with its `[patch]` block and the flake's vendoring step), `rmcp`, the `aws-config`, `aws-credential-types` and `aws-types` SDK crates of `warp`, and the unused `oauth2` dependency of `warp`. `cargo metadata` no longer lists `rmcp`, `warp_multi_agent_api` or any `aws-*` crate other than `aws-lc-rs`/`aws-lc-sys` (the rustls crypto backend behind `reqwest`, which stays). The old `hyper` 0.14 edge that the AWS smithy runtime brought in is gone.
+- Dependencies left without users by earlier AI removals: `channel_versions`, `field_mask`, `iso8601-duration`, `prost`, `prost-types`, `reqwest-eventsource`, `hashbrown`, `mockito` (dev) and `prost-build` (build) from `warp`; `cfg-if`, `lazy_static`, `regex`, `schemars`, `serde_regex` and `settings_value` from `cloud_object_models`; `serde` and `serde_json` from `persistence`; `persistence` from `graphql`; the workspace entries `hashbrown`, `iso8601-duration`, `prost-build` and `strsim` and the `strsim` opt-level override for Agent Mode diff application.
+- `persistence`: the agent conversation, task and usage-metadata model types (`AgentConversation*`, `AgentConversationSummary`, `AgentConversationData`, `ModelTokenUsage`, `ToolUsageMetadata`, `ToolCallStats` and its MCP fields, `ChargedUsageTotals`, `ConversationUsageMetadata`, `ContextWindowSegment*`, `AIAgentActionId` and the proto conversions) with `model_tests.rs`, and `EXECUTION_PROFILE_EDITOR_PANE_KIND`.
+- `persistence/schema.rs` (and the line offset in `schema.patch`): the tables `active_mcp_servers`, `agent_conversations`, `agent_tasks`, `ai_queries`, `mcp_environment_variables`, `mcp_server_installations` and `project_rules`, and the columns `terminal_panes.{llm_model_override, active_profile_id, conversation_ids, active_conversation_id}` and `workspaces/teams.feature_model_choice_json` (with the `feature_model_choice_json` field of the `Team`, `NewTeam`, `Workspace` and `NewWorkspace` models).
+- `warp_graphql`: the conversions from the usage-history and conversation GraphQL types to the persistence types, `convert_token_usage`, `ai_tests.rs`, and the `call_mcp_tool_stats` and `read_mcp_resource_stats` fields of the usage query's `ToolUsageMetadata`.
+
+**Modified:**
+- `cloud_object_models`: `CloudNotebookModel::ai_document_id` is a plain `Option<String>` instead of `ai::document::AIDocumentId`, so the notebook sync queue, sqlite persistence and GraphQL conversions pass the value through unchanged (ids are no longer validated as UUIDs). DRV-3/DRV-5 delete the field with cloud notebooks.
+
+**User-visible impact:** none.
+
+**Persisted state:** no migration. The sqlite tables and columns above stay in existing databases until DB-1 drops them; the app no longer declares them to diesel. `ai_document_panes`, `ai_memory_panes`, `ambient_agent_panes` and `mcp_server_panes` stay in `schema.rs` because `save_app_state` still clears them (their rows have foreign keys to `pane_leaves`); DB-1 removes both together with the tables.
+
+**Notes:**
+- DB-1: drop the tables and columns listed above plus the four pane tables; regenerate `schema.rs` and `schema.patch`; remove the `save_app_state` deletes of the pane tables.
+- Workspace crates without dependents after the deletions: `channel_versions` and `field_mask` (SRV-1 or SWP-17 to delete). `cloud_object_models` still lists unused `log`, `url`, `warp_core` and `warp_util` (DRV-5). `warp_graphql` still holds the AI conversation and usage query types (`list_ai_conversations`, `get_conversation_usage`, `get_ai_conversation_format`, `ConversationUsageMetadata`, `ContextWindowSegment`), now without users (SRV-1).
+- The `agent_mode_evals`, `jemalloc`, `local_fs` and `test-util` Cargo features of `warp` lost their `ai/*` and `warp_multi_agent_client/*` entries; the features themselves stay for AI-32.
+- `deny.toml` keeps its bans on `warp_multi_agent_api`, `rmcp` and `oauth2` so they cannot return.
