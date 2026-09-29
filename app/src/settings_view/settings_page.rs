@@ -255,12 +255,10 @@ pub fn render_separator(appearance: &Appearance) -> Box<dyn Element> {
         .finish()
 }
 
-#[derive(Default)]
-pub struct AdditionalInfo<T> {
+/// An info icon rendered after a setting's label, with a hover tooltip.
+pub struct AdditionalInfo {
     pub mouse_state: MouseStateHandle,
-    pub on_click_action: Option<T>,
-    pub secondary_text: Option<String>,
-    pub tooltip_override_text: Option<String>,
+    pub tooltip_text: String,
 }
 
 #[derive(Default)]
@@ -276,13 +274,11 @@ impl From<bool> for ToggleState {
     }
 }
 
-pub fn render_info_icon<T: Clone + Action>(
+pub fn render_info_icon(
     appearance: &Appearance,
-    additional_info: AdditionalInfo<T>,
+    additional_info: AdditionalInfo,
 ) -> Box<dyn Element> {
-    let tooltip_text = additional_info
-        .tooltip_override_text
-        .unwrap_or("Click to learn more in docs".to_owned());
+    let tooltip_text = additional_info.tooltip_text;
     let icon = Container::new(
         ConstrainedBox::new(
             Icon::Info
@@ -295,7 +291,7 @@ pub fn render_info_icon<T: Clone + Action>(
     )
     .finish();
 
-    let mut info_button = Hoverable::new(additional_info.mouse_state.clone(), move |state| {
+    let info_button = Hoverable::new(additional_info.mouse_state.clone(), move |state| {
         let mut stack = Stack::new().with_child(icon);
         if state.is_hovered() {
             let tool_tip = ConstrainedBox::new(
@@ -321,20 +317,15 @@ pub fn render_info_icon<T: Clone + Action>(
     })
     .with_cursor(Cursor::PointingHand);
 
-    if let Some(on_click_action) = additional_info.on_click_action {
-        info_button = info_button
-            .on_click(move |ctx, _, _| ctx.dispatch_typed_action(on_click_action.clone()));
-    }
-
     Container::new(Box::new(info_button))
         .with_margin_left(4.)
         .finish()
 }
 
-pub fn render_body_item_label<T: Clone + Action>(
+pub fn render_body_item_label(
     label_text: String,
     label_color_override: Option<Fill>,
-    additional_info: Option<AdditionalInfo<T>>,
+    additional_info: Option<AdditionalInfo>,
     toggle_state: ToggleState,
     appearance: &Appearance,
 ) -> Box<dyn Element> {
@@ -348,11 +339,11 @@ pub fn render_body_item_label<T: Clone + Action>(
     )
 }
 
-pub fn render_body_item_label_internal<T: Clone + Action>(
+pub fn render_body_item_label_internal(
     label_text: String,
     label_icon: Option<Icon>,
     label_color_override: Option<Fill>,
-    additional_info: Option<AdditionalInfo<T>>,
+    additional_info: Option<AdditionalInfo>,
     toggle_state: ToggleState,
     appearance: &Appearance,
 ) -> Box<dyn Element> {
@@ -382,42 +373,11 @@ pub fn render_body_item_label_internal<T: Clone + Action>(
 
     let label = label.finish();
     if let Some(additional_info) = additional_info {
-        // Construct a child element for the secondary text, if necessary, before
-        // `additional_info` gets moved into `render_info_icon()`.
-        let secondary_text_child =
-            if let Some(secondary_text) = additional_info.secondary_text.clone() {
-                let warp_theme = appearance.theme();
-                Some(
-                    appearance
-                        .ui_builder()
-                        .span(secondary_text)
-                        .with_style(UiComponentStyles {
-                            font_color: Some(
-                                warp_theme
-                                    .sub_text_color(warp_theme.surface_2())
-                                    .into_solid(),
-                            ),
-                            margin: Some(Coords {
-                                left: 8.,
-                                ..Default::default()
-                            }),
-                            ..Default::default()
-                        })
-                        .build()
-                        .finish(),
-                )
-            } else {
-                None
-            };
-
-        let mut row = Flex::row()
+        Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_child(label)
-            .with_child(render_info_icon(appearance, additional_info));
-        if let Some(child) = secondary_text_child {
-            row.add_child(child);
-        }
-        row.finish()
+            .with_child(render_info_icon(appearance, additional_info))
+            .finish()
     } else {
         label
     }
@@ -442,9 +402,9 @@ pub fn render_page_title(text: &str, size: f32, appearance: &Appearance) -> Box<
 
 /// Renders a toggle with a label on the left and a toggle on the right,
 /// including bottom padding.
-pub fn render_body_item<T: Clone + Action>(
+pub fn render_body_item(
     label_text: String,
-    additional_info: Option<AdditionalInfo<T>>,
+    additional_info: Option<AdditionalInfo>,
     toggle_state: ToggleState,
     appearance: &Appearance,
     child_element: Box<dyn Element>,

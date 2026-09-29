@@ -250,7 +250,7 @@ impl SettingsWidget for WarpControlCliInstallWidget {
                 .finish()
         };
 
-        render_body_item::<ScriptingSettingsPageAction>(
+        render_body_item(
             "Warp Control CLI command".into(),
             None,
             ToggleState::Enabled,
@@ -275,7 +275,7 @@ impl SettingsWidget for LocalControlModeWidget {
         appearance: &Appearance,
         _app: &AppContext,
     ) -> Box<dyn Element> {
-        render_body_item::<ScriptingSettingsPageAction>(
+        render_body_item(
             "warpctrl CLI".into(),
             None,
             ToggleState::Enabled,

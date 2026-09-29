@@ -45,10 +45,7 @@ use crate::workspace::WorkspaceAction;
 lazy_static! {
     /// Set of hardcoded action names that we want to show in the command palette zero state.
     static ref SUGGESTED_ACTIONS: HashSet<&'static str> = HashSet::from_iter(
-        [
-            "workspace:show_theme_chooser",
-            "workspace:create_personal_workflow",
-        ]
+        ["workspace:show_theme_chooser"]
     );
 }
 

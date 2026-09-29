@@ -3678,7 +3678,7 @@ impl FeaturesPageView {
                     Shrinkable::new(
                         1.0,
                         Container::new(
-                            Align::new(render_body_item_label::<FeaturesPageAction>(
+                            Align::new(render_body_item_label(
                                 label_text,
                                 None,
                                 None,
@@ -3870,7 +3870,7 @@ impl SettingsWidget for SessionRestorationWidget {
             })
             .finish();
 
-        let labeled_switch = render_body_item::<FeaturesPageAction>(
+        let labeled_switch = render_body_item(
             "Restore windows, tabs, and panes on startup".into(),
             None,
             ToggleState::Enabled,
@@ -3927,7 +3927,7 @@ impl SettingsWidget for SnackbarHeaderWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Show sticky command header".into(),
             None,
             ToggleState::Enabled,
@@ -3964,7 +3964,7 @@ impl SettingsWidget for LinkTooltipWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Show tooltip on click on links".into(),
             None,
             ToggleState::Enabled,
@@ -3991,7 +3991,7 @@ impl SettingsWidget for QuitWarningModalWidget {
     type View = FeaturesPageView;
 
     fn search_terms(&self) -> &str {
-        "warning popup modal dialog quit logout log out close"
+        "warning popup modal dialog quit close"
     }
 
     fn render(
@@ -4002,7 +4002,7 @@ impl SettingsWidget for QuitWarningModalWidget {
     ) -> Box<dyn Element> {
         let general_settings = GeneralSettings::as_ref(app);
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Show warning before quitting/logging out".into(),
             None,
             ToggleState::Enabled,
@@ -4044,7 +4044,7 @@ impl SettingsWidget for LoginItemWidget {
         let label = "Start Warp at login (requires macOS 13+)";
         #[cfg(not(target_os = "macos"))]
         let label = "Start Warp at login";
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             label.into(),
             None,
             ToggleState::Enabled,
@@ -4082,7 +4082,7 @@ impl SettingsWidget for QuitWhenAllWindowsClosedWidget {
     ) -> Box<dyn Element> {
         let general_settings = GeneralSettings::as_ref(app);
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Quit when all windows are closed".into(),
             None,
             ToggleState::Enabled,
@@ -4159,15 +4159,11 @@ impl SettingsWidget for MouseScrollMultiplierWidget {
             .with_cross_axis_alignment(CrossAxisAlignment::End)
             .finish();
 
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Lines scrolled by mouse wheel interval".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: None,
-                secondary_text: None,
-                tooltip_override_text: Some(
-                    "Supports floating point values between 1 and 20.".to_string(),
-                ),
+                tooltip_text: "Supports floating point values between 1 and 20.".to_string(),
             }),
             ToggleState::Enabled,
             appearance,
@@ -4262,7 +4258,7 @@ impl SettingsWidget for BlockLimitWidget {
             .build()
             .finish();
 
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Maximum rows in a block".into(),
             None,
             ToggleState::Enabled,
@@ -4294,7 +4290,7 @@ impl SettingsWidget for DesktopNotificationsWidget {
         let session_settings = SessionSettings::as_ref(app);
         let ui_builder = appearance.ui_builder();
         let mut column = Flex::column();
-        column.add_child(render_body_item::<FeaturesPageAction>(
+        column.add_child(render_body_item(
             "Receive desktop notifications from Warp".into(),
             None,
             ToggleState::Enabled,
@@ -4359,7 +4355,7 @@ impl SettingsWidget for DesktopNotificationsWidget {
         }
 
         let show_agent_notifications = *CLIAgentSettings::as_ref(app).show_agent_notifications;
-        column.add_child(render_body_item::<FeaturesPageAction>(
+        column.add_child(render_body_item(
             "Show in-app agent notifications".into(),
             None,
             ToggleState::Enabled,
@@ -4534,7 +4530,7 @@ impl SettingsWidget for ExtraMetaKeysWidget {
         let ui_builder = appearance.ui_builder();
         let key_settings = KeysSettings::as_ref(app);
         Flex::column()
-            .with_child(render_body_item::<FeaturesPageAction>(
+            .with_child(render_body_item(
                 EXTRA_META_KEYS_LEFT_TEXT.into(),
                 None,
                 ToggleState::Enabled,
@@ -4549,7 +4545,7 @@ impl SettingsWidget for ExtraMetaKeysWidget {
                     .finish(),
                 None,
             ))
-            .with_child(render_body_item::<FeaturesPageAction>(
+            .with_child(render_body_item(
                 EXTRA_META_KEYS_RIGHT_TEXT.into(),
                 None,
                 ToggleState::Enabled,
@@ -4594,7 +4590,7 @@ impl SettingsWidget for GlobalHotkeyWidget {
         let mut column = Flex::column();
         let ui_builder = appearance.ui_builder();
         if app.is_wayland() {
-            column.add_child(render_body_item::<FeaturesPageAction>(
+            column.add_child(render_body_item(
                 "Global hotkey:".to_owned(),
                 None,
                 ToggleState::Disabled,
@@ -4709,7 +4705,7 @@ impl SettingsWidget for AutocompleteSymbolsWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Autocomplete quotes, parentheses, and brackets".into(),
             None,
             ToggleState::Enabled,
@@ -4746,7 +4742,7 @@ impl SettingsWidget for ErrorUnderliningWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Error underlining for commands".into(),
             None,
             ToggleState::Enabled,
@@ -4783,7 +4779,7 @@ impl SettingsWidget for SyntaxHighlightingWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Syntax highlighting for commands".into(),
             None,
             ToggleState::Enabled,
@@ -4824,7 +4820,7 @@ impl SettingsWidget for WarpCompletionsWidget {
         let warp_completions_enabled = *InputSettings::as_ref(app).warp_completions_enabled.value();
 
         let mut column = Flex::column();
-        column.add_child(render_body_item::<FeaturesPageAction>(
+        column.add_child(render_body_item(
             "Warp completions".into(),
             None,
             ToggleState::Enabled,
@@ -4898,7 +4894,7 @@ impl SettingsWidget for NativeShellCompletionsWidget {
         };
 
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Native shell completions".into(),
             None,
             ToggleState::Enabled,
@@ -4935,7 +4931,7 @@ impl SettingsWidget for CommandCorrectionsWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Suggest corrected commands".into(),
             None,
             ToggleState::Enabled,
@@ -4973,7 +4969,7 @@ impl SettingsWidget for AliasExpansionWidget {
     ) -> Box<dyn Element> {
         let alias_expansion_settings = AliasExpansionSettings::as_ref(app);
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Expand aliases as you type".into(),
             None,
             ToggleState::Enabled,
@@ -5011,7 +5007,7 @@ impl SettingsWidget for MiddleClickPasteWidget {
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
         let selection_settings = SelectionSettings::as_ref(app);
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Middle-click to paste".into(),
             None,
             ToggleState::Enabled,
@@ -5092,7 +5088,7 @@ impl SettingsWidget for VimModeWidget {
 
         let app_editor_settings = AppEditorSettings::as_ref(app);
         let vim_mode_enabled = *app_editor_settings.vim_mode.value();
-        column.add_child(render_body_item::<FeaturesPageAction>(
+        column.add_child(render_body_item(
             "Edit code and commands with Vim keybindings".into(),
             None,
             ToggleState::Enabled,
@@ -5170,7 +5166,7 @@ impl SettingsWidget for AtContextMenuInTerminalModeWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Enable '@' menu for files and code in terminal mode".into(),
             None,
             ToggleState::Enabled,
@@ -5213,7 +5209,7 @@ impl SettingsWidget for SlashCommandsInTerminalModeWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Enable slash commands in terminal mode".into(),
             None,
             ToggleState::Enabled,
@@ -5256,7 +5252,7 @@ impl SettingsWidget for OutlineCodebaseSymbolsForAtContextMenuWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Outline codebase symbols for '@' context menu".into(),
             None,
             ToggleState::Enabled,
@@ -5299,7 +5295,7 @@ impl SettingsWidget for PreserveInputFocusOnBlockSelectionWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Preserve input focus on block selection".into(),
             None,
             ToggleState::Enabled,
@@ -5343,7 +5339,7 @@ impl SettingsWidget for AutosuggestionKeybindingHintWidget {
         let app_editor_settings = AppEditorSettings::as_ref(app);
         let autosuggestion_keybinding_hint =
             *app_editor_settings.autosuggestion_keybinding_hint.value();
-        column.add_child(render_body_item::<FeaturesPageAction>(
+        column.add_child(render_body_item(
             "Show autosuggestion keybinding hint".into(),
             None,
             ToggleState::Enabled,
@@ -5390,7 +5386,7 @@ impl SettingsWidget for AutosuggestionIgnoreButtonWidget {
         let show_autosuggestion_ignore_button = *app_editor_settings
             .show_autosuggestion_ignore_button
             .value();
-        column.add_child(render_body_item::<FeaturesPageAction>(
+        column.add_child(render_body_item(
             "Show autosuggestion ignore button".into(),
             None,
             ToggleState::Enabled,
@@ -5592,7 +5588,7 @@ impl SettingsWidget for MouseReportingWidget {
     ) -> Box<dyn Element> {
         let reporting_settings = AltScreenReporting::as_ref(app);
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Enable Mouse Reporting".into(),
             None,
             ToggleState::Enabled,
@@ -5630,7 +5626,7 @@ impl SettingsWidget for ScrollReportingWidget {
     ) -> Box<dyn Element> {
         let reporting_settings = AltScreenReporting::as_ref(app);
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Enable Scroll Reporting".into(),
             None,
             if *reporting_settings.mouse_reporting_enabled.value() {
@@ -5679,7 +5675,7 @@ impl SettingsWidget for FocusReportingWidget {
     ) -> Box<dyn Element> {
         let reporting_settings = AltScreenReporting::as_ref(app);
         let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Enable Focus Reporting".into(),
             None,
             ToggleState::Enabled,
@@ -5717,7 +5713,7 @@ impl SettingsWidget for AudibleBellWidget {
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
         let terminal_settings = TerminalSettings::as_ref(app);
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Use Audible Bell".into(),
             None,
             ToggleState::Enabled,
@@ -5812,7 +5808,7 @@ impl SettingsWidget for SmartSelectWidget {
         let ui_builder = appearance.ui_builder();
         let selection = SemanticSelection::as_ref(app);
         let mut column = Flex::column();
-        column.add_child(render_body_item::<FeaturesPageAction>(
+        column.add_child(render_body_item(
             "Double-click smart selection".into(),
             None,
             ToggleState::Enabled,
@@ -5863,7 +5859,7 @@ impl SettingsWidget for CopyOnSelectWidget {
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
         let copy_on_select_enabled = SelectionSettings::as_ref(app).copy_on_select_enabled();
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Copy on select".into(),
             None,
             ToggleState::Enabled,
@@ -5997,7 +5993,7 @@ impl SettingsWidget for WorkflowsInCommandSearch {
     ) -> Box<dyn Element> {
         let ui_builder = appearance.ui_builder();
         let workflow_settings = CommandSearchSettings::as_ref(app);
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Show Global Workflows in Command Search (ctrl-r)".into(),
             None,
             ToggleState::Enabled,
@@ -6036,15 +6032,11 @@ impl SettingsWidget for LinuxSelectionClipboardWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        render_body_item::<FeaturesPageAction>(
+        render_body_item(
             "Honor linux selection clipboard".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: None,
-                secondary_text: None,
-                tooltip_override_text: Some(
-                    "Whether the Linux primary clipboard should be supported.".into(),
-                ),
+                tooltip_text: "Whether the Linux primary clipboard should be supported.".into(),
             }),
             ToggleState::Enabled,
             appearance,
@@ -6081,7 +6073,7 @@ impl SettingsWidget for GPUWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let gpu_settings = GPUSettings::as_ref(app);
-        let mut col = Flex::column().with_child(render_body_item::<FeaturesPageAction>(
+        let mut col = Flex::column().with_child(render_body_item(
             "Prefer rendering new windows with integrated GPU (low power)".into(),
             None,
             ToggleState::Enabled,
@@ -6142,13 +6134,11 @@ impl SettingsWidget for WindowSystemWidget {
     ) -> Box<dyn Element> {
         let mut children = Flex::column();
         let force_x11 = *LinuxAppConfiguration::as_ref(app).force_x11.value();
-        children.add_child(render_body_item::<FeaturesPageAction>(
+        children.add_child(render_body_item(
             "Use Wayland for window management".into(),
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_link.clone(),
-                on_click_action: None,
-                secondary_text: None,
-                tooltip_override_text: Some("Enables the use of Wayland".to_string()),
+                tooltip_text: "Enables the use of Wayland".to_string(),
             }),
             ToggleState::Enabled,
             appearance,

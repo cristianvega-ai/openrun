@@ -167,7 +167,7 @@ impl View for UndoCloseView {
 
         let mut column = Flex::column()
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .with_child(render_body_item::<Action>(
+            .with_child(render_body_item(
                 "Enable reopening of closed sessions".into(),
                 None,
                 ToggleState::Enabled,

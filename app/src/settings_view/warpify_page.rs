@@ -491,7 +491,7 @@ impl SettingsWidget for SSHWidget {
             &mut column,
             &WarpifySettings::as_ref(app).enable_ssh_warpification,
             move || {
-                render_body_item::<WarpifyPageAction>(
+                render_body_item(
                     "Warpify SSH Sessions".into(),
                     None,
                     ToggleState::Enabled,
@@ -517,7 +517,7 @@ impl SettingsWidget for SSHWidget {
             &SshSettings::as_ref(app).reuse_existing_control_master,
             move || {
                 let mut column = Flex::column();
-                column.add_child(render_body_item::<WarpifyPageAction>(
+                column.add_child(render_body_item(
                     "Reuse existing SSH ControlMaster".into(),
                     None,
                     enable_ssh_warpification.into(),

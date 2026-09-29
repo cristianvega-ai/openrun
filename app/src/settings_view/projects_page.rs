@@ -322,7 +322,7 @@ impl SettingsWidget for LanguageServerDownloadsWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        render_body_item::<ProjectsPageAction>(
+        render_body_item(
             DOWNLOADS_LABEL.into(),
             None,
             ToggleState::Enabled,

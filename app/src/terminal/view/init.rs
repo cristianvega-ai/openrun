@@ -626,7 +626,7 @@ pub fn init(app: &mut AppContext) {
         "Attach file to agent conversation",
         TerminalAction::AttachFile,
     )
-    .with_group(bindings::BindingGroup::WarpAi.as_str())
+    .with_group(bindings::BindingGroup::CliAgents.as_str())
     .with_context_predicate(
         (id!("Input") | id!("Terminal"))
             & id!(CLI_AGENT_SESSION_ACTIVE_KEY)

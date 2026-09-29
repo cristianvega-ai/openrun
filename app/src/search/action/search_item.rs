@@ -179,7 +179,7 @@ impl SearchItemIcon for BindingGroup {
     fn icon(&self) -> Icon {
         match self {
             Self::Settings => Icon::Gear,
-            Self::WarpAi => Icon::Agent,
+            Self::CliAgents => Icon::Agent,
             Self::Close => Icon::X,
             Self::Navigation => Icon::Navigation,
             Self::Workflow => Icon::Workflow,
@@ -199,7 +199,7 @@ impl SearchItemIcon for BindingGroup {
             | Self::Folders
             | Self::Terminal
             | Self::Notifications => appearance.theme().foreground().into_solid(),
-            Self::WarpAi => appearance.theme().foreground().into_solid(),
+            Self::CliAgents => appearance.theme().foreground().into_solid(),
             Self::Workflow => workflow_icon_color(appearance),
         }
     }

@@ -735,7 +735,7 @@ pub enum BindingGroup {
     Settings,
     Close,
     Navigation,
-    WarpAi,
+    CliAgents,
     Workflow,
     Folders,
     KeyboardShortcuts,
@@ -748,7 +748,7 @@ impl BindingGroup {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Settings => "settings",
-            Self::WarpAi => "warp_ai",
+            Self::CliAgents => "cli_agents",
             Self::Navigation => "navigation",
             Self::Workflow => "workflows",
             Self::Folders => "folders",

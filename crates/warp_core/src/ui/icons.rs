@@ -141,7 +141,6 @@ pub enum Icon {
     Key,
     SlashCircle,
     User,
-    Users,
     Phone,
     Navigation,
     Bell,
@@ -194,7 +193,6 @@ pub enum Icon {
     Dataflow,
     Play,
     MessageText,
-    NewConversation,
     Image,
     FastForward,
     FastForwardFilled,
@@ -211,7 +209,6 @@ pub enum Icon {
     FolderClosed,
     FileCopy,
     AddressedComment,
-    ClockSnooze,
     Hand,
     ArrowCircleBrokenUp,
     FilterLines,
@@ -231,12 +228,12 @@ pub enum Icon {
     CursorLogo,
     GooseLogo,
     AntigravityLogo,
-    /// The Warp "W" glyph used as the agent brand mark (sourced from
-    /// `bundled/svg/warp-drive.svg`). The background and tint color are
+    /// The Warp "W" glyph used as the mark of the CLI agent bindings (sourced from
+    /// `bundled/svg/warp-glyph.svg`). The background and tint color are
     /// the **call site's responsibility** — this variant carries the shape
     /// only. Most surfaces tint it with the surrounding theme color (light
     /// theme: dark glyph; dark theme: light glyph). Kept distinct from
-    /// `Warp` so agent surfaces and non-agent Warp UI can evolve independently.
+    /// `Warp` so CLI agent surfaces and other Warp UI can evolve independently.
     Agent,
     Prompt,
     Grid,
@@ -332,7 +329,7 @@ impl From<Icon> for &'static str {
             Icon::OrderedListBlock => "bundled/svg/block-ordered-list.svg",
             Icon::TaskListBlock => "bundled/svg/block-tasklist.svg",
             Icon::Compass => "bundled/svg/compass-3.svg",
-            Icon::Warp => "bundled/svg/warp-drive.svg",
+            Icon::Warp => "bundled/svg/warp-glyph.svg",
             Icon::WarpLogoLight => "bundled/svg/warp-logo-light.svg",
             Icon::ArrowLeft => "bundled/svg/arrow-left.svg",
             Icon::ArrowBlockLeft => "bundled/svg/arrow-block-left.svg",
@@ -419,7 +416,6 @@ impl From<Icon> for &'static str {
             Icon::Key => "bundled/svg/key.svg",
             Icon::SlashCircle => "bundled/svg/slash-circle-01.svg",
             Icon::User => "bundled/svg/user-02.svg",
-            Icon::Users => "bundled/svg/users-02.svg",
             Icon::Phone => "bundled/svg/phone.svg",
             Icon::Navigation => "bundled/svg/navigation.svg",
             Icon::Bell => "bundled/svg/bell.svg",
@@ -472,7 +468,6 @@ impl From<Icon> for &'static str {
             Icon::Dataflow => "bundled/svg/dataflow.svg",
             Icon::Play => "bundled/svg/play-white.svg",
             Icon::MessageText => "bundled/svg/message-text-square-02.svg",
-            Icon::NewConversation => "bundled/svg/new-conversation.svg",
             Icon::Image => "bundled/svg/image-01.svg",
             Icon::File => "bundled/svg/file.svg",
             Icon::NodeJS => "bundled/svg/nodejs-logo.svg",
@@ -491,7 +486,6 @@ impl From<Icon> for &'static str {
             Icon::FolderClosed => "bundled/svg/folder-closed.svg",
             Icon::FileCopy => "bundled/svg/file_copy.svg",
             Icon::AddressedComment => "bundled/svg/addressed-comment.svg",
-            Icon::ClockSnooze => "bundled/svg/clock-snooze.svg",
             Icon::Hand => "bundled/svg/hand.svg",
             Icon::ArrowCircleBrokenUp => "bundled/svg/arrow-circle-broken-up.svg",
             Icon::FilterLines => "bundled/svg/filter-lines.svg",
@@ -511,7 +505,7 @@ impl From<Icon> for &'static str {
             Icon::CursorLogo => "bundled/svg/cursor.svg",
             Icon::GooseLogo => "bundled/svg/goose.svg",
             Icon::AntigravityLogo => "bundled/svg/antigravity_cli.svg",
-            Icon::Agent => "bundled/svg/warp-drive.svg",
+            Icon::Agent => "bundled/svg/warp-glyph.svg",
             Icon::Prompt => "bundled/svg/prompt.svg",
             Icon::Grid => "bundled/svg/grid.svg",
             Icon::CalloutTriangleBorderDown => "bundled/svg/callout-triangle-border-down.svg",

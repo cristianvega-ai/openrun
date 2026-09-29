@@ -91,7 +91,7 @@ fn render_ai_setting_toggle(
 ) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(app);
     build_toggle_element(
-        render_body_item_label::<SettingsAction>(
+        render_body_item_label(
             label.into(),
             Some(styles::header_font_color(is_setting_toggleable, app)),
             None,
@@ -469,7 +469,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 context,
                 flags::CLI_AGENT_FOOTER_ENABLED,
             )
-            .with_group(bindings::BindingGroup::WarpAi),
+            .with_group(bindings::BindingGroup::CliAgents),
         ],
         app,
     );
@@ -483,7 +483,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 &(context.clone() & id!(flags::CLI_AGENT_FOOTER_ENABLED)),
                 flags::AUTO_TOGGLE_RICH_INPUT_FLAG,
             )
-            .with_group(bindings::BindingGroup::WarpAi),
+            .with_group(bindings::BindingGroup::CliAgents),
             ToggleSettingActionPair::new(
                 "auto open Rich Input when a coding agent session starts",
                 builder(SettingsAction::CLIAgents(
@@ -492,7 +492,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 &(context.clone() & id!(flags::CLI_AGENT_FOOTER_ENABLED)),
                 flags::AUTO_OPEN_RICH_INPUT_ON_CLI_AGENT_START_FLAG,
             )
-            .with_group(bindings::BindingGroup::WarpAi),
+            .with_group(bindings::BindingGroup::CliAgents),
             ToggleSettingActionPair::new(
                 "auto dismiss Rich Input after prompt submission",
                 builder(SettingsAction::CLIAgents(
@@ -501,7 +501,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 &(context.clone() & id!(flags::CLI_AGENT_FOOTER_ENABLED)),
                 flags::AUTO_DISMISS_RICH_INPUT_AFTER_SUBMIT_FLAG,
             )
-            .with_group(bindings::BindingGroup::WarpAi),
+            .with_group(bindings::BindingGroup::CliAgents),
         ],
         app,
     );
@@ -613,16 +613,12 @@ impl SettingsWidget for CLIAgentAutoToggleRichInputWidget {
             return Empty::new().finish();
         }
 
-        let label = render_body_item_label::<CLIAgentsPageAction>(
+        let label = render_body_item_label(
             "Auto show/hide Rich Input based on agent status".into(),
             Some(styles::header_font_color(true, app)),
             Some(AdditionalInfo {
                 mouse_state: self.info_tooltip.clone(),
-                on_click_action: None,
-                secondary_text: None,
-                tooltip_override_text: Some(
-                    "Requires a notification plugin for your coding agent".to_owned(),
-                ),
+                tooltip_text: "Requires a notification plugin for your coding agent".to_owned(),
             }),
             ToggleState::Enabled,
             appearance,

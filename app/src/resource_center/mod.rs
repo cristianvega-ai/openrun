@@ -79,12 +79,6 @@ pub enum TipAction {
     HistorySearch,
     CommandSearch,
     SaveNewLaunchConfig,
-    // Deprecated: no longer in any section. Kept because this enum is serialized into the
-    // welcome tips, and old clients will have this value in their user defaults.
-    OpenWarpDrive,
-    // Not shown in any section. Kept so that welcome tips saved by earlier versions, which may
-    // contain this value, still deserialize.
-    Changelog,
     // Note that this item has been deprecated from the UI and is not in any section.
     // We are leaving it in this enum to ensure that we don't re-use `Workflows` as a
     // value. Since old clients will have this value in their user defaults, we want
@@ -101,8 +95,6 @@ impl TipAction {
             TipAction::CommandSearch => "workspace:show_command_search",
             TipAction::ThemePicker => "workspace:show_theme_chooser",
             TipAction::SaveNewLaunchConfig => "workspace:open_launch_config_save_modal",
-            TipAction::OpenWarpDrive => "workspace:toggle_left_panel",
-            TipAction::Changelog => "/changelog",
             TipAction::Workflows => "input:toggle_workflows",
         }
     }
@@ -200,3 +192,7 @@ impl TipsCompleted {
         self.features_used.len()
     }
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

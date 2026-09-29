@@ -133,6 +133,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Background git and GitHub traffic](#background-git-and-github-traffic) — `gh` and remote `git` now run only while a PR chip or the code-review panel is in use, or on an explicit action; removed the leftover "agent context" triggers and the dead `git fetch origin`
 - [Offline indicator and network reachability watchers](#offline-indicator-and-network-reachability-watchers) — removed the tab-bar "Some features may be unavailable offline" icon, the `NetworkStatus` model and the macOS, Linux, Windows and web reachability watchers
 - [Warp-internal design links](#warp-internal-design-links) — removed Notion, Figma and Google Docs links from comments and a debug assertion message; `script/offline_audit` now fails on them
+- [Dead tips, icons, tooltips and Warp AI / Drive names](#dead-tips-icons-tooltips-and-warp-ai-drive-names) — removed retired welcome-tip actions, three unused icons and five unreferenced SVGs, the docs-link info tooltip, the log-out remnants and a dead slash-menu action; renamed `BindingGroup::WarpAi` and `warp-drive.svg`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3367,3 +3368,21 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 **User-visible impact:** None. The debug-only flex assertion message no longer ends with a link.
 
 **Notes:** Prose that only says "Figma" (for example "matches Figma px-24") stays; it names no location.
+
+## Dead tips, icons, tooltips and Warp AI / Drive names
+**Why:** SWP-18 findings F5 to F8, F10, and V3 findings F7 and F9. Small leftovers of removed features that the earlier removal tasks skipped.
+
+**Removed:**
+- `TipAction::{OpenWarpDrive, Changelog}`. `welcome_tips_features_used` is a `LenientSet<Tip>`, so an old stored value is dropped on load instead of failing the setting (test: `resource_center::tests::retired_welcome_tips_are_dropped_and_current_tips_survive`).
+- `Icon::{NewConversation, Users, ClockSnooze}` and the SVGs `new-conversation`, `users-02`, `clock-snooze`, plus `sparkle.svg` and `user.svg`, which no code referenced.
+- The settings info icon's default tooltip "Click to learn more in docs" and its dead `on_click_action` and `secondary_text` fields. `AdditionalInfo` is no longer generic (`mouse_state`, `tooltip_text`), so `render_body_item`, `render_body_item_label` and `render_info_icon` lost their unused action type parameter and about 85 call sites lost the turbofish.
+- The "log out" TODO in `quit_warning` and the "logout log out" settings search terms of the quit-warning switch.
+- `InputAction::ToggleSlashCommandsMenu` and `Input::toggle_legacy_slash_commands_menu`, whose only caller was deleted with the agent message bar.
+- The dead `workspace:create_personal_workflow` entry of the command palette's suggested actions.
+
+**Modified:**
+- `BindingGroup::WarpAi` (`"warp_ai"`) is now `BindingGroup::CliAgents` (`"cli_agents"`); it groups the CLI-agent bindings. `warp-drive.svg`, the shared glyph of `Icon::Warp` and `Icon::Agent`, is now `warp-glyph.svg`.
+
+**User-visible impact:** None, except that the CLI-agent bindings are grouped under an id that no longer says Warp AI in the command-search grouping code.
+
+**Notes:** Kept on purpose: the legacy settings-slug map in `settings_view/mod.rs` (`"Account"`, `"Oz"`, `"Teams"`, ...) is backward compatibility for stored or deep-linked slugs and is tested (V1 F9). `TipAction::Workflows` stays, as its own comment explains. Many other `Icon` variants have no caller (the icon set is a general library); only the ones tied to removed features were deleted.

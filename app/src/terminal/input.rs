@@ -517,9 +517,6 @@ pub enum InputAction {
     /// Persist the completions menu height when the user resizes it.
     UpdateCompletionsMenuHeight(f32),
 
-    /// Toggles the '/' slash commands menu.
-    ToggleSlashCommandsMenu,
-
     /// Opens the inline history menu for cycling through past commands and conversations.
     OpenInlineHistoryMenu,
 
@@ -2164,22 +2161,6 @@ impl Input {
             model.set_mode(InputSuggestionsMode::SlashCommands, ctx);
         });
         ctx.notify();
-    }
-
-    fn toggle_legacy_slash_commands_menu(&mut self, ctx: &mut ViewContext<Self>) {
-        let is_slash_menu_open = self.suggestions_mode_model.as_ref(ctx).is_slash_commands();
-
-        if is_slash_menu_open {
-            self.editor.update(ctx, |editor, ctx| {
-                editor.clear_buffer(ctx);
-            });
-            self.slash_command_model.update(ctx, |model, ctx| {
-                model.disable(ctx);
-            });
-            self.close_slash_commands_menu(ctx);
-        } else {
-            self.system_insert("/", ctx);
-        }
     }
 
     fn handle_repos_menu_event(
@@ -7727,9 +7708,6 @@ impl TypedActionView for Input {
                 InputSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.completions_menu_height.set_value(*height, ctx));
                 });
-            }
-            InputAction::ToggleSlashCommandsMenu => {
-                self.toggle_legacy_slash_commands_menu(ctx);
             }
             InputAction::TriggerSlashCommandFromKeybinding(command_name) => {
                 let Some(command) = COMMAND_REGISTRY.get_command_with_name(command_name) else {

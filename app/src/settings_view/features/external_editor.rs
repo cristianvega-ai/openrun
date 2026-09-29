@@ -250,7 +250,7 @@ impl View for ExternalEditorView {
             .with_child(code_panels_editor)
             .with_child(default_layout);
 
-        column.add_child(render_body_item::<ExternalEditorAction>(
+        column.add_child(render_body_item(
             TABBED_FILE_VIEWER_TOGGLE_HEADER.into(),
             None,
             ToggleState::Enabled,
@@ -271,7 +271,7 @@ impl View for ExternalEditorView {
             Some(TABBED_FILE_VIEWER_TOGGLE_DESCRIPTION.into()),
         ));
 
-        column.add_child(render_body_item::<ExternalEditorAction>(
+        column.add_child(render_body_item(
             "Open Markdown files in Warp's Markdown Viewer by default".to_string(),
             None,
             ToggleState::Enabled,

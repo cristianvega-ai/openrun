@@ -2566,7 +2566,7 @@ impl SettingsWidget for ThemeSelectWidget {
 
         Flex::column()
             .with_cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .with_child(render_body_item::<AppearancePageAction>(
+            .with_child(render_body_item(
                 "Sync with OS".into(),
                 None,
                 ToggleState::Enabled,
@@ -2649,7 +2649,7 @@ impl SettingsWidget for CustomAppIconWidget {
             &view.app_icon_dropdown,
         );
 
-        let show_dock_icon_toggle = render_body_item::<AppearancePageAction>(
+        let show_dock_icon_toggle = render_body_item(
             "Show Warp in Dock".into(),
             None,
             ToggleState::Enabled,
@@ -2736,7 +2736,7 @@ impl SettingsWidget for CustomWindowSizeWidget {
             (!view.valid_new_window_columns).then(|| themes::theme::Fill::error().into());
         let row_border_color: Option<Fill> =
             (!view.valid_new_window_rows).then(|| themes::theme::Fill::error().into());
-        let mut column = Flex::column().with_child(render_body_item::<AppearancePageAction>(
+        let mut column = Flex::column().with_child(render_body_item(
             "Open new windows with custom size".into(),
             None,
             ToggleState::Enabled,
@@ -2754,7 +2754,7 @@ impl SettingsWidget for CustomWindowSizeWidget {
         ));
         if *window_settings.open_windows_at_custom_size.value() {
             column.add_child(
-                Container::new(render_body_item::<AppearancePageAction>(
+                Container::new(render_body_item(
                     "Columns".into(),
                     None,
                     ToggleState::Enabled,
@@ -2788,7 +2788,7 @@ impl SettingsWidget for CustomWindowSizeWidget {
                 .finish(),
             );
             column.add_child(
-                Container::new(render_body_item::<AppearancePageAction>(
+                Container::new(render_body_item(
                     "Rows".into(),
                     None,
                     ToggleState::Enabled,
@@ -2851,7 +2851,7 @@ impl SettingsWidget for WindowOpacityWidget {
         {
             return Flex::column()
                 .with_child(
-                    Container::new(render_body_item_label::<AppearancePageAction>(
+                    Container::new(render_body_item_label(
                         "Window Opacity:".to_owned(),
                         None,
                         None,
@@ -2877,7 +2877,7 @@ impl SettingsWidget for WindowOpacityWidget {
         }
 
         let opacity_value = *window_settings.background_opacity;
-        let mut col = Flex::column().with_child(render_body_item::<AppearancePageAction>(
+        let mut col = Flex::column().with_child(render_body_item(
             format!("Window Opacity: {opacity_value}"),
             // TODO: add AdditionalInfo here.
             None,
@@ -2966,7 +2966,7 @@ impl SettingsWidget for WindowBlurWidget {
         let window_settings = WindowSettings::as_ref(app);
         let blur_value = *window_settings.background_blur_radius;
         Flex::column()
-            .with_child(render_body_item::<AppearancePageAction>(
+            .with_child(render_body_item(
                 format!("Window Blur Radius: {blur_value}"),
                 None,
                 ToggleState::Enabled,
@@ -3064,7 +3064,7 @@ impl SettingsWidget for ToolsPanelStateScopeWidget {
         let window_settings = WindowSettings::as_ref(app);
         let is_enabled = *window_settings.left_panel_visibility_across_tabs;
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Tools panel visibility is consistent across tabs".to_string(),
             None,
             ToggleState::Enabled,
@@ -3105,7 +3105,7 @@ impl SettingsWidget for ToolsPanelProjectExplorerWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Project explorer".to_string(),
             None,
             ToggleState::Enabled,
@@ -3144,7 +3144,7 @@ impl SettingsWidget for ToolsPanelGlobalSearchWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Global search".to_string(),
             None,
             ToggleState::Enabled,
@@ -3211,7 +3211,7 @@ impl SettingsWidget for InputTypeWidget {
             .build()
             .finish();
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Input type".into(),
             None,
             ToggleState::Enabled,
@@ -3351,7 +3351,7 @@ impl SettingsWidget for DimInactivePanesWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Dim inactive panes".into(),
             None,
             ToggleState::Enabled,
@@ -3388,7 +3388,7 @@ impl SettingsWidget for FocusFollowsMouseWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Focus follows mouse".into(),
             None,
             ToggleState::Enabled,
@@ -3430,7 +3430,7 @@ impl SettingsWidget for CompactModeWidget {
             SpacingMode::Compact
         );
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Compact mode".into(),
             None,
             ToggleState::Enabled,
@@ -3471,7 +3471,7 @@ impl SettingsWidget for JumpToBottomOfBlockWidget {
         let enabled = block_list_settings
             .show_jump_to_bottom_of_block_button
             .value();
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Show Jump to Bottom of Block button".into(),
             None,
             ToggleState::Enabled,
@@ -3512,7 +3512,7 @@ impl SettingsWidget for ShowBlockDividersWidget {
     ) -> Box<dyn Element> {
         let block_list_settings = BlockListSettings::as_ref(app);
         let enabled = block_list_settings.show_block_dividers.value();
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Show block dividers".into(),
             None,
             ToggleState::Enabled,
@@ -3645,7 +3645,7 @@ impl SettingsWidget for TerminalFontWidget {
 
         // Terminal Font
         let mut terminal_font = Flex::column();
-        terminal_font.add_child(render_body_item_label::<AppearancePageAction>(
+        terminal_font.add_child(render_body_item_label(
             "Terminal font".to_string(),
             None,
             None,
@@ -3953,13 +3953,11 @@ impl SettingsWidget for LigaturesWidget {
         let ligature_rendering = &LigatureSettings::as_ref(app).ligature_rendering_enabled;
         let ligature_rendering_enabled = ligature_rendering.value();
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Show ligatures in terminal".into(),
             Some(AdditionalInfo {
                 mouse_state: self.info_mouse_state.clone(),
-                on_click_action: None,
-                secondary_text: None,
-                tooltip_override_text: Some("Ligatures may reduce performance".to_string()),
+                tooltip_text: "Ligatures may reduce performance".to_string(),
             }),
             ToggleState::Enabled,
             appearance,
@@ -4012,7 +4010,7 @@ impl SettingsWidget for CursorTypeWidget {
 
         let cursor_display_types: Vec<CursorDisplayType> = all::<CursorDisplayType>().collect();
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Cursor type".into(),
             None,
             ToggleState::Enabled,
@@ -4075,7 +4073,7 @@ impl SettingsWidget for BlinkingCursorWidget {
     ) -> Box<dyn Element> {
         let settings = AppEditorSettings::as_ref(app);
         let cursor_blink = &settings.cursor_blink;
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Blinking cursor".into(),
             None,
             ToggleState::Enabled,
@@ -4141,7 +4139,7 @@ impl SettingsWidget for TabIndicatorWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Show tab indicators".into(),
             None,
             ToggleState::Enabled,
@@ -4180,7 +4178,7 @@ impl SettingsWidget for PreserveActiveTabColorWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Preserve active tab color for new tabs".into(),
             None,
             ToggleState::Enabled,
@@ -4219,7 +4217,7 @@ impl SettingsWidget for VerticalTabsWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Use vertical tab layout".into(),
             None,
             ToggleState::Enabled,
@@ -4258,7 +4256,7 @@ impl SettingsWidget for ShowVerticalTabPanelInRestoredWindowsWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Show vertical tabs panel in restored windows".into(),
             None,
             ToggleState::Enabled,
@@ -4302,7 +4300,7 @@ impl SettingsWidget for HideTitleBarSearchBarInVerticalTabsWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Hide search bar in vertical tab layout".into(),
             None,
             ToggleState::Enabled,
@@ -4346,7 +4344,7 @@ impl SettingsWidget for UseLatestUserPromptAsConversationTitleInTabNamesWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<AppearancePageAction>(
+        render_body_item(
             "Use latest user prompt as conversation title in tab names".into(),
             None,
             ToggleState::Enabled,
@@ -4389,7 +4387,7 @@ impl SettingsWidget for EditToolbarWidget {
         appearance: &Appearance,
         _app: &AppContext,
     ) -> Box<dyn Element> {
-        let label = render_body_item_label::<AppearancePageAction>(
+        let label = render_body_item_label(
             "Header toolbar layout".to_string(),
             None,
             None,
@@ -4674,7 +4672,7 @@ impl SettingsWidget for AltScreenPaddingWidget {
     ) -> Box<dyn Element> {
         let terminal_settings = &TerminalSettings::as_ref(app);
         let theme = appearance.theme();
-        let mut column = Flex::column().with_child(render_body_item::<AppearancePageAction>(
+        let mut column = Flex::column().with_child(render_body_item(
             "Use custom padding in alt-screen".into(),
             None,
             ToggleState::Enabled,

@@ -341,7 +341,7 @@ impl SettingsWidget for CodeReviewPanelToggleWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<EditorAndCodeReviewPageAction>(
+        render_body_item(
             "Show code review button".into(),
             None,
             ToggleState::Enabled,
@@ -383,7 +383,7 @@ impl SettingsWidget for CodeReviewDiffStatsToggleWidget {
     ) -> Box<dyn Element> {
         let tab_settings = TabSettings::as_ref(app);
 
-        render_body_item::<EditorAndCodeReviewPageAction>(
+        render_body_item(
             "Show diff stats on code review button".into(),
             None,
             ToggleState::Enabled,
@@ -424,7 +424,7 @@ impl SettingsWidget for ProjectExplorerToggleWidget {
     ) -> Box<dyn Element> {
         let code_settings = CodeSettings::as_ref(app);
 
-        render_body_item::<EditorAndCodeReviewPageAction>(
+        render_body_item(
             "Project explorer".into(),
             None,
             ToggleState::Enabled,
@@ -466,7 +466,7 @@ impl SettingsWidget for GlobalSearchToggleWidget {
     ) -> Box<dyn Element> {
         let code_settings = CodeSettings::as_ref(app);
 
-        render_body_item::<EditorAndCodeReviewPageAction>(
+        render_body_item(
             "Global file search".into(),
             None,
             ToggleState::Enabled,
@@ -505,7 +505,7 @@ impl SettingsWidget for ShowHiddenFilesToggleWidget {
     ) -> Box<dyn Element> {
         let code_settings = CodeSettings::as_ref(app);
 
-        render_body_item::<EditorAndCodeReviewPageAction>(
+        render_body_item(
             "Show hidden files in project explorer".into(),
             None,
             ToggleState::Enabled,
@@ -546,7 +546,7 @@ impl SettingsWidget for FormatOnSaveToggleWidget {
     ) -> Box<dyn Element> {
         let code_settings = CodeSettings::as_ref(app);
 
-        render_body_item::<EditorAndCodeReviewPageAction>(
+        render_body_item(
             "Format on save (requires an active language server)".into(),
             None,
             ToggleState::Enabled,
@@ -588,7 +588,7 @@ impl SettingsWidget for AutoSaveToggleWidget {
     ) -> Box<dyn Element> {
         let code_settings = CodeSettings::as_ref(app);
 
-        render_body_item::<EditorAndCodeReviewPageAction>(
+        render_body_item(
             "Auto save".into(),
             None,
             ToggleState::Enabled,
