@@ -224,7 +224,7 @@ const DROP_SHADOW_COLOR: ColorU = ColorU {
 };
 
 const CHIP_MARGIN_RIGHT: f32 = 8.;
-const UDI_CHIP_MAX_NUM_CHARACTERS: usize = 40;
+const CHIP_MAX_NUM_CHARACTERS: usize = 40;
 
 const CHIP_CORNER_RADIUS: f32 = 4.0;
 const GIT_BRANCH_STATUS_MAIN_GAP: f32 = 4.0;
@@ -236,7 +236,7 @@ pub(crate) const CHIP_BORDER_WIDTH: f32 = 1.0;
 /// Inner rounded corners are 1px smaller than the outer border radius
 const CHIP_INNER_CORNER_RADIUS: f32 = CHIP_CORNER_RADIUS - CHIP_BORDER_WIDTH;
 
-/// Standard positioning for tooltip overlays on UDI chips
+/// Standard positioning for tooltip overlays on prompt chips
 fn udi_tooltip_positioning() -> OffsetPositioning {
     OffsetPositioning::offset_from_parent(
         vec2f(0., -8.),
@@ -246,7 +246,7 @@ fn udi_tooltip_positioning() -> OffsetPositioning {
     )
 }
 
-/// Configuration for creating a unified UDI chip
+/// Configuration for creating a prompt chip
 pub(crate) struct UdiChipConfig {
     /// The icon to display
     icon: Option<Icon>,
@@ -255,7 +255,7 @@ pub(crate) struct UdiChipConfig {
     color: ColorU,
     /// The text content to display
     text: String,
-    /// Whether to truncate text to UDI_CHIP_MAX_NUM_CHARACTERS
+    /// Whether to truncate text to CHIP_MAX_NUM_CHARACTERS
     truncate_text: bool,
     border_override: Option<Border>,
     is_in_footer: bool,
@@ -1481,7 +1481,7 @@ impl DisplayChip {
             }
 
             // Shared container so padding, border, and corner radius stay
-            // consistent with the other UDI chips.
+            // consistent with the other prompt chips.
             let mut chip_element = chip_container(content.finish(), None, appearance);
             if state.is_hovered() && is_interactive {
                 chip_element = chip_element.with_background(theme.surface_2());
@@ -2108,7 +2108,7 @@ impl ActionButtonTheme for ClassicPromptChipHintButton {
     }
 }
 
-/// Button theme for hint buttons in the UDI prompt chips.
+/// Button theme for hint buttons in the prompt chips.
 pub struct UdiPromptChipHintButton;
 
 impl ActionButtonTheme for UdiPromptChipHintButton {
@@ -2149,8 +2149,8 @@ pub(crate) fn chip_container(
         .with_background(theme.surface_1())
         .with_border(border)
         .with_corner_radius(CornerRadius::with_all(Radius::Pixels(CHIP_CORNER_RADIUS)))
-        .with_vertical_padding(spacing::UDI_CHIP_VERTICAL_PADDING)
-        .with_horizontal_padding(spacing::UDI_CHIP_HORIZONTAL_PADDING)
+        .with_vertical_padding(spacing::CHIP_VERTICAL_PADDING)
+        .with_horizontal_padding(spacing::CHIP_HORIZONTAL_PADDING)
 }
 
 pub(crate) fn render_udi_chip(config: UdiChipConfig, appearance: &Appearance) -> Box<dyn Element> {
@@ -2167,13 +2167,13 @@ pub(crate) fn render_udi_chip(config: UdiChipConfig, appearance: &Appearance) ->
                     .with_width(icon_size)
                     .finish(),
             )
-            .with_margin_right(spacing::UDI_CHIP_ICON_GAP)
+            .with_margin_right(spacing::CHIP_ICON_GAP)
             .finish(),
         );
     }
 
     let display_text = if config.truncate_text {
-        truncate_from_beginning(&config.text, UDI_CHIP_MAX_NUM_CHARACTERS)
+        truncate_from_beginning(&config.text, CHIP_MAX_NUM_CHARACTERS)
     } else {
         config.text.clone()
     };

@@ -123,7 +123,6 @@ impl InlineHistoryMenuView {
             InlineMenuEvent::NoResults => {
                 ctx.emit(InlineHistoryMenuEvent::NoResults);
             }
-            InlineMenuEvent::TabChanged => {}
         });
 
         Self {

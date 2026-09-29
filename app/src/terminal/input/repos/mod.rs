@@ -25,7 +25,7 @@ pub struct AcceptRepo {
 impl InlineMenuAction for AcceptRepo {
     const MENU_TYPE: InlineMenuType = InlineMenuType::IndexedReposMenu;
 
-    fn produce_inline_menu_message<T>(args: InlineMenuMessageArgs<'_, Self, T>) -> Option<Message> {
+    fn produce_inline_menu_message(args: InlineMenuMessageArgs<'_, Self>) -> Option<Message> {
         let mut items = Vec::new();
 
         let path = args

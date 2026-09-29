@@ -96,9 +96,7 @@ impl InlineReposMenuView {
                     path: item.path.clone(),
                 });
             }
-            InlineMenuEvent::SelectedItem { .. }
-            | InlineMenuEvent::NoResults
-            | InlineMenuEvent::TabChanged => (),
+            InlineMenuEvent::SelectedItem { .. } | InlineMenuEvent::NoResults => (),
             InlineMenuEvent::Dismissed => {
                 ctx.emit(InlineReposMenuEvent::Dismissed);
             }

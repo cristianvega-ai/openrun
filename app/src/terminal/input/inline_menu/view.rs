@@ -17,15 +17,13 @@ use warpui::elements::{
     ScrollStateHandle, Scrollable, ScrollableElement, ScrollbarWidth, SizeConstraintCondition,
     SizeConstraintSwitch, Stack, UniformList, UniformListState,
 };
-use warpui::fonts::Weight;
 use warpui::platform::Cursor;
 use warpui::prelude::{
     Align, ChildView, ConstrainedBox, Container, CrossAxisAlignment, Empty, Flex, SavePosition,
     Text,
 };
 use warpui::scene::{Border, CornerRadius, Radius};
-use warpui::ui_components::button::ButtonVariant;
-use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
+use warpui::ui_components::components::UiComponent;
 use warpui::{
     Action, AppContext, Element, Entity, ModelHandle, SingletonEntity, TypedActionView, View,
     ViewContext, ViewHandle, WeakViewHandle,
@@ -39,7 +37,7 @@ use crate::search::result_renderer::{
 use crate::terminal::input::inline_menu::message_bar::{
     InlineMenuMessageBar, InlineMenuMessageBarArgs,
 };
-use crate::terminal::input::inline_menu::model::{InlineMenuModel, InlineMenuTabConfig};
+use crate::terminal::input::inline_menu::model::InlineMenuModel;
 use crate::terminal::input::inline_menu::positioning::Updated as PositionerUpdated;
 use crate::terminal::input::inline_menu::{
     InlineMenuMessageArgs, InlineMenuPositioner, InlineMenuType, default_navigation_message_items,
@@ -66,8 +64,6 @@ pub enum InlineMenuEvent<T: Action + Clone> {
     NoResults,
     /// User dismissed the menu (via escape or click).
     Dismissed,
-    /// Active tab changed.
-    TabChanged,
 }
 
 type TrailingElementFn = Box<dyn Fn(&AppContext) -> Box<dyn Element>>;
@@ -276,7 +272,7 @@ pub trait InlineMenuAction: Action + Clone {
     const MENU_TYPE: InlineMenuType;
 
     /// Default implementation that just returns navigation/dismiss hints.
-    fn produce_inline_menu_message<T>(args: InlineMenuMessageArgs<'_, Self, T>) -> Option<Message> {
+    fn produce_inline_menu_message(args: InlineMenuMessageArgs<'_, Self>) -> Option<Message> {
         Some(Message::new(default_navigation_message_items(&args)))
     }
 
@@ -305,9 +301,9 @@ pub trait InlineMenuAction: Action + Clone {
 /// Domain-specific views (e.g., `InlineSlashCommandView`) should wrap this and:
 /// - Create and configure the mixer with appropriate data sources
 /// - Subscribe to `InlineMenuEvent` and map to domain-specific events
-pub struct InlineMenuView<A: InlineMenuAction, T: 'static + Send + Sync = ()> {
+pub struct InlineMenuView<A: InlineMenuAction> {
     mixer: ModelHandle<SearchMixer<A>>,
-    model: ModelHandle<InlineMenuModel<A, T>>,
+    model: ModelHandle<InlineMenuModel<A>>,
     state_handles: StateHandles,
     selection: InlineMenuSelection,
     hovered_idx: Option<usize>,
@@ -317,7 +313,7 @@ pub struct InlineMenuView<A: InlineMenuAction, T: 'static + Send + Sync = ()> {
     result_renderers: Vec<QueryResultRenderer<A>>,
     weak_handle: WeakViewHandle<Self>,
     positioner: ModelHandle<InlineMenuPositioner>,
-    message_bar: ViewHandle<InlineMenuMessageBar<A, T>>,
+    message_bar: ViewHandle<InlineMenuMessageBar<A>>,
     header_config: InlineMenuHeaderConfig,
     banner_fn: Option<BannerFn>,
     resize_handle: DragResizeHandle,
@@ -348,33 +344,12 @@ impl<A: InlineMenuAction> InlineMenuView<A> {
     }
 }
 
-impl<A: InlineMenuAction, T: 'static + Send + Sync + Clone + PartialEq> InlineMenuView<A, T> {
-    pub fn new_with_tabs(
-        mixer: ModelHandle<SearchMixer<A>>,
-        positioner: ModelHandle<InlineMenuPositioner>,
-        input_suggestions_model: &ModelHandle<InputSuggestionsModeModel>,
-        tab_configs: Vec<InlineMenuTabConfig<T>>,
-        initial_tab: Option<T>,
-        ctx: &mut ViewContext<Self>,
-    ) -> Self {
-        let inline_menu_model =
-            ctx.add_model(|_| InlineMenuModel::new_with_tabs(tab_configs, initial_tab));
-        Self::new_inner(
-            mixer,
-            positioner,
-            input_suggestions_model,
-            inline_menu_model,
-            ctx,
-        )
-    }
-}
-
-impl<A: InlineMenuAction, T: 'static + Send + Sync> InlineMenuView<A, T> {
+impl<A: InlineMenuAction> InlineMenuView<A> {
     fn new_inner(
         mixer: ModelHandle<SearchMixer<A>>,
         positioner: ModelHandle<InlineMenuPositioner>,
         input_suggestions_model: &ModelHandle<InputSuggestionsModeModel>,
-        inline_menu_model: ModelHandle<InlineMenuModel<A, T>>,
+        inline_menu_model: ModelHandle<InlineMenuModel<A>>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let menu_bar_args = InlineMenuMessageBarArgs {
@@ -523,7 +498,7 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> InlineMenuView<A, T> {
         self
     }
 
-    pub fn model(&self) -> &ModelHandle<InlineMenuModel<A, T>> {
+    pub fn model(&self) -> &ModelHandle<InlineMenuModel<A>> {
         &self.model
     }
 
@@ -680,116 +655,24 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> InlineMenuView<A, T> {
         }
     }
 
-    pub fn set_active_tab(&mut self, index: usize, ctx: &mut ViewContext<Self>) {
-        self.model
-            .update(ctx, |m, ctx| m.set_active_tab_index(index, ctx));
-        ctx.emit(InlineMenuEvent::TabChanged);
-        ctx.notify();
-    }
-
-    pub fn select_next_tab(&mut self, ctx: &mut ViewContext<Self>) -> bool {
-        let num_tabs = self.model.as_ref(ctx).tab_configs().len();
-        if num_tabs <= 1 {
-            return false;
-        }
-
-        let current = self.model.as_ref(ctx).active_tab_index();
-        let next = (current + 1) % num_tabs;
-        self.set_active_tab(next, ctx);
-        true
-    }
-
     fn render_header(&self, app: &AppContext) -> Option<Box<dyn Element>> {
-        let model = self.model.as_ref(app);
-        let tab_configs = model.tab_configs();
-
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
         let header_bg: ColorU = Fill::from(inline_styles::menu_background_color(app))
             .blend(&theme.surface_overlay_1())
             .into();
 
-        let has_tabs = tab_configs.len() > 1;
-        let label_margin_right = if has_tabs { 16. } else { 0. };
-
-        let mut left_section = Flex::row()
+        let left_section = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_child(
-                Container::new(
-                    Text::new_inline(
-                        self.header_config.label.to_uppercase(),
-                        appearance.monospace_font_family(),
-                        12.,
-                    )
-                    .with_color(
-                        inline_styles::primary_text_color(theme, header_bg.into()).into_solid(),
-                    )
-                    .finish(),
+                Text::new_inline(
+                    self.header_config.label.to_uppercase(),
+                    appearance.monospace_font_family(),
+                    12.,
                 )
-                .with_margin_right(label_margin_right)
+                .with_color(inline_styles::primary_text_color(theme, header_bg.into()).into_solid())
                 .finish(),
             );
-
-        if has_tabs {
-            let tab_button_styles = UiComponentStyles {
-                font_size: Some(12.),
-                font_weight: Some(Weight::Semibold),
-                padding: Some(Coords {
-                    top: 4.,
-                    bottom: 4.,
-                    left: 8.,
-                    right: 8.,
-                }),
-                ..Default::default()
-            };
-
-            let active_tab_index = model.active_tab_index();
-            let mut tab_row = Flex::row();
-            for (idx, tab_config) in tab_configs.iter().enumerate() {
-                let is_active = idx == active_tab_index;
-                let Some(mouse_state) = model.tab_mouse_states().get(idx).cloned() else {
-                    continue;
-                };
-
-                let mut button = appearance
-                    .ui_builder()
-                    .button(ButtonVariant::Text, mouse_state)
-                    .with_text_label(tab_config.label.clone())
-                    .with_style(tab_button_styles);
-
-                if is_active {
-                    button = button.active().with_active_styles(UiComponentStyles {
-                        font_color: Some(theme.main_text_color(theme.background()).into_solid()),
-                        ..Default::default()
-                    });
-                }
-
-                let button_element = button
-                    .build()
-                    .on_click(move |ctx, _, _| {
-                        ctx.dispatch_typed_action(InlineMenuRowAction::<A>::SelectTab {
-                            index: idx,
-                        });
-                    })
-                    .finish();
-
-                let is_first_tab = idx == 0;
-                let mut tab_container = Container::new(button_element).with_border(
-                    Border::new(1.)
-                        .with_sides(false, is_first_tab, false, true)
-                        .with_border_fill(theme.outline()),
-                );
-                if is_active {
-                    tab_container = tab_container
-                        .with_background(theme.background())
-                        .with_overdraw_bottom(2.);
-                }
-
-                tab_row.add_child(tab_container.finish());
-            }
-
-            left_section.add_child(tab_row.finish());
-        }
 
         let left_section = left_section.finish();
 
@@ -964,7 +847,7 @@ fn reverse_index(idx: usize, count: usize) -> usize {
     count.saturating_sub(1).saturating_sub(idx)
 }
 
-impl<A: InlineMenuAction, T: 'static + Send + Sync> View for InlineMenuView<A, T> {
+impl<A: InlineMenuAction> View for InlineMenuView<A> {
     fn ui_name() -> &'static str {
         "InlineMenuView"
     }
@@ -1149,12 +1032,11 @@ pub enum InlineMenuRowAction<A: Action + Clone> {
     Select { result_index: usize, item: A },
     HoverItem { result_index: usize },
     Dismiss,
-    SelectTab { index: usize },
     ResizeUpdate { delta: f32 },
     ResizeEnd,
 }
 
-impl<A: InlineMenuAction, T: 'static + Send + Sync> TypedActionView for InlineMenuView<A, T> {
+impl<A: InlineMenuAction> TypedActionView for InlineMenuView<A> {
     type Action = InlineMenuRowAction<A>;
 
     fn handle_action(&mut self, action: &Self::Action, ctx: &mut ViewContext<Self>) {
@@ -1184,16 +1066,6 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> TypedActionView for InlineMe
             }
             InlineMenuRowAction::Dismiss => {
                 ctx.emit(InlineMenuEvent::Dismissed);
-            }
-            InlineMenuRowAction::SelectTab { index } => {
-                let index = *index;
-                let previous_index = self.model.as_ref(ctx).active_tab_index();
-                if index != previous_index {
-                    self.model
-                        .update(ctx, |m, ctx| m.set_active_tab_index(index, ctx));
-                    ctx.emit(InlineMenuEvent::TabChanged);
-                    ctx.notify();
-                }
             }
             InlineMenuRowAction::ResizeUpdate { delta } => {
                 let height_change = self.positioner.update(ctx, |p, ctx| {
@@ -1228,7 +1100,7 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> TypedActionView for InlineMe
     }
 }
 
-impl<A: InlineMenuAction, T: 'static + Send + Sync> Entity for InlineMenuView<A, T> {
+impl<A: InlineMenuAction> Entity for InlineMenuView<A> {
     type Event = InlineMenuEvent<A>;
 }
 

@@ -8,7 +8,7 @@ mod view;
 
 pub use message_bar::{InlineMenuMessageArgs, InlineMenuMessageBarArgs};
 pub use message_provider::{InlineMenuMessageProvider, default_navigation_message_items};
-pub use model::{InlineMenuModel, InlineMenuModelEvent, InlineMenuTabConfig};
+pub use model::{InlineMenuModel, InlineMenuModelEvent};
 pub use positioning::InlineMenuPositioner;
 use serde::{Deserialize, Serialize};
 pub use view::{

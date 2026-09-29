@@ -292,7 +292,7 @@ impl View for PromptDisplay {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_alignment(MainAxisAlignment::Start)
             .with_main_axis_size(MainAxisSize::Min)
-            .with_run_spacing(super::spacing::UDI_ROW_RUN_SPACING);
+            .with_run_spacing(super::spacing::CHIP_ROW_RUN_SPACING);
 
         self.display_chips.iter().for_each(|display_chip| {
             row.add_child(ChildView::new(display_chip).finish());

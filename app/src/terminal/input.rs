@@ -2360,7 +2360,7 @@ impl Input {
             PromptDisplayEvent::ToggleMenu { open } => {
                 if *open {
                     // Close any open input suggestion menus (history, Ctrl+R, etc.) when chip menus
-                    // are opened to prevent overlapping menus in UDI
+                    // are opened to prevent overlapping menus
                     self.close_overlays(false, ctx);
                     ctx.notify();
                 } else {
@@ -7328,7 +7328,7 @@ impl Input {
         }
 
         // Always capture a chip snapshot as the fallback prompt representation.
-        // This covers both UDI mode and any edge cases where PS1 is not available
+        // This covers the Warp prompt and any edge cases where PS1 is not available
         // (e.g. not yet bootstrapped, block-level honor_ps1 mismatch).
         if prompt_elements.ps1_prompt_grid.is_none() {
             prompt_elements.prompt_chip_snapshot = Some(self.prompt_type.as_ref(app).snapshot(app));
@@ -7474,7 +7474,7 @@ impl Input {
 
             Some(
                 Wrap::row()
-                    .with_run_spacing(spacing::UDI_CHIP_MARGIN)
+                    .with_run_spacing(spacing::CHIP_MARGIN)
                     .with_main_axis_alignment(MainAxisAlignment::Start)
                     .with_main_axis_size(MainAxisSize::Min)
                     .with_children(chips)
@@ -7566,7 +7566,7 @@ impl Input {
         let terminal_settings = TerminalSettings::as_ref(app);
         let terminal_spacing =
             terminal_settings.terminal_input_spacing(appearance.line_height_ratio(), app);
-        // Always render with UDI-style spacing values, regardless of the prompt setting.
+        // Always render with the Warp prompt's spacing values, regardless of the prompt setting.
         let bottom_padding = terminal_spacing.editor_bottom_padding - 4.;
 
         let input_box = Container::new(

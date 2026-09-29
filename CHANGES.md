@@ -122,6 +122,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Setting surfaces](#setting-surfaces) — removed `SettingSurfaces`, `SettingsMode` and the `surface:` argument of the settings macros
 - [Unused input hint setting, tree budget mode, icons and theme accessors](#unused-input-hint-setting-tree-budget-mode-icons-and-theme-accessors) — removed the no-op `show_hint_text` setting, `BudgetExceededBehavior`, unused icons and theme accessors, and dogfood/preview wording
 - [Input lock state](#input-lock-state) — removed the vestigial `InputConfig::is_locked` and the lock events
+- [Inline menu tabs and UDI names](#inline-menu-tabs-and-udi-names) — removed the unused inline-menu tab machinery and the `UDI` naming
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3185,5 +3186,17 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `InputModeEvent` is a struct carrying the new config (its only event was the input-type change).
 - `Input::is_locked_in_shell_mode` and `is_locked_in_prompt_mode` are `is_shell_mode` and `is_prompt_mode`.
 - Persisted pane configs are written as `{"input_type": ...}`. Configs that still contain `is_locked` restore as before (always locked shell input).
+
+**User-visible impact:** None.
+
+## Inline menu tabs and UDI names
+**Why:** The inline-menu tab support (`InlineMenuTabConfig`, tab headers, "Shift-Tab to cycle tabs") was only used by the AI menus. Every remaining inline menu (history, slash commands, repos) has no tabs. "UDI" (universal developer input) named a product surface that no longer exists.
+
+**Removed:**
+- `InlineMenuTabConfig`, `InlineMenuView::{new_with_tabs, set_active_tab, select_next_tab}`, `InlineMenuRowAction::SelectTab`, `InlineMenuEvent::TabChanged`, `InlineMenuModelEvent::UpdatedActiveTab`, the tab header rendering, the "cycle tabs" hint, and the tab-type parameter `T` of `InlineMenuView`, `InlineMenuModel`, `InlineMenuMessageBar` and `InlineMenuMessageArgs`.
+- `ButtonSize::{UDIButton, UDIPromptChip}` (nothing used them).
+
+**Modified:**
+- The `UDI_*` spacing constants in `context_chips::spacing`, `UDI_CHIP_MAX_NUM_CHARACTERS` and `MINIMUM_PANE_SIZE_UDI` lost the prefix (`CHIP_*`, `PROMPT_*_PADDING_FACTOR`, `MINIMUM_PANE_SIZE_WITH_WARP_PROMPT`); comments say "prompt chips" or "the Warp prompt".
 
 **User-visible impact:** None.

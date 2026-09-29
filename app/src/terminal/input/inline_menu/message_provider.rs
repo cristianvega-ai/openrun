@@ -23,19 +23,19 @@ impl<A> Default for InlineMenuMessageProvider<A> {
     }
 }
 
-impl<A, T> MessageProvider<InlineMenuMessageArgs<'_, A, T>> for InlineMenuMessageProvider<A>
+impl<A> MessageProvider<InlineMenuMessageArgs<'_, A>> for InlineMenuMessageProvider<A>
 where
     A: InlineMenuAction,
 {
-    fn produce_message(&self, args: InlineMenuMessageArgs<'_, A, T>) -> Option<Message> {
+    fn produce_message(&self, args: InlineMenuMessageArgs<'_, A>) -> Option<Message> {
         A::produce_inline_menu_message(args)
     }
 }
 
 /// Returns the default set of navigation/dismiss message items that should be rendered in all
 /// inline menus.
-pub fn default_navigation_message_items<A: InlineMenuAction, T>(
-    args: &InlineMenuMessageArgs<'_, A, T>,
+pub fn default_navigation_message_items<A: InlineMenuAction>(
+    args: &InlineMenuMessageArgs<'_, A>,
 ) -> Vec<MessageItem> {
     let navigation_keystrokes = navigation_keystrokes(args.app);
     let mut items = vec![
@@ -43,15 +43,6 @@ pub fn default_navigation_message_items<A: InlineMenuAction, T>(
         MessageItem::keystroke(navigation_keystrokes.1),
         MessageItem::text(" to navigate"),
     ];
-
-    if args.inline_menu_model.tab_configs().len() > 1 {
-        items.push(MessageItem::keystroke(Keystroke {
-            key: "tab".to_owned(),
-            shift: true,
-            ..Default::default()
-        }));
-        items.push(MessageItem::text(" to cycle tabs"));
-    }
 
     items.push(MessageItem::clickable(
         vec![

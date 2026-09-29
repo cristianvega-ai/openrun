@@ -561,7 +561,7 @@ impl PromptRenderHelper {
             .with_padding_top({
                 (terminal_spacing.block_padding.padding_top * size_info.cell_height_px().as_f32()
                     - get_input_box_top_border_width())
-                    * spacing::UDI_PROMPT_TOP_PADDING_FACTOR
+                    * spacing::PROMPT_TOP_PADDING_FACTOR
             })
             .finish();
 

@@ -2504,7 +2504,7 @@ impl TerminalView {
         }
 
         // Terminal prompt path: the Warp prompt is active when honor_ps1 is
-        // off, or when UDI overrides PS1. The prompt must include a chip backed
+        // off, or when the Warp prompt overrides PS1. The prompt must include a chip backed
         // by git status.
         let is_using_warp_prompt = !*SessionSettings::as_ref(ctx).honor_ps1
             || InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);

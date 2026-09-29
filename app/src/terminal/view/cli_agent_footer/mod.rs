@@ -397,7 +397,7 @@ impl View for CLIAgentFooter {
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_child(WrapFillEntireRun::new(left_buttons.finish()).finish())
             .with_child(WrapFill::new(0., right_buttons.finish()).finish())
-            .with_run_spacing(context_chips::spacing::UDI_ROW_RUN_SPACING)
+            .with_run_spacing(context_chips::spacing::CHIP_ROW_RUN_SPACING)
             .finish();
         let content = EventHandler::new(content)
             .on_right_mouse_down(|ctx, _, position, _| {

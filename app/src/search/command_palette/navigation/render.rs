@@ -145,7 +145,7 @@ fn render_current_session_pill(
     .finish()
 }
 
-/// Renders the prompt as UDI-style context chips from a [`PromptSnapshot`].
+/// Renders the prompt as context chips from a [`PromptSnapshot`].
 fn render_prompt_udi(snapshot: &PromptSnapshot, appearance: &Appearance) -> Box<dyn Element> {
     let mut chip_row = Wrap::row().with_spacing(4.);
 

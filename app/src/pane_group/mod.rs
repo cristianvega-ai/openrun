@@ -122,13 +122,13 @@ lazy_static! {
 }
 
 const MINIMUM_PANE_SIZE: f32 = 50.;
-const MINIMUM_PANE_SIZE_UDI: f32 = 190.;
+const MINIMUM_PANE_SIZE_WITH_WARP_PROMPT: f32 = 190.;
 const KEYBOARD_RESIZE_DELTA: f32 = 10.;
 
 fn get_minimum_pane_size(app: &AppContext) -> f32 {
     use crate::settings::InputSettings;
     if InputSettings::as_ref(app).is_warp_prompt_enabled(app) {
-        MINIMUM_PANE_SIZE_UDI
+        MINIMUM_PANE_SIZE_WITH_WARP_PROMPT
     } else {
         MINIMUM_PANE_SIZE
     }

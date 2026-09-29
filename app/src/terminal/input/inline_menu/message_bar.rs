@@ -11,23 +11,23 @@ use crate::terminal::input::inline_menu::{
 use crate::terminal::input::message_bar::common::render_standard_message_bar;
 use crate::terminal::input::message_bar::{EmptyMessageProducer, MessageProvider};
 
-pub struct InlineMenuMessageBarArgs<A: InlineMenuAction, T: 'static + Send + Sync = ()> {
-    pub inline_menu_model: ModelHandle<InlineMenuModel<A, T>>,
+pub struct InlineMenuMessageBarArgs<A: InlineMenuAction> {
+    pub inline_menu_model: ModelHandle<InlineMenuModel<A>>,
     pub positioner: ModelHandle<InlineMenuPositioner>,
 }
 
 /// Renders contextual hint text at the bottom of an inline menu.
-pub struct InlineMenuMessageBar<A: InlineMenuAction, T: 'static + Send + Sync = ()> {
-    inline_menu_model: ModelHandle<InlineMenuModel<A, T>>,
+pub struct InlineMenuMessageBar<A: InlineMenuAction> {
+    inline_menu_model: ModelHandle<InlineMenuModel<A>>,
     positioner: ModelHandle<InlineMenuPositioner>,
 }
 
-impl<A: InlineMenuAction, T: 'static + Send + Sync> Entity for InlineMenuMessageBar<A, T> {
+impl<A: InlineMenuAction> Entity for InlineMenuMessageBar<A> {
     type Event = ();
 }
 
-impl<A: InlineMenuAction, T: 'static + Send + Sync> InlineMenuMessageBar<A, T> {
-    pub fn new(args: InlineMenuMessageBarArgs<A, T>, ctx: &mut ViewContext<Self>) -> Self {
+impl<A: InlineMenuAction> InlineMenuMessageBar<A> {
+    pub fn new(args: InlineMenuMessageBarArgs<A>, ctx: &mut ViewContext<Self>) -> Self {
         let InlineMenuMessageBarArgs {
             inline_menu_model,
             positioner,
@@ -46,7 +46,7 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> InlineMenuMessageBar<A, T> {
 
 pub const INLINE_MENU_BORDER_WIDTH: f32 = 1.;
 
-impl<A: InlineMenuAction, T: 'static + Send + Sync> View for InlineMenuMessageBar<A, T> {
+impl<A: InlineMenuAction> View for InlineMenuMessageBar<A> {
     fn ui_name() -> &'static str {
         "InlineMenuMessageBar"
     }
@@ -89,7 +89,7 @@ impl<A: InlineMenuAction, T: 'static + Send + Sync> View for InlineMenuMessageBa
 
 /// Arguments for inline menu message producers.
 #[derive(Copy, Clone)]
-pub struct InlineMenuMessageArgs<'a, A: InlineMenuAction, T = ()> {
-    pub inline_menu_model: &'a InlineMenuModel<A, T>,
+pub struct InlineMenuMessageArgs<'a, A: InlineMenuAction> {
+    pub inline_menu_model: &'a InlineMenuModel<A>,
     pub app: &'a AppContext,
 }

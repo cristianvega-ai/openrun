@@ -242,7 +242,7 @@ impl ControlItemRenderer {
                             .with_width(font_size)
                             .finish(),
                     )
-                    .with_margin_right(spacing::UDI_CHIP_ICON_GAP)
+                    .with_margin_right(spacing::CHIP_ICON_GAP)
                     .finish(),
                 );
             }
@@ -256,7 +256,7 @@ impl ControlItemRenderer {
             if let Some(remove_button) = remove_button {
                 content.add_child(
                     Container::new(remove_button)
-                        .with_margin_left(spacing::UDI_CHIP_ICON_GAP)
+                        .with_margin_left(spacing::CHIP_ICON_GAP)
                         .finish(),
                 );
             }

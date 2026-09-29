@@ -69,7 +69,7 @@ impl Input {
         if let Some(images) = self.render_attachment_chips(appearance) {
             column.add_child(
                 Container::new(images)
-                    .with_margin_top(spacing::UDI_CHIP_MARGIN)
+                    .with_margin_top(spacing::CHIP_MARGIN)
                     .finish(),
             );
         }

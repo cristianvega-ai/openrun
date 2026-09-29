@@ -46,7 +46,7 @@ impl Input {
             Container::new(self.render_input_box(appearance, app))
                 .with_margin_top(
                     terminal_spacing.prompt_to_editor_padding
-                        * spacing::UDI_PROMPT_BOTTOM_PADDING_FACTOR,
+                        * spacing::PROMPT_BOTTOM_PADDING_FACTOR,
                 )
                 .finish(),
         );

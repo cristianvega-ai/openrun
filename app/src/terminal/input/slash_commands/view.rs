@@ -97,7 +97,7 @@ impl InlineSlashCommandView {
             InlineMenuEvent::Dismissed => {
                 ctx.emit(SlashCommandsEvent::Close(CloseReason::ManualDismissal));
             }
-            InlineMenuEvent::SelectedItem { .. } | InlineMenuEvent::TabChanged => (),
+            InlineMenuEvent::SelectedItem { .. } => (),
         });
 
         ctx.subscribe_to_model(slash_command_model, |me, _, _, ctx| {
