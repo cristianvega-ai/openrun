@@ -7,7 +7,7 @@ use url::{Origin, ParseError, Url};
 
 use super::Channel;
 use crate::AppId;
-use crate::channel::config::{ChannelConfig, IapConfig, RudderStackDestination, WarpServerConfig};
+use crate::channel::config::{ChannelConfig, IapConfig, WarpServerConfig};
 use crate::features::FeatureFlag;
 
 lazy_static! {
@@ -49,7 +49,6 @@ impl ChannelState {
                 app_id,
                 logfile_name: "".into(),
                 server_config: WarpServerConfig::offline(),
-                telemetry_config: None,
                 autoupdate_config: None,
                 crash_reporting_config: None,
             },
@@ -169,24 +168,6 @@ impl ChannelState {
         CHANNEL_STATE.lock().config.logfile_name.clone()
     }
 
-    pub fn telemetry_file_name() -> Cow<'static, str> {
-        CHANNEL_STATE
-            .lock()
-            .config
-            .telemetry_config
-            .as_ref()
-            .map(|tc| tc.telemetry_file_name.clone())
-            .unwrap_or_default()
-    }
-
-    /// Returns whether this build has a telemetry config and can therefore ship
-    /// telemetry events. Builds like OpenWarp intentionally ship with
-    /// `telemetry_config: None`, in which case UI that controls telemetry
-    /// should be hidden since the toggle has no effect.
-    pub fn is_telemetry_available() -> bool {
-        CHANNEL_STATE.lock().config.telemetry_config.is_some()
-    }
-
     /// Returns whether this build has a crash reporting config and can therefore
     /// ship crash reports. Builds like OpenWarp intentionally ship with
     /// `crash_reporting_config: None`, in which case UI that controls crash
@@ -263,32 +244,6 @@ impl ChannelState {
         Url::parse(&Self::server_root_url())
             .expect("Server root URL should be valid")
             .origin()
-    }
-
-    /// Returns the rudderstack destination for all events that don't contain user-generated content.
-    pub fn rudderstack_non_ugc_destination() -> RudderStackDestination {
-        let state = CHANNEL_STATE.lock();
-
-        state
-            .config
-            .telemetry_config
-            .as_ref()
-            .and_then(|tc| tc.rudderstack_config.as_ref())
-            .map(|rs| rs.non_ugc_destination())
-            .unwrap_or_default()
-    }
-
-    /// Returns the rudderstack destination for all events that contain user-generated content.
-    pub fn rudderstack_ugc_destination() -> RudderStackDestination {
-        let state = CHANNEL_STATE.lock();
-
-        state
-            .config
-            .telemetry_config
-            .as_ref()
-            .and_then(|tc| tc.rudderstack_config.as_ref())
-            .map(|rs| rs.ugc_destination())
-            .unwrap_or_default()
     }
 
     pub fn channel() -> Channel {

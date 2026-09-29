@@ -3604,7 +3604,6 @@ fn test_workflow_selected() {
             input.show_workflows_info_box_on_workflow_selection(
                 WorkflowType::Local(workflow),
                 WorkflowSource::Global,
-                WorkflowSelectionSource::Undefined,
                 None,
                 ctx,
             );
@@ -3648,7 +3647,6 @@ fn test_workflow_selected_with_default_value() {
             input.show_workflows_info_box_on_workflow_selection(
                 WorkflowType::Local(workflow),
                 WorkflowSource::Global,
-                WorkflowSelectionSource::Undefined,
                 None,
                 ctx,
             );
@@ -3682,7 +3680,6 @@ fn test_multiple_workflows_selected() {
             input.show_workflows_info_box_on_workflow_selection(
                 WorkflowType::Local(workflow.clone()),
                 WorkflowSource::Global,
-                WorkflowSelectionSource::Undefined,
                 None,
                 ctx,
             );
@@ -3714,7 +3711,6 @@ fn test_multiple_workflows_selected() {
             input.show_workflows_info_box_on_workflow_selection(
                 WorkflowType::Local(workflow),
                 WorkflowSource::Global,
-                WorkflowSelectionSource::Undefined,
                 None,
                 ctx,
             );
@@ -3765,7 +3761,6 @@ fn test_workflow_argument_tab_with_syntax_highlighting() {
             input.show_workflows_info_box_on_workflow_selection(
                 WorkflowType::Local(workflow.clone()),
                 WorkflowSource::Global,
-                WorkflowSelectionSource::Undefined,
                 None,
                 ctx,
             );
@@ -3862,7 +3857,6 @@ fn test_workflow_view_does_not_panic() {
                 input.show_workflows_info_box_on_workflow_selection(
                     WorkflowType::Local(workflow),
                     WorkflowSource::Global,
-                    WorkflowSelectionSource::Undefined,
                     None,
                     ctx,
                 );

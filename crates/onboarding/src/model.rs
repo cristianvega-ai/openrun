@@ -1,7 +1,4 @@
-use warp_core::send_telemetry_from_ctx;
 use warpui_core::{Entity, ModelContext};
-
-use crate::telemetry::OnboardingEvent;
 
 /// UI customization settings chosen during the "Customize your UI" onboarding slide.
 #[derive(Clone, Debug, Default)]
@@ -89,25 +86,11 @@ impl OnboardingStateModel {
         if self.ui_customization.use_vertical_tabs == value {
             return;
         }
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SettingChanged {
-                setting: "tab_styling".to_string(),
-                value: if value { "vertical" } else { "horizontal" }.to_string(),
-            },
-            ctx
-        );
         self.ui_customization.use_vertical_tabs = value;
         ctx.notify();
     }
 
     pub(crate) fn set_tools_panel_enabled(&mut self, enabled: bool, ctx: &mut ModelContext<Self>) {
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SettingChanged {
-                setting: "tools_panel".to_string(),
-                value: if enabled { "enabled" } else { "disabled" }.to_string(),
-            },
-            ctx
-        );
         self.ui_customization.show_project_explorer = enabled;
         self.ui_customization.show_global_search = enabled;
         ctx.notify();
@@ -117,13 +100,6 @@ impl OnboardingStateModel {
         if self.ui_customization.show_project_explorer == value {
             return;
         }
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SettingChanged {
-                setting: "project_explorer".to_string(),
-                value: value.to_string(),
-            },
-            ctx
-        );
         self.ui_customization.show_project_explorer = value;
         ctx.notify();
     }
@@ -132,13 +108,6 @@ impl OnboardingStateModel {
         if self.ui_customization.show_global_search == value {
             return;
         }
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SettingChanged {
-                setting: "global_search".to_string(),
-                value: value.to_string(),
-            },
-            ctx
-        );
         self.ui_customization.show_global_search = value;
         ctx.notify();
     }
@@ -151,13 +120,6 @@ impl OnboardingStateModel {
         if self.ui_customization.show_code_review_button == value {
             return;
         }
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SettingChanged {
-                setting: "code_review".to_string(),
-                value: if value { "enabled" } else { "disabled" }.to_string(),
-            },
-            ctx
-        );
         self.ui_customization.show_code_review_button = value;
         ctx.notify();
     }
@@ -170,13 +132,6 @@ impl OnboardingStateModel {
         if self.cli_agent_toolbar_enabled == value {
             return;
         }
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SettingChanged {
-                setting: "cli_agent_toolbar".to_string(),
-                value: if value { "enabled" } else { "disabled" }.to_string(),
-            },
-            ctx
-        );
         self.cli_agent_toolbar_enabled = value;
         ctx.notify();
     }
@@ -189,19 +144,11 @@ impl OnboardingStateModel {
         if self.show_agent_notifications == value {
             return;
         }
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SettingChanged {
-                setting: "show_agent_notifications".to_string(),
-                value: if value { "enabled" } else { "disabled" }.to_string(),
-            },
-            ctx
-        );
         self.show_agent_notifications = value;
         ctx.notify();
     }
 
     pub(crate) fn complete(&mut self, ctx: &mut ModelContext<Self>) {
-        send_telemetry_from_ctx!(OnboardingEvent::OnboardingSlidesCompleted, ctx);
         ctx.emit(OnboardingStateEvent::Completed);
         ctx.notify();
     }
@@ -215,7 +162,6 @@ impl OnboardingStateModel {
         };
 
         if let Some(prev) = prev {
-            send_telemetry_from_ctx!(OnboardingEvent::SlideNavigatedBack, ctx);
             self.set_step(prev, ctx);
         }
     }
@@ -229,7 +175,6 @@ impl OnboardingStateModel {
         };
 
         if let Some(next) = next {
-            send_telemetry_from_ctx!(OnboardingEvent::SlideNavigatedNext, ctx);
             self.set_step(next, ctx);
         }
     }
@@ -240,19 +185,6 @@ impl OnboardingStateModel {
         }
 
         self.step = step;
-
-        let slide_name = match step {
-            OnboardingStep::Intro => "welcome",
-            OnboardingStep::Customize => "customize",
-            OnboardingStep::ThirdParty => "third_party",
-            OnboardingStep::ThemePicker => "theme_picker",
-        };
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SlideViewed {
-                slide_name: slide_name.to_string(),
-            },
-            ctx
-        );
 
         ctx.emit(OnboardingStateEvent::SelectedSlideChanged);
         ctx.notify();

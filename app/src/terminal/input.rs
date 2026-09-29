@@ -132,6 +132,7 @@ use crate::input_suggestions::{
     Event as InputSuggestionsEvent, HistoryInputSuggestion, InputSuggestions,
     TabCompletionsPreselectOption,
 };
+use crate::palette::PaletteSource;
 use crate::pane_group::PaneGroupAction;
 use crate::pane_group::focus_state::PaneFocusHandle;
 #[cfg(feature = "local_fs")]
@@ -145,7 +146,6 @@ use crate::search::at_menu::mixer::AtMenuSearchableAction;
 use crate::search::at_menu::search::is_valid_search_query;
 use crate::search::at_menu::view::AtMenuAction;
 use crate::search::slash_command_menu::static_commands::commands::COMMAND_REGISTRY;
-use crate::server::telemetry::{CommandXRayTrigger, PaletteSource};
 use crate::session_management::SessionNavigationPromptElements;
 use crate::settings::{
     AliasExpansionSettings, AppEditorSettings, AppEditorSettingsChangedEvent, CLIAgentSettings,
@@ -198,7 +198,7 @@ use crate::workflows::command_parser::{
 };
 use crate::workflows::info_box::{WORKFLOW_PARAMETER_HIGHLIGHT_COLOR, WorkflowsMoreInfoView};
 use crate::workflows::local_workflows::LocalWorkflows;
-use crate::workflows::{self, WorkflowSelectionSource, WorkflowSource, WorkflowType};
+use crate::workflows::{self, WorkflowSource, WorkflowType};
 use crate::workspace::sync_inputs::SyncedInputState;
 use crate::workspace::{CommandSearchOptions, InitContent, ToastStack, WorkspaceAction};
 
@@ -633,7 +633,6 @@ struct SelectedWorkflowState {
 
     workflow_source: WorkflowSource,
     workflow_type: WorkflowType,
-    workflow_selection_source: WorkflowSelectionSource,
 
     /// `true` if the WorkflowsMoreInfoView should be shown for the selected workflow. This is true
     /// in all cases except when a workflow-linked history command is selected from up-arrow
@@ -838,6 +837,12 @@ fn strip_control_characters(text: &str) -> Cow<'_, str> {
     } else {
         text.into()
     }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum CommandXRayTrigger {
+    Hover,
+    Keystroke,
 }
 
 /// Which completion sources a request draws on, once the two user toggles and native-completions
@@ -2291,7 +2296,6 @@ impl Input {
                     self.insert_workflow_into_input(
                         workflow_type,
                         workflow_source,
-                        WorkflowSelectionSource::UpArrowHistory,
                         None,
                         Some(command),
                         /*should_show_more_info_view=*/ false,
@@ -3134,7 +3138,6 @@ impl Input {
                 self.show_workflows_info_box_on_workflow_selection(
                     *workflow.clone(),
                     workflow_source,
-                    WorkflowSelectionSource::Voltron,
                     None,
                     ctx,
                 );
@@ -3160,14 +3163,12 @@ impl Input {
         &mut self,
         workflow_type: WorkflowType,
         workflow_source: WorkflowSource,
-        workflow_selection_source: WorkflowSelectionSource,
         argument_override: Option<HashMap<String, String>>,
         ctx: &mut ViewContext<Input>,
     ) {
         self.insert_workflow_into_input(
             workflow_type,
             workflow_source,
-            workflow_selection_source,
             argument_override,
             None,
             true,
@@ -3180,13 +3181,11 @@ impl Input {
         history_command: &str,
         workflow_type: WorkflowType,
         workflow_source: WorkflowSource,
-        workflow_selection_source: WorkflowSelectionSource,
         ctx: &mut ViewContext<Input>,
     ) {
         self.insert_workflow_into_input(
             workflow_type,
             workflow_source,
-            workflow_selection_source,
             None,
             Some(history_command),
             true,
@@ -3223,12 +3222,10 @@ impl Input {
     /// If `history_command` is `Some()` _and_ matches the contained workflow in `workflow_type`,
     /// `history_command` is inserted into the input instead, with its parameters highlighted and
     /// made editable via the shift-tab UX.
-    #[allow(clippy::too_many_arguments)]
     fn insert_workflow_into_input(
         &mut self,
         workflow_type: WorkflowType,
         workflow_source: WorkflowSource,
-        workflow_selection_source: WorkflowSelectionSource,
         argument_overrides: Option<HashMap<String, String>>,
         history_command: Option<&str>,
         should_show_more_info_view: bool,
@@ -3311,7 +3308,6 @@ impl Input {
                     argument_index_to_highlight_index: argument_index_to_highlight_index_map,
                     workflow_source,
                     workflow_type,
-                    workflow_selection_source,
                     should_show_more_info_view,
                 });
             }
@@ -3333,7 +3329,6 @@ impl Input {
                     argument_index_to_highlight_index: HashMap::new(),
                     workflow_source,
                     workflow_type,
-                    workflow_selection_source,
                     should_show_more_info_view,
                 });
             }
@@ -3567,7 +3562,6 @@ impl Input {
                             self.insert_workflow_into_input(
                                 workflow_type,
                                 workflow_source,
-                                WorkflowSelectionSource::UpArrowHistory,
                                 None,
                                 Some(selected_item.text()),
                                 /*should_show_more_info_view=*/ false,
@@ -3666,7 +3660,6 @@ impl Input {
             self.insert_workflow_into_input(
                 state.workflow_type,
                 state.workflow_source,
-                state.workflow_selection_source,
                 None,
                 None,
                 true,

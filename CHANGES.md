@@ -105,6 +105,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Remote images and remote asset fetching](#remote-images-and-remote-asset-fetching) — remote `http(s)` markdown images render as alt text plus a link instead of being downloaded; removed `asset_cache::url_source`, the URL asset cache, the URL-based fallback-font loader and the `reqwest` dependency of `asset_cache`
 - [Network log console and the ServerApi provider](#network-log-console-and-the-serverapi-provider) — deleted the in-app network log pane, its Privacy-page entry and binding, `ServerApiProvider`/`ServerApi`, the IAP manager and the staging-access toast; nothing outside `server/telemetry/` is left in `app/src/server/`
 - [Warp server client crates](#warp-server-client-crates) — deleted `warp_graphql` (`crates/graphql`), `warp_graphql_schema`, `warp_server_client`, `warp_server_auth`, `firebase`, `cloud_objects`, `websocket`, `channel_versions` and `field_mask`, with `cynic`, `graphql-ws-client`, `tungstenite`, and the SSE and websocket error support
+- [Telemetry framework](#telemetry-framework) — deleted the event enum, registration macros, context provider and event store, plus the last telemetry-only plumbing (`workflow_selection_source`, `anonymous_id`, `TelemetryConfig`, `--print-telemetry-events`)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2782,3 +2783,32 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Left for DOCS-1: `.agents/skills/logging-and-error-reporting/SKILL.md` still cites `crates/warp_server_client` in an example.
 - Left for WASM-2: the `futures-timer` wasm dependency of `warp` was there for `reqwest-eventsource`.
 - Code compiled only on other platforms (`cfg(windows)`, Linux, wasm) was checked with `rg`: none named these crates.
+
+## Telemetry framework
+**Why:** TEL-1 turned the telemetry macros into no-ops and TEL-2 and TEL-3 removed their call sites. Nothing sent, recorded or described events any more, so this deletes the framework and everything that only existed to feed it.
+
+**Removed:**
+- `app/src/server/` (the last module of the old server layer): `telemetry/events.rs` (the roughly 4,500-line `TelemetryEvent` enum with its names, descriptions, payloads and enablement states, and the event-source enums such as `FileTreeSource` and `LaunchConfigUiLocation`), `telemetry/macros.rs` (the `send_telemetry_*` no-op macros), its tests, and `mod server`. `secret_redaction` had already moved out of it.
+- `warp_core::telemetry`: the `TelemetryEvent` trait, `register_telemetry_event!` and its `inventory` registration, `all_events`, `enum_events`, `EnablementState`, `TelemetryContextProvider` and `TelemetryContextModel` (with the `anonymous_id` and `user_id` methods) and `MockTelemetryContextProvider`. The `inventory` dependency of `warp_core` and its re-export of `warpui_core` (used only by these macros) went with it.
+- `warpui_core::telemetry` (the in-memory event store, session tracking and the `record_telemetry_*` macros), `warpui_core::time` (a test clock that only the store used) and the `log_named_telemetry_events` feature of `warpui_core`, `warpui` and the `agent_mode_evals` feature of `app`.
+- `crates/onboarding`: `OnboardingEvent`, `telemetry_provider.rs` (`MockTelemetryContextProvider` for the demo binary), the event sends in the model and slides, and the `serde`, `serde_json`, `strum`, `strum_macros`, `uuid` and `cfg-if` dependencies they needed.
+- `warp_core::channel`: `TelemetryConfig`, `RudderStackConfig`, `RudderStackDestination`, `ChannelConfig::telemetry_config` and `ChannelState::{telemetry_file_name, is_telemetry_available, rudderstack_non_ugc_destination, rudderstack_ugc_destination}`, with the `telemetry_config: None` lines in the binaries.
+- The hidden `--print-telemetry-events` command (`warp_cli::Command::PrintTelemetryEvents`).
+- `FeatureFlag::{SendTelemetryToFile, WithSandboxTelemetry}` and the `send_telemetry_to_file` Cargo feature.
+- Event-only helpers and parameters: `AvailableShell::telemetry_value`, `CodeSource::telemetry_source_name`, `DataSourceRunError::telemetry_payload` (trait and both implementations, and the `Serialize` derive of `DataSourceSearchError`), `TabTelemetryAction`, `NotebookLocation`, `prompt::editor_modal::OpenSource`, `WelcomeTipFeature`, and the `telemetry_banner_dismissed` setting (`TelemetryBannerDismissed`, private, no reader).
+- `workflow_selection_source` and `WorkflowSelectionSource`: the argument threaded through `WorkspaceAction::RunWorkflow`, `pane_group::Event::RunWorkflow`, `Workspace::run_workflow_in_active_input` and the terminal input's workflow insertion (37 references), which only fed events.
+
+**Modified:**
+- `PaletteSource` moved from the telemetry events to `app/src/palette.rs`, next to `PaletteMode`, because the workspace branches on it (`CtrlTab` picks the Ctrl-Tab palette and its filter; `TitleBarSearchBar` pins the tab bar). The variants nothing constructs (`PrefixChange`, `WarpDrive`, `LogOutModal`, `PaneHeader`, `AgentTip`) are gone; the serde derives were only for event payloads.
+- `CommandXRayTrigger` moved to `terminal/input.rs`, its only user (a keystroke-triggered X-ray announces itself to screen readers; hover does not). `ImageProtocol` is imported from `warp_terminal` directly.
+- `warp_completer`'s local `telemetry_match_type` is now `filtered_match_type`.
+
+**User-visible impact:** none. `warp-oss --print-telemetry-events` no longer exists.
+
+**Notes:**
+- `rg -t rust -i telemetry app/src crates` is empty. The word still appears in `deny.toml` and `script/offline_audit` (ban lists), `crates/warp_completer/src/parsers/README.md` (an example CLI flag) and this file.
+- The stale `TelemetryBannerDismissed` key that older versions may have written to the private preferences is ignored and never read.
+- `CocoaSentry`, `RecordAppActiveEvents`, `AgentModeAnalytics` and other feature flags for removed reporting features are left for FLAGS-1.
+- `.agents/skills/add-telemetry` was already removed with the Warp-process skills.
+- `server/telemetry/secret_redaction.rs` (kept by TEL-1 for the agent SDK) was already deleted with the Oz CLI and agent SDK; nothing needed moving. User-level secret redaction lives in `crates/secret_redaction`.
+- `CFG-1` also removes the telemetry parts of the channel config; whichever lands second keeps the other's deletions.

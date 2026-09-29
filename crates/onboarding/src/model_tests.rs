@@ -1,10 +1,8 @@
-use warp_core::telemetry::testing::MockTelemetryContextProvider;
 use warpui_core::{App, ModelHandle};
 
 use crate::model::{OnboardingStateModel, OnboardingStep};
 
 fn add_model(app: &mut App) -> ModelHandle<OnboardingStateModel> {
-    app.update(MockTelemetryContextProvider::register);
     app.add_model(|_| OnboardingStateModel::new())
 }
 

@@ -7,3 +7,13 @@ pub enum PaletteMode {
     LaunchConfig,
     Files,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub enum PaletteSource {
+    Keybinding,
+    CtrlTab { shift_pressed_initially: bool },
+    QuitModal,
+    IntegrationTest,
+    ContextChip,
+    TitleBarSearchBar,
+}

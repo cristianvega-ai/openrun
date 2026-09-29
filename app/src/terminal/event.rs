@@ -11,13 +11,13 @@ use super::model::ansi::ExternalShellWidgetSelectionValue;
 use super::model::block::BlockId;
 use super::model::session::{SessionId, SessionInfo};
 use super::model::terminal_model::{BlockIndex, ExitReason};
-use crate::server::telemetry::ImageProtocol;
 use crate::terminal::ClipboardType;
 use crate::terminal::model::block::{BlockMetadata, SerializedBlock};
 use crate::terminal::model::blocks::BlockList;
 use crate::terminal::model::completions::ShellCompletion;
 use crate::terminal::model::terminal_model::HandlerEvent;
 use crate::terminal::shell::ShellType;
+use warp_terminal::ImageProtocol;
 
 #[derive(Clone)]
 /// Events sent to the main thread by the terminal model & event loop.

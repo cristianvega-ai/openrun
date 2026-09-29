@@ -4,15 +4,7 @@ pub mod file;
 pub mod link;
 mod styles;
 
-use serde::{Deserialize, Serialize};
 use warpui::AppContext;
-
-/// A notebook location.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub enum NotebookLocation {
-    /// A notebook backed by a local file.
-    LocalFile,
-}
 
 /// Initialize notebooks-related keybindings.
 pub fn init(app: &mut AppContext) {

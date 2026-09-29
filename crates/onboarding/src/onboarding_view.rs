@@ -1,6 +1,5 @@
 use pathfinder_geometry::vector::vec2f;
 use ui_components::{Component as _, Options as _, button};
-use warp_core::send_telemetry_from_ctx;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::theme::WarpTheme;
 use warpui_core::assets::asset_cache::AssetSource;
@@ -22,7 +21,6 @@ use crate::slides::{
     CustomizeUISlide, IntroSlide, OnboardingSlide, ThemePickerSlide, ThemePickerSlideEvent,
     ThirdPartySlide,
 };
-use crate::telemetry::OnboardingEvent;
 
 #[derive(Clone, Debug)]
 pub enum OnboardingViewEvent {
@@ -134,14 +132,6 @@ impl OnboardingView {
 
         // Preload slide images so they're ready when the user reaches each slide.
         Self::preload_onboarding_images(ctx);
-
-        send_telemetry_from_ctx!(OnboardingEvent::OnboardingStarted, ctx);
-        send_telemetry_from_ctx!(
-            OnboardingEvent::SlideViewed {
-                slide_name: "welcome".to_string(),
-            },
-            ctx
-        );
     }
 
     /// Eagerly loads all onboarding slide images into the asset cache

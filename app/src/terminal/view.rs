@@ -147,6 +147,7 @@ use crate::context_chips::prompt_type::PromptType;
 use crate::editor::EditorAction;
 use crate::features::FeatureFlag;
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
+use crate::palette::PaletteSource;
 use crate::pane_group::focus_state::PaneFocusHandle;
 use crate::pane_group::{
     CodeReviewPanelArg, PaneConfiguration, PaneEvent, PaneGroupAction, SplitPaneState,
@@ -156,7 +157,6 @@ use crate::persistence::{self, FinishedCommandMetadata};
 use crate::resource_center::{
     Tip, TipHint, TipsCompleted, mark_feature_used_and_write_to_user_defaults,
 };
-use crate::server::telemetry::PaletteSource;
 use crate::session_management::{CommandContext, SessionNavigationPromptElements};
 #[cfg(feature = "local_fs")]
 use crate::settings::import::model::ImportedConfigModel;

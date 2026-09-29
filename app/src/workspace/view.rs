@@ -139,7 +139,7 @@ use crate::menu::{
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::network::{NetworkStatus, NetworkStatusEvent};
 use crate::notification::NotificationContext;
-use crate::palette::PaletteMode;
+use crate::palette::{PaletteMode, PaletteSource};
 #[cfg(feature = "local_fs")]
 use crate::pane_group::FilePane;
 use crate::pane_group::pane::ActionOrigin;
@@ -167,7 +167,6 @@ use crate::search::command_search::searcher::{
 use crate::search::command_search::settings::CommandSearchSettings;
 use crate::search::command_search::view::{CommandSearchEvent, CommandSearchView};
 use crate::search::{self, QueryFilter};
-use crate::server::telemetry::PaletteSource;
 use crate::session_management::{SessionNavigationData, SessionSource, TabNavigationData};
 use crate::settings::{
     AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
@@ -259,7 +258,7 @@ use crate::util::traffic_lights::{TrafficLightMouseStates, TrafficLightSide, tra
 use crate::util::truncation::truncate_from_end;
 use crate::view_components::{DismissibleToast, DismissibleToastStack, ToastLink};
 use crate::window_settings::{WindowSettings, WindowSettingsChangedEvent, ZoomLevel};
-use crate::workflows::{WorkflowSelectionSource, WorkflowSource, WorkflowType};
+use crate::workflows::{WorkflowSource, WorkflowType};
 use crate::workspace::action::CommandSearchOptions;
 #[cfg(target_os = "macos")]
 use crate::workspace::cli_install;
@@ -9408,13 +9407,11 @@ impl Workspace {
             pane_group::Event::RunWorkflow {
                 workflow,
                 workflow_source,
-                workflow_selection_source,
                 argument_override,
             } => {
                 self.run_workflow_in_active_input(
                     workflow,
                     *workflow_source,
-                    *workflow_selection_source,
                     argument_override.clone(),
                     TerminalSessionFallbackBehavior::default(),
                     ctx,
@@ -10385,7 +10382,6 @@ impl Workspace {
         &mut self,
         workflow: &WorkflowType,
         workflow_source: WorkflowSource,
-        workflow_selection_source: WorkflowSelectionSource,
         argument_override: Option<HashMap<String, String>>,
         fallback_behavior: TerminalSessionFallbackBehavior,
         ctx: &mut ViewContext<Self>,
@@ -10397,7 +10393,6 @@ impl Workspace {
                 input.show_workflows_info_box_on_workflow_selection(
                     workflow.clone(),
                     workflow_source,
-                    workflow_selection_source,
                     argument_override,
                     ctx,
                 );
@@ -10481,7 +10476,6 @@ impl Workspace {
                                         command.as_str(),
                                         workflow_type,
                                         workflow_source,
-                                        WorkflowSelectionSource::UniversalSearch,
                                         ctx,
                                     );
                                 }
@@ -10505,7 +10499,6 @@ impl Workspace {
                             input.show_workflows_info_box_on_workflow_selection(
                                 workflow,
                                 workflow_source,
-                                WorkflowSelectionSource::UniversalSearch,
                                 None,
                                 ctx,
                             );
@@ -14833,12 +14826,10 @@ impl TypedActionView for Workspace {
             RunWorkflow {
                 workflow,
                 workflow_source,
-                workflow_selection_source,
                 argument_override,
             } => self.run_workflow_in_active_input(
                 workflow,
                 *workflow_source,
-                *workflow_selection_source,
                 argument_override.clone(),
                 TerminalSessionFallbackBehavior::default(),
                 ctx,

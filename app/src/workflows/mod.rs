@@ -27,17 +27,6 @@ pub enum WorkflowSource {
     App,
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, PartialOrd)]
-pub enum WorkflowSelectionSource {
-    CommandPalette,
-    UniversalSearch,
-    Voltron,
-    Notebook,
-    SlashMenu,
-    UpArrowHistory,
-    Undefined,
-}
-
 /// Wrapper type for a workflow that is run from the terminal input.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WorkflowType {

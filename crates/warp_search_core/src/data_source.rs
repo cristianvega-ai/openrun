@@ -5,8 +5,7 @@ use std::sync::Arc;
 use enum_iterator::{Sequence, all};
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Serialize;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::icons::Icon;
 use warp_core::ui::theme::Fill;
@@ -421,7 +420,7 @@ where
         self.as_ref(app).run_query(query, app)
     }
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct DataSourceSearchError {
     pub(crate) message: String,
 }
@@ -435,10 +434,6 @@ impl DataSourceSearchError {
 impl DataSourceRunError for DataSourceSearchError {
     fn user_facing_error(&self) -> String {
         self.message.clone()
-    }
-
-    fn telemetry_payload(&self) -> serde_json::Value {
-        json!(self)
     }
 
     fn as_any(&self) -> &dyn Any {

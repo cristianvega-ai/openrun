@@ -47,7 +47,6 @@ mod quit_warning;
 mod resource_limits;
 mod safe_triangle;
 mod search_bar;
-mod server;
 mod session_management;
 mod shell_indicator;
 mod stored_credentials;
@@ -173,14 +172,12 @@ use crate::gpu_state::GPUState;
 use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::notification::NotificationContext;
-use crate::palette::PaletteMode;
+use crate::palette::{PaletteMode, PaletteSource};
 use crate::persistence::PersistenceWriter;
 use crate::projects::ProjectManagementModel;
 use crate::root_view::{
     OpenFromRestoredArg, OpenPath, quake_mode_window_id, quake_mode_window_is_open,
 };
-use crate::server::telemetry::PaletteSource;
-pub use crate::server::telemetry::TelemetryEvent;
 use crate::session_management::{RunningSessionSummary, SessionNavigationData};
 use crate::settings::manager::SettingsManager;
 use crate::settings::{AccessibilitySettings, ScrollSettings, SelectionSettings};
@@ -338,10 +335,6 @@ pub fn run() -> Result<()> {
             #[cfg(not(target_family = "wasm"))]
             warp_cli::Command::DumpSettingsSchema { output_path } => {
                 return settings::schema_generation::dump_settings_schema(output_path.as_deref());
-            }
-            #[cfg(not(target_family = "wasm"))]
-            warp_cli::Command::PrintTelemetryEvents => {
-                return TelemetryEvent::print_telemetry_events_json();
             }
         }
     }

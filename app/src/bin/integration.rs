@@ -34,7 +34,6 @@ pub fn main() -> Result<()> {
                 rtc_server_url: "ws://192.0.2.0:9/graphql/v2".into(),
                 iap_config: None,
             },
-            telemetry_config: None,
             crash_reporting_config: None,
             autoupdate_config: None,
         },
