@@ -10,9 +10,6 @@ use warp_core::features::FeatureFlag;
 use warp_errors::report_error;
 use warp_graphql::ai::{AgentTaskState, PlatformErrorCode};
 use warp_graphql::client::Operation;
-use warp_graphql::mutations::create_agent_task::{
-    CreateAgentTask, CreateAgentTaskInput, CreateAgentTaskResult, CreateAgentTaskVariables,
-};
 use warp_graphql::mutations::delete_ai_conversation::{
     DeleteAIConversation, DeleteAIConversationVariables, DeleteConversationInput,
     DeleteConversationResult,
@@ -26,9 +23,6 @@ use warp_graphql::queries::free_available_models::{
     FreeAvailableModels, FreeAvailableModelsInput, FreeAvailableModelsResult,
     FreeAvailableModelsVariables,
 };
-use warp_graphql::queries::get_available_harnesses::{
-    GetAvailableHarnesses, GetAvailableHarnessesVariables,
-};
 use warp_graphql::queries::get_feature_model_choices::{
     GetFeatureModelChoices, GetFeatureModelChoicesVariables,
 };
@@ -40,10 +34,9 @@ use crate::ai::agent::conversation::{AIAgentHarness, ServerAIConversationMetadat
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 // Re-export ambient agent types for backwards compatibility
 pub use crate::ai::ambient_agents::{
-    AgentConfigSnapshot, AgentSource, AmbientAgentTask, AmbientAgentTaskState, ExecutionLocation,
+    AgentSource, AmbientAgentTask, AmbientAgentTaskState, ExecutionLocation,
 };
 use crate::ai::artifacts::Artifact;
-use crate::ai::harness_availability::HarnessAvailability;
 use crate::ai::llms::{
     AvailableLLMs, DisableReason, LLMContextWindow, LLMInfo, LLMModelHost, LLMSpec,
     LLMUsageMetadata, ModelsByFeature, RoutingHostConfig,
@@ -202,9 +195,6 @@ pub struct TaskListFilter {
     pub states: Option<Vec<AmbientAgentTaskState>>,
     pub source: Option<AgentSource>,
     pub execution_location: Option<ExecutionLocation>,
-    pub environment_id: Option<String>,
-    pub skill_spec: Option<String>,
-    pub schedule_id: Option<String>,
     pub ancestor_run_id: Option<String>,
     pub config_name: Option<String>,
     pub model_id: Option<String>,
@@ -247,15 +237,6 @@ pub(crate) fn build_list_agent_runs_url(limit: i32, filter: &TaskListFilter) -> 
     }
     if let Some(execution_location) = filter.execution_location {
         push("execution_location", execution_location.as_query_param());
-    }
-    if let Some(environment_id) = filter.environment_id.as_deref() {
-        push("environment_id", environment_id);
-    }
-    if let Some(skill_spec) = filter.skill_spec.as_deref() {
-        push("skill_spec", skill_spec);
-    }
-    if let Some(schedule_id) = filter.schedule_id.as_deref() {
-        push("schedule_id", schedule_id);
     }
     if let Some(ancestor_run_id) = filter.ancestor_run_id.as_deref() {
         push("ancestor_run_id", ancestor_run_id);
@@ -321,32 +302,11 @@ impl<'de> serde::Deserialize<'de> for ListRunsResponse {
     }
 }
 
-#[derive(Clone, serde::Deserialize, Debug, PartialEq, Eq)]
-pub struct ConnectedSelfHostedWorker {
-    pub worker_host: String,
-    pub connection_count: u32,
-    pub connected_at: String,
-    pub last_seen_at: String,
-}
-
-#[derive(Clone, serde::Deserialize, Debug, PartialEq, Eq)]
-pub struct ListConnectedSelfHostedWorkersResponse {
-    pub workers: Vec<ConnectedSelfHostedWorker>,
-}
-
-pub(crate) const CONNECTED_SELF_HOSTED_WORKERS_PATH: &str = "agent/connected-self-hosted-workers";
-
 #[cfg_attr(test, automock)]
 #[cfg_attr(not(target_family = "wasm"), async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait(?Send))]
 pub trait AIClient: 'static + Send + Sync {
     async fn get_feature_model_choices(&self) -> Result<ModelsByFeature, anyhow::Error>;
-
-    async fn get_available_harnesses(&self) -> Result<Vec<HarnessAvailability>, anyhow::Error>;
-    async fn list_connected_self_hosted_workers(
-        &self,
-        team_scope: RequestTeamScope,
-    ) -> Result<ListConnectedSelfHostedWorkersResponse, anyhow::Error>;
 
     /// Fetches the free-tier available models without requiring authentication.
     /// Used during pre-login onboarding so logged-out users see an accurate model list
@@ -355,15 +315,6 @@ pub trait AIClient: 'static + Send + Sync {
         &self,
         referrer: Option<String>,
     ) -> Result<ModelsByFeature, anyhow::Error>;
-
-    async fn create_agent_task(
-        &self,
-        prompt: String,
-        environment_uid: Option<String>,
-        parent_run_id: Option<String>,
-        config: Option<AgentConfigSnapshot>,
-        team_scope: RequestTeamScope,
-    ) -> anyhow::Result<AmbientAgentTaskId, anyhow::Error>;
 
     /// Updates a run's server-side record. Every argument is independently optional; omitted
     /// fields are left untouched rather than cleared.
@@ -475,42 +426,6 @@ impl AIClient for ServerApi {
         }
     }
 
-    async fn get_available_harnesses(&self) -> Result<Vec<HarnessAvailability>, anyhow::Error> {
-        let variables = GetAvailableHarnessesVariables {
-            request_context: get_request_context(),
-        };
-        let operation = GetAvailableHarnesses::build(variables);
-        let response = self.send_graphql_request(operation, None).await?;
-
-        match response.user {
-            warp_graphql::queries::get_available_harnesses::UserResult::UserOutput(output) => {
-                Ok(output
-                    .user
-                    .available_harnesses
-                    .harnesses
-                    .into_iter()
-                    .map(|h| HarnessAvailability {
-                        harness: convert_harness(h.harness).into(),
-                        display_name: h.display_name,
-                        enabled: h.enabled,
-                        available_models: h
-                            .available_models
-                            .into_iter()
-                            .map(|m| crate::ai::harness_availability::HarnessModelInfo {
-                                id: m.id.into_inner(),
-                                display_name: m.display_name,
-                                reasoning_level: m.reasoning_level,
-                            })
-                            .collect(),
-                    })
-                    .collect())
-            }
-            warp_graphql::queries::get_available_harnesses::UserResult::Unknown => {
-                Err(anyhow!("Failed to get available harnesses"))
-            }
-        }
-    }
-
     async fn get_free_available_models(
         &self,
         referrer: Option<String>,
@@ -551,48 +466,6 @@ impl AIClient for ServerApi {
         }
     }
 
-    async fn create_agent_task(
-        &self,
-        prompt: String,
-        environment_uid: Option<String>,
-        parent_run_id: Option<String>,
-        config: Option<AgentConfigSnapshot>,
-        team_scope: RequestTeamScope,
-    ) -> anyhow::Result<AmbientAgentTaskId, anyhow::Error> {
-        // Serialize the config to JSON if provided
-        let agent_config_snapshot = config
-            .map(|c| serde_json::to_string(&c))
-            .transpose()
-            .map_err(|e| anyhow!("Failed to serialize agent config: {e}"))?;
-
-        let variables = CreateAgentTaskVariables {
-            input: CreateAgentTaskInput {
-                prompt,
-                environment_uid: environment_uid.map(|uid| uid.into()),
-                parent_run_id: parent_run_id.map(|run_id| run_id.into()),
-                agent_config_snapshot,
-            },
-            request_context: get_request_context(),
-        };
-
-        let operation = CreateAgentTask::build(variables);
-        let response = self
-            .send_graphql_request_for_team(operation, team_scope)
-            .await?;
-
-        match response.create_agent_task {
-            CreateAgentTaskResult::CreateAgentTaskOutput(output) => output
-                .task_id
-                .into_inner()
-                .parse()
-                .map_err(|e| anyhow!("Failed to parse task ID from server: {e}")),
-            CreateAgentTaskResult::UserFacingError(e) => {
-                Err(anyhow!(get_user_facing_error_message(e)))
-            }
-            CreateAgentTaskResult::Unknown => Err(anyhow!("failed to create agent task")),
-        }
-    }
-
     #[allow(clippy::too_many_arguments)]
     async fn update_agent_task(
         &self,
@@ -625,14 +498,6 @@ impl AIClient for ServerApi {
             }
             UpdateAgentTaskResult::Unknown => Err(anyhow!("failed to update agent task")),
         }
-    }
-
-    async fn list_connected_self_hosted_workers(
-        &self,
-        team_scope: RequestTeamScope,
-    ) -> anyhow::Result<ListConnectedSelfHostedWorkersResponse, anyhow::Error> {
-        self.get_public_api_for_team(CONNECTED_SELF_HOSTED_WORKERS_PATH, team_scope)
-            .await
     }
 
     async fn fork_conversation(

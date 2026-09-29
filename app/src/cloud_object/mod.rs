@@ -509,29 +509,6 @@ pub trait CloudModelType: Debug + Clone + Send + Sync {
         false
     }
 }
-/// Provides app-local typed lookup helpers for generic cloud object aliases.
-pub trait CloudObjectLookup: Sized + Clone {
-    fn get_all(app: &AppContext) -> Vec<Self>;
-
-    fn get_by_id<'a>(sync_id: &'a SyncId, app: &'a AppContext) -> Option<&'a Self>;
-}
-
-impl<K, M> CloudObjectLookup for GenericCloudObject<K, M>
-where
-    K: HashableId + ToServerId + Debug + Into<String> + Clone + 'static,
-    M: CloudModelType<IdType = K, CloudObjectType = GenericCloudObject<K, M>> + 'static,
-{
-    fn get_all(app: &AppContext) -> Vec<Self> {
-        CloudModel::as_ref(app)
-            .get_all_objects_of_type::<K, M>()
-            .cloned()
-            .collect()
-    }
-
-    fn get_by_id<'a>(sync_id: &'a SyncId, app: &'a AppContext) -> Option<&'a Self> {
-        CloudModel::as_ref(app).get_object_of_type::<K, M>(sync_id)
-    }
-}
 
 lazy_static! {
     static ref SPACE_DETECT_RE: Regex = Regex::new(r"\s+").expect("Expect regex to be valid");
@@ -865,8 +842,7 @@ pub use cloud_object_client::{
     ObjectDeleteResult, ObjectMetadataUpdateResult, ObjectPermissionsUpdateData,
 };
 pub use cloud_object_models::{
-    ServerAIExecutionProfile, ServerAmbientAgentEnvironment, ServerCloudAgentConfig,
-    ServerCloudObject, ServerFolder, ServerNotebook, ServerPreference, ServerScheduledAmbientAgent,
+    ServerAIExecutionProfile, ServerCloudObject, ServerFolder, ServerNotebook, ServerPreference,
     TryFromGql,
 };
 use warp_errors::report_error;

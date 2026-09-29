@@ -48,7 +48,6 @@ pub enum FilterType {
     CreatedOn,
     Creator,
     Owner,
-    Harness,
 }
 
 /// Telemetry events for the agent management view

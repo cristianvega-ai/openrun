@@ -7,11 +7,9 @@ use warp_server_client::base_client::{CLOUD_AGENT_ID_HEADER, TEAM_UID_HEADER};
 
 use super::super::ServerApi;
 use super::{
-    AIClient, AgentSource, AmbientAgentTaskState, Artifact, ArtifactDownloadResponse,
-    CONNECTED_SELF_HOSTED_WORKERS_PATH, ConnectedSelfHostedWorker, ExecutionLocation,
-    ForkConversationResponse, ListConnectedSelfHostedWorkersResponse, ListRunsResponse,
-    TaskListFilter, TaskStatusUpdate, agent_task_status_message_input, build_fork_conversation_url,
-    build_list_agent_runs_url,
+    AgentSource, AmbientAgentTaskState, Artifact, ArtifactDownloadResponse, ExecutionLocation,
+    ForkConversationResponse, ListRunsResponse, TaskListFilter, TaskStatusUpdate,
+    agent_task_status_message_input, build_fork_conversation_url, build_list_agent_runs_url,
 };
 use crate::cloud_object::notebook_model::NotebookId;
 use crate::server::ids::ServerId;
@@ -138,75 +136,6 @@ fn list_agent_runs_omits_team_header_for_teamless_scope() {
         server_api.get_public_api_with_team_scope::<serde_json::Value>("agent/runs", Some(scope)),
     )
     .unwrap();
-}
-
-#[test]
-fn connected_self_hosted_workers_path_uses_public_api_route() {
-    assert_eq!(
-        CONNECTED_SELF_HOSTED_WORKERS_PATH,
-        "agent/connected-self-hosted-workers"
-    );
-}
-
-#[test]
-fn list_connected_self_hosted_workers_sends_selected_team_header() {
-    let team_uid = ServerId::from(124);
-    let _request = {
-        let mut server = warp_core::channel::ChannelState::mock_server();
-        server
-            .mock("GET", "/api/v1/agent/connected-self-hosted-workers")
-            .match_header(TEAM_UID_HEADER, team_uid.to_string().as_str())
-            .with_status(200)
-            .with_body(r#"{"workers":[]}"#)
-            .create()
-    };
-    let server_api = ServerApi::new_for_test();
-
-    let response =
-        block_on(server_api.list_connected_self_hosted_workers(request_scope_for_team(team_uid)))
-            .unwrap();
-
-    assert!(response.workers.is_empty());
-}
-
-#[test]
-fn deserialize_connected_self_hosted_workers_response() {
-    let json = r#"{
-        "workers": [
-            {
-                "worker_host": "worker-2",
-                "connection_count": 2,
-                "connected_at": "2026-05-18T19:00:00Z",
-                "last_seen_at": "2026-05-18T19:05:00Z"
-            },
-            {
-                "worker_host": "worker-1",
-                "connection_count": 1,
-                "connected_at": "2026-05-18T18:00:00Z",
-                "last_seen_at": "2026-05-18T18:05:00Z"
-            }
-        ]
-    }"#;
-
-    let response: ListConnectedSelfHostedWorkersResponse = serde_json::from_str(json).unwrap();
-
-    assert_eq!(
-        response.workers,
-        vec![
-            ConnectedSelfHostedWorker {
-                worker_host: "worker-2".to_string(),
-                connection_count: 2,
-                connected_at: "2026-05-18T19:00:00Z".to_string(),
-                last_seen_at: "2026-05-18T19:05:00Z".to_string(),
-            },
-            ConnectedSelfHostedWorker {
-                worker_host: "worker-1".to_string(),
-                connection_count: 1,
-                connected_at: "2026-05-18T18:00:00Z".to_string(),
-                last_seen_at: "2026-05-18T18:05:00Z".to_string(),
-            },
-        ]
-    );
 }
 
 #[test]
@@ -1009,9 +938,6 @@ fn build_list_agent_runs_url_all_fields() {
         ]),
         source: Some(AgentSource::AgentWebhook),
         execution_location: Some(ExecutionLocation::Remote),
-        environment_id: Some("env-123".to_string()),
-        skill_spec: Some("owner/repo:SKILL.md".to_string()),
-        schedule_id: Some("sched-1".to_string()),
         ancestor_run_id: Some("run-parent".to_string()),
         config_name: Some("nightly".to_string()),
         model_id: Some("claude-4-5".to_string()),
@@ -1031,9 +957,6 @@ fn build_list_agent_runs_url_all_fields() {
          &state=ERROR\
          &source=API\
          &execution_location=REMOTE\
-         &environment_id=env-123\
-         &skill_spec=owner%2Frepo%3ASKILL.md\
-         &schedule_id=sched-1\
          &ancestor_run_id=run-parent\
          &name=nightly\
          &model_id=claude-4-5\

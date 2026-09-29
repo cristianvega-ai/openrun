@@ -12,23 +12,17 @@
 #![allow(ambiguous_glob_reexports)]
 
 pub mod ai_execution_profile;
-pub mod cloud_agent_config;
-pub mod cloud_environment;
 pub mod folder;
 pub mod json_model;
 pub mod notebook;
 pub mod preference;
-pub mod scheduled_ambient_agent;
 pub mod server_cloud_object;
 pub mod user_profile;
 
 pub use ai_execution_profile::*;
-pub use cloud_agent_config::*;
-pub use cloud_environment::*;
 pub use folder::*;
 pub use json_model::*;
 pub use notebook::*;
 pub use preference::*;
-pub use scheduled_ambient_agent::*;
 pub use server_cloud_object::*;
 pub use user_profile::*;

@@ -658,15 +658,6 @@ pub fn render_citation(
             let name = url.clone();
             (Some(icon), name)
         }
-        AIAgentCitation::AgentMemory { content, .. } => {
-            let icon = Icon::Cognition.to_warpui_icon(theme.foreground()).finish();
-            let name = if content.is_empty() {
-                String::from("Memory")
-            } else {
-                content.clone()
-            };
-            (Some(icon), name)
-        }
     };
 
     // Shorten the name to 30 chars.
@@ -1059,9 +1050,6 @@ impl View for AIBlock {
                 aws_bedrock_credentials_error_view: self
                     .aws_bedrock_credentials_error_view
                     .as_ref(),
-                gemini_enterprise_credentials_error_view: self
-                    .gemini_enterprise_credentials_error_view
-                    .as_ref(),
                 imported_comments: &self.imported_comments,
                 #[cfg(feature = "local_fs")]
                 resolved_code_block_paths: &self.resolved_code_block_paths,
@@ -1301,7 +1289,6 @@ impl AIAgentInput {
             AIAgentInput::UserQuery { .. }
             | AIAgentInput::AutoCodeDiffQuery { .. }
             | AIAgentInput::ResumeConversation { .. }
-            | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::SummarizeConversation { .. }

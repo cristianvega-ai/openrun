@@ -69,7 +69,6 @@ use crate::ai::blocklist::block::{
 use crate::ai::blocklist::history_model::BlocklistAIHistoryModel;
 use crate::ai::blocklist::inline_action::ask_user_question_view::AskUserQuestionView;
 use crate::ai::blocklist::inline_action::aws_bedrock_credentials_error::AwsBedrockCredentialsErrorView;
-use crate::ai::blocklist::inline_action::gemini_enterprise_credentials_error::GeminiEnterpriseCredentialsErrorView;
 use crate::ai::blocklist::inline_action::inline_action_header::{
     HeaderConfig, INLINE_ACTION_HEADER_VERTICAL_PADDING, INLINE_ACTION_HORIZONTAL_PADDING,
     InteractionMode,
@@ -147,8 +146,6 @@ pub(crate) struct Props<'a> {
     pub(super) is_conversation_transcript_viewer: bool,
     pub(super) aws_bedrock_credentials_error_view:
         Option<&'a ViewHandle<AwsBedrockCredentialsErrorView>>,
-    pub(super) gemini_enterprise_credentials_error_view:
-        Option<&'a ViewHandle<GeminiEnterpriseCredentialsErrorView>>,
     pub(super) imported_comments: &'a HashMap<AIAgentActionId, ImportedCommentGroup>,
     #[cfg(feature = "local_fs")]
     pub(crate) resolved_code_block_paths:
@@ -859,30 +856,9 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                 }
 
                 if should_render_references_section {
-                    let exchange_id = props.model.exchange_id(app);
-                    let memory_citations: Vec<AIAgentCitation> = props
-                        .model
-                        .conversation(app)
-                        .filter(|conv| {
-                            // Only show memory citations on the first exchange.
-                            conv.first_exchange().map(|e| Some(e.id)) == Some(exchange_id)
-                        })
-                        .into_iter()
-                        .flat_map(|conv| conv.fetched_memories())
-                        .filter(|m| !m.memory_store_id.is_empty() && !m.memory_id.is_empty())
-                        .map(|m| AIAgentCitation::AgentMemory {
-                            memory_store_id: m.memory_store_id.clone(),
-                            memory_id: m.memory_id.clone(),
-                            content: m.content.clone(),
-                        })
-                        .collect();
-                    let all_citations: Vec<AIAgentCitation> = output
-                        .citations
-                        .iter()
-                        .cloned()
-                        .chain(memory_citations)
-                        .collect();
-                    if let Some(references) = render_references_footer(&all_citations, props, app) {
+                    if let Some(references) =
+                        render_references_footer(&output.citations, props, app)
+                    {
                         output_items.add_child(references);
                     }
                 }
@@ -916,8 +892,6 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                             .invalid_api_key_button_handle,
                         aws_bedrock_credentials_error_view: props
                             .aws_bedrock_credentials_error_view,
-                        gemini_enterprise_credentials_error_view: props
-                            .gemini_enterprise_credentials_error_view,
                         icon_right_margin: 16.,
                     },
                     app,

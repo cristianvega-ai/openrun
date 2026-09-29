@@ -292,7 +292,7 @@ fn run_card_with_oz_or_unknown_harness_renders_as_oz() {
 }
 
 #[test]
-fn entry_icon_uses_harness() {
+fn entry_icon_renders_as_oz() {
     let conversation_id = AIConversationId::new();
     let entry = AgentConversationEntry {
         id: AgentConversationEntryId::Conversation(conversation_id),
@@ -304,7 +304,7 @@ fn entry_icon_uses_harness() {
         },
         provenance: AgentConversationProvenance::CloudSyncedConversation,
         display: AgentConversationDisplayData {
-            title: "Codex conversation".to_string(),
+            title: "Conversation".to_string(),
             initial_query: None,
             created_at: Utc::now(),
             last_updated: Utc::now(),
@@ -317,8 +317,6 @@ fn entry_icon_uses_harness() {
             session_status: None,
             source: None,
             working_directory: None,
-            environment_id: None,
-            harness: Some(Harness::Codex),
             artifacts: Vec::new(),
         },
         backing: AgentConversationBackingData {
@@ -340,8 +338,8 @@ fn entry_icon_uses_harness() {
     assert_eq!(
         AgentIconFields::from_variant(&variant).unwrap(),
         AgentIconFields {
-            is_cli: true,
-            cli_agent: Some(CLIAgent::Codex),
+            is_cli: false,
+            cli_agent: None,
             status: Some(AgentStatus::Success),
             is_ambient: false,
         }

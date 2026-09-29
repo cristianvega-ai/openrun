@@ -11,16 +11,12 @@ use diesel::SqliteConnection;
 use diesel::result::Error;
 
 use crate::{
-    CloudAIExecutionProfile, CloudAIExecutionProfileModel, CloudAmbientAgentEnvironment,
-    CloudAmbientAgentEnvironmentModel, CloudPreference, CloudPreferenceModel,
-    CloudScheduledAmbientAgent, CloudScheduledAmbientAgentModel,
+    CloudAIExecutionProfile, CloudAIExecutionProfileModel, CloudPreference, CloudPreferenceModel,
 };
 
 pub enum PersistedGenericStringObject {
     Preference(CloudPreference),
     AIExecutionProfile(CloudAIExecutionProfile),
-    CloudEnvironment(CloudAmbientAgentEnvironment),
-    ScheduledAmbientAgent(CloudScheduledAmbientAgent),
 }
 
 pub fn read_generic_string_objects(
@@ -70,34 +66,6 @@ pub fn read_generic_string_objects(
                         )
                     })
                 }
-                JsonObjectType::CloudEnvironment => {
-                    let model = CloudAmbientAgentEnvironmentModel::deserialize_owned(&object.data);
-                    model.ok().map(|model| {
-                        PersistedGenericStringObject::CloudEnvironment(
-                            CloudAmbientAgentEnvironment::new(
-                                object_id,
-                                model,
-                                to_cloud_object_metadata(metadata),
-                                cloud_object_permissions,
-                            ),
-                        )
-                    })
-                }
-                JsonObjectType::ScheduledAmbientAgent => {
-                    let model = CloudScheduledAmbientAgentModel::deserialize_owned(&object.data);
-                    model.ok().map(|model| {
-                        PersistedGenericStringObject::ScheduledAmbientAgent(
-                            CloudScheduledAmbientAgent::new(
-                                object_id,
-                                model,
-                                to_cloud_object_metadata(metadata),
-                                cloud_object_permissions,
-                            ),
-                        )
-                    })
-                }
-                // TODO: Implement CloudAgentConfig model when full sync support is added
-                JsonObjectType::CloudAgentConfig => None,
             }
         })
         .collect())

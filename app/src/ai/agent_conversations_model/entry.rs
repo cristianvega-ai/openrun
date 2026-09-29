@@ -1,12 +1,11 @@
-use ai::harness::Harness;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use warpui::{AppContext, SingletonEntity};
 
 use super::{
     AgentManagementFilters, AgentRunDisplayStatus, ArtifactFilter, ConversationMetadata,
-    CreatedOnFilter, CreatorFilter, EnvironmentFilter, HarnessFilter, OwnerFilter, SessionStatus,
-    SourceFilter, StatusFilter, artifacts_match_filter,
+    CreatedOnFilter, CreatorFilter, OwnerFilter, SessionStatus, SourceFilter, StatusFilter,
+    artifacts_match_filter,
 };
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::AIConversationId;
@@ -86,8 +85,6 @@ pub struct AgentConversationDisplayData {
     pub session_status: Option<SessionStatus>,
     pub source: Option<AgentSource>,
     pub working_directory: Option<String>,
-    pub environment_id: Option<String>,
-    pub harness: Option<Harness>,
     pub artifacts: Vec<Artifact>,
 }
 
@@ -156,8 +153,6 @@ impl AgentConversationEntry {
             && self.matches_source(&filters.source)
             && self.matches_created_on(&filters.created_on)
             && self.matches_artifact(&filters.artifact)
-            && self.matches_environment(&filters.environment)
-            && self.matches_harness(&filters.harness)
     }
 
     fn matches_owner_and_creator(
@@ -209,21 +204,6 @@ impl AgentConversationEntry {
 
     fn matches_artifact(&self, artifact_filter: &ArtifactFilter) -> bool {
         artifacts_match_filter(&self.display.artifacts, artifact_filter)
-    }
-
-    fn matches_environment(&self, environment_filter: &EnvironmentFilter) -> bool {
-        match environment_filter {
-            EnvironmentFilter::All => true,
-            EnvironmentFilter::NoEnvironment => self.display.environment_id.is_none(),
-            EnvironmentFilter::Specific(id) => self.display.environment_id.as_ref() == Some(id),
-        }
-    }
-
-    fn matches_harness(&self, harness_filter: &HarnessFilter) -> bool {
-        match harness_filter {
-            HarnessFilter::All => true,
-            HarnessFilter::Specific(harness) => self.display.harness == Some(*harness),
-        }
     }
 
     pub fn has_open_action(
@@ -439,11 +419,6 @@ fn entry_for_conversation_parts(
                 .latest_working_directory
                 .clone()
                 .or_else(|| metadata.nav_data.initial_working_directory.clone()),
-            environment_id: None,
-            harness: conversation_metadata
-                .and_then(|metadata| metadata.server_conversation_metadata.as_ref())
-                .map(|metadata| Harness::from(metadata.harness))
-                .or(Some(Harness::Oz)),
             artifacts: conversation_artifacts(&metadata, history_model),
         },
         backing: AgentConversationBackingData {

@@ -4,14 +4,13 @@ mod query;
 
 use std::collections::{HashMap, HashSet};
 
-use ai::harness::Harness;
 pub use entry::{
     AgentConversationEntry, AgentConversationEntryId, AgentConversationNavigationSubject,
 };
 use fuzzy_match::FuzzyMatchResult;
 use itertools::Itertools;
 pub use query::query_conversation_entries;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::WarpTheme;
@@ -104,44 +103,11 @@ pub enum CreatedOnFilter {
     LastWeek,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
-pub enum EnvironmentFilter {
-    #[default]
-    All,
-    NoEnvironment,
-    Specific(String),
-}
-
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OwnerFilter {
     All,
     #[default]
     PersonalOnly,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
-pub enum HarnessFilter {
-    #[default]
-    All,
-    Specific(Harness),
-}
-
-impl Serialize for HarnessFilter {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            HarnessFilter::All => serializer.serialize_str("all"),
-            HarnessFilter::Specific(harness) => serializer.collect_str(harness),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for HarnessFilter {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = String::deserialize(deserializer)?;
-        Ok(Harness::from_name(&raw)
-            .map(HarnessFilter::Specific)
-            .unwrap_or(HarnessFilter::All))
-    }
 }
 
 #[derive(Default, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
@@ -152,10 +118,6 @@ pub struct AgentManagementFilters {
     pub created_on: CreatedOnFilter,
     pub creator: CreatorFilter,
     pub artifact: ArtifactFilter,
-    #[serde(default)]
-    pub environment: EnvironmentFilter,
-    #[serde(default)]
-    pub harness: HarnessFilter,
 }
 
 /// Frontend-specific classification of a normalized conversation-list entry.
@@ -190,8 +152,6 @@ impl AgentManagementFilters {
         self.created_on = CreatedOnFilter::default();
         self.creator = CreatorFilter::default();
         self.artifact = ArtifactFilter::default();
-        self.environment = EnvironmentFilter::default();
-        self.harness = HarnessFilter::default();
     }
 
     pub fn is_filtering(&self) -> bool {
@@ -200,8 +160,6 @@ impl AgentManagementFilters {
             || self.created_on != CreatedOnFilter::default()
             || self.creator != CreatorFilter::default() && self.owners != OwnerFilter::PersonalOnly
             || self.artifact != ArtifactFilter::default()
-            || self.environment != EnvironmentFilter::default()
-            || self.harness != HarnessFilter::default()
     }
 }
 

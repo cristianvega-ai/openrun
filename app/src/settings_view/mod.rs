@@ -42,7 +42,7 @@ use crate::GlobalResourceHandlesProvider;
 use crate::appearance::Appearance;
 use crate::editor::{
     EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, SingleLineEditorOptions,
-    TextColors, TextOptions,
+    TextOptions,
 };
 use crate::menu::{self, Menu, MenuItem, MenuItemFields};
 use crate::pane_group::focus_state::PaneFocusHandle;
@@ -57,13 +57,10 @@ use crate::view_components::ToastFlavor;
 use crate::workspace::WorkspaceAction;
 
 mod about_page;
-mod agent_assisted_environment_modal;
 mod appearance_page;
 mod cli_agents_page;
 mod code_editor_review_page;
-mod delete_environment_confirmation_dialog;
 mod directory_color_add_picker;
-pub(crate) mod environments_page;
 mod features;
 mod features_page;
 mod join_teams_modal;
@@ -79,7 +76,6 @@ pub(crate) mod settings_page;
 mod tab_menu;
 mod teams_page;
 mod transfer_ownership_confirmation_modal;
-pub mod update_environment_form;
 mod warpify_page;
 
 #[cfg(not(target_family = "wasm"))]
@@ -151,15 +147,6 @@ pub fn nav_umbrella_position_id(label: &str) -> String {
 /// Saved-position id for a subpage row nested under an umbrella.
 pub fn nav_subpage_position_id(section: SettingsSection) -> String {
     format!("settings_nav_subpage:{section:?}")
-}
-
-pub(super) fn editor_text_colors(appearance: &Appearance) -> TextColors {
-    let theme = appearance.theme();
-    TextColors {
-        default_color: theme.active_ui_text_color(),
-        disabled_color: theme.disabled_ui_text_color(),
-        hint_color: theme.disabled_ui_text_color(),
-    }
 }
 
 /// Small inline pill rendered next to a settings label to mark a feature as beta.
@@ -1413,12 +1400,6 @@ impl SettingsView {
     ) {
         match event {
             SettingsPageEvent::FocusModal => ctx.focus(&self.search_editor),
-            SettingsPageEvent::Pane(_)
-            | SettingsPageEvent::EnvironmentSetupModeSelectorToggled { .. }
-            | SettingsPageEvent::AgentAssistedEnvironmentModalToggled { .. } => {
-                // These events are not handled in standalone settings - only used
-                // when the view is hosted inside a pane.
-            }
         }
     }
 
@@ -1442,12 +1423,6 @@ impl SettingsView {
     ) {
         match event {
             SettingsPageEvent::FocusModal => ctx.focus(&self.search_editor),
-            SettingsPageEvent::Pane(_)
-            | SettingsPageEvent::EnvironmentSetupModeSelectorToggled { .. }
-            | SettingsPageEvent::AgentAssistedEnvironmentModalToggled { .. } => {
-                // These events are not handled in standalone settings - only used
-                // when the view is hosted inside a pane.
-            }
         }
     }
 

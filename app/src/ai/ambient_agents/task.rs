@@ -1,7 +1,6 @@
 //! Ambient agent task types and utilities.
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-pub use cloud_object_models::AgentConfigSnapshot;
 use iso8601_duration::Duration as Iso8601Duration;
 use serde::{Deserialize, Serialize};
 use warp_errors::report_error;
@@ -19,7 +18,6 @@ pub enum AgentSource {
     AgentWebhook,
     Slack,
     Cli,
-    ScheduledAgent,
     Interactive,
     WebApp,
     GitHubAction,
@@ -40,7 +38,6 @@ impl AgentSource {
             AgentSource::AgentWebhook => "API",
             AgentSource::Slack => "SLACK",
             AgentSource::Cli => "CLI",
-            AgentSource::ScheduledAgent => "SCHEDULED_AGENT",
             // The public API's run source for local interactive tasks is named
             // `LOCAL`.
             AgentSource::Interactive => "LOCAL",
@@ -65,7 +62,6 @@ impl AgentSource {
             AgentSource::AgentWebhook => "API",
             AgentSource::Slack => "Slack",
             AgentSource::Cli => "CLI",
-            AgentSource::ScheduledAgent => "Scheduled",
             AgentSource::Interactive | AgentSource::CloudMode => "Warp App",
             AgentSource::WebApp => "Oz Web",
             AgentSource::GitHubAction => "GitHub Action",
@@ -90,7 +86,6 @@ impl AgentSource {
             | AgentSource::CloudMode
             | AgentSource::Jira => true,
             AgentSource::Cli
-            | AgentSource::ScheduledAgent
             | AgentSource::AgentWebhook
             | AgentSource::GitHubAction
             | AgentSource::GitHubWebhook
@@ -134,7 +129,6 @@ where
             "SLACK" => Some(AgentSource::Slack),
             "LOCAL" => Some(AgentSource::Interactive),
             "CLI" => Some(AgentSource::Cli),
-            "SCHEDULED_AGENT" => Some(AgentSource::ScheduledAgent),
             "WEB_APP" => Some(AgentSource::WebApp),
             "GITHUB_ACTION" => Some(AgentSource::GitHubAction),
             "GITHUB_WEBHOOK" => Some(AgentSource::GitHubWebhook),
@@ -193,9 +187,6 @@ pub struct AmbientAgentTask {
     pub request_usage: Option<RequestUsage>,
     pub is_sandbox_running: bool,
 
-    /// Snapshot of the agent config used to create the task.
-    #[serde(default, alias = "agent_config")]
-    pub agent_config_snapshot: Option<AgentConfigSnapshot>,
     #[serde(default, deserialize_with = "deserialize_artifacts")]
     pub artifacts: Vec<Artifact>,
 

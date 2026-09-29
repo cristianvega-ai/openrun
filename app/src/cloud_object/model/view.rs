@@ -179,8 +179,7 @@ impl CloudViewModel {
             }
             CloudModelEvent::ObjectForceExpanded { .. }
             | CloudModelEvent::ObjectSynced { .. }
-            | CloudModelEvent::InitialLoadCompleted
-            | CloudModelEvent::EnvironmentLastTaskRunTimestampsUpdated => (),
+            | CloudModelEvent::InitialLoadCompleted => (),
         }
     }
 

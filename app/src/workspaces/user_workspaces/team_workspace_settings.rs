@@ -127,20 +127,6 @@ impl TeamScope for TeamlessScopeForTest {
 /// [`UserWorkspaces::team_context_resolver`].
 pub type TeamContextResolver = Rc<dyn for<'a> Fn(&'a AppContext) -> TeamContext<'a>>;
 
-/// What windowless Gemini Enterprise credential minting should mint from. See
-/// [`UserWorkspaces::gemini_enterprise_host_for_any_enabling_team`].
-#[cfg(not(target_family = "wasm"))]
-pub(crate) enum GeminiEnterpriseBackgroundHost<'a> {
-    /// No team of the user's enables Gemini Enterprise, so there is nothing to mint.
-    NoneEnabled,
-    /// Teams enable it against different Google Cloud projects, named here so the caller can
-    /// tell the user which teams disagree. Nothing is minted -- there is one credential store
-    /// and no window to choose with -- but unlike [`Self::NoneEnabled`] this is a
-    /// misconfiguration an admin can fix, and the user should be told so.
-    Conflicting(Vec<&'a str>),
-    Enabled(&'a LlmHostSettings),
-}
-
 impl UserWorkspaces {
     /// Captures the team selected in `ctx`'s window as an operation's
     /// [`TeamContextForOperation`]. Always succeeds -- a window with no team selected still yields
@@ -473,16 +459,6 @@ impl UserWorkspaces {
             .unwrap_or_default()
     }
 
-    pub(crate) fn is_gemini_enterprise_credentials_toggleable<S: TeamScope + ?Sized>(
-        &self,
-        scope: &S,
-    ) -> bool {
-        matches!(
-            self.gemini_enterprise_host_enablement_setting(scope),
-            HostEnablementSetting::RespectUserSetting
-        )
-    }
-
     /// Whether Gemini Enterprise (GEAP) credentials should be minted and attached to requests
     pub(crate) fn is_gemini_enterprise_credentials_enabled<S: TeamScope + ?Sized>(
         &self,
@@ -545,59 +521,6 @@ impl UserWorkspaces {
         match host_settings.enablement_setting {
             HostEnablementSetting::Enforce => true,
             HostEnablementSetting::RespectUserSetting => user_setting_enabled(),
-        }
-    }
-
-    /// What background, windowless Gemini Enterprise credential minting should mint from.
-    #[cfg(not(target_family = "wasm"))]
-    pub(crate) fn gemini_enterprise_host_for_any_enabling_team(
-        &self,
-        app: &AppContext,
-    ) -> GeminiEnterpriseBackgroundHost<'_> {
-        if !FeatureFlag::GeminiEnterprise.is_enabled()
-            || AuthStateProvider::as_ref(app)
-                .get()
-                .is_anonymous_or_logged_out()
-        {
-            return GeminiEnterpriseBackgroundHost::NoneEnabled;
-        }
-        let enabling: Vec<(Option<&Team>, &LlmHostSettings)> = self
-            .every_applicable_team_and_llm_settings()
-            .filter(|(_, llm_settings)| {
-                Self::host_credentials_enabled(
-                    llm_settings,
-                    &LLMModelHost::GeminiEnterprise,
-                    || {
-                        *AISettings::as_ref(app)
-                            .gemini_enterprise_credentials_enabled
-                            .value()
-                    },
-                )
-            })
-            .filter_map(|(team, llm_settings)| {
-                llm_settings
-                    .host_configs
-                    .get(&LLMModelHost::GeminiEnterprise)
-                    .map(|settings| (team, settings))
-            })
-            .collect();
-
-        let Some((_, first)) = enabling.first().copied() else {
-            return GeminiEnterpriseBackgroundHost::NoneEnabled;
-        };
-        let agree = enabling.iter().all(|(_, settings)| {
-            settings.gcp_audience == first.gcp_audience
-                && settings.gcp_sa_email == first.gcp_sa_email
-        });
-        if agree {
-            GeminiEnterpriseBackgroundHost::Enabled(first)
-        } else {
-            GeminiEnterpriseBackgroundHost::Conflicting(
-                enabling
-                    .iter()
-                    .filter_map(|(team, _)| team.map(|team| team.name.as_str()))
-                    .collect(),
-            )
         }
     }
 

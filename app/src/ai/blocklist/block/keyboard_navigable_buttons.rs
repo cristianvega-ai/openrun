@@ -1,9 +1,8 @@
-use warp_core::ui::appearance::Appearance;
-use warpui::elements::{Container, CrossAxisAlignment, Flex, MouseStateHandle, ParentElement};
+use warpui::elements::{Container, CrossAxisAlignment, Flex, ParentElement};
 use warpui::keymap::FixedBinding;
-use warpui::ui_components::button::{Button, ButtonVariant};
-use warpui::ui_components::components::{UiComponent, UiComponentStyles};
-use warpui::{AppContext, Element, Entity, SingletonEntity, TypedActionView, View, ViewContext};
+use warpui::ui_components::button::Button;
+use warpui::ui_components::components::UiComponent;
+use warpui::{AppContext, Element, Entity, TypedActionView, View, ViewContext};
 
 const MARGIN_BETWEEN_BUTTONS: f32 = 4.;
 const HAS_OPTIONS: &str = "HasOptions";
@@ -66,49 +65,6 @@ impl KeyboardNavigableButtonBuilder {
             on_click: Box::new(on_selected),
         }
     }
-}
-
-/// Creates a simple navigation button with standard styling.
-/// This is a convenience function for the common case of a text-only button
-/// that dispatches an action when clicked.
-pub fn simple_navigation_button<A: warpui::Action + Clone + 'static>(
-    text_label: String,
-    mouse_state: MouseStateHandle,
-    action: A,
-    disabled: bool,
-) -> KeyboardNavigableButtonBuilder {
-    KeyboardNavigableButtonBuilder::new(
-        move |is_selected, app| {
-            let appearance = Appearance::as_ref(app);
-            let mut button = appearance
-                .ui_builder()
-                .button(ButtonVariant::Secondary, mouse_state.clone())
-                .with_style(UiComponentStyles {
-                    font_size: Some(appearance.monospace_font_size()),
-                    ..UiComponentStyles::default()
-                })
-                .with_hovered_styles(UiComponentStyles {
-                    font_size: Some(appearance.monospace_font_size()),
-                    ..UiComponentStyles::default()
-                });
-            if disabled {
-                button = button.disabled();
-            } else if is_selected {
-                button = button.with_style(UiComponentStyles {
-                    border_color: Some(appearance.theme().accent().into()),
-                    border_width: Some(1.0),
-                    background: Some(appearance.theme().surface_2().into()),
-                    ..UiComponentStyles::default()
-                });
-            }
-            button.with_text_label(text_label.clone())
-        },
-        move |ctx: &mut ViewContext<KeyboardNavigableButtons>| {
-            if !disabled {
-                ctx.dispatch_typed_action(&action);
-            }
-        },
-    )
 }
 
 /// A view that wraps buttons to make them keyboard navigable.

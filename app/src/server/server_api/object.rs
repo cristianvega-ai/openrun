@@ -91,9 +91,6 @@ use warp_graphql::mutations::update_object_guests::{
 };
 use warp_graphql::object::CloudObjectWithDescendants;
 use warp_graphql::object_permissions::AccessLevel;
-use warp_graphql::queries::get_cloud_environments::{
-    GetCloudEnvironmentsQuery, GetCloudEnvironmentsQueryVariables, GetCloudEnvironmentsResult,
-};
 use warp_graphql::queries::get_cloud_object::{
     CloudObjectInput, CloudObjectResult, GetCloudObject, GetCloudObjectVariables,
 };
@@ -104,8 +101,6 @@ use warp_graphql::queries::get_updated_cloud_objects::{
 use warp_graphql::subscriptions::get_warp_drive_updates::GetWarpDriveUpdates;
 use warp_graphql::subscriptions::start_graphql_streaming_operation;
 
-use crate::ai::ambient_agents::scheduled::ScheduledAmbientAgent;
-use crate::ai::cloud_environments::AmbientAgentEnvironment;
 use crate::ai::document::ai_document_model::AIDocumentId;
 use crate::ai::execution_profiles::AIExecutionProfile;
 use crate::channel::ChannelState;
@@ -603,20 +598,6 @@ impl ObjectClient for ServerApi {
                                     gso,
                                 );
                             }
-                            warp_graphql::generic_string_object::GenericStringObjectFormat::JsonCloudEnvironment => {
-                                parse_server_gso::<AmbientAgentEnvironment, JsonSerializer>(
-                                    &mut updated_generic_string_objects,
-                                    GenericStringObjectFormat::Json(JsonObjectType::CloudEnvironment),
-                                    gso,
-                                );
-                            }
-                            warp_graphql::generic_string_object::GenericStringObjectFormat::JsonScheduledAmbientAgent => {
-                                parse_server_gso::<ScheduledAmbientAgent, JsonSerializer>(
-                                    &mut updated_generic_string_objects,
-                                    GenericStringObjectFormat::Json(JsonObjectType::ScheduledAmbientAgent),
-                                    gso,
-                                );
-                            }
                             // GSO formats unknown to this client build (e.g. the
                             // server-only `JsonRunner`) are skipped so syncing of
                             // known objects still succeeds instead of failing to
@@ -625,6 +606,8 @@ impl ObjectClient for ServerApi {
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonTemplatableMCPServer
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonEnvVarCollection
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonWorkflowEnum
+                            | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonCloudEnvironment
+                            | warp_graphql::generic_string_object::GenericStringObjectFormat::JsonScheduledAmbientAgent
                             | warp_graphql::generic_string_object::GenericStringObjectFormat::Unknown => {}
                         }
                     }
@@ -1116,35 +1099,6 @@ impl ObjectClient for ServerApi {
             }
             RemoveObjectGuestResult::Unknown => Err(anyhow!(
                 "Failed to remove object guest due to unknown variant"
-            )),
-        }
-    }
-
-    async fn fetch_environment_last_task_run_timestamps(
-        &self,
-    ) -> Result<HashMap<String, DateTime<Utc>>> {
-        let variables = GetCloudEnvironmentsQueryVariables {
-            request_context: get_request_context(),
-        };
-
-        let operation = GetCloudEnvironmentsQuery::build(variables);
-        let response = self.send_graphql_request(operation, None).await?;
-
-        match response.get_cloud_environments {
-            GetCloudEnvironmentsResult::GetCloudEnvironmentsOutput(output) => {
-                let mut timestamps = HashMap::new();
-                for env in output.cloud_environments {
-                    if let Some(task) = env.last_task_created {
-                        timestamps.insert(env.uid.into_inner(), task.created_at.utc());
-                    }
-                }
-                Ok(timestamps)
-            }
-            GetCloudEnvironmentsResult::UserFacingError(e) => {
-                Err(anyhow!(get_user_facing_error_message(e)))
-            }
-            GetCloudEnvironmentsResult::Unknown => Err(anyhow!(
-                "Failed to fetch cloud environments due to unknown variant"
             )),
         }
     }

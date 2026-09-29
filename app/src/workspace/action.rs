@@ -431,8 +431,6 @@ pub enum WorkspaceAction {
     FixInAgentMode {
         query: String,
     },
-    /// Open the Environment Management pane in Create mode.
-    OpenEnvironmentManagementPane,
     FocusTerminalViewInWorkspace {
         terminal_view_id: EntityId,
     },
@@ -558,9 +556,6 @@ pub enum WorkspaceAction {
         select_first: bool,
     },
     ToggleAgentManagementView,
-    ViewAgentRunsForEnvironment {
-        environment_id: String,
-    },
     /// Show the rewind confirmation dialog before rewinding an AI conversation
     ShowRewindConfirmationDialog {
         ai_block_view_id: EntityId,
@@ -853,7 +848,6 @@ impl WorkspaceAction {
             | ToggleNotificationMailbox { .. }
             | ToggleAgentManagementView
             | OpenAgentManagementView
-            | ViewAgentRunsForEnvironment { .. }
             | ShowRewindConfirmationDialog { .. }
             | ExecuteRewindAIConversation { .. }
             | ExecuteDeleteConversation { .. }
@@ -884,7 +878,6 @@ impl WorkspaceAction {
             FileRenamed { .. } => false, // File rename doesn't change workspace state
             #[cfg(feature = "local_fs")]
             FileDeleted { .. } => false, // File deletion doesn't change workspace state
-            OpenEnvironmentManagementPane => false,
             #[cfg(target_os = "linux")]
             DismissWaylandCrashRecoveryBannerAndOpenLink => false,
             // actions that are related to updating user settings or

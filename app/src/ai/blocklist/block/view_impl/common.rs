@@ -69,7 +69,6 @@ use crate::ai::blocklist::code_block::{
 };
 use crate::ai::blocklist::history_model::BlocklistAIHistoryModel;
 use crate::ai::blocklist::inline_action::aws_bedrock_credentials_error::AwsBedrockCredentialsErrorView;
-use crate::ai::blocklist::inline_action::gemini_enterprise_credentials_error::GeminiEnterpriseCredentialsErrorView;
 use crate::ai::blocklist::inline_action::inline_action_header::{
     INLINE_ACTION_HEADER_VERTICAL_PADDING, INLINE_ACTION_HORIZONTAL_PADDING,
 };
@@ -3050,8 +3049,6 @@ pub struct FailedOutputProps<'a> {
     pub error: &'a RenderableAIError,
     pub invalid_api_key_button_handle: &'a MouseStateHandle,
     pub aws_bedrock_credentials_error_view: Option<&'a ViewHandle<AwsBedrockCredentialsErrorView>>,
-    pub gemini_enterprise_credentials_error_view:
-        Option<&'a ViewHandle<GeminiEnterpriseCredentialsErrorView>>,
     pub is_ai_input_enabled: bool,
     pub icon_right_margin: f32,
 }
@@ -3089,12 +3086,7 @@ pub fn render_failed_output(props: FailedOutputProps, app: &AppContext) -> Box<d
         }
         FailedOutputPresentation::GeminiEnterpriseCredentialsExpiredOrInvalid {
             fallback_message,
-        } => {
-            if let Some(view) = props.gemini_enterprise_credentials_error_view {
-                return ChildView::new(view).finish();
-            }
-            fallback_message
-        }
+        } => fallback_message,
     };
 
     Flex::row()
@@ -3493,9 +3485,7 @@ pub(super) fn query_prefix_highlight_len(
         return Some(prefix_len);
     }
 
-    if displayed_query.starts_with(commands::CREATE_ENVIRONMENT.name) {
-        Some(commands::CREATE_ENVIRONMENT.name.len())
-    } else if displayed_query.starts_with(commands::AGENT.name) {
+    if displayed_query.starts_with(commands::AGENT.name) {
         Some(commands::AGENT.name.len())
     } else if displayed_query.starts_with(commands::NEW.name) {
         Some(commands::NEW.name.len())
@@ -3504,7 +3494,6 @@ pub(super) fn query_prefix_highlight_len(
             AIAgentInput::UserQuery { .. }
             | AIAgentInput::AutoCodeDiffQuery { .. }
             | AIAgentInput::ResumeConversation { .. }
-            | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::CodeReview { .. }

@@ -56,7 +56,7 @@ pub(crate) fn agent_conversation_entry_icon_variant(
     entry: &AgentConversationEntry,
 ) -> IconWithStatusVariant {
     let status = AgentStatus::from(&entry.display.status.to_conversation_status());
-    agent_icon_variant_for_run(entry.display.harness.unwrap_or(Harness::Oz), status, false)
+    agent_icon_variant_for_run(Harness::Oz, status, false)
 }
 
 /// Primitive inputs to the terminal-view waterfall, gathered once from the live

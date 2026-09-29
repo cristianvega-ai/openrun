@@ -689,14 +689,6 @@ pub enum AgentModeSetupCodebaseContextActionType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum AgentModeSetupCreateEnvironmentActionType {
-    #[serde(rename = "create_environment")]
-    CreateEnvironment,
-    #[serde(rename = "skip_environment")]
-    SkipEnvironment,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CpuUsageStats {
     /// The number of logical CPUs on the system.
     pub num_cpus: usize,
@@ -798,12 +790,6 @@ pub enum AgentModeCitation {
         #[serde(skip_serializing)]
         url: String,
     },
-    /// A fetched memory surfaced as a citation so we can track whether memory-backed
-    /// responses are shown to users and whether users open those memory citations.
-    AgentMemory {
-        memory_store_id: String,
-        memory_id: String,
-    },
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Default)]
@@ -818,7 +804,6 @@ pub enum AIAgentInput {
     UserQuery { query: String },
     AutoCodeDiffQuery { query: String },
     ResumeConversation,
-    CreateEnvironment { display_query: Option<String> },
     ActionResult { action_id: AIAgentActionId },
     CreateNewProject { query: String },
     CloneRepository { url: String },
@@ -832,9 +817,6 @@ impl From<FullAIAgentInput> for AIAgentInput {
             FullAIAgentInput::UserQuery { query, .. } => Self::UserQuery { query },
             FullAIAgentInput::AutoCodeDiffQuery { query, .. } => Self::AutoCodeDiffQuery { query },
             FullAIAgentInput::ResumeConversation { .. } => Self::ResumeConversation,
-            FullAIAgentInput::CreateEnvironment { display_query, .. } => {
-                Self::CreateEnvironment { display_query }
-            }
             FullAIAgentInput::ActionResult { result, .. } => Self::ActionResult {
                 action_id: result.id,
             },
@@ -880,7 +862,6 @@ pub enum TelemetryAgentViewEntryOrigin {
     Onboarding,
     Keybinding,
     SlashInit,
-    CreateEnvironment,
     ProjectEntry,
     ClearBuffer,
     DefaultSessionMode,
@@ -918,7 +899,6 @@ impl From<AgentViewEntryOrigin> for TelemetryAgentViewEntryOrigin {
             AgentViewEntryOrigin::PromptChip => Self::PromptChip,
             AgentViewEntryOrigin::ConversationListView => Self::ConversationListView,
             AgentViewEntryOrigin::Keybinding(_) => Self::Keybinding,
-            AgentViewEntryOrigin::CreateEnvironment => Self::CreateEnvironment,
             AgentViewEntryOrigin::ProjectEntry => Self::ProjectEntry,
             AgentViewEntryOrigin::ClearBuffer => Self::ClearBuffer,
             AgentViewEntryOrigin::DefaultSessionMode => Self::DefaultSessionMode,
@@ -2128,9 +2108,6 @@ pub enum TelemetryEvent {
     AgentModeSetupCodebaseContextAction {
         action: AgentModeSetupCodebaseContextActionType,
     },
-    AgentModeSetupCreateEnvironmentAction {
-        action: AgentModeSetupCreateEnvironmentActionType,
-    },
     InputBufferSubmitted {
         input_type: InputType,
         is_locked: bool,
@@ -2231,11 +2208,6 @@ pub enum TelemetryEvent {
     AgentManagementViewOpenedSession,
     /// Emitted when the user copies a session link from the Agent Management View.
     AgentManagementViewCopiedSessionLink,
-    /// Detected that Warp is running in an isolated sandbox.
-    DetectedIsolationPlatform {
-        platform: warp_isolation_platform::IsolationPlatformType,
-    },
-
     AgentTipShown {
         tip: String,
     },
@@ -3496,9 +3468,6 @@ impl TelemetryEvent {
             TelemetryEvent::AgentModeSetupCodebaseContextAction { action } => Some(json!({
                 "action": action,
             })),
-            TelemetryEvent::AgentModeSetupCreateEnvironmentAction { action } => Some(json!({
-                "action": action,
-            })),
             #[cfg(windows)]
             TelemetryEvent::WSLRegistryError
             | TelemetryEvent::AutoupdateUnableToCloseApplications
@@ -3642,9 +3611,6 @@ impl TelemetryEvent {
             })),
             TelemetryEvent::AgentManagementViewOpenedSession => None,
             TelemetryEvent::AgentManagementViewCopiedSessionLink => None,
-            TelemetryEvent::DetectedIsolationPlatform { platform } => Some(json!({
-                "platform": platform,
-            })),
             TelemetryEvent::AgentExitedShellProcess {
                 command,
                 server_output_id,
@@ -4075,7 +4041,6 @@ impl TelemetryEvent {
             | TelemetryEvent::AgentModeSetupBannerDismissed
             | TelemetryEvent::AgentModeSetupProjectScopedRulesAction { .. }
             | TelemetryEvent::AgentModeSetupCodebaseContextAction { .. }
-            | TelemetryEvent::AgentModeSetupCreateEnvironmentAction { .. }
             | TelemetryEvent::CloneRepoPromptSubmitted { .. }
             | TelemetryEvent::GetStartedSkipToTerminal
             | TelemetryEvent::FileTreeItemAttachedAsContext { .. }
@@ -4108,7 +4073,6 @@ impl TelemetryEvent {
             | TelemetryEvent::AgentManagementViewToggled { .. }
             | TelemetryEvent::AgentManagementViewOpenedSession
             | TelemetryEvent::AgentManagementViewCopiedSessionLink
-            | TelemetryEvent::DetectedIsolationPlatform { .. }
             | TelemetryEvent::AgentTipShown { .. }
             | TelemetryEvent::AgentTipClicked { .. }
             | TelemetryEvent::ToggleShowAgentTips { .. }
@@ -4561,7 +4525,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentModeSetupBannerDismissed => EnablementState::Always,
             Self::AgentModeSetupProjectScopedRulesAction { .. } => EnablementState::Always,
             Self::AgentModeSetupCodebaseContextAction { .. } => EnablementState::Always,
-            Self::AgentModeSetupCreateEnvironmentAction { .. } => EnablementState::Always,
             Self::InputBufferSubmitted => EnablementState::ChannelSpecific {
                 channels: vec![Channel::Local, Channel::Dev],
             },
@@ -4587,7 +4550,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             | Self::AgentManagementViewCopiedSessionLink => {
                 EnablementState::Flag(FeatureFlag::AgentManagementView)
             }
-            Self::DetectedIsolationPlatform { .. } => EnablementState::Always,
             Self::AgentExitedShellProcess { .. } => EnablementState::Always,
             Self::CLIAgentToolbarVoiceInputUsed { .. } => EnablementState::Always,
             Self::CLIAgentToolbarImageAttached { .. } => EnablementState::Always,
@@ -5035,9 +4997,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentModeSetupCodebaseContextAction { .. } => {
                 "Agent Mode.Setup Codebase Context Action"
             }
-            Self::AgentModeSetupCreateEnvironmentAction { .. } => {
-                "AgentMode.SetupCreateEnvironmentAction"
-            }
             Self::InputBufferSubmitted => "AgentMode.NaturalLanguageDetection.InputBufferSubmitted",
             Self::RecentMenuItemSelected { .. } => "Recent Menu Item Selected",
             Self::OpenRepoFolderSubmitted { .. } => "Open Repo Folder Submitted",
@@ -5056,7 +5015,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentManagementViewCopiedSessionLink => {
                 "Agent Management View Copied Session Link"
             }
-            Self::DetectedIsolationPlatform { .. } => "Isolation.DetectedIsolationPlatform",
             Self::AgentTipShown => "AgentTip Shown",
             Self::AgentTipClicked => "AgentTip Clicked",
             Self::ToggleShowAgentTips => "Toggle Show Agent Tips",
@@ -5744,9 +5702,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentModeSetupCodebaseContextAction { .. } => {
                 "User clicked a button in the Agent Mode setup codebase context step"
             }
-            Self::AgentModeSetupCreateEnvironmentAction { .. } => {
-                "User clicked a button in the Agent Mode setup create environment step"
-            }
             Self::InputBufferSubmitted => "Input buffer submitted",
             Self::RecentMenuItemSelected { .. } => {
                 "User selected an item from the recents list on the new tab zero state"
@@ -5786,9 +5741,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             }
             Self::AgentManagementViewCopiedSessionLink => {
                 "User copied a session link from the Agent Management View"
-            }
-            Self::DetectedIsolationPlatform { .. } => {
-                "Detected that Warp is running in an isolated sandbox"
             }
             Self::AgentTipShown => "Selected an Agent Tip to show in the Agent Mode status bar",
             Self::AgentTipClicked => "User clicked a link or action in an Agent Tip",

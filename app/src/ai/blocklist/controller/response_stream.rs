@@ -8,7 +8,6 @@ use futures::channel::oneshot;
 use uuid::Uuid;
 use warp_errors::report_error;
 #[cfg(not(target_family = "wasm"))]
-use warp_multi_agent_api as maa_api;
 use warpui::r#async::Timer;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
@@ -38,11 +37,6 @@ const MAX_RECOVERY_ATTEMPTS: usize = 3;
 /// stall the request.
 #[cfg(not(target_family = "wasm"))]
 const GROK_REFRESH_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// How long a request will hold for a request-time GEAP credential mint before
-/// giving up and sending anyway.
-#[cfg(not(target_family = "wasm"))]
-const GEAP_REFRESH_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// The recovery budget for one request and the retries and resumes that recover it,
 /// carried forward across each of those attempts.
@@ -571,10 +565,10 @@ impl ResponseStream {
         // The Grok subscription and its OAuth refresh are native-only.
         #[cfg(not(target_family = "wasm"))]
         {
-            use ::ai::api_keys::{ApiKeyManager, GeapRefreshOutcome, GrokRefreshOutcome};
+            use ::ai::api_keys::{ApiKeyManager, GrokRefreshOutcome};
             use warpui::r#async::FutureExt as _;
 
-            use crate::ai::llms::{LLMModelHost, LLMPreferences, LLMProvider};
+            use crate::ai::llms::{LLMPreferences, LLMProvider};
             use crate::workspaces::user_workspaces::UserWorkspaces;
 
             // Only touch the Grok token for requests that actually use the Grok
@@ -631,62 +625,6 @@ impl ResponseStream {
                                 // the user to reconnect their subscription.
                                 me.surface_grok_refresh_failure(request_id, ctx);
                             }
-                        },
-                    );
-                    return;
-                }
-            }
-
-            let uses_geap = LLMPreferences::as_ref(ctx)
-                .get_llm_info(&params.model, ctx)
-                .is_some_and(|info| {
-                    info.host_configs
-                        .get(&LLMModelHost::GeminiEnterprise)
-                        .is_some_and(|host| host.enabled)
-                });
-            if uses_geap
-                && let Some(binding) =
-                    crate::ai::geap_credentials::current_geap_policy_for_any_team(ctx)
-                        .mint_binding()
-            {
-                let refresh_binding = binding.clone();
-                let refresh_rx = ApiKeyManager::handle(ctx).update(ctx, |manager, ctx| {
-                    manager.begin_expired_geap_refresh(&binding, ctx, |manager, waiter, ctx| {
-                        crate::ai::geap_credentials::start_geap_refresh_for_waiter(
-                            manager, waiter, ctx,
-                        );
-                    })
-                });
-                if let Some(refresh_rx) = refresh_rx {
-                    let _ = ctx.spawn(
-                        async move { refresh_rx.with_timeout(GEAP_REFRESH_REQUEST_TIMEOUT).await },
-                        move |me, result, ctx| {
-                            // Cancelled or superseded while waiting — drop this attempt.
-                            if me.current_request_id != Some(request_id) {
-                                return;
-                            }
-                            // `RequestParams` snapshotted the credentials before
-                            // the wait, so re-read just the GEAP credential and
-                            // leave every other key alone.
-                            //
-                            // Unlike the Grok branch above, a mint failure, a
-                            // timeout, or a dropped sender is never surfaced as a
-                            // terminal error — the request goes out with the
-                            // snapshot untouched, and it is the job of the server
-                            // to respond with an error if the GEAP credentials are bad.
-                            if matches!(result, Ok(Ok(GeapRefreshOutcome::Refreshed)))
-                                && let Some(credentials) = ApiKeyManager::as_ref(ctx)
-                                    .geap_credentials_for_request(&refresh_binding)
-                            {
-                                apply_geap_refresh_to_params(&mut me.params, Some(credentials));
-                            }
-                            Self::spawn_generate(
-                                request_id,
-                                me.params.clone(),
-                                team_scope,
-                                cancellation_rx,
-                                ctx,
-                            );
                         },
                     );
                     return;
@@ -961,21 +899,6 @@ impl ResponseStream {
                 me.retry(ctx);
             },
         );
-    }
-}
-
-/// Applies the result of a request-time GEAP mint to the request snapshot.
-///
-/// A successful mint swaps in the fresh credential.
-#[cfg(not(target_family = "wasm"))]
-fn apply_geap_refresh_to_params(
-    params: &mut api::RequestParams,
-    fresh_credentials: Option<maa_api::request::settings::api_keys::GoogleCloudCredentials>,
-) {
-    if let Some(credentials) = fresh_credentials
-        && let Some(keys) = params.api_keys.as_mut()
-    {
-        keys.google_cloud_credentials = Some(credentials);
     }
 }
 

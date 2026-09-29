@@ -895,7 +895,6 @@ pub(super) enum SummaryPaneKind {
     CodeDiff,
     File,
     Settings,
-    EnvironmentManagement,
     Other,
 }
 
@@ -3333,8 +3332,8 @@ fn resolve_icon_with_status_variant(
                 icon_color: sub_text,
             },
         },
-        // Settings and environment management use the foreground color per design spec
-        TypedPane::Settings | TypedPane::EnvironmentManagement => IconWithStatusVariant::Neutral {
+        // Settings uses the foreground color per design spec
+        TypedPane::Settings => IconWithStatusVariant::Neutral {
             icon: typed.icon(),
             icon_color: main_text,
         },
@@ -3575,7 +3574,6 @@ enum TypedPane<'a> {
     CodeDiff,
     File,
     Settings,
-    EnvironmentManagement,
     Other,
 }
 
@@ -3603,7 +3601,6 @@ impl TypedPane<'_> {
             TypedPane::CodeDiff => SummaryPaneKind::CodeDiff,
             TypedPane::File => SummaryPaneKind::File,
             TypedPane::Settings => SummaryPaneKind::Settings,
-            TypedPane::EnvironmentManagement => SummaryPaneKind::EnvironmentManagement,
             TypedPane::Other => SummaryPaneKind::Other,
         }
     }
@@ -3618,7 +3615,6 @@ impl TypedPane<'_> {
             TypedPane::CodeDiff => "Code Diff",
             TypedPane::File => "File",
             TypedPane::Settings => "Settings",
-            TypedPane::EnvironmentManagement => "Environments",
             TypedPane::Other => "Other",
         }
     }
@@ -3634,7 +3630,6 @@ impl TypedPane<'_> {
             | TypedPane::CodeDiff
             | TypedPane::File
             | TypedPane::Settings
-            | TypedPane::EnvironmentManagement
             | TypedPane::Other => None,
         }
     }
@@ -3645,7 +3640,7 @@ impl TypedPane<'_> {
             TypedPane::Code(_) => WarpIcon::Code2,
             TypedPane::CodeDiff => WarpIcon::Diff,
             TypedPane::File => WarpIcon::File,
-            TypedPane::Settings | TypedPane::EnvironmentManagement => WarpIcon::Gear,
+            TypedPane::Settings => WarpIcon::Gear,
             TypedPane::Other => WarpIcon::File,
         }
     }
@@ -3782,11 +3777,7 @@ fn build_vertical_tabs_summary_data(
                     &pane_subtitle,
                 );
             }
-            TypedPane::CodeDiff
-            | TypedPane::File
-            | TypedPane::Settings
-            | TypedPane::EnvironmentManagement
-            | TypedPane::Other => {
+            TypedPane::CodeDiff | TypedPane::File | TypedPane::Settings | TypedPane::Other => {
                 push_normalized_unique_summary_label(
                     &mut primary_labels,
                     &mut primary_seen,
@@ -3923,7 +3914,6 @@ impl<'a> PaneProps<'a> {
             | TypedPane::CodeDiff
             | TypedPane::File
             | TypedPane::Settings
-            | TypedPane::EnvironmentManagement
             | TypedPane::Other => {
                 non_terminal_search_text_fragments(self.generated_or_tab_title(), &self.subtitle)
             }
@@ -4332,7 +4322,6 @@ impl PaneGroup {
             IPaneType::CodeDiff => TypedPane::CodeDiff,
             IPaneType::File => TypedPane::File,
             IPaneType::Settings => TypedPane::Settings,
-            IPaneType::EnvironmentManagement => TypedPane::EnvironmentManagement,
             IPaneType::NetworkLog => TypedPane::Other,
             #[cfg(test)]
             IPaneType::Dummy => TypedPane::Other,
@@ -5039,7 +5028,6 @@ pub(super) fn render_summary_pane_kind_icon_circle(
         | SummaryPaneKind::CodeDiff
         | SummaryPaneKind::File
         | SummaryPaneKind::Settings
-        | SummaryPaneKind::EnvironmentManagement
         | SummaryPaneKind::Other => {
             let (icon, icon_color) = summary_pane_kind_icon(kind, appearance);
             (
@@ -5104,9 +5092,7 @@ fn summary_pane_kind_icon(
         SummaryPaneKind::Code { .. } => (WarpIcon::Code2, sub_text),
         SummaryPaneKind::CodeDiff => (WarpIcon::Diff, sub_text),
         SummaryPaneKind::File => (WarpIcon::File, sub_text),
-        SummaryPaneKind::Settings | SummaryPaneKind::EnvironmentManagement => {
-            (WarpIcon::Gear, main_text)
-        }
+        SummaryPaneKind::Settings => (WarpIcon::Gear, main_text),
         SummaryPaneKind::Other => (WarpIcon::File, sub_text),
     }
 }
@@ -6926,11 +6912,9 @@ fn render_detail_section(
             app,
         ),
         TypedPane::Code(_) => render_code_detail_section(props, appearance, app),
-        TypedPane::CodeDiff
-        | TypedPane::File
-        | TypedPane::Settings
-        | TypedPane::EnvironmentManagement
-        | TypedPane::Other => Empty::new().finish(),
+        TypedPane::CodeDiff | TypedPane::File | TypedPane::Settings | TypedPane::Other => {
+            Empty::new().finish()
+        }
     }
 }
 pub(super) struct DetailSidecarOverlay {

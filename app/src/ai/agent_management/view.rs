@@ -38,8 +38,8 @@ use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent_conversations_model::{
     AgentConversationEntry, AgentConversationEntryId, AgentConversationNavigationSubject,
     AgentConversationsModel, AgentConversationsModelEvent, AgentManagementFilters, ArtifactFilter,
-    ConversationUpdateKind, CreatedOnFilter, CreatorFilter, EnvironmentFilter, HarnessFilter,
-    OwnerFilter, SessionStatus, SourceFilter, StatusFilter,
+    ConversationUpdateKind, CreatedOnFilter, CreatorFilter, OwnerFilter, SessionStatus,
+    SourceFilter, StatusFilter,
 };
 use crate::ai::agent_management::cloud_setup_guide_view::{
     CloudSetupGuideEvent, CloudSetupGuideView,
@@ -56,8 +56,6 @@ use crate::ai::blocklist::view_util::{format_usage, usage_label};
 use crate::ai::conversation_details_panel::{
     ConversationDetailsData, ConversationDetailsPanel, ConversationDetailsPanelEvent,
 };
-use crate::ai::harness_availability::HarnessAvailabilityModel;
-use crate::ai::harness_display;
 use crate::app_state::PersistedAgentManagementFilters;
 use crate::appearance::Appearance;
 use crate::editor::{
@@ -109,9 +107,6 @@ mod tests;
 const MANAGEMENT_PANEL_WIDTH: f32 = 400.;
 // Vertical margin for filter row elements to align with dropdown buttons
 const FILTER_ROW_VERTICAL_MARGIN: f32 = 6.;
-
-// Environment IDs are a fixed-length ServerId (22 chars), so keep this dropdown compact.
-const ENV_DROPDOWN_WIDTH: f32 = 190.;
 
 const CARD_ROW_SPACING: f32 = 8.;
 const CARD_CONTENT_PADDING: f32 = 12.;
@@ -186,8 +181,6 @@ pub struct AgentManagementView {
     source_dropdown: ViewHandle<Dropdown<AgentManagementViewAction>>,
     created_on_dropdown: ViewHandle<Dropdown<AgentManagementViewAction>>,
     artifact_dropdown: ViewHandle<Dropdown<AgentManagementViewAction>>,
-    harness_dropdown: ViewHandle<Dropdown<AgentManagementViewAction>>,
-    environment_dropdown: ViewHandle<FilterableDropdown<AgentManagementViewAction>>,
     creator_dropdown: ViewHandle<FilterableDropdown<AgentManagementViewAction>>,
     clear_all_filters_button: ViewHandle<ActionButton>,
     no_filter_results_button: ViewHandle<ActionButton>,
@@ -226,17 +219,10 @@ impl AgentManagementView {
                     if *window_id == ctx.window_id()
             ) {
                 me.update_creator_dropdown(ctx);
-                me.update_environment_dropdown(ctx);
                 me.get_tasks_from_model(ctx);
             }
         });
 
-        ctx.subscribe_to_model(
-            &HarnessAvailabilityModel::handle(ctx),
-            |me, _, _event, ctx| {
-                me.update_harness_dropdown(ctx);
-            },
-        );
         ctx.subscribe_to_model(&AISettings::handle(ctx), |_, _, event, ctx| {
             if matches!(event, AISettingsChangedEvent::UsageDisplayUnit { .. }) {
                 ctx.notify();
@@ -292,8 +278,6 @@ impl AgentManagementView {
         let source_dropdown = ctx.add_typed_action_view(Self::create_source_dropdown);
         let created_on_dropdown = ctx.add_typed_action_view(Self::create_created_on_dropdown);
         let artifact_dropdown = ctx.add_typed_action_view(Self::create_artifact_dropdown);
-        let harness_dropdown = ctx.add_typed_action_view(Self::create_harness_dropdown);
-        let environment_dropdown = ctx.add_typed_action_view(Self::create_environment_dropdown);
         let creator_dropdown = ctx.add_typed_action_view(Self::create_creator_dropdown);
 
         let no_filter_results_button = ctx.add_typed_action_view(move |_ctx| {
@@ -384,8 +368,6 @@ impl AgentManagementView {
             source_dropdown,
             created_on_dropdown,
             artifact_dropdown,
-            harness_dropdown,
-            environment_dropdown,
             creator_dropdown,
             clear_all_filters_button,
             no_filter_results_button,
@@ -397,7 +379,6 @@ impl AgentManagementView {
         view.update_filter_buttons(ctx);
         view.sync_with_loaded_filters(ctx);
         view.update_creator_dropdown(ctx);
-        view.update_environment_dropdown(ctx);
         view.get_tasks_from_model(ctx);
         view
     }
@@ -461,13 +442,6 @@ impl AgentManagementView {
         self.artifact_dropdown.update(ctx, |dropdown, ctx| {
             dropdown.set_selected_by_action(
                 AgentManagementViewAction::SetArtifactFilter(self.filters.artifact),
-                ctx,
-            );
-        });
-
-        self.harness_dropdown.update(ctx, |dropdown, ctx| {
-            dropdown.set_selected_by_action(
-                AgentManagementViewAction::SetHarnessFilter(self.filters.harness),
                 ctx,
             );
         });
@@ -571,9 +545,6 @@ impl AgentManagementView {
         }
         sources.push(AgentSource::Linear);
         sources.push(AgentSource::Slack);
-        if FeatureFlag::ScheduledAmbientAgents.is_enabled() {
-            sources.push(AgentSource::ScheduledAgent);
-        }
 
         let mut items = vec![MenuItem::Item(
             MenuItemFields::new("All").with_on_select_action(
@@ -680,71 +651,6 @@ impl AgentManagementView {
         dropdown
     }
 
-    fn create_harness_dropdown(
-        ctx: &mut ViewContext<Dropdown<AgentManagementViewAction>>,
-    ) -> Dropdown<AgentManagementViewAction> {
-        let mut dropdown = Dropdown::new(ctx);
-        Self::setup_filter_menu(&mut dropdown, "Harness", ctx);
-
-        let items = Self::build_harness_dropdown_items(ctx);
-        dropdown.set_rich_items(items, ctx);
-        dropdown.set_selected_by_index(0, ctx);
-        dropdown
-    }
-
-    fn build_harness_dropdown_items(app: &AppContext) -> Vec<MenuItem<DropdownAction>> {
-        let mut items = vec![MenuItem::Item(
-            MenuItemFields::new("All").with_on_select_action(
-                DropdownAction::select_action_and_close(
-                    AgentManagementViewAction::SetHarnessFilter(HarnessFilter::All),
-                ),
-            ),
-        )];
-
-        let availability = HarnessAvailabilityModel::as_ref(app);
-        for entry in availability.available_harnesses() {
-            let harness = entry.harness;
-            let mut fields = MenuItemFields::new(entry.display_name.clone())
-                .with_icon(harness_display::icon_for(harness))
-                .with_on_select_action(DropdownAction::select_action_and_close(
-                    AgentManagementViewAction::SetHarnessFilter(HarnessFilter::Specific(harness)),
-                ));
-            if let Some(color) = harness_display::brand_color(harness) {
-                fields = fields.with_override_icon_color(Fill::from(color));
-            }
-            items.push(MenuItem::Item(fields));
-        }
-
-        items
-    }
-
-    fn create_environment_dropdown(
-        ctx: &mut ViewContext<FilterableDropdown<AgentManagementViewAction>>,
-    ) -> FilterableDropdown<AgentManagementViewAction> {
-        let mut dropdown = FilterableDropdown::new(ctx);
-        Self::setup_searchable_filter_menu(&mut dropdown, "Environment", ctx);
-
-        // Keep the button compact when a specific environment ID is selected by abbreviating the
-        // displayed ID. (The dropdown menu still shows the full ID.)
-        dropdown.set_menu_header_text_override(|text| {
-            if matches!(text, "All" | "None") {
-                return format!("Environment: {text}");
-            }
-
-            let abbreviated = text.chars().take(6).collect::<String>();
-            if abbreviated == text {
-                format!("Environment: {text}")
-            } else {
-                format!("Environment: {abbreviated}…")
-            }
-        });
-
-        dropdown.set_top_bar_max_width(ENV_DROPDOWN_WIDTH);
-        dropdown.set_menu_width(ENV_DROPDOWN_WIDTH, ctx);
-
-        dropdown
-    }
-
     fn create_creator_dropdown(
         ctx: &mut ViewContext<FilterableDropdown<AgentManagementViewAction>>,
     ) -> FilterableDropdown<AgentManagementViewAction> {
@@ -775,46 +681,6 @@ impl AgentManagementView {
         dropdown.set_main_axis_size(MainAxisSize::Min, ctx);
         dropdown.set_menu_header_text_override(move |text| format!("{}: {}", label_prefix, text));
         dropdown.set_button_variant(ButtonVariant::Secondary);
-    }
-
-    fn update_harness_dropdown(&mut self, ctx: &mut ViewContext<Self>) {
-        let items = Self::build_harness_dropdown_items(ctx);
-        self.harness_dropdown.update(ctx, |dropdown, ctx| {
-            dropdown.set_rich_items(items, ctx);
-        });
-    }
-
-    fn update_environment_dropdown(&mut self, ctx: &mut ViewContext<Self>) {
-        let selected_name = match &self.filters.environment {
-            EnvironmentFilter::All => Some("All".to_string()),
-            EnvironmentFilter::NoEnvironment => Some("None".to_string()),
-            EnvironmentFilter::Specific(_) => None,
-        };
-
-        self.environment_dropdown.update(ctx, |dropdown, ctx| {
-            let mut items = vec![MenuItem::Item(
-                MenuItemFields::new("All").with_on_select_action(
-                    DropdownAction::select_action_and_close(
-                        AgentManagementViewAction::SetEnvironmentFilter(EnvironmentFilter::All),
-                    ),
-                ),
-            )];
-
-            items.push(MenuItem::Item(
-                MenuItemFields::new("None").with_on_select_action(
-                    DropdownAction::select_action_and_close(
-                        AgentManagementViewAction::SetEnvironmentFilter(
-                            EnvironmentFilter::NoEnvironment,
-                        ),
-                    ),
-                ),
-            ));
-
-            dropdown.set_rich_items(items, ctx);
-            if let Some(selected_name) = selected_name {
-                dropdown.set_selected_by_name(&selected_name, ctx);
-            }
-        });
     }
 
     fn update_creator_dropdown(&mut self, ctx: &mut ViewContext<Self>) {
@@ -863,45 +729,6 @@ impl AgentManagementView {
     fn on_filter_changed(&mut self, ctx: &mut ViewContext<Self>) {
         self.get_tasks_from_model(ctx);
         ctx.dispatch_global_action("workspace:save_app", ());
-    }
-
-    pub(crate) fn apply_environment_filter_from_link(
-        &mut self,
-        environment_id: String,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // This navigation should show the team/global task runs list.
-        self.filters.owners = OwnerFilter::All;
-        self.filters.reset_all_but_owner();
-        self.filters.environment = EnvironmentFilter::Specific(environment_id);
-        self.update_filter_buttons(ctx);
-
-        // Clear search query.
-        self.search_query.clear();
-        self.search_editor.update(ctx, |editor, ctx| {
-            editor.clear_buffer_and_reset_undo_stack(ctx);
-        });
-
-        // Reset the selected states for the dropdowns.
-        self.status_dropdown.update(ctx, |dropdown, ctx| {
-            dropdown.set_selected_by_index(0, ctx);
-        });
-        self.source_dropdown.update(ctx, |dropdown, ctx| {
-            dropdown.set_selected_by_index(0, ctx);
-        });
-        self.created_on_dropdown.update(ctx, |dropdown, ctx| {
-            dropdown.set_selected_by_index(0, ctx);
-        });
-        self.artifact_dropdown.update(ctx, |dropdown, ctx| {
-            dropdown.set_selected_by_index(0, ctx);
-        });
-        self.harness_dropdown.update(ctx, |dropdown, ctx| {
-            dropdown.set_selected_by_index(0, ctx);
-        });
-
-        self.update_environment_dropdown(ctx);
-        self.update_creator_dropdown(ctx);
-        self.on_filter_changed(ctx);
     }
 
     /// Sync all tasks from the management model, and update the ListState
@@ -1205,7 +1032,6 @@ impl AgentManagementView {
         match event {
             AgentConversationsModelEvent::ConversationsLoaded => {
                 self.update_creator_dropdown(ctx);
-                self.update_environment_dropdown(ctx);
                 self.update_source_dropdown(ctx);
                 self.refresh_details_panel_if_needed(ctx);
                 self.get_tasks_from_model(ctx);
@@ -1701,16 +1527,6 @@ impl AgentManagementView {
             metadata_parts.push(format!("Source: {}", source.display_name()));
         }
 
-        let availability = HarnessAvailabilityModel::as_ref(app);
-        if availability.should_show_harness_selector()
-            && let Some(harness) = entry.display.harness
-        {
-            metadata_parts.push(format!(
-                "Harness: {}",
-                availability.display_name_for(harness)
-            ));
-        }
-
         if let Some(executor) = &entry.display.executor {
             let same_as_creator =
                 executor.uid.is_some() && executor.uid == entry.display.creator.uid;
@@ -1859,12 +1675,6 @@ impl AgentManagementView {
                 .with_child(ChildView::new(&self.source_dropdown).finish())
                 .with_child(ChildView::new(&self.created_on_dropdown).finish())
                 .with_child(ChildView::new(&self.artifact_dropdown).finish());
-
-            if HarnessAvailabilityModel::as_ref(app).should_show_harness_selector() {
-                filters_wrap.add_child(ChildView::new(&self.harness_dropdown).finish());
-            }
-
-            filters_wrap.add_child(ChildView::new(&self.environment_dropdown).finish());
 
             if self.filters.owners != OwnerFilter::PersonalOnly {
                 filters_wrap.add_child(ChildView::new(&self.creator_dropdown).finish());
@@ -2123,9 +1933,7 @@ pub enum AgentManagementViewAction {
     SetSourceFilter(SourceFilter),
     SetCreatedOnFilter(CreatedOnFilter),
     SetArtifactFilter(ArtifactFilter),
-    SetEnvironmentFilter(EnvironmentFilter),
     SetCreatorFilter(CreatorFilter),
-    SetHarnessFilter(HarnessFilter),
     ClearFilters,
     ToggleSetupGuide,
     NewLocalAgent,
@@ -2188,10 +1996,6 @@ impl TypedActionView for AgentManagementView {
                 self.get_tasks_from_model(ctx);
                 ctx.dispatch_global_action("workspace:save_app", ());
             }
-            AgentManagementViewAction::SetEnvironmentFilter(filter) => {
-                self.filters.environment = filter.clone();
-                self.on_filter_changed(ctx);
-            }
             AgentManagementViewAction::SetCreatorFilter(filter) => {
                 send_telemetry_from_ctx!(
                     AgentManagementTelemetryEvent::FilterChanged {
@@ -2200,16 +2004,6 @@ impl TypedActionView for AgentManagementView {
                     ctx
                 );
                 self.filters.creator = filter.clone();
-                self.on_filter_changed(ctx);
-            }
-            AgentManagementViewAction::SetHarnessFilter(filter) => {
-                send_telemetry_from_ctx!(
-                    AgentManagementTelemetryEvent::FilterChanged {
-                        filter_type: FilterType::Harness
-                    },
-                    ctx
-                );
-                self.filters.harness = *filter;
                 self.on_filter_changed(ctx);
             }
             AgentManagementViewAction::ClearFilters => {
@@ -2228,10 +2022,6 @@ impl TypedActionView for AgentManagementView {
                 self.artifact_dropdown.update(ctx, |dropdown, ctx| {
                     dropdown.set_selected_by_index(0, ctx);
                 });
-                self.harness_dropdown.update(ctx, |dropdown, ctx| {
-                    dropdown.set_selected_by_index(0, ctx);
-                });
-                self.update_environment_dropdown(ctx);
                 self.update_creator_dropdown(ctx);
                 self.on_filter_changed(ctx);
             }

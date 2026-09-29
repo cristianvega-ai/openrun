@@ -50,7 +50,6 @@ pub enum SlashCommandKind {
     Theme,
     Exit,
     Logout,
-    CreateEnvironment,
     CreateNewProject,
     Edit,
     RenameTab,

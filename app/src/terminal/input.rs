@@ -750,7 +750,6 @@ pub enum Event {
         diff_mode: DiffMode,
     },
     OpenConversationHistory,
-    OpenEnvironmentManagementPane,
     OpenFilesPalette {
         source: PaletteSource,
     },
@@ -769,10 +768,6 @@ pub enum Event {
     },
     ScrollToExchange {
         exchange_id: AIAgentExchangeId,
-    },
-    /// Trigger environment setup flow with optional repository arguments
-    TriggerEnvironmentSetup {
-        repos: Vec<String>,
     },
 }
 

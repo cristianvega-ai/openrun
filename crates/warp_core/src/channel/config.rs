@@ -14,8 +14,6 @@ pub struct ChannelConfig {
 
     /// Configuration for talking to Warp's servers.
     pub server_config: WarpServerConfig,
-    /// Configuration for Oz/ambient agents.
-    pub oz_config: OzConfig,
     /// Configuration for telemetry sending, or [`None`] if telemetry should be
     /// disabled for this build.
     pub telemetry_config: Option<TelemetryConfig>,
@@ -58,27 +56,6 @@ impl WarpServerConfig {
             rtc_server_url: "ws://offline.invalid/graphql/v2".into(),
             firebase_auth_api_key: "".into(),
             iap_config: None,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct OzConfig {
-    /// Root URL for the Oz (ambient agent management) dashboard.
-    pub oz_root_url: Cow<'static, str>,
-
-    /// URL to use as the audience when issuing workload identity tokens. If [`None`], falls back
-    /// to [`WarpServerConfig::server_root_url`]. This exists so the audience is not overridden
-    /// when a custom server root URL is provided (e.g. an ngrok URL for local development).
-    pub workload_audience_url: Option<Cow<'static, str>>,
-}
-
-impl OzConfig {
-    /// A configuration that reaches no server; see [`WarpServerConfig::offline`].
-    pub fn offline() -> Self {
-        Self {
-            oz_root_url: "http://offline.invalid".into(),
-            workload_audience_url: None,
         }
     }
 }

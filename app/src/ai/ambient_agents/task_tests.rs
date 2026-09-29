@@ -2,44 +2,8 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 
 use super::{
-    AgentConfigSnapshot, AgentSource, AmbientAgentTask, AmbientAgentTaskState, ExecutionLocation,
-    TaskStatusErrorCode, TaskStatusMessage,
+    AgentSource, AmbientAgentTask, ExecutionLocation, TaskStatusErrorCode, TaskStatusMessage,
 };
-
-fn make_task(snapshot_name: Option<&str>, title: &str) -> AmbientAgentTask {
-    let now = Utc::now();
-    let agent_config_snapshot = snapshot_name.map(|name| AgentConfigSnapshot {
-        name: Some(name.to_string()),
-        ..Default::default()
-    });
-    AmbientAgentTask {
-        task_id: "11111111-1111-1111-1111-111111111111".parse().unwrap(),
-        parent_run_id: None,
-        title: title.to_string(),
-        state: AmbientAgentTaskState::InProgress,
-        prompt: String::new(),
-        created_at: now,
-        started_at: Some(now),
-        updated_at: now,
-        run_time: Some("PT1S".parse().unwrap()),
-        status_message: None,
-        source: None,
-        execution_location: None,
-        session_id: None,
-        session_link: None,
-        creator: None,
-        executor: None,
-        conversation_id: None,
-        request_usage: None,
-        is_sandbox_running: false,
-        agent_config_snapshot,
-        artifacts: vec![],
-        last_event_sequence: None,
-        children: vec![],
-        debug_agent_available: false,
-        scope: None,
-    }
-}
 
 fn task_json_with_run_time(run_time_key: &str, run_time: Value) -> Value {
     let now = Utc::now().to_rfc3339();

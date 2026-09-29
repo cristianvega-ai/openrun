@@ -18,12 +18,6 @@ use warpui_extras::secure_storage::{self, AppContextExt};
 
 use crate::LLMProvider;
 pub use crate::aws_credentials::{AwsCredentials, AwsCredentialsState};
-#[cfg(not(target_family = "wasm"))]
-pub use crate::geap_credentials::GeapRefreshOutcome;
-pub use crate::geap_credentials::{
-    GEAP_MINT_FAILURE_COOLDOWN, GEAP_REFRESH_LEAD_TIME, GeapCredentials, GeapCredentialsState,
-    GeapFederation, GeapMintBinding, LoadGeapCredentialsError,
-};
 use crate::telemetry::{
     AITelemetryEvent, ProviderCredentialTelemetryAction, ProviderCredentialTelemetryKind,
     ProviderCredentialTelemetryProvider,
@@ -488,22 +482,6 @@ pub enum GrokRefreshOutcome {
     Failed,
 }
 
-/// Controls how AWS credentials are refreshed by [`ApiKeyManager`].
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub enum AwsCredentialsRefreshStrategy {
-    /// Load credentials from the local AWS credential chain (~/.aws). This is the default.
-    #[default]
-    LocalChain,
-    /// Credentials are managed externally via OIDC/STS.
-    /// The task ID is used to scope the STS AssumeRoleWithWebIdentity session.
-    /// The role ARN + region are the info used to assume the IAM role via STS.
-    OidcManaged {
-        task_id: Option<String>,
-        role_arn: String,
-        region: String,
-    },
-}
-
 struct CustomEndpointState {
     definitions: Option<CustomEndpointDefinitions>,
     settings_valid: bool,
@@ -532,22 +510,7 @@ pub struct ApiKeyManager {
     /// refresh is running. Always cleared when the refresh finishes.
     #[cfg(not(target_family = "wasm"))]
     pub(crate) grok_refresh_waiters: Option<Vec<oneshot::Sender<GrokRefreshOutcome>>>,
-    /// Coordinates request-time GEAP refreshes. Installed by the mint kickoff
-    /// itself (see `install_geap_refresh_waiter`) immediately before the state
-    /// transitions to `Refreshing`, and taken when the mint completes, so
-    /// `Some` means a mint is in flight *by construction* rather than by
-    /// convention. Holds the completion senders for requests blocked on it;
-    /// may be empty for a proactive mint with no waiters.
-    #[cfg(not(target_family = "wasm"))]
-    pub(crate) geap_refresh_waiters: Option<Vec<oneshot::Sender<GeapRefreshOutcome>>>,
-    /// When the last GEAP mint failed, if one has. The timestamp is what
-    /// suppresses repeated request-time waits.
-    #[cfg(not(target_family = "wasm"))]
-    pub(crate) geap_last_mint_failure: Option<SystemTime>,
     pub(crate) aws_credentials_state: AwsCredentialsState,
-    aws_credentials_refresh_strategy: AwsCredentialsRefreshStrategy,
-    /// In-memory Gemini Enterprise (GEAP) credential state.
-    pub(crate) geap_credentials_state: GeapCredentialsState,
     secure_storage_write_version: u64,
     grok_secure_storage_write_version: u64,
 }
@@ -618,13 +581,7 @@ impl ApiKeyManager {
             grok_refresh_allowed: false,
             #[cfg(not(target_family = "wasm"))]
             grok_refresh_waiters: None,
-            #[cfg(not(target_family = "wasm"))]
-            geap_refresh_waiters: None,
-            #[cfg(not(target_family = "wasm"))]
-            geap_last_mint_failure: None,
             aws_credentials_state: AwsCredentialsState::Missing,
-            aws_credentials_refresh_strategy: AwsCredentialsRefreshStrategy::default(),
-            geap_credentials_state: GeapCredentialsState::Missing,
             secure_storage_write_version: 0,
             grok_secure_storage_write_version: 0,
         }
@@ -958,17 +915,6 @@ impl ApiKeyManager {
         &self.aws_credentials_state
     }
 
-    pub fn aws_credentials_refresh_strategy(&self) -> AwsCredentialsRefreshStrategy {
-        self.aws_credentials_refresh_strategy.clone()
-    }
-
-    pub fn set_aws_credentials_refresh_strategy(
-        &mut self,
-        strategy: AwsCredentialsRefreshStrategy,
-    ) {
-        self.aws_credentials_refresh_strategy = strategy;
-    }
-
     /// Builds the `CustomModelProviders` registry that ships with every agent request.
     ///
     /// Emits one [`CustomModelProvider`] per configured [`CustomEndpoint`], each populated with
@@ -1024,7 +970,6 @@ impl ApiKeyManager {
         &self,
         include_byo_keys: bool,
         include_aws_bedrock_credentials: bool,
-        geap_binding: Option<GeapMintBinding>,
     ) -> Option<api::request::settings::ApiKeys> {
         let anthropic = include_byo_keys
             .then(|| self.keys.anthropic.clone())
@@ -1058,14 +1003,7 @@ impl ApiKeyManager {
             .flatten()
             .unwrap_or_default();
 
-        // Also include credentials when running with OIDC-managed Bedrock inference, regardless
-        // of the per-user setting flag (which only applies to the local credential chain path).
-        let include_aws = include_aws_bedrock_credentials
-            || matches!(
-                self.aws_credentials_refresh_strategy,
-                AwsCredentialsRefreshStrategy::OidcManaged { .. }
-            );
-        let aws_credentials = include_aws
+        let aws_credentials = include_aws_bedrock_credentials
             .then(|| match self.aws_credentials_state {
                 AwsCredentialsState::Loaded {
                     ref credentials, ..
@@ -1074,21 +1012,12 @@ impl ApiKeyManager {
             })
             .flatten();
 
-        // Gemini Enterprise (GEAP) credentials attach only when the caller's
-        // gate is on AND the stored token was minted for that same
-        // (user, audience, SA) binding. `geap_credentials_for_request` is the
-        // single source of truth for that rule (see `crate::geap_credentials`).
-        let google_cloud_credentials = geap_binding
-            .as_ref()
-            .and_then(|binding| self.geap_credentials_for_request(binding));
-
         if anthropic.is_empty()
             && openai.is_empty()
             && google.is_empty()
             && open_router.is_empty()
             && grok_oauth_access_token.is_empty()
             && aws_credentials.is_none()
-            && google_cloud_credentials.is_none()
         {
             None
         } else {
@@ -1100,7 +1029,7 @@ impl ApiKeyManager {
                 grok_oauth_access_token,
                 allow_use_of_warp_credits: false,
                 aws_credentials,
-                google_cloud_credentials,
+                google_cloud_credentials: None,
                 chatgpt_delegated_access_token: String::new(),
                 skip_chatgpt_subscription: false,
             })

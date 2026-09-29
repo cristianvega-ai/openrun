@@ -199,40 +199,6 @@ fn test_remove_extension() {
     assert_eq!(remove_extension("🍞.yaml"), Some("🍞"));
 }
 
-#[test]
-fn test_action_create_environment_parse() {
-    let url = Url::parse(&format!(
-        "{}://action/create_environment?repo=foo&repo=bar",
-        ChannelState::url_scheme()
-    ))
-    .unwrap();
-
-    let action = Action::parse(&url).unwrap();
-    match action {
-        Action::CreateEnvironment { repos } => {
-            assert_eq!(repos, vec!["foo".to_owned(), "bar".to_owned()]);
-        }
-        _ => panic!("unexpected action: {action:?}"),
-    }
-}
-
-#[test]
-fn test_action_create_environment_parse_no_repos() {
-    let url = Url::parse(&format!(
-        "{}://action/create_environment",
-        ChannelState::url_scheme()
-    ))
-    .unwrap();
-
-    let action = Action::parse(&url).unwrap();
-    match action {
-        Action::CreateEnvironment { repos } => {
-            assert!(repos.is_empty());
-        }
-        _ => panic!("unexpected action: {action:?}"),
-    }
-}
-
 fn open_file_editor_test_path(file_name: &str) -> (String, PathBuf) {
     #[cfg(windows)]
     let path = format!("C:/tmp/{file_name}");

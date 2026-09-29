@@ -74,7 +74,6 @@ impl TryFrom<&AIAgentInput> for PersistedAIInputType {
             }),
             AIAgentInput::ActionResult { .. }
             | AIAgentInput::ResumeConversation { .. }
-            | AIAgentInput::CreateEnvironment { .. }
             | AIAgentInput::CreateNewProject { .. }
             | AIAgentInput::CloneRepository { .. }
             | AIAgentInput::CodeReview { .. }

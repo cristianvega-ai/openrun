@@ -16,7 +16,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     use warp_core::execution_mode::{AppExecutionMode, ExecutionMode};
     use warp_core::semantic_selection::SemanticSelection;
 
-    use crate::ai::cloud_agent_settings::CloudAgentSettings;
     use crate::search::command_search::settings::CommandSearchSettings;
     use crate::settings::CLIAgentSettings;
     use crate::settings::app_icon::AppIconSettings;
@@ -54,7 +53,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     app.update(AISettings::register_and_subscribe_to_events);
     app.update(CLIAgentSettings::register_and_subscribe_to_events);
     AliasExpansionSettings::register(app);
-    CloudAgentSettings::register(app);
     AppEditorSettings::register(app);
     BlockVisibilitySettings::register(app);
     BlockListSettings::register(app);

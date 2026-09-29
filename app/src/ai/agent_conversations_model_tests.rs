@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use ai::harness::Harness;
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::Mutex;
 use persistence::model::{AgentConversationData, ChargedUsageTotals, ConversationUsageMetadata};
@@ -15,8 +14,8 @@ use super::entry::{
 use super::query::{DEFAULT_RESULT_COUNT, MAX_SEARCH_RESULTS};
 use super::{
     AgentConversationsModel, AgentConversationsModelEvent, AgentManagementFilters, ArtifactFilter,
-    ConversationMetadata, ConversationUpdateKind, EnvironmentFilter, HarnessFilter, OwnerFilter,
-    StatusFilter, query_conversation_entries,
+    ConversationMetadata, ConversationUpdateKind, OwnerFilter, StatusFilter,
+    query_conversation_entries,
 };
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::api::ServerConversationToken;
@@ -67,7 +66,6 @@ fn create_test_task(
         executor: None,
         conversation_id: None,
         request_usage: None,
-        agent_config_snapshot: None,
         artifacts: vec![],
         is_sandbox_running: false,
         last_event_sequence: None,
@@ -744,37 +742,6 @@ fn test_server_token_assignment_updates_copy_link_resolution() {
 }
 
 #[test]
-fn test_environment_none_filter_includes_conversations() {
-    App::test((), |mut app| async move {
-        add_entry_projection_test_models(&mut app);
-
-        let mut model = create_test_model();
-
-        let conversation_id = AIConversationId::new();
-        model.conversations.insert(
-            conversation_id,
-            create_test_conversation_metadata(conversation_id, "Test conversation"),
-        );
-
-        let filters = AgentManagementFilters {
-            owners: OwnerFilter::All,
-            environment: EnvironmentFilter::NoEnvironment,
-            ..Default::default()
-        };
-
-        app.update(|ctx| {
-            let entries = model.get_entries(&filters, &TeamlessScopeForTest, ctx);
-
-            assert!(
-                entries.iter().any(
-                    |entry| entry.id == AgentConversationEntryId::Conversation(conversation_id)
-                )
-            );
-        });
-    })
-}
-
-#[test]
 fn test_file_artifact_filter_matches_only_items_with_file_artifacts() {
     let artifacts_with_file = vec![Artifact::File {
         artifact_uid: "artifact-file-1".to_string(),
@@ -806,100 +773,21 @@ fn test_file_artifact_filter_matches_only_items_with_file_artifacts() {
 }
 
 #[test]
-fn test_harness_filter_matches_only_selected_harness() {
-    App::test((), |mut app| async move {
-        add_entry_projection_test_models(&mut app);
-
-        let mut model = create_test_model();
-
-        let conv_id = AIConversationId::new();
-        model.conversations.insert(
-            conv_id,
-            create_test_conversation_metadata(conv_id, "Local conv"),
-        );
-
-        app.update(|ctx| {
-            let items_for = |filter: HarnessFilter| -> Vec<AgentConversationEntryId> {
-                model
-                    .get_entries(
-                        &AgentManagementFilters {
-                            owners: OwnerFilter::All,
-                            harness: filter,
-                            ..Default::default()
-                        },
-                        &TeamlessScopeForTest,
-                        ctx,
-                    )
-                    .into_iter()
-                    .map(|entry| entry.id)
-                    .collect()
-            };
-
-            assert_eq!(items_for(HarnessFilter::All).len(), 1);
-            assert!(items_for(HarnessFilter::Specific(Harness::Claude)).is_empty());
-            assert_eq!(
-                items_for(HarnessFilter::Specific(Harness::Oz)),
-                vec![AgentConversationEntryId::Conversation(conv_id)]
-            );
-        });
-    });
-}
-
-#[test]
-fn test_harness_filter_is_filtering_and_reset() {
-    // Default is All → not filtering, and after toggling reset_all_but_owner returns to default.
-    let mut filters = AgentManagementFilters::default();
-    assert!(!filters.is_filtering());
-
-    filters.harness = HarnessFilter::Specific(Harness::Claude);
-    assert!(
-        filters.is_filtering(),
-        "harness != All should report filtering"
-    );
-
-    filters.reset_all_but_owner();
-    assert_eq!(filters.harness, HarnessFilter::default());
-    assert!(!filters.is_filtering());
-}
-
-#[test]
-fn test_agent_management_filters_serde_backwards_compat() {
-    // Persisted state from older clients has no `harness` key → deserializes to All.
-    let legacy = r#"{
-        "owners": "PersonalOnly",
-        "status": "All",
-        "source": "All",
-        "created_on": "All",
-        "creator": "All",
-        "artifact": "All"
-    }"#;
-    let decoded: AgentManagementFilters =
-        serde_json::from_str(legacy).expect("legacy payload without harness must deserialize");
-    assert_eq!(decoded.harness, HarnessFilter::All);
-
-    // Round trip a Specific(Claude) value.
-    let original = AgentManagementFilters {
-        harness: HarnessFilter::Specific(Harness::Claude),
-        ..Default::default()
-    };
-    let encoded = serde_json::to_string(&original).unwrap();
-    assert!(
-        encoded.contains("\"harness\":\"claude\""),
-        "expected serialized form to contain \"harness\":\"claude\", got {encoded}"
-    );
-    let decoded: AgentManagementFilters = serde_json::from_str(&encoded).unwrap();
-    assert_eq!(decoded, original);
-
-    // Unknown harness strings deserialize to All (forward compat).
-    let forward = r#"{
+fn test_agent_management_filters_ignore_retired_fields() {
+    // Persisted filters written before the environment and harness filters were removed still
+    // carry those keys; they must be dropped rather than failing the whole payload.
+    let persisted = r#"{
         "owners": "PersonalOnly",
         "status": "All",
         "source": "All",
         "created_on": "All",
         "creator": "All",
         "artifact": "All",
-        "harness": "some-future-harness"
+        "environment": {"Specific": "env-1"},
+        "harness": "claude"
     }"#;
-    let decoded: AgentManagementFilters = serde_json::from_str(forward).unwrap();
-    assert_eq!(decoded.harness, HarnessFilter::All);
+    let decoded: AgentManagementFilters =
+        serde_json::from_str(persisted).expect("retired filter keys must be ignored");
+    assert_eq!(decoded, AgentManagementFilters::default());
+    assert!(!decoded.is_filtering());
 }

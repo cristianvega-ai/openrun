@@ -400,8 +400,7 @@ impl AIDocumentModel {
             | CloudModelEvent::ObjectDeleted { .. }
             | CloudModelEvent::ObjectPermissionsUpdated { .. }
             | CloudModelEvent::ObjectForceExpanded { .. }
-            | CloudModelEvent::ObjectCreated { .. }
-            | CloudModelEvent::EnvironmentLastTaskRunTimestampsUpdated => {}
+            | CloudModelEvent::ObjectCreated { .. } => {}
         }
     }
     /// Reconciles one server-backed notebook with its loaded AI document.

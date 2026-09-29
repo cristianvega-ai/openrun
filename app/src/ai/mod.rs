@@ -7,7 +7,6 @@ pub(crate) mod agent_management;
 pub mod ambient_agents;
 pub(crate) mod artifact_download;
 pub mod artifacts;
-pub mod auth_secret_types;
 #[cfg(not(target_family = "wasm"))]
 pub mod aws_credentials;
 pub(crate) mod block_context;
@@ -24,19 +23,11 @@ pub(crate) mod custom_endpoints;
 pub(crate) mod custom_model_routers;
 pub(crate) mod document;
 pub(crate) mod execution_context;
-#[cfg(not(target_family = "wasm"))]
-pub mod geap_credentials;
 pub(crate) mod get_relevant_files;
-pub mod harness_availability;
 pub(crate) mod harness_display;
 pub(crate) mod llms;
 pub(crate) mod restored_conversations;
-pub(crate) mod runner_display;
 use warpui::AppContext;
-pub mod cloud_agent_config;
-pub mod cloud_agent_settings;
-pub mod cloud_environments;
-pub mod connected_self_hosted_workers;
 pub mod execution_profiles;
 pub(crate) mod loading;
 

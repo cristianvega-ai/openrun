@@ -3,15 +3,12 @@ use base64::prelude::BASE64_URL_SAFE;
 use futures::StreamExt as _;
 use prost::Message as _;
 use warp_core::channel::ChannelState;
-use warp_server_client::base_client::{AmbientHeaderPolicy, BaseClient, TEAM_UID_HEADER};
+use warp_server_client::base_client::{BaseClient, TEAM_UID_HEADER};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Failed to authenticate multi-agent request")]
     Authentication(#[source] anyhow::Error),
-
-    #[error("Failed to resolve ambient headers for multi-agent request")]
-    AmbientHeaders(#[source] anyhow::Error),
 
     #[error("Failed to decode base64 multi-agent response event")]
     Base64Decode(#[source] base64::DecodeError),
@@ -64,13 +61,6 @@ pub async fn generate_multi_agent_output(
         request_builder = request_builder.bearer_auth(token);
     }
 
-    for (name, value) in client
-        .ambient_headers(AmbientHeaderPolicy::workload_only())
-        .await
-        .map_err(Error::AmbientHeaders)?
-    {
-        request_builder = request_builder.header(name, value);
-    }
     if let Some(team_uid) = team_uid {
         request_builder = request_builder.header(TEAM_UID_HEADER, team_uid);
     }

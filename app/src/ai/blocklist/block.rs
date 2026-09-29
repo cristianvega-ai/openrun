@@ -111,9 +111,6 @@ use crate::ai::blocklist::inline_action::aws_bedrock_credentials_error::{
 };
 use crate::ai::blocklist::inline_action::code_diff_view;
 use crate::ai::blocklist::inline_action::code_diff_view::convert_file_edits_to_file_diffs;
-use crate::ai::blocklist::inline_action::gemini_enterprise_credentials_error::{
-    GeminiEnterpriseCredentialsErrorEvent, GeminiEnterpriseCredentialsErrorView,
-};
 use crate::ai::blocklist::inline_action::requested_command::{
     self, RequestedCommand, RequestedCommandView, RequestedCommandViewEvent,
 };
@@ -946,9 +943,6 @@ pub struct AIBlock {
 
     /// View for AWS Bedrock credentials error, created lazily when the error occurs.
     aws_bedrock_credentials_error_view: Option<ViewHandle<AwsBedrockCredentialsErrorView>>,
-    /// View for Gemini Enterprise credentials errors, created lazily when the error occurs.
-    gemini_enterprise_credentials_error_view:
-        Option<ViewHandle<GeminiEnterpriseCredentialsErrorView>>,
 
     imported_comments: HashMap<AIAgentActionId, ImportedCommentGroup>,
     has_imported_comments: bool,
@@ -1299,7 +1293,6 @@ impl AIBlock {
             last_right_clicked_command: None,
             agent_view_controller,
             aws_bedrock_credentials_error_view: None,
-            gemini_enterprise_credentials_error_view: None,
             imported_comments: Default::default(),
             has_imported_comments: false,
             link_detection_handle: None,
@@ -1328,7 +1321,6 @@ impl AIBlock {
             }
             AIBlockOutputStatus::Failed { error, .. } => {
                 me.maybe_create_aws_bedrock_credentials_error_view(&error, ctx);
-                me.maybe_create_gemini_enterprise_credentials_error_view(&error, ctx);
                 me.finish(FinishReason::Error, ctx);
             }
             AIBlockOutputStatus::Cancelled { .. } => {
@@ -1722,7 +1714,6 @@ impl AIBlock {
                     ctx
                 );
                 self.maybe_create_aws_bedrock_credentials_error_view(&error, ctx);
-                self.maybe_create_gemini_enterprise_credentials_error_view(&error, ctx);
                 // There are no actions to be taken in this block, it is finished.
                 self.finish(FinishReason::Error, ctx);
             }
@@ -1879,31 +1870,6 @@ impl AIBlock {
                 .entry(citation.clone())
                 .or_default();
         }
-        // Also register handles for memory citations derived from fetched_memories,
-        // which are synthesized at render time and never go through output.citations.
-        // Only register for the first exchange since that's the only one that shows them.
-        if let Some(conversation) = self.model.conversation(ctx) {
-            let is_first_exchange = conversation
-                .first_exchange()
-                .map(|e| Some(e.id) == self.model.exchange_id(ctx))
-                .unwrap_or(false);
-            if is_first_exchange {
-                for memory in conversation.fetched_memories() {
-                    if memory.memory_store_id.is_empty() || memory.memory_id.is_empty() {
-                        continue;
-                    }
-                    self.state_handles
-                        .footer_citation_chip_handles
-                        .entry(AIAgentCitation::AgentMemory {
-                            memory_store_id: memory.memory_store_id.clone(),
-                            memory_id: memory.memory_id.clone(),
-                            content: memory.content.clone(),
-                        })
-                        .or_default();
-                }
-            }
-        }
-
         // Register element state for reasoning messages and track summarization timing.
         for message in &output.messages {
             if let AIAgentOutputMessageType::Reasoning {
@@ -3357,47 +3323,6 @@ impl AIBlock {
         ctx.notify();
     }
 
-    fn maybe_create_gemini_enterprise_credentials_error_view(
-        &mut self,
-        error: &RenderableAIError,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !matches!(
-            error,
-            RenderableAIError::GeminiEnterpriseCredentialsExpiredOrInvalid
-        ) {
-            return;
-        }
-        if let Some(view) = &self.gemini_enterprise_credentials_error_view {
-            view.update(ctx, |view, ctx| view.reset(ctx));
-            return;
-        }
-
-        let view = ctx.add_typed_action_view(GeminiEnterpriseCredentialsErrorView::new);
-        ctx.subscribe_to_view(&view, |_me, _view, event, ctx| match event {
-            GeminiEnterpriseCredentialsErrorEvent::RefreshCredentials => {
-                #[cfg(not(target_family = "wasm"))]
-                {
-                    use ai::api_keys::ApiKeyManager;
-
-                    ApiKeyManager::handle(ctx).update(ctx, |manager, ctx| {
-                        crate::ai::geap_credentials::force_refresh_geap_credentials(manager, ctx);
-                    });
-                }
-            }
-            GeminiEnterpriseCredentialsErrorEvent::OpenSettings => {
-                // Defer so Workspace is not opened while AIBlock is still mid-subscription.
-                // Synchronous dispatch here can panic with "Circular view update".
-                ctx.dispatch_typed_action_deferred(WorkspaceAction::ShowSettingsPageWithSearch {
-                    search_query: "gemini enterprise".to_string(),
-                    section: Some(SettingsSection::ThirdPartyCLIAgents),
-                });
-            }
-        });
-
-        self.gemini_enterprise_credentials_error_view = Some(view);
-        ctx.notify();
-    }
     pub fn accept_pending_unit_test_suggestion(
         &mut self,
         interaction_source: InteractionSource,

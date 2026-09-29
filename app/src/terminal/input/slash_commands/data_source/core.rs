@@ -424,7 +424,6 @@ pub trait SlashCommandDataSource {
         use itertools::Itertools;
 
         let prioritized_commands = vec![
-            &*commands::CREATE_ENVIRONMENT,
             &*commands::EDIT,
             &commands::CONVERSATIONS,
             &*commands::PLAN,

@@ -2644,12 +2644,6 @@ pub enum AIAgentInput {
         context: Arc<[AIAgentContext]>,
     },
 
-    CreateEnvironment {
-        context: Arc<[AIAgentContext]>,
-        display_query: Option<String>,
-        repo_paths: Vec<String>,
-    },
-
     CreateNewProject {
         query: String,
         context: Arc<[AIAgentContext]>,
@@ -2716,7 +2710,6 @@ impl Display for AIAgentInput {
             }
             Self::ActionResult { result, .. } => write!(f, "ActionResult: {result}"),
             Self::ResumeConversation { .. } => write!(f, "ResumeConversation"),
-            Self::CreateEnvironment { .. } => write!(f, "CreateEnvironment"),
             Self::CreateNewProject { .. } => write!(f, "CreateNewProject"),
             Self::CloneRepository { .. } => write!(f, "CloneRepository"),
             Self::CodeReview { .. } => write!(f, "CodeReview"),
@@ -2742,7 +2735,6 @@ impl AIAgentInput {
                 clone_repo_url: url,
                 ..
             } => Some(url.query.clone()),
-            Self::CreateEnvironment { display_query, .. } => display_query.clone(),
             Self::CodeReview { .. } => Some("Address these comments".to_string()),
             Self::ActionResult {
                 result:
@@ -2773,7 +2765,6 @@ impl AIAgentInput {
             .user_query_mode()
             .is_none_or(|mode| matches!(mode, UserQueryMode::Normal))
             && Some(&query) == initial_conversation_query
-            && !self.has_custom_display_query()
         {
             query = format!("/agent {query}");
         }
@@ -2837,7 +2828,6 @@ impl AIAgentInput {
             | Self::ActionResult { context, .. }
             | Self::AutoCodeDiffQuery { context, .. }
             | Self::ResumeConversation { context, .. }
-            | Self::CreateEnvironment { context, .. }
             | Self::CreateNewProject { context, .. }
             | Self::CloneRepository { context, .. }
             | Self::CodeReview { context, .. } => Some(context),
@@ -2860,7 +2850,6 @@ impl AIAgentInput {
             Self::ActionResult { .. }
             | Self::AutoCodeDiffQuery { .. }
             | Self::ResumeConversation { .. }
-            | Self::CreateEnvironment { .. }
             | Self::CreateNewProject { .. }
             | Self::CloneRepository { .. }
             | Self::CodeReview { .. }
@@ -2870,12 +2859,6 @@ impl AIAgentInput {
 
     pub fn is_auto_code_diff_query(&self) -> bool {
         matches!(self, AIAgentInput::AutoCodeDiffQuery { .. })
-    }
-
-    /// Returns true if this input type provides its own display query that should be preserved
-    /// without prepending "/agent".
-    pub fn has_custom_display_query(&self) -> bool {
-        matches!(self, AIAgentInput::CreateEnvironment { .. })
     }
 }
 

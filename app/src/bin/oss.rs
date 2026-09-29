@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use warp_core::AppId;
-use warp_core::channel::{Channel, ChannelConfig, ChannelState, OzConfig, WarpServerConfig};
+use warp_core::channel::{Channel, ChannelConfig, ChannelState, WarpServerConfig};
 
 // Simple wrapper around warp::run() for Warp OSS builds.
 fn main() -> Result<()> {
@@ -14,7 +14,6 @@ fn main() -> Result<()> {
             app_id: AppId::new("dev", "warp", "WarpOss"),
             logfile_name: "warp-oss.log".into(),
             server_config: WarpServerConfig::offline(),
-            oz_config: OzConfig::offline(),
             telemetry_config: None,
             crash_reporting_config: None,
             autoupdate_config: None,

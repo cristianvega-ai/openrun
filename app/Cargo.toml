@@ -220,9 +220,7 @@ mime_guess = "2.0"
 warp_multi_agent_api.workspace = true
 repo_metadata.workspace = true
 vim.workspace = true
-warp_isolation_platform.workspace = true
 warp_ripgrep.workspace = true
-warp_managed_secrets.workspace = true
 warp_multi_agent_client.workspace = true
 local_control.workspace = true
 hashbrown.workspace = true
@@ -278,7 +276,6 @@ warp_errors = { workspace = true, features = ["tokio-errors", "websocket-errors"
 # AWS SDK (loading credentials for BYO LLM)
 aws-config = { version = "1.8.16", features = ["credentials-login"] }
 aws-credential-types = "1"
-aws-sdk-sts = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-types = "1"
 
 notify-debouncer-full.workspace = true

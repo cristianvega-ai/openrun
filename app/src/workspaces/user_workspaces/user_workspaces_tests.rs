@@ -534,10 +534,6 @@ fn test_gemini_enterprise_credentials_default_off_when_admin_respects_user_setti
                 !user_workspaces.is_gemini_enterprise_credentials_enabled(&scope, ctx),
                 "respect-user-setting should default the local Gemini Enterprise credentials toggle to off"
             );
-            assert!(
-                user_workspaces.is_gemini_enterprise_credentials_toggleable(&scope),
-                "respect-user-setting should leave the local Gemini Enterprise credentials toggle editable"
-            );
         });
     })
 }
@@ -610,10 +606,6 @@ fn test_gemini_enterprise_credentials_enforced_by_admin() {
             assert!(
                 user_workspaces.is_gemini_enterprise_credentials_enabled(&scope, ctx),
                 "enforced Gemini Enterprise host policy should ignore the local credentials toggle"
-            );
-            assert!(
-                !user_workspaces.is_gemini_enterprise_credentials_toggleable(&scope),
-                "enforced Gemini Enterprise host policy should disable the local credentials toggle"
             );
         });
     })

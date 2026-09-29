@@ -162,9 +162,6 @@ impl ToString for GenericStringObjectFormat {
 pub enum JsonObjectType {
     Preference,
     AIExecutionProfile,
-    CloudEnvironment,
-    ScheduledAmbientAgent,
-    CloudAgentConfig,
 }
 
 impl JsonObjectType {
@@ -172,9 +169,6 @@ impl JsonObjectType {
         match self {
             JsonObjectType::Preference => "PREFERENCE",
             JsonObjectType::AIExecutionProfile => "AIEXECUTIONPROFILE",
-            JsonObjectType::CloudEnvironment => "CLOUDENVIRONMENT",
-            JsonObjectType::ScheduledAmbientAgent => "SCHEDULEDAMBIENTAGENT",
-            JsonObjectType::CloudAgentConfig => "CLOUDAGENTCONFIG",
         }
     }
 }
@@ -186,9 +180,6 @@ impl TryFrom<&str> for JsonObjectType {
         match value {
             "PREFERENCE" => Ok(JsonObjectType::Preference),
             "AIEXECUTIONPROFILE" => Ok(JsonObjectType::AIExecutionProfile),
-            "CLOUDENVIRONMENT" => Ok(JsonObjectType::CloudEnvironment),
-            "SCHEDULEDAMBIENTAGENT" => Ok(JsonObjectType::ScheduledAmbientAgent),
-            "CLOUDAGENTCONFIG" => Ok(JsonObjectType::CloudAgentConfig),
             _ => Err(anyhow!("could not convert unknown json object type")),
         }
     }
@@ -537,12 +528,6 @@ pub struct CloudObjectMetadata {
     pub is_welcome_object: bool,
     pub last_editor_uid: Option<String>,
     pub creator_uid: Option<String>,
-    /// The "last used" timestamp for this environment.
-    ///
-    /// This is populated via `GetCloudEnvironments` from
-    /// `CloudEnvironment.lastTaskCreated.createdAt`.
-    /// Only applicable for CloudEnvironment objects.
-    pub last_task_run_ts: Option<ServerTimestamp>,
 }
 
 impl CloudObjectMetadata {
@@ -563,8 +548,6 @@ impl CloudObjectMetadata {
             is_welcome_object: server_metadata.is_welcome_object,
             creator_uid: server_metadata.creator_uid,
             last_editor_uid: server_metadata.last_editor_uid,
-            // last_task_run_ts is populated separately via GetCloudEnvironments query
-            last_task_run_ts: None,
         }
     }
 
@@ -585,7 +568,6 @@ impl CloudObjectMetadata {
             is_welcome_object: false,
             last_editor_uid: None,
             creator_uid: None,
-            last_task_run_ts: None,
         }
     }
 
@@ -816,15 +798,6 @@ impl From<GenericStringObjectFormat>
             GenericStringObjectFormat::Json(JsonObjectType::AIExecutionProfile) => {
                 GraphQLFormat::JsonAIExecutionProfile
             }
-            GenericStringObjectFormat::Json(JsonObjectType::CloudEnvironment) => {
-                GraphQLFormat::JsonCloudEnvironment
-            }
-            GenericStringObjectFormat::Json(JsonObjectType::ScheduledAmbientAgent) => {
-                GraphQLFormat::JsonScheduledAmbientAgent
-            }
-            GenericStringObjectFormat::Json(JsonObjectType::CloudAgentConfig) => {
-                unreachable!("JsonCloudAgentConfig is no longer present in GraphQL schema")
-            }
         }
     }
 }
@@ -1018,6 +991,38 @@ impl From<Owner> for warp_graphql::object_permissions::Owner {
                 type_: OwnerType::Team,
                 uid: Some(cynic::Id::new(team_uid)),
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::JsonObjectType;
+
+    #[test]
+    fn retired_json_object_types_no_longer_parse() {
+        for retired in [
+            "CLOUDENVIRONMENT",
+            "SCHEDULEDAMBIENTAGENT",
+            "CLOUDAGENTCONFIG",
+        ] {
+            assert!(
+                JsonObjectType::try_from(retired).is_err(),
+                "{retired} should be rejected so persisted rows of that type are skipped"
+            );
+        }
+    }
+
+    #[test]
+    fn remaining_json_object_types_round_trip() {
+        for object_type in [
+            JsonObjectType::Preference,
+            JsonObjectType::AIExecutionProfile,
+        ] {
+            assert_eq!(
+                JsonObjectType::try_from(object_type.as_str()).unwrap(),
+                object_type
+            );
         }
     }
 }

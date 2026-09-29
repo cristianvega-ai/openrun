@@ -103,18 +103,6 @@ pub(super) fn convert_input(
                     )),
                 });
             }
-            AIAgentInput::CreateEnvironment {
-                context,
-                repo_paths,
-                ..
-            } => {
-                return Ok(api::request::Input {
-                    context: Some(convert_context(context.as_ref())),
-                    r#type: Some(api::request::input::Type::CreateEnvironment(
-                        api::request::input::CreateEnvironment { repo_paths },
-                    )),
-                });
-            }
             AIAgentInput::CreateNewProject { query, context } => {
                 return Ok(api::request::Input {
                     context: Some(convert_context(context.as_ref())),
@@ -324,7 +312,6 @@ fn convert_input_to_user_input(
         AIAgentInput::ActionResult { result, .. } => result.try_into(),
         AIAgentInput::ResumeConversation { .. } => Err(ConvertToAPITypeError::Ignore),
         AIAgentInput::CodeReview { .. } => Err(ConvertToAPITypeError::Ignore),
-        AIAgentInput::CreateEnvironment { .. } => Err(ConvertToAPITypeError::Ignore),
         invalid_input => Err(anyhow!(
             "Cannot convert non user query or action result input into API UserInput: {invalid_input:?}"
         ).into()),

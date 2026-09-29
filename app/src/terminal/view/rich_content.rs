@@ -12,7 +12,6 @@ use crate::terminal::block_list_viewport::ScrollPositionUpdate;
 use crate::terminal::model::blocks::{RemovableBlocklistItem, RichContentItem};
 use crate::terminal::model::rich_content::RichContentType;
 use crate::terminal::model::terminal_model::BlockIndex;
-use crate::terminal::view::init_environment::InitEnvironmentBlock;
 use crate::terminal::view::ssh_tmux_deprecation_banner::SshTmuxDeprecationBanner;
 use crate::terminal::warpify::success_block::WarpifySuccessBlock;
 
@@ -201,9 +200,6 @@ pub enum RichContentMetadata {
     AIOnboardingBlock {
         /// The ID corresponding to the `AIAgentExchange` represented in this block.
         exchange_id: AIAgentExchangeId,
-    },
-    InitEnvironment {
-        block_handle: ViewHandle<InitEnvironmentBlock>,
     },
     SshTmuxDeprecationBanner {
         handle: ViewHandle<SshTmuxDeprecationBanner>,

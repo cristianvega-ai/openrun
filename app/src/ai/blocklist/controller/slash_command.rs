@@ -21,19 +21,9 @@ use crate::terminal::input::slash_commands::SlashCommandTrigger;
 use crate::workspaces::user_workspaces::ResolvedTeamScope;
 
 pub enum SlashCommandRequest {
-    CreateNewProject {
-        query: String,
-    },
-    CloneRepository {
-        url: String,
-    },
-    CreateEnvironment {
-        repos: Vec<String>,
-        use_current_dir: bool,
-    },
-    Summarize {
-        prompt: Option<String>,
-    },
+    CreateNewProject { query: String },
+    CloneRepository { url: String },
+    Summarize { prompt: Option<String> },
 }
 
 impl SlashCommandRequest {
@@ -165,7 +155,7 @@ impl SlashCommandRequest {
         app: &AppContext,
     ) -> Option<AIConversationId> {
         match self {
-            Self::Summarize { .. } | Self::CreateEnvironment { .. } => controller
+            Self::Summarize { .. } => controller
                 .context_model
                 .as_ref(app)
                 .selected_conversation_id(app),
@@ -184,27 +174,6 @@ impl SlashCommandRequest {
                     context,
                 }]
             }
-            SlashCommandRequest::CreateEnvironment {
-                mut repos,
-                use_current_dir,
-            } => {
-                let display_query = if repos.is_empty() {
-                    "/create-environment".to_string()
-                } else {
-                    format!("/create-environment {}", repos.join(" "))
-                };
-
-                // Add "." to represent the current working directory
-                if use_current_dir {
-                    repos.push(String::from("."));
-                }
-
-                vec![AIAgentInput::CreateEnvironment {
-                    context,
-                    display_query: Some(display_query),
-                    repo_paths: repos,
-                }]
-            }
             SlashCommandRequest::Summarize { prompt, .. } => {
                 vec![AIAgentInput::SummarizeConversation { prompt, context }]
             }
@@ -215,7 +184,6 @@ impl SlashCommandRequest {
         match self {
             SlashCommandRequest::CloneRepository { .. } => EntrypointType::CloneRepository,
             SlashCommandRequest::CreateNewProject { .. }
-            | SlashCommandRequest::CreateEnvironment { .. }
             | SlashCommandRequest::Summarize { .. } => EntrypointType::UserInitiated,
         }
     }
