@@ -5,7 +5,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use strum_macros::{EnumDiscriminants, EnumIter};
-use warp_completer::completer::MatchType;
 use warp_core::command::ExitCode;
 use warp_core::interval_timer::TimingDataPoint;
 use warp_core::telemetry::{
@@ -34,9 +33,7 @@ use crate::settings::import::model::TerminalType;
 use crate::settings_view::TeamsInviteOption;
 use crate::tab::TabTelemetryAction;
 use crate::terminal::block_list_viewport::InputMode;
-use crate::terminal::cli_agent_sessions::{CLIAgentInputEntrypoint, CLIAgentRichInputCloseReason};
 use crate::terminal::input::InputType;
-use crate::terminal::input::TelemetryInputSuggestionsMode;
 use crate::terminal::model::block::BlockId;
 use crate::terminal::model::session::SessionId;
 use crate::terminal::model::terminal_model::BlockSelectionCardinality;
@@ -730,10 +727,6 @@ pub enum TelemetryEvent {
     BackgroundBlockStarted,
     SessionCreation,
     Login,
-    ConfirmSuggestion {
-        mode: TelemetryInputSuggestionsMode,
-        match_type: MatchType,
-    },
     /// Copy command, output or both for some number of blocks.
     ContextMenuCopy(BlockEntity, BlockSelectionCardinality),
     ContextMenuOpenShareModal(BlockSelectionCardinality),
@@ -1693,20 +1686,6 @@ pub enum TelemetryEvent {
         /// The CLI agent being shown.
         cli_agent: CLIAgentType,
     },
-    /// Emitted when the user opens the CLI agent rich input editor.
-    CLIAgentRichInputOpened {
-        /// The CLI agent being used.
-        cli_agent: CLIAgentType,
-        /// How the editor was opened (Ctrl-G or footer button).
-        entrypoint: CLIAgentInputEntrypoint,
-    },
-    /// Emitted when the CLI agent rich input editor is closed.
-    CLIAgentRichInputClosed {
-        /// The CLI agent being used.
-        cli_agent: CLIAgentType,
-        /// Why the editor was closed.
-        reason: CLIAgentRichInputCloseReason,
-    },
     /// Emitted when the user submits a prompt via the CLI agent rich input editor.
     CLIAgentRichInputSubmitted {
         /// The CLI agent being used.
@@ -1875,9 +1854,6 @@ impl TelemetryEvent {
                 Some(json!({ "enabled": enabled }))
             }
             TelemetryEvent::BlockSelection(details) => Some(json!(details)),
-            TelemetryEvent::ConfirmSuggestion { mode, match_type } => {
-                Some(json!({ "mode": mode, "match_type": match_type }))
-            }
             TelemetryEvent::ThemeSelection { theme, entrypoint } => {
                 Some(json!({ "theme": theme, "entrypoint": entrypoint }))
             }
@@ -2755,17 +2731,6 @@ impl TelemetryEvent {
             TelemetryEvent::CLIAgentToolbarShown { cli_agent } => Some(json!({
                 "agent_name": cli_agent,
             })),
-            TelemetryEvent::CLIAgentRichInputOpened {
-                cli_agent,
-                entrypoint,
-            } => Some(json!({
-                "agent_name": cli_agent,
-                "entrypoint": entrypoint,
-            })),
-            TelemetryEvent::CLIAgentRichInputClosed { cli_agent, reason } => Some(json!({
-                "agent_name": cli_agent,
-                "reason": reason,
-            })),
             TelemetryEvent::CLIAgentRichInputSubmitted {
                 cli_agent,
                 prompt_length,
@@ -2827,7 +2792,6 @@ impl TelemetryEvent {
             | TelemetryEvent::Login
             | TelemetryEvent::AgentModeRewindDialogOpened { .. }
             | TelemetryEvent::AgentModeRewindExecuted { .. }
-            | TelemetryEvent::ConfirmSuggestion { .. }
             | TelemetryEvent::ContextMenuCopy(_, _)
             | TelemetryEvent::ContextMenuOpenShareModal(_)
             | TelemetryEvent::ContextMenuFindWithinBlocks(_)
@@ -3124,8 +3088,6 @@ impl TelemetryEvent {
             | TelemetryEvent::CLIAgentToolbarImageAttached { .. }
             | TelemetryEvent::CLIAgentToolbarShown { .. }
             | TelemetryEvent::AgentNotificationShown { .. }
-            | TelemetryEvent::CLIAgentRichInputOpened { .. }
-            | TelemetryEvent::CLIAgentRichInputClosed { .. }
             | TelemetryEvent::CLIAgentRichInputSubmitted { .. }
             | TelemetryEvent::ToggleCLIAgentToolbarSetting { .. }
             | TelemetryEvent::ToggleUseAgentToolbarSetting { .. }
@@ -3230,7 +3192,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::BackgroundBlockStarted => EnablementState::Always,
             Self::SessionCreation => EnablementState::Always,
             Self::Login => EnablementState::Always,
-            Self::ConfirmSuggestion => EnablementState::Always,
             Self::ContextMenuCopy => EnablementState::Always,
             Self::ContextMenuOpenShareModal => EnablementState::Always,
             Self::ContextMenuFindWithinBlocks => EnablementState::Always,
@@ -3542,9 +3503,7 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentNotificationShown { .. } => {
                 EnablementState::Flag(FeatureFlag::HOANotifications)
             }
-            Self::CLIAgentRichInputOpened { .. }
-            | Self::CLIAgentRichInputClosed { .. }
-            | Self::CLIAgentRichInputSubmitted { .. } => EnablementState::Always,
+            Self::CLIAgentRichInputSubmitted { .. } => EnablementState::Always,
             Self::ToggleCLIAgentToolbarSetting { .. } => EnablementState::Always,
             Self::ToggleUseAgentToolbarSetting { .. } => EnablementState::Always,
             Self::CodexModalOpened | Self::CodexModalUseCodexClicked => EnablementState::Always,
@@ -3608,7 +3567,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AnonymousUserHitCloudObjectLimit => "Anonymous User Hit Cloud Object Limit",
             Self::BootstrappingSucceeded => "Bootstrapping Succeeded",
             Self::SessionAbandonedBeforeBootstrap => "Session Abandoned Before Bootstrap",
-            Self::ConfirmSuggestion => "Confirm Suggestion",
             Self::ContextMenuInsertSelectedText => "Context Menu Insert Selected Text into Input",
             Self::ContextMenuCopyPrompt => "Context Menu Copy Prompt",
             Self::ContextMenuToggleGitPromptDirtyIndicator => {
@@ -3934,8 +3892,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::CLIAgentToolbarImageAttached { .. } => "CLIAgentFooter.ImageAttached",
             Self::CLIAgentToolbarShown { .. } => "CLIAgentFooter.Shown",
             Self::AgentNotificationShown { .. } => "AgentNotification.Shown",
-            Self::CLIAgentRichInputOpened { .. } => "CLIAgentRichInput.Opened",
-            Self::CLIAgentRichInputClosed { .. } => "CLIAgentRichInput.Closed",
             Self::CLIAgentRichInputSubmitted { .. } => "CLIAgentRichInput.Submitted",
             Self::ToggleCLIAgentToolbarSetting { .. } => "CLIAgentFooter.SettingToggled",
             Self::ToggleUseAgentToolbarSetting { .. } => "UseAgentToolbar.SettingToggled",
@@ -3992,7 +3948,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::LoginLaterConfirmationButtonClicked => {
                 "Clicked \"Yes, skip login\" confirmation button"
             }
-            Self::ConfirmSuggestion => "Accepted tab completion suggestion",
             Self::ContextMenuCopy => "Clicked \"Copy\" in context menu",
             Self::ContextMenuOpenShareModal => "Opened \"Share\" modal via context menu",
             Self::ContextMenuFindWithinBlocks => "Clicked \"find within blocks\" in context menu",
@@ -4574,8 +4529,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::AgentNotificationShown { .. } => {
                 "An agent notification was shown to the user (toast or mailbox)"
             }
-            Self::CLIAgentRichInputOpened { .. } => "User opened CLI agent Rich Input",
-            Self::CLIAgentRichInputClosed { .. } => "CLI agent Rich Input was closed",
             Self::CLIAgentRichInputSubmitted { .. } => {
                 "User submitted a prompt via CLI agent Rich Input"
             }

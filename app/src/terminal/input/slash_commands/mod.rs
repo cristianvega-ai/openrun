@@ -15,7 +15,6 @@ use warp_core::ui::theme::AnsiColorIdentifier;
 use warp_util::path::{CleanPathResult, LineAndColumnArg};
 use warpui::{AppContext, ViewContext};
 
-use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
 use crate::search::slash_command_menu::SlashCommandId;
 use crate::search::slash_command_menu::StaticCommand;
 use crate::search::slash_command_menu::static_commands::SlashCommandKind;
@@ -401,9 +400,7 @@ impl Input {
                 }
             }
             SlashCommandKind::OpenCodeReview => {
-                ctx.dispatch_typed_action(&TerminalAction::ToggleCodeReviewPane {
-                    entrypoint: CodeReviewPaneEntrypoint::SlashCommand,
-                });
+                ctx.dispatch_typed_action(&TerminalAction::ToggleCodeReviewPane);
             }
             SlashCommandKind::OpenSettingsFile => {
                 if !FeatureFlag::SettingsFile.is_enabled() || !cfg!(feature = "local_fs") {

@@ -5959,15 +5959,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mach2"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a1b95cd5421ec55b445b5ae102f5ea0e768de1f82bd3001e11f426c269c3aea"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8431,9 +8422,6 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "serde",
- "serde_json",
- "strum",
- "strum_macros",
  "tempfile",
  "thiserror 2.0.17",
  "virtual-fs",
@@ -11338,7 +11326,6 @@ dependencies = [
  "lsp",
  "lsp-types",
  "lz4_flex 0.11.6",
- "mach2",
  "markdown_parser",
  "memo-map",
  "mermaid_to_svg",
@@ -11348,7 +11335,6 @@ dependencies = [
  "nix 0.26.4",
  "notify-debouncer-full",
  "num-traits",
- "num_cpus",
  "objc",
  "objc2 0.6.3",
  "objc2-app-kit 0.3.2",
@@ -11402,7 +11388,6 @@ dependencies = [
  "siphasher 0.3.11",
  "smallvec",
  "smol_str",
- "static_assertions",
  "string-offset",
  "strum",
  "strum_macros",

@@ -19,7 +19,6 @@ use warp_util::path::EscapeChar;
 use crate::code::editor::line::EditorLineLocation;
 use crate::code_review::comments::{AgentReviewCommentBatch, AttachedReviewCommentTarget};
 use crate::code_review::diff_set::DiffSetHunk;
-use crate::server::telemetry::CLIAgentType;
 use crate::ui_components::icons::Icon;
 
 /// Claude/Anthropic brand color (official brand orange #D97757).
@@ -524,30 +523,6 @@ pub fn build_selection_line_range_prompt(
     end_line: usize,
 ) -> String {
     format!("{file_path} L{start_line}-L{end_line}")
-}
-
-impl From<CLIAgent> for CLIAgentType {
-    fn from(agent: CLIAgent) -> Self {
-        match agent {
-            CLIAgent::Claude => CLIAgentType::Claude,
-            CLIAgent::Gemini => CLIAgentType::Gemini,
-            CLIAgent::Codex => CLIAgentType::Codex,
-            CLIAgent::Amp => CLIAgentType::Amp,
-            CLIAgent::Droid => CLIAgentType::Droid,
-            CLIAgent::OpenCode => CLIAgentType::OpenCode,
-            CLIAgent::Copilot => CLIAgentType::Copilot,
-            CLIAgent::Pi => CLIAgentType::Pi,
-            CLIAgent::OhMyPi => CLIAgentType::OhMyPi,
-            CLIAgent::Auggie => CLIAgentType::Auggie,
-            CLIAgent::CursorCli => CLIAgentType::Cursor,
-            CLIAgent::Goose => CLIAgentType::Goose,
-            CLIAgent::Hermes => CLIAgentType::Hermes,
-            CLIAgent::Vibe => CLIAgentType::Vibe,
-            CLIAgent::Antigravity => CLIAgentType::Antigravity,
-            CLIAgent::Grok => CLIAgentType::Grok,
-            CLIAgent::Unknown => CLIAgentType::Unknown,
-        }
-    }
 }
 
 #[cfg(test)]

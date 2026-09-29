@@ -25,8 +25,8 @@ use crate::terminal::cli_agent_sessions::event::{
 };
 use crate::terminal::cli_agent_sessions::listener::CLIAgentSessionListener;
 use crate::terminal::cli_agent_sessions::{
-    CLIAgentInputEntrypoint, CLIAgentInputState, CLIAgentRichInputCloseReason, CLIAgentSession,
-    CLIAgentSessionContext, CLIAgentSessionStatus, CLIAgentSessionsModel,
+    CLIAgentInputState, CLIAgentSession, CLIAgentSessionContext, CLIAgentSessionStatus,
+    CLIAgentSessionsModel,
 };
 use crate::terminal::input::{InputConfig, InputType};
 use crate::terminal::model::ansi::{self, BootstrappedValue, InitShellValue, PreexecValue};
@@ -675,7 +675,7 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
                 );
             });
 
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
 
             view.submit_cli_agent_rich_input("hello!".to_owned(), ctx);
@@ -738,7 +738,7 @@ fn unregister_cli_agent_session_restores_unlocked_input_config() {
                 );
             });
 
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
 
             CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
@@ -3418,7 +3418,7 @@ fn submit_rich_input_and_collect_pty_writes(
             );
         });
 
-        view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+        view.open_cli_agent_rich_input(ctx);
         assert!(view.has_active_cli_agent_input_session(ctx));
 
         view.submit_cli_agent_rich_input(text.to_owned(), ctx);
@@ -3454,7 +3454,7 @@ fn open_cli_agent_rich_input_for_agent_with_window_id(
             );
         });
 
-        view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+        view.open_cli_agent_rich_input(ctx);
         assert!(view.has_active_cli_agent_input_session(ctx));
     });
     (window_id, terminal)
@@ -3583,7 +3583,7 @@ fn ctrl_g_toggles_cli_agent_rich_input_from_terminal_context() {
         // Re-open programmatically (mirrors the user re-triggering open via
         // Ctrl-G in a long-running context).
         terminal.update(&mut app, |view, ctx| {
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::CtrlG, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
         });
 
@@ -3976,7 +3976,7 @@ fn submit_without_auto_dismiss_keeps_rich_input_open() {
                 );
             });
 
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
 
             view.submit_cli_agent_rich_input("hello".to_owned(), ctx);
@@ -4034,7 +4034,7 @@ fn submit_with_plugin_and_auto_toggle_keeps_rich_input_open() {
                 );
             });
 
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
 
             view.submit_cli_agent_rich_input("hello".to_owned(), ctx);
@@ -4084,7 +4084,7 @@ fn submit_with_plugin_but_auto_toggle_off_respects_auto_dismiss() {
                 );
             });
 
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
 
             view.submit_cli_agent_rich_input("hello".to_owned(), ctx);
@@ -4134,7 +4134,7 @@ fn status_blocked_auto_closes_rich_input() {
                 );
             });
 
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
 
             // Simulate a PermissionRequest event → status transitions to Blocked.
@@ -4207,7 +4207,7 @@ fn status_in_progress_auto_opens_rich_input_after_blocked() {
             });
 
             // Open rich input, then simulate blocked → closed automatically.
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
                 sessions.update_from_event(
                     view.view_id,
@@ -4436,7 +4436,7 @@ fn manual_dismiss_disables_auto_toggle_for_session() {
                 );
             });
 
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
 
             // Manual dismiss via the "disable auto-toggle" path (Escape / Ctrl-G / footer).
@@ -4513,7 +4513,7 @@ fn close_cli_agent_rich_input_saves_draft_and_reopen_restores_it() {
 
         // Close the composer — the buffer text should be saved as a draft.
         terminal.update(&mut app, |view, ctx| {
-            view.close_cli_agent_rich_input(CLIAgentRichInputCloseReason::Manual, ctx);
+            view.close_cli_agent_rich_input(ctx);
             assert!(!view.has_active_cli_agent_input_session(ctx));
         });
 
@@ -4530,7 +4530,7 @@ fn close_cli_agent_rich_input_saves_draft_and_reopen_restores_it() {
 
         // Reopen — draft should be restored into the buffer and consumed.
         terminal.update(&mut app, |view, ctx| {
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
         });
 
@@ -4595,7 +4595,7 @@ fn close_cli_agent_rich_input_with_empty_buffer_stores_no_draft() {
 
         // Close immediately without typing anything.
         terminal.update(&mut app, |view, ctx| {
-            view.close_cli_agent_rich_input(CLIAgentRichInputCloseReason::Manual, ctx);
+            view.close_cli_agent_rich_input(ctx);
             assert!(!view.has_active_cli_agent_input_session(ctx));
         });
 

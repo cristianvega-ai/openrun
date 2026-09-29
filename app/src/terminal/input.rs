@@ -37,7 +37,6 @@ use parking_lot::FairMutex;
 #[cfg(feature = "local_fs")]
 use parking_lot::Mutex;
 use regex::Regex;
-use serde::Serialize;
 use settings::{Setting as _, ToggleableSetting};
 use string_offset::{ByteOffset, CharOffset};
 use vec1::Vec1;
@@ -147,9 +146,7 @@ use crate::search::at_menu::mixer::AtMenuSearchableAction;
 use crate::search::at_menu::search::is_valid_search_query;
 use crate::search::at_menu::view::AtMenuAction;
 use crate::search::slash_command_menu::static_commands::commands::COMMAND_REGISTRY;
-use crate::server::telemetry::{
-    CommandXRayTrigger, PaletteSource, SlashMenuSource, TelemetryEvent, WorkflowTelemetryMetadata,
-};
+use crate::server::telemetry::{CommandXRayTrigger, PaletteSource};
 use crate::session_management::SessionNavigationPromptElements;
 use crate::settings::{
     AliasExpansionSettings, AppEditorSettings, AppEditorSettingsChangedEvent, CLIAgentSettings,
@@ -205,8 +202,6 @@ use crate::workflows::local_workflows::LocalWorkflows;
 use crate::workflows::{self, WorkflowSelectionSource, WorkflowSource, WorkflowType};
 use crate::workspace::sync_inputs::SyncedInputState;
 use crate::workspace::{CommandSearchOptions, InitContent, ToastStack, WorkspaceAction};
-#[allow(unused_imports)]
-use crate::{AgentModeEntrypoint, ServerApiProvider, cmd_or_ctrl_shift, send_telemetry_from_ctx};
 
 /// Drop target data for dropping content on the [`Input`].
 #[derive(Debug, Clone)]
@@ -281,17 +276,6 @@ cfg_if::cfg_if! {
         // On linux and windows, the CmdEnter EditorAction is bound to ctrl-shift-enter.
         const CMD_ENTER_KEYBINDING: &str =  "ctrl-shift-enter";
     }
-}
-
-#[derive(PartialEq, Eq, Copy, Clone, Serialize)]
-pub enum TelemetryInputSuggestionsMode {
-    HistoryFuzzySearch,
-    CompletionSuggestions,
-    HistoryUp,
-    AtMenu,
-    SlashCommands,
-    InlineHistoryMenu,
-    IndexedReposMenu,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -433,31 +417,6 @@ impl InputSuggestionsMode {
             _ => None,
         }
     }
-
-    fn to_telemetry_mode(&self) -> TelemetryInputSuggestionsMode {
-        match *self {
-            InputSuggestionsMode::HistoryUp {
-                search_mode: HistorySearchMode::Prefix,
-                ..
-            } => TelemetryInputSuggestionsMode::HistoryUp,
-            InputSuggestionsMode::HistoryUp {
-                search_mode: HistorySearchMode::Fuzzy,
-                ..
-            } => TelemetryInputSuggestionsMode::HistoryFuzzySearch,
-            InputSuggestionsMode::CompletionSuggestions { .. } => {
-                TelemetryInputSuggestionsMode::CompletionSuggestions
-            }
-            InputSuggestionsMode::AtMenu { .. } => TelemetryInputSuggestionsMode::AtMenu,
-            InputSuggestionsMode::SlashCommands => TelemetryInputSuggestionsMode::SlashCommands,
-            InputSuggestionsMode::InlineHistoryMenu { .. } => {
-                TelemetryInputSuggestionsMode::InlineHistoryMenu
-            }
-            InputSuggestionsMode::IndexedReposMenu => {
-                TelemetryInputSuggestionsMode::IndexedReposMenu
-            }
-            InputSuggestionsMode::Closed => unreachable!(),
-        }
-    }
 }
 
 fn render_prompt_chip_shell_command(
@@ -483,29 +442,6 @@ fn render_prompt_chip_shell_command(
         PromptChipShellCommand::NvmInstallLatestNode => "nvm install node".to_string(),
         PromptChipShellCommand::Echo { message } => {
             format!("echo {}", shell_quote_arg(message, shell_type))
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Copy, Clone)]
-pub enum HistoryUpMode {
-    // Show prefixed results.
-    Prefixed,
-    // Show all results with no query.
-    RegularNoQuery,
-    // Show all results with query.
-    RegularWithQuery,
-    // Used for ConfirmSuggestion event.
-    NotApplicable,
-}
-
-impl HistoryUpMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            HistoryUpMode::Prefixed => "prefixed history up",
-            HistoryUpMode::RegularNoQuery => "regular history up (no query)",
-            HistoryUpMode::RegularWithQuery => "regular history up (with query)",
-            HistoryUpMode::NotApplicable => "history up",
         }
     }
 }
@@ -1498,7 +1434,7 @@ impl Input {
                 // which shares this footer.
                 CLIAgentFooterEvent::WriteToPty(_)
                 | CLIAgentFooterEvent::InsertIntoCLIRichInput(_)
-                | CLIAgentFooterEvent::ToggleFileExplorer(_)
+                | CLIAgentFooterEvent::ToggleFileExplorer
                 | CLIAgentFooterEvent::OpenRichInput
                 | CLIAgentFooterEvent::HideRichInput => {}
                 CLIAgentFooterEvent::ToggledChipMenu { open } => {
@@ -2251,21 +2187,6 @@ impl Input {
                     ctx,
                 );
             });
-
-            // Emit telemetry for @ menu opened
-            let is_udi_enabled = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
-            let current_input_mode = self.input_mode_model.as_ref(ctx).input_type();
-
-            send_telemetry_from_ctx!(
-                TelemetryEvent::AtMenuInteracted {
-                    action: "opened".to_string(),
-                    item_count: None,
-                    query_length: None,
-                    is_udi_enabled,
-                    current_input_mode,
-                },
-                ctx
-            );
         } else if self.suggestions_mode_model.as_ref(ctx).is_at_menu() {
             self.close_at_menu(ctx);
         }
@@ -2306,14 +2227,6 @@ impl Input {
             self.close_slash_commands_menu(ctx);
         } else {
             self.system_insert("/", ctx);
-            send_telemetry_from_ctx!(
-                TelemetryEvent::OpenSlashMenu {
-                    source: SlashMenuSource::SlashButton,
-                    is_inline_ui_enabled: true,
-                    is_in_agent_view: false,
-                },
-                ctx
-            );
         }
     }
 
@@ -3103,7 +3016,6 @@ impl Input {
             // We don't want to submit the command if precmd has not
             // been received. Instead, we want the user to be aware
             // that the prompt might not be up to date.
-            send_telemetry_from_ctx!(TelemetryEvent::TriedToExecuteBeforePrecmd, ctx);
             did_execute = false;
         }
 
@@ -3226,15 +3138,6 @@ impl Input {
                 workflow_source,
             } => {
                 let workflow_source = *workflow_source;
-
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::WorkflowSelected(WorkflowTelemetryMetadata {
-                        workflow_source,
-                        workflow_categories: workflow.as_workflow().tags().cloned(),
-                        workflow_selection_source: WorkflowSelectionSource::Voltron,
-                    }),
-                    ctx
-                );
 
                 self.show_workflows_info_box_on_workflow_selection(
                     *workflow.clone(),
@@ -3628,46 +3531,17 @@ impl Input {
         }
 
         match event {
-            InputSuggestionsEvent::ConfirmSuggestion {
-                suggestion,
-                match_type,
-            } => {
+            InputSuggestionsEvent::ConfirmSuggestion { suggestion } => {
                 if !self.confirm_suggestion(suggestion, ctx) {
                     return;
                 }
 
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::ConfirmSuggestion {
-                        mode: self
-                            .suggestions_mode_model
-                            .as_ref(ctx)
-                            .mode()
-                            .to_telemetry_mode(),
-                        match_type: *match_type,
-                    },
-                    ctx
-                );
                 self.close_input_suggestions(/*should_focus_input=*/ true, ctx);
             }
-            InputSuggestionsEvent::ConfirmAndExecuteSuggestion {
-                suggestion,
-                match_type,
-            } => {
+            InputSuggestionsEvent::ConfirmAndExecuteSuggestion { suggestion } => {
                 if !self.confirm_and_execute_suggestion(suggestion, ctx) {
                     return;
                 }
-
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::ConfirmSuggestion {
-                        mode: self
-                            .suggestions_mode_model
-                            .as_ref(ctx)
-                            .mode()
-                            .to_telemetry_mode(),
-                        match_type: *match_type,
-                    },
-                    ctx
-                );
 
                 self.close_input_suggestions(/*should_focus_input=*/ true, ctx);
 
@@ -4098,13 +3972,6 @@ impl Input {
 
     // TODO - Implement PageUp functionality for input suggestions menu
     fn editor_page_up(&mut self, ctx: &mut ViewContext<Self>) {
-        let event = self.editor.read(ctx, |editor, ctx| {
-            TelemetryEvent::PageUpDownInEditorPressed {
-                is_empty_editor: editor.is_empty(ctx),
-                is_down: false,
-            }
-        });
-        send_telemetry_from_ctx!(event, ctx);
         if self.suggestions_mode_model.as_ref(ctx).is_visible() {
             self.editor
                 .update(ctx, |input, ctx| input.move_page_up(ctx));
@@ -4270,13 +4137,6 @@ impl Input {
 
     // TODO - Implement PageDown functionality for input suggestions menu
     fn editor_page_down(&mut self, ctx: &mut ViewContext<Self>) {
-        let event = self.editor.read(ctx, |editor, ctx| {
-            TelemetryEvent::PageUpDownInEditorPressed {
-                is_empty_editor: editor.is_empty(ctx),
-                is_down: true,
-            }
-        });
-        send_telemetry_from_ctx!(event, ctx);
         if self.suggestions_mode_model.as_ref(ctx).is_visible() {
             self.editor
                 .update(ctx, |input, ctx| input.move_page_down(ctx));
@@ -4657,7 +4517,7 @@ impl Input {
         if matches!(
             event,
             EditorEvent::DeleteAllLeft
-                | EditorEvent::CtrlC { .. }
+                | EditorEvent::CtrlC
                 | EditorEvent::BackspaceOnEmptyBuffer
                 | EditorEvent::BackspaceAtBeginningOfBuffer
                 | EditorEvent::SetAtMenuOpen(false)
@@ -5282,7 +5142,7 @@ impl Input {
             EditorEvent::CmdEnter => self.input_cmd_enter(ctx),
             EditorEvent::CtrlEnter => self.input_ctrl_enter(ctx),
             EditorEvent::Escape => self.editor_escape(ctx),
-            EditorEvent::CtrlC { .. } => {
+            EditorEvent::CtrlC => {
                 self.close_input_suggestions(/*should_focus_input=*/ true, ctx);
 
                 ctx.emit(Event::CtrlC);
@@ -7240,8 +7100,6 @@ impl Input {
             if !self.try_execute_command(&command, ctx) {
                 return;
             }
-            self.emit_input_buffer_submitted_telemetry(ctx);
-
             self.input_mode_model.update(ctx, |model, ctx| {
                 model.handle_input_buffer_submitted(ctx);
             });
@@ -7308,20 +7166,6 @@ impl Input {
                 }
             }
         }
-    }
-
-    fn emit_input_buffer_submitted_telemetry(&self, ctx: &mut ViewContext<Self>) {
-        let input_model = self.input_mode_model.as_ref(ctx);
-        let block_id = self.model.lock().active_block_id().clone();
-        send_telemetry_from_ctx!(
-            TelemetryEvent::InputBufferSubmitted {
-                input_type: input_model.input_type(),
-                is_locked: input_model.is_input_type_locked(),
-                was_lock_set_with_empty_buffer: input_model.was_lock_set_with_empty_buffer(),
-                block_id,
-            },
-            ctx
-        );
     }
 
     /// Set input mode to prompt mode (CLI agent rich input)
@@ -7599,20 +7443,6 @@ impl Input {
         // If the SelectedWorkflowState is populated with a workflow, we count this as a workflow execution.
         let workflow_command = match self.workflows_state.selected_workflow_state.as_ref() {
             Some(selected_workflow_state) => {
-                send_telemetry_from_ctx!(
-                    TelemetryEvent::WorkflowExecuted(WorkflowTelemetryMetadata {
-                        workflow_source: selected_workflow_state.workflow_source,
-                        workflow_categories: selected_workflow_state
-                            .workflow_type
-                            .as_workflow()
-                            .tags()
-                            .cloned(),
-                        workflow_selection_source: selected_workflow_state
-                            .workflow_selection_source,
-                    }),
-                    ctx
-                );
-
                 // Local workflows are tracked by persisting the workflow contents.
                 selected_workflow_state
                     .workflow_type

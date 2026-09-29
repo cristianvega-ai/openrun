@@ -9,7 +9,7 @@ use warpui::{App, EntityId, ModelHandle, SingletonEntity};
 use super::*;
 use crate::terminal::CLIAgent;
 use crate::terminal::cli_agent_sessions::{
-    CLIAgentInputEntrypoint, CLIAgentSession, CLIAgentSessionContext, CLIAgentSessionStatus,
+    CLIAgentSession, CLIAgentSessionContext, CLIAgentSessionStatus,
 };
 
 const PROMPT_LOCKED: InputConfig = InputConfig {
@@ -51,14 +51,7 @@ fn start_cli_agent_session(app: &mut App, surface_id: EntityId) {
 
 fn open_rich_input(app: &mut App, surface_id: EntityId, previous: InputConfig) {
     CLIAgentSessionsModel::handle(app).update(app, |sessions, ctx| {
-        sessions.open_input(
-            surface_id,
-            CLIAgentInputEntrypoint::CtrlG,
-            previous,
-            true,
-            true,
-            ctx,
-        );
+        sessions.open_input(surface_id, previous, true, true, ctx);
     });
 }
 

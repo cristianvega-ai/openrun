@@ -14,8 +14,7 @@ use super::{
     AliasExpansionBannerAction, ContextMenuAction, GridHighlightedLink, InputContextMenuAction,
     NotificationsDiscoveryBannerAction, NotificationsErrorBannerAction, TerminalEditor,
 };
-use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
-use crate::server::telemetry::{PaletteSource, ToggleBlockFilterSource};
+use crate::server::telemetry::PaletteSource;
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::block_list_element::{
     BlockHoverAction, BlockListMenuSource, BlockSelectAction, BlockTextSelectAction,
@@ -170,7 +169,7 @@ pub enum TerminalAction {
     OpenInWarpBanner(OpenInWarpBannerAction),
     OpenBlockFilterEditor(BlockIndex),
     ImportSettings,
-    ToggleBlockFilterOnSelectedOrLastBlock(ToggleBlockFilterSource),
+    ToggleBlockFilterOnSelectedOrLastBlock,
     VimModeBanner(VimModeBannerAction),
     ToggleSnackbarInActivePane,
     DragAndDropFiles(Vec<String>),
@@ -195,9 +194,7 @@ pub enum TerminalAction {
         index: usize,
     },
     AttachFile,
-    ToggleCodeReviewPane {
-        entrypoint: CodeReviewPaneEntrypoint,
-    },
+    ToggleCodeReviewPane,
     PickRepoToOpen,
     OpenFilesPalette {
         source: PaletteSource,
@@ -350,7 +347,7 @@ impl fmt::Debug for TerminalAction {
                 write!(f, "OpenBlockFilterEditor({block_index:?})")
             }
             ImportSettings => write!(f, "ImportSettings"),
-            ToggleBlockFilterOnSelectedOrLastBlock(_) => {
+            ToggleBlockFilterOnSelectedOrLastBlock => {
                 f.write_str("ToggleBlockFilterOnSelectedOrLastBlock")
             }
             VimModeBanner(action) => write!(f, "VimModeBanner({action:?})"),
@@ -378,7 +375,7 @@ impl fmt::Debug for TerminalAction {
                 write!(f, "OpenAttachmentLightbox({index:?})")
             }
             AttachFile => write!(f, "AttachFile"),
-            ToggleCodeReviewPane { .. } => write!(f, "ToggleCodeReviewPane"),
+            ToggleCodeReviewPane => write!(f, "ToggleCodeReviewPane"),
             PickRepoToOpen => write!(f, "PickRepoToOpen"),
             OpenFilesPalette { .. } => write!(f, "OpenFilesPalette"),
             DismissCodeToolbeltTooltip => write!(f, "DismissCodeToolbeltTooltip"),

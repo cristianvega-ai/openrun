@@ -703,7 +703,7 @@ pub trait BackingView: View {
 
     /// Processes the corresponding action when one of the
     /// overflow menu items is selected. Allows implementers
-    /// to add pre-/post-processing logic (e.g. telemetry).
+    /// to add pre-/post-processing logic.
     ///
     // Note: even if the [`PaneHeaderOverflowMenuAction`] was [`TypedActionView::Action`]
     // (assuming [`TypedActionView`] was one of the trait bounds for [`BackingView`]),

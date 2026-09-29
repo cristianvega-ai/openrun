@@ -2,7 +2,6 @@
 
 mod agent_notifications;
 mod alloc;
-mod antivirus;
 #[cfg(target_os = "macos")]
 mod app_menus;
 mod app_services;
@@ -179,7 +178,6 @@ use window_settings::WindowSettings;
 use workspace::sync_inputs::SyncedInputState;
 
 use self::features::FeatureFlag;
-use crate::antivirus::AntivirusInfo;
 use crate::app_state::AppState;
 use crate::code::global_buffer_model::GlobalBufferModel;
 #[cfg(feature = "local_fs")]
@@ -749,7 +747,7 @@ pub(crate) fn initialize_app(
     // consumes; loading everything is expensive on large databases.
     let persisted_data_scope = persistence::PersistedDataScope::Full;
     let (sqlite_data, writer_handles) =
-        persistence::initialize(ctx, persistence_scope, persisted_data_scope);
+        persistence::initialize(persistence_scope, persisted_data_scope);
     timer.mark_interval_end("SQLITE_INITIALIZED");
 
     let persistence_writer = PersistenceWriter::new(writer_handles);
@@ -812,8 +810,6 @@ pub(crate) fn initialize_app(
             current_workspace_uid,
         )
     });
-
-    ctx.add_singleton_model(AntivirusInfo::new);
 
     ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
 

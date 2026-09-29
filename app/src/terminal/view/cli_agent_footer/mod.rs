@@ -35,8 +35,6 @@ use crate::appearance::Appearance;
 use crate::context_chips::display_chip::{DisplayChip, DisplayChipConfig, PromptChipShellCommand};
 use crate::context_chips::prompt_type::PromptType;
 use crate::context_chips::{self, ContextChipKind};
-use crate::send_telemetry_from_ctx;
-use crate::server::telemetry::TelemetryEvent;
 use crate::settings::{CodeSettings, CodeSettingsChangedEvent};
 use crate::settings_view::SettingsSection;
 use crate::terminal::cli_agent_sessions::{
@@ -431,14 +429,6 @@ impl TypedActionView for CLIAgentFooter {
                 self.select_file(ctx);
             }
             CLIAgentFooterAction::InsertFilePath(path) => {
-                if let Some(agent) = self.cli_agent(ctx) {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::CLIAgentToolbarImageAttached {
-                            cli_agent: agent.into(),
-                        },
-                        ctx
-                    );
-                }
                 let path_with_space = format!("{path} ");
                 if self.has_active_cli_agent_input_session(ctx) {
                     ctx.emit(CLIAgentFooterEvent::InsertIntoCLIRichInput(path_with_space));
@@ -447,7 +437,7 @@ impl TypedActionView for CLIAgentFooter {
                 }
             }
             CLIAgentFooterAction::ToggleFileExplorer => {
-                ctx.emit(CLIAgentFooterEvent::ToggleFileExplorer(self.cli_agent(ctx)));
+                ctx.emit(CLIAgentFooterEvent::ToggleFileExplorer);
             }
             CLIAgentFooterAction::ToggleRichInput => {
                 if self.has_active_cli_agent_input_session(ctx) {
@@ -476,9 +466,8 @@ pub enum CLIAgentFooterEvent {
     WriteToPty(String),
     /// Insert text into the CLI agent rich input.
     InsertIntoCLIRichInput(String),
-    /// Toggle the file explorer side panel. `None` when no CLI agent session is
-    /// attached to this pane.
-    ToggleFileExplorer(Option<CLIAgent>),
+    /// Toggle the file explorer side panel.
+    ToggleFileExplorer,
     OpenRichInput,
     HideRichInput,
     ToggledChipMenu {

@@ -157,7 +157,7 @@ fn footer_hide_event_closes_the_rich_input_and_restores_shell_mode() {
         terminal.update(&mut app, |view, ctx| {
             simulate_long_running_command(view);
             start_cli_agent_session(view, ctx);
-            view.open_cli_agent_rich_input(CLIAgentInputEntrypoint::FooterButton, ctx);
+            view.open_cli_agent_rich_input(ctx);
             assert!(view.has_active_cli_agent_input_session(ctx));
         });
         terminal.read(&app, |view, ctx| {

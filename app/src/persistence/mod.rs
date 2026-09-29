@@ -35,7 +35,7 @@ pub use sqlite::database_file_path_for_scope;
 pub use sqlite::establish_ro_connection;
 use warp_core::command::ExitCode;
 use warp_errors::report_error;
-use warpui::{AppContext, Entity, SingletonEntity};
+use warpui::{Entity, SingletonEntity};
 
 use self::model::Project;
 use crate::app_state::AppState;
@@ -101,7 +101,6 @@ impl PersistedDataScope {
 /// available.
 #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
 pub fn initialize(
-    ctx: &mut AppContext,
     scope: PersistenceScope,
     data_scope: PersistedDataScope,
 ) -> (Option<Box<PersistedData>>, Option<WriterHandles>) {
@@ -110,7 +109,7 @@ pub fn initialize(
     let _ = CURRENT_SCOPE.set(scope.clone());
     cfg_if::cfg_if! {
         if #[cfg(feature = "local_fs")] {
-            sqlite::initialize(ctx, scope, data_scope)
+            sqlite::initialize(scope, data_scope)
         } else {
             (None, None)
         }

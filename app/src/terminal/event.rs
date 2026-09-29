@@ -1,7 +1,6 @@
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-use std::time::Duration;
 
 use instant::Instant;
 pub use warp_terminal::event::{ExecutedExecutorCommandEvent, ParseGeneratorOutputError};
@@ -10,7 +9,6 @@ use warp_util::lazy::Lazy;
 use super::history::HistoryEntry;
 use super::model::ansi::ExternalShellWidgetSelectionValue;
 use super::model::block::BlockId;
-use super::model::lifecycle::LifecycleRecoveryRecord;
 use super::model::session::{SessionId, SessionInfo};
 use super::model::terminal_model::{BlockIndex, ExitReason};
 use crate::server::telemetry::ImageProtocol;
@@ -49,8 +47,6 @@ pub enum Event {
     /// the requested-command finish detector) should keep listening only to
     /// `BlockMetadataReceived` so they preserve their once-per-block contract.
     BlockWorkingDirectoryUpdated(BlockWorkingDirectoryUpdatedEvent),
-    /// Sent after a background block is started and added to the block list.
-    BackgroundBlockStarted,
     ClipboardStore(ClipboardType, String),
     ClipboardLoad(
         ClipboardType,
@@ -92,8 +88,6 @@ pub enum Event {
     /// buffer, and re-echoes them after Precmd.
     Typeahead,
     Handler(HandlerEvent),
-    /// Carries non-UGC lifecycle diagnostics to the model dispatcher for telemetry.
-    LifecycleRecovery(LifecycleRecoveryRecord),
     ExternalShellWidgetSelection(ExternalShellWidgetSelectionValue),
     ShellSpawned(ShellType),
     ImageReceived {
@@ -180,9 +174,6 @@ pub struct BootstrappedEvent {
     // functionally needs to be wrapped in an `Box`.
     pub session_info: Box<SessionInfo>,
     pub restored_block_commands: Vec<HistoryEntry>,
-    /// The time we spent sourcing the user's rcfiles, in seconds.  This may be
-    /// None if the information was not provided by the shell.
-    pub rcfiles_duration_seconds: Option<f64>,
 }
 
 #[derive(Clone)]
@@ -197,13 +188,7 @@ pub struct BlockCompletedEvent {
 
 #[derive(Clone)]
 pub struct AfterBlockCompletedEvent {
-    /// The delay from the CommandFinished ansi hook to the Precmd hook.
-    /// This value is only provided for the blocks that the user directly
-    /// executes (so it's not provided if this is a restored block from session
-    /// restoration or a bootstrapping block).
-    pub command_finished_to_precmd_delay: Option<Duration>,
     pub block_type: BlockType,
-    pub num_secrets_obfuscated: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -377,7 +362,6 @@ impl Debug for Event {
                 event.block_metadata, event.is_done_bootstrapping
             ),
             Event::AfterBlockStarted { .. } => write!(f, "BlockExecutionStarted"),
-            Event::BackgroundBlockStarted => write!(f, "BackgroundBlockStarted"),
             Event::VisibleBootstrapBlock => write!(f, "VisibleBootstrapBlock"),
             Event::Title(title) => write!(f, "Title({title})"),
             Event::ClipboardStore(_, text) => write!(f, "ClipboardStore({text})"),
@@ -408,7 +392,6 @@ impl Debug for Event {
             Event::HonorPS1OutOfSync => write!(f, "HonorPS1OutOfSync"),
             Event::Typeahead => write!(f, "Typeahead"),
             Event::Handler(handler_event) => write!(f, "Handler({handler_event:?}))"),
-            Event::LifecycleRecovery(record) => write!(f, "LifecycleRecovery({record:?})"),
             Event::ExternalShellWidgetSelection(data) => {
                 write!(
                     f,

@@ -46,8 +46,8 @@ use vim::{
     vim_word_iterator_from_offset,
 };
 use warp_completer::completer::Description;
+use warp_core::safe_error;
 use warp_core::semantic_selection::SemanticSelection;
-use warp_core::{safe_error, send_telemetry_from_ctx};
 use warp_editor::editor::NavigationKey;
 use warp_util::path::ShellFamily;
 use warp_util::user_input::UserInput;
@@ -94,14 +94,12 @@ use crate::editor::autosuggestion_ignore_view::{AutosuggestionIgnore, Autosugges
 use crate::features::FeatureFlag;
 use crate::search::at_menu::mixer::AtMenuSearchableAction;
 use crate::search::at_menu::view::{AtMenu, AtMenuCategory, AtMenuEvent};
-use crate::server::telemetry::TelemetryEvent;
 use crate::settings::{
     AppEditorSettings, AppEditorSettingsChangedEvent, CursorBlink, CursorDisplayType,
     InputSettings, SelectionSettings,
 };
 use crate::settings_view::flags;
 use crate::terminal::grid_size_util::grid_cell_dimensions;
-use crate::terminal::input::InputType;
 use crate::terminal::input::pending_attachments::{
     PendingAttachment, PendingAttachmentsModel, PendingFile,
 };
@@ -2914,58 +2912,21 @@ impl EditorView {
 
         let at_menu_state = if options.include_at_menu {
             let at_menu = ctx.add_typed_action_view(AtMenu::new);
-            ctx.subscribe_to_view(&at_menu, |me, _, event: &AtMenuEvent, ctx| {
-                let is_udi_enabled = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
-                let current_input_mode = if me.is_prompt_input {
-                    InputType::Prompt
-                } else {
-                    InputType::Shell
-                };
-                match event {
-                    AtMenuEvent::Close {
-                        item_count,
-                        query_length,
-                    } => {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::AtMenuInteracted {
-                                action: "cancelled".to_string(),
-                                item_count: *item_count,
-                                query_length: Some(*query_length),
-                                is_udi_enabled,
-                                current_input_mode,
-                            },
-                            ctx
-                        );
-
-                        ctx.emit(Event::SetAtMenuOpen(false));
-                        ctx.focus_self();
-                        ctx.notify();
-                    }
-                    AtMenuEvent::ResultAccepted {
-                        action,
-                        item_count,
-                        query_length,
-                    } => {
-                        send_telemetry_from_ctx!(
-                            TelemetryEvent::AtMenuInteracted {
-                                action: "item_selected".to_string(),
-                                item_count: *item_count,
-                                query_length: Some(*query_length),
-                                is_udi_enabled,
-                                current_input_mode,
-                            },
-                            ctx
-                        );
-
-                        ctx.emit(Event::AcceptAtMenuItem(action.clone()));
-                        ctx.focus_self();
-                        ctx.notify();
-                    }
-                    AtMenuEvent::CategorySelected { category } => {
-                        ctx.emit(Event::SelectAtMenuCategory(*category));
-                        ctx.focus_self();
-                        ctx.notify();
-                    }
+            ctx.subscribe_to_view(&at_menu, |_, _, event: &AtMenuEvent, ctx| match event {
+                AtMenuEvent::Close => {
+                    ctx.emit(Event::SetAtMenuOpen(false));
+                    ctx.focus_self();
+                    ctx.notify();
+                }
+                AtMenuEvent::ResultAccepted { action } => {
+                    ctx.emit(Event::AcceptAtMenuItem(action.clone()));
+                    ctx.focus_self();
+                    ctx.notify();
+                }
+                AtMenuEvent::CategorySelected { category } => {
+                    ctx.emit(Event::SelectAtMenuCategory(*category));
+                    ctx.focus_self();
+                    ctx.notify();
                 }
             });
 
@@ -4082,18 +4043,16 @@ impl EditorView {
             return;
         }
 
-        let mut cleared_buffer_len = 0;
         if !self.vim_mode_enabled(ctx)
             || self
                 .vim_mode(ctx)
                 .is_some_and(|vim_mode| matches![vim_mode, VimMode::Normal | VimMode::Insert])
         {
-            cleared_buffer_len = self.buffer_size(ctx).as_usize();
             self.clear_buffer(ctx);
         }
         self.vim_interrupt(ctx);
 
-        ctx.emit(Event::CtrlC { cleared_buffer_len });
+        ctx.emit(Event::CtrlC);
     }
 
     // Clears editor buffer and conditionally resets the undo stack.
@@ -4871,16 +4830,6 @@ impl EditorView {
         if !self.image_context_options.is_enabled() {
             return;
         }
-
-        let is_udi_enabled = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
-
-        send_telemetry_from_ctx!(
-            TelemetryEvent::AttachedImagesToAgentModeQuery {
-                num_images: pending_images.len(),
-                is_udi_enabled,
-            },
-            ctx
-        );
 
         self.process_attached_images_future_handle = Some(ctx.spawn(
             async move {
@@ -7767,9 +7716,7 @@ pub enum Event {
     /// buffer.
     BackspaceAtBeginningOfBuffer,
     BackspaceOnEmptyBuffer,
-    CtrlC {
-        cleared_buffer_len: usize,
-    },
+    CtrlC,
     BufferReplaced,
     BufferReinitialized,
     CmdUpOnFirstRow,

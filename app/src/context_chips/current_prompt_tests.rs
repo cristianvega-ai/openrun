@@ -277,7 +277,6 @@ fn test_shell_chip_is_disabled_when_required_executable_is_missing() {
                 SessionInfo::new_for_test().with_id(session_id),
                 "test command".to_string(),
                 vec![],
-                None,
                 ctx,
             );
             sessions
@@ -429,7 +428,6 @@ fn test_disabling_chips() {
                 SessionInfo::new_for_test().with_id(session_id),
                 "test command".to_string(),
                 vec![],
-                None,
                 ctx,
             );
             sessions
@@ -674,7 +672,6 @@ fn test_ps1_without_active_agent_surface_runs_no_footer_generators() {
                 SessionInfo::new_for_test().with_id(session_id),
                 "test command".to_string(),
                 vec![],
-                None,
                 ctx,
             );
             sessions

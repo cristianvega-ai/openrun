@@ -8,7 +8,6 @@ use super::model::ansi;
 use super::model::ansi::ExternalShellWidgetSelectionValue;
 use super::model::block::BlockId;
 use super::model::completions::ShellCompletion;
-use super::model::lifecycle::LifecycleTelemetryEvent;
 use super::model::session::{SessionId, SessionInfo};
 use super::model::terminal_model::{CommandType, ExitReason, HandlerEvent};
 use crate::server::telemetry::ImageProtocol;
@@ -163,7 +162,6 @@ impl ModelEventDispatcher {
             Event::BlockWorkingDirectoryUpdated(block_working_directory_updated_event) => {
                 ModelEvent::BlockWorkingDirectoryUpdated(block_working_directory_updated_event)
             }
-            Event::BackgroundBlockStarted => ModelEvent::BackgroundBlockStarted,
             Event::ClipboardStore(clipboard_type, text) => {
                 ModelEvent::ClipboardStore(clipboard_type, text)
             }
@@ -214,10 +212,6 @@ impl ModelEventDispatcher {
             Event::PluggableNotification { title, body } => {
                 ModelEvent::PluggableNotification { title, body }
             }
-            Event::LifecycleRecovery(record) => {
-                crate::send_telemetry_from_ctx!(LifecycleTelemetryEvent::Recovery(record), ctx);
-                return;
-            }
             _ => return,
         };
 
@@ -234,7 +228,6 @@ impl ModelEventDispatcher {
             session_info,
             spawning_command,
             restored_block_commands,
-            rcfiles_duration_seconds,
         } = event;
 
         self.sessions.update(ctx, |sessions, ctx| {
@@ -242,7 +235,6 @@ impl ModelEventDispatcher {
                 *session_info,
                 spawning_command,
                 restored_block_commands,
-                rcfiles_duration_seconds,
                 ctx,
             );
         });
@@ -278,8 +270,6 @@ pub enum ModelEvent {
     /// Sent when an existing block's working directory has been updated
     /// outside of the precmd path (e.g. via an OSC 7 escape sequence).
     BlockWorkingDirectoryUpdated(BlockWorkingDirectoryUpdatedEvent),
-    /// Sent after a background block is started and added to the block list.
-    BackgroundBlockStarted,
     ClipboardStore(ClipboardType, String),
     ClipboardLoad(
         ClipboardType,

@@ -184,8 +184,6 @@ impl ShellStarter {
                         session_id,
                     }));
                 }
-                let unsupported_shell = pw_shell_path;
-
                 let (resolved_default_shell_path, shell_type) = if let Some(shell_path_and_type) =
                     supported_shell_path_and_type(ZSH_SHELL_PATH)
                 {
@@ -206,7 +204,6 @@ impl ShellStarter {
                     session_id,
                 );
                 Some(ShellStarterSource::Fallback {
-                    unsupported_shell,
                     starter: DirectShellStarter {
                         args,
                         shell_path: resolved_default_shell_path,
@@ -328,10 +325,7 @@ pub enum ShellStarterSource {
     /// On Windows, this an ordered list of shells hardcoded _by Warp_.
     UserDefault(DirectShellStarter),
     /// We weren't able to find a shell that could be bootstrapped for the user.
-    Fallback {
-        unsupported_shell: Option<String>,
-        starter: DirectShellStarter,
-    },
+    Fallback { starter: DirectShellStarter },
 }
 
 impl ShellStarterSource {

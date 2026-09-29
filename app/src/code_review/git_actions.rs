@@ -6,7 +6,7 @@
 //! tied to a diff-state model, so this logic lives here rather than on a
 //! model.
 //!
-//! Callers own everything *around* the action: UI (toasts, telemetry, dialog
+//! Callers own everything *around* the action: UI (toasts, dialog
 //! lifecycle), the model (applying the returned delta to a `DiffStateModel`),
 //! and any execution-time guards.
 

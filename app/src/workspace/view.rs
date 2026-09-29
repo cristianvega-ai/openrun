@@ -125,11 +125,8 @@ use crate::code::editor::{add_color, remove_color};
 #[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeManager;
 use crate::code::editor_management::CodeSource;
-#[cfg(feature = "local_fs")]
-use crate::code_review::CodeReviewTelemetryEvent;
 use crate::code_review::GlobalCodeReviewModel;
 use crate::code_review::diff_state::DiffStateModel;
-use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
 use crate::context_chips::ChipRuntimeCapabilities;
 use crate::default_terminal::DefaultTerminal;
@@ -589,8 +586,6 @@ struct CodeReviewPaneContext {
 struct RightPanelUpdateParams<'a> {
     pane_group: &'a ViewHandle<PaneGroup>,
     target_open_state: bool,
-    entrypoint: Option<CodeReviewPaneEntrypoint>,
-    cli_agent: Option<crate::terminal::CLIAgent>,
     review_pane_context: Option<&'a CodeReviewPaneContext>,
 }
 
@@ -6290,13 +6285,7 @@ impl Workspace {
             diff_state_model,
         };
 
-        self.open_right_panel(
-            &context,
-            &pane_group,
-            panel_context.entrypoint,
-            panel_context.cli_agent,
-            ctx,
-        );
+        self.open_right_panel(&context, &pane_group, ctx);
     }
 
     fn update_right_panel_open_state(
@@ -6346,18 +6335,6 @@ impl Workspace {
                     // If current_width is not the default, it means we have a width from a previous tab,
                     // so we don't need to do anything - the width is already preserved
                 }
-                send_telemetry_from_ctx!(
-                    CodeReviewTelemetryEvent::PaneOpened {
-                        is_local: panel_update_params
-                            .review_pane_context
-                            .and_then(|context| context.repo_path.as_ref())
-                            .map(LocalOrRemotePath::is_local),
-                        entrypoint: panel_update_params.entrypoint.unwrap_or_default(),
-                        is_code_mode_v2: true,
-                        cli_agent: panel_update_params.cli_agent.map(Into::into),
-                    },
-                    ctx
-                );
                 self.setup_code_review_panel(panel_update_params.review_pane_context, ctx);
             }
         } else {
@@ -6398,8 +6375,6 @@ impl Workspace {
             RightPanelUpdateParams {
                 pane_group: pane_group_handle,
                 target_open_state,
-                entrypoint: Some(CodeReviewPaneEntrypoint::RightPanel),
-                cli_agent: None,
                 review_pane_context: context.as_ref(),
             },
             ctx,
@@ -6411,8 +6386,6 @@ impl Workspace {
         &mut self,
         context: &CodeReviewPaneContext,
         pane_group_handle: &ViewHandle<PaneGroup>,
-        entrypoint: CodeReviewPaneEntrypoint,
-        cli_agent: Option<crate::terminal::CLIAgent>,
         ctx: &mut ViewContext<Self>,
     ) {
         if pane_group_handle.as_ref(ctx).right_panel_open {
@@ -6428,8 +6401,6 @@ impl Workspace {
             RightPanelUpdateParams {
                 pane_group: pane_group_handle,
                 target_open_state: true,
-                entrypoint: Some(entrypoint),
-                cli_agent,
                 review_pane_context: Some(context),
             },
             ctx,
@@ -6446,8 +6417,6 @@ impl Workspace {
         &mut self,
         _context: &CodeReviewPaneContext,
         _pane_group_handle: &ViewHandle<PaneGroup>,
-        _entrypoint: CodeReviewPaneEntrypoint,
-        _cli_agent: Option<crate::terminal::CLIAgent>,
         _ctx: &mut ViewContext<Self>,
     ) {
     }
@@ -6461,8 +6430,6 @@ impl Workspace {
             RightPanelUpdateParams {
                 pane_group: pane_group_handle,
                 target_open_state: false,
-                entrypoint: None,
-                cli_agent: None,
                 review_pane_context: None,
             },
             ctx,
@@ -15023,13 +14990,7 @@ impl TypedActionView for Workspace {
                                 repo_path,
                                 diff_state_model,
                             };
-                            self.open_right_panel(
-                                &context,
-                                &pane_group_handle,
-                                CodeReviewPaneEntrypoint::GitDiffChip,
-                                None,
-                                ctx,
-                            );
+                            self.open_right_panel(&context, &pane_group_handle, ctx);
                         }
                     }
                 }

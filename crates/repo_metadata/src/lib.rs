@@ -40,7 +40,6 @@ pub mod local_model;
 pub mod repositories;
 pub mod repository;
 pub mod repository_identifier;
-mod telemetry;
 pub mod watcher;
 pub mod wrapper_model;
 

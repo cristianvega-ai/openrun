@@ -21,7 +21,6 @@ use num_traits::FromPrimitive;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
 use warp_errors::report_error;
-use warpui::AppContext;
 use warpui::platform::FullscreenState;
 use warpui::windowing::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 
@@ -45,8 +44,8 @@ use crate::auth::UserUid;
 use crate::code::editor_management::CodeSource;
 use crate::persistence::block_list::get_all_restored_blocks;
 use crate::persistence::model::{CODE_REVIEW_PANE_KIND, NewTeamSettings};
+use crate::safe_info;
 use crate::server::ids::ServerId;
-use crate::server::telemetry::TelemetryEvent;
 use crate::settings_view::SettingsSection;
 use crate::suggestions::ignored_suggestions_model::SuggestionType;
 use crate::tab::SelectedTabColor;
@@ -58,7 +57,6 @@ use crate::workspace::tab_group::TabGroupId;
 use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
 use crate::workspaces::team::Team as TeamMetadata;
 use crate::workspaces::workspace::{Workspace as WorkspaceMetadata, WorkspaceUid};
-use crate::{safe_info, send_telemetry_from_app_ctx};
 
 diesel::define_sql_function! {
     fn json_extract(target: diesel::sql_types::Text, path: diesel::sql_types::Text) -> diesel::sql_types::Text;
@@ -75,7 +73,6 @@ const WARP_SQLITE_FILE_NAME: &str = "warp.sqlite";
 /// Reads from the sqlite database to get the app state for session restoration.
 /// Starts a writer thread that listens for ModelEvents and processes them.
 pub fn initialize(
-    ctx: &mut AppContext,
     scope: PersistenceScope,
     data_scope: PersistedDataScope,
 ) -> (Option<Box<PersistedData>>, Option<WriterHandles>) {
@@ -86,15 +83,11 @@ pub fn initialize(
     let database_path = database_file_path_for_scope(&scope);
     match init_db(&scope) {
         Ok(mut conn) => {
-            let persisted_data = read_persisted_data(&mut conn, ctx, data_scope);
+            let persisted_data = read_persisted_data(&mut conn, data_scope);
 
             let writer_handles = match start_writer(conn, database_path.clone()) {
                 Ok(writer_handles) => Some(writer_handles),
                 Err(err) => {
-                    send_telemetry_from_app_ctx!(
-                        TelemetryEvent::DatabaseWriteError(err.to_string()),
-                        ctx
-                    );
                     report_db_error("starting writer", err, &database_path);
                     None
                 }
@@ -103,10 +96,6 @@ pub fn initialize(
             (persisted_data, writer_handles)
         }
         Err(err) => {
-            send_telemetry_from_app_ctx!(
-                TelemetryEvent::DatabaseStartUpError(err.to_string()),
-                ctx
-            );
             report_db_error("initialization", err, &database_path);
             (None, None)
         }
@@ -115,13 +104,11 @@ pub fn initialize(
 
 fn read_persisted_data(
     conn: &mut SqliteConnection,
-    ctx: &mut AppContext,
     data_scope: PersistedDataScope,
 ) -> Option<Box<PersistedData>> {
     match read_sqlite_data(conn, data_scope) {
         Ok(app_state) => Some(Box::new(app_state)),
         Err(err) => {
-            send_telemetry_from_app_ctx!(TelemetryEvent::DatabaseReadError(err.to_string()), ctx);
             report_error!(anyhow::Error::new(err).context("Failed to read persisted data"));
             None
         }

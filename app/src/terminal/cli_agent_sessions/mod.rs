@@ -56,38 +56,11 @@ pub enum CLIAgentInputState {
     Closed,
     /// The rich input editor is open.
     Open {
-        /// How this session was opened (for telemetry).
-        entrypoint: CLIAgentInputEntrypoint,
         /// The input config that was active before opening rich input.
         previous_input_config: InputConfig,
         /// Whether the previous lock state was established while the input buffer was empty.
         previous_was_lock_set_with_empty_buffer: bool,
     },
-}
-
-/// Why the CLI agent rich input was closed (for telemetry).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum CLIAgentRichInputCloseReason {
-    /// User explicitly closed (Escape, Ctrl-G, footer button).
-    Manual,
-    /// Auto-closed due to agent status change (e.g. Blocked).
-    AutoToggle,
-    /// Auto-dismissed after submitting a prompt.
-    Submit,
-    /// Closed for another reason (chip removed, session ended, shared session sync).
-    Other,
-}
-
-/// How a [`CLIAgentInputState`] was opened.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum CLIAgentInputEntrypoint {
-    /// User pressed Ctrl-G while a CLI agent was active.
-    CtrlG,
-    /// User clicked the rich input button in the CLI agent footer.
-    FooterButton,
-    /// Automatically opened when the CLI agent resumed work (left a blocked state)
-    /// and the auto-show setting is enabled.
-    AutoShow,
 }
 
 impl CLIAgentSessionContext {
@@ -438,7 +411,6 @@ impl CLIAgentSessionsModel {
     pub fn open_input(
         &mut self,
         terminal_view_id: EntityId,
-        entrypoint: CLIAgentInputEntrypoint,
         previous_input_config: InputConfig,
         previous_was_lock_set_with_empty_buffer: bool,
         should_auto_toggle_input: bool,
@@ -450,7 +422,6 @@ impl CLIAgentSessionsModel {
 
         let previous_input_state = session.input_state;
         session.input_state = CLIAgentInputState::Open {
-            entrypoint,
             previous_input_config,
             previous_was_lock_set_with_empty_buffer,
         };

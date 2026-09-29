@@ -61,7 +61,6 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Skills](#skills) — deleted the skills feature (`SKILL.md` discovery, the `/skills` and `/open-skill` commands, the `@`-menu skills category, the `read_skill` tool, bundled and channel-gated skill files) and the "Fix with Warp Agent" and tab-config-editor agent buttons that invoked bundled skills
 - [AI plan documents and to-do popup](#ai-plan-documents-and-to-do-popup) — removed the plan (AI document) pane, the plan menu and plan/to-do chips, the to-do popup and the plan-related shortcuts and attachments
 - [Voice input](#voice-input) — deleted voice input end to end (microphone capture, Wispr Flow transcription through Warp's server, the mic buttons, the toggle-key shortcut, the `/voice` command and the voice settings), plus the unused `WarpDriveContextEnabled` setting
-
 - [Warp Drive: environment-variable collections](#warp-drive-environment-variable-collections) — removed the environment-variable collection objects, editor pane, invocation blocks, subshell invocation, workflow env-var selectors and the search filter
 - [Warp Drive: 1Password and LastPass secrets](#warp-drive-1password-and-lastpass-secrets) — removed the external secret manager integration, whose only entry point was environment-variable collections
 - [Session sharing: viewer, joins and shared-session model state](#session-sharing-viewer-joins-and-shared-session-model-state) — removed joining and viewing another user's shared session (the viewer network, presence, tombstones, join links and the viewer paths through the terminal model, input, panes and workspace) and the shared-session state and replication in the terminal model and input editor
@@ -99,6 +98,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Docs, skills, comments and icons: leftover AI mentions](#docs-skills-comments-and-icons-leftover-ai-mentions) — removed the AI and skills text from `AGENTS.md`, `README.md`, `FAQ.md`, `CONTRIBUTING.md`, the repo-local skills and the Nix flake; rewrote stale Agent Mode, Warp AI and AI-block comments; deleted 37 unused AI icon variants and 36 SVGs
 - [Warp help, docs and feedback links](#warp-help-docs-and-feedback-links) — removed the Help menu, every warp.dev docs, Slack, privacy, feedback and issue link from the UI, and the resource-center main page; the resource center is now the keyboard-shortcuts panel
 - [Cloud-object infrastructure: model, sync queue, update manager and listener](#cloud-object-infrastructure-model-sync-queue-update-manager-and-listener) — deleted `CloudModel`, `CloudViewModel`, `ObjectActions`, `UpdateManager`, the real-time listener, the sync queue, the object API client and the object `ModelEvent`s; the persisted cloud-object rows are no longer read or written; the three `cloud_object_*` crates are gone
+- [Telemetry call sites: terminal, editor and code layer](#telemetry-call-sites-terminal-editor-and-code-layer) — deleted every telemetry emission in terminal, pane group, editor, code, code review, search, URI, prompt, persistence, undo-close, view components, system, quit warning and repo metadata, with the parameters, fields and helpers that only fed them
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2597,3 +2597,24 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Left for TEL-4: `AnonymousUserHitCloudObjectLimit`, `DriveSharingOnboardingBlockShown` and the other Drive telemetry variants with plain payloads.
 - Left for FLAGS-1: `FeatureFlag::SharedWithMe` and the other Drive flags.
 - Left for WASM-1: `workspace/home.rs` still lists Warp Drive among the web home page features.
+
+## Telemetry call sites: terminal, editor and code layer
+**Why:** TEL-1 made the telemetry macros no-ops, but every call site, the values computed to feed events and the per-feature event enums were still in the code. This removes them from the terminal, editor and code layer so that TEL-4 can delete the framework.
+
+**Removed:**
+- Every `send_telemetry_*!` statement in `terminal/`, `pane_group/`, `editor/`, `code/`, `code_review/`, `search/`, `uri/`, `prompt/`, `persistence/`, `undo_close/`, `view_components/`, `system/`, `quit_warning/`, `crates/repo_metadata`, plus the two LSP call sites in `workspace_metadata/mod.rs` and `settings_view/projects_page.rs` (needed because their event enum is gone).
+- Per-feature event enums: `code/lsp_telemetry.rs`, `code_review/telemetry_event.rs` (with `CodeReviewPaneEntrypoint` and the other classification enums), `terminal/model/lifecycle/telemetry.rs` (lifecycle recovery diagnostics: `LifecycleRecoveryRecord`, the rate limiter, `Event::LifecycleRecovery`, `LifecycleInputKind`, `LifecycleTransition::recovery_record` and the debug log of the record), `crates/repo_metadata/src/telemetry.rs`, and `app/src/antivirus/` (the Windows antivirus scan only fed an event, along with the `Win32_System_SecurityCenter` feature).
+- `system/info.rs`: the resource-usage reporter, CPU and memory statistics, the memory-spike check, the five-second polling loop, `SystemInfoEvent`, and `system/memory_footprint.rs` with its tests. `SystemInfo` keeps only the process-table queries that the Windows Kaspersky check uses. The `num_cpus`, `static_assertions` and `mach2` dependencies of `app` and the `serde_json`, `strum` and `strum_macros` dependencies of `repo_metadata` were only used by this code.
+- `warp_terminal`: `PtySpawnHooks`, `PtySpawnMode`, `local_tty::recorder` (PTY throughput), `ShellStarterSource::Fallback::unsupported_shell`. In the app: `AppPtySpawnHooks`, the `RecordPtyThroughput` block, `get_shell_starter`, `TerminalView::{get_shell_starter_local, auth_state, toggle_file_tree}`.
+- Parameters, fields and events that existed only for events: the code-review pane `entrypoint` and `cli_agent` (`CodeReviewPanelArg`, `RightPanelUpdateParams`, `TerminalAction::ToggleCodeReviewPane`), `ReviewSubmissionResult::Success` counts, `DiffStateModelEvent::NewDiffsComputed::load_duration` with the load timer, `BackendOrigin`, `DiffOperation`, `RelocateCommentsResult`, `CodeEditorEvent::CommentEditorOpened`, `CLIAgentInputEntrypoint`, `CLIAgentRichInputCloseReason`, the toggle-file-explorer agent payload, `AtMenuEvent` counts, `EditorEvent::CtrlC` length, `SearchBarEvent::BufferCleared` length, `AfterBlockCompletedEvent::{command_finished_to_precmd_delay, num_secrets_obfuscated}` with `latest_block_finished_time`, `BootstrappedEvent::rcfiles_duration_seconds`, `Sessions` pending start times (now a set), `ModelEvent::BackgroundBlockStarted`, the block-filter select-all tracking, `OpenedFromClick`, `PaneHeaderAction::PaneHeaderDragStarted`, the `source` payloads of `ToggleBlockFilterOnSelectedOrLastBlock` and the notifications-discovery `TurnOn`, `HistoryUpMode`, `TelemetryInputSuggestionsMode`, `ContextChipKind::telemetry_name`, `AltScreenPaddingMode::telemetry_string`.
+- `events.rs`: the `ConfirmSuggestion`, `CLIAgentRichInputOpened` and `CLIAgentRichInputClosed` variants (their payload types were deleted). TEL-4 deletes the rest.
+
+**Modified:**
+- Unused imports left by the removals were fixed with the compiler's suggestions, restricted to files touched here.
+- `TerminalView::insert_shell_process_terminated_banner` no longer computes exit details; it only inserts the banner.
+- `enable_vim_keybindings` reports a failed setting write through `report_if_error!` instead of ignoring it.
+
+**User-visible impact:** none. No usage data was being sent since TEL-1; the Windows antivirus scan and the periodic memory sampling no longer run.
+
+**Notes:**
+- Left for TEL-3 or TEL-4: `telemetry_value` (`AvailableShell`) and `telemetry_source_name` (`CodeSource`), still called from `workspace/` and `events.rs`; the `telemetry_payload` method of `DataSourceRunError` in `warp_search_core`; the event-source enums in `events.rs` (`PaletteSource`, `FileTreeSource`, `LaunchConfigUiLocation`, ...) still used as payloads in `workspace/` and `root_view.rs`.
