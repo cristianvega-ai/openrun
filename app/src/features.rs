@@ -17,12 +17,13 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
     // Enable features overridden for the given channel.
     let mut flags = ChannelState::additional_features();
 
-    flags.extend([
+    let platform_flags: &[FeatureFlag] = &[
         #[cfg(not(windows))]
         FeatureFlag::ITermImages,
         #[cfg(not(windows))]
         FeatureFlag::KittyImages,
-    ]);
+    ];
+    flags.extend(platform_flags.iter().copied());
 
     flags
 }

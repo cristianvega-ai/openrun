@@ -15,7 +15,7 @@ use virtual_fs::{Stub, VirtualFS};
 use warp_util::standardized_path::StandardizedPath;
 use warpui_core::r#async::FutureExt as _;
 use warpui_core::{App, ModelHandle};
-#[cfg(feature = "local_fs")]
+#[cfg(all(unix, feature = "local_fs"))]
 use watcher::BulkFilesystemWatcherEvent;
 
 use crate::RepoMetadataError;

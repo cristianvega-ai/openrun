@@ -18,9 +18,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Result, anyhow, bail};
 use bimap::BiMap;
-use cosmic_text::{
-    Align, Attrs, AttrsList, BidiParagraphs, LayoutGlyph, LayoutLine, ShapeLine, Shaping, Wrap,
-};
+use cosmic_text::{Align, Attrs, AttrsList, BidiParagraphs, LayoutLine, ShapeLine, Shaping, Wrap};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use fontdb::Source;
@@ -909,7 +907,6 @@ impl TextLayoutSystem {
     #[cfg(target_os = "windows")]
     fn load_fallback_fonts(&self, _font_id: FontId, _family_name: &str, _properties: Properties) {}
 
-    #[allow(clippy::too_many_arguments)]
     fn create_text_frame(
         &self,
         layout_lines: impl Iterator<Item = (LayoutLine, bool)>,
@@ -918,7 +915,6 @@ impl TextLayoutSystem {
         max_height: f32,
         alignment: TextAlignment,
         str_index_map: &StrIndexMap,
-        text: &str,
     ) -> TextFrame {
         let (_, upper_bound) = layout_lines.size_hint();
         let mut lines = match upper_bound {
@@ -940,7 +936,6 @@ impl TextLayoutSystem {
                 text_styles_map,
                 is_last_line.then_some(ClipConfig::default()),
                 str_index_map,
-                text,
                 line_glyph_start_index,
                 has_trailing_newline,
             );
@@ -982,7 +977,6 @@ impl TextLayoutSystem {
         text_styles_map: &TextStylesMap,
         clip_config: Option<ClipConfig>,
         str_index_map: &StrIndexMap,
-        text: &str,
         line_glyph_start_index: usize,
         has_trailing_newline: bool,
     ) -> Line {
@@ -1346,7 +1340,6 @@ impl platform::TextLayoutSystem for TextLayoutSystem {
             &text_styles_map,
             Some(clip_config),
             &str_index_map,
-            &text,
             0,
             false,
         )
@@ -1436,7 +1429,6 @@ impl platform::TextLayoutSystem for TextLayoutSystem {
             max_height,
             alignment,
             &str_index_map,
-            text,
         )
     }
 }

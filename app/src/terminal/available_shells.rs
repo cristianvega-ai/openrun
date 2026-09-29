@@ -637,8 +637,6 @@ impl AvailableShells {
     fn locate_msys2_executables() -> Vec<PathBuf> {
         use std::env;
 
-        use warp_core::features::FeatureFlag;
-
         let mut paths = Vec::new();
 
         // We look for Git Bash at `$env:LocalAppData\Programs\Git\usr\bin`.

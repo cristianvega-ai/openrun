@@ -117,6 +117,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Script cleanup: channel arguments and stale tests](#script-cleanup-channel-arguments-and-stale-tests) — bundle, run and icon scripts build `warp-oss` only and take no channel argument; `check_license_config_sync` works without Python 3.11; two stale script tests fixed; fixture author made generic
 - [Offline guardrails (final)](#offline-guardrails-final) — the `offline-audit` CI job blocks, an idle two-minute sandboxed session joins it, the SSH tests that needed Warp's GCP VM and the Metal-skip build hook are gone, host patterns cover the removed features' hosts
 - [Clippy and dead-code fixes](#clippy-and-dead-code-fixes) — restored a clean `cargo clippy --workspace --all-targets --tests -- -D warnings`
+- [Linux and Windows compile fixes](#linux-and-windows-compile-fixes) — fixed a Windows-only compile error and Linux/Windows-only warnings found by cross-target checks
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3109,3 +3110,17 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **User-visible impact:** None.
 
 **Notes:** Clippy on `warp`, including its build script, passes with `-D warnings`; the earlier build-script failure came from a lint in `crates/persistence` that has since been fixed.
+
+## Linux and Windows compile fixes
+**Why:** `cargo check` on macOS never compiles `cfg(windows)` and `cfg(linux)` code, so earlier removal tasks edited it by search. Cross-checking with `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu` found one real error and several warnings.
+
+**Modified:**
+- `app/src/features.rs`: `enabled_features()` failed to compile on Windows (`flags.extend([])` with every element cfg'd out, so the item type could not be inferred). The platform flags are now a typed slice.
+- Windows-only unused imports: `FeatureFlag` in `warp_terminal::local_tty::windows::environment` and in `available_shells.rs`, and the `get_user_and_system_env_variable` import in `terminal/view.rs`.
+- `Rc`/`RefCell` in `terminal/local_tty/terminal_manager.rs` and the `BulkFilesystemWatcherEvent` import in `repo_metadata` tests are now `cfg(unix)`, matching their only users.
+- Linux: the `text` argument of the winit `create_line` and `create_text_frame` text-layout helpers and the `LayoutGlyph` import were unused; `MouseStateHandle` in `scripting_page.rs` is macOS-only.
+- Windows: `CodeEditorEvent::WindowsCtrlC` and `CodeEditorModelEvent::WindowsCtrlC` were only consumed by the deleted blocklist code block, so nothing read them. Ctrl-C in the code editor still copies the selection and clears it.
+
+**User-visible impact:** None. The Windows build compiled again for `app`.
+
+**Notes:** The cross checks used `zig cc` and a stub `pkg-config` only to get past `-sys` build scripts (`cargo check` does not link). Neither is part of the repo.

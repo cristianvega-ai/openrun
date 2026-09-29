@@ -1,7 +1,9 @@
+#[cfg(unix)]
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{SendError, SyncSender};

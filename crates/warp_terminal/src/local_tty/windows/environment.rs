@@ -7,7 +7,6 @@ use warp_core::channel::ChannelState;
 use warp_core::cli_agent_protocol::{
     CLI_AGENT_PROTOCOL_VERSION, WARP_CLI_AGENT_PROTOCOL_VERSION_ENV, WARP_CLIENT_VERSION_ENV,
 };
-use warp_core::features::FeatureFlag;
 use warp_core::safe_info;
 use windows::Win32::System::Environment::ExpandEnvironmentStringsW;
 use windows::core::{HSTRING, PCWSTR};

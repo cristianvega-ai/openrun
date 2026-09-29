@@ -205,11 +205,6 @@ pub enum CodeEditorModelEvent {
     /// Emitted when the render state layout has been updated.
     /// Consumers can use this to invalidate cached heights.
     LayoutInvalidated,
-    #[cfg(windows)]
-    WindowsCtrlC {
-        /// True if the `ctrl-c` action was used to copy an active selection.
-        copied_selection: bool,
-    },
 }
 
 /// Triggers to delay rendering until a certain event.
@@ -1779,25 +1774,14 @@ impl CodeEditorModel {
     }
 
     #[cfg(windows)]
-    /// If there is selected text, copy it. Otherwise, emit an event to allow
-    /// an ancestor to handle the `WindowsCtrlC` event.
+    /// If there is selected text, copy it and clear the selection.
     pub fn handle_windows_ctrl_c(&self, ctx: &mut ModelContext<Self>) {
         let buffer = self.content().as_ref(ctx);
         let selected_text =
             buffer.selected_text_as_plain_text(self.buffer_selection_model().clone(), ctx);
         if !selected_text.as_str().is_empty() {
             self.copy(ctx);
-            // If the code editor is in a blocklist, this won't clear the
-            // selection model there, we have to do that separately. That is
-            // handled by emitted the `WindowsCtrlC` event.
             self.clear_selections(ctx);
-            ctx.emit(CodeEditorModelEvent::WindowsCtrlC {
-                copied_selection: true,
-            });
-        } else {
-            ctx.emit(CodeEditorModelEvent::WindowsCtrlC {
-                copied_selection: false,
-            });
         }
     }
 
