@@ -49,21 +49,8 @@ Optimize for fast delivery and let CI catch uncommon failures outside targeted l
 Run the full presubmit only when the user, task, or approved spec explicitly requires it. For agent-driven implementation, this section replaces the broader pre-push presubmit guidance in `CONTRIBUTING.md`; that document still describes the human contributor workflow. A later source, test, manifest, generated-code, or configuration change creates a new candidate: rerun the affected portion of the sequence and finish with the applicable formatter. Local commits are checkpoints rather than validation boundaries and do not each need to pass independently. PR text, comments, labels, and other metadata do not invalidate code validation.
 
 ### Platform Setup
-- `./script/bootstrap` - Platform-specific setup plus common agent skill installation from `skills-lock.json`; prompts for project/global when an install or update is needed unless a target flag or environment override is provided.
-- `./script/bootstrap --skip-common-skills` - Platform setup without installing or updating common agent skills.
-- `WARP_SKIP_COMMON_SKILLS_INSTALL=1 ./script/run` (or `./script/bootstrap`) - Skip the common-skills install/update check, including its interactive upstream-lock-update prompt, without passing a flag on every invocation.
-- `./script/bootstrap --install-common-skills` - Explicitly install common agent skills from `skills-lock.json`; this is the default behavior.
-- `./script/bootstrap --install-common-skills-in-repo` - Platform setup plus common agent skill installation in this checkout's `.agents/skills`.
-- `./script/bootstrap --install-common-skills-globally` - Platform setup plus common agent skill installation in `~/.agents/skills`.
-- `../common-skills/scripts/install_common_skills --repo-root "$PWD" --project --if-needed` - Install or refresh shared agent skills in this checkout's `.agents/skills`.
-- `../common-skills/scripts/install_common_skills --repo-root "$PWD" --global --if-needed` - Install or refresh shared agent skills in `~/.agents/skills`.
-- `../common-skills/scripts/remove_common_skills --repo-root "$PWD"` - Remove shared agent skills listed in `skills-lock.json` from this checkout's `.agents/skills`.
-- `../common-skills/scripts/remove_common_skills --repo-root "$PWD" --global` - Remove shared agent skills listed in `skills-lock.json` from `~/.agents/skills`.
-- `../common-skills/scripts/remove_common_skills --repo-root "$PWD" --clear-lock` - Remove shared agent skills from this checkout and delete `skills-lock.json`.
 - `./script/install_cargo_build_deps` - Install Cargo build dependencies
 - `./script/install_cargo_test_deps` - Install Cargo test dependencies
-
-`skills-lock.json` is the standard project lock file managed by `npx skills`. `warpdotdev/common-skills/scripts/install_common_skills` requires an explicit install target before restoring: pass `--project`, pass `--global`, set `WARP_COMMON_SKILLS_INSTALL_TARGET`, or answer the interactive prompt from bootstrap. Non-interactive flows fail if no target is explicit. The installer creates `skills-lock.json` from `warpdotdev/common-skills` if it is missing, uses global as the recommended interactive default, errors if common skills are present in both project and global locations, prevents a global install pinned to one lock from being silently overwritten by another checkout pinned to a different lock, and verifies installed skills against the lock after successful install or skip paths. `script/run` and `script/bootstrap` execute this installer with `script/resolve_common_skills`, which uses `WARP_COMMON_SKILLS_SCRIPTS_DIR` only when explicitly set and otherwise runs the raw script from `warpdotdev/common-skills`. To test a remote common-skills branch, set `WARP_COMMON_SKILLS_REF=<branch>`. Cloud setup should use `common-skills/scripts/install_common_skills --repo-root <warp-checkout> --project --if-needed --non-interactive` or set `WARP_COMMON_SKILLS_INSTALL_TARGET=project` to avoid the prompt. To update the locked common skills, run `npx --yes skills@1.5.6 update -p -y` and commit the resulting `skills-lock.json` changes.
 
 ## Architecture Overview
 
@@ -81,7 +68,6 @@ This is a Rust-based terminal emulator with a custom UI framework called **WarpU
 
 **Main app** (`app/`):
 - Terminal emulation and shell management (`terminal/`)
-- AI integration including Agent Mode (`ai/`)
 - Cloud synchronization and Drive features (`drive/`)
 - Authentication and user management (`auth/`)
 - Settings and preferences (`settings/`)
@@ -99,8 +85,7 @@ This is a Rust-based terminal emulator with a custom UI framework called **WarpU
 1. **Entity-Handle System**: Views reference other views via handles, not direct ownership
 2. **Modular Structure**: Workspace contains multiple workspace configurations, each with terminals, notebooks, etc.
 3. **Cross-Platform**: Native implementations for macOS, Windows, Linux, plus WASM target
-4. **AI Integration**: Built-in AI assistant with context awareness and codebase indexing
-5. **Cloud Sync**: Objects can be synchronized across devices via Warp Drive
+4. **Cloud Sync**: Objects can be synchronized across devices via Warp Drive
 
 ### Development Guidelines
 

@@ -14,9 +14,9 @@ Settings pages look simple, so they get written by pattern-matching the nearest 
 A settings page is a `PageType` (`app/src/settings_view/settings_page.rs`). It holds **a list of searchable widgets** plus **an optional page title**:
 
 ```rust
-PageType::new_uncategorized(widgets, Some("Knowledge"))
+PageType::new_uncategorized(widgets, Some("Scripting"))
 PageType::new_categorized(categories, None)
-PageType::new_monolith(widget, Some("Billing and Usage"), /* is_dual_scrollable */ true)
+PageType::new_monolith(widget, Some("Teams"), /* is_dual_scrollable */ true)
 ```
 
 - **`Uncategorized`** — a flat list of widgets. The common shape.
@@ -88,9 +88,9 @@ if ai_settings.some_setting.is_supported_on_current_platform() {
 - **Fixed for the process** — a feature flag, a `cfg!` feature, a platform-support check. → **Use the build-time `if`.** This is the preferred default: the widget never exists, so there is nothing to filter, render, or reason about.
 - **Can change at runtime** — a setting the user toggles, auth state, an availability check that can flip mid-session. → **Use `should_render`.**
 
-The reason is *when each is evaluated*. The build-time `if` runs once, when the page is constructed, and its result is frozen until something rebuilds the page (for AI/Code subpages, only switching subpages does — see below). `should_render` is re-evaluated on every filter and render pass, so it tracks a value that changes while the settings page is open. Gate a runtime-changing value with a build-time `if` and the page goes stale; gate a static flag with `should_render` and you carry a widget around for nothing.
+The reason is *when each is evaluated*. The build-time `if` runs once, when the page is constructed, and its result is frozen until something rebuilds the page. `should_render` is re-evaluated on every filter and render pass, so it tracks a value that changes while the settings page is open. Gate a runtime-changing value with a build-time `if` and the page goes stale; gate a static flag with `should_render` and you carry a widget around for nothing.
 
-The real `should_render` users are all the runtime kind: `SettingsSyncWidget` (`main_page.rs`) on auth state, `WarpDriveToggleWidget` (`warp_drive_page.rs`) on `WarpDriveSettings::is_warp_drive_available`, and the CLI-agent rich-input widgets (`ai_page.rs`) on the user-toggleable footer setting, via `should_render_cli_agent_rich_input`.
+The real `should_render` users are all the runtime kind: the CLI-agent rich-input widgets (`cli_agents_page.rs`) on the user-toggleable footer setting, via `should_render_cli_agent_rich_input`.
 
 Either mechanism keeps search honest: an uncreated widget isn't in the list, and `update_filter` already skips a widget whose `should_render` is false. What you must never do is hide rows inside `render` while `search_terms` still advertises them — that makes the page match a query and then show nothing for it.
 
@@ -107,9 +107,9 @@ Getting this wrong in the first direction is bug class 1 below. Getting it wrong
 
 Classify the page before you write it:
 
-- **Single-topic page** — one heading names everything on it, but the content is still made of separately-matchable widgets. Knowledge, Third party CLI agents, Editor and Code Review, Account, Scripting. → **Title in the `PageType` slot.**
-- **Multi-section page** — several independent sections, each with its own heading. Warp Agent, Agent profiles, Appearance, Features. → **Per-section headings live in widgets/categories** and correctly disappear with their rows. (For `Categorized`, `get_filtered` drops categories whose widgets all filtered out, so their subheaders vanish automatically — that's the behavior you want.)
-- **Monolith page** — Keybindings, Teams, About, Environments, Codebase Indexing. There is no partial-match state: the sole widget either matches, and the whole page renders, or it doesn't, and the whole page renders empty and drops out of the sidebar. So a monolith can never strand an orphaned setting under a missing heading — it is **not** affected by bug class 1, but for that reason, *not* because its title is protected. Passing the title through the slot is still the tidier structure (Billing and Usage and Referrals do), just don't expect it to keep the title on screen during a non-matching search; on a monolith it will not. Codebase Indexing looks single-topic but is really one unfilterable widget covering the whole page (`CodePageWidget`, wrapped by `CodeIndexingPageWidget`) — building it as `Uncategorized` instead of `Monolith` made the sidebar show a permanent, misleading "(1)" on any match ([APP-5530]).
+- **Single-topic page** — one heading names everything on it, but the content is still made of separately-matchable widgets. Third party CLI agents, Editor and Code Review, Scripting. → **Title in the `PageType` slot.**
+- **Multi-section page** — several independent sections, each with its own heading. Appearance, Features. → **Per-section headings live in widgets/categories** and correctly disappear with their rows. (For `Categorized`, `get_filtered` drops categories whose widgets all filtered out, so their subheaders vanish automatically — that's the behavior you want.)
+- **Monolith page** — Keybindings, Teams, About. There is no partial-match state: the sole widget either matches, and the whole page renders, or it doesn't, and the whole page renders empty and drops out of the sidebar. So a monolith can never strand an orphaned setting under a missing heading — it is **not** affected by bug class 1, but for that reason, *not* because its title is protected. Passing the title through the slot is still the tidier structure, just don't expect it to keep the title on screen during a non-matching search; on a monolith it will not. A page that is really one unfilterable widget must be built as `Monolith`, not `Uncategorized`: otherwise the sidebar shows a permanent, misleading "(1)" on any match ([APP-5530]).
 
 The two are not mutually exclusive: a page can name itself in the title slot **and** have per-section subheaders inside its widgets. Privacy does exactly that — `PageType::new_uncategorized(widgets, Some("Privacy"))` plus `render_sub_header` calls inside individual widgets. The rule is per heading, not per page.
 
@@ -121,27 +121,13 @@ Worked positive example: **Scripting** (`scripting_page.rs`) is a small page don
 
 **Cause:** the only heading was rendered inside a widget — via `build_sub_header` / `render_page_title` in that widget's `render`, or via a header-only widget that exists just to draw a title. Filtering removes the widget, and the heading goes with it.
 
-Canonical fix — commit `ddadcee` ([APP-5060], #14519), Knowledge. Before, `AIFactWidget::render` opened with:
+Canonical fix — commit `ddadcee` ([APP-5060], #14519). Before, a widget's `render` opened with a `build_sub_header(appearance, "<Title>", …)` call followed by all of the page's rows. After, the heading moved to page chrome and the rows became focused widgets:
 
 ```rust
-let header = build_sub_header(appearance, "Knowledge", …).finish();
-let mut column = Flex::column().with_child(header) /* … all the Knowledge rows … */;
+PageType::new_uncategorized(widgets, Some(PageTitle::new(PAGE_TITLE)))
 ```
 
-After, the heading moved to page chrome and the rows became focused widgets:
-
-```rust
-let title = match subpage {
-    AISubpage::Knowledge => Some("Knowledge"),
-    AISubpage::ThirdPartyCLIAgents => Some("Third party CLI agents"),
-    AISubpage::WarpAgent | AISubpage::Profiles => None,
-};
-PageType::new_uncategorized(widgets, title)
-```
-
-(The `ThirdPartyCLIAgents` arm and the exhaustive `match` came from #14524; note the deliberate absence of a `_` arm, so a new subpage forces this decision.)
-
-The same commit (#14524) deleted `CodeSubpageHeaderWidget` from the then-combined Code page — a widget whose entire job was `build_sub_header(appearance, self.title, None)` — and replaced it with a title passed through `PageType`. Those two halves are now separate pages, `code_indexing_page.rs` and `code_editor_review_page.rs`, each passing its own `PAGE_TITLE` through the slot. **A header-only widget is always this bug.** If a widget renders nothing but a title, delete it and use the title slot.
+The same commit (#14524) deleted a header-only widget whose entire job was `build_sub_header(appearance, self.title, None)` and replaced it with a title passed through `PageType`. **A header-only widget is always this bug.** If a widget renders nothing but a title, delete it and use the title slot.
 
 ## Bug class 2 — the unfilterable mega-widget
 
@@ -161,8 +147,8 @@ fn search_terms(&self) -> &str {
 After — one widget per setting, each with terms scoped to just that setting:
 
 ```rust
-fn cli_agent_widgets() -> Vec<Box<dyn SettingsWidget<View = AISettingsPageView>>> {
-    vec![
+fn build_page() -> PageType<Self> {
+    let widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
         Box::new(CLIAgentWidget::default()),
         Box::new(CLIAgentAutoToggleRichInputWidget::default()),
         Box::new(CLIAgentAutoOpenRichInputWidget::default()),
@@ -170,7 +156,8 @@ fn cli_agent_widgets() -> Vec<Box<dyn SettingsWidget<View = AISettingsPageView>>
         Box::new(CLIAgentSubmitRichInputWidget::default()),
         Box::new(CLIAgentCommandsWidget),
         Box::new(CLIAgentToolbarLayoutWidget),
-    ]
+    ];
+    PageType::new_uncategorized(widgets, Some(PageTitle::new(PAGE_TITLE)))
 }
 ```
 
@@ -182,17 +169,11 @@ Rules of thumb when splitting:
 - **Move per-row state with the row.** Each `SwitchStateHandle` / `MouseStateHandle` moves to the widget that owns its control. Never create one inline while rendering (see `gui-ui-guidelines` and the AGENTS.md note on `MouseStateHandle`).
 - **Watch the widget ids.** `widget_id()` is `std::any::type_name::<Self>()`, so splitting a widget changes ids. `settings_widget_deeplink_target` in `app/src/settings_view/mod.rs` maps stable public slugs (`warp://settings?widget=<slug>`) onto them. The CLI-agent split deliberately kept `CLIAgentWidget` as the first widget so `cli_agent_settings_widget_id()` — the target of the `cli_agents` deeplink — stayed valid. If you rename or remove a widget that backs a deeplink, re-point the accessor.
 
-## Subpages rebuild their `PageType` — reapply the filter
-
-AI subpages rebuild their `PageType` when the active subpage changes (`AISettingsPageView::set_active_subpage` / `build_page`). A fresh `PageType` starts with **every** widget in its filter, so a live search query is silently dropped unless it's reapplied. `SettingsView::reapply_search_filter_to_active_subpage` in `app/src/settings_view/mod.rs` exists for exactly this ([APP-4922], #14116). If you add a code path that rebuilds a subpage's page while search may be active, call it.
-The Code umbrella no longer works this way: `CodeIndexing` and `EditorAndCodeReview` are separate pages that each own their widgets outright, so nothing rebuilds and there is no filter to reapply. Prefer that shape for new umbrella children — a subpage that owns its own page needs none of this machinery.
-
 ## Known anti-examples still in the tree
 
 Useful to read, not to copy:
 
 - **Warpify** (`warpify_page.rs`) — `PageType::new_categorized(categories, None)` where the first category is `Category::new("", vec![Box::new(TitleWidget::default())])` and `TitleWidget::render` calls `render_page_title("Warpify", …)`. Single-topic page, title inside a widget: bug class 1.
-- **Warp Drive** (`warp_drive_page.rs`) — `PageType::new_uncategorized([WarpDriveHeaderWidget, WarpDriveToggleWidget], None)` with no title slot at all. `WarpDriveHeaderWidget` is a conditional sign-up banner, so a signed-in user sees only a bare toggle row and no page heading.
 
 ## How to verify a settings-page change
 

@@ -55,7 +55,7 @@ use crate::view_components::action_button::{ActionButtonTheme, NakedTheme};
 use crate::workspace::view::TOGGLE_RIGHT_PANEL_BINDING_NAME;
 
 /// Helper function to render git diff stats content (file icon or +- icons, file count, bullet, +/- counts)
-/// Used by both the context chips and the AI control panel
+/// Used by the context chips
 pub fn render_git_diff_stats_content(
     line_changes: &GitLineChanges,
     icon_size: f32,

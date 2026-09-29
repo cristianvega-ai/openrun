@@ -74,7 +74,7 @@ pub enum FindTaskMessage {
         dirty_range: RangeInclusive<u64>,
         matches: Vec<AbsoluteMatch>,
     },
-    /// Request to scan an AI block on the main thread.
+    /// Request to scan a rich content block on the main thread.
     ScanAIBlock {
         view_id: EntityId,
         total_index: TotalIndex,
@@ -307,11 +307,11 @@ pub(crate) struct BlockFindResults {
     /// Matches for terminal blocks, keyed by (block_index, grid_type).
     /// Matches are stored in ascending order by end point.
     pub(crate) terminal_matches: HashMap<(BlockIndex, GridType), Vec<AbsoluteMatch>>,
-    /// Matches for AI blocks, keyed by view_id.
+    /// Matches for rich content blocks, keyed by view_id.
     pub(crate) ai_matches: HashMap<EntityId, Vec<RichContentMatchId>>,
     /// TotalIndex for each terminal block that has been scanned.
     terminal_total_indices: HashMap<BlockIndex, TotalIndex>,
-    /// TotalIndex for each AI block that has been scanned.
+    /// TotalIndex for each rich content block that has been scanned.
     ai_total_indices: HashMap<EntityId, TotalIndex>,
 }
 
@@ -427,7 +427,7 @@ pub enum BlockInfo {
         block_index: BlockIndex,
         total_index: TotalIndex,
     },
-    /// A rich content block (e.g., AI block).
+    /// A rich content block.
     RichContent {
         view_id: EntityId,
         total_index: TotalIndex,
@@ -467,7 +467,7 @@ pub struct AsyncFindController {
     /// Shared work queue for the background task.
     work_queue: Option<FindWorkQueue>,
 
-    /// Rich content views for AI block searching.
+    /// Rich content views for rich content block searching.
     rich_content_views: HashMap<EntityId, Box<dyn FindableRichContentHandle>>,
 
     /// The block sort direction for the current/last find run.
@@ -708,7 +708,7 @@ impl AsyncFindController {
                     if let Some(ai_matches) = self.block_results.ai_matches.get(view_id) {
                         // Mirror sync find's per-AI-block traversal order. Sync
                         // reverses rich-content match ids for MostRecentLast so
-                        // that matches inside one AI block are walked from
+                        // that matches inside one rich content block are walked from
                         // bottom to top; we apply the same reversal at iteration
                         // time to keep stored order canonical.
                         let iter: Box<dyn Iterator<Item = &RichContentMatchId>> =
@@ -738,7 +738,7 @@ impl AsyncFindController {
         self.cached_focused_match = None;
     }
 
-    /// Registers a rich content view for AI block searching.
+    /// Registers a rich content view for rich content block searching.
     pub(crate) fn register_rich_content_view(
         &mut self,
         view_id: EntityId,
@@ -925,7 +925,7 @@ impl AsyncFindController {
                 view_id,
                 total_index,
             } => {
-                // Scan AI block on main thread.
+                // Scan rich content block on main thread.
                 if let Some(view) = self.rich_content_views.get(&view_id)
                     && let Some(config) = &self.current_config
                 {
@@ -995,7 +995,7 @@ impl AsyncFindController {
         self.status = AsyncFindStatus::Idle;
         self.current_find_options = None;
 
-        // Clear matches in AI blocks.
+        // Clear matches in rich content blocks.
         for view in self.rich_content_views.values() {
             view.clear_matches(ctx);
         }
@@ -1058,7 +1058,7 @@ impl AsyncFindController {
             .get(&(block_index, grid_type))
     }
 
-    /// Returns matches for a specific AI block.
+    /// Returns matches for a specific rich content block.
     pub fn matches_for_ai_block(&self, view_id: EntityId) -> Option<&Vec<RichContentMatchId>> {
         self.block_results.ai_matches.get(&view_id)
     }

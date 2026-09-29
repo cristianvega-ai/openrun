@@ -13,7 +13,7 @@ use pin_project::pin_project;
 ///
 /// Callers should provide a description of the reason for preventing sleep. Depending on
 /// platform, this may appear in logs, so write it as though it may be user-visible, e.g.:
-/// "Agent Mode request in-progress".
+/// "Export in-progress".
 pub fn prevent_sleep(reason: &'static str) -> Guard {
     imp::prevent_sleep(reason)
 }

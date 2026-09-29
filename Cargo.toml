@@ -435,9 +435,8 @@ debug-assertions = true
 [profile.rltoda]
 inherits = "release-lto-debug_assertions"
 
-# A profile tuned for the `oz` CLI tarball. The CLI is shipped over the network
-# and run headlessly, so we trade some compile time and a small amount of
-# runtime perf for a smaller binary.
+# A profile tuned for the standalone `warpctrl` binary. We trade some compile time and a
+# small amount of runtime perf for a smaller binary.
 [profile.release-cli]
 inherits = "release-lto"
 opt-level = "s"

@@ -3894,7 +3894,7 @@ fn uses_outer_group_container(display_granularity: VerticalTabsDisplayGranularit
 ///
 /// The third condition is what fixes issue #9098: previously the header was
 /// only shown when a custom title existed, so multi-pane tabs with auto-
-/// generated names (the AI/CLI session naming flow) rendered without any
+/// generated names (the CLI session naming flow) rendered without any
 /// tab-level identifier — only their first row's title was visible, which
 /// looked identical for every tab and made the bar appear "nameless".
 /// Single-pane groups in `Panes` mode still omit the header because the

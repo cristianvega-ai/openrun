@@ -96,6 +96,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [App AI core: `app/src/ai`, `AISettings`, the AI server client and app-side AI persistence](#app-ai-core-appsrcai-aisettings-the-ai-server-client-and-app-side-ai-persistence) — deleted `app/src/ai` (82 files), the AI settings group, `server_api/ai.rs`, the agent persistence, the AI execution profile cloud object type and the workspace/team AI fields; `crate::ai` no longer exists
 - [AI crates and dependencies](#ai-crates-and-dependencies) — deleted the `ai`, `ai_types` and `warp_multi_agent_client` crates, the Warp agent protocol and MCP/AWS SDK dependencies, and the AI types of `persistence` (tables stay until DB-1)
 - [Per-setting cloud-sync attribute](#per-setting-cloud-sync-attribute) — removed the sync-mode attribute, its `Setting` accessor and its macro argument from every setting definition
+- [Docs, skills, comments and icons: leftover AI mentions](#docs-skills-comments-and-icons-leftover-ai-mentions) — removed the AI and skills text from `AGENTS.md`, `README.md`, `FAQ.md`, `CONTRIBUTING.md`, the repo-local skills and the Nix flake; rewrote stale Agent Mode, Warp AI and AI-block comments; deleted 37 unused AI icon variants and 36 SVGs
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
@@ -2509,3 +2510,31 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **Notes:**
 - `ChangeEventReason::CloudSync` (`settings` crate) and its one use in `workspaces/user_workspaces/mod.rs` remain for TEAM-1 and AUTH-2.
 - `privacy.rs` still has comments about cloud-synced values for the Warp Drive privacy settings; those go with SRV-1 and AUTH-2.
+
+## Docs, skills, comments and icons: leftover AI mentions
+**Why:** With the AI code gone (AI-03 to AI-29), docs, skills, comments and assets still described Agent Mode, Oz, Warp AI, common skills and codebase indexing. The goal is that nothing reads as if the feature exists.
+
+**Removed:**
+- `AGENTS.md` — the "Platform Setup" lines for `./script/bootstrap --install-common-skills*`, `--skip-common-skills`, `WARP_SKIP_COMMON_SKILLS_INSTALL`, `install_common_skills`/`remove_common_skills` and `skills-lock.json` (the scripts and lock file were already deleted); the "AI integration including Agent Mode (`ai/`)" key-component line; the "AI Integration" architectural pattern.
+- `CONTRIBUTING.md` — the paragraph and bullets about spec-writing skills from `warpdotdev/common-skills`, the `/write-product-spec` and `/write-tech-spec` sentence, "Warp's built-in agent", and the paragraph about Oz cloud agents implementing issues on complimentary credits.
+- `FAQ.md` — the questions on using Codex or Claude models inside Warp and on getting Oz to implement an issue; Oz credits, Oz orchestration and hosted-model agents from the payment, open-source and offline answers.
+- `README.md` — the OpenAI sponsor note about agentic management workflows; "Use Warp's built-in coding agent" (now: bring your own CLI agent).
+- `images/Powered-By-Oz-Export@2x.png` — Oz badge, unreferenced.
+- `flake.nix` — the `warp_multi_agent_api` proto vendoring step and the "agentic development environment" description.
+- `.agents/skills/` (also visible through `.claude/skills`) — the `gui-settings-ui` skill lost its examples built on deleted AI pages (Knowledge, Warp Agent, Agent profiles, Codebase Indexing, `AISettingsPageView`/`AISubpage`, the subpage `PageType` rebuild section, the Warp Drive anti-example); `gui-integration-test` and `rust-unit-tests` no longer point at `computer_use` or the deleted `gui-integration-test-video` skill; `logging-and-error-reporting` examples no longer use codebase indexing or `LlmProvider`.
+- `crates/warp_core/src/ui/icons.rs`, `app/assets/bundled/svg/` — 37 `Icon` variants with no users and their 36 SVGs: `AgentMode`, `AmbientAgentMode`, `LoadingAgents0-7`, `Neurology`, `Psychology`, `ContextWindow*`, `ContextRemaining*`, `Credits`, `CoinsStacked`, `TurnUsagePie`, `PieChart`, `NLD`, `Oz`, `Conversation`, `Explain`, `GeminiEnterpriseAgentPlatform`.
+
+**Modified:**
+- Comments and doc comments that named Agent Mode, Warp AI, Oz, AI blocks, the AI control panel or AI input now describe the code that remains (rich content blocks, the CLI agent Rich Input, non-editable embedded editors). `app/src/util/image.rs` documents its role for CLI agent Rich Input attachments. A dangling doc comment about oz environments in `terminal/model/block.rs` was deleted.
+- `settings_file_footer.rs` — `ALERT_OZ_ICON_SIZE` renamed `ALERT_ICON_SIZE`, and the "Fix with Warp Agent" wording dropped from its docs.
+- `Cargo.toml`, `.gitignore`, `crates/warpui/examples/table-sample/WARP.md` — the `release-cli` profile comment no longer refers to the `oz` CLI; the `__pycache__` comment no longer mentions bundled skills; the example note no longer targets "Agent Mode".
+- Comment and doc edits only in Rust files; no behavior changed.
+
+**User-visible impact:** None.
+
+**Notes:**
+- Left for SWP-16 (and DOCS-1): the Oz review flow, `specs/` spec process, labels and `/warp-agent-review` in `CONTRIBUTING.md`/`FAQ.md`; the Warp Factories, build.warp.dev and Drive text and the "Agentic Development Environment" image alt text in `README.md`; the warp-server section of `AGENTS.md`. `FAQ.md` is slated for deletion.
+- Left for AI-32: the AI-era `--features` in the bundle scripts (`agent_mode_debug`, `nld_classifier_v3`, `nld_heuristic_v2`, `standalone`).
+- Left for TEL-4: Agent-mode wording in the `code_review/telemetry_event.rs` variant docs.
+- Left for AI-33 (code, not comments): `appearance_page.rs` still builds an AI font family dropdown and an "Oz and third-party agent sessions" vertical-tabs setting text; `code_editor_review_page.rs` search terms name `oz`/`agent mode`; `FeatureFlag::AgentMode` binding in `editor/view/mod.rs`; `is_agent_executed` in `terminal/history.rs`; `FindWorkItem::ScanAIBlock`; `assert_secrets_redacted_for_ai`; `cfg!(feature = "agent_mode_evals")` in `warp_logging`; the `oz` CLI log directory and `Channel::cli_command_name` values (CFG-1).
+- `crates/graphql`, `crates/warp_server_client`, `crates/warp_graphql_schema`, `crates/warp_features` and `app/src/server/telemetry` were not touched; SRV-1, FLAGS-1 and TEL-4 delete them.

@@ -25,7 +25,7 @@ Do **not** reach for an integration test when:
 
 - The logic is deterministic and reachable in-process. Push it into a unit test (`rust-unit-tests`); it will run in milliseconds and point straight at the failure.
 - You are re-covering branch logic a unit test already covers. This harness is for the seams between components, not for re-testing conditionals at full app-boot cost.
-- What you actually want is a screenshot or a manual look. Use `computer_use` or the `gui-integration-test-video` skill instead of attaching weak assertions to a full app boot.
+- What you actually want is a screenshot or a manual look. Take a screenshot or look at the running app instead of attaching weak assertions to a full app boot.
 
 If a behavior is hard to reach from a unit test *only* because of how the code is structured, prefer fixing the structure over writing a slow test around it.
 
@@ -390,10 +390,6 @@ Useful for understanding exactly what the test is doing:
 ```bash
 WARPUI_PAUSE_INTEGRATION_TEST_AT_EVERY_STEP=1 cargo run -p integration --bin integration -- test_name
 ```
-
-### Video and screenshots
-
-If the task is specifically about recording a test, collecting screenshots, or validating overlay/video artifacts, also use the `gui-integration-test-video` skill (located at `.warp/skills/gui-integration-test-video/SKILL.md`).
 
 ### Environment variable gotcha
 

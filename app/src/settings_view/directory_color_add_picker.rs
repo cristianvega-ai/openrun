@@ -255,7 +255,7 @@ impl TypedActionView for DirectoryColorAddPicker {
 
 /// Computes the set of directory paths that should be offered in the add-directory dropdown.
 ///
-/// Candidates are the union of indexed codebase paths and persisted workspace
+/// Candidates are the union of known repository paths and persisted workspace
 /// paths. An entry is filtered out if:
 /// - its canonical key is already a key in `existing` with a value other than
 ///   [`DirectoryTabColor::Suppressed`] (those are already in the visible list), or

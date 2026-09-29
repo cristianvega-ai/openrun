@@ -173,9 +173,6 @@ pub struct Block {
     /// model because they may be shown for debugging purposes.
     pub(super) is_for_in_band_command: bool,
 
-    /// `true` if this command block corresponds to a startup command in an oz environment executed
-    /// in cloud mode.
-
     /// If true, we should discard the next right prompt data we receive
     /// (whether it comes from a precmd hook or from a marked prompt
     /// printed by the shell).

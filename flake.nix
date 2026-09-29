@@ -1,5 +1,5 @@
 {
-  description = "Warp is an agentic development environment, born out of the terminal (Experimental Nix Support, Linux-only).";
+  description = "Warp terminal (Experimental Nix Support, Linux-only).";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

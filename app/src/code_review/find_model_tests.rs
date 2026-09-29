@@ -170,9 +170,8 @@ fn initialize_test_app(app: &mut App) {
     app.add_singleton_model(|_| ActiveSession::default());
     app.add_singleton_model(NotebookKeybindings::new);
 
-    // CodeReviewView reads AI usage/availability when comments are populated
-    // (e.g. to compute the comment tray's "Send to Agent" button state), so
-    // register the same AI singletons the other code_review tests use.
+    // CodeReviewView reads the server API when comments are populated, so register the same
+    // singletons the other code_review tests use.
     app.add_singleton_model(|_| ServerApiProvider::new_for_test());
 }
 

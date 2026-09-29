@@ -247,8 +247,6 @@ impl ResourceCenterView {
         match item {
             ResourceCenterFooterItem::Docs => ctx.open_url(links::USER_DOCS_URL),
             ResourceCenterFooterItem::Slack => ctx.open_url(links::SLACK_URL),
-            // Route feedback through the workspace action so the guided agent experience is
-            // launched when AI is available, and the GitHub issue form is opened otherwise.
             ResourceCenterFooterItem::Feedback => {
                 ctx.dispatch_typed_action(&WorkspaceAction::SendFeedback)
             }

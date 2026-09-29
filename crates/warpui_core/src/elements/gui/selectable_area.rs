@@ -52,7 +52,7 @@ pub struct SelectableArea {
 /// Stores the selection start and end points. We include the option to store
 /// bounds alongside raw selection points since we may need to clamp the selection
 /// points to the SelectableArea's bounds when it's not laid out (i.e. to support
-/// across-block selections with AI blocks).
+/// across-block selections with rich content blocks).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct InternalSelection {
     /// The point where the user first clicked before dragging.
@@ -586,7 +586,7 @@ impl SelectableArea {
         let text_fragments = self.get_current_selection_text_fragments();
         let update_args = SelectionUpdateArgs {
             // If `text_fragments` is `None`, we still need to invoke the selection_handler accordingly.
-            // Otherwise, clicking away from text within an AIBlock won't clear the underlying selected_text state.
+            // Otherwise, clicking away from text within a rich content block won't clear the underlying selected_text state.
             selection: text_fragments.map(order_and_concatenate_fragments),
         };
         (self.selection_handler)(update_args, ctx, app);

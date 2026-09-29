@@ -19,7 +19,7 @@ pub fn assert_secret_tooltip_open(open: bool) -> AssertionCallback {
     })
 }
 
-/// Assert that secrets are properly redacted for AI conversations in both modes
+/// Assert that secrets are properly redacted in both modes
 pub fn assert_secrets_redacted_for_ai(
     test_text: String,
     expected_phone_redaction: String,
@@ -40,7 +40,7 @@ pub fn assert_secrets_redacted_for_ai(
                 ));
             }
 
-            // Test that redaction works for both modes when sending to AI
+            // Test that redaction works for both modes when sending to a CLI agent
             if secret_redaction_mode.should_redact_secret() {
                 let mut redacted_text = test_text.clone();
                 redact_secrets(&mut redacted_text);

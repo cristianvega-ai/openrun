@@ -352,7 +352,7 @@ pub struct TerminalModel {
     /// For fullscreen programs like vim.
     alt_screen: AltScreen,
 
-    /// True if the local user has made edits in the input editor since the last submit (shell or AI).
+    /// True if the local user has made edits in the input editor since the last submit.
     is_input_dirty: bool,
 
     /// List of blocks. All blocks are immutable except for the current block.
@@ -1391,7 +1391,7 @@ impl TerminalModel {
     }
 
     /// Returns **all** selected text across the entire `TerminalView` view hierarchy.
-    /// This includes selected text within regular blocks, AI blocks, inline actions, etc.
+    /// This includes selected text within regular blocks, rich content blocks, inline actions, etc.
     pub fn selection_to_string(
         &self,
         semantic_selection: &SemanticSelection,

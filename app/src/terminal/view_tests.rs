@@ -4613,7 +4613,7 @@ fn close_cli_agent_rich_input_with_empty_buffer_stores_no_draft() {
 
 /// Regression test for the async-find branch of #11212.
 ///
-/// Closing the find bar must clear stale AI block highlights without dropping
+/// Closing the find bar must clear stale rich content block highlights without dropping
 /// the saved query options on the async-find path. `open_find_bar` reads
 /// `active_find_options` to restore the previous query; if `close_find_bar`
 /// routes through `clear_matches → AsyncFindController::clear_results`, that

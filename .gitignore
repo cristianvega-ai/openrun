@@ -57,7 +57,7 @@ tags
 pr_cleanup.md
 desired_behavior.md
 
-# Don't include the python cache for bundled skills.
+# Don't include python caches.
 __pycache__/
 
 # Project notes

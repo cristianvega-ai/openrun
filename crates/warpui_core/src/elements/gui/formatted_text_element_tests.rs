@@ -492,7 +492,7 @@ fn left_mouse_up_at(x: f32) -> Event {
 /// `SelectableArea` does not also treat the press as the start of a text selection. When it
 /// didn't (the regression), the selection path fired its selection handler on the same press and
 /// cleared the link tooltip/click that `handle_mouse_down` had just triggered, making clicks on
-/// markdown links in AI output appear to do nothing. A click that misses every clickable range
+/// markdown links appear to do nothing. A click that misses every clickable range
 /// must still report unhandled so normal text selection keeps working.
 #[test]
 fn single_click_on_link_is_handled_so_selection_is_not_started() {

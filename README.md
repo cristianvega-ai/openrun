@@ -22,14 +22,11 @@
   <a href="https://www.warp.dev/blog/how-warp-works">How Warp Works</a>
 </p>
 
-> [!NOTE]
-> OpenAI is the founding sponsor of the new, open-source Warp repository, and the new agentic management workflows are powered by GPT models.
-
 <h1></h1>
 
 ## About
 
-[Warp](https://www.warp.dev) is an agentic development environment, born out of the terminal. Use Warp's built-in coding agent, or bring your own CLI agent (Claude Code, Codex, Gemini CLI, and others).
+[Warp](https://www.warp.dev) is a terminal that works with the CLI agents you bring yourself (Claude Code, Codex, Gemini CLI, and others).
 
 ## Installation
 

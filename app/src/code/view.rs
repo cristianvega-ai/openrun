@@ -81,7 +81,7 @@ const TAB_INTERNAL_MARGIN: f32 = 4.;
 const TAB_HORIZONTAL_MARGIN: f32 = 8.;
 const TAB_PADDING: f32 = 2.;
 
-// Keybinding constants - exported so AI document view can reuse
+// Keybinding constants - exported for reuse by other views
 pub const SAVE_FILE_BINDING_NAME: &str = "code_view:save";
 pub const SAVE_FILE_BINDING_DESCRIPTION: &str = "Save file";
 

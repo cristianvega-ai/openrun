@@ -811,7 +811,7 @@ fn test_focused_ai_match_resolves_only_ai_block() {
     let terminal_model = Arc::new(FairMutex::new(mock_terminal_model));
     let mut controller = AsyncFindController::new(terminal_model);
 
-    // Seed a single AI block with two matches. Default block sort direction is
+    // Seed a single rich content block with two matches. Default block sort direction is
     // MostRecentLast, which reverses per-AI-block traversal at iteration time.
     let view_id = EntityId::from_usize(42);
     let ai_match_a = RichContentMatchId::default();
@@ -897,9 +897,9 @@ fn test_focused_match_index_walks_across_terminal_and_ai_blocks() {
     let mut controller = AsyncFindController::new(terminal_model);
 
     // Two blocks at different TotalIndex positions:
-    //  - AI block (TotalIndex 5, newer) with one match.
+    //  - rich content block (TotalIndex 5, newer) with one match.
     //  - Terminal block at BlockIndex(0) (TotalIndex 1, older) with one
-    //    Output match. The AI block is sorted first because its TotalIndex
+    //    Output match. The rich content block is sorted first because its TotalIndex
     //    is higher.
     let ai_view_id = EntityId::from_usize(11);
     let ai_match = RichContentMatchId::default();
@@ -918,7 +918,7 @@ fn test_focused_match_index_walks_across_terminal_and_ai_blocks() {
 
     assert_eq!(controller.match_count(), 2);
 
-    // Index 0 -> AI match (newest block, AI block in this fixture).
+    // Index 0 -> AI match (newest block, rich content block in this fixture).
     controller.focused_match_index = Some(0);
     controller.update_cached_focused_match();
     let focused_ai = controller

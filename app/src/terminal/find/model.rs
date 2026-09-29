@@ -342,7 +342,7 @@ impl TerminalFindModel {
 
     /// Returns the focused rich content match id, if any.
     ///
-    /// This works for both sync and async find paths and is used by AI block
+    /// This works for both sync and async find paths and is used by rich content block
     /// rendering to apply the focused-match highlight color.
     pub(crate) fn focused_rich_content_match_id(&self) -> Option<RichContentMatchId> {
         if self.terminal_model.lock().is_alt_screen_active() {
@@ -562,7 +562,7 @@ impl TerminalFindModel {
         ctx.emit(FindEvent::UpdatedFocusedMatch);
     }
 
-    /// Notifies every registered rich-content child view (e.g. AI blocks) to
+    /// Notifies every registered rich-content child view to
     /// drop its cached find state and repaint, **without** touching the active
     /// find run's options/config.
     ///

@@ -1195,7 +1195,6 @@ pub fn init(app: &mut AppContext) {
             "Show History",
             // We need to ensure the workflow info box is not open as the "up" arrow
             // key is used to navigate the environment variables dropdown.
-            // Same goes with the LLM menu.
             id!("Input")
                 & !id!("IMEOpen")
                 & !id!("VoltronActive")
@@ -7926,8 +7925,7 @@ impl Input {
         let terminal_settings = TerminalSettings::as_ref(app);
         let terminal_spacing =
             terminal_settings.terminal_input_spacing(appearance.line_height_ratio(), app);
-        // Always render with UDI-style spacing values, regardless of terminal/agent mode or
-        // prompt setting.
+        // Always render with UDI-style spacing values, regardless of the prompt setting.
         let bottom_padding = terminal_spacing.editor_bottom_padding - 4.;
 
         let input_box = Container::new(

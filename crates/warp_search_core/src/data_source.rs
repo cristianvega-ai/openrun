@@ -131,7 +131,7 @@ pub enum QueryFilter {
     /// Filter results for launch configurations.
     LaunchConfigurations,
 
-    /// Filter results for historical AI history.
+    /// Filter results for prompt history.
     PromptHistory,
 
     /// Filter results for files.

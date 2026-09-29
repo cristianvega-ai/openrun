@@ -217,7 +217,7 @@ pub struct HistoryEntry {
 
     pub is_for_restored_block: bool,
 
-    /// Whether this command was executed by an AI agent.
+    /// Whether this command was executed by an agent.
     pub is_agent_executed: bool,
 }
 

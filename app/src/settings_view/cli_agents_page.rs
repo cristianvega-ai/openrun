@@ -1,8 +1,7 @@
 //! The "Third party CLI agents" settings page, shown under the Agents umbrella.
 //!
 //! Everything on this page controls third-party coding agents (Claude Code,
-//! Codex, Gemini CLI) rather than Warp's own AI, so its settings are always
-//! interactive regardless of the global AI toggle.
+//! Codex, Gemini CLI).
 
 use enum_iterator::all;
 use markdown_parser::{FormattedText, FormattedTextFragment, FormattedTextLine};

@@ -43,7 +43,7 @@ The default filter is `Info`, so `debug!`/`trace!` are off unless `RUST_LOG` ena
 
 Guidance:
 - Hot loops, per-frame render paths, and per-message handlers must log at `debug!`/`trace!` (never `info!`+), or they flood the log file.
-- Prefer static, greppable message prefixes with structured `key=value` detail (e.g. `"[Remote codebase indexing] … repo_path={} state={:?}"`), matching the surrounding module.
+- Prefer static, greppable message prefixes with structured `key=value` detail (e.g. `"[Repo metadata] … repo_path={} state={:?}"`), matching the surrounding module.
 - Use inline format args (`log::warn!("… {err:#}")`) per the workspace clippy config; format an error chain with `{err:#}`.
 
 ## Sensitive data: `safe_*` macros
@@ -189,8 +189,8 @@ use warp_errors::ReportErrorLogMode;
 report_error!(err, ReportErrorLogMode::OncePerRun);
 // with a static message + incidental data:
 report_error!(
-    "Invalid LlmProvider; update client GraphQL types",
-    extra: { "provider" => %value },
+    "Invalid ServerEnum; update client GraphQL types",
+    extra: { "value" => %value },
     ReportErrorLogMode::OncePerRun
 );
 ```

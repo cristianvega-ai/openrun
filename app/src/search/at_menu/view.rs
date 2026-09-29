@@ -54,7 +54,7 @@ const PANEL_POSITION_ID: &str = "AtMenuPanel";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AtMenuPosition {
-    /// The user clicked the AI Context Menu button.
+    /// The user clicked the @ Context Menu button.
     AtButton,
     /// If this is at the user's cursor, then we don't need to show a
     /// text input field.
@@ -139,7 +139,7 @@ struct AtMenuState {
 const MAX_SEARCH_RESULTS: usize = 250;
 const MAX_CONSECUTIVE_EMPTY_RESULTS_EVENTS: usize = 7;
 
-/// AI Context Menu View
+/// @ Context Menu View
 pub struct AtMenu {
     mixer: ModelHandle<AtMenuMixer>,
     /// While we aren't rendering a search bar, the view contains

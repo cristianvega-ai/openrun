@@ -37,7 +37,7 @@ Escalate to a higher level when any of these hold:
 Where to go instead:
 
 - `gui-integration-test` — GUI end-to-end behavior, terminal and shell integration, settings and keybinding wiring.
-- `gui-integration-test-video` or `computer_use` — when the real question is visual and someone needs to look at it.
+- A manual look at the running app — when the real question is visual and someone needs to look at it.
 
 Before escalating, try splitting the problem. Most "untestable" code is a thin shell of IO wrapped around logic that tests fine once separated: extract the decision-making into a pure function, unit test that, and let an integration test cover the thin shell that remains. That is usually cheaper than either a heavily stubbed unit test or a full app-boot test.
 

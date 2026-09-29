@@ -899,7 +899,7 @@ impl CommentListView {
     }
 
     /// Keep the stored "Send to Agent" button's enabled state and tooltip in sync with the current
-    /// destination / comment / AI-availability state.
+    /// destination / comment state.
     fn sync_send_button(&mut self, ctx: &mut ViewContext<Self>) {
         let enabled = self.can_send(ctx);
         let tooltip = Self::send_button_tooltip_text(

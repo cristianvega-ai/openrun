@@ -32,7 +32,7 @@ use crate::features::FeatureFlag;
 use crate::notebooks::editor::model::word_unit;
 use crate::util::bindings::CustomAction;
 
-/// Limit the keybindings that conflict with the Agent Mode embedded editor.
+/// Limit the keybindings that conflict with non-editable embedded editors.
 const NON_EDITABLE_KEYMAP_CONTEXT: &str = "NonEditableKeymapContext";
 
 lazy_static! {
@@ -45,7 +45,7 @@ pub fn init(app: &mut AppContext) {
     use warpui::keymap::macros::*;
 
     let text_entry = id!("CodeEditorView") & !id!("IMEOpen");
-    // We use this to disable some keybindings that would conflict with the Agent Mode embedded editor.
+    // We use this to disable some keybindings that would conflict with non-editable embedded editors.
     let editable_state = text_entry.clone() & !id!(NON_EDITABLE_KEYMAP_CONTEXT);
     app.register_fixed_bindings([
         FixedBinding::new(
@@ -999,13 +999,13 @@ impl TypedActionView for CodeEditorView {
             // Note that this is _not_ the only code path that could copy selected text to the clipboard.
             // This is only for the case when the editor is focused and the copy action gets dispatched directly.
             // The owner of the editor can also perform a copy by accessing the selected text and copying it to the clipboard.
-            // This is the case when the code block is owned by an AIBlock and unfocused.
+            // This is the case when the code block is owned by a rich content block and unfocused.
             Copy => {
                 self.model.update(ctx, |model, ctx| {
                     model.copy(ctx);
                 });
                 // It's possible that the copy action was dispatched to the focused editor even when
-                // the user intended to copy selected text from a parent view (i.e. an `AIBlock`).
+                // the user intended to copy selected text from a parent view (i.e. a rich content block).
                 // The `CopiedEmptyText` event gives the parent view a signal to attempt a copy action.
                 if self.selected_text(ctx).is_none() {
                     ctx.emit(CodeEditorEvent::CopiedEmptyText);

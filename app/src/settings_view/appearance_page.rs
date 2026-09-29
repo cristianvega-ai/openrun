@@ -1384,7 +1384,7 @@ impl AppearanceSettingsPageView {
         // stay in sync, and the tools panel already recomputes its available
         // views live when these settings change (see `Workspace::new`).
         // Each toggle is gated only on compile-time / feature-flag availability
-        // of the corresponding tab (not on transient login/AI state), so the
+        // of the corresponding tab (not on transient state), so the
         // section stays stable regardless of when the page is built.
         let mut tools_panel_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
         if cfg!(feature = "local_fs") {

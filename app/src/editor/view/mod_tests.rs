@@ -4285,7 +4285,7 @@ fn test_paste_clipboard_with_text_only_should_paste_text_normally() {
         let (_, editor) = app.add_window(WindowStyle::NotStealFocus, |ctx| {
             let mut editor = EditorView::new(Default::default(), ctx);
             // Enable image context options to allow image attachment functionality
-            // This simulates the state when Agent Mode is active and image attachments are supported
+            // This simulates the state when image attachments are supported
             editor.image_context_options = ImageContextOptions::Enabled {
                 is_processing_attached_images: false,
                 num_images_attached: 0,
@@ -4345,7 +4345,7 @@ fn test_paste_clipboard_with_image_only_should_switch_to_agent_mode() {
             editor
         });
 
-        // Image-only clipboard - should switch to Agent Mode and attach image
+        // Image-only clipboard - should attach image
         app.update(|ctx| {
             let png_image = warpui::clipboard::ImageData {
                 data: vec![137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13], // PNG header + minimal data
@@ -4364,9 +4364,9 @@ fn test_paste_clipboard_with_image_only_should_switch_to_agent_mode() {
         editor.update(&mut app, |editor, ctx| {
             editor.paste(ctx);
             // Image-only clipboard should not paste any text to the buffer
-            // The image data should be processed separately via Agent Mode switching
+            // The image data should be processed separately as an attachment
             assert_eq!(editor.buffer_text(ctx), "");
-            // TODO: Add assertions for Agent Mode switch and image attachment
+            // TODO: Add assertions for image attachment
         });
     })
 }
@@ -4386,7 +4386,7 @@ fn test_paste_clipboard_with_supported_image_and_text_should_handle_both() {
             editor
         });
 
-        // PNG (supported) image and text clipboard - should switch to Agent Mode, attach image, and paste text
+        // PNG (supported) image and text clipboard - should attach image and paste text
         app.update(|ctx| {
             let png_image = warpui::clipboard::ImageData {
                 data: vec![137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13], // PNG header + minimal data
@@ -4406,9 +4406,9 @@ fn test_paste_clipboard_with_supported_image_and_text_should_handle_both() {
             editor.paste(ctx);
             // When clipboard contains both supported image and text, both should be handled:
             // - Text content gets pasted to the buffer
-            // - Image triggers Agent Mode switch and attachment process
+            // - Image triggers the attachment process
             assert_eq!(editor.buffer_text(ctx), "some descriptive text");
-            // TODO: Add assertions for Agent Mode switch and image attachment
+            // TODO: Add assertions for image attachment
         });
     })
 }

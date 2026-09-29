@@ -3179,7 +3179,7 @@ impl Workspace {
 
     /// Attempts to get selected text from the focused pane.
     /// Returns None if there is no selection, multiple selections, or an empty selection.
-    /// Supports code, notebook, AI document, and terminal panes.
+    /// Supports code, notebook, and terminal panes.
     fn get_selected_text_from_focused_view(&self, ctx: &AppContext) -> Option<String> {
         self.active_tab_pane_group()
             .as_ref(ctx)
@@ -14629,7 +14629,7 @@ impl Workspace {
         }
     }
 
-    /// Computes the list of available left panel views based on current AI settings and feature flags.
+    /// Computes the list of available left panel views based on current settings and feature flags.
     fn compute_left_panel_views(ctx: &AppContext) -> Vec<ToolPanelView> {
         let mut views = vec![];
         if cfg!(feature = "local_fs") && *CodeSettings::as_ref(ctx).show_project_explorer.value() {
@@ -14646,7 +14646,7 @@ impl Workspace {
         views
     }
 
-    /// Recomputes the available left panel views based on current AI settings and feature flags,
+    /// Recomputes the available left panel views based on current settings and feature flags,
     /// then updates both the workspace's left_panel_views and the LeftPanelView's toolbelt buttons.
     fn update_left_panel_available_views(&mut self, ctx: &mut ViewContext<Self>) {
         let views = Self::compute_left_panel_views(ctx);

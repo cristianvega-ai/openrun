@@ -33,12 +33,12 @@ const FOOTER_FONT_SIZE: f32 = 12.;
 const OPEN_BUTTON_HEIGHT: f32 = 32.;
 /// Height of action buttons inside the error alert.
 const ALERT_ACTION_BUTTON_HEIGHT: f32 = 24.;
-/// Size of the leading icons (search-sm, code-02, alert-circle, oz).
+/// Size of the leading icons (search-sm, code-02, alert-circle).
 const FOOTER_ICON_SIZE: f32 = 16.;
-/// Size of the Warp Agent brand mark inside the "Fix with Warp Agent" button. Matches the
-/// Figma spec and the workspace banner's secondary-button icon sizing.
-const ALERT_OZ_ICON_SIZE: f32 = 14.;
-/// Horizontal padding inside the "Open file" / "Fix with Warp Agent" action buttons.
+/// Size of the icon inside an action button. Matches the Figma spec and the workspace banner's
+/// secondary-button icon sizing.
+const ALERT_ICON_SIZE: f32 = 14.;
+/// Horizontal padding inside the action buttons.
 /// Matches the workspace banner's secondary button pad.
 const ALERT_BUTTON_HORIZONTAL_PADDING: f32 = 8.;
 /// Spacing between the two action buttons when they fit on one row.
@@ -317,8 +317,8 @@ fn render_alert_action_button(
             row.add_child(
                 Container::new(
                     ConstrainedBox::new(icon.to_warpui_icon(Fill::Solid(text_color)).finish())
-                        .with_width(ALERT_OZ_ICON_SIZE)
-                        .with_height(ALERT_OZ_ICON_SIZE)
+                        .with_width(ALERT_ICON_SIZE)
+                        .with_height(ALERT_ICON_SIZE)
                         .finish(),
                 )
                 .with_margin_right(4.)

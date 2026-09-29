@@ -58,29 +58,15 @@ Contributors with several merged PRs may be invited to become collaborators. The
 
 ### Can I use my own coding agent to contribute?
 
-Yes. Use whatever you like — Warp's built-in agent, Claude Code, Codex, Gemini CLI, Cursor, others, or no agent at all. The repo ships agent-readable context (skills under [`.agents/skills/`](.agents/skills/), specs under [`specs/`](specs/), and [`AGENTS.md`](AGENTS.md)) that any harness supporting these formats can pick up.
-
-### Can I use Codex or Claude models with my existing subscriptions in Warp, or submit a PR to add that?
-
-Not today. Warp's built-in agent harness runs server-side and isn't open in this repo today.
-
-That said, we plan to support [ACP (agent client protocol)](https://agentclientprotocol.com/) in Warp, so you could connect other models or subscriptions directly and get a native Warp experience for your coding agent of choice.
-
-[This is tracked on our roadmap](https://github.com/warpdotdev/warp/issues/9233), and we will update the community as we explore this.
-
-### How can I get Oz to implement an issue for me?
-
-Mention **@oss-maintainers** on any issue with a readiness label and ask. Approved requests run on **complimentary Oz credits** — you don't need to set up your own Oz account or pay for compute.
-
-Once you're a collaborator, you can mention `@oz` directly on any ready issue to dispatch it without waiting for a maintainer.
+Yes. Use whatever you like — Claude Code, Codex, Gemini CLI, Cursor, others, or no agent at all. The repo ships agent-readable context (skills under [`.agents/skills/`](.agents/skills/) and [`AGENTS.md`](AGENTS.md)) that any harness supporting these formats can pick up.
 
 ### Do I have to pay anything to contribute here?
 
-No. Contributing by hand or with your own agent is free. Oz runs on Warp's credits for approved requests on this repo, and is free for collaborators contributing back to it.
+No. Contributing by hand or with your own agent is free.
 
 ### Are agent-generated PRs held to the same bar as human ones?
 
-Yes. The same Oz + SME review, the same tests, and the same `./script/format` / `cargo clippy` / presubmit checks apply regardless of who (or what) wrote the code. Whether a PR is hand-written or agent-written doesn't change the quality bar — it changes how quickly you can iterate to meet it.
+Yes. The same review, the same tests, and the same `./script/format` / `cargo clippy` / presubmit checks apply regardless of who (or what) wrote the code. Whether a PR is hand-written or agent-written doesn't change the quality bar — it changes how quickly you can iterate to meet it.
 
 ### Will my issues, comments, or code be used to train models?
 
@@ -90,19 +76,19 @@ No. Warp does not use contributions to this repository, or the discussion around
 
 ### Is Warp fully open source?
 
-The Warp **client** is open source: the app and most crates are licensed under [AGPL v3](LICENSE-AGPL), and the UI framework crates (`warpui_core`, `warpui`) are licensed under [MIT](LICENSE-MIT). The **server**, the **Warp Drive backend**, and **Oz** (our agent orchestration layer) are not in this repository and remain proprietary today.
+The Warp **client** is open source: the app and most crates are licensed under [AGPL v3](LICENSE-AGPL), and the UI framework crates (`warpui_core`, `warpui`) are licensed under [MIT](LICENSE-MIT). The **server**, and the **Warp Drive backend** are not in this repository and remain proprietary today.
 
 ### What lives in this repo and what doesn't?
 
-**In this repo:** the Warp client app, the WarpUI framework, integration tests, agent skills, and feature specs.
+**In this repo:** the Warp client app, the WarpUI framework, integration tests, and agent skills.
 
-**Not in this repo:** the server, the Drive backend, hosted authentication, and Oz orchestration.
+**Not in this repo:** the server, the Drive backend, and hosted authentication.
 
 ### Can I run Warp without signing in or using Warp's cloud?
 
-Some functionality works fully locally; other features (Drive sync, hosted-model agents, team features) require Warp's backend. We're working to make the locally-runnable surface clearer over time, including more explicit controls in onboarding.
+Some functionality works fully locally; other features (Drive sync, team features) require Warp's backend. We're working to make the locally-runnable surface clearer over time, including more explicit controls in onboarding.
 
-### Will the server or Oz ever be open-sourced?
+### Will the server ever be open-sourced?
 
 We haven't committed to a date and don't want to overpromise. Opening the client under AGPL is a one-way door, and opening the server would be a similar commitment — we'll be explicit when and if we make it.
 

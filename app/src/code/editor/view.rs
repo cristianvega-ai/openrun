@@ -86,7 +86,7 @@ pub use actions::init;
 
 mod vim_handler;
 
-/// Limit the keybindings that conflict with the Agent Mode embedded editor.
+/// Limit the keybindings that conflict with non-editable embedded editors.
 const NON_EDITABLE_KEYMAP_CONTEXT: &str = "NonEditableKeymapContext";
 
 lazy_static! {

@@ -101,7 +101,7 @@ const SIDEBAR_WIDTH_DEFAULT: f32 = 200.;
 /// Wider sidebar used when the settings-file footer is enabled. Sized to
 /// match Figma's settings nav rail (223px alert + 12px horizontal padding
 /// on each side + 1px right border), giving the error-alert footer enough
-/// room to render its "Open file" and "Fix with Warp Agent" buttons side-by-side
+/// room to render its "Open file" button
 /// with the designed 24px indent and 8px internal padding.
 const SIDEBAR_WIDTH_WITH_FOOTER: f32 = 248.;
 
@@ -261,7 +261,7 @@ impl SettingsSection {
             // These pages no longer exist; land on the default page instead.
             "Account" | "Billing and usage" | "Environments" | "CloudEnvironments"
             | "Oz Cloud API Keys" | "OzCloudAPIKeys" => Self::default(),
-            // The Warp Agent and Profiles pages were folded into the agents settings page.
+            // The removed AI pages land on the CLI agents page.
             "Warp Agent" | "Oz" | "AI" | "Profiles" | "AgentProfiles" => Self::ThirdPartyCLIAgents,
             "Appearance" => Self::Appearance,
             "Features" => Self::Features,

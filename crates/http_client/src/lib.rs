@@ -607,7 +607,7 @@ impl<'a> RequestBuilder<'a> {
     /// Prevents the system from sleeping due to idle while this request is in progress.
     ///
     /// The provided reason will be used in user-visible logging, so make sure it is
-    /// descriptive and reasonably formatted (e.g. "Agent mode request in-progress").
+    /// descriptive and reasonably formatted (e.g. "Download request in-progress").
     pub fn prevent_sleep(self, reason: &'static str) -> RequestBuilder<'a> {
         Self {
             prevent_sleep_reason: Some(reason),

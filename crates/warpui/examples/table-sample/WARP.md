@@ -11,7 +11,7 @@ This project can auto-generate screenshots of the table example demos and then s
   - Baseline: `screenshots/baseline/`
   - Current: `screenshots/current/`
 
-### Sanity-check protocol (Agent/Agent Mode)
+### Sanity-check protocol
 - Use the read_file tool to upload all PNGs in the chosen directory (baseline or current).
 - For each image, scan for:
   - Completely blank/black/solid-color large areas where UI should be rendered

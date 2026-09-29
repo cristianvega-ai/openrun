@@ -1075,13 +1075,13 @@ impl<'a> ViewportState<'a> {
                     || (rich_content_top <= current_scroll_top
                         && rich_content_bottom >= current_scroll_bottom)
                 {
-                    // If the AI block is either completely in view or is larger than the viewport
+                    // If the rich content block is either completely in view or is larger than the viewport
                     // and spans the entire viewport, fix the scroll position.
                     return ScrollPosition::FixedAtPosition {
                         scroll_lines: self.scroll_lines_from_scroll_top(current_scroll_top),
                     };
                 } else if rich_content_top < current_scroll_top {
-                    // If the AI block is above the viewport, scroll such that the block is at the
+                    // If the rich content block is above the viewport, scroll such that the block is at the
                     // bottom of the viewport.
                     rich_content_bottom - viewport_height
                 } else {

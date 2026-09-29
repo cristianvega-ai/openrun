@@ -1,7 +1,4 @@
-//! Shared image processing utilities for agent mode.
-//!
-//! This module provides common functionality for processing images before they are
-//! sent to the AI agent, whether attached by the user or read via the read_files tool.
+//! Shared image processing utilities for images attached to the CLI agent Rich Input.
 
 use std::path::Path;
 
@@ -73,7 +70,7 @@ pub const MAX_IMAGE_COUNT_FOR_QUERY: usize = 20;
 /// Minimum bytes needed for image format detection using magic number signatures.
 pub const MIN_IMAGE_HEADER_SIZE: usize = 8;
 
-/// Supported image MIME types for agent mode.
+/// Supported image MIME types for image attachments.
 pub const SUPPORTED_IMAGE_MIME_TYPES: &[&str] = &[
     "image/png",
     "image/jpeg",
@@ -127,7 +124,7 @@ pub fn resize_image(image: &[u8]) -> Result<Vec<u8>, ImageError> {
     Ok(output_bytes)
 }
 
-/// Result of processing an image for agent mode.
+/// Result of processing an attached image.
 #[derive(Debug)]
 pub enum ProcessImageResult {
     /// Image was successfully processed and is within size limits.
@@ -141,7 +138,7 @@ pub enum ProcessImageResult {
     Error(ImageError),
 }
 
-/// Processes an image for agent mode: resizes if needed and checks size limits.
+/// Processes an attached image: resizes if needed and checks size limits.
 ///
 /// This applies the same processing that user-attached images go through.
 pub fn process_image_for_agent(image_data: &[u8]) -> ProcessImageResult {

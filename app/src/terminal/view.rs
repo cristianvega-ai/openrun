@@ -1421,7 +1421,7 @@ impl Default for TerminalViewStateChange {
 }
 
 /// Whether or not this is the active terminal session. The active session for a pane group
-/// is the one used for executing workflows, Warp AI suggestions, etc.
+/// is the one used for executing workflows, etc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveSessionState {
     Active,
@@ -6877,7 +6877,7 @@ impl TerminalView {
             find_model.rerun_find_on_active_grid(ctx);
         });
         // Resizing the model already clears selected text, but
-        // we also need to clear selections in any rich content blocks (e.g. AI blocks).
+        // we also need to clear selections in any rich content blocks.
         if size_update.rows_or_columns_changed() {
             self.clear_selected_text(ctx);
         }
@@ -8215,7 +8215,7 @@ impl TerminalView {
                     // Since rich content blocks cannot be selected, `redetermine_focus` has no way
                     // of knowing whether the user just clicked on a rich content block. To allow
                     // users to attach blocks as context and submit queries quickly, we only divert
-                    // the focus away from the input box when we're not in Agent Mode.
+                    // the focus away from the input box when the prompt input is disabled.
                     if !self.input_mode_model.as_ref(ctx).is_prompt_input_enabled() {
                         self.focus_terminal(ctx);
                     }
@@ -9067,9 +9067,9 @@ impl TerminalView {
     fn close_find_bar(&mut self, ctx: &mut ViewContext<Self>) {
         self.find_model.update(ctx, |find_model, ctx| {
             find_model.set_is_find_bar_open(false);
-            // Notify rich-content child views (e.g. AI blocks) to repaint and
+            // Notify rich-content child views to repaint and
             // drop their stale find highlights. Terminal grid highlights are
-            // gated at paint time on `is_find_bar_open()`, but AI blocks are
+            // gated at paint time on `is_find_bar_open()`, but rich content blocks are
             // separate child views that won't repaint on their own when the
             // find bar closes.
             //

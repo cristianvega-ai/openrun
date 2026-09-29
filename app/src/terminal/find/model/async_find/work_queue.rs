@@ -29,7 +29,7 @@ pub enum FindWorkItem {
         row_range: RangeInclusive<usize>,
         num_lines_truncated: u64,
     },
-    /// Request scanning of an AI block on the main thread.
+    /// Request scanning of a rich content block on the main thread.
     AIBlock {
         view_id: EntityId,
         total_index: TotalIndex,

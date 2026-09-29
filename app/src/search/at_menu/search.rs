@@ -1,6 +1,6 @@
 const MAX_NEW_SPACES: usize = 2;
 
-/// If this is ever false, we close the AI context menu.
+/// If this is ever false, we close the @ context menu.
 pub fn is_valid_search_query(is_navigation: bool, prev_query: &str, query: &str) -> bool {
     if query.contains('\n') || query.contains("  ") {
         return false;

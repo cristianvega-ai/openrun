@@ -1740,7 +1740,7 @@ pub struct EditorView {
     /// allow the creation of AtMenuState.
     pub at_menu_state: Option<AtMenuState>,
 
-    /// Whether this editor is in AI input mode.
+    /// Whether this editor is the prompt input.
     is_prompt_input: bool,
 
     /// Whether this editor should delegate handling of paste events to its parent.
@@ -4758,7 +4758,7 @@ impl EditorView {
     /// Reads and processes images asynchronously from file paths.
     ///
     /// This function reads image files from the given paths, validates they are supported formats,
-    /// and processes them for AI context attachment via `process_and_attach_images_as_ai_context`.
+    /// and processes them for attachment via `process_and_attach_images_as_ai_context`.
     pub fn read_and_process_images_async(
         &mut self,
         num_images_user_attached: usize,
@@ -4858,7 +4858,7 @@ impl EditorView {
         );
     }
 
-    /// Processes and attaches images to the AI context model.
+    /// Processes and attaches images to the context model.
     ///
     /// This function handles the final step of image attachment after validation,
     /// updating the context model and UI state accordingly.
@@ -8035,7 +8035,7 @@ impl TypedActionView for EditorView {
                     }
                     // If setting is false, don't emit the event to open the menu
                 } else {
-                    // In AI mode or when closing, always allow
+                    // When closing, always allow
                     ctx.emit(Event::SetAtMenuOpen(*open));
                 }
             }

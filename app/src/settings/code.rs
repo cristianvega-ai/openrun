@@ -61,7 +61,7 @@ define_settings_group!(CodeSettings, settings: [
     },
     // Controls whether the Warp text editor automatically saves file changes as the
     // user types (debounced) and when the editor loses focus. Only applies to the
-    // Warp text editor, not the command line or AI input.
+    // Warp text editor, not the command line.
     auto_save: AutoSave {
         type: bool,
         default: false,
