@@ -16,7 +16,7 @@
       "request": "launch",
       "name": "Debug executable 'warp-oss'",
       "cargo": {
-        "args": ["build", "--bin=warp-oss", "--features=gui"],
+        "args": ["build", "--bin=warp-oss"],
         "filter": {
           "name": "warp-oss",
           "kind": "bin"

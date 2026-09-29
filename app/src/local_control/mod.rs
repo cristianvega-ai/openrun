@@ -25,7 +25,7 @@
 //!                 [0600 socket + kernel-reported peer UID]
 //!                                             |
 //!                                             v
-//!                           feature flag + Settings > Scripting gate
+//!                           Settings > Scripting gate
 //!                           + protocol + exact action metadata
 //!                                             |
 //!                                             v

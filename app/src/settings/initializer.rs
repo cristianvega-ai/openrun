@@ -1,12 +1,10 @@
 use warp_core::channel::{Channel, ChannelState};
-use warp_core::features::FeatureFlag;
 use warp_core::settings::Setting;
 use warp_errors::report_if_error;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
 use crate::root_view::has_completed_local_onboarding;
-use crate::settings::{FontSettings, PrivacySettings, ThemeSettings};
-use crate::themes::theme::ThemeKind;
+use crate::settings::{FontSettings, PrivacySettings};
 
 pub struct SettingsInitializer;
 
@@ -41,28 +39,17 @@ impl SettingsInitializer {
             settings.initialize_default_regexes_once(ctx);
         });
 
-        if is_new_user {
-            if FeatureFlag::DefaultAdeberryTheme.is_enabled() {
-                log::debug!("Setting default theme to Adeberry for new user");
-                ThemeSettings::handle(ctx).update(ctx, |settings, ctx| {
-                    if *settings.theme_kind.value() == ThemeKind::Phenomenon {
-                        report_if_error!(settings.theme_kind.set_value(ThemeKind::Adeberry, ctx));
-                    }
-                });
-            }
-
-            if cfg!(windows) {
-                log::debug!("Setting default font size to 16px (12pt) for a new Windows user");
-                FontSettings::handle(ctx).update(ctx, |settings, ctx| {
-                    if !settings.monospace_font_size.is_value_explicitly_set() {
-                        report_if_error!(
-                            settings
-                                .monospace_font_size
-                                .set_value(DEFAULT_WINDOWS_MONOSPACE_FONT_SIZE, ctx)
-                        );
-                    }
-                })
-            }
+        if is_new_user && cfg!(windows) {
+            log::debug!("Setting default font size to 16px (12pt) for a new Windows user");
+            FontSettings::handle(ctx).update(ctx, |settings, ctx| {
+                if !settings.monospace_font_size.is_value_explicitly_set() {
+                    report_if_error!(
+                        settings
+                            .monospace_font_size
+                            .set_value(DEFAULT_WINDOWS_MONOSPACE_FONT_SIZE, ctx)
+                    );
+                }
+            })
         }
     }
 }

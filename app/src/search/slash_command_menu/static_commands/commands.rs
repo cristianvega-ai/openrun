@@ -3,7 +3,6 @@ use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use warp_core::features::FeatureFlag;
 
 use super::{Availability, SlashCommandKind};
 use crate::search::slash_command_menu::StaticCommand;
@@ -145,7 +144,7 @@ fn all_commands() -> Vec<StaticCommand> {
         commands.extend([EDIT.clone(), OPEN_REPO]);
     }
 
-    if FeatureFlag::SettingsFile.is_enabled() && cfg!(feature = "local_fs") {
+    if cfg!(feature = "local_fs") {
         commands.push(OPEN_SETTINGS_FILE);
     }
 

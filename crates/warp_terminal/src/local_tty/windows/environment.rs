@@ -135,15 +135,13 @@ pub(super) fn get_shell_environment_variables(options: &PtyOptions) -> Vec<u16> 
         },
     );
 
-    if FeatureFlag::HOANotifications.is_enabled() {
-        env.insert(
-            map_key(WARP_CLI_AGENT_PROTOCOL_VERSION_ENV.into()),
-            EnvEntry {
-                preferred_key: WARP_CLI_AGENT_PROTOCOL_VERSION_ENV.into(),
-                value: CLI_AGENT_PROTOCOL_VERSION.to_string().into(),
-            },
-        );
-    }
+    env.insert(
+        map_key(WARP_CLI_AGENT_PROTOCOL_VERSION_ENV.into()),
+        EnvEntry {
+            preferred_key: WARP_CLI_AGENT_PROTOCOL_VERSION_ENV.into(),
+            value: CLI_AGENT_PROTOCOL_VERSION.to_string().into(),
+        },
+    );
 
     let ssh_socket_dir = ssh_socket_dir();
     env.insert(
@@ -229,9 +227,7 @@ fn wsl_env_allowlist(include_initial_working_dir: bool) -> OsString {
         format!("{PROMPT_NODE_VERSION_ENABLED_NAME}/u"),
     ];
 
-    if FeatureFlag::HOANotifications.is_enabled() {
-        entries.push(format!("{WARP_CLI_AGENT_PROTOCOL_VERSION_ENV}/u"));
-    }
+    entries.push(format!("{WARP_CLI_AGENT_PROTOCOL_VERSION_ENV}/u"));
 
     if include_initial_working_dir {
         entries.push(format!("{INITIAL_WORKING_DIR_NAME}/pu"));

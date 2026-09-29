@@ -10,7 +10,6 @@ use serde::Serialize;
 use string_offset::CharOffset;
 use warp_completer::meta::Span;
 use warp_core::command::ExitCode;
-use warp_core::features::FeatureFlag;
 use warp_core::semantic_selection::SemanticSelection;
 use warp_errors::report_error;
 pub use warp_terminal::event::ExitReason;
@@ -3023,10 +3022,8 @@ impl ansi::Handler for TerminalModel {
     }
 
     fn pluggable_notification(&mut self, title: Option<String>, body: String) {
-        if FeatureFlag::PluggableNotifications.is_enabled() {
-            self.event_proxy
-                .send_app_event(Event::PluggableNotification { title, body });
-        }
+        self.event_proxy
+            .send_app_event(Event::PluggableNotification { title, body });
     }
 
     fn set_keyboard_enhancement_flags(

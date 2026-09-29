@@ -35,12 +35,11 @@ use super::settings_page::render_sub_sub_header;
 use super::settings_page::{
     AdditionalInfo, CONTENT_FONT_SIZE, Category, HEADER_PADDING, MatchData, PageType,
     SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, TOGGLE_BUTTON_RIGHT_PADDING,
-    ToggleState, add_setting, build_reset_button, build_toggle_element, render_body_item,
-    render_body_item_label, render_dropdown_item, render_dropdown_item_label,
+    ToggleState, add_setting, build_reset_button, render_body_item, render_body_item_label,
+    render_dropdown_item, render_dropdown_item_label,
 };
 use super::{
     DisplayCount, SettingsAction, SettingsSection, ToggleSettingActionPair, features, flags,
-    render_beta_chip,
 };
 use crate::appearance::Appearance;
 use crate::default_terminal::DefaultTerminal;
@@ -48,7 +47,6 @@ use crate::editor::{
     ACCEPT_AUTOSUGGESTION_KEYBINDING_NAME, EditorView, Event as EditorEvent,
     SingleLineEditorOptions, TextOptions,
 };
-use crate::features::FeatureFlag;
 use crate::gpu_state::{GPUState, GPUStateEvent};
 use crate::root_view::QuakeModePinPosition;
 use crate::search::command_search::settings::CommandSearchSettings;
@@ -203,8 +201,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::WARP_COMPLETIONS_CONTEXT_FLAG,
-        )
-        .with_enabled(|| FeatureFlag::NativeShellCompletions.is_enabled()),
+        ),
         ToggleSettingActionPair::new(
             "native shell completions",
             builder(SettingsAction::FeaturesPageToggle(
@@ -212,8 +209,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::NATIVE_SHELL_COMPLETIONS_CONTEXT_FLAG,
-        )
-        .with_enabled(|| FeatureFlag::NativeShellCompletions.is_enabled()),
+        ),
         ToggleSettingActionPair::new(
             "command corrections",
             builder(SettingsAction::FeaturesPageToggle(
@@ -289,8 +285,7 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::SHOW_AUTOSUGGESTION_IGNORE_BUTTON_FLAG,
-        )
-        .with_enabled(|| FeatureFlag::AllowIgnoringInputSuggestions.is_enabled()),
+        ),
     ];
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
@@ -371,17 +366,14 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 .is_supported_on_current_platform(),
         ),
     );
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "in-app agent notifications",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleAgentInAppNotifications,
-            )),
-            context,
-            flags::AGENT_IN_APP_NOTIFICATIONS_FLAG,
-        )
-        .with_enabled(|| FeatureFlag::HOANotifications.is_enabled()),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "in-app agent notifications",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleAgentInAppNotifications,
+        )),
+        context,
+        flags::AGENT_IN_APP_NOTIFICATIONS_FLAG,
+    ));
 
     toggle_binding_pairs.push(
         ToggleSettingActionPair::new(
@@ -590,23 +582,22 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 .is_supported_on_current_platform(),
         ),
     );
-    if FeatureFlag::AIContextMenuCode.is_enabled() {
-        toggle_binding_pairs.push(
-            ToggleSettingActionPair::new(
-                "codebase symbols in the '@' context menu",
-                builder(SettingsAction::FeaturesPageToggle(
-                    FeaturesPageAction::ToggleOutlineCodebaseSymbolsForAtContextMenu,
-                )),
-                context,
-                flags::OUTLINE_CODEBASE_SYMBOLS_FOR_AT_CONTEXT_MENU_FLAG,
-            )
-            .is_supported_on_current_platform(
-                InputSettings::as_ref(app)
-                    .outline_codebase_symbols_for_at_context_menu
-                    .is_supported_on_current_platform(),
-            ),
-        );
-    }
+    toggle_binding_pairs.push(
+        ToggleSettingActionPair::new(
+            "codebase symbols in the '@' context menu",
+            builder(SettingsAction::FeaturesPageToggle(
+                FeaturesPageAction::ToggleOutlineCodebaseSymbolsForAtContextMenu,
+            )),
+            context,
+            flags::OUTLINE_CODEBASE_SYMBOLS_FOR_AT_CONTEXT_MENU_FLAG,
+        )
+        .is_supported_on_current_platform(
+            InputSettings::as_ref(app)
+                .outline_codebase_symbols_for_at_context_menu
+                .is_supported_on_current_platform(),
+        ),
+    );
+
     toggle_binding_pairs.push(
         ToggleSettingActionPair::new(
             "global workflows in Command Search",
@@ -686,7 +677,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
 #[derive(Clone, Debug, PartialEq)]
 pub enum FeaturesPageAction {
     ToggleCopyOnSelect,
-    ToggleAsyncFind,
     ToggleNotifications,
     ToggleRestoreSession,
     ToggleAutocompleteSymbols,
@@ -762,7 +752,6 @@ pub enum FeaturesPageAction {
     ToggleAtContextMenuInTerminalMode,
     ToggleSlashCommandsInTerminalMode,
     ToggleOutlineCodebaseSymbolsForAtContextMenu,
-    ToggleAutoOpenCodeReviewPane,
     TogglePreserveInputFocusOnBlockSelection,
     ToggleAgentInAppNotifications,
     MakeWarpDefaultTerminal,
@@ -1568,15 +1557,6 @@ impl TypedActionView for FeaturesPageView {
                     );
                 });
             }
-            ToggleAutoOpenCodeReviewPane => {
-                GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
-                    report_if_error!(
-                        settings
-                            .auto_open_code_review_pane_on_first_agent_change
-                            .toggle_and_save_value(ctx)
-                    );
-                })
-            }
             TogglePreserveInputFocusOnBlockSelection => {
                 BlockListSettings::handle(ctx).update(ctx, |blocklist_settings, ctx| {
                     report_if_error!(
@@ -1610,15 +1590,6 @@ impl TypedActionView for FeaturesPageView {
             MakeWarpDefaultTerminal => {
                 DefaultTerminal::handle(ctx).update(ctx, |default_terminal, ctx| {
                     default_terminal.make_warp_default(ctx);
-                });
-            }
-            ToggleAsyncFind => {
-                TerminalSettings::handle(ctx).update(ctx, |terminal_settings, ctx| {
-                    report_if_error!(
-                        terminal_settings
-                            .async_find_enabled
-                            .toggle_and_save_value(ctx)
-                    );
                 });
             }
         }
@@ -2201,11 +2172,6 @@ impl FeaturesPageView {
             general_widgets.push(Box::new(DefaultTerminalWidget::default()));
         }
 
-        // The widget is the opt-in surface for channels where `FeatureFlag::AsyncFind`
-        // is off. Channels with the flag on force the feature on and hide the toggle
-        // entirely; see `TerminalSettings::is_async_find_enabled`.
-        general_widgets.push(Box::new(AsyncFindWidget::default()));
-
         let app_editor_settings = AppEditorSettings::as_ref(ctx);
 
         let notifications_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
@@ -2288,15 +2254,9 @@ impl FeaturesPageView {
         {
             editor_widgets.push(Box::new(SyntaxHighlightingWidget::default()))
         }
-        if FeatureFlag::NativeShellCompletions.is_enabled() {
-            editor_widgets.push(Box::new(WarpCompletionsWidget::default()));
-            editor_widgets.push(Box::new(NativeShellCompletionsWidget::default()));
-        } else if input_settings
-            .completions_open_while_typing
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(CompletionsMenuWhileTypingWidget::default()));
-        }
+        editor_widgets.push(Box::new(WarpCompletionsWidget::default()));
+        editor_widgets.push(Box::new(NativeShellCompletionsWidget::default()));
+
         if input_settings
             .command_corrections
             .is_supported_on_current_platform()
@@ -2329,9 +2289,7 @@ impl FeaturesPageView {
 
         editor_widgets.push(Box::new(AutosuggestionKeybindingHintWidget::default()));
 
-        if FeatureFlag::AllowIgnoringInputSuggestions.is_enabled() {
-            editor_widgets.push(Box::new(AutosuggestionIgnoreButtonWidget::default()));
-        }
+        editor_widgets.push(Box::new(AutosuggestionIgnoreButtonWidget::default()));
 
         if input_settings
             .at_context_menu_in_terminal_mode
@@ -2350,7 +2308,6 @@ impl FeaturesPageView {
         if input_settings
             .outline_codebase_symbols_for_at_context_menu
             .is_supported_on_current_platform()
-            && FeatureFlag::AIContextMenuCode.is_enabled()
         {
             editor_widgets.push(Box::new(
                 OutlineCodebaseSymbolsForAtContextMenuWidget::default(),
@@ -4423,84 +4380,80 @@ impl SettingsWidget for DesktopNotificationsWidget {
             column.add_child(render_group(toggles, appearance));
         }
 
-        if FeatureFlag::HOANotifications.is_enabled() {
-            let show_agent_notifications = *CLIAgentSettings::as_ref(app).show_agent_notifications;
-            column.add_child(render_body_item::<FeaturesPageAction>(
-                "Show in-app agent notifications".into(),
-                None,
-                ToggleState::Enabled,
-                appearance,
-                ui_builder
-                    .switch(
-                        view.button_mouse_states
-                            .agent_in_app_notifications_switch
-                            .clone(),
+        let show_agent_notifications = *CLIAgentSettings::as_ref(app).show_agent_notifications;
+        column.add_child(render_body_item::<FeaturesPageAction>(
+            "Show in-app agent notifications".into(),
+            None,
+            ToggleState::Enabled,
+            appearance,
+            ui_builder
+                .switch(
+                    view.button_mouse_states
+                        .agent_in_app_notifications_switch
+                        .clone(),
+                )
+                .check(show_agent_notifications)
+                .build()
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleAgentInAppNotifications);
+                })
+                .finish(),
+            None,
+        ));
+
+        if show_agent_notifications {
+            let theme = appearance.theme();
+            let font_size = appearance.ui_font_size() - 2.;
+            let font_color = theme.active_ui_text_color();
+
+            let editor_style = UiComponentStyles {
+                width: Some(appearance.ui_font_size() * 3.),
+                height: Some(appearance.ui_font_size() * 2.),
+                padding: Some(Coords::uniform(5.)),
+                background: Some(theme.surface_2().into()),
+                ..Default::default()
+            };
+
+            let toast_duration_row = Flex::row()
+                .with_cross_axis_alignment(CrossAxisAlignment::Center)
+                .with_child(
+                    Text::new_inline(
+                        "Toast notifications stay visible for",
+                        appearance.ui_font_family(),
+                        font_size,
                     )
-                    .check(show_agent_notifications)
-                    .build()
-                    .on_click(move |ctx, _, _| {
-                        ctx.dispatch_typed_action(
-                            FeaturesPageAction::ToggleAgentInAppNotifications,
-                        );
-                    })
+                    .with_color(font_color.into())
                     .finish(),
-                None,
-            ));
-
-            if show_agent_notifications {
-                let theme = appearance.theme();
-                let font_size = appearance.ui_font_size() - 2.;
-                let font_color = theme.active_ui_text_color();
-
-                let editor_style = UiComponentStyles {
-                    width: Some(appearance.ui_font_size() * 3.),
-                    height: Some(appearance.ui_font_size() * 2.),
-                    padding: Some(Coords::uniform(5.)),
-                    background: Some(theme.surface_2().into()),
-                    ..Default::default()
-                };
-
-                let toast_duration_row = Flex::row()
-                    .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                    .with_child(
-                        Text::new_inline(
-                            "Toast notifications stay visible for",
-                            appearance.ui_font_family(),
-                            font_size,
+                )
+                .with_child(
+                    Container::new(
+                        Dismiss::new(
+                            appearance
+                                .ui_builder()
+                                .text_input(view.notification_toast_duration_editor.clone())
+                                .with_style(editor_style)
+                                .build()
+                                .finish(),
                         )
+                        .on_dismiss(|ctx, _app| {
+                            ctx.dispatch_typed_action(
+                                FeaturesPageAction::SetNotificationToastDuration,
+                            )
+                        })
+                        .finish(),
+                    )
+                    .with_margin_right(NOTIFICATION_EDITOR_MARGIN)
+                    .with_margin_left(NOTIFICATION_EDITOR_MARGIN)
+                    .finish(),
+                )
+                .with_child(
+                    Text::new_inline("seconds", appearance.ui_font_family(), font_size)
                         .with_color(font_color.into())
                         .finish(),
-                    )
-                    .with_child(
-                        Container::new(
-                            Dismiss::new(
-                                appearance
-                                    .ui_builder()
-                                    .text_input(view.notification_toast_duration_editor.clone())
-                                    .with_style(editor_style)
-                                    .build()
-                                    .finish(),
-                            )
-                            .on_dismiss(|ctx, _app| {
-                                ctx.dispatch_typed_action(
-                                    FeaturesPageAction::SetNotificationToastDuration,
-                                )
-                            })
-                            .finish(),
-                        )
-                        .with_margin_right(NOTIFICATION_EDITOR_MARGIN)
-                        .with_margin_left(NOTIFICATION_EDITOR_MARGIN)
-                        .finish(),
-                    )
-                    .with_child(
-                        Text::new_inline("seconds", appearance.ui_font_family(), font_size)
-                            .with_color(font_color.into())
-                            .finish(),
-                    )
-                    .finish();
+                )
+                .finish();
 
-                column.add_child(render_group(vec![toast_duration_row], appearance));
-            }
+            column.add_child(render_group(vec![toast_duration_row], appearance));
         }
 
         column.finish()
@@ -4863,47 +4816,6 @@ impl SettingsWidget for SyntaxHighlightingWidget {
                 .build()
                 .on_click(move |ctx, _, _| {
                     ctx.dispatch_typed_action(FeaturesPageAction::ToggleSyntaxHighlighting);
-                })
-                .finish(),
-            None,
-        )
-    }
-}
-
-#[derive(Default)]
-struct CompletionsMenuWhileTypingWidget {
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for CompletionsMenuWhileTypingWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "completions menu type typing"
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-        render_body_item::<FeaturesPageAction>(
-            "Open completions menu as you type".into(),
-            None,
-            ToggleState::Enabled,
-            appearance,
-            ui_builder
-                .switch(self.switch_state.clone())
-                .check(
-                    *InputSettings::as_ref(app)
-                        .completions_open_while_typing
-                        .value(),
-                )
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleCompletionsOpenWhileTyping);
                 })
                 .finish(),
             None,
@@ -6359,66 +6271,5 @@ impl SettingsWidget for GraphicsBackendWidget {
             );
         }
         col.finish()
-    }
-}
-
-#[derive(Default)]
-struct AsyncFindWidget {
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for AsyncFindWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "async asynchronous fast find search"
-    }
-
-    fn should_render(&self, _app: &AppContext) -> bool {
-        // Here, the feature flag being enabled means the feature is force-enabled,
-        // so we don't need to render the toggle.
-        !FeatureFlag::AsyncFind.is_enabled()
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder();
-
-        let label = render_body_item_label::<FeaturesPageAction>(
-            "Asynchronous find".into(),
-            None,
-            None,
-            ToggleState::Enabled,
-            appearance,
-        );
-
-        let label_with_chip = Flex::row()
-            .with_cross_axis_alignment(CrossAxisAlignment::Center)
-            .with_child(label)
-            .with_child(render_beta_chip(appearance))
-            .finish();
-
-        let switch = ui_builder
-            .switch(self.switch_state.clone())
-            .check(*TerminalSettings::as_ref(app).async_find_enabled)
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(FeaturesPageAction::ToggleAsyncFind);
-            })
-            .finish();
-
-        build_toggle_element(
-            label_with_chip,
-            switch,
-            appearance,
-            Some(
-                "Use an improved implementation of find to keep the UI responsive while searching for matches on large outputs."
-                    .into(),
-            ),
-        )
     }
 }

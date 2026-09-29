@@ -175,18 +175,22 @@ for itself.
 
 ### Feature Flags
 
-The app uses compile-time feature flags with a small runtime plumbing layer.
+There is one release stream (`Channel::Oss`, plus `Channel::Integration` for tests), so behavior that is the same
+everywhere is written directly, not put behind a flag. `FeatureFlag` (in `crates/warp_features/src/lib.rs`) is a
+small runtime layer for behavior that depends on the platform or the build profile, such as `ITermImages`,
+`KittyImages` and `DebugMode`.
 
 How to add a feature flag:
 - Add a new variant to the `FeatureFlag` enum in `crates/warp_features/src/lib.rs`
+- Enable it in `enabled_features()` in `app/src/features.rs` (with a `#[cfg(...)]` on the platform or build condition), or list it in `DEBUG_FLAGS`
 - Gate code paths with `FeatureFlag::YourFlag.is_enabled()`
-- To turn a flag on by default, add a Cargo feature for it in `app/Cargo.toml` and map it in `app/src/features.rs` (`enabled_features`); otherwise it stays off until enabled at runtime
+- There is no Cargo feature per flag, and there are no Dogfood/Preview/Release lists
 
 Best practices:
-- **Prefer runtime checks over cfg directives**: Prefer `FeatureFlag::YourFlag.is_enabled()` over `#[cfg(...)]` compile-time directives so flags can be toggled without recompilation and are easier to clean up later. Use `#[cfg(...)]` only when the code cannot compile without them (for example, platform-specific code or dependencies that do not exist when the feature is disabled).
+- **Prefer runtime checks over cfg directives**: Prefer `FeatureFlag::YourFlag.is_enabled()` over `#[cfg(...)]` compile-time directives when both arms compile everywhere. Use `#[cfg(...)]` only when the code cannot compile without them (for example, platform-specific code or dependencies that do not exist when the feature is disabled).
 - Keep flags high-level and product-focused rather than per-call-site
-- Remove the flag and dead branches after launch has stabilized
-- For UI sections that expose a new feature, hide the UI behind the same flag
+- Remove the flag and dead branches once its value no longer varies
+- In tests, use `FeatureFlag::YourFlag.override_enabled(true)`
 
 Example:
 ```rust

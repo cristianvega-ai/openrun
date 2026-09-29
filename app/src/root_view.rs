@@ -29,7 +29,6 @@ use warpui::{
 
 use crate::app_state::{AppState, PaneUuid, WindowSnapshot};
 use crate::appearance::Appearance;
-use crate::features::FeatureFlag;
 use crate::interval_timer::IntervalTimer;
 use crate::launch_configs::launch_config;
 use crate::pane_group::{NewTerminalOptions, PanesLayout};
@@ -269,9 +268,7 @@ pub fn init(app: &mut AppContext) {
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("RootView"))
         .with_key_binding("shift-f12")
-        .with_enabled(|| {
-            FeatureFlag::AgentOnboarding.is_enabled() && ChannelState::enable_debug_features()
-        }),
+        .with_enabled(ChannelState::enable_debug_features),
     ])
 }
 
@@ -1162,8 +1159,7 @@ impl RootView {
         };
 
         // Integration tests drive the workspace directly, so they never start in onboarding.
-        let onboarding_state = if FeatureFlag::AgentOnboarding.is_enabled()
-            && !has_completed_local_onboarding(ctx)
+        let onboarding_state = if !has_completed_local_onboarding(ctx)
             && ChannelState::channel() != Channel::Integration
         {
             let workspace_args_box: Box<WorkspaceArgs> = workspace_args.into();
@@ -1242,11 +1238,6 @@ impl RootView {
     fn debug_enter_onboarding_state(&mut self, _: &(), ctx: &mut ViewContext<Self>) -> bool {
         if !ChannelState::enable_debug_features() {
             log::warn!("Attempted to enter onboarding state in release build");
-            return false;
-        }
-
-        if !FeatureFlag::AgentOnboarding.is_enabled() {
-            log::warn!("Attempted to enter onboarding state without AgentOnboarding enabled");
             return false;
         }
 

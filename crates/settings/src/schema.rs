@@ -22,11 +22,6 @@ pub struct SettingSchemaEntry {
     /// Whether this setting is private (excluded from user-facing schema).
     pub is_private: bool,
 
-    /// Feature flag gating this setting.
-    /// If Some, the setting is only included in the schema when the flag
-    /// is active for the target build channel.
-    pub feature_flag: Option<warp_features::FeatureFlag>,
-
     /// Returns which platforms this setting applies to.
     pub supported_platforms_fn: fn() -> SupportedPlatforms,
 
@@ -60,7 +55,6 @@ macro_rules! submit_schema_entry {
         toml_path_value: $toml_path:expr,
         fallback_storage_key: $fallback_key:expr,
         supported_platforms: $plat:expr,
-        feature_flag: $flag:expr,
         max_table_depth: $mtd:expr,
         default: $default:tt,
         value_type: $type:ty,
@@ -84,7 +78,6 @@ macro_rules! submit_schema_entry {
                     HIER
                 },
                 is_private: $private,
-                feature_flag: $flag,
                 supported_platforms_fn: || $plat,
                 default_value_fn: || {
                     let val: $type = $default;
@@ -112,17 +105,6 @@ macro_rules! _schema_default_description {
     };
     ($desc:literal) => {
         $desc
-    };
-}
-
-/// Helper: produces `Option<FeatureFlag>` for a feature flag, defaulting to `None`.
-#[macro_export]
-macro_rules! _schema_default_flag {
-    () => {
-        None
-    };
-    ($flag:path) => {
-        Some($flag)
     };
 }
 

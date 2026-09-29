@@ -9,7 +9,6 @@ use std::path::PathBuf;
 pub use data_source::*;
 pub use mixer::{SlashCommandMixer, build_slash_command_mixer, slash_command_query};
 pub use view::{CloseReason, InlineSlashCommandView, SlashCommandsEvent};
-use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::AnsiColorIdentifier;
 #[cfg(feature = "local_fs")]
 use warp_util::path::{CleanPathResult, LineAndColumnArg};
@@ -403,7 +402,7 @@ impl Input {
                 ctx.dispatch_typed_action(&TerminalAction::ToggleCodeReviewPane);
             }
             SlashCommandKind::OpenSettingsFile => {
-                if !FeatureFlag::SettingsFile.is_enabled() || !cfg!(feature = "local_fs") {
+                if !cfg!(feature = "local_fs") {
                     return false;
                 }
                 ctx.dispatch_typed_action(&WorkspaceAction::OpenSettingsFile);

@@ -5,7 +5,7 @@
 # Always builds the `warp-oss` binary. On macOS this delegates to
 # `./script/macos/run`, which builds and runs Warp as a real `.app` bundle
 # (with code signing, plist updates, etc.). On Linux and Windows it invokes
-# `cargo run --bin warp-oss --features gui` directly.
+# `cargo run --bin warp-oss` directly.
 #
 # This script owns the shared argument parsing and passes the resolved cargo
 # features to the platform-specific script via the FEATURES environment
@@ -18,7 +18,7 @@ cd "${REPO_ROOT}"
 
 OS_TYPE="$(uname -s)"
 
-FEATURES="gui"
+FEATURES=""
 WARP_BIN_NAME="warp-oss"
 
 # Shared argument parsing. macOS-specific flags (--dont-open,
@@ -37,7 +37,7 @@ while (( "$#" )); do
       ;;
     --features)
       if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-        FEATURES="$FEATURES,$2"
+        FEATURES="${FEATURES:+$FEATURES,}$2"
         shift 2
       else
         echo "Error: Argument for $1 is missing" >&2
@@ -77,11 +77,15 @@ if [[ "$OS_TYPE" = "Darwin" ]]; then
     exec ./script/macos/run "${MAC_ARGS[@]}"
   fi
 elif [[ "$OS_TYPE" = "Linux" ]] || [[ "$OS_TYPE" =~ ^(MINGW64_NT|MSYS_NT) ]]; then
-  echo "Running cargo run --bin $WARP_BIN_NAME --features \"$FEATURES\" ${CARGO_PARAMS[*]}"
+  FEATURE_PARAMS=()
+  if [[ -n "$FEATURES" ]]; then
+    FEATURE_PARAMS=(--features "$FEATURES")
+  fi
+  echo "Running cargo run --bin $WARP_BIN_NAME ${FEATURE_PARAMS[*]} ${CARGO_PARAMS[*]}"
   if [[ ${#WARP_ARGS[@]} -gt 0 ]]; then
-    cargo run --bin "$WARP_BIN_NAME" --features "$FEATURES" "${CARGO_PARAMS[@]}" -- "${WARP_ARGS[@]}"
+    cargo run --bin "$WARP_BIN_NAME" ${FEATURE_PARAMS[@]+"${FEATURE_PARAMS[@]}"} "${CARGO_PARAMS[@]}" -- "${WARP_ARGS[@]}"
   else
-    cargo run --bin "$WARP_BIN_NAME" --features "$FEATURES" "${CARGO_PARAMS[@]}"
+    cargo run --bin "$WARP_BIN_NAME" ${FEATURE_PARAMS[@]+"${FEATURE_PARAMS[@]}"} "${CARGO_PARAMS[@]}"
   fi
 else
   echo "No run script defined for the current platform ($OS_TYPE)!" >&2

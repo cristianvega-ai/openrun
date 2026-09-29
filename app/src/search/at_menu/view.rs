@@ -7,7 +7,6 @@ use itertools::Itertools;
 #[cfg(not(target_family = "wasm"))]
 use repo_metadata::repositories::DetectedRepositories;
 use settings::Setting as _;
-use warp_core::features::FeatureFlag;
 use warpui::elements::{
     AnchorPair, Border, ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment,
     Dismiss, Empty, Fill, Flex, Hoverable, Icon, MouseStateHandle, OffsetPositioning, OffsetType,
@@ -272,10 +271,9 @@ impl AtMenu {
             vec![AtMenuCategory::CurrentFolderFiles]
         };
 
-        if FeatureFlag::AIContextMenuCode.is_enabled()
-            && *InputSettings::as_ref(app)
-                .outline_codebase_symbols_for_at_context_menu
-                .value()
+        if *InputSettings::as_ref(app)
+            .outline_codebase_symbols_for_at_context_menu
+            .value()
             && is_active_dir_in_git_repo
         {
             categories.push(AtMenuCategory::Code);

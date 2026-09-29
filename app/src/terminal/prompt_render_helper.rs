@@ -2,11 +2,7 @@ use std::fmt;
 use std::num::NonZeroUsize;
 
 use settings::Setting as _;
-use warp_core::semantic_selection::SemanticSelection;
-use warpui::elements::{
-    Container, DispatchEventResult, Element, EventHandler, SavePosition, SelectableArea,
-    SelectionHandle, Text,
-};
+use warpui::elements::{Container, DispatchEventResult, Element, EventHandler, SavePosition, Text};
 use warpui::fonts::{Properties, Weight};
 use warpui::presenter::ChildView;
 use warpui::units::Pixels;
@@ -23,7 +19,6 @@ use super::{SizeInfo, TerminalModel, prompt, should_right_click_paste};
 use crate::appearance::Appearance;
 use crate::context_chips::display::PromptDisplay;
 use crate::context_chips::spacing;
-use crate::features::FeatureFlag;
 use crate::settings::FontSettings;
 use crate::terminal::blockgrid_element::BlockGridElement;
 use crate::terminal::grid_size_util::grid_compute_baseline_position_fn;
@@ -116,7 +111,6 @@ pub struct PromptRenderHelper {
     prompt_parent_view_id: EntityId,
 
     prompt_view: ViewHandle<PromptDisplay>,
-    prompt_selection_state_handle: SelectionHandle,
     input_render_state_model_handle: ModelHandle<InputRenderStateModel>,
 }
 
@@ -139,14 +133,12 @@ impl PromptRenderHelper {
     pub(in crate::terminal) fn new(
         sessions: ModelHandle<Sessions>,
         prompt_view_handle: ViewHandle<PromptDisplay>,
-        prompt_selection_state_handle: SelectionHandle,
         parent_view_id: EntityId,
         input_render_state_model_handle: ModelHandle<InputRenderStateModel>,
     ) -> Self {
         Self {
             sessions,
             prompt_view: prompt_view_handle,
-            prompt_selection_state_handle,
             prompt_parent_view_id: parent_view_id,
             input_render_state_model_handle,
         }
@@ -518,42 +510,25 @@ impl PromptRenderHelper {
                 }
             })
             .finish();
-        let semantic_selection = SemanticSelection::as_ref(app);
         Some(
             SavePosition::new(
-                EventHandler::new(if FeatureFlag::SelectablePrompt.is_enabled() {
-                    // TODO(Simon): Distinguish right-clicks performed directly within selected text bounds.
-                    // The "Copy" option should only appear when selected text is right-clicked directly.
-                    // Right-clicks performed directly within selected text can be handled separately via
-                    // the `SelectableArea`'s `on_selection_right_click` function. It may be helpful to
-                    // follow the paradigm used for `TerminalAction::BlockListContextMenu`.
-                    SelectableArea::new(
-                        self.prompt_selection_state_handle.clone(),
-                        |_selection_args, _ctx, _| {},
-                        prompt_with_padding_container,
-                    )
-                    .with_word_boundaries_policy(semantic_selection.word_boundary_policy())
-                    .with_smart_select_fn(semantic_selection.smart_select_fn())
-                    .finish()
-                } else {
-                    prompt_with_padding_container
-                })
-                .on_right_mouse_down(move |ctx, app, position, modifiers| {
-                    if should_right_click_paste(modifiers.shift, app) {
-                        ctx.dispatch_typed_action(TerminalAction::Paste);
-                        return DispatchEventResult::StopPropagation;
-                    }
-                    let position_id = format!("prompt_area_{view_id}");
-                    let Some(prompt_rect) = ctx.element_position_by_id(position_id) else {
-                        return DispatchEventResult::PropagateToParent;
-                    };
-                    let offset_position = position - prompt_rect.origin();
-                    ctx.dispatch_typed_action(TerminalAction::PromptContextMenu {
-                        position_offset_from_prompt: offset_position,
-                    });
-                    DispatchEventResult::StopPropagation
-                })
-                .finish(),
+                EventHandler::new(prompt_with_padding_container)
+                    .on_right_mouse_down(move |ctx, app, position, modifiers| {
+                        if should_right_click_paste(modifiers.shift, app) {
+                            ctx.dispatch_typed_action(TerminalAction::Paste);
+                            return DispatchEventResult::StopPropagation;
+                        }
+                        let position_id = format!("prompt_area_{view_id}");
+                        let Some(prompt_rect) = ctx.element_position_by_id(position_id) else {
+                            return DispatchEventResult::PropagateToParent;
+                        };
+                        let offset_position = position - prompt_rect.origin();
+                        ctx.dispatch_typed_action(TerminalAction::PromptContextMenu {
+                            position_offset_from_prompt: offset_position,
+                        });
+                        DispatchEventResult::StopPropagation
+                    })
+                    .finish(),
                 &position_id,
             )
             .finish(),

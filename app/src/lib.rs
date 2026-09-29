@@ -124,7 +124,6 @@ pub mod workflows;
 pub mod workspace;
 
 use std::borrow::Cow;
-use std::ops::Deref;
 
 use ::settings::{Setting, ToggleableSetting};
 #[cfg(feature = "local_tty")]
@@ -156,7 +155,6 @@ use warpui::{App, AppContext, Event, SingletonEntity, WindowId};
 use window_settings::WindowSettings;
 use workspace::sync_inputs::SyncedInputState;
 
-use self::features::FeatureFlag;
 use crate::app_state::AppState;
 use crate::code::global_buffer_model::GlobalBufferModel;
 #[cfg(feature = "local_fs")]
@@ -318,12 +316,6 @@ pub fn run() -> Result<()> {
         }
     }
 
-    // A standalone CLI build has no GUI to launch, so print help instead.
-    if cfg!(feature = "standalone") {
-        warp_cli::Args::clap_command().print_help()?;
-        return Ok(());
-    }
-
     run_internal(LaunchMode::App {
         args: args.into_app_args(),
     })
@@ -467,9 +459,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     let private_preferences = settings::init_private_user_preferences();
     let (public_preferences, startup_toml_parse_error) = settings::init_public_user_preferences();
 
-    // When the SettingsFile feature flag is enabled, public settings live in
-    // the TOML-backed store. When disabled, they live in the platform-native
-    // store (same backend as private). Use the correct one for pre-app reads.
+    // Public settings live in the TOML-backed store. Use it for pre-app reads.
     #[cfg_attr(
         not(any(
             enable_crash_recovery,
@@ -480,11 +470,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         expect(unused)
     )]
     let prefs_for_public_settings: &dyn warpui_extras::user_preferences::UserPreferences =
-        if FeatureFlag::SettingsFile.is_enabled() {
-            public_preferences.as_ref()
-        } else {
-            private_preferences.deref()
-        };
+        public_preferences.as_ref();
 
     #[cfg(enable_crash_recovery)]
     let crash_recovery =
@@ -601,8 +587,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
 
         let app_state = initialize_app(timer, startup_toml_parse_error, ctx);
 
-        FeatureFlag::UseTantivySearch.set_enabled(true);
-
         launch(ctx, app_state, launch_mode);
     })
 }
@@ -640,9 +624,7 @@ pub(crate) fn initialize_app(
     let user_defaults_on_startup = settings::init(startup_toml_parse_error, ctx);
     timer.mark_interval_end("READ_USER_DEFAULTS_AND_INITIALIZE_SETTINGS");
 
-    if FeatureFlag::UIZoom.is_enabled() {
-        ctx.set_zoom_factor(WindowSettings::as_ref(ctx).zoom_level.as_zoom_factor());
-    }
+    ctx.set_zoom_factor(WindowSettings::as_ref(ctx).zoom_level.as_zoom_factor());
 
     stored_credentials::remove_stored_account_credentials_once(ctx);
 
@@ -842,9 +824,7 @@ pub(crate) fn initialize_app(
     tab_configs::params_modal::init(ctx);
     context_chips::display_menu::init(ctx);
     context_chips::node_version_popup::init(ctx);
-    if FeatureFlag::CodeReviewSaveChanges.is_enabled() {
-        code_review::init(ctx);
-    }
+    code_review::init(ctx);
 
     let display_count = ctx.windows().display_count();
     ctx.add_singleton_model(|_| DisplayCount(display_count));

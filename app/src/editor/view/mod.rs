@@ -91,7 +91,6 @@ use crate::channel::{Channel, ChannelState};
 use crate::editor::RangeExt;
 use crate::editor::accept_autosuggestion_keybinding_view::AcceptAutosuggestionKeybinding;
 use crate::editor::autosuggestion_ignore_view::{AutosuggestionIgnore, AutosuggestionIgnoreEvent};
-use crate::features::FeatureFlag;
 use crate::search::at_menu::mixer::AtMenuSearchableAction;
 use crate::search::at_menu::view::{AtMenu, AtMenuCategory, AtMenuEvent};
 use crate::settings::{
@@ -879,24 +878,13 @@ pub fn init(ctx: &mut AppContext) {
         ),
     ]);
 
-    ctx.register_editable_bindings([
-        // Command x-ray is bound to something other than cmdorctrl-i.
-        EditableBinding::new(
-            "editor_view:inspect_command",
-            "Inspect Command",
-            EditorAction::InspectCommand,
-        )
-        .with_enabled(|| FeatureFlag::AgentMode.is_enabled())
-        .with_context_predicate(id!("EditorView") & !id!("IMEOpen")),
-        EditableBinding::new(
-            "editor_view:inspect_command",
-            "Inspect Command",
-            EditorAction::InspectCommand,
-        )
-        .with_enabled(|| !FeatureFlag::AgentMode.is_enabled())
-        .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_key_binding("cmdorctrl-i"),
-    ]);
+    ctx.register_editable_bindings([EditableBinding::new(
+        "editor_view:inspect_command",
+        "Inspect Command",
+        EditorAction::InspectCommand,
+    )
+    .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
+    .with_key_binding("cmdorctrl-i")]);
 
     ctx.register_editable_bindings([EditableBinding::new(
         "editor_view:clear_buffer",
@@ -5696,9 +5684,7 @@ impl EditorView {
         {
             self.vim_escape(ctx);
         } else if self.can_select(ctx) {
-            if FeatureFlag::ClearAutosuggestionOnEscape.is_enabled()
-                && (!self.vim_mode_enabled(ctx) || self.vim_mode(ctx) == Some(VimMode::Normal))
-            {
+            if !self.vim_mode_enabled(ctx) || self.vim_mode(ctx) == Some(VimMode::Normal) {
                 self.clear_autosuggestion(ctx);
             }
 

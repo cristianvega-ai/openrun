@@ -9,7 +9,6 @@ use warpui::{App, EntityIdSet, Presenter, WindowInvalidation};
 use super::*;
 use crate::context_chips::prompt::Prompt;
 use crate::editor::AutosuggestionLocation;
-use crate::features::FeatureFlag;
 use crate::pane_group::focus_state::PaneGroupFocusState;
 use crate::pane_group::{BackingView, TerminalPaneId};
 use crate::settings::import::model::ImportedConfigModel;
@@ -2237,6 +2236,8 @@ fn run_find_test(input_mode: InputMode) {
             }
 
             view.show_find_bar(ctx);
+            view.find_model
+                .update(ctx, |model, _| model.disable_async_find_for_test());
 
             // Test without find_in_block enabled (results should be selection-agnostic)
             view.find_bar.update(ctx, |view, _ctx| {
@@ -2387,6 +2388,8 @@ fn test_case_sensitive_find() {
             }
 
             view.show_find_bar(ctx);
+            view.find_model
+                .update(ctx, |model, _| model.disable_async_find_for_test());
 
             // Test without case sensitivity enabled (no blocks enabled)
             view.handle_find_event(
@@ -2477,6 +2480,8 @@ fn test_find_bar_prefix_search() {
             }
 
             view.show_find_bar(ctx);
+            view.find_model
+                .update(ctx, |model, _| model.disable_async_find_for_test());
 
             // Test without regex enabled
             view.handle_find_event(
@@ -3753,7 +3758,6 @@ fn submit_cli_agent_rich_input_opencode_defers_enter_and_close() {
 fn attach_path_as_context_routes_to_open_cli_agent_rich_input() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _hoa_code_review = FeatureFlag::HoaCodeReview.override_enabled(true);
 
         let terminal = open_cli_agent_rich_input_for_agent(&mut app, CLIAgent::Claude);
         let pty_writes: Rc<RefCell<Vec<Vec<u8>>>> = Rc::new(RefCell::new(Vec::new()));
@@ -4623,7 +4627,6 @@ fn close_cli_agent_rich_input_with_empty_buffer_stores_no_draft() {
 fn close_find_bar_preserves_options_on_async_find_path() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _async_find = FeatureFlag::AsyncFind.override_enabled(true);
         let terminal = add_window_with_terminal(&mut app, None);
 
         let needle_options = || FindOptions {
@@ -4812,7 +4815,6 @@ fn copy_does_not_forward_on_normal_screen() {
 fn active_cli_agent_ignores_non_agent_long_running_command() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        let _hoa_code_review = FeatureFlag::HoaCodeReview.override_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
         terminal.update(&mut app, |view, _| {
@@ -4867,7 +4869,6 @@ fn visible_bootstrap_block_leaves_focus_on_tab_rename_editor() {
 
 #[test]
 fn visible_bootstrap_block_leaves_focus_on_tab_group_rename_editor() {
-    let _grouped_tabs_guard = FeatureFlag::GroupedTabs.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_workspace_app(&mut app);
         let workspace = mock_workspace(&mut app);

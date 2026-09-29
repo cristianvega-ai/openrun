@@ -7,7 +7,6 @@ use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
 use string_offset::CharOffset;
-use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::Appearance;
 use warp_editor::model::CoreEditorModel;
 use warp_editor::render::model::BlockItem;
@@ -293,7 +292,6 @@ fn test_load_static() {
 fn test_file_notebook_mermaid_blocks_default_to_rendered() {
     App::test((), |mut app| async move {
         init_app(&mut app);
-        let _flag = FeatureFlag::MarkdownMermaid.override_enabled(true);
         let (_, handle) = app.add_window(WindowStyle::NotStealFocus, FileNotebookView::new);
 
         handle.update(&mut app, |file_notebook, ctx| {

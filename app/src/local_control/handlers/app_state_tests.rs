@@ -3,7 +3,6 @@ use ::local_control::{ActionKind, ErrorCode};
 #[cfg(feature = "local_fs")]
 use super::resolve_against_working_directory;
 use super::{ensure_surface_available, validate_staged_input_text};
-use crate::features::FeatureFlag;
 use crate::local_control::handlers::metadata::SurfaceDestination;
 
 #[test]
@@ -65,8 +64,8 @@ fn file_open_resolves_relative_paths_against_the_session_working_directory() {
 
 #[test]
 fn unavailable_surface_open_returns_structured_error() {
-    let flag_guard = FeatureFlag::VerticalTabs.override_enabled(false);
     warpui::App::test((), |mut app| async move {
+        crate::test_util::settings::initialize_settings_for_tests(&mut app);
         let error = app
             .update(|ctx| {
                 ensure_surface_available(
@@ -79,5 +78,4 @@ fn unavailable_surface_open_returns_structured_error() {
         assert_eq!(error.code, ErrorCode::UnsupportedAction);
         assert!(error.message.contains("surface.vertical_tabs.open"));
     });
-    drop(flag_guard);
 }

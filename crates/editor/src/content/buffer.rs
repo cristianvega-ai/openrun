@@ -10,7 +10,7 @@ use line_ending::LineEnding;
 use markdown_parser::{
     CodeBlockText, FormattedIndentTextInline, FormattedTable, FormattedTaskList, FormattedText,
     FormattedTextFragment, FormattedTextHeader, FormattedTextLine, FormattedTextStyles,
-    OrderedFormattedIndentTextInline, parse_markdown, parse_markdown_with_gfm_tables,
+    OrderedFormattedIndentTextInline, parse_markdown_with_gfm_tables,
 };
 use num_traits::SaturatingSub;
 use pathfinder_color::ColorU;
@@ -847,11 +847,7 @@ impl Buffer {
         selection_model: ModelHandle<BufferSelectionModel>,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
-        let parse_fn = if warp_core::features::FeatureFlag::MarkdownTables.is_enabled() {
-            parse_markdown_with_gfm_tables
-        } else {
-            parse_markdown
-        };
+        let parse_fn = parse_markdown_with_gfm_tables;
         let parsed_formatted_text = match parse_fn(markdown) {
             Ok(parsed) => parsed,
             Err(e) => {
@@ -887,8 +883,7 @@ impl Buffer {
         selection_model: ModelHandle<BufferSelectionModel>,
         ctx: &mut ModelContext<Self>,
     ) -> Result<Self, ipynb_parser::IpynbError> {
-        let gfm_tables = warp_core::features::FeatureFlag::MarkdownTables.is_enabled();
-        let formatted_text = ipynb_parser::ipynb_to_formatted_text(ipynb, gfm_tables)?;
+        let formatted_text = ipynb_parser::ipynb_to_formatted_text(ipynb, true)?;
         Ok(Self::from_formatted_text(
             formatted_text,
             embedded_item_conversion,

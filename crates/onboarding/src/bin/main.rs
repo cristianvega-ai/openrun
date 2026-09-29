@@ -414,7 +414,6 @@ fn build_appearance(theme: WarpTheme, ctx: &mut AppContext) -> Appearance {
         ui_font_family,
         1.2,
         ui_font_family,
-        ui_font_family,
     )
 }
 

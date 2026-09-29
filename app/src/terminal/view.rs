@@ -145,7 +145,6 @@ use crate::context_chips::ContextChipKind;
 use crate::context_chips::prompt::{Prompt, PromptSelection};
 use crate::context_chips::prompt_type::PromptType;
 use crate::editor::EditorAction;
-use crate::features::FeatureFlag;
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
 use crate::palette::PaletteSource;
 use crate::pane_group::focus_state::PaneFocusHandle;
@@ -1853,7 +1852,7 @@ impl TerminalView {
             model
         });
 
-        let find_model = ctx.add_model(|ctx| TerminalFindModel::new(model.clone(), ctx));
+        let find_model = ctx.add_model(|_| TerminalFindModel::new(model.clone()));
 
         ctx.subscribe_to_model(
             &TerminalSettings::handle(ctx),
@@ -2567,8 +2566,7 @@ impl TerminalView {
 
     fn should_retry_default_pr_chip_validation(ctx: &AppContext) -> bool {
         let settings = SessionSettings::as_ref(ctx);
-        FeatureFlag::GithubPrPromptChip.is_enabled()
-            && settings.github_pr_chip_default_validation.is_suppressed()
+        settings.github_pr_chip_default_validation.is_suppressed()
             && matches!(*settings.saved_prompt, PromptSelection::Default)
     }
 
@@ -3197,7 +3195,7 @@ impl TerminalView {
         &mut self,
         ctx: &mut ViewContext<Self>,
     ) -> bool {
-        if !FeatureFlag::ShellWidgetHandoff.is_enabled() || self.is_long_running() {
+        if self.is_long_running() {
             return false;
         }
         let Some(session_id) = self.active_block_session_id() else {
@@ -3238,7 +3236,7 @@ impl TerminalView {
         &mut self,
         ctx: &mut ViewContext<Self>,
     ) -> bool {
-        if !FeatureFlag::ShellWidgetHandoff.is_enabled() || self.is_long_running() {
+        if self.is_long_running() {
             return false;
         }
         let Some(session_id) = self.active_block_session_id() else {
@@ -3289,8 +3287,7 @@ impl TerminalView {
     }
 
     pub(crate) fn external_alt_c_binding_eligible(&self, app: &AppContext) -> bool {
-        if !FeatureFlag::ShellWidgetHandoff.is_enabled()
-            || self.is_long_running()
+        if self.is_long_running()
             || self.input.as_ref(app).is_voltron_open()
             || self.model.lock().is_alt_screen_active()
         {
@@ -5005,51 +5002,45 @@ impl TerminalView {
                     // If the completed command was a `gh` or `gt` invocation, eagerly refresh PR
                     // info since these don't touch .git/ and won't be caught by the filesystem watcher.
                     #[cfg(feature = "local_fs")]
-                    if (FeatureFlag::GitOperationsInCodeReview.is_enabled()
-                        || FeatureFlag::GithubPrPromptChip.is_enabled())
-                        && match &block_type {
-                            BlockType::User(user_block_completed) => {
-                                let command = user_block_completed.command.get_with(|compute| {
+                    if match &block_type {
+                        BlockType::User(user_block_completed) => {
+                            let command = user_block_completed.command.get_with(|compute| {
+                                let model = self.model.lock();
+                                compute(model.block_list())
+                            });
+                            let top_level = user_block_completed
+                                .serialized_block
+                                .get_with(|compute| {
                                     let model = self.model.lock();
                                     compute(model.block_list())
-                                });
-                                let top_level = user_block_completed
-                                    .serialized_block
-                                    .get_with(|compute| {
-                                        let model = self.model.lock();
-                                        compute(model.block_list())
-                                    })
-                                    .session_id
-                                    .and_then(|session_id| {
-                                        self.sessions.as_ref(ctx).get(session_id)
-                                    })
-                                    .and_then(|session| {
-                                        let escape_char = session.shell_family().escape_char();
-                                        let cmd =
+                                })
+                                .session_id
+                                .and_then(|session_id| self.sessions.as_ref(ctx).get(session_id))
+                                .and_then(|session| {
+                                    let escape_char = session.shell_family().escape_char();
+                                    let cmd = warp_completer::parsers::simple::top_level_command(
+                                        command,
+                                        escape_char,
+                                    )?;
+                                    let cmd = session
+                                        .alias_value(cmd.as_str())
+                                        .and_then(|alias| {
                                             warp_completer::parsers::simple::top_level_command(
-                                                command,
+                                                alias,
                                                 escape_char,
-                                            )?;
-                                        let cmd = session
-                                            .alias_value(cmd.as_str())
-                                            .and_then(|alias| {
-                                                warp_completer::parsers::simple::top_level_command(
-                                                    alias,
-                                                    escape_char,
-                                                )
-                                            })
-                                            .unwrap_or(cmd);
-                                        Some(cmd)
-                                    })
-                                    .or_else(|| {
-                                        command.split_whitespace().next().map(|cmd| cmd.to_owned())
-                                    });
+                                            )
+                                        })
+                                        .unwrap_or(cmd);
+                                    Some(cmd)
+                                })
+                                .or_else(|| {
+                                    command.split_whitespace().next().map(|cmd| cmd.to_owned())
+                                });
 
-                                matches!(top_level.as_deref(), Some("gh" | "gt"))
-                            }
-                            _ => false,
+                            matches!(top_level.as_deref(), Some("gh" | "gt"))
                         }
-                    {
+                        _ => false,
+                    } {
                         self.refresh_pr_info_after_gh_or_gt_command(ctx);
                     }
                 }
@@ -5350,9 +5341,7 @@ impl TerminalView {
             }
             ModelEvent::Handler(_) => {}
             ModelEvent::ExternalShellWidgetSelection(data) => {
-                if FeatureFlag::ShellWidgetHandoff.is_enabled()
-                    && let Some(session_id) = data.session_id.map(SessionId::from)
-                {
+                if let Some(session_id) = data.session_id.map(SessionId::from) {
                     self.input.update(ctx, |input, _ctx| {
                         input.set_external_shell_widget_selection(session_id, &data.buffer);
                     });
@@ -5509,10 +5498,6 @@ impl TerminalView {
             return;
         }
 
-        if notification.agent == CLIAgent::Codex && !FeatureFlag::CodexPlugin.is_enabled() {
-            return;
-        }
-
         if !self.register_cli_agent_listener_from_event(&notification, ctx) {
             return;
         }
@@ -5624,18 +5609,14 @@ impl TerminalView {
                 let mut model = self.model.lock();
                 let active_block = model.block_list_mut().active_block_mut();
                 active_block.enable_full_grid_clear_behavior();
-                if FeatureFlag::TrimTrailingBlankLines.is_enabled() {
-                    active_block.set_trim_trailing_blank_rows(true);
-                }
+                active_block.set_trim_trailing_blank_rows(true);
             }
             CLIAgentSessionsModelEvent::Ended {
                 terminal_view_id, ..
             } if *terminal_view_id == self.view_id => {
                 let mut model = self.model.lock();
                 let active_block = model.block_list_mut().active_block_mut();
-                if FeatureFlag::TrimTrailingBlankLines.is_enabled() {
-                    active_block.set_trim_trailing_blank_rows(false);
-                }
+                active_block.set_trim_trailing_blank_rows(false);
             }
             _ => {}
         }
@@ -6116,15 +6097,11 @@ impl TerminalView {
         if is_ssh_command {
             return vec![];
         }
-        if FeatureFlag::CommandCorrectionsHistoryRule.is_enabled() {
-            correct_command(command, &session_metadata, std::iter::empty())
-        } else {
-            correct_command(
-                command,
-                &session_metadata,
-                DEFAULT_IGNORED_RULES_FOR_COMMAND_CORRECTIONS.into_iter(),
-            )
-        }
+        correct_command(
+            command,
+            &session_metadata,
+            DEFAULT_IGNORED_RULES_FOR_COMMAND_CORRECTIONS.into_iter(),
+        )
     }
 
     fn write_init_subshell_bytes_to_pty(
@@ -10224,9 +10201,6 @@ impl TerminalView {
 
     /// Returns the CLI agent currently active in this terminal, if any.
     pub fn active_cli_agent(&self, ctx: &AppContext) -> Option<super::CLIAgent> {
-        if !FeatureFlag::HoaCodeReview.is_enabled() {
-            return None;
-        }
         CLIAgentSessionsModel::as_ref(ctx)
             .session(self.view_id)
             .map(|s| s.agent)
@@ -10374,8 +10348,8 @@ impl TerminalView {
         if block.honor_ps1() {
             block.prompt_contents_to_string(false)
         } else if block.prompt_snapshot().is_some() {
-            // Note that we're checking not only for the flag being enabled but also ensuring the
-            // prompt_snapshot is defined. This is because some historical blocks from the restored
+            // Note that we're checking that the prompt_snapshot is defined. This is because some
+            // historical blocks from the restored
             // session may not have yet their prompt_snapshot value, and we still want to show them
             // nicely.
             block
@@ -10507,10 +10481,6 @@ impl TerminalView {
     }
 
     pub fn shell_launch_data_if_local(&self, ctx: &AppContext) -> Option<ShellLaunchData> {
-        if !FeatureFlag::ShellSelector.is_enabled() {
-            return None;
-        }
-
         let session_id = self.active_block_session_id()?;
         let Some(session) = self.sessions.as_ref(ctx).get(session_id) else {
             log::warn!("Expected to have session for session ID {session_id:?}, but doesn't exist");
@@ -13171,8 +13141,7 @@ impl View for TerminalView {
 
         // Add a border above the input view when there's an overhanging block (or below in input at the top
         // mode).
-        if ((viewport.overhanging_bottom_block(app).is_some()
-            && FeatureFlag::MinimalistUI.is_enabled())
+        if (viewport.overhanging_bottom_block(app).is_some()
             || *BlockListSettings::as_ref(app).show_block_dividers.value())
             && self.is_input_box_visible(&model, app)
             && !InputSettings::as_ref(app).is_warp_prompt_enabled(app)

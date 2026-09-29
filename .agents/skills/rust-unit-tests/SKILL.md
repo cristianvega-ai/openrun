@@ -191,7 +191,7 @@ VirtualFS::test("case", |_dirs, mut fs| {
 - Feature flags (scoped):
 ```rust
 use warp::features::FeatureFlag; // or `use crate::features::FeatureFlag;` inside the app crate
-let _flag = FeatureFlag::CreatingSharedSessions.override_enabled(true);
+let _flag = FeatureFlag::KittyImages.override_enabled(true);
 ```
 - UI numeric assertions (lines):
 ```rust

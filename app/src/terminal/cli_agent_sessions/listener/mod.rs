@@ -1,7 +1,6 @@
 use warpui::{EntityId, ModelContext, ModelHandle, SingletonEntity};
 
 use super::{CLIAgentEvent, CLIAgentSessionsModel};
-use crate::features::FeatureFlag;
 use crate::terminal::CLIAgent;
 use crate::terminal::cli_agent_sessions::event::{
     CLIAgentEventPayload, CLIAgentEventSource, CLIAgentEventType, parse_event,
@@ -132,9 +131,6 @@ impl CLIAgentSessionHandler for Osc9FallbackSessionHandler {
     ) -> Option<CLIAgentEvent> {
         if let Some(event) = parse_event(title, body) {
             if event.agent != self.agent {
-                return None;
-            }
-            if self.agent == CLIAgent::Codex && !FeatureFlag::CodexPlugin.is_enabled() {
                 return None;
             }
             return Some(event);

@@ -1,4 +1,3 @@
-use warp_core::features::FeatureFlag;
 use warp_core::user_preferences::GetUserPreferences as _;
 use warpui::platform::WindowStyle;
 use warpui::{App, ViewHandle};
@@ -39,8 +38,6 @@ fn new_root_view(app: &mut App) -> ViewHandle<RootView> {
 /// and goes straight to the workspace afterwards.
 #[test]
 fn root_view_new_uses_local_onboarding_state() {
-    let _agent_onboarding = FeatureFlag::AgentOnboarding.override_enabled(true);
-
     App::test((), |mut app| async move {
         crate::workspace::view::tests::initialize_app(&mut app);
         set_local_onboarding_completed(&mut app, false);

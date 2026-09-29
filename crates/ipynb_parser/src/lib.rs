@@ -41,8 +41,7 @@ pub enum IpynbError {
 /// Convert the JSON contents of a `.ipynb` file into [`FormattedText`].
 ///
 /// `gfm_tables` selects the GFM-table-aware Markdown parser for markdown cells,
-/// mirroring the `Buffer::from_markdown` behavior (the caller passes the
-/// `MarkdownTables` feature flag state).
+/// mirroring the `Buffer::from_markdown` behavior.
 ///
 /// Returns an [`IpynbError`] if the input is not a parseable nbformat v4
 /// notebook; callers should fall back to [`raw_fallback_formatted_text`] in that

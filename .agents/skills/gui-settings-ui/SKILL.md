@@ -70,11 +70,11 @@ One more thing worth knowing before you go looking for a title stranded over zer
 
 There are two mechanisms for conditionally showing a setting, and they are not interchangeable.
 
-**1. An `if` at page-build time — never create the widget.** This is how most gating in `AISettingsPageView::build_page` (`ai_page.rs`) is written:
+**1. An `if` at page-build time — never create the widget.** This is how most gating in a page's build function (for example `AppearanceSettingsPageView`, `appearance_page.rs`) is written:
 
 ```rust
-if FeatureFlag::AIRules.is_enabled() {
-    widgets.extend(Self::knowledge_widgets());
+if cfg!(feature = "local_fs") {
+    widgets.extend(Self::local_file_widgets());
 }
 if ai_settings.some_setting.is_supported_on_current_platform() {
     widgets.push(Box::new(SomeWidget::default()));

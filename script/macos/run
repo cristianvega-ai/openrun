@@ -7,7 +7,7 @@
 # This script is invoked by `./script/run`, which handles the shared argument
 # parsing. It always builds the `warp-oss` binary. The following env var is
 # expected to be set by the caller:
-#   FEATURES       — comma-separated cargo features (already normalized)
+#   FEATURES       — comma-separated cargo features (already normalized; may be empty)
 # Must be called from the root directory of the warp repo.
 
 set -e
@@ -15,7 +15,7 @@ set -e
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../.. && pwd)"
 cd "${REPO_ROOT}"
 
-: "${FEATURES:?FEATURES must be set (invoke via ./script/run)}"
+: "${FEATURES?FEATURES must be set (invoke via ./script/run)}"
 
 WARP_BIN_NAME="warp-oss"
 WARP_CHANNEL="oss"
@@ -86,7 +86,7 @@ rm -rf "$WARP_APP_PATH"
 
 pushd app > /dev/null
 echo "Bundling app (bin: $WARP_BIN_NAME)..."
-cargo bundle --bin "$WARP_BIN_NAME" --features "$FEATURES" $PARAMS
+cargo bundle --bin "$WARP_BIN_NAME" ${FEATURES:+--features "$FEATURES"} $PARAMS
 echo "Successfully bundled..."
 popd > /dev/null
 

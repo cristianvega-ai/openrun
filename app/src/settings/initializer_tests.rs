@@ -1,13 +1,9 @@
-use warp_core::features::FeatureFlag;
-use warp_core::settings::Setting;
 use warpui::{App, SingletonEntity};
 
 use super::SettingsInitializer;
-use crate::root_view::mark_local_onboarding_completed;
-use crate::settings::{PrivacySettings, ThemeSettings};
+use crate::settings::PrivacySettings;
 use crate::terminal::model::secrets::regexes::DEFAULT_REGEXES_WITH_NAMES;
 use crate::test_util::settings::initialize_settings_for_tests;
-use crate::themes::theme::ThemeKind;
 
 fn launch(app: &mut App) {
     app.update(|ctx| {
@@ -50,49 +46,5 @@ fn app_launch_seeds_recommended_secret_regexes_once() {
                     .is_empty()
             );
         });
-    });
-}
-
-/// Launches with the theme set to Phenomenon, the value the new-user defaults replace.
-fn theme_kind_after_launch(app: &mut App, onboarding_completed: bool) -> ThemeKind {
-    initialize_settings_for_tests(app);
-    app.add_singleton_model(PrivacySettings::mock);
-    app.add_singleton_model(|_| SettingsInitializer::new());
-    app.update(|ctx| {
-        if onboarding_completed {
-            mark_local_onboarding_completed(ctx);
-        }
-        ThemeSettings::handle(ctx).update(ctx, |settings, ctx| {
-            settings
-                .theme_kind
-                .set_value(ThemeKind::Phenomenon, ctx)
-                .unwrap();
-        });
-    });
-
-    launch(app);
-
-    app.read(|ctx| ThemeSettings::as_ref(ctx).theme_kind.value().clone())
-}
-
-#[test]
-fn fresh_profile_gets_new_user_defaults() {
-    let _adeberry = FeatureFlag::DefaultAdeberryTheme.override_enabled(true);
-    App::test((), |mut app| async move {
-        assert_eq!(
-            theme_kind_after_launch(&mut app, false),
-            ThemeKind::Adeberry
-        );
-    });
-}
-
-#[test]
-fn profile_that_completed_onboarding_keeps_its_settings() {
-    let _adeberry = FeatureFlag::DefaultAdeberryTheme.override_enabled(true);
-    App::test((), |mut app| async move {
-        assert_eq!(
-            theme_kind_after_launch(&mut app, true),
-            ThemeKind::Phenomenon
-        );
     });
 }

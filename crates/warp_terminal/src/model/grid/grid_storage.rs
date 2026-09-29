@@ -9,7 +9,6 @@ use std::cmp::min;
 use std::ops::{Index, IndexMut, Range};
 
 use serde::{Deserialize, Serialize};
-use warp_core::features::FeatureFlag;
 use warp_errors::report_error;
 
 use crate::model::ansi::{CharsetIndex, StandardCharset};
@@ -125,7 +124,7 @@ impl GridStorage {
         _secret_obfuscation_mode: ObfuscateSecrets,
     ) -> GridStorage {
         GridStorage {
-            raw: Storage::with_capacity(rows, columns, FeatureFlag::SequentialStorage.is_enabled()),
+            raw: Storage::with_capacity(rows, columns, false),
             max_scroll_limit,
             saved_cursor: Cursor::default(),
             cursor: Cursor::default(),

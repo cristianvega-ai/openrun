@@ -116,7 +116,7 @@ The `WARPUI_USE_REAL_DISPLAY_IN_INTEGRATION_TESTS="1"` will force the new termin
 
 ### Known issues / limitations
 * To determine (from the `TestStep`) which shell is used for the test, you can try checking `WARP_SHELL_PATH` environment variable (that works within the CI on github) or check the passwd for the user (for local runs).
-* Similarly you can run the test with a specific shell by setting the `WARP_SHELL_PATH` and then running the test. Note that if you're running with fish, you also need to pass in `--features fish_shell` until that feature flag is removed. For example: `WARP_SHELL_PATH=/usr/local/bin/fish`, then `cargo run --bin integration --features fish_shell -- test_simple_example`
+* Similarly you can run the test with a specific shell by setting the `WARP_SHELL_PATH` and then running the test. For example: `WARP_SHELL_PATH=/usr/local/bin/fish`, then `cargo run --bin integration -- test_simple_example`
 * Bindings aren't exposed by default in integration tests, add them in the file of the original binding. Example from `editor/view.rs`:
 
 ```rust

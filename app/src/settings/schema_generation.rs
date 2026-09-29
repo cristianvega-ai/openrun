@@ -8,11 +8,10 @@ use settings::schema::SettingSchemaEntry;
 use settings::{SettingSurfaces, SettingsMode};
 use tempfile::NamedTempFile;
 use warp_core::channel::ChannelState;
-use warp_core::features::FeatureFlag;
 
 /// Writes the settings schema to a file or prints it to standard output.
 pub fn dump_settings_schema(output_path: Option<&Path>) -> Result<()> {
-    let output = settings_schema_json(|flag| flag.is_enabled())?;
+    let output = settings_schema_json()?;
 
     if let Some(path) = output_path {
         write_atomically(path, output.as_bytes())?;
@@ -24,20 +23,13 @@ pub fn dump_settings_schema(output_path: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn settings_schema_json(is_flag_enabled: impl Fn(FeatureFlag) -> bool) -> Result<String> {
+fn settings_schema_json() -> Result<String> {
     let mut generator = SchemaGenerator::default();
     let mut root_properties = Map::new();
     let mut entry_count = 0;
 
     for entry in inventory::iter::<SettingSchemaEntry> {
         if entry.is_private {
-            continue;
-        }
-
-        if entry
-            .feature_flag
-            .is_some_and(|flag| !is_flag_enabled(flag))
-        {
             continue;
         }
 

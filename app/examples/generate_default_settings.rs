@@ -7,9 +7,6 @@
 //! defined via those macros is picked up automatically — there is no
 //! per-generator registration list to keep in sync.
 //!
-//! A setting gated on a feature flag is included only when that flag is enabled
-//! by the build's Cargo features.
-//!
 //! Usage:
 //!   cargo run --example generate_default_settings -- <output_path>
 //!
@@ -59,8 +56,6 @@ fn main() {
         std::process::exit(1);
     };
 
-    let active_flags = warp::features::enabled_features();
-
     // Generate a fresh document at `output_path`. If the file already exists
     // and contains invalid TOML, `TomlBackedUserPreferences::new` falls back
     // to an empty document and hands back the parse error; we ignore it here
@@ -74,13 +69,6 @@ fn main() {
         // Skip private settings — they live in the platform-native store and
         // never appear in the user-visible TOML file.
         if entry.is_private {
-            continue;
-        }
-
-        // Skip settings whose feature flag is not enabled.
-        if let Some(flag) = entry.feature_flag
-            && !active_flags.contains(&flag)
-        {
             continue;
         }
 

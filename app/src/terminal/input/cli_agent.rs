@@ -19,7 +19,6 @@ use super::{
 use crate::appearance::Appearance;
 use crate::context_chips::spacing;
 use crate::editor::{EnterAction, EnterSettings, TextColors};
-use crate::features::FeatureFlag;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::should_right_click_paste;
 use crate::terminal::view::TerminalAction;
@@ -67,9 +66,7 @@ impl Input {
         let mut column = Flex::column();
 
         // Render attachment chips (e.g. pasted screenshots) above the editor.
-        if FeatureFlag::ImageAsContext.is_enabled()
-            && let Some(images) = self.render_attachment_chips(appearance)
-        {
+        if let Some(images) = self.render_attachment_chips(appearance) {
             column.add_child(
                 Container::new(images)
                     .with_margin_top(spacing::UDI_CHIP_MARGIN)

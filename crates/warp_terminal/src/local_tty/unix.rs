@@ -24,7 +24,6 @@ use warp_core::channel::ChannelState;
 use warp_core::cli_agent_protocol::{
     CLI_AGENT_PROTOCOL_VERSION, WARP_CLI_AGENT_PROTOCOL_VERSION_ENV, WARP_CLIENT_VERSION_ENV,
 };
-use warp_core::features::FeatureFlag;
 use warp_core::safe_error;
 use warp_errors::report_if_error;
 use warpui_core::{AppContext, SingletonEntity};
@@ -330,15 +329,11 @@ fn build_host_shell_command(
     // logic if this flag is set.
     builder.env("WARP_IS_LOCAL_SHELL_SESSION", "1");
 
-    // Only advertise the protocol version when the HOA notifications feature is enabled.
-    // Without it, Warp can't render structured CLI agent notifications,
-    // so the plugin should fall back to legacy notifications.
-    if FeatureFlag::HOANotifications.is_enabled() {
-        builder.env(
-            WARP_CLI_AGENT_PROTOCOL_VERSION_ENV,
-            CLI_AGENT_PROTOCOL_VERSION.to_string(),
-        );
-    }
+    // Advertise the protocol version so CLI agent plugins emit structured notifications.
+    builder.env(
+        WARP_CLI_AGENT_PROTOCOL_VERSION_ENV,
+        CLI_AGENT_PROTOCOL_VERSION.to_string(),
+    );
 
     if shell_debug_mode {
         builder.env("WARP_SHELL_DEBUG_MODE", "1");

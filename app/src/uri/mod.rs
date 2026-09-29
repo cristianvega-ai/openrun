@@ -11,7 +11,6 @@ use warpui::notification::UserNotification;
 use warpui::{AppContext, SingletonEntity as _, TypedActionView, WindowId};
 
 use self::docker::open_docker_container;
-use crate::features::FeatureFlag;
 use crate::launch_configs::launch_config::LaunchConfig;
 use crate::root_view::{OpenLaunchConfigArg, open_new_window_get_handles};
 use crate::settings_view::{SettingsSection, settings_widget_deeplink_target};
@@ -70,7 +69,7 @@ impl FromStr for UriHost {
             "launch" => Ok(Self::Launch),
             "settings" => Ok(Self::Settings),
             "home" => Ok(Self::Home),
-            "tab_config" if FeatureFlag::TabConfigs.is_enabled() => Ok(Self::TabConfig),
+            "tab_config" => Ok(Self::TabConfig),
             "session" => Ok(Self::Session),
             _ => Err(anyhow!("Received url with unexpected host: {}", s)),
         }
@@ -773,7 +772,7 @@ fn can_open_file_editor_path(path: &Path) -> bool {
 
 /// Handle an incoming `file://` URL.
 /// * Markdown files are opened as notebook panes when the viewer preference is enabled.
-/// * Jupyter notebook files are opened as notebook panes when their feature flag is enabled.
+/// * Jupyter notebook files are opened as notebook panes.
 /// * For directories, open a new session at the directory path.
 /// * For other files, open a new session at the parent directory path, then possibly execute the
 ///   file.

@@ -75,7 +75,6 @@ use crate::code::{
 };
 use crate::code_review::comments::CommentId;
 use crate::editor::InteractionState;
-use crate::features::FeatureFlag;
 use crate::notebooks::editor::rich_text_styles;
 use crate::settings::{AppEditorSettings, CodeEditorLineNumberMode, FontSettings};
 use crate::view_components::find::FindDirection;
@@ -263,7 +262,6 @@ pub struct CodeEditorView {
     self_handle: WeakViewHandle<Self>,
     display_options: CodeEditorViewDisplayOptions,
     pending_scroll: Option<ScrollTrigger>,
-    supports_vim_mode: bool,
     vim_model: ModelHandle<VimModel>,
     // Track the most recent Vim search direction to determine how to cycle (n/N) thereafter.
     last_search_direction: Direction,
@@ -349,14 +347,11 @@ impl CodeEditorView {
             }
         });
 
-        // If feature flag is enabled, enable vim mode.
-        let supports_vim_mode = FeatureFlag::VimCodeEditor.is_enabled();
-
         let vim_model = ctx.add_model(|_| VimModel::new());
         ctx.subscribe_to_model(&vim_model, Self::handle_vim_event);
 
         // Ensure CodeEditorView starts in Normal mode when Vim keybindings are enabled.
-        if supports_vim_mode && AppEditorSettings::as_ref(ctx).vim_mode_enabled() {
+        if AppEditorSettings::as_ref(ctx).vim_mode_enabled() {
             vim_model.update(ctx, |vim_model, ctx| {
                 if let Ok(escape) = Keystroke::parse("escape") {
                     vim_model.keypress(&escape, ctx);
@@ -413,7 +408,6 @@ impl CodeEditorView {
                 line_height_override: render_options.line_height_override,
             },
             pending_scroll: None,
-            supports_vim_mode,
             vim_model,
             last_search_direction: Direction::Forward,
             active_comment_editor: comment_editor,
@@ -1394,7 +1388,7 @@ impl CodeEditorView {
             return;
         }
 
-        let multiselect = modifiers.alt && FeatureFlag::RichTextMultiselect.is_enabled();
+        let multiselect = modifiers.alt;
         self.model.update(ctx, |model, ctx| {
             model.select_at(offset, multiselect, ctx);
         });
@@ -1892,7 +1886,7 @@ impl CodeEditorView {
     }
 
     pub fn vim_mode_enabled(&self, ctx: &AppContext) -> bool {
-        self.supports_vim_mode && AppEditorSettings::as_ref(ctx).vim_mode_enabled()
+        AppEditorSettings::as_ref(ctx).vim_mode_enabled()
     }
 
     pub fn enter_vim_normal_mode(&mut self, ctx: &mut ViewContext<Self>) {
@@ -2256,40 +2250,39 @@ impl View for CodeEditorView {
             stack.add_overlay_child(dialog);
         }
 
-        if !FeatureFlag::EmbeddedCodeReviewComments.is_enabled() {
-            // Render the open comment editor.
-            if let PendingComment::Open { line, .. } = pending_comment {
-                let render_state_ref = render_state.as_ref(app);
-                let vertical_offset = render_state_ref
-                    .vertical_offset_at_render_location(line.clone().into_render_line_location())
-                    .unwrap_or_default()
-                    + render_state_ref.styles().base_line_height();
+        // Render the open comment editor.
+        if let PendingComment::Open { line, .. } = pending_comment {
+            let render_state_ref = render_state.as_ref(app);
+            let vertical_offset = render_state_ref
+                .vertical_offset_at_render_location(line.clone().into_render_line_location())
+                .unwrap_or_default()
+                + render_state_ref.styles().base_line_height();
 
-                let line_location = app.element_position_by_id_at_last_frame(
-                    self.window_id,
-                    &self.comment_save_position_id,
+            let line_location = app.element_position_by_id_at_last_frame(
+                self.window_id,
+                &self.comment_save_position_id,
+            );
+
+            let should_render_comment_editor = match line_location {
+                Some(line_location) => self
+                    .show_comment_editor_provider
+                    .should_show_comment_editor(line_location, app),
+                None => true,
+            };
+
+            if should_render_comment_editor {
+                stack.add_positioned_child(
+                    ChildView::new(&self.active_comment_editor).finish(),
+                    OffsetPositioning::offset_from_parent(
+                        vec2f(0., vertical_offset.as_f32()),
+                        ParentOffsetBounds::ParentByPosition,
+                        ParentAnchor::TopLeft,
+                        ChildAnchor::TopLeft,
+                    ),
                 );
-
-                let should_render_comment_editor = match line_location {
-                    Some(line_location) => self
-                        .show_comment_editor_provider
-                        .should_show_comment_editor(line_location, app),
-                    None => true,
-                };
-
-                if should_render_comment_editor {
-                    stack.add_positioned_child(
-                        ChildView::new(&self.active_comment_editor).finish(),
-                        OffsetPositioning::offset_from_parent(
-                            vec2f(0., vertical_offset.as_f32()),
-                            ParentOffsetBounds::ParentByPosition,
-                            ParentAnchor::TopLeft,
-                            ChildAnchor::TopLeft,
-                        ),
-                    );
-                }
             }
         }
+
         stack.finish()
     }
 

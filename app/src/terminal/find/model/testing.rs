@@ -6,6 +6,11 @@ use super::{BlockListFindRun, TerminalFindModel};
 use crate::terminal::model::terminal_model::BlockIndex;
 
 impl TerminalFindModel {
+    /// Forces the synchronous block-list find path, which the app itself no longer uses.
+    pub fn disable_async_find_for_test(&mut self) {
+        self.async_find_controller = None;
+    }
+
     pub fn visible_block_list_match_count(&self) -> usize {
         // On the async path, `match_count` already excludes filter-hidden
         // matches, so it reports the visible count consistent with the sync

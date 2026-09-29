@@ -1,5 +1,4 @@
 use settings::Setting as _;
-use warp_core::features::FeatureFlag;
 use warp_errors::report_if_error;
 use warpui::{App, EntityId, ModelHandle, SingletonEntity};
 
@@ -21,7 +20,6 @@ fn setup_app(app: &mut App) -> ModelHandle<AgentNotificationsModel> {
 #[test]
 fn add_notification_tracks_unread_activity_when_in_app_notifications_are_hidden() {
     App::test((), |mut app| async move {
-        let _guard = FeatureFlag::HOANotifications.override_enabled(true);
         let notifications = setup_app(&mut app);
 
         CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {

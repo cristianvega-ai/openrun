@@ -1,153 +1,79 @@
 ---
 name: remove-feature-flag
-description: Remove a feature flag after it has been rolled out and stabilized in the Warp codebase.
+description: Remove a FeatureFlag variant by folding its permanent arm into the code.
 ---
 
 # remove-feature-flag
 
-Remove a feature flag after it has been rolled out and stabilized in the Warp codebase.
+Remove a `FeatureFlag` variant whose value no longer varies.
 
 ## Overview
 
-After a feature flag has been enabled for all users and has stabilized in production, the flag should be removed to reduce technical debt and simplify the codebase. This involves removing the flag definition and all conditional checks.
+A flag can go when its value is the same everywhere it is checked. There is nothing to "promote" first: this
+build has one stream, no Dogfood, Preview or Release lists (`DOGFOOD_FLAGS`, `PREVIEW_FLAGS` and
+`RELEASE_FLAGS` no longer exist), and flags are not backed by Cargo features. A flag is on when
+`enabled_features()` in `app/src/features.rs` (or `ChannelState::additional_features()`) says so, and off
+otherwise.
 
-## When to Remove
-
-Remove a feature flag when:
-- The feature has been enabled in `default` features in `app/Cargo.toml`
-- The feature has been stable in production for a reasonable period
-- There are no plans to disable the feature or provide configuration options
-- The team agrees the feature is permanent
+First decide the value the build has today (see `enabled_features()`), then keep that arm so behavior does not
+change.
 
 ## Steps
 
-### 1. Remove from app/Cargo.toml
-Remove the feature from both the `[features]` section and the `default` array:
+### 1. Find every use
+The shared `FeatureFlag` is used from `crates/` as well as `app/`:
 
-```toml
-[features]
-default = [
-    # Remove "your_feature_name" from here
-]
-
-# Remove this line:
-# your_feature_name = []
+```bash
+rg "FeatureFlag::YourFeatureName" app/ crates/
 ```
 
-### 2. Remove from FeatureFlag enum
-Remove the variant from the `FeatureFlag` enum in `warp_core/src/features.rs`:
-
-```rust
-#[derive(Sequence)]
-pub enum FeatureFlag {
-    // Remove YourFeatureName,
-}
-```
-
-### 3. Remove from app/src/lib.rs
-Remove the conditional compilation directive:
-
-```rust
-// Remove these lines:
-// #[cfg(feature = "your_feature_name")]
-// YourFeatureName,
-```
-
-### 4. Remove from DOGFOOD_FLAGS/PREVIEW_FLAGS/RELEASE_FLAGS
-If the flag was listed in any of these arrays in `features.rs`, remove it:
-
-```rust
-pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
-    // Remove FeatureFlag::YourFeatureName,
-];
-```
-
-### 5. Remove all runtime checks and dead code
-Find and remove all `FeatureFlag::YourFeatureName.is_enabled()` checks throughout the codebase:
+### 2. Fold the checks
+If the flag is permanently on, keep the enabled arm; if permanently off, keep the disabled arm.
 
 **Before:**
 ```rust
 if FeatureFlag::YourFeatureName.is_enabled() {
     // new behavior
 } else {
-    // old behavior (dead code)
+    // old behavior
 }
 ```
 
-**After:**
+**After (flag on):**
 ```rust
-// new behavior (unconditionally enabled)
+// new behavior
 ```
 
-Use ripgrep to find all occurrences. The shared `FeatureFlag` may be used from non-`app/` crates, so search `crates/`, not just `app/`:
+Remove the dead arm and anything only it used: helper functions, fields, imports, settings, actions, menu
+entries and tests.
+
+### 3. Remove keybinding predicates
+```rust
+EditableBinding::new("action:name", "Action description", YourAction::Variant)
+    .with_enabled(|| FeatureFlag::YourFeatureName.is_enabled())   // delete this line
+    .with_key_binding("cmdorctrl-key")
+```
+
+### 4. Fix the tests
+- Delete `FeatureFlag::YourFeatureName.override_enabled(true)` (flag on) from tests that keep the enabled
+  behavior.
+- Delete tests that only exercise the arm you removed.
+- Remove `set_enabled` calls in the integration tests the same way.
+
+### 5. Remove the definition
+- Delete the variant from `crates/warp_features/src/lib.rs`.
+- Delete its entry in `enabled_features()` in `app/src/features.rs` (and from `DEBUG_FLAGS` if listed).
+
+### 6. Verify
 ```bash
-rg "YourFeatureName" app/ crates/
-```
-
-### 6. Remove keybinding predicates
-If the feature flag was used in keybinding enabled predicates, remove the predicate:
-
-**Before:**
-```rust
-EditableBinding::new(
-    "action:name",
-    "Action description",
-    YourAction::Variant
-)
-.with_enabled(|| FeatureFlag::YourFeatureName.is_enabled())
-.with_key_binding("cmdorctrl-key")
-```
-
-**After:**
-```rust
-EditableBinding::new(
-    "action:name",
-    "Action description",
-    YourAction::Variant
-)
-.with_key_binding("cmdorctrl-key")
-```
-
-### 7. Clean up dead code branches
-Remove any code paths that were only executed when the feature was disabled (the `else` branches in feature checks). These are now dead code.
-
-### 8. Run tests and validation
-After removing the flag:
-
-```bash
-# Run affected tests first
+cargo check --workspace --all-targets
 cargo nextest run -p <affected-package>
-
-# Then run the applicable Clippy check
-cargo clippy -p <affected-package> --all-targets --tests -- -D warnings
-
-# Format once after the code is settled
 ./script/format
 ```
 
-Add affected packages or test filters when the flag crosses package boundaries.
+The build must produce no new warnings: removing an arm often leaves unused functions and imports.
 
-Do not run the full workspace suite, launch the app, rerun earlier checks after formatting, or add `./script/presubmit` unless the user, task, or approved spec explicitly requires it.
+## Best practices
 
-CI owns broader platform and workspace coverage.
-
-## Best Practices
-
-- Remove feature flags promptly after they're no longer needed to reduce technical debt
-- When removing a flag, remove ALL related code (checks, dead branches, keybinding predicates)
-- Use grep/ripgrep to ensure you've found all occurrences
-- Test the affected behavior after removal to ensure no regressions
-- Consider doing flag removal in a separate PR for easier review
-
-## Example Search Commands
-
-```bash
-# Find all occurrences of the flag name (include non-app crates)
-rg "YourFeatureName" app/ crates/
-
-# Find feature flag checks
-rg "FeatureFlag::YourFeatureName" app/ crates/
-
-# Find cfg attributes
-rg 'cfg\(feature = "your_feature_name"\)' app/
-```
+- Remove ALL related code: checks, dead branches, keybinding predicates, tests.
+- Do the flag removal in its own commit for easier review.

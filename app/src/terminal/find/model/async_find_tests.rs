@@ -72,8 +72,8 @@ fn test_async_find_produces_same_results_as_sync_find() {
         });
 
         // Run async find using TerminalFindModel.
-        let test_model = app.add_model(|ctx| {
-            let mut model = TerminalFindModel::new(terminal_model.clone(), ctx);
+        let test_model = app.add_model(|_ctx| {
+            let mut model = TerminalFindModel::new(terminal_model.clone());
             if model.async_find_controller.is_none() {
                 model.async_find_controller =
                     Some(AsyncFindController::new(terminal_model.clone()));
@@ -180,8 +180,8 @@ fn test_async_find_cancellation() {
         mock_terminal_model.simulate_block("cmd2", "line3\r\nline4\r\n");
 
         let terminal_model = Arc::new(FairMutex::new(mock_terminal_model));
-        let test_model = app.add_model(|ctx| {
-            let mut model = TerminalFindModel::new(terminal_model.clone(), ctx);
+        let test_model = app.add_model(|_ctx| {
+            let mut model = TerminalFindModel::new(terminal_model.clone());
             if model.async_find_controller.is_none() {
                 model.async_find_controller =
                     Some(AsyncFindController::new(terminal_model.clone()));
@@ -259,8 +259,8 @@ fn test_message_processing_updates_state() {
         let mock_terminal_model = TerminalModel::mock(None, None);
         let terminal_model = Arc::new(FairMutex::new(mock_terminal_model));
 
-        let test_model = app.add_model(|ctx| {
-            let mut model = TerminalFindModel::new(terminal_model.clone(), ctx);
+        let test_model = app.add_model(|_ctx| {
+            let mut model = TerminalFindModel::new(terminal_model.clone());
             let mut controller = AsyncFindController::new(terminal_model);
             // Manually set up state as if a find is in progress.
             controller.set_test_status(AsyncFindStatus::Scanning);
@@ -700,8 +700,8 @@ fn assert_async_focused_order_matches_sync(block_sort_direction: BlockSortDirect
             .collect::<Vec<_>>()
         });
 
-        let test_model = app.add_model(|ctx| {
-            let mut model = TerminalFindModel::new(terminal_model.clone(), ctx);
+        let test_model = app.add_model(|_ctx| {
+            let mut model = TerminalFindModel::new(terminal_model.clone());
             if model.async_find_controller.is_none() {
                 model.async_find_controller =
                     Some(AsyncFindController::new(terminal_model.clone()));

@@ -8765,7 +8765,6 @@ dependencies = [
  "settings_value",
  "tempfile",
  "warp_errors",
- "warp_features",
  "warpui_core",
  "warpui_extras",
 ]

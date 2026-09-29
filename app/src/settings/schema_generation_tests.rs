@@ -67,7 +67,7 @@ fn strips_empty_enum_entries() {
 
 #[test]
 fn generates_a_settings_schema() {
-    let schema = settings_schema_json(|_| false).unwrap();
+    let schema = settings_schema_json().unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema).unwrap();
 
     assert_eq!(schema["title"], "Warp Settings");

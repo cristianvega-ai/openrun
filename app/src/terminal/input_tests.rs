@@ -1241,8 +1241,6 @@ fn count_native_shell_completions_dispatches(
 
 #[test]
 fn input_tab_does_not_ask_the_shell_when_bundled_specs_are_non_empty() {
-    let _native_completions_flag = FeatureFlag::NativeShellCompletions.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let session_info = SessionInfo::new_for_test();
@@ -1280,8 +1278,6 @@ fn input_tab_does_not_ask_the_shell_when_bundled_specs_are_non_empty() {
 
 #[test]
 fn input_tab_asks_the_shell_once_when_bundled_specs_are_empty() {
-    let _native_completions_flag = FeatureFlag::NativeShellCompletions.override_enabled(true);
-
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let session_info = SessionInfo::new_for_test();
@@ -1403,137 +1399,6 @@ fn test_tab_completion_with_multibyte_chars() {
 }
 
 #[test]
-fn test_tab_completion_with_cursor_movement() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let session_info = SessionInfo::new_for_test();
-        let session_id = session_info.session_id;
-        let terminal = add_window_with_bootstrapped_terminal(
-            &mut app,
-            None, /* history_file_commands */
-            Some(session_info),
-        )
-        .await;
-        // Simulate being in the /usr/bin directory.
-        simulate_directory_for_completion(session_id, &terminal, &mut app, "/usr/bin");
-        let input = terminal.read(&app, |view, _| view.input().clone());
-
-        // Start the editor with the text "yarn a" and press tab to ensure tab completions are
-        // showing.
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("yarn a", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "yarn a");
-        });
-        input.update(&mut app, |input, ctx| {
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("add"),
-                        argument_suggestion("audit"),
-                        argument_suggestion("autoclean"),
-                    ],
-                    (5, 5),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            )
-            // Somehow `completion_session_context` is yielding None for pwd
-        });
-        input.read(&app, |input, ctx| {
-            // Tab completion menu should be open.
-            assert!(matches!(
-                input.suggestions_mode_model.as_ref(ctx).mode(),
-                InputSuggestionsMode::CompletionSuggestions { .. }
-            ))
-        });
-
-        input.read(&app, |input, _ctx| {
-            input
-                .input_suggestions
-                .read(&app, |input_suggestions, _ctx| {
-                    assert!(
-                        input_suggestions
-                            .items()
-                            .iter()
-                            .map(|item| item.text())
-                            .eq(["add", "audit", "autoclean",])
-                    )
-                });
-        });
-
-        // Add a character and ensure items are filtered down.
-        input.update(&mut app, |input, ctx| {
-            input.user_insert("u", ctx);
-        });
-
-        input.read(&app, |input, ctx| {
-            input
-                .input_suggestions
-                .read(&app, |input_suggestions, _ctx| {
-                    assert!(
-                        input_suggestions
-                            .items()
-                            .iter()
-                            .map(|item| item.text())
-                            .eq(["audit", "autoclean",])
-                    )
-                });
-
-            assert!(matches!(
-                input.suggestions_mode_model.as_ref(ctx).mode(),
-                InputSuggestionsMode::CompletionSuggestions { .. }
-            ))
-        });
-
-        // Move cursor to the left--all the results should now appear.
-        input.update(&mut app, |input, ctx| {
-            input.editor.update(ctx, |editor, ctx| {
-                editor.move_left(/* stop at line start */ false, ctx);
-            })
-        });
-
-        input.read(&app, |input, ctx| {
-            input
-                .input_suggestions
-                .read(&app, |input_suggestions, _ctx| {
-                    assert!(
-                        input_suggestions
-                            .items()
-                            .iter()
-                            .map(|item| item.text())
-                            .eq(["add", "audit", "autoclean",])
-                    )
-                });
-
-            assert!(matches!(
-                input.suggestions_mode_model.as_ref(ctx).mode(),
-                InputSuggestionsMode::CompletionSuggestions { .. }
-            ))
-        });
-
-        // Move cursor to the left one more time, the input suggestions menu should be closed.
-        input.update(&mut app, |input, ctx| {
-            input.editor.update(ctx, |editor, ctx| {
-                editor.move_left(/* stop at line start */ false, ctx);
-            })
-        });
-
-        input.read(&app, |input, ctx| {
-            assert!(matches!(
-                input.suggestions_mode_model.as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            ))
-        });
-    });
-}
-
-#[test]
 fn test_tab_completion_with_leading_space() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
@@ -1556,494 +1421,6 @@ fn test_tab_completion_with_leading_space() {
         });
         input.read(&app, |input, ctx| {
             assert_eq!(input.buffer_text(ctx), " cd asdf");
-        });
-    });
-}
-
-#[test]
-fn test_tab_completion_with_spaces() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let history_file_commands = vec![
-            "cd Documents/zed".to_string(),
-            "curl https://app.example.com".to_string(),
-            "cargo check\ncargo run".to_string(),
-        ];
-        let terminal =
-            add_window_with_bootstrapped_terminal(&mut app, Some(history_file_commands), None)
-                .await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-        let (editor, suggestions) = input.read(&app, |input, _| {
-            let editor = input.editor().clone();
-            let input_suggestions = input.input_suggestions.clone();
-            (editor, input_suggestions)
-        });
-
-        // Single result tab completion should update buffer.
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("cd A\\ p", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ p");
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![argument_suggestion("A\\ path\\ with\\ spaces")],
-                    (3, 7),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ path\\ with\\ spaces ");
-        });
-
-        // Multiple result tab completion should show menu and highlight the matches.
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("cd A\\ ", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ ");
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("A\\ dir\\ with\\ spaces"),
-                        argument_suggestion("A\\ desktop"),
-                    ],
-                    (3, 6),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-        // We should be highlighting the prefix matches from the last word.
-        suggestions.read(&app, |suggestions, _| {
-            let highlights = suggestions
-                .items()
-                .iter()
-                .map(|item| item.matches())
-                .collect::<Vec<_>>();
-            assert_eq!(
-                highlights,
-                [
-                    Some(&(0..4).collect::<Vec<_>>()),
-                    Some(&(0..4).collect::<Vec<_>>())
-                ]
-            );
-        });
-
-        suggestions.update(&mut app, |suggestions, ctx| {
-            suggestions.select_next(ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ d");
-        });
-
-        // Closing the input suggestions menu leaves input buffer unchanged,
-        // regardless of whether additional characters were inserted/removed from the original completion buffer text.
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ d");
-        });
-        suggestions.update(&mut app, |suggestions, ctx| {
-            suggestions.exit(true, ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
-            assert_eq!(input.buffer_text(ctx), "cd A\\ d");
-        });
-
-        // Inserting a character prefix-searches previous results.
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("A\\ dir\\ with\\ spaces"),
-                        argument_suggestion("A\\ desktop"),
-                    ],
-                    (3, 7),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-            input.user_insert("e", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ de");
-        });
-        suggestions.read(&app, |suggestions, _ctx| {
-            assert_eq!(suggestions.items().len(), 1);
-            assert_eq!(suggestions.item_text(0), "A\\ desktop");
-            let highlight = suggestions.items()[0].matches();
-            assert_eq!(highlight, Some(&(0..5).collect::<Vec<_>>()));
-        });
-
-        // Typing out an entire suggestion should highlight the entire suggestion.
-        input.update(&mut app, |input, ctx| {
-            input.user_insert("sktop", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ desktop");
-        });
-        suggestions.read(&app, |suggestions, _ctx| {
-            assert_eq!(suggestions.items().len(), 1);
-            assert_eq!(suggestions.item_text(0), "A\\ desktop");
-            let highlight = suggestions.items()[0].matches();
-            assert_eq!(highlight, Some(&(0..10).collect::<Vec<_>>()));
-        });
-
-        // Deleting a character that wasn't part of the original completion buffer updates suggestions.
-        editor.update(&mut app, |editor, ctx| {
-            for _ in 0.."esktop".len() {
-                editor.backspace(ctx);
-            }
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ d");
-            assert_ne!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
-        });
-        suggestions.read(&app, |suggestions, _ctx| {
-            assert_eq!(suggestions.items().len(), 2);
-            assert_eq!(suggestions.item_text(1), "A\\ desktop");
-            assert_eq!(suggestions.item_text(0), "A\\ dir\\ with\\ spaces");
-            let highlights = suggestions
-                .items()
-                .iter()
-                .map(|item| item.matches())
-                .collect::<Vec<_>>();
-            assert_eq!(
-                highlights,
-                [
-                    Some(&(0..4).collect::<Vec<_>>()),
-                    Some(&(0..4).collect::<Vec<_>>())
-                ]
-            );
-        });
-
-        // Deleting a character that was part of the original completion buffer closes the suggestions menu
-        editor.update(&mut app, |editor, ctx| editor.backspace(ctx));
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd A\\ ");
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
-        });
-
-        // Bring up suggestions one more time
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("A\\ dir\\ with\\ spaces"),
-                        argument_suggestion("A\\ desktop"),
-                    ],
-                    (3, 6),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-
-        // Use tab to select next element, tab-shift to go to the previous & enter to confirm
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-        });
-        input.read(&app, |input, _| {
-            // after first tab
-            input.input_suggestions.read(&app, |suggestions, _| {
-                assert_eq!(suggestions.get_selected_item_text().unwrap(), "A\\ desktop");
-            });
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_shift_tab(ctx);
-            input.input_enter(ctx);
-        });
-        input.read(&app, |input, ctx| {
-            // shift-tab, enter
-            assert_eq!(input.buffer_text(ctx), "cd A\\ dir\\ with\\ spaces ");
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
-        });
-    });
-}
-
-#[test]
-fn test_tab_completion() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let history_file_commands = vec![
-            "cd Documents/zed".to_string(),
-            "curl https://app.example.com".to_string(),
-            "cargo check\ncargo run".to_string(),
-        ];
-        let terminal =
-            add_window_with_bootstrapped_terminal(&mut app, Some(history_file_commands), None)
-                .await;
-
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-        let (editor, suggestions) = input.read(&app, |input, _| {
-            let editor = input.editor().clone();
-            let input_suggestions = input.input_suggestions.clone();
-            (editor, input_suggestions)
-        });
-
-        // Single result tab completion should update buffer.
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("c", ctx);
-            input.user_insert("d", ctx);
-            input.user_insert(" ", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd ");
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![argument_suggestion("Documents")],
-                    (3, 3),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd Documents ");
-        });
-
-        // Multiple result tab completion should show menu and highlight the matches.
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("c", ctx);
-            input.user_insert("d", ctx);
-            input.user_insert(" ", ctx);
-            input.user_insert("D", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd D");
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("Downloads"),
-                        argument_suggestion("Desktop"),
-                    ],
-                    (3, 4),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-        // We should be highlighting the prefix matches from the last word.
-        suggestions.read(&app, |suggestions, _| {
-            let highlights = suggestions
-                .items()
-                .iter()
-                .map(|item| item.matches())
-                .collect::<Vec<_>>();
-            assert_eq!(
-                highlights,
-                [
-                    Some(&(0..1).collect::<Vec<_>>()),
-                    Some(&(0..1).collect::<Vec<_>>())
-                ]
-            );
-        });
-
-        suggestions.update(&mut app, |suggestions, ctx| {
-            suggestions.select_next(ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd D");
-        });
-
-        // Closing the input suggestions menu leaves input buffer unchanged,
-        // regardless of whether additional characters were inserted/removed from the original completion buffer text.
-        input.update(&mut app, |input, ctx| {
-            input.user_insert("o", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd Do");
-        });
-        suggestions.update(&mut app, |suggestions, ctx| {
-            suggestions.exit(true, ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
-            assert_eq!(input.buffer_text(ctx), "cd Do");
-        });
-
-        // Inserting a character prefix-searches previous results.
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("Downloads"),
-                        argument_suggestion("Documents"),
-                    ],
-                    (3, 5),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-            input.user_insert("c", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd Doc");
-        });
-        suggestions.read(&app, |suggestions, _ctx| {
-            assert_eq!(suggestions.items().len(), 1);
-            assert_eq!(suggestions.item_text(0), "Documents");
-            let highlight = suggestions.items()[0].matches();
-            assert_eq!(highlight, Some(&(0..3).collect::<Vec<_>>()));
-        });
-
-        // Typing out an entire suggestion should highlight the entire suggestion.
-        input.update(&mut app, |input, ctx| {
-            input.user_insert("uments", ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd Documents");
-        });
-        suggestions.read(&app, |suggestions, _ctx| {
-            assert_eq!(suggestions.items().len(), 1);
-            assert_eq!(suggestions.item_text(0), "Documents");
-            let highlight = suggestions.items()[0].matches();
-            assert_eq!(highlight, Some(&(0..9).collect::<Vec<_>>()));
-        });
-
-        // Deleting a character that wasn't part of the original completion buffer updates suggestions.
-        editor.update(&mut app, |editor, ctx| {
-            for _ in 0.."cuments".len() {
-                editor.backspace(ctx);
-            }
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd Do");
-            assert_ne!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
-        });
-        suggestions.read(&app, |suggestions, _ctx| {
-            assert_eq!(suggestions.items().len(), 2);
-            assert_eq!(suggestions.item_text(1), "Documents");
-            assert_eq!(suggestions.item_text(0), "Downloads");
-            let highlights = suggestions
-                .items()
-                .iter()
-                .map(|item| item.matches())
-                .collect::<Vec<_>>();
-            assert_eq!(
-                highlights,
-                [
-                    Some(&(0..2).collect::<Vec<_>>()),
-                    Some(&(0..2).collect::<Vec<_>>())
-                ]
-            );
-        });
-
-        // Deleting a character that was part of the original completion buffer closes the suggestions menu
-        editor.update(&mut app, |editor, ctx| editor.backspace(ctx));
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd D");
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
-        });
-
-        // Bring up suggestions one more time
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("Desktop"),
-                        argument_suggestion("Downloads"),
-                        argument_suggestion("Documents"),
-                    ],
-                    (3, 4),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-
-        // Use tab to select next element, tab-shift to go to the previous & enter to confirm
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-        });
-        input.read(&app, |input, _| {
-            // after first tab
-            input.input_suggestions.read(&app, |suggestions, _| {
-                assert_eq!(suggestions.get_selected_item_text().unwrap(), "Downloads");
-            });
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-        });
-        input.read(&app, |input, _| {
-            // second tab
-            input.input_suggestions.read(&app, |suggestions, _| {
-                assert_eq!(suggestions.get_selected_item_text().unwrap(), "Documents");
-            });
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_shift_tab(ctx);
-            input.input_enter(ctx);
-        });
-        input.read(&app, |input, ctx| {
-            // shift-tab, enter
-            // Accepting a suggestion inserts a space at the end
-            assert_eq!(input.buffer_text(ctx), "cd Downloads ");
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                InputSuggestionsMode::Closed
-            );
         });
     });
 }
@@ -2205,56 +1582,6 @@ fn test_tab_completion_longest_common_prefix() {
         });
         input.read(&app, |input, ctx| {
             assert_eq!(input.buffer_text(ctx), "open Charlie111_");
-        });
-    });
-}
-
-#[test]
-fn test_tab_completion_longest_common_prefix_with_fuzzy_suggestions_and_completions_open() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(
-            &mut app, None, /* history_file_commands */
-            None,
-        )
-        .await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("open c", ctx);
-        });
-        input.update(&mut app, |input, ctx| {
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("charlie.txt"),
-                        argument_suggestion("charlotte.txt"),
-                        fuzzy_argument_suggestion("bobcha.txt", (3..=4).collect()),
-                    ],
-                    (5, 6),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-        input.read(&app, |input, ctx| {
-            // Tab completion menu should be open.
-            assert!(matches!(
-                input.suggestions_mode_model.as_ref(ctx).mode(),
-                InputSuggestionsMode::CompletionSuggestions { .. }
-            ))
-        });
-        input.update(&mut app, |input, ctx| {
-            // Trigger tab completion when the completion menu is open.
-            input.input_tab(ctx);
-        });
-        input.read(&app, |input, ctx| {
-            // The common prefix between the two prefix matches should be inserted.
-            assert_eq!(input.buffer_text(ctx), "open charl");
         });
     });
 }
@@ -3176,183 +2503,6 @@ fn test_tab_completion_longest_common_prefix_with_fuzzy_suggestions() {
 
         input.update(&mut app, |input, ctx| {
             assert_eq!(input.buffer_text(ctx), "git add ");
-        });
-    });
-}
-
-#[test]
-fn test_tab_completion_common_prefix_shorter() {
-    // We need to check the same two cases as the 'longest_common_prefix' test, however we want
-    // to verify that if the longest common prefix is _shorter_ than what the user typed, we
-    // don't insert it
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(
-            &mut app, None, /* history_file_commands */
-            None,
-        )
-        .await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-        let suggestions = input.read(&app, |input, _| input.input_suggestions.clone());
-
-        // Case 1: When a user triggers a tab completion, ensure longest common prefix is
-        // longer than the text
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("cd foo/b", ctx);
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("foo/Bar"),
-                        argument_suggestion("foo/bazz"),
-                    ],
-                    (3, 8),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd foo/b");
-        });
-
-        // Case 2: When user types to filter the completion results and then triggers tab
-        // completion again, we still want to ensure the longest common prefix is longer
-        // than the text
-        input.update(&mut app, |input, ctx| {
-            input.close_input_suggestions(/*should_focus_input=*/ true, ctx);
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("cd f", ctx);
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("far"),
-                        argument_suggestion("foo/Bar"),
-                        argument_suggestion("foo/bazz"),
-                    ],
-                    (3, 4),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-            input.user_insert("oo/b", ctx);
-        });
-        suggestions.update(&mut app, |suggestions, _| {
-            suggestions.set_items(vec![
-                Item::from_text("foo/Bar".into()),
-                Item::from_text("foo/bazz".into()),
-            ]);
-        });
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd foo/b");
-        });
-    });
-}
-
-#[test]
-fn test_cursor_movement() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let history_file_commands = vec![
-            "cd Documents/zed".to_string(),
-            "curl https://app.example.com".to_string(),
-            "cargo check\ncargo run".to_string(),
-        ];
-        let terminal =
-            add_window_with_bootstrapped_terminal(&mut app, Some(history_file_commands), None)
-                .await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-        let editor = input.read(&app, |input, _| input.editor.clone());
-        // Test cursor movement
-        input.update(&mut app, |input, ctx| {
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("c", ctx);
-            input.user_insert("d", ctx);
-            input.user_insert(" ", ctx);
-            input.user_insert("D", ctx);
-        });
-
-        // XXX Note that it's necessary to put `input_tab` in a separate call.
-        // Otherwise, there's a race where we crash because editor:cursor is not set.
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd D");
-        });
-
-        input.update(&mut app, |input, ctx| {
-            input.input_tab(ctx);
-            input.handle_completion_suggestions_results(
-                build_suggestion_results(
-                    vec![
-                        argument_suggestion("Downloads"),
-                        argument_suggestion("Documents"),
-                    ],
-                    (3, 4),
-                    MatchStrategy::CaseInsensitive,
-                ),
-                CompletionsTrigger::Keybinding,
-                editor_model_snapshot(input, ctx),
-                ctx,
-            );
-        });
-        let expected_completion = InputSuggestionsMode::CompletionSuggestions {
-            replacement_start: 3,
-            buffer_text_original: "cd D".to_string(),
-            completion_results: SuggestionResults {
-                suggestions: vec![
-                    argument_suggestion("Downloads"),
-                    argument_suggestion("Documents"),
-                ],
-                replacement_span: Span::new(3, 4),
-                match_strategy: MatchStrategy::CaseInsensitive,
-            },
-            trigger: CompletionsTrigger::Keybinding,
-            menu_position: TabCompletionsMenuPosition::AtLastCursor,
-        };
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd Do");
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                expected_completion
-            );
-        });
-        // move back 1 character, and we're still showing the completion, except ignoring the
-        // characters _after_ the cursor
-        editor.update(&mut app, |editor, ctx| {
-            editor.move_left(/* stop at line start */ false, ctx)
-        });
-        input.read(&app, |input, ctx| {
-            assert_eq!(input.buffer_text(ctx), "cd Do");
-            assert_eq!(
-                *input.suggestions_mode_model().as_ref(ctx).mode(),
-                expected_completion
-            );
-        });
-        editor.read(&app, |editor, ctx| {
-            assert!(editor.is_single_cursor_only(ctx));
-            let column = editor.start_byte_index_of_last_selection(ctx).as_usize();
-            assert_eq!(column, 4);
-        });
-
-        // Put the cursor back at the end
-        editor.update(&mut app, |editor, ctx| {
-            editor.move_right(/* stop at line end */ false, ctx);
-        });
-
-        editor.read(&app, |editor, ctx| {
-            assert!(editor.is_single_cursor_only(ctx));
-            let column = editor.start_byte_index_of_last_selection(ctx).as_usize();
-            assert_eq!(column, 5);
         });
     });
 }
@@ -4705,24 +3855,44 @@ fn test_get_expanded_command_on_execute() {
 }
 
 #[test]
-fn test_tab_completions_menu_for_regular_completions() {
-    let _flag = FeatureFlag::ClassicCompletions.override_enabled(true);
+fn test_cursor_movement() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
 
+        let history_file_commands = vec![
+            "cd Documents/zed".to_string(),
+            "curl https://app.example.com".to_string(),
+            "cargo check\ncargo run".to_string(),
+        ];
+        let terminal =
+            add_window_with_bootstrapped_terminal(&mut app, Some(history_file_commands), None)
+                .await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        let editor = input.read(&app, |input, _| input.editor.clone());
+        // Test cursor movement
         input.update(&mut app, |input, ctx| {
             input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert("cd Do", ctx);
+            input.user_insert("c", ctx);
+            input.user_insert("d", ctx);
+            input.user_insert(" ", ctx);
+            input.user_insert("D", ctx);
+        });
+
+        // XXX Note that it's necessary to put `input_tab` in a separate call.
+        // Otherwise, there's a race where we crash because editor:cursor is not set.
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.buffer_text(ctx), "cd D");
         });
 
         input.update(&mut app, |input, ctx| {
             input.input_tab(ctx);
             input.handle_completion_suggestions_results(
                 build_suggestion_results(
-                    vec![file_suggestion("Downloads"), file_suggestion("Documents")],
-                    (3, 5),
+                    vec![
+                        argument_suggestion("Downloads"),
+                        argument_suggestion("Documents"),
+                    ],
+                    (3, 4),
                     MatchStrategy::CaseInsensitive,
                 ),
                 CompletionsTrigger::Keybinding,
@@ -4730,33 +3900,64 @@ fn test_tab_completions_menu_for_regular_completions() {
                 ctx,
             );
         });
-
-        let expected_menu_position = TabCompletionsMenuPosition::AtLastCursor;
+        let expected_completion = InputSuggestionsMode::CompletionSuggestions {
+            replacement_start: 3,
+            buffer_text_original: "cd D".to_string(),
+            completion_results: SuggestionResults {
+                suggestions: vec![
+                    argument_suggestion("Downloads"),
+                    argument_suggestion("Documents"),
+                ],
+                replacement_span: Span::new(3, 4),
+                match_strategy: MatchStrategy::CaseInsensitive,
+            },
+            trigger: CompletionsTrigger::Keybinding,
+            menu_position: TabCompletionsMenuPosition::AtStartOfReplacementSpan,
+        };
         input.read(&app, |input, ctx| {
-            assert!(matches!(
-                input.suggestions_mode_model.as_ref(ctx).mode(),
-                InputSuggestionsMode::CompletionSuggestions { menu_position, .. } if menu_position == &expected_menu_position
-            ))
+            assert_eq!(input.buffer_text(ctx), "cd Do");
+            assert_eq!(
+                *input.suggestions_mode_model().as_ref(ctx).mode(),
+                expected_completion
+            );
         });
-    })
+        // move back 1 character, and we're still showing the completion, except ignoring the
+        // characters _after_ the cursor
+        editor.update(&mut app, |editor, ctx| {
+            editor.move_left(/* stop at line start */ false, ctx)
+        });
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.buffer_text(ctx), "cd Do");
+            assert_eq!(
+                *input.suggestions_mode_model().as_ref(ctx).mode(),
+                expected_completion
+            );
+        });
+        editor.read(&app, |editor, ctx| {
+            assert!(editor.is_single_cursor_only(ctx));
+            let column = editor.start_byte_index_of_last_selection(ctx).as_usize();
+            assert_eq!(column, 4);
+        });
+
+        // Put the cursor back at the end
+        editor.update(&mut app, |editor, ctx| {
+            editor.move_right(/* stop at line end */ false, ctx);
+        });
+
+        editor.read(&app, |editor, ctx| {
+            assert!(editor.is_single_cursor_only(ctx));
+            let column = editor.start_byte_index_of_last_selection(ctx).as_usize();
+            assert_eq!(column, 5);
+        });
+    });
 }
 
 #[test]
 fn test_tab_completions_menu_for_classic_completions() {
-    let _flag = FeatureFlag::ClassicCompletions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        app.update(|ctx| {
-            InputSettings::handle(ctx).update(ctx, |setting, ctx| {
-                setting
-                    .classic_completions_mode
-                    .toggle_and_save_value(ctx)
-                    .expect("Able to turn on classic completions");
-            })
-        });
 
         input.update(&mut app, |input, ctx| {
             input.clear_buffer_and_reset_undo_stack(ctx);
@@ -4793,20 +3994,10 @@ fn test_tab_completions_menu_for_classic_completions() {
 
 #[test]
 fn test_tab_completions_menu_for_classic_completions_with_files() {
-    let _flag = FeatureFlag::ClassicCompletions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        app.update(|ctx| {
-            InputSettings::handle(ctx).update(ctx, |setting, ctx| {
-                setting
-                    .classic_completions_mode
-                    .toggle_and_save_value(ctx)
-                    .expect("Able to turn on classic completions");
-            })
-        });
 
         input.update(&mut app, |input, ctx| {
             input.clear_buffer_and_reset_undo_stack(ctx);
@@ -4846,21 +4037,11 @@ fn test_tab_completions_menu_for_classic_completions_with_files() {
 
 #[test]
 fn test_classic_tab_completions_close_after_user_backspace() {
-    let _flag = FeatureFlag::ClassicCompletions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
         let editor = input.read(&app, |input, _| input.editor().clone());
-
-        app.update(|ctx| {
-            InputSettings::handle(ctx).update(ctx, |setting, ctx| {
-                setting
-                    .classic_completions_mode
-                    .toggle_and_save_value(ctx)
-                    .expect("Able to turn on classic completions");
-            })
-        });
 
         input.update(&mut app, |input, ctx| {
             input.clear_buffer_and_reset_undo_stack(ctx);
@@ -4909,20 +4090,10 @@ fn test_classic_tab_completions_close_after_user_backspace() {
 
 #[test]
 fn test_classic_tab_completions_keep_menu_open_while_cycling() {
-    let _flag = FeatureFlag::ClassicCompletions.override_enabled(true);
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-
-        app.update(|ctx| {
-            InputSettings::handle(ctx).update(ctx, |setting, ctx| {
-                setting
-                    .classic_completions_mode
-                    .toggle_and_save_value(ctx)
-                    .expect("Able to turn on classic completions");
-            })
-        });
 
         input.update(&mut app, |input, ctx| {
             input.clear_buffer_and_reset_undo_stack(ctx);
@@ -6204,52 +5375,28 @@ mod completion_sources_resolution_tests {
     use super::super::{CompletionSources, CompletionsTrigger, resolve_completion_sources};
 
     #[test]
-    fn feature_flag_off_is_warp_only_regardless_of_toggles() {
+    fn prompt_input_is_warp_only_regardless_of_toggles() {
         for warp_completions_enabled in [true, false] {
             for native_shell_completions_enabled in [true, false] {
                 assert_eq!(
                     resolve_completion_sources(
-                        false,
-                        false,
+                        true,
                         false,
                         CompletionsTrigger::Keybinding,
                         warp_completions_enabled,
                         native_shell_completions_enabled,
                     ),
                     CompletionSources::WarpOnly,
-                    "flag off must resolve to WarpOnly (warp={warp_completions_enabled}, native={native_shell_completions_enabled})"
+                    "prompt input must resolve to WarpOnly (warp={warp_completions_enabled}, native={native_shell_completions_enabled})"
                 );
             }
         }
     }
 
     #[test]
-    fn ai_input_is_warp_only_regardless_of_flag_and_toggles() {
-        for feature_flag_enabled in [true, false] {
-            for warp_completions_enabled in [true, false] {
-                for native_shell_completions_enabled in [true, false] {
-                    assert_eq!(
-                        resolve_completion_sources(
-                            feature_flag_enabled,
-                            true,
-                            false,
-                            CompletionsTrigger::Keybinding,
-                            warp_completions_enabled,
-                            native_shell_completions_enabled,
-                        ),
-                        CompletionSources::WarpOnly,
-                        "AI input must resolve to WarpOnly (flag={feature_flag_enabled}, warp={warp_completions_enabled}, native={native_shell_completions_enabled})"
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn feature_flag_on_maps_the_four_toggle_states() {
+    fn maps_the_four_toggle_states() {
         let resolve = |warp_completions_enabled, native_shell_completions_enabled| {
             resolve_completion_sources(
-                true,
                 false,
                 false,
                 CompletionsTrigger::Keybinding,
@@ -6267,7 +5414,6 @@ mod completion_sources_resolution_tests {
     fn as_you_type_never_selects_native_even_with_both_toggles_on() {
         assert_eq!(
             resolve_completion_sources(
-                true,  // feature flag on
                 false, // not AI input
                 false, // single-line
                 CompletionsTrigger::AsYouType,
@@ -6283,7 +5429,6 @@ mod completion_sources_resolution_tests {
     fn multiline_buffer_never_selects_native() {
         assert_eq!(
             resolve_completion_sources(
-                true,  // feature flag on
                 false, // not AI input
                 true,  // multi-line
                 CompletionsTrigger::Keybinding,

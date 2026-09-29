@@ -49,14 +49,12 @@ use crate::editor::{
     EditOrigin, EditorView, Event as EditorEvent, InteractionState, SingleLineEditorOptions,
     TextOptions,
 };
-use crate::features::FeatureFlag;
 use crate::gpu_state::{GPUState, GPUStateEvent};
 use crate::settings::app_icon::{AppIcon, AppIconSettings};
 use crate::settings::{
-    AIFontName, AppEditorSettings, CodeSettings, CursorBlink, CursorDisplayType,
-    DEFAULT_MONOSPACE_FONT_NAME, EnforceMinimumContrast, FontSettings, FontSettingsChangedEvent,
-    GPUSettings, InputModeSettings, MonospaceFontName, PaneSettings, ThemeSettings,
-    active_theme_kind, respect_system_theme,
+    AppEditorSettings, CodeSettings, CursorBlink, CursorDisplayType, DEFAULT_MONOSPACE_FONT_NAME,
+    EnforceMinimumContrast, FontSettings, FontSettingsChangedEvent, GPUSettings, InputModeSettings,
+    MonospaceFontName, PaneSettings, ThemeSettings, active_theme_kind, respect_system_theme,
 };
 use crate::terminal::block_list_viewport::InputMode;
 use crate::terminal::blockgrid_element::BlockGridElement;
@@ -102,12 +100,8 @@ const INPUT_MODE_DROPDOWN_WIDTH: f32 = 225.;
 const MIN_NEW_WINDOW_ROWS_OR_COLS: u16 = 5;
 const MAX_NEW_WINDOW_ROWS_OR_COLS: u16 = 2000;
 
-fn default_font_label(is_ai_font: bool) -> String {
-    if is_ai_font {
-        format!("{} (default)", AIFontName::default_value())
-    } else {
-        format!("{} (default)", MonospaceFontName::default_value())
-    }
+fn default_font_label() -> String {
+    format!("{} (default)", MonospaceFontName::default_value())
 }
 
 pub fn init_actions_from_parent_view<T: Action + Clone>(
@@ -261,15 +255,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     ));
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
-        "agent font matching terminal font",
-        builder(SettingsAction::AppearancePageToggle(
-            AppearancePageAction::ToggleMatchAIToTerminalFontFamily,
-        )),
-        context,
-        flags::MATCH_AI_FONT_TO_TERMINAL_FONT_FLAG,
-    ));
-
-    toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "notebook font size matching terminal font size",
         builder(SettingsAction::AppearancePageToggle(
             AppearancePageAction::ToggleMatchNotebookToMonospaceFontSize,
@@ -310,96 +295,90 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         ),
     );
 
-    if FeatureFlag::FullScreenZenMode.is_enabled() {
-        // Add bindings for each visibility option.
-        app.register_fixed_bindings([
-            FixedBinding::empty(
-                "Always show tab bar".to_string(),
-                builder(SettingsAction::AppearancePageToggle(
-                    AppearancePageAction::SetWorkspaceDecorationVisibility(
-                        WorkspaceDecorationVisibility::AlwaysShow,
-                    ),
-                )),
-                context.to_owned(),
-            )
-            .with_group(bindings::BindingGroup::Settings.as_str()),
-            FixedBinding::empty(
-                "Hide tab bar if fullscreen".to_string(),
-                builder(SettingsAction::AppearancePageToggle(
-                    AppearancePageAction::SetWorkspaceDecorationVisibility(
-                        WorkspaceDecorationVisibility::HideFullscreen,
-                    ),
-                )),
-                context.to_owned(),
-            )
-            .with_group(bindings::BindingGroup::Settings.as_str()),
-            FixedBinding::empty(
-                "Only show tab bar on hover".to_string(),
-                builder(SettingsAction::AppearancePageToggle(
-                    AppearancePageAction::SetWorkspaceDecorationVisibility(
-                        WorkspaceDecorationVisibility::OnHover,
-                    ),
-                )),
-                context.to_owned(),
-            )
-            .with_group(bindings::BindingGroup::Settings.as_str()),
-        ]);
-
-        // Add a toggle alias for "Zen mode".
-        toggle_binding_pairs.push(
-            ToggleSettingActionPair::new(
-                "zen mode",
-                builder(SettingsAction::AppearancePageToggle(
-                    AppearancePageAction::ToggleWorkspaceDecorationVisibility,
-                )),
-                context,
-                flags::HIDE_WORKSPACE_DECORATIONS_CONTEXT_FLAG,
-            )
-            .is_supported_on_current_platform(
-                TabSettings::as_ref(app)
-                    .workspace_decoration_visibility
-                    .is_supported_on_current_platform(),
-            ),
+    // Add bindings for each visibility option.
+    app.register_fixed_bindings([
+        FixedBinding::empty(
+            "Always show tab bar".to_string(),
+            builder(SettingsAction::AppearancePageToggle(
+                AppearancePageAction::SetWorkspaceDecorationVisibility(
+                    WorkspaceDecorationVisibility::AlwaysShow,
+                ),
+            )),
+            context.to_owned(),
         )
-    }
+        .with_group(bindings::BindingGroup::Settings.as_str()),
+        FixedBinding::empty(
+            "Hide tab bar if fullscreen".to_string(),
+            builder(SettingsAction::AppearancePageToggle(
+                AppearancePageAction::SetWorkspaceDecorationVisibility(
+                    WorkspaceDecorationVisibility::HideFullscreen,
+                ),
+            )),
+            context.to_owned(),
+        )
+        .with_group(bindings::BindingGroup::Settings.as_str()),
+        FixedBinding::empty(
+            "Only show tab bar on hover".to_string(),
+            builder(SettingsAction::AppearancePageToggle(
+                AppearancePageAction::SetWorkspaceDecorationVisibility(
+                    WorkspaceDecorationVisibility::OnHover,
+                ),
+            )),
+            context.to_owned(),
+        )
+        .with_group(bindings::BindingGroup::Settings.as_str()),
+    ]);
 
-    if FeatureFlag::VerticalTabs.is_enabled() {
-        toggle_binding_pairs.push(ToggleSettingActionPair::new(
-            "vertical tab layout",
+    // Add a toggle alias for "Zen mode".
+    toggle_binding_pairs.push(
+        ToggleSettingActionPair::new(
+            "zen mode",
             builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleVerticalTabs,
+                AppearancePageAction::ToggleWorkspaceDecorationVisibility,
             )),
             context,
-            flags::USE_VERTICAL_TABS_FLAG,
-        ));
-        toggle_binding_pairs.push(ToggleSettingActionPair::new(
-            "show vertical tabs panel in restored windows",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleShowVerticalTabPanelInRestoredWindows,
-            )),
-            context,
-            flags::SHOW_VERTICAL_TAB_PANEL_IN_RESTORED_WINDOWS_FLAG,
-        ));
-        toggle_binding_pairs.push(ToggleSettingActionPair::new(
-            "latest user prompt as conversation title in tab names",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleUseLatestUserPromptAsConversationTitleInTabNames,
-            )),
-            context,
-            flags::USE_LATEST_USER_PROMPT_AS_CONVERSATION_TITLE_IN_TAB_NAMES_FLAG,
-        ));
-    }
+            flags::HIDE_WORKSPACE_DECORATIONS_CONTEXT_FLAG,
+        )
+        .is_supported_on_current_platform(
+            TabSettings::as_ref(app)
+                .workspace_decoration_visibility
+                .is_supported_on_current_platform(),
+        ),
+    );
 
-    if FeatureFlag::Ligatures.is_enabled() {
-        toggle_binding_pairs.push(ToggleSettingActionPair::new(
-            "ligature rendering",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleLigatureRendering,
-            )),
-            context,
-            flags::LIGATURE_RENDERING_CONTEXT_FLAG,
-        ));
-    }
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "vertical tab layout",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleVerticalTabs,
+        )),
+        context,
+        flags::USE_VERTICAL_TABS_FLAG,
+    ));
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "show vertical tabs panel in restored windows",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleShowVerticalTabPanelInRestoredWindows,
+        )),
+        context,
+        flags::SHOW_VERTICAL_TAB_PANEL_IN_RESTORED_WINDOWS_FLAG,
+    ));
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "latest user prompt as conversation title in tab names",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleUseLatestUserPromptAsConversationTitleInTabNames,
+        )),
+        context,
+        flags::USE_LATEST_USER_PROMPT_AS_CONVERSATION_TITLE_IN_TAB_NAMES_FLAG,
+    ));
+
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "ligature rendering",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleLigatureRendering,
+        )),
+        context,
+        flags::LIGATURE_RENDERING_CONTEXT_FLAG,
+    ));
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "preserve active tab color for new tabs",
@@ -452,7 +431,6 @@ pub enum AppearancePageAction {
     OpacitySliderDragged(f32),
     BlurSliderDragged(f32),
     SetFontFamily(String),
-    SetAIFontFamily(String),
     SetThinStrokes(ThinStrokes),
     SetInputMode {
         new_mode: InputMode,
@@ -473,7 +451,6 @@ pub enum AppearancePageAction {
     ToggleDimInactivePanes,
     ToggleAllAvailableFonts,
     ToggleMatchNotebookToMonospaceFontSize,
-    ToggleMatchAIToTerminalFontFamily,
     ToggleTabIndicators,
     ToggleShowCodeReviewButton,
     TogglePreserveActiveTabColor,
@@ -509,7 +486,6 @@ pub struct AppearanceSettingsPageView {
     font_size_editor: ViewHandle<EditorView>,
     line_height_editor: ViewHandle<EditorView>,
     notebook_font_size_editor: ViewHandle<EditorView>,
-    ai_font_family_dropdown: ViewHandle<FilterableDropdown<AppearancePageAction>>,
     new_window_columns_editor: ViewHandle<EditorView>,
     valid_new_window_columns: bool,
     new_window_rows_editor: ViewHandle<EditorView>,
@@ -570,22 +546,11 @@ impl TypedActionView for AppearanceSettingsPageView {
                     );
                 });
             }
-            ToggleMatchAIToTerminalFontFamily => self.toggle_match_ai_font_to_terminal_font(ctx),
             SetNotebookFontSize => self.set_notebook_font_size(ctx),
             SetLineHeight => self.set_line_height_ratio(ctx),
             SetOpacity(value) => self.set_opacity(*value, ctx),
             SetBlur(value) => self.set_blur(*value, ctx),
             SetFontFamily(name) => self.set_font_family(name, ctx),
-            SetAIFontFamily(name) => {
-                self.set_ai_font_family(name, ctx);
-                FontSettings::handle(ctx).update(ctx, |font_settings, ctx| {
-                    report_if_error!(
-                        font_settings
-                            .match_ai_font_to_terminal_font
-                            .set_value(false, ctx)
-                    );
-                });
-            }
             SetThinStrokes(value) => self.set_thin_strokes(value, ctx),
             SetEnforceMinimumContrast(value) => {
                 FontSettings::handle(ctx).update(ctx, |font_settings, ctx| {
@@ -1047,18 +1012,7 @@ impl AppearanceSettingsPageView {
             dropdown.set_menu_width(FONT_FAMILY_DROPDOWN_WIDTH, ctx);
 
             // Initialize dropdown with the default font in case system fonts failed to load.
-            dropdown.add_items(vec![Self::default_font_item(ctx, false)], ctx);
-            dropdown.set_selected_by_index(0, ctx);
-            dropdown
-        });
-
-        let ai_font_family_dropdown = ctx.add_typed_action_view(|ctx| {
-            let mut dropdown = FilterableDropdown::new(ctx);
-            dropdown.set_top_bar_max_width(FONT_FAMILY_DROPDOWN_WIDTH);
-            dropdown.set_menu_width(FONT_FAMILY_DROPDOWN_WIDTH, ctx);
-
-            // Initialize dropdown with the default font in case system fonts failed to load.
-            dropdown.add_items(vec![Self::default_font_item(ctx, true)], ctx);
+            dropdown.add_items(vec![Self::default_font_item(ctx)], ctx);
             dropdown.set_selected_by_index(0, ctx);
             dropdown
         });
@@ -1252,7 +1206,6 @@ impl AppearanceSettingsPageView {
         AppearanceSettingsPageView {
             page: Self::build_page(ctx),
             window_id: ctx.window_id(),
-            ai_font_family_dropdown,
             notebook_font_size_editor,
             font_size_editor,
             line_height_editor,
@@ -1333,9 +1286,7 @@ impl AppearanceSettingsPageView {
             window_settings_widgets.push(Box::new(WindowBackdropWidget));
         }
 
-        if FeatureFlag::UIZoom.is_enabled() {
-            window_settings_widgets.push(Box::new(ZoomLevelWidget));
-        }
+        window_settings_widgets.push(Box::new(ZoomLevelWidget));
 
         if window_settings
             .left_panel_visibility_across_tabs
@@ -1354,14 +1305,14 @@ impl AppearanceSettingsPageView {
         // points at the same backing setting as onboarding so the two surfaces
         // stay in sync, and the tools panel already recomputes its available
         // views live when these settings change (see `Workspace::new`).
-        // Each toggle is gated only on compile-time / feature-flag availability
+        // Each toggle is gated only on compile-time availability
         // of the corresponding tab (not on transient state), so the
         // section stays stable regardless of when the page is built.
         let mut tools_panel_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
         if cfg!(feature = "local_fs") {
             tools_panel_widgets.push(Box::new(ToolsPanelProjectExplorerWidget::default()));
         }
-        if cfg!(feature = "local_fs") && FeatureFlag::GlobalSearch.is_enabled() {
+        if cfg!(feature = "local_fs") {
             tools_panel_widgets.push(Box::new(ToolsPanelGlobalSearchWidget::default()));
         }
         if !tools_panel_widgets.is_empty() {
@@ -1391,15 +1342,13 @@ impl AppearanceSettingsPageView {
             Box::new(CompactModeWidget::default()),
             Box::new(JumpToBottomOfBlockWidget::default()),
         ];
-        if FeatureFlag::MinimalistUI.is_enabled() {
-            block_settings_widgets.push(Box::new(ShowBlockDividersWidget::default()));
-        }
+        block_settings_widgets.push(Box::new(ShowBlockDividersWidget::default()));
+
         categories.push(Category::new("Blocks", block_settings_widgets));
 
         let font_settings = FontSettings::as_ref(ctx);
         let mut text_settings_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
             Box::new(TerminalFontWidget::default()),
-            Box::new(AIFontWidget::default()),
             Box::new(NotebookFontSizeWidget::default()),
         ];
         if font_settings
@@ -1415,10 +1364,9 @@ impl AppearanceSettingsPageView {
             text_settings_widgets.push(Box::new(MinimumContrastWidget::default()));
         }
         let ligature_settings = LigatureSettings::as_ref(ctx);
-        if FeatureFlag::Ligatures.is_enabled()
-            && ligature_settings
-                .ligature_rendering_enabled
-                .is_supported_on_current_platform()
+        if ligature_settings
+            .ligature_rendering_enabled
+            .is_supported_on_current_platform()
         {
             text_settings_widgets.push(Box::new(LigaturesWidget::default()));
         }
@@ -1436,39 +1384,33 @@ impl AppearanceSettingsPageView {
         let tab_settings = TabSettings::as_ref(ctx);
         let mut tab_settings_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
             vec![Box::new(TabIndicatorWidget::default())];
-        if FeatureFlag::FullScreenZenMode.is_enabled()
-            && tab_settings
-                .workspace_decoration_visibility
-                .is_supported_on_current_platform()
+        if tab_settings
+            .workspace_decoration_visibility
+            .is_supported_on_current_platform()
         {
             tab_settings_widgets.push(Box::new(ZenModeWidget::default()));
         }
-        if FeatureFlag::TabCloseButtonOnLeft.is_enabled() {
-            tab_settings_widgets.push(Box::new(TabCloseButtonPositionWidget::default()));
-        }
+        tab_settings_widgets.push(Box::new(TabCloseButtonPositionWidget::default()));
+
         tab_settings_widgets.push(Box::new(PreserveActiveTabColorWidget::default()));
 
-        if FeatureFlag::VerticalTabs.is_enabled() {
-            tab_settings_widgets.push(Box::new(VerticalTabsWidget::default()));
-            tab_settings_widgets.push(Box::new(
-                ShowVerticalTabPanelInRestoredWindowsWidget::default(),
-            ));
-            tab_settings_widgets.push(Box::new(
-                HideTitleBarSearchBarInVerticalTabsWidget::default(),
-            ));
-            tab_settings_widgets.push(Box::new(
-                UseLatestUserPromptAsConversationTitleInTabNamesWidget::default(),
-            ));
-            tab_settings_widgets.push(Box::new(EditToolbarWidget));
-        }
+        tab_settings_widgets.push(Box::new(VerticalTabsWidget::default()));
+        tab_settings_widgets.push(Box::new(
+            ShowVerticalTabPanelInRestoredWindowsWidget::default(),
+        ));
+        tab_settings_widgets.push(Box::new(
+            HideTitleBarSearchBarInVerticalTabsWidget::default(),
+        ));
+        tab_settings_widgets.push(Box::new(
+            UseLatestUserPromptAsConversationTitleInTabNamesWidget::default(),
+        ));
+        tab_settings_widgets.push(Box::new(EditToolbarWidget));
 
-        if FeatureFlag::DirectoryTabColors.is_enabled() {
-            let add_picker = ctx.add_typed_action_view(DirectoryColorAddPicker::new);
-            ctx.subscribe_to_view(&add_picker, |me, _, event, ctx| {
-                me.handle_directory_color_add_picker_event(event, ctx);
-            });
-            tab_settings_widgets.push(Box::new(DirectoryTabColorsWidget { add_picker }));
-        }
+        let add_picker = ctx.add_typed_action_view(DirectoryColorAddPicker::new);
+        ctx.subscribe_to_view(&add_picker, |me, _, event, ctx| {
+            me.handle_directory_color_add_picker_event(event, ctx);
+        });
+        tab_settings_widgets.push(Box::new(DirectoryTabColorsWidget { add_picker }));
 
         categories.push(Category::new("Tabs", tab_settings_widgets));
 
@@ -1552,25 +1494,14 @@ impl AppearanceSettingsPageView {
         self.context_chips = Self::get_context_chip_renderers(ctx);
     }
 
-    fn default_font_item<V>(
-        ctx: &mut ViewContext<V>,
-        is_ai_font: bool,
-    ) -> DropdownItem<AppearancePageAction>
+    fn default_font_item<V>(ctx: &mut ViewContext<V>) -> DropdownItem<AppearancePageAction>
     where
         V: View,
     {
-        let font_name = if is_ai_font {
-            AIFontName::default_value()
-        } else {
-            MonospaceFontName::default_value()
-        };
+        let font_name = MonospaceFontName::default_value();
         let mut initial_dropdown_item = DropdownItem::new(
-            default_font_label(is_ai_font),
-            if is_ai_font {
-                AppearancePageAction::SetAIFontFamily(font_name.clone())
-            } else {
-                AppearancePageAction::SetFontFamily(font_name.clone())
-            },
+            default_font_label(),
+            AppearancePageAction::SetFontFamily(font_name.clone()),
         );
 
         // If we're on a non-Linux platform, render the dropdown item in the
@@ -1909,7 +1840,6 @@ impl AppearanceSettingsPageView {
 
     fn update_font_dropdown(&mut self, ctx: &mut ViewContext<Self>) {
         let monospace_font_family = Appearance::as_ref(ctx).monospace_font_family();
-        let ai_font_family = Appearance::as_ref(ctx).ai_font_family();
 
         self.font_family_dropdown.update(ctx, |dropdown, ctx| {
             // Get the family name of the current monospace font.
@@ -1966,70 +1896,12 @@ impl AppearanceSettingsPageView {
             // Sort the font names by alphabetical order.
             items.sort_by(|a, b| a.display_text.cmp(&b.display_text));
             // Prepend the default item
-            items.insert(0, Self::default_font_item(ctx, false));
+            items.insert(0, Self::default_font_item(ctx));
             dropdown.set_items(items, ctx);
 
             if !font_name.is_empty() {
                 let label = if font_name == MonospaceFontName::default_value() {
-                    &default_font_label(false)
-                } else {
-                    &font_name
-                };
-                dropdown.set_selected_by_name(label, ctx);
-            }
-        });
-
-        self.ai_font_family_dropdown.update(ctx, |dropdown, ctx| {
-            // Get the family name of the current agent mode font.
-            // We check the font_cache for the current agent mode family.
-            // We also make sure that
-            // - If the current family is in our available_families map,
-            //   we update its entry to ensure it has the correct family_id
-            // - Otherwise, we add a new entry for the current agent mode family
-            let font_name = ctx.font_cache().load_family_name_from_id(ai_font_family);
-
-            if let Some(font_name) = &font_name {
-                self.available_families
-                    .entry(font_name.clone())
-                    .and_modify(|entry| entry.0 = Some(ai_font_family))
-                    .or_insert((Some(ai_font_family), FontType::Any));
-            }
-            let font_name = font_name.unwrap_or_default();
-
-            let mut items = self
-                .available_families
-                .iter()
-                .filter_map(|(name, (family, _font_type))| {
-                    if name == &AIFontName::default_value() {
-                        return None;
-                    }
-
-                    let name_move = name.clone();
-                    let mut dropdown =
-                        DropdownItem::new(name, AppearancePageAction::SetAIFontFamily(name_move));
-
-                    // If we're on a non-Linux platform, render the dropdown item in the
-                    // actual font.  We currently don't do this on Linux because
-                    // pre-loading all of the fonts is too expensive.
-                    if cfg!(not(any(target_os = "linux", target_os = "freebsd")))
-                        && let Some(family_id) = family
-                    {
-                        dropdown = dropdown.with_font_override(*family_id)
-                    }
-
-                    Some(dropdown)
-                })
-                .collect::<Vec<_>>();
-
-            // Sort the font names by alphabetical order.
-            items.sort_by(|a, b| a.display_text.cmp(&b.display_text));
-            // Prepend the default item
-            items.insert(0, Self::default_font_item(ctx, true));
-            dropdown.set_items(items, ctx);
-
-            if !font_name.is_empty() {
-                let label = if font_name == AIFontName::default_value() {
-                    &default_font_label(true)
+                    &default_font_label()
                 } else {
                     &font_name
                 };
@@ -2079,32 +1951,6 @@ impl AppearanceSettingsPageView {
                     .monospace_font_name
                     .set_value(name.to_string(), ctx)
             );
-            if *font_settings.match_ai_font_to_terminal_font.value() {
-                report_if_error!(font_settings.ai_font_name.set_value(name.to_string(), ctx))
-            }
-        });
-    }
-
-    pub fn toggle_match_ai_font_to_terminal_font(&mut self, ctx: &mut ViewContext<Self>) {
-        FontSettings::handle(ctx).update(ctx, |font_settings, ctx| {
-            report_if_error!(
-                font_settings
-                    .match_ai_font_to_terminal_font
-                    .toggle_and_save_value(ctx)
-            );
-            if *font_settings.match_ai_font_to_terminal_font.value() {
-                let font_name = font_settings.monospace_font_name.value().clone();
-                self.ai_font_family_dropdown.update(ctx, |dropdown, ctx| {
-                    dropdown.clear_filter(ctx);
-                });
-                report_if_error!(font_settings.ai_font_name.set_value(font_name, ctx))
-            }
-        });
-    }
-
-    pub fn set_ai_font_family(&mut self, name: &str, ctx: &mut ViewContext<Self>) {
-        FontSettings::handle(ctx).update(ctx, |font_settings, ctx| {
-            report_if_error!(font_settings.ai_font_name.set_value(name.to_string(), ctx))
         });
     }
 
@@ -2518,21 +2364,19 @@ impl AppearanceSettingsPageView {
     }
 
     fn toggle_ligature_rendering(&mut self, ctx: &mut ViewContext<Self>) {
-        if FeatureFlag::Ligatures.is_enabled() {
-            let ligature_settings = LigatureSettings::handle(ctx);
-            let new_value = !*ligature_settings
-                .as_ref(ctx)
-                .ligature_rendering_enabled
-                .value();
+        let ligature_settings = LigatureSettings::handle(ctx);
+        let new_value = !*ligature_settings
+            .as_ref(ctx)
+            .ligature_rendering_enabled
+            .value();
 
-            ligature_settings.update(ctx, |settings, ctx| {
-                report_if_error!(
-                    settings
-                        .ligature_rendering_enabled
-                        .set_value(new_value, ctx)
-                );
-            });
-        }
+        ligature_settings.update(ctx, |settings, ctx| {
+            report_if_error!(
+                settings
+                    .ligature_rendering_enabled
+                    .set_value(new_value, ctx)
+            );
+        });
     }
 
     pub fn toggle_input_mode(&mut self, ctx: &mut ViewContext<Self>) {
@@ -3688,69 +3532,6 @@ impl SettingsWidget for ShowBlockDividersWidget {
 }
 
 #[derive(Default)]
-struct AIFontWidget {
-    checkbox_state: MouseStateHandle,
-}
-
-impl SettingsWidget for AIFontWidget {
-    type View = AppearanceSettingsPageView;
-
-    fn search_terms(&self) -> &str {
-        "text agent ai font family font size monospace"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let font_settings = FontSettings::as_ref(app);
-        let mut ai_font_row = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
-        let mut ai_font = Flex::column();
-        ai_font.add_child(render_body_item_label::<AppearancePageAction>(
-            "Agent font".to_string(),
-            None,
-            None,
-            ToggleState::Enabled,
-            appearance,
-        ));
-        ai_font.add_child(
-            Container::new(ChildView::new(&view.ai_font_family_dropdown).finish())
-                .with_margin_bottom(10.)
-                .finish(),
-        );
-
-        ai_font_row
-            .add_child(Shrinkable::new(1., Align::new(ai_font.finish()).left().finish()).finish());
-        ai_font_row.add_child(
-            appearance
-                .ui_builder()
-                .checkbox(self.checkbox_state.clone(), None)
-                .check(*font_settings.match_ai_font_to_terminal_font)
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(
-                        AppearancePageAction::ToggleMatchAIToTerminalFontFamily,
-                    )
-                })
-                .finish(),
-        );
-        ai_font_row.add_child(
-            appearance
-                .ui_builder()
-                .span("Match terminal".to_string())
-                .build()
-                .with_margin_left(2.)
-                .with_margin_right(16.)
-                .finish(),
-        );
-
-        ai_font_row.finish()
-    }
-}
-
-#[derive(Default)]
 struct TerminalFontWidget {
     line_height_button_state: MouseStateHandle,
     fonts_checkbox_state: MouseStateHandle,
@@ -4554,7 +4335,7 @@ impl SettingsWidget for UseLatestUserPromptAsConversationTitleInTabNamesWidget {
     type View = AppearanceSettingsPageView;
 
     fn search_terms(&self) -> &str {
-        "latest user prompt conversation title tab names vertical tabs oz third-party agent"
+        "latest user prompt conversation title tab names vertical tabs third-party agent"
     }
 
     fn render(
@@ -4585,7 +4366,7 @@ impl SettingsWidget for UseLatestUserPromptAsConversationTitleInTabNamesWidget {
                 })
                 .finish(),
             Some(
-                "Show the latest user prompt instead of the generated conversation title for Oz and third-party agent sessions in vertical tabs."
+                "Show the latest user prompt instead of the generated conversation title for third-party agent sessions in vertical tabs."
                     .to_string(),
             ),
         )

@@ -121,7 +121,7 @@ fn new_command_executor_for_local_tty_session(
     use wsl_command_executor::WslCommandExecutor;
 
     use super::IsSSHWrapperSession;
-    use crate::features::FeatureFlag;
+
     use crate::settings::DebugSettings;
     use crate::terminal::available_shells::AvailableShells;
     use crate::terminal::model::session::{BootstrapSessionType, ShellLaunchData};
@@ -190,9 +190,7 @@ fn new_command_executor_for_local_tty_session(
             }
         }
         BootstrapSessionType::WarpifiedRemote
-            if is_ssh_wrapper_session
-                && !FeatureFlag::InBandGeneratorsForSSH.is_enabled()
-                && !force_use_in_band_generators =>
+            if is_ssh_wrapper_session && !force_use_in_band_generators =>
         {
             if let IsSSHWrapperSession::Yes { socket_path, .. } =
                 &session_info.is_ssh_wrapper_session

@@ -10,7 +10,6 @@ use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
 use smallvec::SmallVec;
 use vim::vim::{MotionType, VimMode};
-use warp_core::features::FeatureFlag;
 use warp_core::ui::appearance::DEFAULT_UI_FONT_SIZE;
 use warp_errors::report_error;
 use warp_util::user_input::UserInput;
@@ -1384,9 +1383,7 @@ impl EditorElement {
                 self.autosuggestion_shortcut_icon =
                     Some(ChildView::new(accept_autosuggestion_keybinding).finish());
             }
-            if show_autosuggestion_ignore_button
-                && FeatureFlag::AllowIgnoringInputSuggestions.is_enabled()
-            {
+            if show_autosuggestion_ignore_button {
                 self.autosuggestion_ignore_icon =
                     Some(ChildView::new(autosuggestion_ignore).finish());
             }

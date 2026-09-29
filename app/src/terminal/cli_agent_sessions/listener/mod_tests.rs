@@ -71,7 +71,6 @@ fn codex_try_parse_handles_osc9() {
 
 #[test]
 fn codex_try_parse_ignores_osc9_when_plugin_already_active() {
-    let _guard = FeatureFlag::CodexPlugin.override_enabled(true);
     let mut handler = Osc9FallbackSessionHandler {
         agent: CLIAgent::Codex,
     };
@@ -87,26 +86,6 @@ fn codex_try_parse_ignores_osc9_when_plugin_already_active() {
         handler
             .try_parse(None, "Agent turn complete", true)
             .is_none()
-    );
-}
-
-#[test]
-fn codex_try_parse_ignores_structured_event_without_codex_plugin() {
-    let _guard = FeatureFlag::CodexPlugin.override_enabled(false);
-    let mut handler = Osc9FallbackSessionHandler {
-        agent: CLIAgent::Codex,
-    };
-    let body = r#"{"v":1,"agent":"codex","event":"permission_request","summary":"Approve?","tool_name":"Bash"}"#;
-
-    assert!(
-        handler
-            .try_parse(Some(CLI_AGENT_NOTIFICATION_SENTINEL), body, false)
-            .is_none()
-    );
-    assert!(
-        handler
-            .try_parse(None, "Agent turn complete", false)
-            .is_some()
     );
 }
 

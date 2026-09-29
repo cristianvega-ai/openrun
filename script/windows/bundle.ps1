@@ -13,7 +13,7 @@ Param (
 
     [Alias('release-tag')]
     [String]$RELEASE_TAG = '',
-    [String]$FEATURES = 'release_bundle,gui',
+    [String]$FEATURES = 'release_bundle',
 
     # Builds only the Warp binary, skips the installer.
     [Switch]$SKIP_BUILD_INSTALLER = $False,
@@ -110,9 +110,6 @@ $BUNDLE_ID = "dev.warp.$app_name"
 $WARP_BIN = 'warp-oss'
 $BINARY_NAME = 'warp-oss.exe'
 $APP_NAME = 'WarpOss'
-
-# All app channels ship the v3 classifier and v2 heuristic.
-$FEATURES = "$FEATURES,nld_classifier_v3,nld_heuristic_v2"
 
 $BINARY_PATH = "$CARGO_TARGET_OUTPUT_DIR\$BINARY_NAME"
 $BUNDLE_ID = "dev.warp.$APP_NAME"

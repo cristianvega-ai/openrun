@@ -87,29 +87,11 @@ pub use settings_page::{
     render_input_list, render_separator,
 };
 
-/// Original sidebar width used when the settings-file footer is not
-/// enabled. Preserved for Preview/Stable until `FeatureFlag::SettingsFile`
-/// is promoted.
-const SIDEBAR_WIDTH_DEFAULT: f32 = 200.;
-
-/// Wider sidebar used when the settings-file footer is enabled. Sized to
-/// match Figma's settings nav rail (223px alert + 12px horizontal padding
-/// on each side + 1px right border), giving the error-alert footer enough
-/// room to render its "Open file" button
-/// with the designed 24px indent and 8px internal padding.
-const SIDEBAR_WIDTH_WITH_FOOTER: f32 = 248.;
-
-/// Returns the sidebar width, widened only when the settings-file footer
-/// is enabled. This keeps the wider layout gated with the footer itself so
-/// Preview/Stable users don't see an unexplained 48px width bump before
-/// the feature ships.
-fn sidebar_width() -> f32 {
-    if FeatureFlag::SettingsFile.is_enabled() {
-        SIDEBAR_WIDTH_WITH_FOOTER
-    } else {
-        SIDEBAR_WIDTH_DEFAULT
-    }
-}
+/// Sidebar width. Sized to match Figma's settings nav rail (223px alert + 12px
+/// horizontal padding on each side + 1px right border), giving the error-alert
+/// footer enough room to render its "Open file" button with the designed 24px
+/// indent and 8px internal padding.
+const SIDEBAR_WIDTH: f32 = 248.;
 
 /// Width of the borders for the header and the sidebar.
 const SECTION_BORDER_WIDTH: f32 = 1.;
@@ -141,24 +123,6 @@ pub fn nav_umbrella_position_id(label: &str) -> String {
 /// Saved-position id for a subpage row nested under an umbrella.
 pub fn nav_subpage_position_id(section: SettingsSection) -> String {
     format!("settings_nav_subpage:{section:?}")
-}
-
-/// Small inline pill rendered next to a settings label to mark a feature as beta.
-/// Used for experimental features (i.e. AsyncFind) that are enabled for Friends of Warp (i.e. Dogfood/Preview) and toggleable by others.
-pub(super) fn render_beta_chip(appearance: &Appearance) -> Box<dyn Element> {
-    let theme = appearance.theme();
-    let chip_color = theme.sub_text_color(theme.surface_3()).into_solid();
-    Container::new(
-        Text::new_inline("BETA", appearance.ui_font_family(), 10.)
-            .with_color(chip_color)
-            .finish(),
-    )
-    .with_background(theme.surface_3())
-    .with_corner_radius(CornerRadius::with_all(Radius::Pixels(3.)))
-    .with_horizontal_padding(4.)
-    .with_vertical_padding(1.)
-    .with_margin_left(8.)
-    .finish()
 }
 
 #[derive(PartialEq)]
@@ -359,7 +323,6 @@ pub mod flags {
     pub const DIM_INACTIVE_PANES_FLAG: &str = "Dim_Inactive_Panes";
     pub const OPEN_WINDOWS_AT_CUSTOM_SIZE_FLAG: &str = "Open_Windows_At_Custom_Size";
     pub const LEFT_PANEL_VISIBILITY_ACROSS_TABS_FLAG: &str = "Left_Panel_Visibility_Across_Tabs";
-    pub const MATCH_AI_FONT_TO_TERMINAL_FONT_FLAG: &str = "Match_AI_Font_To_Terminal_Font";
     pub const MATCH_NOTEBOOK_FONT_SIZE_TO_TERMINAL_FONT_SIZE_FLAG: &str =
         "Match_Notebook_Font_Size_To_Terminal_Font_Size";
     pub const QUIT_WARNING_MODAL: &str = "Quit_Warning_Modal";
@@ -371,7 +334,6 @@ pub mod flags {
     pub const TAB_INDICATORS_FLAG: &str = "Tab_Indicators_Enabled";
     pub const SHOW_CODE_REVIEW_BUTTON_FLAG: &str = "Show_Code_Review_Button_Enabled";
     pub const SHOW_CODE_REVIEW_DIFF_STATS_FLAG: &str = "Show_Code_Review_Diff_Stats_Enabled";
-    pub const AUTO_OPEN_CODE_REVIEW_PANE_FLAG: &str = "Auto_Open_Code_Review_Pane_Enabled";
     pub const USE_VERTICAL_TABS_FLAG: &str = "Use_Vertical_Tabs";
     pub const PRESERVE_ACTIVE_TAB_COLOR_FLAG: &str = "Preserve_Active_Tab_Color";
     pub const SHOW_VERTICAL_TAB_PANEL_IN_RESTORED_WINDOWS_FLAG: &str =
@@ -1896,7 +1858,6 @@ impl View for SettingsView {
         // scrollable nav list but inside the same sidebar column so it
         // shares the right-border and SIDEBAR_WIDTH constraint.
         let footer_kind = SettingsFooterKind::choose(
-            FeatureFlag::SettingsFile.is_enabled(),
             self.settings_file_error.is_some(),
             self.settings_error_banner_dismissed,
         );
@@ -1931,7 +1892,7 @@ impl View for SettingsView {
             .with_border(Border::right(SECTION_BORDER_WIDTH).with_border_fill(theme.outline()))
             .finish(),
         )
-        .with_width(sidebar_width())
+        .with_width(SIDEBAR_WIDTH)
         .finish();
 
         let row = Flex::row()

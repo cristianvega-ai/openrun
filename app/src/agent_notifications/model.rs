@@ -1,4 +1,3 @@
-use warp_core::features::FeatureFlag;
 use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity, ViewHandle};
 
 use crate::agent_notifications::{
@@ -57,9 +56,6 @@ impl AgentNotificationsModel {
         terminal_view_id: EntityId,
         ctx: &mut ModelContext<Self>,
     ) {
-        if !FeatureFlag::HOANotifications.is_enabled() {
-            return;
-        }
         if self
             .notifications
             .mark_all_terminal_view_items_as_read(terminal_view_id)
@@ -73,10 +69,6 @@ impl AgentNotificationsModel {
         event: &CLIAgentSessionsModelEvent,
         ctx: &mut ModelContext<Self>,
     ) {
-        if !FeatureFlag::HOANotifications.is_enabled() {
-            return;
-        }
-
         match event {
             CLIAgentSessionsModelEvent::Ended {
                 terminal_view_id, ..

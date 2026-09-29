@@ -1,90 +1,17 @@
 ---
 name: promote-feature
-description: Promote a feature-flagged feature to Dogfood, Preview, or Stable in the Warp codebase. Use when a feature behind a FeatureFlag is ready to roll out to a broader audience, including wiring up the compile-time/runtime bridge and deferring flag cleanup safely.
+description: Make a feature permanent in the Warp codebase. Use when a feature behind a FeatureFlag should now always be on.
 ---
 
 # promote-feature
 
-Guides the staged promotion of a gated `FeatureFlag` variant to Dogfood, Preview, or Stable, and schedules the follow-up cleanup.
+There is nothing to promote a flag through. This build ships one stream (`Channel::Oss`, plus
+`Channel::Integration` for tests) and has no Dogfood, Preview or Release channel lists, so a flag has no rollout
+stages and no per-flag Cargo feature.
 
-## Overview
+To make a gated feature permanent, fold its enabled arm into the code and delete the flag. Follow the
+`remove-feature-flag` skill.
 
-Feature flags have two interacting layers:
-- **Runtime** (`warp_core/src/features.rs`): `DOGFOOD_FLAGS`, `PREVIEW_FLAGS`, `RELEASE_FLAGS` — enabled per-channel at startup.
-- **Compile-time** (`app/Cargo.toml` + `app/src/lib.rs`): Cargo features in `[features]`. The `default = [...]` array enables a feature for all builds. `enabled_features()` in `app/src/lib.rs` bridges each Cargo feature to its `FeatureFlag` variant via `#[cfg(feature = "...")]`.
-
-**Do not remove the flag immediately after promoting to Stable.** Keep it for at least 1–2 release cycles so a rollback is a one-line PR (remove the entry from `default`). Use the `remove-feature-flag` skill for the cleanup step later.
-
-## Promote to Dogfood
-
-Add the flag to `DOGFOOD_FLAGS` in `warp_core/src/features.rs`:
-
-```rust
-pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
-    // ...
-    FeatureFlag::YourFeature,
-];
-```
-
-No other file changes needed.
-
-## Promote to Preview
-
-1. Add to `PREVIEW_FLAGS` in `warp_core/src/features.rs`.
-2. Remove from `DOGFOOD_FLAGS` if present — Preview flags are automatically included in Dogfood builds.
-
-```rust
-pub const PREVIEW_FLAGS: &[FeatureFlag] = &[
-    // ...
-    FeatureFlag::YourFeature,
-];
-```
-
-## Promote to Stable
-
-This requires changes in **three files**.
-
-### 1. `app/Cargo.toml` — add to `default`
-
-Add the snake_case feature name to the `default = [...]` array:
-
-```toml
-default = [
-    # ...
-    "your_feature_name",
-]
-```
-
-Prefer this over adding to `RELEASE_FLAGS` (see comment at `warp_core/src/features.rs:787-790`). It compiles the feature into all builds and enables a one-line rollback.
-
-### 2. `app/src/lib.rs` — add to `enabled_features()` bridge
-
-Add a `#[cfg(...)]` entry inside the `flags.extend([...])` block in `enabled_features()`, following the existing pattern:
-
-```rust
-#[cfg(feature = "your_feature_name")]
-FeatureFlag::YourFeature,
-```
-
-Place it near logically related entries.
-
-### 3. `warp_core/src/features.rs` — remove from `PREVIEW_FLAGS` / `DOGFOOD_FLAGS`
-
-Remove the variant from whichever arrays it currently lives in:
-
-```rust
-pub const PREVIEW_FLAGS: &[FeatureFlag] = &[
-    // Remove FeatureFlag::YourFeature,
-];
-```
-
-### Validate
-
-```bash
-cargo clippy -p warp_core --all-targets --tests -- -D warnings
-# Also lint the GUI app when app/Cargo.toml or app/src/lib.rs changed.
-cargo clippy -p warp --all-targets --tests -- -D warnings
-./script/format
-```
-
-If the promotion changes behavior beyond flag lists or configuration, run affected tests before Clippy. Format once after all other changes are complete. Do not rerun earlier checks after formatting or add a full presubmit unless explicitly required; CI owns broader platform and workspace coverage.
+To ship a feature that should only be on for some platforms or builds, keep the flag and enable it in
+`enabled_features()` in `app/src/features.rs` (or `DEBUG_FLAGS` in `crates/warp_features/src/lib.rs`). See the
+`add-feature-flag` skill.

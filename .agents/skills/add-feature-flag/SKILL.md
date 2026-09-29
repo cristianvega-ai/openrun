@@ -1,102 +1,93 @@
 ---
 name: add-feature-flag
-description: Add a new feature flag to gate code changes in the Warp codebase.
+description: Add a new runtime feature flag in the Warp codebase, for behavior that genuinely varies by platform, build profile or debug tooling.
 ---
 
 # add-feature-flag
 
-Add a new feature flag to gate code changes in the Warp codebase.
+Add a new `FeatureFlag` variant.
 
 ## Overview
 
-Feature flags in Warp are compile-time flags that allow features to be selectively enabled for different channels (e.g.: Dev, Stable). They use a small runtime plumbing layer that checks if a flag is enabled.
+This build ships a single stream (`Channel::Oss`, plus `Channel::Integration` for tests). There are no
+Dogfood, Preview or Release channel lists, and no per-flag Cargo features. A flag that would simply be
+"on" or "off" everywhere is not a flag: write the code (or delete it) directly.
+
+Add a flag only when behavior legitimately depends on something known at startup, for example:
+
+- the platform (`ITermImages` and `KittyImages` are enabled on every platform except Windows),
+- the build profile or debugging tools (`DebugMode` is enabled through `DEBUG_FLAGS` in debug builds of the
+  `warp-oss` binary).
+
+The pieces are:
+
+- `FeatureFlag` (an enum) and its runtime state live in `crates/warp_features/src/lib.rs`. `warp_core::features`
+  and `app/src/features.rs` re-export it.
+- `init_feature_flags()` in `app/src/features.rs` enables every flag returned by `enabled_features()`. That set is
+  `ChannelState::additional_features()` (set by the binary, for example `DEBUG_FLAGS`) plus the `#[cfg(...)]`
+  entries in `enabled_features()`.
 
 ## Steps
 
-### 1. Add to Cargo.toml
-Add the feature to `app/Cargo.toml` under the `[features]` section, but **NOT** under the `default` nested stanza:
-
-```toml
-[features]
-your_feature_name = []
-```
-
-### 2. Add to FeatureFlag enum
-Add a new variant to the `FeatureFlag` enum in `warp_core/src/features.rs`:
+### 1. Add the variant
+In `crates/warp_features/src/lib.rs`:
 
 ```rust
-#[derive(Sequence)]
 pub enum FeatureFlag {
+    /// What the flag gates.
     YourFeatureName,
 }
 ```
 
-### 3. Add conditional compilation directive
-Add the feature to `app/src/lib.rs` with a corresponding `#[cfg(feature = "...")]` attribute to ensure it's only included when enabled:
+### 2. Decide when it is enabled
+Add it to `enabled_features()` in `app/src/features.rs`, gated by a `cfg` on the condition that matters:
 
 ```rust
-#[cfg(feature = "your_feature_name")]
-YourFeatureName,
+flags.extend([
+    #[cfg(not(windows))]
+    FeatureFlag::YourFeatureName,
+]);
 ```
 
-### 4. Gate code with runtime checks
-In your code, use the runtime check to conditionally execute feature-gated code:
+For something that should only be on in debug builds of `warp-oss`, add it to `DEBUG_FLAGS` in
+`crates/warp_features/src/lib.rs` instead.
 
+Do not add a Cargo feature per flag. Cargo features are for optional dependencies and build modes
+(`local_fs`, `local_tty`, `release_bundle`, profiling), not for flags.
+
+### 3. Gate code with runtime checks
 ```rust
 if FeatureFlag::YourFeatureName.is_enabled() {
-    // feature-gated behavior
+    // gated behavior
 }
 ```
 
-### 5. (Optional) Enable for dogfood builds
-To enable the feature by default for Dev/dogfood builds, add it to the `DOGFOOD_FLAGS` array in `features.rs`:
+Prefer runtime checks over `#[cfg(...)]` so both arms compile everywhere; use `cfg` only when the code cannot
+compile without the condition (platform APIs, missing dependencies).
+
+### 4. Tests
+Flags are all off in unit tests. Turn one on for the duration of a test with the thread-local override
+(needs the `test-util` feature of `warp_features`, which the workspace test targets enable):
 
 ```rust
-pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
-    FeatureFlag::YourFeatureName,
-];
+let _flag = FeatureFlag::YourFeatureName.override_enabled(true);
 ```
 
-### 6. Running with feature flags
-To test locally with the feature enabled:
+`set_enabled` panics inside unit tests; use `override_enabled` there.
 
-```bash
-cargo run --features your_feature_name
+## Keybindings with feature flags
 
-# Multiple features:
-cargo run --features your_feature_name,another_feature
-```
+If an `EditableBinding` or `FixedBinding` belongs to a gated feature, add an enabled predicate so it does not
+show up in keyboard settings when the flag is off:
 
-## Keybindings with Feature Flags
-
-If adding an `EditableBinding` or `FixedBinding` that's part of a gated feature, include an enabled predicate that checks the feature flag. This prevents the keybinding from appearing in keyboard settings when the feature is disabled.
-
-Example:
 ```rust
-EditableBinding::new(
-    "action:name",
-    "Action description",
-    YourAction::Variant
-)
-.with_enabled(|| FeatureFlag::YourFeatureName.is_enabled())
-.with_key_binding("cmdorctrl-key")
+EditableBinding::new("action:name", "Action description", YourAction::Variant)
+    .with_enabled(|| FeatureFlag::YourFeatureName.is_enabled())
+    .with_key_binding("cmdorctrl-key")
 ```
 
-## Rolling Out to Stable
+## Best practices
 
-When ready to enable the feature for all Warp Stable users, add it to the `default` array in `app/Cargo.toml`:
-
-```toml
-[features]
-default = [
-    "your_feature_name",
-    # other default features...
-]
-```
-
-## Best Practices
-
-- **Prefer runtime checks over cfg directives**: Use `FeatureFlag::YourFeatureName.is_enabled()` instead of `#[cfg(...)]` when possible, so flags can be toggled without recompilation and are easier to clean up later
-- Use `#[cfg(...)]` only when code cannot compile without the flag (e.g., platform-specific code or missing dependencies)
-- Keep flags high-level and product-focused rather than per-call-site
-- Remove flags and dead branches after launch has stabilized
+- Keep flags rare. If the answer is the same on every platform and build, do not add one.
+- Keep flags high-level and product-focused rather than per-call-site.
+- Remove a flag (see the `remove-feature-flag` skill) as soon as the condition it captured goes away.

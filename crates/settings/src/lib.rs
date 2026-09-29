@@ -63,7 +63,6 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use warp_errors::report_error;
-use warp_features::FeatureFlag;
 use warpui_core::{AppContext, Entity, ModelContext};
 use warpui_extras::secure_storage::{self, AppContextExt as _};
 use warpui_extras::user_preferences::UserPreferences;
@@ -71,8 +70,7 @@ use warpui_extras::user_preferences::UserPreferences;
 /// A newtype wrapper for the public preferences backend.
 ///
 /// Public settings (those marked `private: false` in `define_settings_group!`)
-/// are stored in the user-visible settings file (TOML) when the `SettingsFile`
-/// feature flag is enabled, otherwise in the platform-native store.
+/// are stored in the user-visible settings file (TOML).
 ///
 /// The inner field is private and only accessible within the settings crate via
 /// [`as_preferences`](Self::as_preferences). This prevents external code from
@@ -162,7 +160,7 @@ pub enum SettingsMode {
 /// The set of surfaces a setting applies to.
 ///
 /// Declared per-setting via the required `surface:` attribute in
-/// `define_settings_group!` and used — like `feature_flag` — at schema /
+/// `define_settings_group!` and used at schema /
 /// default-file generation time to decide which settings belong in a given
 /// surface's file. Combine surfaces with [`SettingSurfaces::ALL`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -353,12 +351,8 @@ pub trait Setting {
 
         if Self::is_private() {
             <PrivatePreferences as SingletonEntity>::as_ref(ctx).deref()
-        } else if FeatureFlag::SettingsFile.is_enabled() {
-            <PublicPreferences as SingletonEntity>::as_ref(ctx).as_preferences()
         } else {
-            // When the settings file is disabled, fall back to the private
-            // backend so both paths share a single instance.
-            <PrivatePreferences as SingletonEntity>::as_ref(ctx).deref()
+            <PublicPreferences as SingletonEntity>::as_ref(ctx).as_preferences()
         }
     }
 
