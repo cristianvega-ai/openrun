@@ -1077,7 +1077,6 @@ impl CodeView {
         ctx.dispatch_typed_action(&WorkspaceAction::InsertInInput {
             content: format!("{file_path}:{start_line}-{end_line} "),
             replace_buffer: false,
-            ensure_agent_mode: true,
         });
     }
 

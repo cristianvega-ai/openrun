@@ -84,6 +84,7 @@ use crate::suggestions::ignored_suggestions_model::SuggestionType;
 use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
 use crate::terminal::history::PersistedCommand;
+use crate::terminal::input::InputConfig;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::tab_group::TabGroupId;
 use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
@@ -1665,7 +1666,7 @@ fn read_node(
                         .and_then(|shell_str| serde_json::from_str(&shell_str).ok());
                     let input_config = terminal_pane
                         .input_config
-                        .and_then(|config_str| serde_json::from_str(&config_str).ok());
+                        .and_then(|config_str| InputConfig::from_persisted(&config_str));
                     let active_profile_id = terminal_pane
                         .active_profile_id
                         .and_then(|profile_str| serde_json::from_str(&profile_str).ok());

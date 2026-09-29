@@ -29,7 +29,6 @@ use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::team::MockTeamClient;
 use crate::server::server_api::workspace::MockWorkspaceClient;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
-use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::model::session::Session;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::workspace::ActiveSession;
@@ -51,7 +50,6 @@ fn init_app(app: &mut App) {
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(FileModel::new);
     app.add_singleton_model(NotebookKeybindings::new);
-    app.add_singleton_model(TerminalKeybindings::new);
     app.add_singleton_model(|_| ServerApiProvider::new_for_test());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     app.add_singleton_model(AuthManager::new_for_test);

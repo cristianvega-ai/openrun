@@ -44,7 +44,6 @@ use crate::system::SystemStats;
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::history::History;
-use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::local_tty::spawner::PtySpawner;
 use crate::terminal::resizable_data::ResizableData;
 use crate::test_util::assert_eventually;
@@ -109,7 +108,6 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(|_| GlobalResourceHandlesProvider::new(global_resources.clone()));
     app.add_singleton_model(|_| KeybindingChangedNotifier::new());
     app.add_singleton_model(NotebookKeybindings::new);
-    app.add_singleton_model(TerminalKeybindings::new);
     app.add_singleton_model(move |_| BlocklistAIHistoryModel::new(vec![], &conversations));
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
     app.add_singleton_model(LocalAgentTaskSyncModel::new);

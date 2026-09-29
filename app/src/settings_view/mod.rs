@@ -421,9 +421,6 @@ pub mod flags {
     pub const IS_BLOCK_AI_SUMMARIES_ENABLED: &str = "IsBlockAISummariesEnabled";
     pub const LIGATURE_RENDERING_CONTEXT_FLAG: &str = "Ligature_Rendering_Enabled";
     pub const HAS_SETTINGS_TO_IMPORT_FLAG: &str = "HasSettingsToImport";
-    /// The user's setting enabled UDI, but we may show a classic input (e.g. ssh/subshell warpification)
-    pub const AGENT_MODE_INPUT: &str = "InputAgentMode";
-    pub const TERMINAL_MODE_INPUT: &str = "InputTerminalMode";
     pub const WARP_IS_DEFAULT_TERMINAL: &str = "WarpIsDefaultTerminal";
     /// When set, the terminal input owns Page Up / Page Down so the editor's fixed bindings
     /// should not match.
@@ -431,11 +428,6 @@ pub mod flags {
         "TerminalInputPageKeysHandledByInput";
     pub const ACTIVE_AGENT_VIEW: &str = "ActiveAgentView";
     pub const ACTIVE_INLINE_AGENT_VIEW: &str = "ActiveInlineAgentView";
-    /// When set, ctrl-enter should be the active binding to enter agent view.
-    ///
-    /// This is true on linux and windows.
-    pub const CTRL_ENTER_ENTERS_AGENT_VIEW: &str = "CtrlEnterEntersAgentView";
-    pub const LOCKED_INPUT: &str = "LockedInput";
     pub const EMPTY_INPUT_BUFFER: &str = "EmptyInputBuffer";
     pub const CLI_AGENT_RICH_INPUT_OPEN: &str = "CLIAgentRichInputOpen";
     pub const CLI_AGENT_FOOTER_ENABLED: &str = "CLIAgentFooterEnabled";

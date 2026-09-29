@@ -120,9 +120,9 @@ impl Input {
             return;
         }
 
-        // We don't show input command decorations in AI mode, but we keep slash command prefix highlighting.
+        // We don't show input command decorations in prompt mode, but we keep slash command prefix highlighting.
         let buffer_text = self.editor.as_ref(ctx).buffer_text(ctx);
-        if self.ai_input_model.as_ref(ctx).is_ai_input_enabled()
+        if self.input_mode_model.as_ref(ctx).is_prompt_input_enabled()
             || self
                 .slash_command_model
                 .as_ref(ctx)

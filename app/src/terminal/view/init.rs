@@ -1,7 +1,5 @@
 use warpui::AppContext;
-use warpui::keymap::{
-    BindingDescription, ContextPredicate, EditableBinding, FixedBinding, PerPlatformKeystroke,
-};
+use warpui::keymap::{BindingDescription, EditableBinding, FixedBinding, PerPlatformKeystroke};
 use warpui::platform::OperatingSystem;
 use warpui::units::IntoLines;
 
@@ -14,15 +12,9 @@ use crate::features::FeatureFlag;
 use crate::server::telemetry::ToggleBlockFilterSource;
 use crate::settings_view::flags;
 use crate::terminal::TerminalView;
-use crate::terminal::input::{
-    SET_INPUT_MODE_AGENT_ACTION_NAME, SET_INPUT_MODE_TERMINAL_ACTION_NAME,
-};
 use crate::terminal::model::escape_sequences::{self, EscCodes};
 use crate::terminal::model::selection::SelectionDirection;
-use crate::terminal::view::{
-    LONG_RUNNING_AGENT_REQUESTED_COMMAND_CONTEXT_KEY,
-    LONG_RUNNING_AGENT_REQUESTED_COMMAND_USER_TOOK_OVER_CONTEXT_KEY,
-};
+use crate::terminal::view::LONG_RUNNING_AGENT_REQUESTED_COMMAND_CONTEXT_KEY;
 use crate::util::bindings;
 use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, is_binding_pty_compliant};
 
@@ -72,8 +64,6 @@ pub fn init(app: &mut AppContext) {
     app.register_binding_validator::<TerminalView>(is_binding_pty_compliant);
 
     init_overlapping_keybindings(app);
-    // Register input mode bindings before warpify bindings so ctrl-i warpifies
-    // instead of opening inline agent when a warpify banner is visible.
     register_input_mode_bindings(app);
 
     app.register_fixed_bindings([
@@ -209,13 +199,6 @@ pub fn init(app: &mut AppContext) {
                 cmd_or_ctrl_shift("c"),
                 TerminalAction::Copy,
                 id!("Terminal") & !id!("IMEOpen"),
-            ),
-            FixedBinding::new(
-                cmd_or_ctrl_shift("i"),
-                TerminalAction::SetInputModeAgent,
-                id!("Terminal")
-                    & !id!("IMEOpen")
-                    & (id!(flags::ACTIVE_AGENT_VIEW) | id!(flags::ACTIVE_INLINE_AGENT_VIEW)),
             ),
         ]);
     }
@@ -771,83 +754,30 @@ fn register_input_mode_bindings(app: &mut AppContext) {
     // A context predicate that is active when there is a long running command.
     let command_predicate = id!("LongRunningCommand") | id!("AltScreen");
 
-    // A context predicate that is active when the user can switch input to agent mode.
-    let agent_mode_predicate = base_context.clone()
-        & ContextPredicate::Or(
-            Box::new(id!(flags::TERMINAL_MODE_INPUT)),
-            Box::new(ContextPredicate::Or(
-                Box::new(
-                    !id!(flags::TERMINAL_MODE_INPUT)
-                        & id!(LONG_RUNNING_AGENT_REQUESTED_COMMAND_USER_TOOK_OVER_CONTEXT_KEY),
-                ),
-                Box::new(command_predicate.clone()),
-            )),
-        );
-
-    // A context predicate that is active when the user could switch input to shell mode.
-    // This matches when in AI mode AND either:
-    // - In an active agent view, OR
-    // - Input is unlocked
-    let terminal_mode_predicate = base_context.clone()
-        & id!(flags::AGENT_MODE_INPUT)
-        & (id!(flags::ACTIVE_AGENT_VIEW)
-            | id!(flags::ACTIVE_INLINE_AGENT_VIEW)
-            | !id!(flags::LOCKED_INPUT));
-
     // A context predicate that is active when a user can start a new agent conversation.
     let agent_conversation_predicate = base_context.clone() & id!("Terminal") & !id!("Input");
 
-    app.register_fixed_bindings([
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "cmd-enter",
-                linux_and_windows: "ctrl-shift-enter",
-            },
-            TerminalAction::StartNewAgentConversation {
-                origin: AgentViewEntryOrigin::Keybinding(
-                    ENTER_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE.clone(),
-                ),
-            },
-            agent_conversation_predicate.clone() & !command_predicate.clone(),
-        ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "cmd-enter",
-                linux_and_windows: "ctrl-shift-enter",
-            },
-            TerminalAction::SetInputModeAgent,
-            agent_conversation_predicate & agent_mode_predicate.clone() & command_predicate,
-        ),
-    ]);
+    app.register_fixed_bindings([FixedBinding::new_per_platform(
+        PerPlatformKeystroke {
+            mac: "cmd-enter",
+            linux_and_windows: "ctrl-shift-enter",
+        },
+        TerminalAction::StartNewAgentConversation {
+            origin: AgentViewEntryOrigin::Keybinding(
+                ENTER_AGENT_VIEW_NEW_CONVERSATION_KEYSTROKE.clone(),
+            ),
+        },
+        agent_conversation_predicate & !command_predicate,
+    )]);
 
-    app.register_editable_bindings([
-        EditableBinding::new(
-            SET_INPUT_MODE_AGENT_ACTION_NAME,
-            "Set Input Mode to Agent Mode",
-            TerminalAction::SetInputModeAgent,
-        )
-        .with_group(bindings::BindingGroup::WarpAi.as_str())
-        .with_context_predicate(agent_mode_predicate)
-        .with_mac_key_binding("cmd-i")
-        .with_linux_or_windows_key_binding("ctrl-i"),
-        EditableBinding::new(
-            SET_INPUT_MODE_TERMINAL_ACTION_NAME,
-            "Set Input Mode to Terminal Mode",
-            TerminalAction::SetInputModeTerminal,
-        )
-        .with_group(bindings::BindingGroup::WarpAi.as_str())
-        .with_context_predicate(terminal_mode_predicate)
-        .with_mac_key_binding("cmd-i")
-        .with_linux_or_windows_key_binding("ctrl-i"),
-        EditableBinding::new(
-            TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING,
-            "Toggle Hide CLI Responses",
-            TerminalAction::ToggleHideCliResponses,
-        )
-        .with_key_binding("cmdorctrl-g")
-        .with_group(bindings::BindingGroup::WarpAi.as_str())
-        .with_context_predicate(
-            id!(flags::IS_ANY_AI_ENABLED) & !id!(LONG_RUNNING_AGENT_REQUESTED_COMMAND_CONTEXT_KEY),
-        ),
-    ]);
+    app.register_editable_bindings([EditableBinding::new(
+        TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING,
+        "Toggle Hide CLI Responses",
+        TerminalAction::ToggleHideCliResponses,
+    )
+    .with_key_binding("cmdorctrl-g")
+    .with_group(bindings::BindingGroup::WarpAi.as_str())
+    .with_context_predicate(
+        id!(flags::IS_ANY_AI_ENABLED) & !id!(LONG_RUNNING_AGENT_REQUESTED_COMMAND_CONTEXT_KEY),
+    )]);
 }

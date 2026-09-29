@@ -30,7 +30,7 @@ use warpui::elements::{
     SizeConstraintCondition, SizeConstraintSwitch, Stack, Text, resizable_state_handle,
 };
 use warpui::fonts::{Properties, Style, Weight};
-use warpui::keymap::{EditableBinding, Keystroke};
+use warpui::keymap::Keystroke;
 use warpui::platform::{Cursor, OperatingSystem};
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::{
@@ -79,7 +79,6 @@ use crate::menu::{Event as MenuEvent, Menu, MenuItemFields, MenuVariant};
 use crate::server::telemetry::TelemetryEvent;
 use crate::settings::AISettings;
 use crate::settings_view::SettingsSection;
-use crate::terminal::input::SET_INPUT_MODE_TERMINAL_ACTION_NAME;
 use crate::terminal::model::block::BlockId;
 use crate::terminal::safe_mode_settings::get_secret_obfuscation_mode;
 use crate::terminal::{ShellLaunchData, TerminalModel};
@@ -161,16 +160,6 @@ pub fn init(app: &mut AppContext) {
                 & id!(HAS_PENDING_NON_TRANSFER_CONTROL_ACTION_CONTEXT_KEY),
         ),
     ]);
-    app.register_editable_bindings([EditableBinding::new(
-        SET_INPUT_MODE_TERMINAL_ACTION_NAME,
-        "Take control of running command",
-        CLISubagentAction::TakeControlOfRunningCommand,
-    )
-    .with_mac_key_binding("cmd-i")
-    .with_linux_or_windows_key_binding("ctrl-i")
-    .with_context_predicate(
-        id!(CLISubagentView::ui_name()) & id!(HAS_PENDING_CLI_ACTION_CONTEXT_KEY),
-    )]);
 }
 
 #[derive(Default)]
@@ -266,9 +255,7 @@ impl CLISubagentView {
 
         let take_over_button = CompactibleActionButton::new(
             "Take over".to_string(),
-            Some(KeystrokeSource::Binding(
-                SET_INPUT_MODE_TERMINAL_ACTION_NAME,
-            )),
+            None,
             ButtonSize::Small,
             CLISubagentAction::RejectBlockedAction {
                 should_user_take_over: true,
@@ -279,9 +266,7 @@ impl CLISubagentView {
         );
         let transfer_control_button = CompactibleActionButton::new(
             "Take control".to_string(),
-            Some(KeystrokeSource::Binding(
-                SET_INPUT_MODE_TERMINAL_ACTION_NAME,
-            )),
+            None,
             ButtonSize::Small,
             CLISubagentAction::ExecuteBlockedAction,
             Icon::Hand,
@@ -1002,7 +987,7 @@ impl View for CLISubagentView {
                         secret_redaction_state: &self.secret_redaction_state,
                         input_index,
                         is_selecting: self.state_handles.query_selection_handle.is_selecting(),
-                        is_ai_input_enabled: false,
+                        is_prompt_input_enabled: false,
                         find_context: None,
                         font_properties: &Properties {
                             style: Style::Normal,
@@ -1111,7 +1096,7 @@ impl View for CLISubagentView {
                                     .is_selecting(),
                                 selectable: true,
                                 text_color,
-                                is_ai_input_enabled: false,
+                                is_prompt_input_enabled: false,
                                 secret_redaction_state: &self.secret_redaction_state,
                                 find_context: None,
                                 shell_launch_data: None,
@@ -1214,7 +1199,7 @@ impl View for CLISubagentView {
                 output_items.add_child(render_failed_output(
                     FailedOutputProps {
                         error,
-                        is_ai_input_enabled: false,
+                        is_prompt_input_enabled: false,
                         invalid_api_key_button_handle: &self
                             .state_handles
                             .invalid_api_key_button_handle,

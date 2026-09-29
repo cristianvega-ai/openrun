@@ -66,8 +66,7 @@ impl Input {
 
         let mut column = Flex::column();
 
-        // Render attachment chips (e.g. pasted screenshots) above the editor,
-        // matching the pattern used by the agent view input in agent.rs.
+        // Render attachment chips (e.g. pasted screenshots) above the editor.
         if FeatureFlag::ImageAsContext.is_enabled()
             && let Some(images) = self.render_attachment_chips(appearance)
         {

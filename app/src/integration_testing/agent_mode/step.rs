@@ -42,16 +42,16 @@ pub fn enter_agent_view() -> TestStep {
             move |app, window_id| {
                 let terminal_view = terminal_view(app, window_id, 0, 0);
                 terminal_view.read(app, |terminal_view, app| {
-                    let is_ai_input_mode = terminal_view
+                    let is_prompt_input_mode = terminal_view
                         .input()
-                        .read(app, |input, app| input.input_type(app).is_ai());
+                        .read(app, |input, app| input.input_type(app).is_prompt());
                     let transcript_scope = {
                         let model = terminal_view.model.lock();
                         *model.block_list().transcript_scope()
                     };
                     async_assert!(
-                        is_ai_input_mode && transcript_scope.is_conversation(),
-                        "Expected fullscreen Agent View + AI input mode, got transcript_scope={transcript_scope:?}, is_ai_input_mode={is_ai_input_mode}"
+                        is_prompt_input_mode && transcript_scope.is_conversation(),
+                        "Expected fullscreen Agent View + AI input mode, got transcript_scope={transcript_scope:?}, is_prompt_input_mode={is_prompt_input_mode}"
                     )
                 })
             },
@@ -67,16 +67,16 @@ pub fn exit_agent_view() -> TestStep {
             move |app, window_id| {
                 let terminal_view = terminal_view(app, window_id, 0, 0);
                 terminal_view.read(app, |terminal_view, app| {
-                    let is_ai_input_mode = terminal_view
+                    let is_prompt_input_mode = terminal_view
                         .input()
-                        .read(app, |input, app| input.input_type(app).is_ai());
+                        .read(app, |input, app| input.input_type(app).is_prompt());
                     let transcript_scope = {
                         let model = terminal_view.model.lock();
                         *model.block_list().transcript_scope()
                     };
                     async_assert!(
-                        !is_ai_input_mode && !transcript_scope.is_conversation(),
-                        "Expected inactive Agent View + non-AI input mode, got transcript_scope={transcript_scope:?}, is_ai_input_mode={is_ai_input_mode}"
+                        !is_prompt_input_mode && !transcript_scope.is_conversation(),
+                        "Expected inactive Agent View + non-AI input mode, got transcript_scope={transcript_scope:?}, is_prompt_input_mode={is_prompt_input_mode}"
                     )
                 })
             },

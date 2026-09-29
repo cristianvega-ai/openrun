@@ -23,8 +23,8 @@ use super::model::{AIBlockModel, AIBlockModelImpl, AIBlockOutputStatus};
 use super::view_impl::common::{
     AutoExecuteButtonProps, ButtonProps, ForceRefreshButtonProps, LOAD_OUTPUT_MESSAGE,
     MaybeShimmeringText, STATUS_MESSAGE_ELLIPSIS, WAITING_FOR_USER_INPUT_MESSAGE,
-    WarpingIndicatorProps, WarpingProps, render_switch_control_to_user_button,
-    render_warping_indicator, render_warping_indicator_base, status_message_naming_model,
+    WarpingIndicatorProps, WarpingProps, render_warping_indicator, render_warping_indicator_base,
+    status_message_naming_model,
 };
 use crate::BlocklistAIHistoryModel;
 use crate::ai::agent::conversation::AIConversationId;
@@ -42,13 +42,14 @@ use crate::ai::blocklist::summarization_cancel_dialog::{
 };
 use crate::ai::blocklist::{
     BlocklistAIActionEvent, BlocklistAIActionModel, BlocklistAIContextEvent,
-    BlocklistAIContextModel, BlocklistAIController, BlocklistAIHistoryEvent, BlocklistAIInputEvent,
-    BlocklistAIInputModel, ResponseStreamId, ai_brand_color,
+    BlocklistAIContextModel, BlocklistAIController, BlocklistAIHistoryEvent, ResponseStreamId,
+    ai_brand_color,
 };
+use crate::terminal::input::{InputModeEvent, InputModeModel};
+
 use crate::ai::llms::LLMPreferences;
 use crate::settings::{InputModeSettings, InputSettings};
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
-use crate::terminal::input::SET_INPUT_MODE_TERMINAL_ACTION_NAME;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
 use crate::terminal::input::slash_command_model::SlashCommandModel;
 use crate::terminal::input::suggestions_mode_model::InputSuggestionsModeModel;
@@ -69,7 +70,6 @@ pub fn init(app: &mut AppContext) {
 struct StateHandles {
     autoexecute_button: MouseStateHandle,
     stop_button: MouseStateHandle,
-    take_over_button: MouseStateHandle,
     hide_cli_responses_button: MouseStateHandle,
     /// Tracks hover/press state for the inline `Check now` affordance rendered next to
     /// `Last seen by agent ...` while the agent is polling a long-running command.
@@ -82,7 +82,7 @@ pub struct BlocklistAIStatusBar {
     controller: ModelHandle<BlocklistAIController>,
     cli_subagent_controller: ModelHandle<CLISubagentController>,
     context_model: ModelHandle<BlocklistAIContextModel>,
-    input_model: ModelHandle<BlocklistAIInputModel>,
+    input_model: ModelHandle<InputModeModel>,
     agent_view_controller: ModelHandle<AgentViewController>,
     terminal_model: Arc<FairMutex<TerminalModel>>,
     shimmering_text_handle: ShimmeringTextStateHandle,
@@ -90,7 +90,6 @@ pub struct BlocklistAIStatusBar {
 
     autoexecute_keystroke: Option<Keystroke>,
     stop_keystroke: Option<Keystroke>,
-    set_terminal_input_keystroke: Option<Keystroke>,
     hide_cli_responses_keystroke: Option<Keystroke>,
 
     // Whether the summarization cancellation confirmation dialog is open.
@@ -118,7 +117,7 @@ impl BlocklistAIStatusBar {
         cli_subagent_controller: ModelHandle<CLISubagentController>,
         action_model: ModelHandle<BlocklistAIActionModel>,
         context_model: ModelHandle<BlocklistAIContextModel>,
-        input_model: ModelHandle<BlocklistAIInputModel>,
+        input_model: ModelHandle<InputModeModel>,
         input_buffer_model: ModelHandle<InputBufferModel>,
         model_event_dispatcher: &ModelHandle<ModelEventDispatcher>,
         terminal_model: Arc<FairMutex<TerminalModel>>,
@@ -197,7 +196,7 @@ impl BlocklistAIStatusBar {
             }
         });
         ctx.subscribe_to_model(&input_model, |_, _, event, ctx| {
-            if let BlocklistAIInputEvent::InputTypeChanged { .. } = event {
+            if let InputModeEvent::InputTypeChanged { .. } = event {
                 ctx.notify();
             }
         });
@@ -226,7 +225,8 @@ impl BlocklistAIStatusBar {
                 new_content: new,
                 ..
             } = event;
-            if !me.input_model.as_ref(ctx).is_ai_input_enabled() && old.is_empty() != new.is_empty()
+            if !me.input_model.as_ref(ctx).is_prompt_input_enabled()
+                && old.is_empty() != new.is_empty()
             {
                 ctx.notify();
             }
@@ -240,16 +240,12 @@ impl BlocklistAIStatusBar {
         let stop_keystroke = keybinding_name_to_keystroke(CANCEL_COMMAND_KEYBINDING, ctx);
         let autoexecute_keystroke =
             keybinding_name_to_keystroke(TOGGLE_AUTOEXECUTE_MODE_KEYBINDING, ctx);
-        let set_terminal_input_keystroke =
-            keybinding_name_to_keystroke(SET_INPUT_MODE_TERMINAL_ACTION_NAME, ctx);
         let hide_cli_responses_keystroke =
             keybinding_name_to_keystroke(TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING, ctx);
         ctx.subscribe_to_model(&KeybindingChangedNotifier::handle(ctx), |me, _, _, ctx| {
             me.stop_keystroke = keybinding_name_to_keystroke(CANCEL_COMMAND_KEYBINDING, ctx);
             me.autoexecute_keystroke =
                 keybinding_name_to_keystroke(TOGGLE_AUTOEXECUTE_MODE_KEYBINDING, ctx);
-            me.set_terminal_input_keystroke =
-                keybinding_name_to_keystroke(SET_INPUT_MODE_TERMINAL_ACTION_NAME, ctx);
             ctx.notify();
         });
 
@@ -325,7 +321,6 @@ impl BlocklistAIStatusBar {
             state_handles: Default::default(),
             autoexecute_keystroke,
             stop_keystroke,
-            set_terminal_input_keystroke,
             hide_cli_responses_keystroke,
             summarization_cancel_dialog,
             latest_response_stream_id: None,
@@ -733,11 +728,6 @@ impl BlocklistAIStatusBar {
                     keystroke: self.stop_keystroke.as_ref(),
                     is_active: false,
                 }),
-                take_over_lrc_control_button: is_agent_in_control.then_some(ButtonProps {
-                    button_handle: &self.state_handles.take_over_button,
-                    keystroke: self.set_terminal_input_keystroke.as_ref(),
-                    is_active: false,
-                }),
                 hide_responses_button: is_agent_in_control.then_some((
                     ButtonProps {
                         button_handle: &self.state_handles.hide_cli_responses_button,
@@ -980,16 +970,7 @@ impl View for BlocklistAIStatusBar {
                             ),
                             non_shimmering_text: None,
                             non_shimmering_suffix: None,
-                            buttons: Some(render_switch_control_to_user_button(
-                                "Exit",
-                                "Exit agent input",
-                                ButtonProps {
-                                    button_handle: &self.state_handles.take_over_button,
-                                    keystroke: self.set_terminal_input_keystroke.as_ref(),
-                                    is_active: false,
-                                },
-                                appearance,
-                            )),
+                            buttons: None,
                             is_passive_code_diff: false,
                             secondary_element: None,
                         },
@@ -1046,7 +1027,7 @@ impl View for BlocklistAIStatusBar {
             });
 
         if !FeatureFlag::AgentView.is_enabled()
-            && self.input_model.as_ref(app).is_ai_input_enabled()
+            && self.input_model.as_ref(app).is_prompt_input_enabled()
             && !is_passive_code_diff
             && is_active_exchange_in_selected_conversation
             && !self.terminal_model.lock().is_alt_screen_active()

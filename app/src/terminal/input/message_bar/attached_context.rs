@@ -3,8 +3,10 @@
 use warp_core::features::FeatureFlag;
 use warpui::keymap::Keystroke;
 
+use crate::ai::blocklist::BlocklistAIContextModel;
 use crate::ai::blocklist::agent_view::{AgentMessageBarMouseStates, AgentViewController};
-use crate::ai::blocklist::{BlocklistAIContextModel, BlocklistAIInputModel};
+use crate::terminal::input::InputModeModel;
+
 use crate::terminal::input::InputAction;
 use crate::terminal::input::buffer_model::InputBufferModel;
 use crate::terminal::input::message_bar::{
@@ -17,7 +19,7 @@ use crate::terminal::model::TerminalModel;
 pub trait AttachedContextArgs {
     fn terminal_model(&self) -> &TerminalModel;
     fn input_buffer_model(&self) -> &InputBufferModel;
-    fn input_model(&self) -> &BlocklistAIInputModel;
+    fn input_model(&self) -> &InputModeModel;
     fn agent_view_controller(&self) -> &AgentViewController;
     fn context_model(&self) -> &BlocklistAIContextModel;
     fn mouse_states(&self) -> &AgentMessageBarMouseStates;
@@ -37,7 +39,7 @@ impl<Args: AttachedContextArgs + Copy> MessageProvider<Args> for AttachedBlocksM
         // In the agent view, only show the attached context message if in AI mode.
         if args.agent_view_controller().is_active()
             && !args.input_buffer_model().current_value().is_empty()
-            && !args.input_model().is_ai_input_enabled()
+            && !args.input_model().is_prompt_input_enabled()
         {
             return None;
         }
@@ -107,7 +109,7 @@ impl<Args: AttachedContextArgs + Copy> MessageProvider<Args>
         // When inactive, always show the message.
         if args.agent_view_controller().is_active()
             && !args.input_buffer_model().current_value().is_empty()
-            && !args.input_model().is_ai_input_enabled()
+            && !args.input_model().is_prompt_input_enabled()
         {
             return None;
         }

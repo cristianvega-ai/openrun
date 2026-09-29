@@ -711,17 +711,6 @@ define_settings_group!(AISettings, settings: [
         description: "Whether Warp should route eligible requests through your workspace's Gemini Enterprise Google Cloud project.",
     }
 
-    should_render_use_agent_footer_for_user_commands: ShouldRenderUseAgentToolbarForUserCommands {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: false,
-        toml_path: "agents.warp_agent.other.should_render_use_agent_toolbar_for_user_commands",
-        description: "Whether to show the \"Use Agent\" footer for terminal commands.",
-    }
-
     // Whether the ambient agent trial widget has been dismissed by the user.
     //
     // Not a user-visible setting - we model it as a setting so we can track state.

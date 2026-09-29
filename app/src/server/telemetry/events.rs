@@ -23,9 +23,7 @@ use crate::ai::agent::{
     EntrypointType, ServerOutputId, SuggestedLoggingId,
 };
 use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
-use crate::ai::blocklist::{
-    AIBlockResponseRating, CommandExecutionPermissionAllowedReason, InputType,
-};
+use crate::ai::blocklist::{AIBlockResponseRating, CommandExecutionPermissionAllowedReason};
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::channel::Channel;
 use crate::cloud_object::notebook_model::NotebookId;
@@ -50,6 +48,7 @@ use crate::settings_view::TeamsInviteOption;
 use crate::tab::TabTelemetryAction;
 use crate::terminal::block_list_viewport::InputMode;
 use crate::terminal::cli_agent_sessions::{CLIAgentInputEntrypoint, CLIAgentRichInputCloseReason};
+use crate::terminal::input::InputType;
 use crate::terminal::input::TelemetryInputSuggestionsMode;
 use crate::terminal::model::block::BlockId;
 use crate::terminal::model::session::SessionId;

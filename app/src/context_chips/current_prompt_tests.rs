@@ -15,7 +15,6 @@ use warpui_extras::user_preferences;
 
 use super::{ActiveChipSurfaces, ChipUpdateStatus, CurrentPrompt, PromptContext};
 use crate::CLIAgentSessionsModel;
-use crate::ai::blocklist::agent_view::toolbar_item::AgentToolbarItemKind;
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_manager::AuthManager;
 #[cfg(feature = "local_fs")]
@@ -43,7 +42,7 @@ use crate::terminal::model::session::{
     CommandExecutor, ExecuteCommandOptions, SessionId, SessionInfo, Sessions,
 };
 use crate::terminal::session_settings::{
-    AgentToolbarChipSelection, CLIAgentToolbarChipSelection, SessionSettings, ToolbarChipSelection,
+    CLIAgentToolbarChipSelection, SessionSettings, ToolbarChipSelection,
 };
 use crate::terminal::shell::Shell;
 use crate::terminal::view::PromptPosition;
@@ -517,18 +516,6 @@ fn test_chips_to_run_only_includes_active_surface_configurations() {
         app.update(|ctx| {
             SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
                 settings
-                    .agent_footer_chip_selection
-                    .set_value(
-                        AgentToolbarChipSelection::Custom {
-                            left: vec![AgentToolbarItemKind::ContextChip(
-                                ContextChipKind::WorkingDirectory,
-                            )],
-                            right: vec![],
-                        },
-                        ctx,
-                    )
-                    .unwrap();
-                settings
                     .cli_agent_footer_chip_selection
                     .set_value(
                         CLIAgentToolbarChipSelection::Custom {
@@ -561,13 +548,6 @@ fn test_chips_to_run_only_includes_active_surface_configurations() {
             );
             assert_eq!(
                 chips_for(ActiveChipSurfaces {
-                    agent_footer: true,
-                    ..Default::default()
-                }),
-                vec![ContextChipKind::WorkingDirectory]
-            );
-            assert_eq!(
-                chips_for(ActiveChipSurfaces {
                     cli_agent_footer: true,
                     ..Default::default()
                 }),
@@ -576,14 +556,9 @@ fn test_chips_to_run_only_includes_active_surface_configurations() {
             assert_eq!(
                 chips_for(ActiveChipSurfaces {
                     prompt: true,
-                    agent_footer: true,
                     cli_agent_footer: true,
                 }),
-                vec![
-                    ContextChipKind::Username,
-                    ContextChipKind::WorkingDirectory,
-                    ContextChipKind::ShellGitBranch,
-                ]
+                vec![ContextChipKind::Username, ContextChipKind::ShellGitBranch]
             );
         });
     });

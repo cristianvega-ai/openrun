@@ -13,8 +13,6 @@ pub(crate) mod local_agent_task_sync_model;
 pub(super) use controller::RequestInput;
 pub mod history_model;
 pub mod inline_action;
-mod input_mode_policy;
-mod input_model;
 mod permissions;
 mod persistence;
 pub mod prompt;
@@ -36,9 +34,6 @@ pub use context_model::{
     PendingFile,
 };
 pub use controller::BlocklistAIController;
-pub use controller::input_context::{
-    BLOCK_CONTEXT_ATTACHMENT_REGEX, DIFF_HUNK_ATTACHMENT_REGEX, DRIVE_OBJECT_ATTACHMENT_REGEX,
-};
 #[cfg(test)]
 pub(crate) use controller::response_stream::ResponseStream;
 pub(crate) use controller::response_stream::ResponseStreamId;
@@ -54,8 +49,6 @@ pub(crate) use history_model::{
     BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate, FORK_PREFIX,
     PRE_REWIND_PREFIX,
 };
-pub(crate) use input_model::BlocklistAIInputEvent;
-pub use input_model::{BlocklistAIInputModel, InputConfig, InputType};
 #[cfg(test)]
 pub(crate) use permissions::is_agent_mode_autonomy_allowed;
 pub use permissions::{BlocklistAIPermissions, CommandExecutionPermissionAllowedReason};

@@ -299,7 +299,7 @@ impl PaneContent for TerminalPane {
         let view = self.terminal_view(app).as_ref(app);
         let is_active = view.is_active_session(app);
 
-        // Capture the current input_config from the AI input model
+        // Capture the current input_config from the input mode model
         let current_input_config = view.input_config(app.as_ref());
 
         if view.model.lock().is_conversation_transcript_viewer() {
@@ -599,10 +599,6 @@ fn handle_terminal_view_event(
             Event::FocusSession => {
                 group.focus_pane(terminal_pane_id.into(), true, ctx);
                 ctx.emit(pane_group::Event::FocusPaneGroup);
-            }
-            Event::SummarizationCancelDialogToggled { is_open } => {
-                group.terminal_with_open_summarization_dialog = is_open.then_some(terminal_pane_id);
-                ctx.notify();
             }
             #[cfg(feature = "local_fs")]
             Event::OpenFileWithTarget {

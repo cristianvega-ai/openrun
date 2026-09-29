@@ -8,13 +8,14 @@ use warpui::platform::FullscreenState;
 use warpui::{AppContext, SingletonEntity as _};
 
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::{InputConfig, SerializedBlockListItem};
+use crate::ai::blocklist::SerializedBlockListItem;
 use crate::code::editor_management::CodeSource;
 use crate::root_view::quake_mode_window_id;
 use crate::server::ids::{ServerId, SyncId};
 use crate::settings_view::SettingsSection;
 use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
+use crate::terminal::input::InputConfig;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::WorkspaceRegistry;
 use crate::workspace::tab_group::TabGroupId;

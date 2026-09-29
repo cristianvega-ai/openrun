@@ -16,15 +16,14 @@ use crate::ai::agent::{
     AIAgentOutputMessage, AIAgentOutputMessageType, AIAgentOutputStatus, FinishedAIAgentOutput,
     MessageId, Shared, TodoOperation, UserQueryMode,
 };
-use crate::ai::blocklist::agent_view::toolbar_item::AgentToolbarItemKind;
 use crate::ai::blocklist::agent_view::{
     AgentViewEntryBlock, AgentViewEntryOrigin, AgentViewState, EnterAgentBlockAction,
     ExitAgentViewError,
 };
 use crate::ai::blocklist::block::cli_controller::UserTakeOverReason;
 use crate::ai::blocklist::{
-    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, FakeAIBlockModel, InputConfig, InputType,
-    ResponseStream, ResponseStreamId,
+    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, FakeAIBlockModel, ResponseStream,
+    ResponseStreamId,
 };
 use crate::ai::llms::LLMId;
 use crate::context_chips::prompt::Prompt;
@@ -48,12 +47,12 @@ use crate::terminal::cli_agent_sessions::{
     CLIAgentInputEntrypoint, CLIAgentInputState, CLIAgentRichInputCloseReason, CLIAgentSession,
     CLIAgentSessionContext, CLIAgentSessionStatus, CLIAgentSessionsModel,
 };
+use crate::terminal::input::{InputConfig, InputType};
 use crate::terminal::model::ansi::{self, BootstrappedValue, InitShellValue, PreexecValue};
 use crate::terminal::model::block::AgentViewVisibility;
 use crate::terminal::model::blocks::{TotalIndex, insert_block};
 use crate::terminal::model::grid::Dimensions as _;
 use crate::terminal::model::terminal_model::WithinBlock;
-use crate::terminal::session_settings::AgentToolbarChipSelection;
 use crate::terminal::view::load_ai_conversation::{
     RestoreConversationEntryBehavior, RestoredAIConversation,
 };
@@ -79,45 +78,6 @@ fn navigation_ring_targets(view: &TerminalView, app: &AppContext) -> Vec<EntityI
                 .then(|| ai_metadata.ai_block_handle.id())
         })
         .collect()
-}
-
-#[test]
-fn agent_view_lifecycle_updates_input_mode() {
-    App::test((), |mut app| async move {
-        initialize_app_for_terminal_view(&mut app);
-        let terminal = add_window_with_terminal(&mut app, None);
-
-        terminal.read(&app, |view, ctx| {
-            assert_eq!(
-                view.ai_input_model().as_ref(ctx).input_type(),
-                InputType::Shell
-            );
-        });
-        terminal.update(&mut app, |view, ctx| {
-            view.agent_view_controller().update(ctx, |controller, ctx| {
-                controller
-                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
-                    .expect("agent view entry should succeed");
-            });
-        });
-        terminal.read(&app, |view, ctx| {
-            assert_eq!(
-                view.ai_input_model().as_ref(ctx).input_type(),
-                InputType::AI
-            );
-        });
-        terminal.update(&mut app, |view, ctx| {
-            view.agent_view_controller().update(ctx, |controller, ctx| {
-                controller.exit_agent_view_without_confirmation(ctx)
-            });
-        });
-        terminal.read(&app, |view, ctx| {
-            assert_eq!(
-                view.ai_input_model().as_ref(ctx).input_type(),
-                InputType::Shell
-            );
-        });
-    });
 }
 
 #[test]
@@ -1935,16 +1895,18 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
 
         terminal.update(&mut app, |view, ctx| {
             view.input.update(ctx, |input, ctx| {
-                input.ai_input_model().update(ctx, |ai_input, ctx| {
-                    ai_input.set_input_config(
-                        InputConfig {
-                            input_type: InputType::Shell,
-                            is_locked: false,
-                        },
-                        true,
-                        ctx,
-                    );
-                });
+                input
+                    .input_mode_model()
+                    .update(ctx, |input_mode_model, ctx| {
+                        input_mode_model.set_input_config(
+                            InputConfig {
+                                input_type: InputType::Shell,
+                                is_locked: false,
+                            },
+                            true,
+                            ctx,
+                        );
+                    });
             });
 
             CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
@@ -1973,10 +1935,10 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
 
         terminal.read(&app, |view, ctx| {
             let input = view.input.as_ref(ctx);
-            let ai_input_model = input.ai_input_model().as_ref(ctx);
+            let input_mode_model = input.input_mode_model().as_ref(ctx);
 
             assert_eq!(
-                ai_input_model.input_config(),
+                input_mode_model.input_config(),
                 InputConfig {
                     input_type: InputType::Shell,
                     is_locked: false,
@@ -1991,23 +1953,23 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
 fn unregister_cli_agent_session_restores_unlocked_input_config() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
-        // The AI input model in `app/src/ai` still reads this flag.
-        let _agent_view = FeatureFlag::AgentView.override_enabled(true);
 
         let terminal = add_window_with_terminal(&mut app, None);
 
         terminal.update(&mut app, |view, ctx| {
             view.input.update(ctx, |input, ctx| {
-                input.ai_input_model().update(ctx, |ai_input, ctx| {
-                    ai_input.set_input_config(
-                        InputConfig {
-                            input_type: InputType::Shell,
-                            is_locked: false,
-                        },
-                        true,
-                        ctx,
-                    );
-                });
+                input
+                    .input_mode_model()
+                    .update(ctx, |input_mode_model, ctx| {
+                        input_mode_model.set_input_config(
+                            InputConfig {
+                                input_type: InputType::Shell,
+                                is_locked: false,
+                            },
+                            true,
+                            ctx,
+                        );
+                    });
             });
 
             CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
@@ -2043,10 +2005,10 @@ fn unregister_cli_agent_session_restores_unlocked_input_config() {
 
         terminal.read(&app, |view, ctx| {
             let input = view.input.as_ref(ctx);
-            let ai_input_model = input.ai_input_model().as_ref(ctx);
+            let input_mode_model = input.input_mode_model().as_ref(ctx);
 
             assert_eq!(
-                ai_input_model.input_config(),
+                input_mode_model.input_config(),
                 InputConfig {
                     input_type: InputType::Shell,
                     is_locked: false,
@@ -5624,76 +5586,6 @@ fn test_prompt_context_menu_items_in_agent_view() {
 }
 
 #[test]
-fn agent_footer_updates_chip_groups_when_side_assignment_changes() {
-    App::test((), |mut app| async move {
-        initialize_app_for_terminal_view(&mut app);
-
-        let terminal = add_window_with_terminal(&mut app, None);
-        terminal.update(&mut app, |view, ctx| {
-            view.agent_view_controller().update(ctx, |controller, ctx| {
-                controller
-                    .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
-                    .expect("Should be able to enter agent view");
-            });
-        });
-
-        terminal.update(&mut app, |view, ctx| {
-            let model = view.model.lock();
-            view.current_prompt.update(ctx, |prompt, ctx| {
-                let PromptType::Dynamic { prompt } = prompt else {
-                    return;
-                };
-                prompt.update(ctx, |prompt, ctx| {
-                    prompt.update_context(model.block_list().active_block(), ctx);
-                });
-            });
-        });
-
-        SessionSettings::handle(&app).update(&mut app, |settings, ctx| {
-            let _ = settings.agent_footer_chip_selection.set_value(
-                AgentToolbarChipSelection::Custom {
-                    left: vec![AgentToolbarItemKind::ContextChip(ContextChipKind::Time12)],
-                    right: vec![AgentToolbarItemKind::ContextChip(ContextChipKind::Time24)],
-                },
-                ctx,
-            );
-        });
-
-        assert_eventually!(
-            terminal.read(&app, |view, ctx| {
-                view.input().as_ref(ctx).agent_footer_chip_kinds(ctx)
-                    == (vec![ContextChipKind::Time12], vec![ContextChipKind::Time24])
-            }),
-            "Agent footer should render separate left and right chip groups"
-        );
-
-        SessionSettings::handle(&app).update(&mut app, |settings, ctx| {
-            let _ = settings.agent_footer_chip_selection.set_value(
-                AgentToolbarChipSelection::Custom {
-                    left: vec![
-                        AgentToolbarItemKind::ContextChip(ContextChipKind::Time12),
-                        AgentToolbarItemKind::ContextChip(ContextChipKind::Time24),
-                    ],
-                    right: vec![],
-                },
-                ctx,
-            );
-        });
-
-        assert_eventually!(
-            terminal.read(&app, |view, ctx| {
-                view.input().as_ref(ctx).agent_footer_chip_kinds(ctx)
-                    == (
-                        vec![ContextChipKind::Time12, ContextChipKind::Time24],
-                        vec![],
-                    )
-            }),
-            "Agent footer should update when a chip moves between sides without changing overall chip order"
-        );
-    })
-}
-
-#[test]
 fn test_link_at_range_trims_zero_width_spaces() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
@@ -5813,67 +5705,6 @@ fn test_scroll_position_doesnt_change_when_block_finished() {
                 scroll_position_before_finished,
                 scroll_position_after_finished
             );
-        });
-    })
-}
-
-#[test]
-fn inline_agent_view_exits_when_tagged_in_long_running_command_is_tagged_out() {
-    App::test((), |mut app| async move {
-        initialize_app_for_terminal_view(&mut app);
-
-        let terminal = add_window_with_terminal(&mut app, None);
-
-        terminal.update(&mut app, |view, ctx| {
-            {
-                let mut model = view.model.lock();
-                model.init_shell(InitShellValue {
-                    session_id: 0.into(),
-                    shell: "zsh".to_owned(),
-                    ..Default::default()
-                });
-                model.bootstrapped(BootstrappedValue {
-                    shell: "zsh".to_owned(),
-                    ..Default::default()
-                });
-                model.simulate_long_running_block("sleep 10", "running");
-            }
-
-            view.agent_view_controller().update(ctx, |controller, ctx| {
-                controller
-                    .try_enter_inline_agent_view(
-                        None,
-                        AgentViewEntryOrigin::LongRunningCommand,
-                        ctx,
-                    )
-                    .expect("should enter inline agent view for a tagged-in command");
-            });
-            view.model
-                .lock()
-                .block_list_mut()
-                .active_block_mut()
-                .set_is_agent_tagged_in(true);
-
-            assert!(view.agent_view_controller().as_ref(ctx).is_inline());
-            assert!(
-                view.model
-                    .lock()
-                    .block_list()
-                    .active_block()
-                    .is_agent_tagged_in()
-            );
-
-            let model = view.model.lock();
-            assert!(view.is_input_box_visible(&model, ctx));
-            drop(model);
-
-            view.handle_action(&TerminalAction::SetInputModeTerminal, ctx);
-
-            assert!(!view.agent_view_controller().as_ref(ctx).is_active());
-            let model = view.model.lock();
-            let active_block = model.block_list().active_block();
-            assert!(!active_block.is_agent_tagged_in());
-            assert!(!view.is_input_box_visible(&model, ctx));
         });
     })
 }
@@ -6181,91 +6012,6 @@ fn inline_agent_view_persists_across_transfer_takeover_for_monitored_long_runnin
             let active_block = model.block_list().active_block();
             assert!(active_block.is_agent_in_control());
             assert!(view.is_input_box_visible(&model, ctx));
-        });
-    })
-}
-
-#[test]
-fn use_agent_footer_renders_for_transfer_handoff_even_when_user_command_footer_setting_disabled() {
-    App::test((), |mut app| async move {
-        initialize_app_for_terminal_view(&mut app);
-        AISettings::handle(&app).update(&mut app, |settings, ctx| {
-            let _ = settings
-                .should_render_use_agent_footer_for_user_commands
-                .set_value(false, ctx);
-        });
-
-        let terminal = add_window_with_terminal(&mut app, None);
-
-        terminal.update(&mut app, |view, ctx| {
-            {
-                let mut model = view.model.lock();
-                model.init_shell(InitShellValue {
-                    session_id: 0.into(),
-                    shell: "zsh".to_owned(),
-                    ..Default::default()
-                });
-                model.bootstrapped(BootstrappedValue {
-                    shell: "zsh".to_owned(),
-                    ..Default::default()
-                });
-                model.simulate_long_running_block("ssh localhost", "Password:");
-            }
-
-            view.maybe_show_use_agent_footer_in_blocklist(ctx);
-            {
-                let model = view.model.lock();
-                assert!(!view.should_render_use_agent_footer(&model, ctx));
-                let active_block_index = model.block_list().active_block_index();
-                assert!(
-                    model
-                        .block_list()
-                        .last_non_hidden_rich_content_block_after_block(Some(active_block_index))
-                        .is_none()
-                );
-            }
-
-            let conversation_id = view.agent_view_controller().update(ctx, |controller, ctx| {
-                controller
-                    .try_enter_inline_agent_view(
-                        None,
-                        AgentViewEntryOrigin::LongRunningCommand,
-                        ctx,
-                    )
-                    .expect("inline agent view should create a conversation")
-            });
-            view.model
-                .lock()
-                .block_list_mut()
-                .active_block_mut()
-                .set_is_agent_tagged_in(true);
-
-            let task_id = TaskId::new("test-task".to_owned());
-            view.model
-                .lock()
-                .block_list_mut()
-                .active_block_mut()
-                .set_agent_interaction_mode_for_agent_monitored_command(&task_id, conversation_id)
-                .expect("tagged-in command should transition to agent-monitored");
-
-            view.cli_subagent_controller.update(ctx, |controller, ctx| {
-                controller.switch_control_to_user(
-                    UserTakeOverReason::TransferFromAgent {
-                        reason: "Enter your password".to_owned(),
-                    },
-                    ctx,
-                );
-            });
-
-            view.maybe_show_use_agent_footer_in_blocklist(ctx);
-            let model = view.model.lock();
-            assert!(view.should_render_use_agent_footer(&model, ctx));
-            let active_block_index = model.block_list().active_block_index();
-            let rendered_footer_view_id = model
-                .block_list()
-                .last_non_hidden_rich_content_block_after_block(Some(active_block_index))
-                .map(|(_, item)| item.view_id);
-            assert_eq!(rendered_footer_view_id, Some(view.use_agent_footer.id()));
         });
     })
 }
@@ -6680,16 +6426,18 @@ fn cli_agent_rich_input_shell_mode_uses_run_commands_hint_text() {
         let terminal = open_cli_agent_rich_input_for_agent(&mut app, CLIAgent::Claude);
         terminal.update(&mut app, |view, ctx| {
             view.input.update(ctx, |input, ctx| {
-                input.ai_input_model().update(ctx, |ai_input, ctx| {
-                    ai_input.set_input_config(
-                        InputConfig {
-                            input_type: InputType::Shell,
-                            is_locked: true,
-                        },
-                        true,
-                        ctx,
-                    );
-                });
+                input
+                    .input_mode_model()
+                    .update(ctx, |input_mode_model, ctx| {
+                        input_mode_model.set_input_config(
+                            InputConfig {
+                                input_type: InputType::Shell,
+                                is_locked: true,
+                            },
+                            true,
+                            ctx,
+                        );
+                    });
                 input.set_zero_state_hint_text(ctx);
             });
         });
@@ -7371,6 +7119,78 @@ fn codex_status_change_does_not_auto_open_rich_input() {
 
         terminal.read(&app, |view, ctx| {
             assert!(!view.has_active_cli_agent_input_session(ctx));
+        });
+    })
+}
+
+#[test]
+fn rich_input_auto_opens_in_prompt_mode_when_a_cli_agent_starts() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
+            let _ = settings
+                .auto_open_rich_input_on_cli_agent_start
+                .set_value(true, ctx);
+            let _ = settings.should_render_cli_agent_footer.set_value(true, ctx);
+        });
+
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.has_active_cli_agent_input_session(ctx));
+            assert_eq!(
+                view.input_mode_model().as_ref(ctx).input_type(),
+                InputType::Shell
+            );
+        });
+
+        terminal.update(&mut app, |view, ctx| {
+            view.register_cli_agent_listener_without_session_start_event(CLIAgent::Claude, ctx);
+        });
+
+        terminal.read(&app, |view, ctx| {
+            assert!(view.has_active_cli_agent_input_session(ctx));
+            assert_eq!(
+                view.input_mode_model().as_ref(ctx).input_type(),
+                InputType::Prompt
+            );
+        });
+
+        // Closing the composer hands the input back to the shell.
+        terminal.update(&mut app, |view, ctx| {
+            view.close_cli_agent_rich_input_and_disable_auto_toggle(ctx);
+        });
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.has_active_cli_agent_input_session(ctx));
+            assert_eq!(
+                view.input_mode_model().as_ref(ctx).input_type(),
+                InputType::Shell
+            );
+        });
+    })
+}
+
+#[test]
+fn rich_input_does_not_auto_open_when_the_setting_is_disabled() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
+            let _ = settings
+                .auto_open_rich_input_on_cli_agent_start
+                .set_value(false, ctx);
+        });
+
+        let terminal = add_window_with_terminal(&mut app, None);
+        terminal.update(&mut app, |view, ctx| {
+            view.register_cli_agent_listener_without_session_start_event(CLIAgent::Claude, ctx);
+        });
+
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.has_active_cli_agent_input_session(ctx));
+            assert_eq!(
+                view.input_mode_model().as_ref(ctx).input_type(),
+                InputType::Shell
+            );
         });
     })
 }

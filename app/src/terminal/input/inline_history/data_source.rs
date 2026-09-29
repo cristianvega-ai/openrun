@@ -8,7 +8,7 @@
 
 use chrono::Local;
 use ordered_float::OrderedFloat;
-use warpui::{AppContext, Entity, EntityId, ModelHandle, SingletonEntity};
+use warpui::{AppContext, Entity, ModelHandle, SingletonEntity};
 
 use crate::input_suggestions::HistoryInputSuggestion;
 use crate::search::SyncDataSource;
@@ -37,16 +37,12 @@ impl InlineMenuAction for AcceptHistoryItem {
 
 /// Data source that provides command history for a terminal view.
 pub struct InlineHistoryMenuDataSource {
-    terminal_view_id: EntityId,
     active_session: ModelHandle<ActiveSession>,
 }
 
 impl InlineHistoryMenuDataSource {
-    pub fn new(terminal_view_id: EntityId, active_session: ModelHandle<ActiveSession>) -> Self {
-        Self {
-            terminal_view_id,
-            active_session,
-        }
+    pub fn new(active_session: ModelHandle<ActiveSession>) -> Self {
+        Self { active_session }
     }
 }
 
@@ -66,12 +62,10 @@ impl SyncDataSource for InlineHistoryMenuDataSource {
         let history = History::handle(app).as_ref(app);
 
         let results = history
-            .up_arrow_suggestions_for_terminal_surface(
-                self.terminal_view_id,
+            .up_arrow_suggestions(
                 session_id,
                 UpArrowHistoryConfig {
                     include_commands: true,
-                    include_prompts: false,
                 },
                 app,
             )

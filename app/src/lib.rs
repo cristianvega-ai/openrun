@@ -230,7 +230,6 @@ use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
 use crate::system::SystemStats;
 use crate::tab::TabShortcutModifierState;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
-use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::resizable_data::ResizableData;
 use crate::terminal::view::inline_banner::ByoLlmAuthBannerSessionState;
 use crate::terminal::{AudibleBell, CustomSecretRegexUpdater, History};
@@ -1152,7 +1151,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(|_| CodeManager::default());
     ctx.add_singleton_model(|_| OpenedFilesModel::new());
     ctx.add_singleton_model(NotebookKeybindings::new);
-    ctx.add_singleton_model(TerminalKeybindings::new);
     ctx.add_singleton_model(|_| ActiveSession::default());
     ctx.add_singleton_model(|ctx| {
         Listener::new(

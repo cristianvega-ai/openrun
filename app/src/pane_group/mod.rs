@@ -35,9 +35,7 @@ use warpui::{
 };
 
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::{
-    BlocklistAIHistoryModel, InputConfig, InputType, SerializedBlockListItem,
-};
+use crate::ai::blocklist::{BlocklistAIHistoryModel, SerializedBlockListItem};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::{LLMId, LLMPreferences};
 use crate::ai::restored_conversations::RestoredAgentConversations;
@@ -76,6 +74,7 @@ use crate::settings_view::SettingsSection;
 use crate::shell_indicator::ShellIndicatorType;
 use crate::terminal::available_shells::{AvailableShell, AvailableShells};
 use crate::terminal::general_settings::{GeneralSettings, GeneralSettingsChangedEvent};
+use crate::terminal::input::{InputConfig, InputType};
 #[cfg(feature = "local_tty")]
 use crate::terminal::local_tty::TerminalManager as LocalTtyTerminalManager;
 #[cfg(feature = "local_tty")]
@@ -699,8 +698,6 @@ pub struct PaneGroup {
 
     /// Model that tracks the currently active file.
     active_file_model: ModelHandle<ActiveFileModel>,
-    /// If there is an open summarization cancel dialog, the terminal pane ID where summarization is active.
-    terminal_with_open_summarization_dialog: Option<TerminalPaneId>,
 
     /// If the left panel is open for this pane group
     pub left_panel_open: bool,
@@ -1946,7 +1943,6 @@ impl PaneGroup {
             dragged_border: None,
             user_default_shell_changed_banner,
             active_file_model,
-            terminal_with_open_summarization_dialog: None,
             right_panel_open: false,
             left_panel_open: false,
             is_right_panel_maximized: false,
@@ -4556,19 +4552,7 @@ impl View for PaneGroup {
         };
         column.add_child(Shrinkable::new(1., main_content).finish());
 
-        let mut stack = Stack::new().with_child(column.finish());
-
-        // Render the summarization cancel dialog at tab level when open.
-        if let Some(terminal_pane_id) = self.terminal_with_open_summarization_dialog
-            && let Some(terminal_view) = self.terminal_view_from_pane_id(terminal_pane_id, app)
-            && let Some(dialog_handle) = terminal_view.read(app, |view, ctx| {
-                view.summarization_cancel_dialog_handle(ctx)
-            })
-        {
-            stack.add_child(ChildView::new(&dialog_handle).finish());
-        }
-
-        stack.finish()
+        Stack::new().with_child(column.finish()).finish()
     }
 
     fn on_window_transferred(

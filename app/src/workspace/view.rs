@@ -11741,7 +11741,6 @@ impl Workspace {
         content: &str,
         replace_buffer: bool,
         should_submit: bool,
-        ensure_agent_mode: bool,
         ctx: &mut ViewContext<Self>,
     ) {
         let active_input_handle = self.get_active_input_view_handle(ctx);
@@ -11752,10 +11751,6 @@ impl Workspace {
                     input.replace_buffer_content(content, ctx);
                 } else {
                     input.append_to_buffer(content, ctx);
-                }
-
-                if ensure_agent_mode {
-                    input.ensure_agent_mode_for_ai_features(ctx);
                 }
 
                 if should_submit {
@@ -11800,7 +11795,7 @@ impl Workspace {
                         // Switch to shell input mode so the history command is
                         // treated as a shell command, not an agent prompt.
                         active_input_handle.update(ctx, |input, ctx| {
-                            input.set_input_mode_terminal(false, ctx);
+                            input.set_input_mode_shell(false, ctx);
                             input.replace_buffer_content(command.as_str(), ctx);
                             input.focus_input_box(ctx);
                         });
@@ -16329,15 +16324,14 @@ impl TypedActionView for Workspace {
             }
             RunCommand(code) => {
                 let command = code.trim().to_string();
-                self.insert_in_input(&command, true, true, false, ctx);
+                self.insert_in_input(&command, true, true, ctx);
                 ctx.notify();
             }
             InsertInInput {
                 content,
                 replace_buffer,
-                ensure_agent_mode,
             } => {
-                self.insert_in_input(content, *replace_buffer, false, *ensure_agent_mode, ctx);
+                self.insert_in_input(content, *replace_buffer, false, ctx);
                 ctx.notify();
             }
             #[cfg(all(enable_crash_recovery, target_os = "linux"))]
@@ -16637,7 +16631,7 @@ impl TypedActionView for Workspace {
 
                 // Prefill the input after the rewind
                 if let Some(query) = user_query {
-                    self.insert_in_input(&query, true, false, true, ctx);
+                    self.insert_in_input(&query, true, false, ctx);
                 }
             }
             OpenLightbox {

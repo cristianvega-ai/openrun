@@ -45,7 +45,7 @@ use crate::server::cloud_objects::update_manager::UpdateManager;
 use crate::server::server_api::ServerApiProvider;
 use crate::server::sync_queue::SyncQueue;
 use crate::settings::import::model::ImportedConfigModel;
-use crate::settings::{AliasExpansionSettings, AppEditorSettings, PrivacySettings};
+use crate::settings::{AISettings, AliasExpansionSettings, AppEditorSettings, PrivacySettings};
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 #[cfg(windows)]
 use crate::system::SystemInfo;
@@ -63,7 +63,6 @@ use crate::terminal::event::{
 };
 use crate::terminal::general_settings::UserDefaultShellUnsupportedBannerState;
 use crate::terminal::input::slash_commands::SlashCommandsEvent;
-use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::local_shell::LocalShellState;
 use crate::terminal::local_tty::shell::ShellStarter;
 use crate::terminal::model::ansi::{Handler, PromptMetadata};
@@ -251,7 +250,6 @@ pub fn initialize_app(app: &mut App) {
     app.add_singleton_model(|_| History::default());
     app.add_singleton_model(LocalWorkflows::new);
     app.add_singleton_model(|_| KeybindingChangedNotifier::new());
-    app.add_singleton_model(TerminalKeybindings::new);
     app.add_singleton_model(|_| ActiveSession::default());
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
@@ -4681,7 +4679,7 @@ fn test_alias_expansion_when_alias_expansion_is_disabled() {
 }
 
 #[test]
-fn test_alias_expansion_disabled_in_ai_input_mode() {
+fn test_alias_expansion_disabled_in_prompt_input_mode() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -4708,21 +4706,13 @@ fn test_alias_expansion_disabled_in_ai_input_mode() {
             )
         });
 
-        // Set input type to AI mode
-        input.update(&mut app, |input, ctx| {
-            input.ai_input_model().update(ctx, |ai_input, ctx| {
-                ai_input.set_input_config(
-                    InputConfig {
-                        input_type: InputType::AI,
-                        is_locked: true,
-                    },
-                    true, /* is_input_buffer_empty */
-                    ctx,
-                );
-            });
+        // Opening the rich input switches to prompt input mode
+        open_rich_input_for_terminal(&terminal, &mut app);
+        input.read(&app, |input, ctx| {
+            assert!(input.input_type(ctx).is_prompt());
         });
 
-        // Aliases should NOT be expanded when in AI input mode, even with setting enabled
+        // Aliases should NOT be expanded when in prompt input mode, even with setting enabled
         input.update(&mut app, |input, ctx| {
             input.user_insert("gco ", ctx);
         });
@@ -4732,22 +4722,24 @@ fn test_alias_expansion_disabled_in_ai_input_mode() {
         });
         input.update(&mut app, |input, ctx| {
             input.run_expansion_on_space(ctx);
-            // Alias should NOT be expanded since we're in AI input mode
+            // Alias should NOT be expanded since we're in prompt input mode
             assert_eq!(input.buffer_text(ctx), "gco ");
         });
 
         // Now switch back to Shell mode and verify expansion works
         input.update(&mut app, |input, ctx| {
-            input.ai_input_model().update(ctx, |ai_input, ctx| {
-                ai_input.set_input_config(
-                    InputConfig {
-                        input_type: InputType::Shell,
-                        is_locked: true,
-                    },
-                    false, /* is_input_buffer_empty */
-                    ctx,
-                );
-            });
+            input
+                .input_mode_model()
+                .update(ctx, |input_mode_model, ctx| {
+                    input_mode_model.set_input_config(
+                        InputConfig {
+                            input_type: InputType::Shell,
+                            is_locked: true,
+                        },
+                        false, /* is_input_buffer_empty */
+                        ctx,
+                    );
+                });
         });
 
         input.update(&mut app, |input, ctx| {
@@ -5180,53 +5172,56 @@ fn test_input_mode_setting_methods() {
         .await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
 
-        // Test setting input mode to agent mode
+        // Prompt input is only reachable through the CLI agent rich input.
         input.update(&mut app, |input, ctx| {
-            input.set_input_mode_agent(true, ctx);
+            input.set_input_mode_prompt(true, ctx);
         });
-
         let config = input.read(&app, |input, _| {
-            app.read_model(input.ai_input_model(), |ai_input, _| {
-                ai_input.input_config()
+            app.read_model(input.input_mode_model(), |input_mode_model, _| {
+                input_mode_model.input_config()
             })
         });
-        assert_eq!(config.input_type, InputType::AI);
-        assert!(config.is_locked, "Input should be locked to AI mode");
+        assert_eq!(config.input_type, InputType::Shell);
 
-        // Test setting input mode to terminal mode
-        input.update(&mut app, |input, ctx| {
-            input.set_input_mode_terminal(true, ctx);
-        });
-
+        open_rich_input_for_terminal(&terminal, &mut app);
         let config = input.read(&app, |input, _| {
-            app.read_model(input.ai_input_model(), |ai_input, _| {
-                ai_input.input_config()
+            app.read_model(input.input_mode_model(), |input_mode_model, _| {
+                input_mode_model.input_config()
+            })
+        });
+        assert_eq!(config.input_type, InputType::Prompt);
+        assert!(config.is_locked, "Input should be locked to prompt mode");
+
+        input.update(&mut app, |input, ctx| {
+            input.set_input_mode_shell(true, ctx);
+        });
+        let config = input.read(&app, |input, _| {
+            app.read_model(input.input_mode_model(), |input_mode_model, _| {
+                input_mode_model.input_config()
             })
         });
         assert_eq!(config.input_type, InputType::Shell);
         assert!(config.is_locked, "Input should be locked to Shell mode");
-    });
-}
 
-fn enter_fullscreen_agent_view_for_test(terminal: &ViewHandle<TerminalView>, app: &mut App) {
-    terminal.update(app, |view, ctx| {
-        view.agent_view_controller().update(ctx, |controller, ctx| {
-            controller
-                .try_enter_agent_view(None, AgentViewEntryOrigin::Input, ctx)
-                .expect("Should be able to enter agent view");
+        input.update(&mut app, |input, ctx| {
+            input.set_input_mode_prompt(true, ctx);
         });
+        let config = input.read(&app, |input, _| {
+            app.read_model(input.input_mode_model(), |input_mode_model, _| {
+                input_mode_model.input_config()
+            })
+        });
+        assert_eq!(config.input_type, InputType::Prompt);
     });
 }
 
 #[test]
 fn test_terminal_prefix_locks_shell_mode() {
     App::test((), |mut app| async move {
-        let _am_flag = FeatureFlag::AgentMode.override_enabled(true);
-
         initialize_app(&mut app);
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-        enter_fullscreen_agent_view_for_test(&terminal, &mut app);
+        open_rich_input_for_terminal(&terminal, &mut app);
 
         input.update(&mut app, |input, ctx| {
             input.user_insert(TERMINAL_INPUT_PREFIX, ctx);
@@ -5234,10 +5229,155 @@ fn test_terminal_prefix_locks_shell_mode() {
 
         input.read(&app, |input, ctx| {
             assert!(input.buffer_text(ctx).is_empty());
-            app.read_model(input.ai_input_model(), |input_model, _| {
+            app.read_model(input.input_mode_model(), |input_model, _| {
                 assert_eq!(input_model.input_type(), InputType::Shell);
                 assert!(input_model.is_input_type_locked());
             });
+        });
+    });
+}
+
+#[test]
+fn test_terminal_prefix_is_literal_outside_the_rich_input() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+
+        input.update(&mut app, |input, ctx| {
+            input.user_insert(TERMINAL_INPUT_PREFIX, ctx);
+        });
+
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.buffer_text(ctx), TERMINAL_INPUT_PREFIX);
+            assert_eq!(input.input_type(ctx), InputType::Shell);
+        });
+    });
+}
+
+#[test]
+fn test_backspace_on_empty_buffer_exits_shell_prefix_mode_in_the_rich_input() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        open_rich_input_for_terminal(&terminal, &mut app);
+
+        input.update(&mut app, |input, ctx| {
+            input.user_insert(TERMINAL_INPUT_PREFIX, ctx);
+        });
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.input_type(ctx), InputType::Shell);
+        });
+
+        input.update(&mut app, |input, ctx| {
+            input.handle_backspace_at_buffer_boundary(ctx);
+        });
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.input_type(ctx), InputType::Prompt);
+        });
+    });
+}
+
+#[test]
+fn submitting_in_shell_prefix_mode_sends_the_prefix_and_returns_to_prompt_mode() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        open_rich_input_for_terminal(&terminal, &mut app);
+
+        let submitted: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let submitted_clone = submitted.clone();
+        app.update(|ctx| {
+            ctx.subscribe_to_view(&input, move |_, event, _| {
+                if let Event::SubmitCLIAgentInput { text } = event {
+                    submitted_clone.borrow_mut().push(text.clone());
+                }
+            });
+        });
+
+        input.update(&mut app, |input, ctx| {
+            input.user_insert(TERMINAL_INPUT_PREFIX, ctx);
+        });
+        input.update(&mut app, |input, ctx| {
+            input.user_insert("ls -la", ctx);
+        });
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.input_type(ctx), InputType::Shell);
+            assert_eq!(input.buffer_text(ctx), "ls -la");
+        });
+
+        input.update(&mut app, |input, ctx| input.input_enter(ctx));
+
+        assert_eq!(submitted.borrow().as_slice(), ["!ls -la"]);
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.input_type(ctx), InputType::Prompt);
+        });
+    });
+}
+
+#[test]
+fn ai_settings_changes_do_not_reset_the_open_rich_input_to_shell_mode() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        open_rich_input_for_terminal(&terminal, &mut app);
+
+        for enabled in [true, false, true] {
+            AISettings::handle(&app).update(&mut app, |settings, ctx| {
+                report_if_error!(settings.is_any_ai_enabled.set_value(enabled, ctx));
+            });
+            input.read(&app, |input, ctx| {
+                assert_eq!(input.input_type(ctx), InputType::Prompt);
+                assert!(CLIAgentSessionsModel::as_ref(ctx).is_input_open(input.terminal_view_id));
+            });
+        }
+    });
+}
+
+#[test]
+fn focus_changes_do_not_reset_the_open_rich_input_to_shell_mode() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        open_rich_input_for_terminal(&terminal, &mut app);
+
+        input.update(&mut app, |input, ctx| {
+            input.on_focus(&FocusContext::SelfFocused, ctx);
+            input.on_focus(&FocusContext::DescendentFocused(ctx.view_id()), ctx);
+        });
+        terminal.update(&mut app, |view, ctx| ctx.focus(view.input()));
+
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.input_type(ctx), InputType::Prompt);
+        });
+    });
+}
+
+#[test]
+fn closing_the_rich_input_returns_to_shell_mode_and_clears_the_buffer() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        open_rich_input_for_terminal(&terminal, &mut app);
+        input.update(&mut app, |input, ctx| {
+            input.user_insert("draft prompt", ctx)
+        });
+
+        terminal.update(&mut app, |view, ctx| {
+            let view_id = view.view_id();
+            CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions, ctx| {
+                sessions.close_input(view_id, false, ctx);
+            });
+        });
+
+        input.read(&app, |input, ctx| {
+            assert_eq!(input.input_type(ctx), InputType::Shell);
+            assert!(input.buffer_text(ctx).is_empty());
         });
     });
 }
@@ -5293,16 +5433,18 @@ fn test_at_menu_preserves_lock_state() {
 
         // Start in locked Shell mode
         input.update(&mut app, |input, ctx| {
-            input.ai_input_model().update(ctx, |ai_input, ctx| {
-                ai_input.set_input_config(
-                    InputConfig {
-                        input_type: InputType::Shell,
-                        is_locked: true,
-                    },
-                    true, /* is_input_buffer_empty */
-                    ctx,
-                );
-            });
+            input
+                .input_mode_model()
+                .update(ctx, |input_mode_model, ctx| {
+                    input_mode_model.set_input_config(
+                        InputConfig {
+                            input_type: InputType::Shell,
+                            is_locked: true,
+                        },
+                        true, /* is_input_buffer_empty */
+                        ctx,
+                    );
+                });
         });
 
         // Open @ menu (should no longer switch to AI mode)
@@ -5312,8 +5454,8 @@ fn test_at_menu_preserves_lock_state() {
 
         // Verify we stay in Shell mode with lock state preserved
         let config_after_open = input.read(&app, |input, _| {
-            app.read_model(input.ai_input_model(), |ai_input, _| {
-                ai_input.input_config()
+            app.read_model(input.input_mode_model(), |input_mode_model, _| {
+                input_mode_model.input_config()
             })
         });
         assert_eq!(config_after_open.input_type, InputType::Shell);
@@ -5324,16 +5466,18 @@ fn test_at_menu_preserves_lock_state() {
 
         // Test with unlocked mode
         input.update(&mut app, |input, ctx| {
-            input.ai_input_model().update(ctx, |ai_input, ctx| {
-                ai_input.set_input_config(
-                    InputConfig {
-                        input_type: InputType::Shell,
-                        is_locked: false,
-                    },
-                    true, /* is_input_buffer_empty */
-                    ctx,
-                );
-            });
+            input
+                .input_mode_model()
+                .update(ctx, |input_mode_model, ctx| {
+                    input_mode_model.set_input_config(
+                        InputConfig {
+                            input_type: InputType::Shell,
+                            is_locked: false,
+                        },
+                        true, /* is_input_buffer_empty */
+                        ctx,
+                    );
+                });
         });
 
         // Open @ menu again
@@ -5343,8 +5487,8 @@ fn test_at_menu_preserves_lock_state() {
 
         // Verify we stay in Shell mode and unlocked (@ button no longer switches to AI mode)
         let config_after_second_open = input.read(&app, |input, _| {
-            app.read_model(input.ai_input_model(), |ai_input, _| {
-                ai_input.input_config()
+            app.read_model(input.input_mode_model(), |input_mode_model, _| {
+                input_mode_model.input_config()
             })
         });
         assert_eq!(config_after_second_open.input_type, InputType::Shell);
@@ -5359,8 +5503,8 @@ fn test_at_menu_preserves_lock_state() {
         });
 
         let config_after_close = input.read(&app, |input, _| {
-            app.read_model(input.ai_input_model(), |ai_input, _| {
-                ai_input.input_config()
+            app.read_model(input.input_mode_model(), |input_mode_model, _| {
+                input_mode_model.input_config()
             })
         });
         assert_eq!(config_after_close.input_type, InputType::Shell);
@@ -5369,36 +5513,38 @@ fn test_at_menu_preserves_lock_state() {
 }
 
 #[test]
-fn test_should_show_completions_in_ai_input() {
+fn test_should_show_completions_in_prompt_input() {
     // Test cases where the function should return true
     // i.e. we should trigger completions-as-you-type in AI input.
-    assert!(should_show_completions_in_ai_input("/"));
-    assert!(should_show_completions_in_ai_input("/foo"));
-    assert!(should_show_completions_in_ai_input("some text /foo"));
+    assert!(should_show_completions_in_prompt_input("/"));
+    assert!(should_show_completions_in_prompt_input("/foo"));
+    assert!(should_show_completions_in_prompt_input("some text /foo"));
 
-    assert!(should_show_completions_in_ai_input("./"));
-    assert!(should_show_completions_in_ai_input("./foo"));
-    assert!(should_show_completions_in_ai_input("some text ./foo"));
+    assert!(should_show_completions_in_prompt_input("./"));
+    assert!(should_show_completions_in_prompt_input("./foo"));
+    assert!(should_show_completions_in_prompt_input("some text ./foo"));
 
-    assert!(should_show_completions_in_ai_input("foo/"));
-    assert!(should_show_completions_in_ai_input("~/"));
-    assert!(should_show_completions_in_ai_input("foo/bar"));
-    assert!(should_show_completions_in_ai_input("some text foo/bar"));
+    assert!(should_show_completions_in_prompt_input("foo/"));
+    assert!(should_show_completions_in_prompt_input("~/"));
+    assert!(should_show_completions_in_prompt_input("foo/bar"));
+    assert!(should_show_completions_in_prompt_input("some text foo/bar"));
 
-    assert!(should_show_completions_in_ai_input("../"));
-    assert!(should_show_completions_in_ai_input("../foo"));
-    assert!(should_show_completions_in_ai_input("bar ../foo"));
+    assert!(should_show_completions_in_prompt_input("../"));
+    assert!(should_show_completions_in_prompt_input("../foo"));
+    assert!(should_show_completions_in_prompt_input("bar ../foo"));
 
     // Test cases where the function should return false
     // i.e. we should NOT trigger completions-as-you-type in AI input.
-    assert!(!should_show_completions_in_ai_input("foo"));
-    assert!(!should_show_completions_in_ai_input("some text/ foo"));
-    assert!(!should_show_completions_in_ai_input("./bar foo"));
-    assert!(!should_show_completions_in_ai_input("some text / bar foo"));
-    assert!(!should_show_completions_in_ai_input(""));
-    assert!(!should_show_completions_in_ai_input("../foo bar"));
+    assert!(!should_show_completions_in_prompt_input("foo"));
+    assert!(!should_show_completions_in_prompt_input("some text/ foo"));
+    assert!(!should_show_completions_in_prompt_input("./bar foo"));
+    assert!(!should_show_completions_in_prompt_input(
+        "some text / bar foo"
+    ));
+    assert!(!should_show_completions_in_prompt_input(""));
+    assert!(!should_show_completions_in_prompt_input("../foo bar"));
     // Space at the end invalidates triggering completions.
-    assert!(!should_show_completions_in_ai_input("../foo "));
+    assert!(!should_show_completions_in_prompt_input("../foo "));
 }
 
 #[test]
@@ -5446,100 +5592,6 @@ fn test_remove_ignored_suggestion_on_command_execution() {
             !is_ignored_after,
             "Command should no longer be ignored after execution"
         );
-    });
-}
-
-#[test]
-fn test_remove_ignored_suggestion_on_ai_query_execution() {
-    App::test((), |mut app| async move {
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |view, _| view.input().clone());
-        enter_fullscreen_agent_view_for_test(&terminal, &mut app);
-
-        // First, add an AI query to ignored suggestions
-        let test_query = "what is the current date";
-        IgnoredSuggestionsModel::handle(&app).update(&mut app, |model, ctx| {
-            model.add_ignored_suggestion(
-                test_query.to_string(),
-                crate::suggestions::ignored_suggestions_model::SuggestionType::AIQuery,
-                ctx,
-            );
-        });
-
-        // Verify the query is ignored
-        let is_ignored_before = IgnoredSuggestionsModel::handle(&app).read(&app, |model, _| {
-            model.is_ignored(
-                test_query,
-                crate::suggestions::ignored_suggestions_model::SuggestionType::AIQuery,
-            )
-        });
-        assert!(is_ignored_before, "AI query should be ignored initially");
-
-        // Set up AI input mode and execute the query
-        input.update(&mut app, |input, ctx| {
-            input.ai_input_model.update(ctx, |ai_input, ctx| {
-                ai_input.set_input_type(InputType::AI, ctx);
-            });
-            input.clear_buffer_and_reset_undo_stack(ctx);
-            input.user_insert(test_query, ctx);
-            input.submit_ai_query_local(ctx);
-        });
-
-        // Verify the query is no longer ignored
-        let is_ignored_after = IgnoredSuggestionsModel::handle(&app).read(&app, |model, _| {
-            model.is_ignored(
-                test_query,
-                crate::suggestions::ignored_suggestions_model::SuggestionType::AIQuery,
-            )
-        });
-        assert!(
-            !is_ignored_after,
-            "AI query should no longer be ignored after execution"
-        );
-    });
-}
-
-#[test]
-fn test_terminal_only_escape_locks_shell_mode() {
-    use crate::ai::blocklist::InputConfig;
-
-    App::test((), |mut app| async move {
-        let _am_flag = FeatureFlag::AgentMode.override_enabled(true);
-
-        initialize_app(&mut app);
-
-        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
-        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
-        let editor = input.read(&app, |input, _| input.editor().clone());
-
-        // Start in AI mode (unlocked) while agent view is inactive.
-        input.update(&mut app, |input, ctx| {
-            input.ai_input_model().update(ctx, |ai_input, ctx| {
-                ai_input.set_input_config(
-                    InputConfig {
-                        input_type: InputType::AI,
-                        is_locked: false,
-                    },
-                    true, /* is_input_buffer_empty */
-                    ctx,
-                );
-            });
-        });
-
-        // Hit Esc (via editor) and ensure we end up locked to shell.
-        editor.update(&mut app, |editor, ctx| {
-            editor.escape(ctx);
-        });
-
-        let config = input.read(&app, |input, _| {
-            app.read_model(input.ai_input_model(), |ai_input, _| {
-                ai_input.input_config()
-            })
-        });
-        assert_eq!(config.input_type, InputType::Shell);
-        assert!(config.is_locked);
     });
 }
 
@@ -5800,8 +5852,8 @@ fn open_rich_input_for_terminal(terminal: &ViewHandle<TerminalView>, app: &mut A
             sessions.open_input(
                 view_id,
                 CLIAgentInputEntrypoint::CtrlG,
-                crate::ai::blocklist::InputConfig {
-                    input_type: crate::ai::blocklist::InputType::AI,
+                InputConfig {
+                    input_type: InputType::Shell,
                     is_locked: true,
                 },
                 false,
@@ -6094,7 +6146,7 @@ fn ctrl_enter_with_selection_preserves_selection_in_submit_when_setting_is_true(
 }
 
 #[test]
-fn editor_keymap_context_excludes_ctrl_enter_enters_agent_view_when_rich_input_is_open() {
+fn editor_keymap_context_marks_the_rich_input_as_open() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
 
@@ -6107,12 +6159,6 @@ fn editor_keymap_context_excludes_ctrl_enter_enters_agent_view_when_rich_input_i
             let km_ctx = input
                 .editor
                 .read(ctx, |editor, ctx| editor.keymap_context(ctx));
-            assert!(
-                !km_ctx.set.contains(flags::CTRL_ENTER_ENTERS_AGENT_VIEW),
-                "CTRL_ENTER_ENTERS_AGENT_VIEW must NOT be set when the CLI agent rich input \
-                 is open; got flags: {:?}",
-                km_ctx.set
-            );
             assert!(
                 km_ctx.set.contains(flags::CLI_AGENT_RICH_INPUT_OPEN),
                 "CLI_AGENT_RICH_INPUT_OPEN must be set when the rich input is open; \

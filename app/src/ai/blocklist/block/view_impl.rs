@@ -950,7 +950,7 @@ impl View for AIBlock {
                     detected_links_state: &self.detected_links_state,
                     secret_redaction_state: &self.secret_redaction_state,
                     is_selecting_text: self.state_handles.selection_handle.is_selecting(),
-                    is_ai_input_enabled: self
+                    is_prompt_input_enabled: self
                         .context_model
                         .as_ref(app)
                         .pending_context_selected_text()
@@ -1022,7 +1022,7 @@ impl View for AIBlock {
                 todo_list_states: &self.todo_list_states,
                 collapsible_block_states: &self.collapsible_block_states,
                 is_selecting_text: self.state_handles.selection_handle.is_selecting(),
-                is_ai_input_enabled: self
+                is_prompt_input_enabled: self
                     .context_model
                     .as_ref(app)
                     .pending_context_selected_text()

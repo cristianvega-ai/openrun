@@ -30,8 +30,8 @@ use super::{
     ChipResult, ChipValue, ContextChipKind, agent_view_chip_color, github_pr_display_text_from_url,
     render_text_from_kind,
 };
-use crate::ai::blocklist::agent_view::AgentViewController;
-use crate::ai::blocklist::{BlocklistAIContextModel, BlocklistAIInputModel};
+
+use crate::ai::blocklist::BlocklistAIContextModel;
 use crate::appearance::Appearance;
 use crate::code::editor::{add_color, remove_color};
 use crate::code_review::code_review_view::CODE_REVIEW_TOOLTIP_TEXT;
@@ -44,6 +44,7 @@ use crate::context_chips::node_version_popup::{NodeVersionPopupEvent, NodeVersio
 use crate::context_chips::spacing;
 use crate::settings_view::keybindings::{KeybindingChangedEvent, KeybindingChangedNotifier};
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
+use crate::terminal::input::InputModeModel;
 use crate::terminal::input::{MenuPositioning, MenuPositioningProvider};
 use crate::terminal::model::session::SessionType;
 use crate::terminal::model_events::ModelEventDispatcher;
@@ -347,7 +348,6 @@ pub struct DisplayChip {
     on_click_values: Vec<String>,
     session_context: Option<SessionContext>,
     menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
-    agent_view_controller: ModelHandle<AgentViewController>,
     is_in_agent_view: bool,
     /// Cached display string for the code review keybinding.
     code_review_keybinding: Option<String>,
@@ -676,14 +676,13 @@ pub struct MenuItem {
 /// Configuration for creating a DisplayChip
 #[derive(Clone)]
 pub struct DisplayChipConfig {
-    pub ai_input_model: ModelHandle<BlocklistAIInputModel>,
+    pub input_mode_model: ModelHandle<InputModeModel>,
     pub ai_context_model: ModelHandle<BlocklistAIContextModel>,
     pub terminal_view_id: EntityId,
     pub menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
     pub session_context: Option<SessionContext>,
     pub current_repo_path: Option<PathBuf>,
     pub model_events: ModelHandle<ModelEventDispatcher>,
-    pub agent_view_controller: ModelHandle<AgentViewController>,
 }
 
 #[derive(Debug, Clone)]
@@ -869,12 +868,6 @@ impl DisplayChip {
         is_in_agent_view: bool,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        // Re-render this chip whenever Agent Mode state changes so UDI font/color updates
-        // immediately on enter/exit.
-        ctx.subscribe_to_model(&config.agent_view_controller, |_me, _model, _event, ctx| {
-            ctx.notify();
-        });
-
         let display_chip_kind = match chip_result.kind {
             ContextChipKind::ShellGitBranch => DisplayChipKind::GitBranch {
                 menu_open: false,
@@ -1092,7 +1085,6 @@ impl DisplayChip {
             on_click_values: chip_result.on_click_values,
             session_context: config.session_context,
             menu_positioning_provider: config.menu_positioning_provider,
-            agent_view_controller: config.agent_view_controller.clone(),
             is_in_agent_view,
             code_review_keybinding,
             terminal_view_id: config.terminal_view_id,

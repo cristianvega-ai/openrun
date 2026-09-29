@@ -38,7 +38,6 @@ use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
 use crate::system::{SystemInfo, SystemStats};
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
-use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::resizable_data::ResizableData;
 use crate::terminal::view::inline_banner::ByoLlmAuthBannerSessionState;
 use crate::terminal::{History, TerminalView};
@@ -92,7 +91,6 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
     app.add_singleton_model(UndoCloseStack::new);
 
     app.add_singleton_model(|_| KeybindingChangedNotifier::new());
-    app.add_singleton_model(TerminalKeybindings::new);
     app.add_singleton_model(|_| ActiveSession::default());
     app.add_singleton_model(|_| AuthStateProvider::new_for_test());
     app.add_singleton_model(AuthManager::new_for_test);

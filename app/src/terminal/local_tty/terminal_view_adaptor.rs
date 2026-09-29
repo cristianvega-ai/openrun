@@ -9,11 +9,12 @@ use warpui::{AppContext, SingletonEntity, ViewHandle, WindowId};
 
 use super::terminal_manager::{TerminalManager, TerminalSurfaceInit, TerminalSurfaceResult};
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
-use crate::ai::blocklist::{InputConfig, SerializedBlockListItem};
+use crate::ai::blocklist::SerializedBlockListItem;
 use crate::context_chips::current_prompt::CurrentPrompt;
 use crate::context_chips::prompt_type::PromptType;
 use crate::pane_group::TerminalViewResources;
 use crate::persistence::ModelEvent;
+use crate::terminal::input::InputConfig;
 use crate::terminal::view::ConversationRestorationInNewPaneType;
 use crate::terminal::{TerminalManager as TerminalManagerTrait, TerminalModel, TerminalView};
 

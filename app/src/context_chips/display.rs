@@ -13,18 +13,19 @@ use warpui::{
 use super::display_chip::{DisplayChip, DisplayChipConfig, PromptDisplayChipEvent};
 use super::prompt_type::PromptType;
 use super::{ChipResult, git_line_changes_from_chips};
-use crate::ai::blocklist::agent_view::AgentViewController;
-use crate::ai::blocklist::{BlocklistAIContextModel, BlocklistAIInputEvent, BlocklistAIInputModel};
+
+use crate::ai::blocklist::BlocklistAIContextModel;
 use crate::completer::SessionContext;
 use crate::context_chips::display_chip::{DisplayChipAction, PromptChipShellCommand};
 use crate::terminal::input::MenuPositioningProvider;
+use crate::terminal::input::{InputModeEvent, InputModeModel};
 use crate::terminal::model_events::ModelEventDispatcher;
 
 /// A view for displaying the prompt.
 pub struct PromptDisplay {
     prompt: ModelHandle<PromptType>,
     display_chips: Vec<ViewHandle<DisplayChip>>,
-    ai_input_model: ModelHandle<BlocklistAIInputModel>,
+    input_mode_model: ModelHandle<InputModeModel>,
     ai_context_model: ModelHandle<BlocklistAIContextModel>,
     terminal_view_id: EntityId,
     menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
@@ -34,8 +35,6 @@ pub struct PromptDisplay {
 
     /// Whether the pane this prompt belongs to is currently focused.
     pane_is_focused: bool,
-
-    agent_view_controller: ModelHandle<AgentViewController>,
 }
 
 const PROMPT_CHIP_DISPLAY_ID: &str = "PromptChipDisplay";
@@ -60,44 +59,37 @@ impl PromptDisplay {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         prompt: ModelHandle<PromptType>,
-        ai_input_model: ModelHandle<BlocklistAIInputModel>,
+        input_mode_model: ModelHandle<InputModeModel>,
         ai_context_model: ModelHandle<BlocklistAIContextModel>,
         terminal_view_id: EntityId,
         menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
         session_context: Option<SessionContext>,
         current_repo_path: Option<PathBuf>,
         model_events: ModelHandle<ModelEventDispatcher>,
-        agent_view_controller: ModelHandle<AgentViewController>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         ctx.observe(&prompt, |me, _, ctx| me.handle_prompt_change(ctx));
 
-        // Subscribe to AI input model changes to trigger re-render when input mode changes
-        ctx.subscribe_to_model(&ai_input_model, |_me, _model, event, ctx| {
+        // Subscribe to input mode model changes to trigger re-render when input mode changes
+        ctx.subscribe_to_model(&input_mode_model, |_me, _model, event, ctx| {
             match event {
-                BlocklistAIInputEvent::InputTypeChanged { .. }
-                | BlocklistAIInputEvent::LockChanged { .. } => {
+                InputModeEvent::InputTypeChanged { .. } | InputModeEvent::LockChanged { .. } => {
                     // Trigger re-render to update chip visibility based on new input mode
                     ctx.notify();
                 }
             }
         });
 
-        ctx.subscribe_to_model(&agent_view_controller, |_, _, _, ctx| {
-            ctx.notify();
-        });
-
         Self {
             prompt,
             display_chips: vec![],
-            ai_input_model,
+            input_mode_model,
             ai_context_model,
             terminal_view_id,
             menu_positioning_provider,
             session_context,
             current_repo_path,
             model_events,
-            agent_view_controller,
             pane_is_focused: true,
         }
     }
@@ -161,14 +153,13 @@ impl PromptDisplay {
                     chip_result.clone(),
                     next_chip_kind,
                     DisplayChipConfig {
-                        ai_input_model: self.ai_input_model.clone(),
+                        input_mode_model: self.input_mode_model.clone(),
                         ai_context_model: self.ai_context_model.clone(),
                         terminal_view_id: self.terminal_view_id,
                         menu_positioning_provider: self.menu_positioning_provider.clone(),
                         session_context: self.session_context.clone(),
                         current_repo_path: self.current_repo_path.clone(),
                         model_events: self.model_events.clone(),
-                        agent_view_controller: self.agent_view_controller.clone(),
                     },
                 );
                 chip.maybe_set_git_line_changes_info(git_line_changes_info.clone());

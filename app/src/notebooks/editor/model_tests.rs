@@ -44,7 +44,6 @@ use crate::server::server_api::team::MockTeamClient;
 use crate::server::server_api::workspace::MockWorkspaceClient;
 use crate::settings::FontSettings;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
-use crate::terminal::keys::TerminalKeybindings;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::workspace::ActiveSession;
 use crate::{GlobalResourceHandles, GlobalResourceHandlesProvider, UserWorkspaces};
@@ -97,7 +96,6 @@ fn setup_editor_window(app: &mut App) -> warpui::WindowId {
     app.add_singleton_model(repo_metadata::RepoMetadataModel::new);
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(NotebookKeybindings::new);
-    app.add_singleton_model(TerminalKeybindings::new);
 
     let (window, _) = app.add_window(WindowStyle::NotStealFocus, |ctx| {
         let window_id = ctx.window_id();

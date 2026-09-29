@@ -44,7 +44,7 @@ impl CompactAgentInput {
                 ..Default::default()
             };
             let mut editor = EditorView::new(options, ctx);
-            editor.set_is_ai_input(true, ctx);
+            editor.set_is_prompt_input(true, ctx);
             editor
         });
 

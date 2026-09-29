@@ -29,6 +29,7 @@ use crate::server::ids::{ClientId, ServerId};
 use crate::settings_view::SettingsSection;
 use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
+use crate::terminal::input::{InputConfig, InputType};
 use crate::terminal::model::block::SerializedBlock;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::tab_group::TabGroupId;
@@ -1258,4 +1259,109 @@ fn test_sqlite_restore_skips_cloud_notebook_pane_without_losing_the_tab() {
 
     assert_eq!(restored.windows[0].tabs.len(), 1);
     assert_eq!(terminal_uuid(&restored.windows[0].tabs[0].root), vec![7]);
+}
+
+fn restored_input_config(node: &PaneNodeSnapshot) -> Option<InputConfig> {
+    let PaneNodeSnapshot::Leaf(LeafSnapshot {
+        contents: LeafContents::Terminal(terminal),
+        ..
+    }) = node
+    else {
+        panic!("expected a terminal leaf, got {node:?}");
+    };
+    terminal.input_config
+}
+
+/// `terminal_panes.input_config` values written while the input could be an AI input (`"AI"`)
+/// restore as shell input.
+#[test]
+fn test_sqlite_restores_persisted_ai_input_config_as_shell() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let app_state = AppState {
+        windows: vec![window_with_tabs(
+            vec![tab_with_root(PaneNodeSnapshot::Branch(BranchSnapshot {
+                direction: SplitDirection::Vertical,
+                children: vec![
+                    (PaneFlex(0.5), terminal_leaf(1)),
+                    (PaneFlex(0.5), terminal_leaf(2)),
+                ],
+            }))],
+            0,
+        )],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+    conn.batch_execute(
+        r#"UPDATE terminal_panes
+           SET input_config = '{"input_type":"AI","is_locked":true}'
+           WHERE uuid = x'01';
+           UPDATE terminal_panes
+           SET input_config = '{"input_type":"AI","is_locked":false}'
+           WHERE uuid = x'02';"#,
+    )
+    .expect("persisted AI input configs should be written");
+
+    let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
+        .expect("a persisted AI input config must not fail the read")
+        .app_state
+        .expect("app state should be present for the full scope");
+
+    let PaneNodeSnapshot::Branch(branch) = &restored.windows[0].tabs[0].root else {
+        panic!("expected the split to be restored");
+    };
+    assert_eq!(
+        restored_input_config(&branch.children[0].1),
+        Some(InputConfig {
+            input_type: InputType::Shell,
+            is_locked: true,
+        })
+    );
+    assert_eq!(
+        restored_input_config(&branch.children[1].1),
+        Some(InputConfig {
+            input_type: InputType::Shell,
+            is_locked: false,
+        })
+    );
+}
+
+#[test]
+fn test_sqlite_round_trips_shell_input_config() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let mut leaf = terminal_leaf(1);
+    let PaneNodeSnapshot::Leaf(LeafSnapshot {
+        contents: LeafContents::Terminal(terminal),
+        ..
+    }) = &mut leaf
+    else {
+        unreachable!("terminal_leaf returns a terminal");
+    };
+    let shell_config = InputConfig {
+        input_type: InputType::Shell,
+        is_locked: true,
+    };
+    terminal.input_config = Some(shell_config);
+
+    let app_state = AppState {
+        windows: vec![window_with_tabs(vec![tab_with_root(leaf)], 0)],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+
+    let restored = read_sqlite_data(&mut conn, None, PersistedDataScope::Full)
+        .expect("app state should load")
+        .app_state
+        .expect("app state should be present for the full scope");
+    assert_eq!(
+        restored_input_config(&restored.windows[0].tabs[0].root),
+        Some(shell_config)
+    );
 }

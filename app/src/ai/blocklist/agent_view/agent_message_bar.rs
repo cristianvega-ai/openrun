@@ -8,6 +8,7 @@ use warpui::platform::OperatingSystem;
 use warpui::{AppContext, Entity, ModelHandle, SingletonEntity, View, ViewContext};
 
 use super::{AgentViewState, EphemeralMessageModel, EphemeralMessageModelEvent};
+
 use crate::BlocklistAIHistoryModel;
 use crate::ai::agent::conversation::AIConversation;
 use crate::ai::agent::{
@@ -19,8 +20,10 @@ use crate::ai::blocklist::agent_view::{
 };
 use crate::ai::blocklist::{
     BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIHistoryEvent,
-    BlocklistAIInputEvent, BlocklistAIInputModel,
 };
+use crate::terminal::input::{InputModeEvent, InputModeModel};
+
+use crate::terminal::input::InputAction;
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
 use crate::terminal::input::message_bar::attached_context::{
     AttachedBlocksMessageProducer, AttachedContextArgs, AttachedTextSelectionMessageProducer,
@@ -35,10 +38,8 @@ use crate::terminal::input::slash_command_model::{SlashCommandEntryState, SlashC
 use crate::terminal::input::suggestions_mode_model::{
     InputSuggestionsModeEvent, InputSuggestionsModeModel,
 };
-use crate::terminal::input::{InputAction, SET_INPUT_MODE_AGENT_ACTION_NAME};
 use crate::terminal::model::TerminalModel;
 use crate::terminal::view::TerminalAction;
-use crate::util::bindings::keybinding_name_to_keystroke;
 #[cfg(not(target_family = "wasm"))]
 use crate::workspace::WorkspaceAction;
 use crate::workspace::tab_settings::{TabSettings, TabSettingsChangedEvent};
@@ -59,7 +60,7 @@ pub struct AgentMessageBar {
     ephemeral_message_model: ModelHandle<EphemeralMessageModel>,
     shortcut_view_model: ModelHandle<AgentShortcutViewModel>,
     input_buffer_model: ModelHandle<InputBufferModel>,
-    input_model: ModelHandle<BlocklistAIInputModel>,
+    input_model: ModelHandle<InputModeModel>,
     input_suggestions_model: ModelHandle<InputSuggestionsModeModel>,
     slash_command_model: ModelHandle<SlashCommandModel>,
     context_model: ModelHandle<BlocklistAIContextModel>,
@@ -77,7 +78,7 @@ impl AgentMessageBar {
         ephemeral_message_model: ModelHandle<EphemeralMessageModel>,
         shortcut_view_model: ModelHandle<AgentShortcutViewModel>,
         input_buffer_model: ModelHandle<InputBufferModel>,
-        input_model: ModelHandle<BlocklistAIInputModel>,
+        input_model: ModelHandle<InputModeModel>,
         input_suggestions_model: ModelHandle<InputSuggestionsModeModel>,
         slash_command_model: ModelHandle<SlashCommandModel>,
         context_model: ModelHandle<BlocklistAIContextModel>,
@@ -101,8 +102,7 @@ impl AgentMessageBar {
         ctx.subscribe_to_model(&input_model, |_, _, event, ctx| {
             if matches!(
                 event,
-                BlocklistAIInputEvent::InputTypeChanged { .. }
-                    | BlocklistAIInputEvent::LockChanged { .. }
+                InputModeEvent::InputTypeChanged { .. } | InputModeEvent::LockChanged { .. }
             ) {
                 ctx.notify();
             }
@@ -117,7 +117,7 @@ impl AgentMessageBar {
             me.ephemeral_message_model
                 .update(ctx, |m, ctx| m.try_dismiss_explicit_message(ctx));
             let empty_state_changed = old.is_empty() != new.is_empty();
-            let in_shell_mode = !me.input_model.as_ref(ctx).is_ai_input_enabled();
+            let in_shell_mode = !me.input_model.as_ref(ctx).is_prompt_input_enabled();
             if empty_state_changed || in_shell_mode {
                 ctx.notify();
             }
@@ -237,9 +237,6 @@ impl View for AgentMessageBar {
             .or_else(|| ForkSlashCommandMessageProducer.produce_message(args))
             .or_else(|| AttachedBlocksMessageProducer.produce_message(args))
             .or_else(|| AttachedTextSelectionMessageProducer.produce_message(args))
-            .or_else(|| AutodetectedBashModeMessageProducer.produce_message(args))
-            .or_else(|| ExitBashModeMessageProducer.produce_message(args))
-            .or_else(|| HideShortcutsMessageProducer.produce_message(args))
             .or_else(|| ZeroStateMessageProducer.produce_message(args))
             .or_else(|| EmptyMessageProducer.produce_message(args))
         else {
@@ -258,7 +255,7 @@ pub struct AgentMessageArgs<'a> {
     pub ephemeral_message_model: &'a EphemeralMessageModel,
     pub shortcut_view_model: &'a AgentShortcutViewModel,
     pub input_buffer_model: &'a InputBufferModel,
-    pub input_model: &'a BlocklistAIInputModel,
+    pub input_model: &'a InputModeModel,
     pub slash_command_model: &'a SlashCommandModel,
     pub context_model: &'a BlocklistAIContextModel,
     pub terminal_model: &'a TerminalModel,
@@ -276,7 +273,7 @@ impl AttachedContextArgs for AgentMessageArgs<'_> {
         self.input_buffer_model
     }
 
-    fn input_model(&self) -> &BlocklistAIInputModel {
+    fn input_model(&self) -> &InputModeModel {
         self.input_model
     }
 
@@ -324,7 +321,7 @@ impl MessageProvider<AgentMessageArgs<'_>> for ZeroStateMessageProducer {
         } = args;
 
         let is_locked_shell_input =
-            !input_model.is_ai_input_enabled() && input_model.is_input_type_locked();
+            !input_model.is_prompt_input_enabled() && input_model.is_input_type_locked();
         if is_locked_shell_input {
             return None;
         }
@@ -363,30 +360,6 @@ impl MessageProvider<AgentMessageArgs<'_>> for ZeroStateMessageProducer {
             color_override_for_shortcuts_and_commands,
             bg_color_override_for_shortcuts_and_commands,
         ) = disableable_message_item_color_overrides(!is_buffer_empty, app);
-
-        items.push(
-            MessageItem::clickable(
-                vec![
-                    MessageItem::Keystroke {
-                        keystroke: Keystroke {
-                            key: "?".to_owned(),
-                            ..Default::default()
-                        },
-                        color: color_override_for_shortcuts_and_commands,
-                        background_color: bg_color_override_for_shortcuts_and_commands,
-                    },
-                    MessageItem::Text {
-                        content: "for help".into(),
-                        color: color_override_for_shortcuts_and_commands,
-                    },
-                ],
-                |ctx| {
-                    ctx.dispatch_typed_action(InputAction::ToggleAgentViewShortcuts);
-                },
-                mouse_states.toggle_shortcuts.clone(),
-            )
-            .with_is_disabled(!is_buffer_empty),
-        );
 
         items.push(
             MessageItem::clickable(
@@ -564,95 +537,5 @@ impl MessageProvider<AgentMessageArgs<'_>> for ForkSlashCommandMessageProducer {
             MessageItem::keystroke(modifier_keystroke),
             MessageItem::text(" new tab"),
         ]))
-    }
-}
-
-struct HideShortcutsMessageProducer;
-
-impl MessageProvider<AgentMessageArgs<'_>> for HideShortcutsMessageProducer {
-    fn produce_message(&self, args: AgentMessageArgs<'_>) -> Option<Message> {
-        if !args.shortcut_view_model.is_shortcut_view_open() {
-            return None;
-        }
-
-        Some(Message::new(vec![MessageItem::clickable(
-            vec![
-                MessageItem::keystroke(Keystroke {
-                    key: "?".to_owned(),
-                    ..Default::default()
-                }),
-                MessageItem::text("to hide help"),
-            ],
-            |ctx| {
-                ctx.dispatch_typed_action(InputAction::ToggleAgentViewShortcuts);
-            },
-            args.mouse_states.toggle_shortcuts.clone(),
-        )]))
-    }
-}
-
-struct AutodetectedBashModeMessageProducer;
-
-impl MessageProvider<AgentMessageArgs<'_>> for AutodetectedBashModeMessageProducer {
-    fn produce_message(&self, args: AgentMessageArgs<'_>) -> Option<Message> {
-        let AgentMessageArgs {
-            input_buffer_model,
-            input_model,
-            appearance,
-            app,
-            slash_command_model,
-            ..
-        } = args;
-        if input_model.is_ai_input_enabled()
-            || input_model.is_input_type_locked()
-            || input_buffer_model.current_value().is_empty()
-            || slash_command_model.state().is_detected_command()
-        {
-            return None;
-        }
-
-        let message = match keybinding_name_to_keystroke(SET_INPUT_MODE_AGENT_ACTION_NAME, app) {
-            Some(keystroke) => Message::new(vec![
-                MessageItem::text("autodetected shell command, "),
-                MessageItem::keystroke(keystroke),
-                MessageItem::text(" to override"),
-            ])
-            .with_text_color(appearance.theme().ansi_fg_blue()),
-            None => Message::from_text("autodetected shell command"),
-        };
-
-        Some(message)
-    }
-}
-
-struct ExitBashModeMessageProducer;
-
-impl MessageProvider<AgentMessageArgs<'_>> for ExitBashModeMessageProducer {
-    fn produce_message(&self, args: AgentMessageArgs<'_>) -> Option<Message> {
-        let AgentMessageArgs {
-            input_model,
-            appearance,
-            app,
-            ..
-        } = args;
-        if input_model.is_ai_input_enabled() || !input_model.is_input_type_locked() {
-            return None;
-        }
-        let set_input_mode_agent_keystroke =
-            keybinding_name_to_keystroke(SET_INPUT_MODE_AGENT_ACTION_NAME, app)?;
-
-        let text_color = appearance.theme().ansi_fg_blue();
-
-        Some(
-            Message::new(vec![
-                MessageItem::Keystroke {
-                    keystroke: set_input_mode_agent_keystroke,
-                    color: None,
-                    background_color: None,
-                },
-                MessageItem::text("to exit shell mode"),
-            ])
-            .with_text_color(text_color),
-        )
     }
 }

@@ -3286,8 +3286,9 @@ impl Element for BlockListElement {
                             is_bottom_of_continuous_selection,
                         );
 
-                        let can_be_ai_context = self.ai_render_context.borrow().is_ai_input_enabled
-                            && block.can_be_ai_context(transcript_scope);
+                        let can_be_ai_context =
+                            self.ai_render_context.borrow().is_prompt_input_enabled
+                                && block.can_be_ai_context(transcript_scope);
 
                         ctx.scene
                             .draw_rect_with_hit_recording(RectF::new(

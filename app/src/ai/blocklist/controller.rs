@@ -26,11 +26,11 @@ use warpui::{
 };
 
 use self::response_stream::{PendingResume, RecoveryBudget, ResponseStream, ResponseStreamEvent};
+use super::ResponseStreamId;
 use super::action_model::{BlocklistAIActionEvent, BlocklistAIActionModel};
 use super::context_model::{BlocklistAIContextModel, PendingAttachment, PendingFile};
 use super::conversation_selection::{ConversationSelectionEvent, ConversationSelectionHandle};
 use super::history_model::BlocklistAIHistoryModel;
-use super::{BlocklistAIInputModel, ResponseStreamId};
 use crate::ai::agent::api::{self, ServerConversationToken};
 use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
 use crate::ai::agent::task::TaskId;
@@ -252,7 +252,6 @@ impl RequestInput {
 /// This is responsible for managing and updating blocklist AI state for a single terminal surface.
 pub struct BlocklistAIController {
     active_session: ModelHandle<ActiveSession>,
-    input_model: ModelHandle<BlocklistAIInputModel>,
     context_model: ModelHandle<BlocklistAIContextModel>,
     action_model: ModelHandle<BlocklistAIActionModel>,
     terminal_model: Arc<FairMutex<TerminalModel>>,
@@ -323,7 +322,6 @@ impl BlocklistAIController {
     /// Creates a controller for a terminal surface.
     #[allow(clippy::too_many_arguments)]
     pub fn new<T: Entity>(
-        input_model: ModelHandle<BlocklistAIInputModel>,
         context_model: ModelHandle<BlocklistAIContextModel>,
         conversation_selection: ConversationSelectionHandle,
         action_model: ModelHandle<BlocklistAIActionModel>,
@@ -489,7 +487,6 @@ impl BlocklistAIController {
             }
         });
         Self {
-            input_model,
             context_model,
             action_model,
             active_session,
@@ -637,7 +634,7 @@ impl BlocklistAIController {
                 ctx,
             ),
             Some(RequestMetadata {
-                is_autodetected_user_query: !self.input_model.as_ref(ctx).is_input_type_locked(),
+                is_autodetected_user_query: false,
                 entrypoint: entrypoint_type,
                 is_auto_resume_after_error: false,
             }),
@@ -1618,7 +1615,6 @@ impl BlocklistAIController {
             self.action_model.update(ctx, |action_model, ctx| {
                 action_model.cancel_all_pending_actions(conversation_id, Some(reason), ctx);
             });
-            self.set_input_mode_for_cancellation(ctx);
         }
     }
 
@@ -1911,7 +1907,6 @@ impl BlocklistAIController {
                     return;
                 };
                 let new_exchange_ids = conversation.new_exchange_ids_for_response(&stream_id);
-                let mut was_passive_request = false;
                 let mut is_any_exchange_unfinished = false;
                 let mut actions_to_queue = vec![];
 
@@ -1920,7 +1915,6 @@ impl BlocklistAIController {
                         log::warn!("Exchange not found.");
                         return;
                     };
-                    was_passive_request |= exchange.has_passive_request();
                     is_any_exchange_unfinished |= !exchange.output_status.is_finished();
 
                     if let AIAgentOutputStatus::Finished {
@@ -1942,15 +1936,6 @@ impl BlocklistAIController {
                             ctx,
                         );
                     });
-
-                    if !was_passive_request
-                        && matches!(
-                            stream_cancellation.reason.conversation_outcome(),
-                            CancellationOutcome::Cancelled
-                        )
-                    {
-                        self.set_input_mode_for_cancellation(ctx);
-                    }
                 } else if is_any_exchange_unfinished {
                     // Defensive: truncated streams are detected inside `ResponseStream`,
                     // so an unfinished exchange here means an unexpected completion path.
@@ -2011,20 +1996,6 @@ impl BlocklistAIController {
                 });
             }
         }
-    }
-
-    /// Sets the terminal input state after an AI request is cancelled.
-    /// From the user perspective, we downgrade the level of autonomy so:
-    /// * Executing a task automatically -> interactive AI input
-    /// * Interactive AI input -> interactive shell input
-    fn set_input_mode_for_cancellation(&mut self, ctx: &mut ModelContext<Self>) {
-        // If the request was cancelled, default to shell mode.
-        self.input_model.update(ctx, |input_model, ctx| {
-            input_model.set_input_config_for_classic_mode(
-                input_model.input_config().with_shell_type().locked(),
-                ctx,
-            );
-        });
     }
 
     pub(super) fn handle_response_stream_finished(

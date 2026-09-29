@@ -236,7 +236,6 @@ impl Input {
                         } else {
                             None
                         },
-                        Some(ChildView::new(&self.agent_status_view).finish()),
                         Some(input),
                     ]
                     .into_iter()
@@ -247,7 +246,6 @@ impl Input {
                 column.add_children(
                     [
                         Some(input),
-                        Some(ChildView::new(&self.agent_status_view).finish()),
                         if is_slash_commands {
                             Some(ChildView::new(&self.inline_slash_commands_view).finish())
                         } else if is_inline_history_menu {
@@ -276,7 +274,7 @@ impl Input {
                     column.add_child(ChildView::new(&self.inline_repos_menu_view).finish());
                 }
 
-                column.add_children([ChildView::new(&self.agent_status_view).finish(), input]);
+                column.add_child(input);
 
                 if is_slash_commands && should_render_below {
                     column.add_child(ChildView::new(&self.inline_slash_commands_view).finish());

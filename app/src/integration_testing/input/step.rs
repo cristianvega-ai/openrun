@@ -3,8 +3,6 @@ use warpui::SingletonEntity;
 use warpui::integration::TestStep;
 use warpui::windowing::WindowManager;
 
-use crate::ai::blocklist::agent_view::AgentInputFooterEvent;
-use crate::ai::blocklist::{InputConfig, InputType};
 use crate::integration_testing::step::new_step_with_default_assertions;
 use crate::integration_testing::terminal::assert_context_menu_is_open;
 use crate::integration_testing::view_getters::{
@@ -15,6 +13,7 @@ use crate::terminal::cli_agent_sessions::{
     CLIAgentInputEntrypoint, CLIAgentInputState, CLIAgentSession, CLIAgentSessionContext,
     CLIAgentSessionStatus, CLIAgentSessionsModel,
 };
+use crate::terminal::input::{InputConfig, InputType};
 use crate::terminal::view::TerminalAction;
 
 /// Opens the CLI-agent Rich Input for the terminal view at `tab_index`.
@@ -47,7 +46,7 @@ pub fn open_cli_agent_rich_input(tab_index: usize) -> TestStep {
                         view_id,
                         CLIAgentInputEntrypoint::CtrlG,
                         InputConfig {
-                            input_type: InputType::AI,
+                            input_type: InputType::Shell,
                             is_locked: true,
                         },
                         false,

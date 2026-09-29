@@ -128,7 +128,7 @@ pub(crate) struct Props<'a> {
     pub(super) todo_list_states: &'a HashMap<MessageId, TodoListElementState>,
     pub(super) collapsible_block_states: &'a HashMap<MessageId, CollapsibleElementState>,
     pub(crate) is_selecting_text: bool,
-    pub(super) is_ai_input_enabled: bool,
+    pub(super) is_prompt_input_enabled: bool,
     pub(crate) find_context: Option<FindContext<'a>>,
     pub(super) is_references_section_open: bool,
     pub(super) autonomy_setting_speedbump: &'a AutonomySettingSpeedbump,
@@ -273,7 +273,7 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                                     image_section_tooltip_handles: &props
                                         .state_handles
                                         .image_section_tooltip_handles,
-                                    is_ai_input_enabled: props.is_ai_input_enabled,
+                                    is_prompt_input_enabled: props.is_prompt_input_enabled,
                                     open_code_block_action_factory: Some(&open_code_block_action),
                                     copy_code_action_factory: Some(&copy_code_action),
                                     detected_links: Some(props.detected_links_state),
@@ -886,7 +886,7 @@ pub(super) fn render(props: Props, app: &AppContext) -> Box<dyn Element> {
                 render_failed_output(
                     FailedOutputProps {
                         error,
-                        is_ai_input_enabled: props.is_ai_input_enabled,
+                        is_prompt_input_enabled: props.is_prompt_input_enabled,
                         invalid_api_key_button_handle: &props
                             .state_handles
                             .invalid_api_key_button_handle,
@@ -2870,7 +2870,7 @@ fn render_collapsible_text_block_section(
             code_snippet_button_handles: &[],
             table_section_handles: &[],
             image_section_tooltip_handles: &[],
-            is_ai_input_enabled: props.is_ai_input_enabled,
+            is_prompt_input_enabled: props.is_prompt_input_enabled,
             open_code_block_action_factory: (None as Option<
                 &'static dyn Fn(CodeSource) -> AIBlockAction,
             >),

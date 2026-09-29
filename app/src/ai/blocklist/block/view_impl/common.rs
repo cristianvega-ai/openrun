@@ -158,7 +158,6 @@ pub struct WarpingProps<'a, V> {
     pub shimmering_text_handle: &'a ShimmeringTextStateHandle,
     pub summarization_start_time: Option<instant::Instant>,
     pub hide_responses_button: Option<(ButtonProps<'a>, bool)>,
-    pub take_over_lrc_control_button: Option<ButtonProps<'a>>,
     pub auto_execute_button: Option<AutoExecuteButtonProps<'a>>,
     pub stop_button: Option<ButtonProps<'a>>,
     /// Inline `Check now` affordance displayed alongside `Last seen by agent ...`
@@ -441,16 +440,6 @@ pub fn render_warping_indicator<V: View>(
         ));
     }
 
-    if let Some(take_over_button_props) = props.take_over_lrc_control_button {
-        has_buttons = true;
-        buttons_row.add_child(render_switch_control_to_user_button(
-            "Take over",
-            "Take over control of the command",
-            take_over_button_props,
-            appearance,
-        ));
-    }
-
     if let Some(autoexecute_button_props) = props.auto_execute_button {
         has_buttons = true;
         buttons_row.add_child(render_auto_approve_button(
@@ -725,7 +714,7 @@ struct ImageSourceLinkProps<'a> {
     section_index: usize,
     detected_links: Option<&'a DetectedLinksState>,
     secret_redaction_state: &'a SecretRedactionState,
-    is_ai_input_enabled: bool,
+    is_prompt_input_enabled: bool,
     is_selecting_text: bool,
     soft_wrap: bool,
 }
@@ -738,7 +727,7 @@ fn render_image_source_link(props: ImageSourceLinkProps<'_>, app: &AppContext) -
                 Appearance::as_ref(app).theme(),
                 Appearance::as_ref(app).theme().surface_1(),
             ),
-            is_ai_input_enabled: props.is_ai_input_enabled,
+            is_prompt_input_enabled: props.is_prompt_input_enabled,
             section_index: props.section_index,
             line_index: IMAGE_SOURCE_LINK_LINE_INDEX,
             secret_redaction_state: props.secret_redaction_state,
@@ -790,38 +779,6 @@ fn render_hide_responses_button(
         false,
         |ctx| {
             ctx.dispatch_typed_action(BlocklistAIStatusBarAction::ToggleHideResponses);
-        },
-    )
-}
-
-pub fn render_switch_control_to_user_button(
-    text: &'static str,
-    tooltip: &'static str,
-    props: ButtonProps,
-    appearance: &Appearance,
-) -> Box<dyn Element> {
-    let theme = appearance.theme();
-    let text = Container::new(
-        Text::new(
-            text,
-            appearance.ui_font_family(),
-            get_keybinding_font_size(appearance),
-        )
-        .with_color(theme.foreground().into())
-        .finish(),
-    )
-    .finish();
-
-    render_warping_indicator_button(
-        props.button_handle.clone(),
-        appearance,
-        text,
-        props.keystroke,
-        tooltip.to_string(),
-        props.is_active,
-        false,
-        |ctx| {
-            ctx.dispatch_typed_action(TerminalAction::SetInputModeTerminal);
         },
     )
 }
@@ -1063,7 +1020,7 @@ pub struct TextSectionsProps<'a, V, A: 'static> {
     pub sections: &'a [AIAgentTextSection],
     pub selectable: bool,
     pub text_color: ColorU,
-    pub is_ai_input_enabled: bool,
+    pub is_prompt_input_enabled: bool,
     pub find_context: Option<FindContext<'a>>,
     pub shell_launch_data: Option<&'a ShellLaunchData>,
     pub current_working_directory: Option<&'a String>,
@@ -1131,7 +1088,7 @@ pub fn render_text_sections<V: View, A: Action>(
                 let render_context = ImageRenderContext {
                     detected_links: props.detected_links,
                     secret_redaction_state: props.secret_redaction_state,
-                    is_ai_input_enabled: props.is_ai_input_enabled,
+                    is_prompt_input_enabled: props.is_prompt_input_enabled,
                     is_selecting_text: props.is_selecting_text,
                     copy_action_factory: props.copy_code_action_factory,
                     current_working_directory: props.current_working_directory,
@@ -1174,7 +1131,7 @@ pub fn render_text_sections<V: View, A: Action>(
                                 is_restored: props.model.is_restored(),
                                 formatted_text: formatted_text.formatted_text_arc(),
                                 text_color: props.text_color,
-                                is_ai_input_enabled: props.is_ai_input_enabled,
+                                is_prompt_input_enabled: props.is_prompt_input_enabled,
                                 section_index,
                                 find_context: props.find_context,
                                 secret_redaction_state: props.secret_redaction_state,
@@ -1189,7 +1146,7 @@ pub fn render_text_sections<V: View, A: Action>(
                         TextSectionProps {
                             text: text.text(),
                             text_color: props.text_color,
-                            is_ai_input_enabled: props.is_ai_input_enabled,
+                            is_prompt_input_enabled: props.is_prompt_input_enabled,
                             section_index,
                             line_index: 0,
                             secret_redaction_state: props.secret_redaction_state,
@@ -1221,7 +1178,7 @@ pub fn render_text_sections<V: View, A: Action>(
                         button_handles,
                         language: language.as_ref(),
                         source: source.as_ref(),
-                        is_ai_input_enabled: props.is_ai_input_enabled,
+                        is_prompt_input_enabled: props.is_prompt_input_enabled,
                         section_index,
                         find_context: props.find_context,
                         shell_launch_data: props.shell_launch_data,
@@ -1245,7 +1202,7 @@ pub fn render_text_sections<V: View, A: Action>(
                 column.add_child(render_table_section(
                     table,
                     table_handles,
-                    props.is_ai_input_enabled,
+                    props.is_prompt_input_enabled,
                     props.selectable,
                     section_index,
                     props.find_context,
@@ -1265,7 +1222,7 @@ pub fn render_text_sections<V: View, A: Action>(
                         section_index,
                         detected_links: props.detected_links,
                         secret_redaction_state: props.secret_redaction_state,
-                        is_ai_input_enabled: props.is_ai_input_enabled,
+                        is_prompt_input_enabled: props.is_prompt_input_enabled,
                         is_selecting_text: props.is_selecting_text,
                         copy_action_factory: props.copy_code_action_factory,
                         current_working_directory: props.current_working_directory,
@@ -1501,7 +1458,7 @@ pub(super) struct RichTextSectionProps<'a> {
     is_restored: bool,
     formatted_text: Arc<FormattedText>,
     text_color: ColorU,
-    is_ai_input_enabled: bool,
+    is_prompt_input_enabled: bool,
     section_index: usize,
     find_context: Option<FindContext<'a>>,
     secret_redaction_state: &'a SecretRedactionState,
@@ -1537,7 +1494,7 @@ pub(super) fn render_rich_text_output_text_section(
         props.text_color,
         Default::default(),
     )
-    .with_selection_color(if props.is_ai_input_enabled {
+    .with_selection_color(if props.is_prompt_input_enabled {
         theme.text_selection_as_context_color().into_solid()
     } else {
         theme.text_selection_color().into_solid()
@@ -1600,7 +1557,7 @@ pub(super) fn render_rich_text_output_text_section(
 struct TextSectionProps<'a> {
     text: &'a str,
     text_color: ColorU,
-    is_ai_input_enabled: bool,
+    is_prompt_input_enabled: bool,
     section_index: usize,
     line_index: usize,
     secret_redaction_state: &'a SecretRedactionState,
@@ -1628,7 +1585,7 @@ fn render_text_section_with_options(
     )
     .with_style(Properties::default().weight(appearance.monospace_font_weight()))
     .with_color(props.text_color)
-    .with_selection_color(if props.is_ai_input_enabled {
+    .with_selection_color(if props.is_prompt_input_enabled {
         theme.text_selection_as_context_color().into_solid()
     } else {
         theme.text_selection_color().into_solid()
@@ -1691,7 +1648,7 @@ struct ImageSectionProps<'a, A: Action> {
     section_index: usize,
     detected_links: Option<&'a DetectedLinksState>,
     secret_redaction_state: &'a SecretRedactionState,
-    is_ai_input_enabled: bool,
+    is_prompt_input_enabled: bool,
     is_selecting_text: bool,
     copy_action_factory: Option<CopyCodeActionFactory<A>>,
     current_working_directory: Option<&'a String>,
@@ -1707,7 +1664,7 @@ struct ImageSectionProps<'a, A: Action> {
 struct ImageRenderContext<'a, A: Action + 'static> {
     detected_links: Option<&'a DetectedLinksState>,
     secret_redaction_state: &'a SecretRedactionState,
-    is_ai_input_enabled: bool,
+    is_prompt_input_enabled: bool,
     is_selecting_text: bool,
     copy_action_factory: Option<CopyCodeActionFactory<A>>,
     current_working_directory: Option<&'a String>,
@@ -1896,7 +1853,7 @@ fn render_image_section<A: Action>(
     let render_context = ImageRenderContext {
         detected_links: props.detected_links,
         secret_redaction_state: props.secret_redaction_state,
-        is_ai_input_enabled: props.is_ai_input_enabled,
+        is_prompt_input_enabled: props.is_prompt_input_enabled,
         is_selecting_text: props.is_selecting_text,
         copy_action_factory: props.copy_action_factory,
         current_working_directory: props.current_working_directory,
@@ -1987,7 +1944,7 @@ fn render_inline_image_group_item<A: Action>(
             section_index: indexed_image.section_index,
             detected_links: render_context.detected_links,
             secret_redaction_state: render_context.secret_redaction_state,
-            is_ai_input_enabled: render_context.is_ai_input_enabled,
+            is_prompt_input_enabled: render_context.is_prompt_input_enabled,
             is_selecting_text: render_context.is_selecting_text,
             soft_wrap: false,
         },
@@ -2081,7 +2038,7 @@ fn render_block_image_group_row<A: Action>(
             section_index: indexed_image.section_index,
             detected_links: render_context.detected_links,
             secret_redaction_state: render_context.secret_redaction_state,
-            is_ai_input_enabled: render_context.is_ai_input_enabled,
+            is_prompt_input_enabled: render_context.is_prompt_input_enabled,
             is_selecting_text: render_context.is_selecting_text,
             soft_wrap: true,
         },
@@ -2391,7 +2348,7 @@ const TABLE_BLOCK_CORNER_RADIUS: f32 = 8.0;
 fn render_table_section(
     table: &AgentOutputTable,
     table_handles: TableSectionHandles,
-    is_ai_input_enabled: bool,
+    is_prompt_input_enabled: bool,
     selectable: bool,
     section_index: usize,
     find_context: Option<FindContext<'_>>,
@@ -2401,7 +2358,7 @@ fn render_table_section(
         return render_legacy_table_section(
             content,
             table_handles.scroll_handle,
-            is_ai_input_enabled,
+            is_prompt_input_enabled,
             app,
         );
     }
@@ -2416,7 +2373,7 @@ fn render_table_section(
     let body_text_color = table_appearance.text_color;
     let border_color = table_appearance.border_color;
     let cell_padding = table_appearance.cell_padding;
-    let selection_color = if is_ai_input_enabled {
+    let selection_color = if is_prompt_input_enabled {
         theme.text_selection_as_context_color().into_solid()
     } else {
         theme.text_selection_color().into_solid()
@@ -2534,7 +2491,7 @@ fn render_table_section(
 fn render_legacy_table_section(
     content: &str,
     scroll_handle: ClippedScrollStateHandle,
-    is_ai_input_enabled: bool,
+    is_prompt_input_enabled: bool,
     app: &AppContext,
 ) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(app);
@@ -2546,7 +2503,7 @@ fn render_legacy_table_section(
         appearance.monospace_font_size(),
     )
     .with_color(blended_colors::text_main(theme, theme.surface_2()))
-    .with_selection_color(if is_ai_input_enabled {
+    .with_selection_color(if is_prompt_input_enabled {
         theme.text_selection_as_context_color().into_solid()
     } else {
         theme.text_selection_color().into_solid()
@@ -2707,7 +2664,7 @@ pub struct CodeSectionProps<'a, A: 'static> {
     pub button_handles: Option<&'a CodeSnippetButtonHandles>,
     pub language: Option<&'a ProgrammingLanguage>,
     pub source: Option<&'a CodeSource>,
-    pub is_ai_input_enabled: bool,
+    pub is_prompt_input_enabled: bool,
     pub section_index: usize,
     pub find_context: Option<FindContext<'a>>,
     pub shell_launch_data: Option<&'a ShellLaunchData>,
@@ -2788,7 +2745,7 @@ pub fn render_code_output_section<A: Action>(
             appearance.monospace_font_size(),
         )
         .with_color(blended_colors::text_sub(theme, theme.surface_3()))
-        .with_selection_color(if props.is_ai_input_enabled {
+        .with_selection_color(if props.is_prompt_input_enabled {
             theme.text_selection_as_context_color().into_solid()
         } else {
             theme.text_selection_color().into_solid()
@@ -2837,7 +2794,6 @@ pub fn render_code_output_section<A: Action>(
                             crate::workspace::WorkspaceAction::InsertInInput {
                                 content: insert_text,
                                 replace_buffer: false,
-                                ensure_agent_mode: false,
                             },
                         );
                     }))
@@ -2906,7 +2862,6 @@ pub fn render_code_output_section<A: Action>(
                                 crate::workspace::WorkspaceAction::InsertInInput {
                                     content: insert_text,
                                     replace_buffer: false,
-                                    ensure_agent_mode: false,
                                 },
                             );
                         }))
@@ -3001,7 +2956,7 @@ pub struct FailedOutputProps<'a> {
     pub error: &'a RenderableAIError,
     pub invalid_api_key_button_handle: &'a MouseStateHandle,
     pub aws_bedrock_credentials_error_view: Option<&'a ViewHandle<AwsBedrockCredentialsErrorView>>,
-    pub is_ai_input_enabled: bool,
+    pub is_prompt_input_enabled: bool,
     pub icon_right_margin: f32,
 }
 
@@ -3070,7 +3025,7 @@ pub fn render_failed_output(props: FailedOutputProps, app: &AppContext) -> Box<d
                     appearance.theme(),
                     appearance.theme().surface_1(),
                 ))
-                .with_selection_color(if props.is_ai_input_enabled {
+                .with_selection_color(if props.is_prompt_input_enabled {
                     appearance
                         .theme()
                         .text_selection_as_context_color()
@@ -3414,7 +3369,7 @@ pub struct UserQueryProps<'a> {
     pub secret_redaction_state: &'a SecretRedactionState,
     pub input_index: usize,
     pub is_selecting: bool,
-    pub is_ai_input_enabled: bool,
+    pub is_prompt_input_enabled: bool,
     pub find_context: Option<FindContext<'a>>,
     pub font_properties: &'a Properties,
 }
@@ -3472,7 +3427,7 @@ pub fn render_query_text(props: UserQueryProps<'_>, app: &AppContext) -> Text {
     )
     .with_style(*props.font_properties)
     .with_color(blended_colors::text_main(theme, theme.surface_1()))
-    .with_selection_color(if props.is_ai_input_enabled {
+    .with_selection_color(if props.is_prompt_input_enabled {
         theme.text_selection_as_context_color().into_solid()
     } else {
         theme.text_selection_color().into_solid()

@@ -51,7 +51,6 @@ use crate::system::SystemStats;
 use crate::tab_configs::tab_config::{TabConfigPaneNode, TabConfigPaneType};
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::history::History;
-use crate::terminal::keys::TerminalKeybindings;
 use crate::terminal::local_tty::spawner::PtySpawner;
 use crate::test_util::settings::initialize_settings_for_tests;
 use crate::undo_close::UndoCloseSettings;
@@ -112,7 +111,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     app.add_singleton_model(|_| WorkspaceToastStack);
     app.add_singleton_model(|_| ObjectActions::new(Vec::new()));
     app.add_singleton_model(NotebookKeybindings::new);
-    app.add_singleton_model(TerminalKeybindings::new);
     app.add_singleton_model(|_| BlocklistAIHistoryModel::new_for_test());
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
     app.add_singleton_model(|_| ActiveAgentViewsModel::new());

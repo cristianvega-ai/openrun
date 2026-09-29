@@ -277,9 +277,9 @@ impl Prompt {
         }
     }
 
-    /// Updates the in-memory prompt configuration to reflect an AI input model change.
-    fn handle_ai_input_model_change(&mut self, ctx: &mut ModelContext<Self>) {
-        log::debug!("Loading new prompt configuration due to AI input model change");
+    /// Updates the in-memory prompt configuration to reflect an input mode model change.
+    fn handle_input_mode_model_change(&mut self, ctx: &mut ModelContext<Self>) {
+        log::debug!("Loading new prompt configuration due to input mode model change");
         self.config = Self::from_user_settings(ctx);
         ctx.emit(PromptEvent::Changed);
     }

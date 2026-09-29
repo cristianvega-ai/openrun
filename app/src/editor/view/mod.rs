@@ -87,7 +87,7 @@ use self::model::{LocalSelections, Selection, UpdateBufferOption};
 use super::Point;
 use super::soft_wrap::{ClampDirection, DisplayPointAndClampDirection};
 use crate::BlocklistAIHistoryModel;
-use crate::ai::blocklist::{BlocklistAIContextModel, InputType, PendingAttachment, PendingFile};
+use crate::ai::blocklist::{BlocklistAIContextModel, PendingAttachment, PendingFile};
 use crate::appearance::Appearance;
 use crate::channel::{Channel, ChannelState};
 use crate::editor::RangeExt;
@@ -103,6 +103,7 @@ use crate::settings::{
 };
 use crate::settings_view::flags;
 use crate::terminal::grid_size_util::grid_cell_dimensions;
+use crate::terminal::input::InputType;
 use crate::themes::theme::Fill;
 use crate::ui_components::avatar::{Avatar, AvatarContent};
 use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, keybinding_name_to_keystroke};
@@ -342,7 +343,7 @@ pub fn init(ctx: &mut AppContext) {
         FixedBinding::new(
             "ctrl-enter",
             EditorAction::CtrlEnter,
-            id!("EditorView") & !id!("IMEOpen") & !id!(flags::CTRL_ENTER_ENTERS_AGENT_VIEW),
+            id!("EditorView") & !id!("IMEOpen"),
         ),
         FixedBinding::new(
             "alt-enter",
@@ -1774,7 +1775,7 @@ pub struct EditorView {
     pub at_menu_state: Option<AtMenuState>,
 
     /// Whether this editor is in AI input mode.
-    is_ai_input: bool,
+    is_prompt_input: bool,
 
     /// Whether this editor should delegate handling of paste events to its parent.
     delegate_paste_handling: bool,
@@ -2946,8 +2947,8 @@ impl EditorView {
             let at_menu = ctx.add_typed_action_view(AtMenu::new);
             ctx.subscribe_to_view(&at_menu, |me, _, event: &AtMenuEvent, ctx| {
                 let is_udi_enabled = InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
-                let current_input_mode = if me.is_ai_input {
-                    InputType::AI
+                let current_input_mode = if me.is_prompt_input {
+                    InputType::Prompt
                 } else {
                     InputType::Shell
                 };
@@ -3057,7 +3058,7 @@ impl EditorView {
             show_autosuggestion_ignore_button: *editor_settings_handle
                 .as_ref(ctx)
                 .show_autosuggestion_ignore_button,
-            is_ai_input: false,
+            is_prompt_input: false,
             convert_newline_to_space: options.convert_newline_to_space,
             context_model: None,
             image_context_options: ImageContextOptions::Disabled,
@@ -3070,8 +3071,8 @@ impl EditorView {
         }
     }
 
-    pub fn set_is_ai_input(&mut self, is_ai_input: bool, ctx: &mut ViewContext<Self>) {
-        self.is_ai_input = is_ai_input;
+    pub fn set_is_prompt_input(&mut self, is_prompt_input: bool, ctx: &mut ViewContext<Self>) {
+        self.is_prompt_input = is_prompt_input;
         ctx.notify();
     }
 
@@ -8150,7 +8151,7 @@ impl TypedActionView for EditorView {
                 self.drag_and_drop_files(paths, ctx);
             }
             SetAtMenuOpen(open) => {
-                if !self.is_ai_input && *open {
+                if !self.is_prompt_input && *open {
                     // In terminal mode, check the setting before opening
                     let input_settings = InputSettings::as_ref(ctx);
                     if *input_settings.at_context_menu_in_terminal_mode {
@@ -8261,7 +8262,7 @@ impl View for EditorView {
             }
         }
 
-        if self.is_ai_input {
+        if self.is_prompt_input {
             context.set.insert("AIInput");
         }
 

@@ -76,7 +76,6 @@ use crate::pane_group::pane::{PaneId, view};
 use crate::pane_group::{BackingView, PaneEvent};
 use crate::server::telemetry::AgentModeCodeFileNavigationSource;
 use crate::terminal::ShellLaunchData;
-use crate::terminal::input::SET_INPUT_MODE_AGENT_ACTION_NAME;
 use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
 use crate::util::bindings::keybinding_name_to_keystroke;
@@ -665,7 +664,7 @@ impl CodeDiffView {
 
         let iterate_with_agent_button = CompactibleActionButton::new(
             SUGGESTED_EDIT_ITERATE_WITH_AGENT_LABEL.to_string(),
-            Some(KeystrokeSource::Binding(SET_INPUT_MODE_AGENT_ACTION_NAME)),
+            None,
             ButtonSize::Small,
             CodeDiffViewAction::IterateOnPassiveDiffWithAgent,
             Icon::ChatDashed,

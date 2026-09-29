@@ -1,6 +1,6 @@
 //! Inline history menu view for up-arrow command history.
 use warpui::elements::ChildView;
-use warpui::{AppContext, Element, Entity, EntityId, ModelHandle, View, ViewContext, ViewHandle};
+use warpui::{AppContext, Element, Entity, ModelHandle, View, ViewContext, ViewHandle};
 
 use crate::search::data_source::{Query, QueryFilter};
 use crate::search::mixer::SearchMixer;
@@ -43,15 +43,13 @@ pub struct InlineHistoryMenuView {
 
 impl InlineHistoryMenuView {
     pub fn new(
-        terminal_view_id: EntityId,
         active_session: ModelHandle<ActiveSession>,
         input_suggestions_model: &ModelHandle<InputSuggestionsModeModel>,
         positioner: &ModelHandle<InlineMenuPositioner>,
         buffer_model: ModelHandle<InputBufferModel>,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        let data_source =
-            ctx.add_model(|_| InlineHistoryMenuDataSource::new(terminal_view_id, active_session));
+        let data_source = ctx.add_model(|_| InlineHistoryMenuDataSource::new(active_session));
 
         let mixer = ctx.add_model(|ctx| {
             let mut mixer = SearchMixer::<AcceptHistoryItem>::new();
