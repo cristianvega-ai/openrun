@@ -121,6 +121,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Editor peer layer, single-variant enums and grid storage mode](#editor-peer-layer-single-variant-enums-and-grid-storage-mode) — removed the unused editor remote-peer layer and its drawing, avatar status icons, `is_excluded_binding`, single-variant enums and `Storage::is_sequential`
 - [Setting surfaces](#setting-surfaces) — removed `SettingSurfaces`, `SettingsMode` and the `surface:` argument of the settings macros
 - [Unused input hint setting, tree budget mode, icons and theme accessors](#unused-input-hint-setting-tree-budget-mode-icons-and-theme-accessors) — removed the no-op `show_hint_text` setting, `BudgetExceededBehavior`, unused icons and theme accessors, and dogfood/preview wording
+- [Input lock state](#input-lock-state) — removed the vestigial `InputConfig::is_locked` and the lock events
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3171,3 +3172,18 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Comments that named the dogfood, preview or stable channels now describe debug builds.
 
 **User-visible impact:** The "input hint text" toggle disappears from the input context menu and the command palette; it had no effect.
+
+## Input lock state
+**Why:** The input lock (`InputConfig::is_locked`) existed so that AI auto-detection could leave the input unlocked. Since the AI removal every config is created locked, so the flag, the lock events and the "lock set with an empty buffer" bookkeeping did nothing.
+
+**Removed:**
+- `InputConfig::is_locked` and `InputConfig::locked()`; `InputModeModel::{is_input_type_locked, was_lock_set_with_empty_buffer, handle_input_buffer_submitted}`; `InputModeEvent::LockChanged`.
+- The `is_input_buffer_empty` argument of `InputModeModel::set_input_config`, the `previous_was_lock_set_with_empty_buffer` field of `CLIAgentInputState::Open` and the matching `CLIAgentSessionsModel::open_input` argument, and `original_input_was_locked` in the history-up suggestions mode.
+- The empty `impl Input {}` for integration tests.
+
+**Modified:**
+- `InputModeEvent` is a struct carrying the new config (its only event was the input-type change).
+- `Input::is_locked_in_shell_mode` and `is_locked_in_prompt_mode` are `is_shell_mode` and `is_prompt_mode`.
+- Persisted pane configs are written as `{"input_type": ...}`. Configs that still contain `is_locked` restore as before (always locked shell input).
+
+**User-visible impact:** None.

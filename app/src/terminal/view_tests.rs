@@ -630,7 +630,7 @@ fn waterfall_background_right_click_honors_right_click_pastes_setting() {
 }
 
 #[test]
-fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
+fn submit_cli_agent_rich_input_restores_previous_input_config() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
         CLIAgentSettings::handle(&app).update(&mut app, |settings, ctx| {
@@ -649,9 +649,7 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
                         input_mode_model.set_input_config(
                             InputConfig {
                                 input_type: InputType::Shell,
-                                is_locked: false,
                             },
-                            true,
                             ctx,
                         );
                     });
@@ -689,7 +687,6 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
                 input_mode_model.input_config(),
                 InputConfig {
                     input_type: InputType::Shell,
-                    is_locked: false,
                 }
             );
             assert!(input.editor().as_ref(ctx).buffer_text(ctx).is_empty());
@@ -698,7 +695,7 @@ fn submit_cli_agent_rich_input_restores_unlocked_input_config() {
 }
 
 #[test]
-fn unregister_cli_agent_session_restores_unlocked_input_config() {
+fn unregister_cli_agent_session_restores_previous_input_config() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
 
@@ -712,9 +709,7 @@ fn unregister_cli_agent_session_restores_unlocked_input_config() {
                         input_mode_model.set_input_config(
                             InputConfig {
                                 input_type: InputType::Shell,
-                                is_locked: false,
                             },
-                            true,
                             ctx,
                         );
                     });
@@ -759,7 +754,6 @@ fn unregister_cli_agent_session_restores_unlocked_input_config() {
                 input_mode_model.input_config(),
                 InputConfig {
                     input_type: InputType::Shell,
-                    is_locked: false,
                 }
             );
             assert!(input.editor().as_ref(ctx).buffer_text(ctx).is_empty());
@@ -3645,9 +3639,7 @@ fn cli_agent_rich_input_shell_mode_uses_run_commands_hint_text() {
                         input_mode_model.set_input_config(
                             InputConfig {
                                 input_type: InputType::Shell,
-                                is_locked: true,
                             },
-                            true,
                             ctx,
                         );
                     });

@@ -1125,14 +1125,12 @@ fn test_sqlite_restores_persisted_ai_input_config_as_shell() {
         restored_input_config(&branch.children[0].1),
         Some(InputConfig {
             input_type: InputType::Shell,
-            is_locked: true,
         })
     );
     assert_eq!(
         restored_input_config(&branch.children[1].1),
         Some(InputConfig {
             input_type: InputType::Shell,
-            is_locked: false,
         })
     );
 }
@@ -1153,7 +1151,6 @@ fn test_sqlite_round_trips_shell_input_config() {
     };
     let shell_config = InputConfig {
         input_type: InputType::Shell,
-        is_locked: true,
     };
     terminal.input_config = Some(shell_config);
 

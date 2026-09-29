@@ -3759,9 +3759,7 @@ fn test_alias_expansion_disabled_in_prompt_input_mode() {
                     input_mode_model.set_input_config(
                         InputConfig {
                             input_type: InputType::Shell,
-                            is_locked: true,
                         },
-                        false, /* is_input_buffer_empty */
                         ctx,
                     );
                 });
@@ -4236,7 +4234,6 @@ fn test_input_mode_setting_methods() {
             })
         });
         assert_eq!(config.input_type, InputType::Prompt);
-        assert!(config.is_locked, "Input should be locked to prompt mode");
 
         input.update(&mut app, |input, ctx| {
             input.set_input_mode_shell(true, ctx);
@@ -4247,7 +4244,6 @@ fn test_input_mode_setting_methods() {
             })
         });
         assert_eq!(config.input_type, InputType::Shell);
-        assert!(config.is_locked, "Input should be locked to Shell mode");
 
         input.update(&mut app, |input, ctx| {
             input.set_input_mode_prompt(true, ctx);
@@ -4262,7 +4258,7 @@ fn test_input_mode_setting_methods() {
 }
 
 #[test]
-fn test_terminal_prefix_locks_shell_mode() {
+fn test_terminal_prefix_switches_to_shell_mode() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);
         let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
@@ -4277,7 +4273,6 @@ fn test_terminal_prefix_locks_shell_mode() {
             assert!(input.buffer_text(ctx).is_empty());
             app.read_model(input.input_mode_model(), |input_model, _| {
                 assert_eq!(input_model.input_type(), InputType::Shell);
-                assert!(input_model.is_input_type_locked());
             });
         });
     });
@@ -4457,7 +4452,7 @@ fn test_at_menu_preserves_lock_state() {
         .await;
         let input = terminal.read(&app, |terminal, _| terminal.input().clone());
 
-        // Start in locked Shell mode
+        // Start in Shell mode
         input.update(&mut app, |input, ctx| {
             input
                 .input_mode_model()
@@ -4465,9 +4460,7 @@ fn test_at_menu_preserves_lock_state() {
                     input_mode_model.set_input_config(
                         InputConfig {
                             input_type: InputType::Shell,
-                            is_locked: true,
                         },
-                        true, /* is_input_buffer_empty */
                         ctx,
                     );
                 });
@@ -4478,50 +4471,13 @@ fn test_at_menu_preserves_lock_state() {
             input.set_at_menu_open(true, ctx);
         });
 
-        // Verify we stay in Shell mode with lock state preserved
+        // Verify we stay in Shell mode
         let config_after_open = input.read(&app, |input, _| {
             app.read_model(input.input_mode_model(), |input_mode_model, _| {
                 input_mode_model.input_config()
             })
         });
         assert_eq!(config_after_open.input_type, InputType::Shell);
-        assert!(
-            config_after_open.is_locked,
-            "Lock state should be preserved when opening @ menu"
-        );
-
-        // Test with unlocked mode
-        input.update(&mut app, |input, ctx| {
-            input
-                .input_mode_model()
-                .update(ctx, |input_mode_model, ctx| {
-                    input_mode_model.set_input_config(
-                        InputConfig {
-                            input_type: InputType::Shell,
-                            is_locked: false,
-                        },
-                        true, /* is_input_buffer_empty */
-                        ctx,
-                    );
-                });
-        });
-
-        // Open @ menu again
-        input.update(&mut app, |input, ctx| {
-            input.set_at_menu_open(true, ctx);
-        });
-
-        // Verify we stay in Shell mode and unlocked (@ button no longer switches to AI mode)
-        let config_after_second_open = input.read(&app, |input, _| {
-            app.read_model(input.input_mode_model(), |input_mode_model, _| {
-                input_mode_model.input_config()
-            })
-        });
-        assert_eq!(config_after_second_open.input_type, InputType::Shell);
-        assert!(
-            !config_after_second_open.is_locked,
-            "Auto-detection should be preserved when opening @ menu"
-        );
 
         // Closing context menu should not change input config
         input.update(&mut app, |input, ctx| {
@@ -4534,7 +4490,6 @@ fn test_at_menu_preserves_lock_state() {
             })
         });
         assert_eq!(config_after_close.input_type, InputType::Shell);
-        assert!(!config_after_close.is_locked);
     });
 }
 
@@ -4879,9 +4834,7 @@ fn open_rich_input_for_terminal(terminal: &ViewHandle<TerminalView>, app: &mut A
                 view_id,
                 InputConfig {
                     input_type: InputType::Shell,
-                    is_locked: true,
                 },
-                false,
                 false,
                 ctx,
             );

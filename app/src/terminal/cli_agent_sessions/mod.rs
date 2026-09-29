@@ -58,8 +58,6 @@ pub enum CLIAgentInputState {
     Open {
         /// The input config that was active before opening rich input.
         previous_input_config: InputConfig,
-        /// Whether the previous lock state was established while the input buffer was empty.
-        previous_was_lock_set_with_empty_buffer: bool,
     },
 }
 
@@ -412,7 +410,6 @@ impl CLIAgentSessionsModel {
         &mut self,
         terminal_view_id: EntityId,
         previous_input_config: InputConfig,
-        previous_was_lock_set_with_empty_buffer: bool,
         should_auto_toggle_input: bool,
         ctx: &mut ModelContext<Self>,
     ) {
@@ -423,7 +420,6 @@ impl CLIAgentSessionsModel {
         let previous_input_state = session.input_state;
         session.input_state = CLIAgentInputState::Open {
             previous_input_config,
-            previous_was_lock_set_with_empty_buffer,
         };
         session.should_auto_toggle_input = should_auto_toggle_input;
 

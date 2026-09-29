@@ -1837,8 +1837,7 @@ impl TerminalView {
             let mut model = InputModeModel::new(terminal_view_id, ctx);
 
             if let Some(input_config) = initial_input_config {
-                let is_input_buffer_empty = true;
-                model.set_input_config(input_config.locked(), is_input_buffer_empty, ctx);
+                model.set_input_config(input_config, ctx);
             }
             model
         });
@@ -2773,20 +2772,15 @@ impl TerminalView {
     fn handle_input_mode_model_event(
         &mut self,
         _input_mode_model: ModelHandle<InputModeModel>,
-        event: &InputModeEvent,
+        _event: &InputModeEvent,
         ctx: &mut ViewContext<Self>,
     ) {
-        match event {
-            InputModeEvent::InputTypeChanged { .. } => {
-                #[cfg(feature = "local_fs")]
-                self.update_git_status_subscription(ctx);
+        #[cfg(feature = "local_fs")]
+        self.update_git_status_subscription(ctx);
 
-                // Emit AppStateChanged when the input mode changes to trigger pane state saving
-                ctx.emit(Event::AppStateChanged);
-                ctx.notify();
-            }
-            InputModeEvent::LockChanged { .. } => {}
-        }
+        // Emit AppStateChanged when the input mode changes to trigger pane state saving
+        ctx.emit(Event::AppStateChanged);
+        ctx.notify();
     }
 
     fn handle_windowing_state_update(

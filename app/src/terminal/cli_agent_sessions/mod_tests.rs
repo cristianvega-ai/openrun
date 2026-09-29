@@ -254,9 +254,7 @@ fn apply_event_preserves_input_session() {
     let input_state = CLIAgentInputState::Open {
         previous_input_config: InputConfig {
             input_type: InputType::Shell,
-            is_locked: false,
         },
-        previous_was_lock_set_with_empty_buffer: true,
     };
     let mut session = CLIAgentSession {
         agent: CLIAgent::Claude,

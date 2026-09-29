@@ -698,18 +698,10 @@ impl TerminalView {
 
         let input_mode_model = self.input_mode_model.as_ref(ctx);
         let previous_input_config = input_mode_model.input_config();
-        let previous_was_lock_set_with_empty_buffer =
-            input_mode_model.was_lock_set_with_empty_buffer();
 
         let view_id = self.view_id;
         CLIAgentSessionsModel::handle(ctx).update(ctx, |sessions_model, ctx| {
-            sessions_model.open_input(
-                view_id,
-                previous_input_config,
-                previous_was_lock_set_with_empty_buffer,
-                true,
-                ctx,
-            );
+            sessions_model.open_input(view_id, previous_input_config, true, ctx);
         });
 
         // Input mode switch, buffer clear, draft restoration, and hint text

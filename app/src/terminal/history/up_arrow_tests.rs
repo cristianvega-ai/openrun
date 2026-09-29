@@ -189,11 +189,9 @@ fn history_excludes_ignored_commands() {
 fn only_shell_input_has_command_history() {
     let shell = InputConfig {
         input_type: InputType::Shell,
-        is_locked: true,
     };
     let prompt = InputConfig {
         input_type: InputType::Prompt,
-        is_locked: true,
     };
     assert!(UpArrowHistoryConfig::for_input_config(&shell).include_commands);
     assert!(!UpArrowHistoryConfig::for_input_config(&prompt).include_commands);

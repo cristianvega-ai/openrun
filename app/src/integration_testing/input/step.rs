@@ -46,9 +46,7 @@ pub fn open_cli_agent_rich_input(tab_index: usize) -> TestStep {
                         view_id,
                         InputConfig {
                             input_type: InputType::Shell,
-                            is_locked: true,
                         },
-                        false,
                         false,
                         ctx,
                     );

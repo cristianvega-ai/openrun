@@ -1414,7 +1414,6 @@ impl PaneGroup {
                             shell_launch_data: None,
                             input_config: Some(InputConfig {
                                 input_type: InputType::Shell,
-                                is_locked: true,
                             }),
                         })
                     }

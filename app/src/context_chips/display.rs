@@ -16,8 +16,8 @@ use super::{ChipResult, git_line_changes_from_chips};
 
 use crate::completer::SessionContext;
 use crate::context_chips::display_chip::{DisplayChipAction, PromptChipShellCommand};
+use crate::terminal::input::InputModeModel;
 use crate::terminal::input::MenuPositioningProvider;
-use crate::terminal::input::{InputModeEvent, InputModeModel};
 use crate::terminal::model_events::ModelEventDispatcher;
 
 /// A view for displaying the prompt.
@@ -66,13 +66,9 @@ impl PromptDisplay {
         ctx.observe(&prompt, |me, _, ctx| me.handle_prompt_change(ctx));
 
         // Subscribe to input mode model changes to trigger re-render when input mode changes
-        ctx.subscribe_to_model(&input_mode_model, |_me, _model, event, ctx| {
-            match event {
-                InputModeEvent::InputTypeChanged { .. } | InputModeEvent::LockChanged { .. } => {
-                    // Trigger re-render to update chip visibility based on new input mode
-                    ctx.notify();
-                }
-            }
+        ctx.subscribe_to_model(&input_mode_model, |_me, _model, _event, ctx| {
+            // Trigger re-render to update chip visibility based on new input mode
+            ctx.notify();
         });
 
         Self {

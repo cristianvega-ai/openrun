@@ -331,8 +331,6 @@ pub enum InputSuggestionsMode {
         search_mode: HistorySearchMode,
         /// The input mode when arrow-up is pressed.
         original_input_type: InputType,
-        /// The input's lock status when the arrow-up is pressed.
-        original_input_was_locked: bool,
     },
     CompletionSuggestions {
         /// Stores the byte index of the beginning of the text we are replacing
@@ -1728,9 +1726,8 @@ impl Input {
                 me.restore_buffer_state(buffer_state, ctx);
             }
             if let Some(input_config) = input_config_to_restore {
-                let is_buffer_empty = me.editor.as_ref(ctx).buffer_text(ctx).is_empty();
                 me.input_mode_model.update(ctx, |input_mode_model, ctx| {
-                    input_mode_model.set_input_config(*input_config, is_buffer_empty, ctx);
+                    input_mode_model.set_input_config(*input_config, ctx);
                 });
             }
 
@@ -1744,7 +1741,7 @@ impl Input {
                 .try_send(InputBackgroundJobOptions::default().with_command_decoration());
 
             let config = event.updated_config();
-            if config.is_locked && me.suggestions_mode_model.as_ref(ctx).is_visible() {
+            if me.suggestions_mode_model.as_ref(ctx).is_visible() {
                 // Preserve certain menus when input type changes - they handle their own
                 // input type transitions during navigation.
                 let should_preserve_menu = me
@@ -1755,7 +1752,7 @@ impl Input {
                         && config.is_prompt());
 
                 if !should_preserve_menu {
-                    // If switching to a locked mode, close suggestions
+                    // Close suggestions
                     me.close_input_suggestions(/*should_focus_input=*/ false, ctx);
                 }
             }
@@ -1859,19 +1856,13 @@ impl Input {
             me.handle_slash_commands_menu_event(event, ctx);
         });
 
-        ctx.subscribe_to_model(&input_mode_model, move |me, _, event, ctx| {
-            match event {
-                InputModeEvent::InputTypeChanged { .. } | InputModeEvent::LockChanged { .. } => {
-                    // Close slash command menu if we're now in locked shell mode
-                    if me.is_locked_in_shell_mode(ctx)
-                        && me.suggestions_mode_model.as_ref(ctx).is_slash_commands()
-                    {
-                        me.suggestions_mode_model.update(ctx, |m, ctx| {
-                            m.set_mode(InputSuggestionsMode::Closed, ctx);
-                        });
-                        ctx.notify();
-                    }
-                }
+        ctx.subscribe_to_model(&input_mode_model, move |me, _, _, ctx| {
+            // Close slash command menu if we're now in shell mode
+            if me.is_shell_mode(ctx) && me.suggestions_mode_model.as_ref(ctx).is_slash_commands() {
+                me.suggestions_mode_model.update(ctx, |m, ctx| {
+                    m.set_mode(InputSuggestionsMode::Closed, ctx);
+                });
+                ctx.notify();
             }
         });
 
@@ -2621,7 +2612,7 @@ impl Input {
     }
 
     fn cli_agent_rich_input_hint_text(&self, ctx: &ViewContext<Self>) -> Cow<'static, str> {
-        if self.is_locked_in_shell_mode(ctx) {
+        if self.is_shell_mode(ctx) {
             return Cow::Borrowed(TERMINAL_INPUT_HINT_TEXT);
         }
 
@@ -3687,25 +3678,20 @@ impl Input {
             && let InputSuggestionsMode::HistoryUp {
                 original_buffer,
                 original_cursor_point,
-                original_input_was_locked,
                 original_input_type,
                 ..
             } = self.suggestions_mode_model.as_ref(ctx).mode()
         {
             let original_buffer = original_buffer.clone();
             let original_cursor_point = *original_cursor_point;
-            let original_input_was_locked = *original_input_was_locked;
             let original_input_type = *original_input_type;
             // If the user closes the input suggestions menu, we want to reset the input mode
-            // to the exact same state it was originally, which includes the mode itself and
-            // whether it was locked to that mode.
+            // to the exact same state it was originally.
             self.input_mode_model.update(ctx, |input_mode_model, ctx| {
                 input_mode_model.set_input_config(
                     InputConfig {
                         input_type: original_input_type,
-                        is_locked: original_input_was_locked,
                     },
-                    original_buffer.is_empty(),
                     ctx,
                 );
             });
@@ -3883,8 +3869,6 @@ impl Input {
 
             let original_cursor_point = self.editor.as_ref(ctx).single_cursor_to_point(ctx);
             let original_input_type = self.input_mode_model.as_ref(ctx).input_type();
-            let original_input_was_locked =
-                self.input_mode_model.as_ref(ctx).is_input_type_locked();
             self.suggestions_mode_model.update(ctx, |m, ctx| {
                 m.set_mode(
                     InputSuggestionsMode::HistoryUp {
@@ -3892,7 +3876,6 @@ impl Input {
                         original_cursor_point,
                         search_mode: HistorySearchMode::Prefix,
                         original_input_type,
-                        original_input_was_locked,
                     },
                     ctx,
                 );
@@ -4702,17 +4685,15 @@ impl Input {
                     }
                 }
 
-                let is_input_mode_locked = self.input_mode_model.as_ref(ctx).is_input_type_locked();
-
-                // If the last buffer didn't start with the terminal input prefix and the current buffer does, then enable terminal input and lock it.
-                let is_locked_shell_mode = !is_prompt_input_enabled && is_input_mode_locked;
+                // If the last buffer didn't start with the terminal input prefix and the current buffer does, then enable terminal input.
+                let is_shell_mode = !is_prompt_input_enabled;
                 let is_cli_agent_bash_mode_input_open = CLIAgentSessionsModel::as_ref(ctx)
                     .session(self.terminal_view_id)
                     .is_some_and(|s| {
                         s.agent.supports_bash_mode()
                             && matches!(s.input_state, CLIAgentInputState::Open { .. })
                     });
-                if !is_locked_shell_mode && is_cli_agent_bash_mode_input_open {
+                if !is_shell_mode && is_cli_agent_bash_mode_input_open {
                     let buffer_text = self.buffer_text(ctx);
                     if buffer_text.starts_with(TERMINAL_INPUT_PREFIX)
                         && *edit_origin == EditOrigin::UserTyped
@@ -4721,24 +4702,20 @@ impl Input {
 
                         if !last_buffer_text.starts_with(TERMINAL_INPUT_PREFIX) {
                             // Remove the prefix from the editor contents.
-                            let is_input_buffer_empty =
-                                self.editor.update(ctx, |editor_view, ctx| {
-                                    if let Some(command) = editor_view
-                                        .buffer_text(ctx)
-                                        .strip_prefix(TERMINAL_INPUT_PREFIX)
-                                    {
-                                        editor_view.set_buffer_text(command, ctx);
-                                    }
-                                    editor_view.buffer_text(ctx).is_empty()
-                                });
+                            self.editor.update(ctx, |editor_view, ctx| {
+                                if let Some(command) = editor_view
+                                    .buffer_text(ctx)
+                                    .strip_prefix(TERMINAL_INPUT_PREFIX)
+                                {
+                                    editor_view.set_buffer_text(command, ctx);
+                                }
+                            });
 
                             self.input_mode_model.update(ctx, |input_mode_model, ctx| {
                                 input_mode_model.set_input_config(
                                     InputConfig {
                                         input_type: InputType::Shell,
-                                        is_locked: true,
                                     },
-                                    is_input_buffer_empty,
                                     ctx,
                                 );
                             });
@@ -5065,7 +5042,7 @@ impl Input {
                 ctx.emit(Event::CtrlC);
             }
             EditorEvent::DeleteAllLeft => {
-                if self.is_locked_in_shell_mode(ctx)
+                if self.is_shell_mode(ctx)
                     && CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
                 {
                     self.exit_shell_mode_to_prompt(ctx);
@@ -5408,7 +5385,7 @@ impl Input {
         ctx: &mut ViewContext<Self>,
     ) {
         // Switch to prompt mode, unless already locked to it
-        if !self.is_locked_in_prompt_mode(ctx) {
+        if !self.is_prompt_mode(ctx) {
             self.set_input_mode_prompt(true, ctx);
             self.update_image_context_options(ctx);
         }
@@ -5498,7 +5475,7 @@ impl Input {
     /// Handles backspace at the buffer boundary (empty buffer or cursor at
     /// position 0): exits the `!` shell prefix mode of the CLI agent rich input.
     fn handle_backspace_at_buffer_boundary(&mut self, ctx: &mut ViewContext<Self>) {
-        if self.is_locked_in_shell_mode(ctx)
+        if self.is_shell_mode(ctx)
             && CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
         {
             self.exit_shell_mode_to_prompt(ctx);
@@ -5621,7 +5598,6 @@ impl Input {
         // which involves resetting the cursor point.
         let original_buffer = editor.buffer_text(ctx);
         let original_input_type = self.input_mode_model.as_ref(ctx).input_type();
-        let original_input_was_locked = self.input_mode_model.as_ref(ctx).is_input_type_locked();
         self.suggestions_mode_model.update(ctx, |m, ctx| {
             m.set_mode(
                 InputSuggestionsMode::HistoryUp {
@@ -5629,7 +5605,6 @@ impl Input {
                     original_cursor_point,
                     search_mode: HistorySearchMode::Fuzzy,
                     original_input_type,
-                    original_input_was_locked,
                 },
                 ctx,
             );
@@ -5862,7 +5837,7 @@ impl Input {
         // even though the active block is a long-running command.
         // However, completions are disabled on warpified remote hosts because
         // in-band generators don't work in this context (with CLI agent).
-        let is_cli_agent_shell_mode = self.is_locked_in_shell_mode(ctx)
+        let is_cli_agent_shell_mode = self.is_shell_mode(ctx)
             && CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id)
             && !self
                 .active_session(ctx)
@@ -6952,9 +6927,6 @@ impl Input {
             if !self.try_execute_command(&command, ctx) {
                 return;
             }
-            self.input_mode_model.update(ctx, |model, ctx| {
-                model.handle_input_buffer_submitted(ctx);
-            });
 
             if SyncedInputState::as_ref(ctx).is_syncing_any_inputs(ctx.window_id()) {
                 ctx.emit(Event::SyncInput(SyncInputType::RanCommand));
@@ -6982,7 +6954,7 @@ impl Input {
         // prepend it back so the CLI agent receives the mode-switch prefix,
         // then exit shell mode so the next prompt starts in prompt mode.
         let mut text = self.editor.as_ref(ctx).buffer_text(ctx);
-        if self.is_locked_in_shell_mode(ctx) {
+        if self.is_shell_mode(ctx) {
             text = format!("{TERMINAL_INPUT_PREFIX}{text}");
             self.exit_shell_mode_to_prompt(ctx);
         }
@@ -7025,13 +6997,11 @@ impl Input {
         ensure_input_is_focused: bool,
         ctx: &mut ViewContext<Self>,
     ) {
-        let is_input_buffer_empty = self.editor.as_ref(ctx).buffer_text(ctx).is_empty();
         self.input_mode_model.update(ctx, |input_mode_model, ctx| {
             let new_config = InputConfig {
                 input_type: InputType::Prompt,
-                is_locked: true,
             };
-            input_mode_model.set_input_config(new_config, is_input_buffer_empty, ctx);
+            input_mode_model.set_input_config(new_config, ctx);
         });
 
         if ensure_input_is_focused {
@@ -7041,13 +7011,11 @@ impl Input {
 
     /// Set input mode to shell mode (shell command input)
     pub fn set_input_mode_shell(&mut self, steal_focus: bool, ctx: &mut ViewContext<Self>) {
-        let is_input_buffer_empty = self.editor.as_ref(ctx).buffer_text(ctx).is_empty();
         self.input_mode_model.update(ctx, |input_mode_model, ctx| {
             let new_config = InputConfig {
                 input_type: InputType::Shell,
-                is_locked: true,
             };
-            input_mode_model.set_input_config(new_config, is_input_buffer_empty, ctx);
+            input_mode_model.set_input_config(new_config, ctx);
         });
 
         if steal_focus {
@@ -7055,28 +7023,25 @@ impl Input {
         }
     }
 
-    /// Returns true if the input is locked in shell mode
-    fn is_locked_in_shell_mode(&self, ctx: &ViewContext<Self>) -> bool {
-        let input_mode_model = self.input_mode_model.as_ref(ctx);
-        input_mode_model.is_input_type_locked() && !input_mode_model.input_type().is_prompt()
+    /// Returns true if the input is in shell mode
+    fn is_shell_mode(&self, ctx: &ViewContext<Self>) -> bool {
+        !self.input_mode_model.as_ref(ctx).input_type().is_prompt()
     }
 
-    /// Exits `!` shell mode by switching back to prompt mode, locked (the `!` prefix is the
-    /// explicit toggle).
+    /// Exits `!` shell mode by switching back to prompt mode (the `!` prefix is the explicit
+    /// toggle).
     fn exit_shell_mode_to_prompt(&mut self, ctx: &mut ViewContext<Self>) {
         let new_config = InputConfig {
             input_type: InputType::Prompt,
-            is_locked: true,
         };
         self.input_mode_model.update(ctx, |input_mode_model, ctx| {
-            input_mode_model.set_input_config(new_config, true, ctx);
+            input_mode_model.set_input_config(new_config, ctx);
         });
     }
 
-    /// Returns true if the input is locked in prompt mode
-    fn is_locked_in_prompt_mode(&self, ctx: &ViewContext<Self>) -> bool {
-        let input_mode_model = self.input_mode_model.as_ref(ctx);
-        input_mode_model.is_input_type_locked() && input_mode_model.input_type().is_prompt()
+    /// Returns true if the input is in prompt mode
+    fn is_prompt_mode(&self, ctx: &ViewContext<Self>) -> bool {
+        self.input_mode_model.as_ref(ctx).input_type().is_prompt()
     }
 
     fn get_command(&mut self, ctx: &mut ViewContext<Self>) -> String {
@@ -7231,11 +7196,6 @@ impl Input {
     ) {
         if let BlockType::User(block_completed) = block {
             self.last_user_block_completed = Some(block_completed.clone());
-
-            self.input_mode_model.update(ctx, |input_mode_model, ctx| {
-                let new_config = input_mode_model.input_config().locked();
-                input_mode_model.set_input_config(new_config, false, ctx);
-            });
 
             ctx.emit(Event::InputStateChanged(InputState::Enabled));
         } else if block.is_bootstrap_block()
@@ -7986,14 +7946,13 @@ fn maybe_render_shell_mode_indicator(
     );
 
     let is_prompt_input_enabled = input_mode_model.is_prompt_input_enabled();
-    let is_input_type_locked = input_mode_model.is_input_type_locked();
 
-    // Show the `!` shell mode indicator when in locked shell mode inside the CLI agent rich input
+    // Show the `!` shell mode indicator when in shell mode inside the CLI agent rich input
     // (e.g. Claude Code bash mode).
-    let is_locked_shell = !is_prompt_input_enabled && is_input_type_locked;
+    let is_shell_mode = !is_prompt_input_enabled;
     let is_cli_agent_input_open =
         CLIAgentSessionsModel::as_ref(app).is_input_open(terminal_view_id);
-    if is_locked_shell && is_cli_agent_input_open {
+    if is_shell_mode && is_cli_agent_input_open {
         return Some(render_prefix_mode_indicator(
             TERMINAL_INPUT_PREFIX,
             appearance.theme().ansi_fg_blue(),
@@ -8005,9 +7964,6 @@ fn maybe_render_shell_mode_indicator(
 
     None
 }
-
-#[cfg(feature = "integration_tests")]
-impl Input {}
 
 #[cfg(test)]
 impl Input {
