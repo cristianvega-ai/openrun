@@ -48,15 +48,15 @@ Guidance:
 
 ## Sensitive data: `safe_*` macros
 
-Never log secrets, tokens, or credentials at any level. For messages whose *useful* detail is sensitive-ish — file paths, response payloads, user-generated content — that you want locally but must NOT appear in release-channel logs (which users may bundle and share), use the `safe_*` macros instead of `log::*`.
+Never log secrets, tokens, or credentials at any level. For messages whose *useful* detail is sensitive-ish — file paths, response payloads, user-generated content — that you want locally but must NOT appear in release-build logs (which users may bundle and share), use the `safe_*` macros instead of `log::*`.
 
-`safe_error!`, `safe_warn!`, `safe_info!`, `safe_debug!` (plus `safe_anyhow!` to build an `anyhow::Error`, and `safe_eprintln!`) each take a `safe:` and a `full:` arm. Dogfood builds log `full:`; release channels log `safe:`:
+`safe_error!`, `safe_warn!`, `safe_info!`, `safe_debug!` (plus `safe_anyhow!` to build an `anyhow::Error`, and `safe_eprintln!`) each take a `safe:` and a `full:` arm. Debug builds log `full:`; release builds log `safe:`:
 ```rust
 use warp_core::safe_error;
 
 safe_error!(
-    safe: ("Remote server unexpected response for Initialize"),
-    full: ("Remote server unexpected response for Initialize: response={other:?}")
+    safe: ("Unexpected response from the language server"),
+    full: ("Unexpected response from the language server: response={other:?}")
 );
 ```
 - The `safe:` arm must stand on its own and contain no sensitive/verbose detail; put those bits only in `full:`.
@@ -182,14 +182,14 @@ report_error!(
 
 ## Throttling with ReportErrorLogMode::OncePerRun
 
-Sites that can fire repeatedly (hot loops, per-frame paths, enum-fallback conversions from GraphQL/protobuf) should report only once per app run so they don't flood the log. Default is `EveryTime`.
+Sites that can fire repeatedly (hot loops, per-frame paths, enum-fallback conversions from persisted data) should report only once per app run so they don't flood the log. Default is `EveryTime`.
 ```rust
 use warp_errors::ReportErrorLogMode;
 
 report_error!(err, ReportErrorLogMode::OncePerRun);
 // with a static message + incidental data:
 report_error!(
-    "Invalid ServerEnum; update client GraphQL types",
+    "Unrecognized persisted value; falling back to the default",
     extra: { "value" => %value },
     ReportErrorLogMode::OncePerRun
 );
@@ -197,7 +197,7 @@ report_error!(
 
 ## No secrets or PII
 
-This applies to `report_error!` messages/`extra:` AND to `log::*` at Info and above (both land in the log file, which users may bundle and share). Never place secrets, tokens, credentials, or user-generated content (file contents, prompts, command text, personal data) in any of them. Limit reported/logged data to non-sensitive diagnostics: ids, paths, counts, durations, and error types. When the useful detail is sensitive but helpful locally, use the `safe_*` macros (see "Sensitive data" above) so it only appears in dogfood logs.
+This applies to `report_error!` messages/`extra:` AND to `log::*` at Info and above (both land in the log file, which users may bundle and share). Never place secrets, tokens, credentials, or user-generated content (file contents, prompts, command text, personal data) in any of them. Limit reported/logged data to non-sensitive diagnostics: ids, paths, counts, durations, and error types. When the useful detail is sensitive but helpful locally, use the `safe_*` macros (see "Sensitive data" above) so it only appears in debug-build logs.
 
 ## Best practices
 

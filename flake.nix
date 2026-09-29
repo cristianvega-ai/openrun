@@ -59,6 +59,8 @@
                     postPatch = (old.postPatch or "") + ''
                       find . -name 'Cargo.toml.orig' -delete
 
+                      # `specs/` here is the workflows repository's own YAML directory, which its
+                      # build.rs reads from outside the crate; it is not this repository's `specs/`.
                       ${lib.optionalString (hasCrate "warp-workflows") ''
                         mkdir -p workflows/nix-vendored-specs
                         cp -R specs/. workflows/nix-vendored-specs/

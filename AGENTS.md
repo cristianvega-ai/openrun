@@ -39,7 +39,9 @@ Run the full presubmit only when the user, task, or approved spec explicitly req
 
 ## Architecture Overview
 
-This is a Rust-based terminal emulator with a custom UI framework called **WarpUI**. The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`, `crates/warpui_core`): `Element`/`View` layout, GPU/WGSL rendering, mouse input, `.app` bundles. Run with `cargo run` / `./script/run`; verify visually with the real-display integration framework (`crates/integration`).
+This is a Rust-based, fully offline terminal emulator with a custom UI framework called **WarpUI**. It has no accounts, no built-in AI or agents, no cloud sync, no telemetry or crash reporting and no autoupdate; `CHANGES.md` records each removal. The only network access left is opt-in language server downloads, links the user opens and the opt-in loopback `warpctrl` local control, and `script/offline_audit` enforces that. Do not add code that calls a server. Third-party CLI agents (Claude Code, Codex, Gemini CLI, OpenCode) run inside the terminal, and the UI for them is kept.
+
+The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`, `crates/warpui_core`): `Element`/`View` layout, GPU/WGSL rendering, mouse input, `.app` bundles. Run with `cargo run` / `./script/run`; verify visually with the real-display integration framework (`crates/integration`).
 
 ### Key Components
 
@@ -52,24 +54,35 @@ This is a Rust-based terminal emulator with a custom UI framework called **WarpU
 - Mouse input uses `MouseStateHandle`: create it once during construction and reference/clone it wherever mouse input is tracked. An inline `MouseStateHandle::default()` while rendering means no mouse interactions work.
 
 **Main app** (`app/`):
-- Terminal emulation and shell management (`terminal/`)
-- Cloud synchronization and Drive features (`drive/`)
-- Authentication and user management (`auth/`)
-- Settings and preferences (`settings/`)
-- Workspace and session management (`workspace/`)
+- Terminal emulation, blocks, the input editor and shell management (`terminal/`)
+- Windows, tabs, panes and sessions (`workspace/`, `pane_group/`, `tab_configs/`, `launch_configs/`)
+- Local workflows (`workflows/`) and the markdown file viewer (`notebooks/`)
+- Code editor, file tree, code review and global search (`code/`, `code_review/`, `editor/`, `search/`)
+- Settings and preferences (`settings/`, `settings_view/`)
+- Local persistence in SQLite (`persistence/`)
+- Third-party CLI-agent notifications and status (`agent_notifications/`)
+- `warpctrl` local control server (`local_control/`)
 
 **Core Libraries**:
-- `crates/warp_core/` - Core utilities and platform abstractions (shared)
+- `crates/warp_core/` - Core utilities, platform abstractions and channel state (shared)
+- `crates/warp_features/` - The `FeatureFlag` enum
+- `crates/warp_terminal/` - Terminal model, grid and PTY handling
 - `crates/editor/` - Text editing functionality
 - `crates/warpui/` and `crates/warpui_core/` - Custom UI framework
+- `crates/lsp/` and `crates/node_runtime/` - Language servers; a missing server or runtime is downloaded only when `code.language_servers.allow_downloads` is on
+- `crates/repo_metadata/`, `crates/code_outline/`, `crates/warp_ripgrep/` - Repository tree, symbol outlines and search
+- `crates/persistence/` - Diesel models, schema and migrations
+- `crates/local_control/` and `crates/warp_cli/` - The `warpctrl` protocol and command line
 - `crates/ipc/` - Inter-process communication
+- `crates/integration/` - Integration test framework
+
+**Channels and binaries**: `Channel` is `Oss` or `Integration`. The binaries are `warp-oss` (`app/src/bin/oss.rs`) and `integration` (`app/src/bin/integration.rs`).
 
 ### Key Architectural Patterns
 
 1. **Entity-Handle System**: Views reference other views via handles, not direct ownership
-2. **Modular Structure**: Workspace contains multiple workspace configurations, each with terminals, notebooks, etc.
-3. **Cross-Platform**: Native implementations for macOS, Windows, Linux, plus WASM target
-4. **Cloud Sync**: Objects can be synchronized across devices via Warp Drive
+2. **Modular Structure**: Workspace contains multiple workspace configurations, each with terminals, code editors, etc.
+3. **Cross-Platform**: Native implementations for macOS, Windows and Linux. The `cfg(target_family = "wasm")` branches that remain are dormant: there is no web build.
 
 ### Development Guidelines
 
@@ -151,13 +164,9 @@ for itself.
 - Follow the Implementation Validation Order before opening a PR or pushing a code update. Do not repeat validation when the candidate has not changed.
 - CI is the broad cross-platform and workspace gate. Push once the targeted tests and lint checks pass and the formatter has run; address a later CI failure as a new revision.
 - Do not create public pull requests or public issues that disclose a non-public security vulnerability. Refer users to `SECURITY.md` for the proper disclosure methods instead.
+- Run `script/offline_audit` when a change touches networking, dependencies or hosts; new findings are regressions.
  - When opening PRs, use the PR template at `.github/pull_request_template.md`
- - Add changelog entries when appropriate using the format at the bottom of the PR template. Use the following prefixes (without the `{{}}` brackets):
-   - `CHANGELOG-NEW-FEATURE:` for new, relatively sizable features (use sparingly - these may get marketing/docs)
-   - `CHANGELOG-IMPROVEMENT:` for new functionality of existing features
-   - `CHANGELOG-BUG-FIX:` for fixes related to known bugs or regressions
-   - `CHANGELOG-IMAGE:` for GCP-hosted image URLs
-   - Leave changelog lines blank or remove them if no changelog entry is needed
+ - If the PR removes or changes a feature, add a section to `CHANGES.md` (template at its top) and a bullet to its Contents list.
 
 **Database**:
 - Uses Diesel ORM with SQLite
@@ -166,12 +175,12 @@ for itself.
 
 ### Feature Flags
 
-Warp uses compile-time feature flags with a small runtime plumbing layer.
+The app uses compile-time feature flags with a small runtime plumbing layer.
 
 How to add a feature flag:
-- Add a new variant to `warp_core/src/features.rs` in the `FeatureFlag` enum
+- Add a new variant to the `FeatureFlag` enum in `crates/warp_features/src/lib.rs`
 - Gate code paths with `FeatureFlag::YourFlag.is_enabled()`
-- To turn a flag on by default, add a Cargo feature for it in `app/Cargo.toml` and map it in `app/src/features.rs`; otherwise it stays off until enabled at runtime
+- To turn a flag on by default, add a Cargo feature for it in `app/Cargo.toml` and map it in `app/src/features.rs` (`enabled_features`); otherwise it stays off until enabled at runtime
 
 Best practices:
 - **Prefer runtime checks over cfg directives**: Prefer `FeatureFlag::YourFlag.is_enabled()` over `#[cfg(...)]` compile-time directives so flags can be toggled without recompilation and are easier to clean up later. Use `#[cfg(...)]` only when the code cannot compile without them (for example, platform-specific code or dependencies that do not exist when the feature is disabled).

@@ -60,12 +60,12 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Onboarding: AI slides, callout tutorial and Get Started](#onboarding-ai-slides-callout-tutorial-and-get-started) — onboarding is now four slides (welcome, customize, CLI agents, theme); removed the agent-intention flow, the AI-access and offer slides, the in-terminal callout tutorial that started an agent, the Get Started pane and coding entrypoints
 - [Skills](#skills) — deleted the skills feature (`SKILL.md` discovery, the `/skills` and `/open-skill` commands, the `@`-menu skills category, the `read_skill` tool, bundled and channel-gated skill files) and the "Fix with Warp Agent" and tab-config-editor agent buttons that invoked bundled skills
 - [AI plan documents and to-do popup](#ai-plan-documents-and-to-do-popup) — removed the plan (AI document) pane, the plan menu and plan/to-do chips, the to-do popup and the plan-related shortcuts and attachments
-- [Voice input](#voice-input) — deleted voice input end to end (microphone capture, Wispr Flow transcription through Warp's server, the mic buttons, the toggle-key shortcut, the `/voice` command and the voice settings), plus the unused `WarpDriveContextEnabled` setting
 - [Warp Drive: environment-variable collections](#warp-drive-environment-variable-collections) — removed the environment-variable collection objects, editor pane, invocation blocks, subshell invocation, workflow env-var selectors and the search filter
 - [Warp Drive: 1Password and LastPass secrets](#warp-drive-1password-and-lastpass-secrets) — removed the external secret manager integration, whose only entry point was environment-variable collections
 - [Session sharing: viewer, joins and shared-session model state](#session-sharing-viewer-joins-and-shared-session-model-state) — removed joining and viewing another user's shared session (the viewer network, presence, tombstones, join links and the viewer paths through the terminal model, input, panes and workspace) and the shared-session state and replication in the terminal model and input editor
 - [Session-sharing protocol dependency](#session-sharing-protocol-dependency) — dropped the `session-sharing-protocol` crate and its patch entry, so no crate can build the relay wire types
 - [Warp-distributed CLI-agent plugins](#warp-distributed-cli-agent-plugins) — removed the install/update flows, the "Enable notifications" chips, the manual-instructions pane and the OpenCode debug actions for the `claude-code-warp`, `codex-warp`, `gemini-cli-warp` and `opencode-warp` plugins; the OSC 777/9 listener stays
+- [Voice input](#voice-input) — deleted voice input end to end (microphone capture, Wispr Flow transcription through Warp's server, the mic buttons, the toggle-key shortcut, the `/voice` command and the voice settings), plus the unused `WarpDriveContextEnabled` setting
 - [Agent tips](#agent-tips) — removed the rotating "Tip:" line under the agent warping indicator and the cloud-mode loading screen, the Show agent tips setting and its toggle
 - [Cloud mode, ambient-agent terminal UI and handoff](#cloud-mode-ambient-agent-terminal-ui-and-handoff) — removed the cloud-agent terminal (setup, follow-up input, tombstones, queued cloud prompts), local-to-cloud and cloud-to-cloud handoff, auto-handoff on sleep, the cloud environment and host selectors and the cloud slash commands, tab types, panes and settings
 - [Tolerant stored inline-menu heights](#tolerant-stored-inline-menu-heights) — stored per-menu heights ignore keys of removed menus (`skill_menu`, `prompts_menu`, `plan_menu`) instead of failing to parse and discarding all heights
@@ -110,6 +110,8 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Server configuration and channel collapse](#server-configuration-and-channel-collapse) — `Channel` is now `{Oss, Integration}`; deleted the server, telemetry, autoupdate and crash-reporting channel config, the `WARP_*` server-URL overrides, the Warp headers and IAP logic in `http_client`, and the dogfood/preview/release flag lists
 - [Comments, provenance references and test fixtures](#comments-provenance-references-and-test-fixtures) — removed ticket, issue and PR references, `warpdotdev` links and mentions of removed features from kept comments, replaced `warp.dev` sample URLs in tests with `example.com`, and scrubbed the SQLite fixtures
 - [Server-config leftovers](#server-config-leftovers) — removed the dead installation-detection subcommand lookup in `warp_cli` and the local warp-server instructions in `AGENTS.md`
+- [Top-level docs rewrite](#top-level-docs-rewrite) — README, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT and the `AGENTS.md` architecture section now describe the offline fork; `FAQ.md` deleted; contacts name no person, address or URL
+- [WASM-2 skipped: dormant cfg(wasm) branches stay](#wasm-2-skipped-dormant-cfgwasm-branches-stay) — the user chose to keep the roughly 2,000 `cfg(wasm)` branches; the WASM-2-tagged leftovers stay on purpose
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2933,3 +2935,45 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Verified already gone (removed by "Server configuration and channel collapse"): `WARP_SERVER_ROOT_URL`, `WARP_WS_SERVER_URL` and the other server-URL arguments in `warp_cli`; the `X-Warp-*` header injection, `is_warp_server_origin`, staging comments and their tests in `http_client`; and the `firebase_auth_api_key` field and every other server field in `app/src/bin/*` and `crates/integration/src/bin/integration.rs`. `rg -i 'server_root|warp_server|staging|firebase|firebase_auth_api_key|X-Warp'` over `app/src` and `crates` now finds only allowlisted redaction patterns and fixtures, unrelated wgpu/editor "staging" buffers, and unrelated test data.
 - `http_client` is kept for `node_runtime` (LSP downloads) and `local_control`.
 - Still open elsewhere: `authors` in the manifests and the `about.toml` comment (SWP-15), top-level docs (SWP-16), `CocoaSentry`, `LogExpensiveFramesInSentry` and the `warp-server` doc comment in `warp_features` (FLAGS-1), `WARP_LOCAL_SKIP_METAL` in `crates/warpui/build.rs` (SWP-17).
+
+
+## Top-level docs rewrite
+**Why:** The top-level documents still described Warp the product: its website, docs, Slack, careers page, Factories dashboard, Oz-driven triage and review, spec PRs, readiness labels and the security and conduct mailboxes. None of that exists in the offline fork, and decision 3 removes every warp.dev link.
+
+**Removed:**
+- `FAQ.md`: contributing, agent-workflow and product-relationship answers that all assumed Warp's Slack, Oz and hosted services.
+- `README.md`: the product banner, the link bar, the "Built with Warp" badge, the build.warp.dev contributions dashboard, the Warp Factories sections, the Slack, docs and Preview-build support links, the careers section and the `@oss-maintainers` escalation.
+- `CONTRIBUTING.md`: the Oz review process (automatic assignment, Oz approval before human review, the `/warp-agent-review` re-review command and its three-use limit), the `specs/` flow (spec PRs, `product.md` and `tech.md`), the readiness labels (`ready-to-spec`, `ready-to-implement`, `needs-mocks`, `warp:reserved-internal`), the flow diagram, the `/feedback` command, the stale-PR reminder and auto-close automation, the `CHANGELOG-*` entry format, and the Slack and docs links.
+- `AGENTS.md`: the `drive/` and `auth/` entries, the "Cloud Sync" architectural pattern, the WASM target claim and the `CHANGELOG-*` prefixes. The local warp-server section had already gone with "Server-config leftovers".
+- `SECURITY.md` and `CODE_OF_CONDUCT.md`: the warp.dev security and conduct mailboxes and the GitHub advisory link for the upstream repository.
+
+**Modified:**
+- `README.md`: says what the fork is, what it no longer has, and the three ways the app touches the network (opt-in language server downloads, links the user opens, opt-in loopback `warpctrl`). It also covers build steps, the unchanged identifiers and install paths, `script/offline_audit`, licensing and the dependency credits.
+- `CONTRIBUTING.md`: issue guidelines, a plain PR flow (link an issue, tests, `./script/presubmit`, manual-testing proof, a `CHANGES.md` section for removals), a "Staying offline" section that points at `script/offline_audit`, and the coding-agent, style and testing sections.
+- `AGENTS.md`: the architecture section lists only what exists (terminal, workspace, local workflows and markdown viewer, code editor and review, settings, SQLite persistence, CLI-agent notifications, `warpctrl`, `warp_features`, `lsp`, `node_runtime`), states the offline rule, names the `Oss` and `Integration` channels and the two binaries, and points the feature-flag steps at `crates/warp_features/src/lib.rs` and `app/src/features.rs`. Its PR workflow now asks for a `CHANGES.md` section and an offline-audit run.
+- `SECURITY.md`, `CODE_OF_CONDUCT.md`, `README.md` and `CONTRIBUTING.md`: name no person, address or URL. They say to report issues and security problems to the fork's maintainers, privately for security.
+- `.agents/skills/logging-and-error-reporting/SKILL.md`: `safe_*` macros log the `full:` arm in debug builds and the `safe:` arm in release builds (the text said dogfood and release channels), and the examples no longer cite the remote server or GraphQL.
+- `CHANGES.md`: the Contents index is in section order (the Voice input bullet had drifted) and has a bullet for every section.
+- `flake.nix`: a comment on the `warp-workflows` vendoring step. The `specs/` it copies is the `warpdotdev/workflows` repository's own YAML directory, which that crate's `build.rs` reads from outside the crate. It is not this repository's deleted `specs/`, so the step is correct and unchanged.
+
+**User-visible impact:** none in the app.
+
+**Notes:**
+- Build-time git dependencies on the `github.com/warpdotdev/*` forks (`warp-workflows` and others in `Cargo.toml` and `Cargo.lock`) are kept as they are. They are fetched when the app is built and never at runtime, and `script/offline_audit.allowlist` lists them.
+- Bundle identifiers, data directories, the `warposs://` scheme, the secure-storage key string and the install paths (`/opt/warpdotdev/warp-terminal...` in the Linux packaging and the flake, `Software\Warp.dev\` under the Windows registry base) are unchanged on purpose, so installs and stored preferences do not move. The audit allowlist lists them with that reason.
+- `.agents/skills/{add-feature-flag,promote-feature,remove-feature-flag}` still describe the removed flag lists (FLAGS-1). Cargo `authors` and the `about.toml` comment are SWP-15's.
+- Comments in code that still say dogfood or preview (for example in `settings_view/mod.rs` and `warp_features`) were left alone because this task changed no code.
+
+## WASM-2 skipped: dormant cfg(wasm) branches stay
+**Why:** WASM-2 was the optional task that would delete the `cfg(target_family = "wasm")` branches, about 2,000 of them in 352 files. On 2026-09-29 the user chose to keep them. WASM-1 already removed the web artifacts and the ties to `app.warp.dev` (see "Web client crates, scripts and build profiles"), so what remains cannot reach a Warp server or be built into a web client by any script in the repository.
+
+**Removed:** nothing.
+
+**Modified:** nothing.
+
+**User-visible impact:** none.
+
+**Notes:**
+- Leftovers that other sections tagged for WASM-2 stay dormant on purpose: the always-true `ContextFlag::X.is_enabled()` checks, the wasm-only dependencies (`js-sys`, `wasm-bindgen`, `gloo`, `web-sys`, `serde-wasm-bindgen`, `futures-timer`), `workspace/home.rs` (which still lists Warp Drive), and `warp_web_event_bus` remnants.
+- Nothing builds the wasm target, and the `wasm32-unknown-unknown` target is not checked. A change that touches a `cfg(wasm)` branch is checked with `rg`, not the compiler.
+- `AGENTS.md` describes the branches as dormant.
