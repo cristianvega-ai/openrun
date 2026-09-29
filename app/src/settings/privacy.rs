@@ -7,7 +7,7 @@ use settings::macros::{define_settings_group, maybe_define_setting, register_set
 use settings::{Setting, SupportedPlatforms};
 use warp_errors::report_error;
 pub use warp_terminal::model::secrets::RegexDisplayInfo;
-use warpui::{AppContext, Entity, ModelContext, SingletonEntity, UpdateModel};
+use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use crate::auth::AuthStateProvider;
 use crate::auth::auth_state::AuthState;
@@ -15,8 +15,6 @@ use crate::server::server_api::ServerApiProvider;
 use crate::server::server_api::auth::AuthClient;
 #[cfg(any(test, feature = "test-util"))]
 use crate::server::server_api::auth::MockAuthClient;
-use crate::terminal::safe_mode_settings::SafeModeSettings;
-use crate::workspaces::workspace::EnterpriseSecretRegex;
 
 pub const CLOUD_CONVERSATION_STORAGE_ENABLED_DEFAULTS_KEY: &str = "CloudConversationStorageEnabled";
 
@@ -40,16 +38,6 @@ impl CustomSecretRegex {
 impl RegexDisplayInfo for CustomSecretRegex {
     fn pattern(&self) -> &str {
         self.pattern.as_str()
-    }
-
-    fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-}
-
-impl RegexDisplayInfo for EnterpriseSecretRegex {
-    fn pattern(&self) -> &str {
-        &self.pattern
     }
 
     fn name(&self) -> Option<&str> {
@@ -112,16 +100,8 @@ pub struct PrivacySettings {
     pub is_cloud_conversation_storage_enabled: bool,
     pub has_initialized_default_secret_regexes: HasInitializedDefaultSecretRegexes,
     /// List of user defined secret regexes.
-    /// Enterprise-level secret regexes will always take precedence over user-level secrets,
-    /// but they both used to support additive behavior.
     /// It's a [Vec<CustomSecretRegex>], but also a user setting.
     pub user_secret_regex_list: CustomSecretRegexList,
-    /// List of enterprise-level secret regexes provided by the organization.
-    /// These are kept separate from user-level secrets to support additive behavior.
-    pub enterprise_secret_regex_list: Vec<CustomSecretRegex>,
-    /// Whether or not the user's organization has enabled enterprise secret redaction.
-    /// This is populated by the server when teams data is fetched.
-    pub is_enterprise_secret_redaction_enabled: bool,
 }
 
 /// A snapshot of a user's [`PrivacySettings`] settings at some point in time.
@@ -200,67 +180,12 @@ impl PrivacySettings {
             is_cloud_conversation_storage_enabled,
             user_secret_regex_list,
             has_initialized_default_secret_regexes,
-            is_enterprise_secret_redaction_enabled: false,
-            enterprise_secret_regex_list: Vec::new(),
         }
-    }
-
-    pub fn is_enterprise_secret_redaction_enabled(&self) -> bool {
-        self.is_enterprise_secret_redaction_enabled
-    }
-
-    pub fn set_enterprise_secret_redaction_settings(
-        &mut self,
-        enabled: bool,
-        enterprise_regexes: Vec<EnterpriseSecretRegex>,
-        change_event_reason: ChangeEventReason,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if enabled {
-            // First time: Force enable secret redaction setting (safe mode).
-            if !self.is_enterprise_secret_redaction_enabled {
-                let safe_mode_settings = SafeModeSettings::handle(ctx);
-                ctx.update_model(&safe_mode_settings, |safe_mode_settings, ctx| {
-                    let _ = safe_mode_settings.safe_mode_enabled.set_value(true, ctx);
-                });
-            }
-
-            // Convert EnterpriseSecretRegex to CustomSecretRegex for internal use
-            let mut enterprise_secrets = Vec::new();
-            for enterprise_regex in enterprise_regexes {
-                match Regex::new(&enterprise_regex.pattern) {
-                    Ok(regex) => {
-                        enterprise_secrets.push(CustomSecretRegex {
-                            pattern: regex,
-                            name: enterprise_regex.name,
-                        });
-                    }
-                    _ => {
-                        report_error!(
-                            "Invalid enterprise secret regex pattern",
-                            extra: { "pattern" => %enterprise_regex.pattern }
-                        );
-                    }
-                }
-            }
-            self.enterprise_secret_regex_list = enterprise_secrets;
-        } else {
-            // Clear enterprise secrets when disabled
-            self.enterprise_secret_regex_list.clear();
-        }
-
-        self.is_enterprise_secret_redaction_enabled = enabled;
-
-        ctx.emit(PrivacySettingsChangedEvent::CustomSecretRegexList {
-            change_event_reason,
-        });
-        ctx.notify();
     }
 
     pub fn refresh_to_default(&mut self) {
         // TODO(zach): this seems incorrect - should we also update the values on disk?
         self.is_cloud_conversation_storage_enabled = true;
-        self.is_enterprise_secret_redaction_enabled = false;
     }
 
     /// Constructor for tests only.
@@ -272,8 +197,6 @@ impl PrivacySettings {
             is_cloud_conversation_storage_enabled: true,
             user_secret_regex_list: CustomSecretRegexList::new(None),
             has_initialized_default_secret_regexes: HasInitializedDefaultSecretRegexes::new(None),
-            is_enterprise_secret_redaction_enabled: false,
-            enterprise_secret_regex_list: Vec::new(),
         }
     }
 

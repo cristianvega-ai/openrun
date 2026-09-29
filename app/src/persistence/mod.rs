@@ -44,7 +44,6 @@ use crate::terminal::history::PersistedCommand;
 use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::session::SessionId;
 use crate::workspace_metadata::{EnablementState, WorkspaceMetadata as CodeWorkspaceMetadata};
-use crate::workspaces::workspace::{Workspace as WorkspaceMetadata, WorkspaceUid};
 
 #[derive(Clone)]
 pub enum PersistenceScope {
@@ -189,8 +188,6 @@ pub struct PersistedData {
     /// [`PersistedDataScope`] excludes it entirely (the daemon).
     pub app_state: Option<AppState>,
 
-    pub workspaces: Vec<WorkspaceMetadata>,
-    pub current_workspace_uid: Option<WorkspaceUid>,
     pub command_history: Vec<PersistedCommand>,
     pub workspace_metadata: Vec<CodeWorkspaceMetadata>,
     pub workspace_language_servers: HashMap<PathBuf, HashMap<LSPServerType, EnablementState>>,
@@ -232,15 +229,6 @@ pub enum ModelEvent {
     SaveBlock(BlockCompleted),
     DeleteBlocks(Vec<u8>),
     Snapshot(AppState),
-    UpsertWorkspace {
-        workspace: Box<WorkspaceMetadata>,
-    },
-    UpsertWorkspaces {
-        workspaces: Vec<WorkspaceMetadata>,
-    },
-    SetCurrentWorkspace {
-        workspace_uid: WorkspaceUid,
-    },
     InsertCommand {
         metadata: StartedCommandMetadata,
     },

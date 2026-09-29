@@ -168,3 +168,57 @@ gemini_enterprise_credentials_enabled = true
         });
     });
 }
+
+#[test]
+fn removed_team_and_workspace_settings_in_the_settings_file_are_ignored() {
+    use settings::{PrivatePreferences, PublicPreferences, SettingsManager};
+    use warpui::SingletonEntity as _;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.toml");
+    std::fs::write(
+        &path,
+        r#"
+[general]
+restore_session = false
+
+[workspace]
+team_uid = "stale-team"
+
+[workspace.settings]
+is_session_sharing_enabled = true
+is_shared_workflows_enabled = true
+
+[teams.settings]
+enterprise_secret_redaction_enabled = true
+"#,
+    )
+    .unwrap();
+    let (preferences, error) =
+        warpui_extras::user_preferences::toml_backed::TomlBackedUserPreferences::new(path);
+    assert!(error.is_none(), "the settings file itself must still load");
+
+    warpui::App::test((), |mut app| async move {
+        app.update(|ctx| {
+            ctx.add_singleton_model(move |_| PublicPreferences::new(Box::new(preferences)));
+            ctx.add_singleton_model(|_| -> PrivatePreferences {
+                PrivatePreferences::new(Box::<InMemoryPreferences>::default())
+            });
+        });
+        app.add_singleton_model(|_| SettingsManager::default());
+        GeneralSettings::register(&mut app);
+
+        let failed_keys = app.update(|ctx| {
+            SettingsManager::handle(ctx)
+                .update(ctx, |manager, ctx| manager.reload_all_public_settings(ctx))
+        });
+        assert!(
+            failed_keys.is_empty(),
+            "removed team and workspace settings must not fail any setting: {failed_keys:?}"
+        );
+
+        app.read(|ctx| {
+            assert!(!*GeneralSettings::as_ref(ctx).restore_session);
+        });
+    });
+}

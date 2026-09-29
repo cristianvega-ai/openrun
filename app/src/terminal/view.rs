@@ -12516,7 +12516,6 @@ impl TypedActionView for TerminalView {
             | StartFileDropTarget
             | StopFileDropTarget
             | RunNativeShellCompletions { .. }
-            | OpenTeamSettingsPage
             | DeleteAttachment { .. }
             | OpenAttachmentLightbox { .. }
             | AttachFile
@@ -12797,9 +12796,6 @@ impl TypedActionView for TerminalView {
                     buffer_text: buffer_text.clone(),
                     results_tx: results_tx.clone(),
                 });
-            }
-            OpenTeamSettingsPage => {
-                ctx.emit(Event::OpenSettings(SettingsSection::Teams));
             }
             SetMarkedText {
                 marked_text,

@@ -16,10 +16,8 @@ use crate::app_state::{
     NotebookPaneSnapshot, PaneFlex, PaneNodeSnapshot, SettingsPaneSnapshot, SplitDirection,
     TabGroupSnapshot, TabSnapshot, TerminalPaneSnapshot, WindowSnapshot,
 };
-use crate::auth::UserUid;
 use crate::code::editor_management::CodeSource;
 use crate::persistence::{BlockCompleted, ModelEvent, PersistedDataScope, PersistenceScope};
-use crate::server::ids::ServerId;
 use crate::settings_view::SettingsSection;
 use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
@@ -28,8 +26,6 @@ use crate::terminal::model::block::SerializedBlock;
 use crate::themes::theme::AnsiColorIdentifier;
 use crate::workspace::tab_group::TabGroupId;
 use crate::workspace_metadata::WorkspaceMetadata;
-use crate::workspaces::team::{MembershipRole, Team, TeamMember};
-use crate::workspaces::workspace::Workspace;
 
 #[test]
 fn app_scope_database_path_matches_app_database_path() {
@@ -211,7 +207,6 @@ fn test_terminal_window_snapshot(vertical_tabs_panel_open: bool) -> WindowSnapsh
             pinned: false,
         }],
         active_tab_index: 0,
-        team_uid: None,
         bounds: None,
         fullscreen_state: Default::default(),
         quake_mode: false,
@@ -259,32 +254,6 @@ fn test_sqlite_round_trips_vertical_tabs_panel_open() {
 }
 
 #[test]
-fn test_sqlite_round_trips_window_team_uid() {
-    let tempdir = tempfile::tempdir().expect("tempdir should be created");
-    let database_path = tempdir.path().join("warp.sqlite");
-    let mut conn = setup_database(&database_path).expect("database should initialize");
-    let team_uid = ServerId::from(123);
-    let mut assigned_window = test_terminal_window_snapshot(false);
-    assigned_window.team_uid = Some(team_uid);
-
-    let app_state = AppState {
-        windows: vec![assigned_window, test_terminal_window_snapshot(true)],
-        active_window_index: Some(0),
-        block_lists: Default::default(),
-    };
-
-    save_app_state(&mut conn, &app_state).expect("app state should save");
-
-    let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
-        .expect("app state should load")
-        .app_state
-        .expect("app state should be present for the full scope");
-
-    assert_eq!(restored.windows[0].team_uid, Some(team_uid));
-    assert_eq!(restored.windows[1].team_uid, None);
-}
-
-#[test]
 fn test_sqlite_round_trips_custom_vertical_tabs_title() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");
@@ -317,7 +286,6 @@ fn test_sqlite_round_trips_custom_vertical_tabs_title() {
                 pinned: false,
             }],
             active_tab_index: 0,
-            team_uid: None,
             bounds: None,
             fullscreen_state: Default::default(),
             quake_mode: false,
@@ -392,7 +360,6 @@ fn test_sqlite_round_trips_code_pane_with_multiple_tabs() {
                 pinned: false,
             }],
             active_tab_index: 0,
-            team_uid: None,
             bounds: None,
             fullscreen_state: Default::default(),
             quake_mode: false,
@@ -499,7 +466,6 @@ fn test_sqlite_round_trips_tab_groups() {
         windows: vec![WindowSnapshot {
             tabs: vec![tab_in_group, tab_outside_group],
             active_tab_index: 0,
-            team_uid: None,
             bounds: None,
             fullscreen_state: Default::default(),
             quake_mode: false,
@@ -635,7 +601,6 @@ fn test_sqlite_round_trips_pinned_state() {
         windows: vec![WindowSnapshot {
             tabs: vec![pinned_tab, tab_in_pinned_group, unpinned_tab],
             active_tab_index: 0,
-            team_uid: None,
             bounds: None,
             fullscreen_state: Default::default(),
             quake_mode: false,
@@ -819,68 +784,6 @@ fn test_sqlite_drops_too_small_bounds_on_read() {
     );
 }
 
-#[test]
-fn team_member_is_disabled_round_trips_through_sqlite_cache() {
-    let tempdir = tempfile::tempdir().expect("tempdir should be created");
-    let database_path = tempdir.path().join("warp.sqlite");
-    let conn = setup_database(&database_path).expect("database should initialize");
-
-    let team = Team::from_local_cache(
-        ServerId::from_string_lossy(format!("{:0>22}", "team")),
-        "Team".to_string(),
-        None,
-        None,
-        Some(vec![
-            TeamMember {
-                uid: UserUid::new("active-user"),
-                email: "active@example.com".to_string(),
-                role: MembershipRole::User,
-                is_disabled: false,
-            },
-            TeamMember {
-                uid: UserUid::new("disabled-user"),
-                email: "disabled@example.com".to_string(),
-                role: MembershipRole::User,
-                is_disabled: true,
-            },
-        ]),
-    );
-    let workspace = Workspace::from_local_cache(
-        format!("{:0>22}", "workspace").into(),
-        "Workspace".to_string(),
-        Some(vec![team]),
-    );
-
-    let writer = start_writer(conn, database_path.clone()).expect("writer should start");
-    writer
-        .sender
-        .send(ModelEvent::UpsertWorkspaces {
-            workspaces: vec![workspace],
-        })
-        .expect("upsert workspaces event should send");
-    writer
-        .sender
-        .send(ModelEvent::Terminate)
-        .expect("terminate event should send");
-    writer.handle.join().expect("writer should terminate");
-
-    let mut conn = setup_database(&database_path).expect("database should reopen");
-    let restored =
-        read_sqlite_data(&mut conn, PersistedDataScope::Full).expect("persisted data should load");
-
-    let members = &restored.workspaces[0].teams[0].members;
-    let active_member = members
-        .iter()
-        .find(|member| member.email == "active@example.com")
-        .expect("active member should be present");
-    let disabled_member = members
-        .iter()
-        .find(|member| member.email == "disabled@example.com")
-        .expect("disabled member should be present");
-    assert!(!active_member.is_disabled);
-    assert!(disabled_member.is_disabled);
-}
-
 fn terminal_leaf(uuid_byte: u8) -> PaneNodeSnapshot {
     let mut window = test_terminal_window_snapshot(false);
     let PaneNodeSnapshot::Leaf(mut leaf) = window.tabs.remove(0).root else {
@@ -941,6 +844,70 @@ fn rewrite_settings_panes_as_kind(conn: &mut diesel::SqliteConnection, kind: &st
          PRAGMA foreign_keys = ON;"
     ))
     .expect("panes should be rewritten");
+}
+
+#[test]
+fn test_sqlite_restore_opens_default_settings_page_for_stored_teams_section() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let settings_on_privacy = PaneNodeSnapshot::Leaf(LeafSnapshot {
+        is_focused: false,
+        custom_vertical_tabs_title: None,
+        contents: LeafContents::Settings(SettingsPaneSnapshot::Local {
+            current_page: SettingsSection::Privacy,
+            search_query: None,
+        }),
+    });
+    let app_state = AppState {
+        windows: vec![window_with_tabs(
+            vec![tab_with_root(settings_on_privacy)],
+            0,
+        )],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+    conn.batch_execute("UPDATE settings_panes SET current_page = 'Teams'")
+        .expect("stored section should be rewritten");
+
+    let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+        .expect("a stored Teams section must not fail the read")
+        .app_state
+        .expect("app state should be present for the full scope");
+
+    let PaneNodeSnapshot::Leaf(LeafSnapshot {
+        contents: LeafContents::Settings(SettingsPaneSnapshot::Local { current_page, .. }),
+        ..
+    }) = &restored.windows[0].tabs[0].root
+    else {
+        panic!("expected a settings leaf");
+    };
+    assert_eq!(*current_page, SettingsSection::default());
+}
+
+#[test]
+fn test_sqlite_restore_ignores_stored_window_team_uid() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let app_state = AppState {
+        windows: vec![test_terminal_window_snapshot(true)],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+    conn.batch_execute("UPDATE windows SET team_uid = 'stale-team'")
+        .expect("stored team should be written");
+
+    let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+        .expect("a stored team must not fail the read")
+        .app_state
+        .expect("app state should be present for the full scope");
+
+    assert_eq!(restored.windows, app_state.windows);
 }
 
 #[test]

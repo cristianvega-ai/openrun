@@ -8968,7 +8968,6 @@ dependencies = [
  "regex_dfas",
  "string-offset",
  "warp_core",
- "warp_errors",
 ]
 
 [[package]]

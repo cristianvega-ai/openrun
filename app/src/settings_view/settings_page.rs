@@ -33,7 +33,6 @@ use super::keybindings::KeybindingsView;
 use super::privacy_page::PrivacyPageView;
 use super::projects_page::ProjectsPageView;
 use super::scripting_page::ScriptingSettingsPageView;
-use super::teams_page::TeamsPageView;
 use super::warpify_page::WarpifyPageView;
 use crate::appearance::Appearance;
 use crate::themes::theme::Fill;
@@ -95,7 +94,6 @@ pub enum SettingsPageViewHandle {
     About(ViewHandle<AboutPageView>),
     Projects(ViewHandle<ProjectsPageView>),
     EditorAndCodeReview(ViewHandle<EditorAndCodeReviewPageView>),
-    Teams(ViewHandle<TeamsPageView>),
     Privacy(ViewHandle<PrivacyPageView>),
     Warpify(ViewHandle<WarpifyPageView>),
     Scripting(ViewHandle<ScriptingSettingsPageView>),
@@ -112,7 +110,6 @@ impl SettingsPageViewHandle {
             About(view_handle) => ChildView::new(view_handle).finish(),
             Projects(view_handle) => ChildView::new(view_handle).finish(),
             EditorAndCodeReview(view_handle) => ChildView::new(view_handle).finish(),
-            Teams(view_handle) => ChildView::new(view_handle).finish(),
             Privacy(view_handle) => ChildView::new(view_handle).finish(),
             Warpify(view_handle) => ChildView::new(view_handle).finish(),
             Scripting(view_handle) => ChildView::new(view_handle).finish(),
@@ -255,32 +252,6 @@ pub fn render_separator(appearance: &Appearance) -> Box<dyn Element> {
     Container::new(Empty::new().finish())
         .with_border(Border::bottom(2.).with_border_fill(appearance.theme().outline()))
         .with_margin_bottom(HEADER_PADDING)
-        .finish()
-}
-
-pub fn render_banner(
-    icon: Icon,
-    body: Box<dyn Element>,
-    appearance: &Appearance,
-) -> Box<dyn Element> {
-    let theme = appearance.theme();
-    let sub_text = theme.sub_text_color(theme.background());
-    let icon = ConstrainedBox::new(icon.to_warpui_icon(sub_text).finish())
-        .with_width(14.)
-        .with_height(14.)
-        .finish();
-
-    let row = Flex::row()
-        .with_main_axis_size(MainAxisSize::Max)
-        .with_cross_axis_alignment(CrossAxisAlignment::Center)
-        .with_child(Container::new(icon).with_margin_right(8.).finish())
-        .with_child(body)
-        .finish();
-
-    Container::new(row)
-        .with_background_color(theme.surface_1().into_solid())
-        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(8.)))
-        .with_uniform_padding(12.)
         .finish()
 }
 

@@ -16,7 +16,6 @@ use settings_page::{
     HEADER_PADDING, MatchData, SettingsPage, SettingsPageEvent, SettingsPageMeta,
     SettingsPageViewHandle,
 };
-use teams_page::{TeamsPageAction, TeamsPageView, TeamsPageViewEvent};
 use warp_core::channel::ChannelState;
 use warp_core::context_flag::ContextFlag;
 use warp_core::features::FeatureFlag;
@@ -63,7 +62,6 @@ mod code_editor_review_page;
 mod directory_color_add_picker;
 mod features;
 mod features_page;
-mod join_teams_modal;
 pub mod keybindings;
 mod nav;
 pub mod pane_manager;
@@ -73,9 +71,6 @@ mod projects_page;
 mod scripting_page;
 mod settings_file_footer;
 pub(crate) mod settings_page;
-mod tab_menu;
-mod teams_page;
-mod transfer_ownership_confirmation_modal;
 mod warpify_page;
 
 #[cfg(not(target_family = "wasm"))]
@@ -91,7 +86,6 @@ pub use settings_page::{
     AdditionalInfo, InputListItem, ToggleState, render_body_item_label, render_info_icon,
     render_input_list, render_separator,
 };
-pub use teams_page::{OpenTeamsSettingsModalArgs, TeamsInviteOption};
 
 /// Original sidebar width used when the settings-file footer is not
 /// enabled. Preserved for Preview/Stable until `FeatureFlag::SettingsFile`
@@ -191,7 +185,6 @@ pub enum SettingsSection {
     Keybindings,
     Privacy,
     Scripting,
-    Teams,
     Warpify,
     ThirdPartyCLIAgents,
     // ── Code umbrella subpages ──
@@ -238,7 +231,6 @@ impl SettingsSection {
             Self::Keybindings => "Keyboard shortcuts",
             Self::Privacy => "Privacy",
             Self::Scripting => "Scripting",
-            Self::Teams => "Teams",
             Self::Warpify => "Warpify",
             Self::ThirdPartyCLIAgents => "Third party CLI agents",
             // Keeps the "Indexing and projects" spelling the slug was seeded from; only the
@@ -260,7 +252,7 @@ impl SettingsSection {
             "About" => Self::About,
             // These pages no longer exist; land on the default page instead.
             "Account" | "Billing and usage" | "Environments" | "CloudEnvironments"
-            | "Oz Cloud API Keys" | "OzCloudAPIKeys" => Self::default(),
+            | "Oz Cloud API Keys" | "OzCloudAPIKeys" | "Teams" => Self::default(),
             // The removed AI pages land on the CLI agents page.
             "Warp Agent" | "Oz" | "AI" | "Profiles" | "AgentProfiles" => Self::ThirdPartyCLIAgents,
             "Appearance" => Self::Appearance,
@@ -268,7 +260,6 @@ impl SettingsSection {
             "Keyboard shortcuts" => Self::Keybindings,
             "Privacy" => Self::Privacy,
             "Scripting" => Self::Scripting,
-            "Teams" => Self::Teams,
             "Warpify" => Self::Warpify,
             "Third party CLI agents" | "ThirdPartyCLIAgents" => Self::ThirdPartyCLIAgents,
             // "Code" named the combined page before it split in two.
@@ -898,7 +889,6 @@ macro_rules! update_page {
             SettingsPageViewHandle::Appearance(handle) => $ctx.update_view(handle, $update),
             SettingsPageViewHandle::Features(handle) => $ctx.update_view(handle, $update),
             SettingsPageViewHandle::Keybindings(handle) => $ctx.update_view(handle, $update),
-            SettingsPageViewHandle::Teams(handle) => $ctx.update_view(handle, $update),
             SettingsPageViewHandle::Warpify(handle) => $ctx.update_view(handle, $update),
             SettingsPageViewHandle::Privacy(handle) => $ctx.update_view(handle, $update),
             SettingsPageViewHandle::Scripting(handle) => $ctx.update_view(handle, $update),
@@ -977,21 +967,6 @@ impl SettingsView {
         });
         let editor_review_page_handle = ctx.add_typed_action_view(EditorAndCodeReviewPageView::new);
 
-        // Teams page, adding unconditionally, as `should_render` later on decides whether it
-        // should be shown to the user or not
-        let teams_page_handle = ctx.add_typed_action_view(TeamsPageView::new);
-        ctx.subscribe_to_view(&teams_page_handle, |_, _, event, ctx| match event {
-            TeamsPageViewEvent::TeamsChanged => ctx.notify(),
-            TeamsPageViewEvent::ShowToast { message, flavor } => {
-                ctx.emit(SettingsViewEvent::ShowToast {
-                    message: message.clone(),
-                    flavor: *flavor,
-                })
-            }
-            // Modal rendering is handled in get_modal_content_for_page
-            TeamsPageViewEvent::ModalVisibilityChanged => ctx.notify(),
-        });
-
         let warpify_page_handle = ctx.add_typed_action_view(WarpifyPageView::new);
         ctx.subscribe_to_view(&warpify_page_handle, |me, _, event, ctx| {
             me.handle_warpify_page_event(event, ctx);
@@ -1040,7 +1015,6 @@ impl SettingsView {
             SettingsPage::new(cli_agents_page_handle),
             SettingsPage::new(projects_page_handle),
             SettingsPage::new(editor_review_page_handle),
-            SettingsPage::new(teams_page_handle),
             SettingsPage::new(appearance_page_handle),
             SettingsPage::new(features_page_handle),
             SettingsPage::new(keybindings_handle),
@@ -1067,7 +1041,6 @@ impl SettingsView {
                     SettingsSection::EditorAndCodeReview,
                 ],
             )),
-            SettingsNavItem::Page(SettingsSection::Teams),
             SettingsNavItem::Page(SettingsSection::Appearance),
             SettingsNavItem::Page(SettingsSection::Features),
             SettingsNavItem::Page(SettingsSection::Keybindings),
@@ -1541,7 +1514,6 @@ impl SettingsView {
 
     fn should_render_page(&self, settings_page: &SettingsPage, app: &AppContext) -> bool {
         match &settings_page.view_handle {
-            SettingsPageViewHandle::Teams(v) => v.as_ref(app).should_render(app),
             SettingsPageViewHandle::Keybindings(v) => v.as_ref(app).should_render(app),
             SettingsPageViewHandle::Features(v) => v.as_ref(app).should_render(app),
             SettingsPageViewHandle::Appearance(v) => v.as_ref(app).should_render(app),
@@ -1552,31 +1524,6 @@ impl SettingsView {
             SettingsPageViewHandle::CLIAgents(v) => v.as_ref(app).should_render(app),
             SettingsPageViewHandle::Projects(v) => v.as_ref(app).should_render(app),
             SettingsPageViewHandle::EditorAndCodeReview(v) => v.as_ref(app).should_render(app),
-        }
-    }
-
-    /// Open the invite section of the teams page, optionally with an email to invite.
-    pub fn open_teams_page_email_invite(
-        &mut self,
-        email: Option<&String>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if let Some(team_page) = self.settings_page(SettingsSection::Teams)
-            && let SettingsPageViewHandle::Teams(view) = &team_page.view_handle
-        {
-            view.update(ctx, |view, ctx| {
-                view.open_team_members(email, ctx);
-            })
-        }
-    }
-
-    pub fn open_teams_page_join_modal(&mut self, ctx: &mut ViewContext<Self>) {
-        if let Some(team_page) = self.settings_page(SettingsSection::Teams)
-            && let SettingsPageViewHandle::Teams(view) = &team_page.view_handle
-        {
-            view.update(ctx, |view, ctx| {
-                view.handle_action(&TeamsPageAction::ShowJoinTeamsModal, ctx);
-            });
         }
     }
 
@@ -1686,9 +1633,6 @@ impl SettingsView {
                 SettingsPageViewHandle::Keybindings(view_handle) => {
                     view_handle.update(ctx, |view, ctx| view.on_tab_pressed(ctx));
                 }
-                SettingsPageViewHandle::Teams(view_handle) => {
-                    view_handle.update(ctx, |view, ctx| view.on_tab_pressed(ctx));
-                }
                 _ => (),
             };
         }
@@ -1744,9 +1688,6 @@ impl SettingsView {
     ) -> Option<Box<dyn Element>> {
         match page_handle {
             SettingsPageViewHandle::Privacy(view) => {
-                view.read(app, |view, _| view.get_modal_content())
-            }
-            SettingsPageViewHandle::Teams(view) => {
                 view.read(app, |view, _| view.get_modal_content())
             }
             _ => None,

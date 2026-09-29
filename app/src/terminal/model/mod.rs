@@ -33,7 +33,7 @@ pub use lifecycle::StartCommandOutcome;
 pub use warp_terminal::model::grid::cell;
 pub use warp_terminal::model::secrets::{
     ObfuscateSecrets, RespectObfuscatedSecrets, Secret, SecretHandle,
-    set_user_and_enterprise_secret_regexes,
+    set_user_secret_regexes,
 };
 pub use warp_terminal::model::{
     BlockId, ansi, blockgrid, char_or_str, completions, escape_sequences, find, grid, image_map,

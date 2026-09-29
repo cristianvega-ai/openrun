@@ -63,7 +63,6 @@ const ALL_SECTIONS: &[SettingsSection] = &[
     SettingsSection::Keybindings,
     SettingsSection::Privacy,
     SettingsSection::Scripting,
-    SettingsSection::Teams,
     SettingsSection::Warpify,
     SettingsSection::ThirdPartyCLIAgents,
     SettingsSection::Projects,
@@ -85,7 +84,6 @@ fn all_sections_list_is_exhaustive() {
             | SettingsSection::Keybindings
             | SettingsSection::Privacy
             | SettingsSection::Scripting
-            | SettingsSection::Teams
             | SettingsSection::Warpify
             | SettingsSection::ThirdPartyCLIAgents
             | SettingsSection::Projects
@@ -174,6 +172,7 @@ fn from_slug_maps_removed_pages_to_the_default_page() {
         "CloudEnvironments",
         "Oz Cloud API Keys",
         "OzCloudAPIKeys",
+        "Teams",
     ] {
         assert_eq!(
             SettingsSection::from_slug(slug),
@@ -243,7 +242,7 @@ fn realistic_nav_items() -> Vec<SettingsNavItem> {
             "Terminal",
             TERMINAL_SUBPAGES.to_vec(),
         )),
-        SettingsNavItem::Page(SettingsSection::Teams),
+        SettingsNavItem::Page(SettingsSection::Privacy),
     ]
 }
 
@@ -263,7 +262,7 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
     let stops = build_nav_stops(&nav_items, |_| true);
 
     // Expect: Appearance, ThirdPartyCLIAgents, Features, <Code umbrella>,
-    // <Terminal umbrella>, Teams.
+    // <Terminal umbrella>, Privacy.
     assert_eq!(stops.len(), 6);
     assert!(matches!(
         stops[0],
@@ -293,7 +292,10 @@ fn collapsed_umbrella_is_a_single_nav_stop() {
             last_subpage: SettingsSection::Scripting,
         }
     ));
-    assert!(matches!(stops[5], NavStop::Section(SettingsSection::Teams)));
+    assert!(matches!(
+        stops[5],
+        NavStop::Section(SettingsSection::Privacy)
+    ));
 }
 
 #[test]
@@ -320,7 +322,7 @@ fn expanded_umbrella_produces_section_stop_per_subpage() {
             "Projects",
             "EditorAndCodeReview",
             "Umbrella@4",
-            "Teams",
+            "Privacy",
         ]
     );
 }
@@ -388,13 +390,13 @@ fn umbrella_with_no_visible_subpages_is_skipped_entirely() {
 fn filtered_out_top_level_page_is_skipped() {
     let nav_items = realistic_nav_items();
 
-    let stops = build_nav_stops(&nav_items, |section| section != SettingsSection::Teams);
+    let stops = build_nav_stops(&nav_items, |section| section != SettingsSection::Privacy);
 
     assert!(
         !stops
             .iter()
-            .any(|s| matches!(s, NavStop::Section(SettingsSection::Teams))),
-        "Teams should be filtered out entirely"
+            .any(|s| matches!(s, NavStop::Section(SettingsSection::Privacy))),
+        "Privacy should be filtered out entirely"
     );
     // But other pages remain.
     assert!(
@@ -512,14 +514,14 @@ fn arrow_up_from_teams_with_collapsed_terminal_lands_on_last_subpage() {
     let nav_items = realistic_nav_items();
     let stops = build_nav_stops(&nav_items, |_| true);
 
-    // Pressing Up from Teams should land on the collapsed Terminal
+    // Pressing Up from Privacy should land on the collapsed Terminal
     // umbrella, which resolves to Scripting (last visible subpage)
     // so the user continues moving in natural reading order rather than being
     // jumped back to the top of the umbrella.
     let next = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::Teams,
+        SettingsSection::Privacy,
         CycleDirection::Up,
     );
     assert_eq!(next, SettingsSection::Scripting);
@@ -533,13 +535,13 @@ fn arrow_up_into_collapsed_umbrella_respects_search_filter_for_last_subpage() {
     let is_visible = |section: SettingsSection| !matches!(section, SettingsSection::Scripting);
     let stops = build_nav_stops(&nav_items, is_visible);
 
-    // From Teams, Up should land on the last *visible* terminal subpage
+    // From Privacy, Up should land on the last *visible* terminal subpage
     // (Warpify), not on the filtered-out Scripting or on the first subpage
     // Keybindings.
     let next = simulate_cycle(
         &nav_items,
         &stops,
-        SettingsSection::Teams,
+        SettingsSection::Privacy,
         CycleDirection::Up,
     );
     assert_eq!(next, SettingsSection::Warpify);
@@ -552,14 +554,14 @@ fn arrow_down_from_expanded_last_subpage_leaves_umbrella() {
     let stops = build_nav_stops(&nav_items, |_| true);
 
     // Scripting is the last Terminal subpage; Down should move to
-    // Teams (the next top-level page in the nav order).
+    // Privacy (the next top-level page in the nav order).
     let next = simulate_cycle(
         &nav_items,
         &stops,
         SettingsSection::Scripting,
         CycleDirection::Down,
     );
-    assert_eq!(next, SettingsSection::Teams);
+    assert_eq!(next, SettingsSection::Privacy);
 }
 
 #[test]

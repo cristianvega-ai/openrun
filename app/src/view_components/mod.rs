@@ -2,7 +2,6 @@
 
 pub mod action_button;
 pub mod callout_bubble;
-mod clickable_text_input;
 mod compact_dropdown;
 mod dismissible_toast;
 pub mod dropdown;
@@ -12,7 +11,6 @@ pub mod find;
 mod markdown_toggle_view;
 mod submittable_text_input;
 
-pub use clickable_text_input::*;
 pub use compact_dropdown::{CompactDropdown, CompactDropdownEvent, CompactDropdownItem};
 pub use dismissible_toast::*;
 pub use dropdown::{Dropdown, DropdownItem, DropdownItemAction};

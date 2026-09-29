@@ -7,9 +7,8 @@ use super::schema::{
     app, blocks, cloud_objects_refreshes, code_pane_tabs, code_panes, code_review_panes, commands,
     folders, generic_string_objects, ignored_suggestions, notebook_panes, notebooks,
     object_actions, object_metadata, object_permissions, pane_branches, pane_leaves, pane_nodes,
-    panels, projects, settings_panes, tab_groups, tabs, team_members, team_settings, teams,
-    terminal_panes, user_profiles, windows, workflow_panes, workflows, workspace_language_server,
-    workspace_metadata, workspace_teams, workspaces,
+    panels, projects, settings_panes, tab_groups, tabs, terminal_panes, user_profiles, windows,
+    workflow_panes, workflows, workspace_language_server, workspace_metadata,
 };
 
 #[derive(Insertable)]
@@ -96,73 +95,6 @@ pub struct NewFolder {
     pub is_warp_pack: bool,
 }
 
-#[derive(Identifiable, Insertable, Queryable)]
-pub struct Team {
-    pub id: i32,
-    pub name: String,
-    pub server_uid: String,
-    pub billing_metadata_json: Option<String>,
-}
-
-#[derive(Insertable, AsChangeset)]
-#[diesel(table_name = teams)]
-pub struct NewTeam {
-    pub name: String,
-    pub server_uid: String,
-    pub billing_metadata_json: Option<String>,
-}
-
-#[derive(Identifiable, Queryable)]
-#[diesel(table_name = team_members)]
-pub struct TeamMemberRow {
-    pub id: i32,
-    pub team_id: i32,
-    pub user_uid: String,
-    pub email: String,
-    pub role: String,
-    pub is_disabled: bool,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = team_members)]
-pub struct NewTeamMember {
-    pub team_id: i32,
-    pub user_uid: String,
-    pub email: String,
-    pub role: String,
-    pub is_disabled: bool,
-}
-
-#[derive(Identifiable, Insertable, Queryable)]
-pub struct Workspace {
-    pub id: i32,
-    pub name: String,
-    pub server_uid: String,
-    pub is_selected: bool,
-}
-
-#[derive(Insertable, AsChangeset)]
-#[diesel(table_name = workspaces)]
-pub struct NewWorkspace {
-    pub name: String,
-    pub server_uid: String,
-    pub is_selected: bool,
-}
-
-#[derive(Identifiable, Insertable, Queryable)]
-pub struct TeamSetting {
-    pub id: i32,
-    pub team_id: i32,
-    pub settings_json: String,
-}
-
-#[derive(Insertable, AsChangeset)]
-#[diesel(table_name = team_settings)]
-pub struct NewTeamSettings {
-    pub team_id: i32,
-    pub settings_json: String,
-}
-
 #[derive(Clone, Identifiable, Queryable, AsChangeset)]
 #[diesel(table_name = workspace_metadata)]
 pub struct WorkspaceMetadata {
@@ -220,20 +152,6 @@ impl PartialEq for Project {
 }
 
 impl Eq for Project {}
-
-#[derive(Identifiable, Insertable, Queryable)]
-pub struct WorkspaceTeam {
-    pub id: i32,
-    pub workspace_server_uid: String,
-    pub team_server_uid: String,
-}
-
-#[derive(Insertable, AsChangeset)]
-#[diesel(table_name = workspace_teams)]
-pub struct NewWorkspaceTeam {
-    pub workspace_server_uid: String,
-    pub team_server_uid: String,
-}
 
 #[derive(Insertable, Queryable)]
 #[diesel(table_name = object_permissions)]
@@ -320,7 +238,6 @@ pub struct NewWindow {
     pub agent_management_filters: Option<String>,
     pub left_panel_open: Option<bool>,
     pub vertical_tabs_panel_open: Option<bool>,
-    pub team_uid: Option<String>,
 }
 
 #[derive(Identifiable, Queryable, Associations)]

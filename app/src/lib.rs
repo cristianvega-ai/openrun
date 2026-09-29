@@ -20,7 +20,6 @@ mod context_chips;
 mod crash_recovery;
 mod debug_dump;
 mod default_terminal;
-mod drive;
 #[cfg(windows)]
 mod dynamic_libraries;
 mod global_resource_handles;
@@ -70,9 +69,7 @@ mod vim_registers;
 mod voltron;
 mod warp_managed_paths_watcher;
 mod window_settings;
-mod word_block_editor;
 mod workspace_metadata;
-mod workspaces;
 
 // PLEASE DO NOT ADD MORE PUBLIC MODULES!
 //
@@ -213,9 +210,6 @@ use crate::vim_registers::VimRegisters;
 use crate::warp_managed_paths_watcher::{WarpManagedPathsWatcher, ensure_warp_watch_roots_exist};
 use crate::workflows::local_workflows::LocalWorkflows;
 use crate::workspace::{ActiveSession, PaneViewLocator, ToastStack, Workspace, WorkspaceAction};
-use crate::workspaces::team_tester::TeamTesterStatus;
-use crate::workspaces::update_manager::TeamUpdateManager;
-use crate::workspaces::user_workspaces::UserWorkspaces;
 
 /// Our embedded application assets.
 pub static ASSETS: warp_assets::Assets = warp_assets::Assets;
@@ -718,7 +712,7 @@ pub(crate) fn initialize_app(
     #[cfg(target_family = "wasm")]
     let iap_state: Option<Arc<IapState>> = None;
 
-    let server_api_provider = ctx.add_singleton_model({
+    ctx.add_singleton_model({
         let auth_state = auth_state.clone();
         let iap_state = iap_state.clone();
         move |ctx| ServerApiProvider::new(auth_state, iap_state, ctx)
@@ -763,8 +757,6 @@ pub(crate) fn initialize_app(
     });
 
     let (
-        cached_workspaces,
-        current_workspace_uid,
         app_state,
         command_history,
         persisted_workspaces,
@@ -774,8 +766,6 @@ pub(crate) fn initialize_app(
     ) = sqlite_data
         .map(|sqlite_data| {
             (
-                sqlite_data.workspaces,
-                sqlite_data.current_workspace_uid,
                 sqlite_data.app_state,
                 sqlite_data.command_history,
                 sqlite_data.workspace_metadata,
@@ -792,19 +782,9 @@ pub(crate) fn initialize_app(
                 Default::default(),
                 Default::default(),
                 Default::default(),
-                Default::default(),
-                Default::default(),
             )
         });
 
-    ctx.add_singleton_model(|ctx| {
-        UserWorkspaces::new(
-            server_api_provider.as_ref(ctx).get_team_client(),
-            server_api_provider.as_ref(ctx).get_workspace_client(),
-            cached_workspaces,
-            current_workspace_uid,
-        )
-    });
 
     ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
 
@@ -973,18 +953,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(RepoOutlines::new);
 
     ctx.add_singleton_model(|_| AudibleBell::new());
-
-    // This model has to be registered after the user workspaces model because it relies on it,
-    // and before the TeamUpdateManager model because it relies on the TeamTester model.
-    ctx.add_singleton_model(TeamTesterStatus::new);
-
-    ctx.add_singleton_model(|ctx| {
-        TeamUpdateManager::new(
-            server_api_provider.as_ref(ctx).get_team_client(),
-            persistence_writer.sender(),
-            ctx,
-        )
-    });
 
     // LogManager must be registered before any subsystem (e.g. LSP) that creates file-based loggers.
     ctx.add_singleton_model(|_| simple_logger::manager::LogManager::new());

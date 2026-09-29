@@ -34,10 +34,9 @@ use crate::interval_timer::IntervalTimer;
 use crate::launch_configs::launch_config;
 use crate::pane_group::{NewTerminalOptions, PanesLayout};
 use crate::persistence::ModelEvent;
-use crate::server::ids::ServerId;
 use crate::server::server_api::{ServerApi, ServerApiProvider};
 use crate::settings::{QuakeModeSettings, ThemeSettings, apply_onboarding_settings};
-use crate::settings_view::{OpenTeamsSettingsModalArgs, SettingsSection, flags};
+use crate::settings_view::{SettingsSection, flags};
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::keys_settings::KeysSettings;
@@ -51,8 +50,6 @@ use crate::util::bindings::{self, is_binding_pty_compliant};
 use crate::util::traffic_lights::{TrafficLightData, TrafficLightMouseStates, traffic_light_data};
 use crate::window_settings::WindowSettings;
 use crate::workspace::{PaneViewLocator, Workspace, WorkspaceAction, WorkspaceRegistry};
-use crate::workspaces::team_tester::TeamTesterStatus;
-use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{
     ChannelState, GlobalResourceHandles, GlobalResourceHandlesProvider, UpdateQuakeModeEventArg,
 };
@@ -189,14 +186,6 @@ pub fn init(app: &mut AppContext) {
         RootView::add_session_at_path,
     );
     app.add_action(
-        "root_view:handle_team_intent_link_action",
-        RootView::handle_team_intent_link_action,
-    );
-    app.add_action(
-        "root_view:open_team_settings_page",
-        RootView::open_team_settings_page,
-    );
-    app.add_action(
         "root_view:handle_notification_click",
         RootView::handle_notification_click,
     );
@@ -215,15 +204,6 @@ pub fn init(app: &mut AppContext) {
         RootView::toggle_maximize_window,
     );
     app.add_action("root_view:toggle_fullscreen", RootView::toggle_fullscreen);
-
-    app.add_global_action(
-        "root_view:open_team_settings_with_email_invite_in_new_window",
-        open_team_settings_with_email_invite_in_new_window,
-    );
-    app.add_action(
-        "root_view:open_team_settings_with_email_invite_in_existing_window",
-        RootView::open_team_settings_with_email_invite_in_existing_window,
-    );
 
     app.add_global_action(
         "root_view:open_settings_page_in_new_window",
@@ -651,27 +631,9 @@ pub(crate) fn open_new_from_path(
                 NewTerminalOptions::default()
                     .with_initial_directory_opt(path_if_directory(&arg.path).map(Into::into)),
             ),
-            initial_team_uid: None,
         },
         ctx,
     )
-}
-
-fn open_team_settings_with_email_invite_in_new_window(
-    arg: &OpenTeamsSettingsModalArgs,
-    ctx: &mut AppContext,
-) {
-    let root_handle = open_new_window_get_handles(None, ctx).1;
-    root_handle.update(ctx, |root_view, ctx| {
-        if let AuthOnboardingState::Terminal(workspace_view_handle) =
-            &root_view.auth_onboarding_state
-        {
-            let email_invite = arg.invite_email.clone();
-            workspace_view_handle.update(ctx, |workspace, ctx| {
-                workspace.show_team_settings_page_with_email_invite(email_invite.as_ref(), ctx)
-            });
-        }
-    });
 }
 
 fn open_settings_page_in_new_window(section: &SettingsSection, ctx: &mut AppContext) {
@@ -1089,14 +1051,9 @@ pub enum NewWorkspaceSource {
     },
     Session {
         options: Box<NewTerminalOptions>,
-        initial_team_uid: Option<ServerId>,
     },
     NotebookFromFilePath {
         file_path: Option<PathBuf>,
-    },
-    /// Opens a new window pre-scoped to a specific team, chosen via the title-bar team switcher.
-    TeamSwitched {
-        team_uid: ServerId,
     },
     /// A tab is being transferred from another window via the transferable views framework.
     /// The workspace will create a placeholder tab, which will be replaced by the transferred
@@ -1139,39 +1096,6 @@ impl NewWorkspaceSource {
             }
             _ => false,
         }
-    }
-
-    pub fn team_uid(&self, ctx: &AppContext) -> Option<ServerId> {
-        if let Self::Session {
-            initial_team_uid: Some(team_uid),
-            ..
-        } = self
-        {
-            return Some(*team_uid);
-        }
-        let source_window_id = match self {
-            Self::Empty {
-                previous_active_window,
-                ..
-            } => *previous_active_window,
-            Self::TransferredTab {
-                source_window_id, ..
-            } => Some(*source_window_id),
-            Self::FromTemplate { .. }
-            | Self::Session { .. }
-            | Self::NotebookFromFilePath { .. } => None,
-            Self::TeamSwitched { team_uid } => return Some(*team_uid),
-            Self::Restored {
-                window_snapshot, ..
-            } => {
-                if let Some(team_uid) = window_snapshot.team_uid {
-                    return Some(team_uid);
-                }
-                None
-            }
-        };
-
-        UserWorkspaces::as_ref(ctx).inherited_or_default_team_uid(source_window_id)
     }
 }
 
@@ -1237,11 +1161,6 @@ impl RootView {
         workspace_setting: NewWorkspaceSource,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
-        let window_id = ctx.window_id();
-        let team_uid = workspace_setting.team_uid(ctx);
-        UserWorkspaces::handle(ctx).update(ctx, |user_workspaces, ctx| {
-            user_workspaces.register_window(window_id, team_uid, ctx);
-        });
         let server_api = ServerApiProvider::as_ref(ctx).get();
 
         let model_event_sender = global_resource_handles.model_event_sender.clone();
@@ -1491,22 +1410,6 @@ impl RootView {
         true
     }
 
-    pub fn open_team_settings_with_email_invite_in_existing_window(
-        &mut self,
-        arg: &OpenTeamsSettingsModalArgs,
-        ctx: &mut ViewContext<Self>,
-    ) -> bool {
-        if let AuthOnboardingState::Terminal(handle) = &self.auth_onboarding_state {
-            handle.update(ctx, |workspace, ctx| {
-                workspace.show_team_settings_page_with_email_invite(arg.invite_email.as_ref(), ctx)
-            });
-            return true;
-        } else {
-            log::warn!("Auth not complete before trying to open settings pane");
-        }
-        false
-    }
-
     pub fn add_file_pane(&mut self, path: &PathBuf, ctx: &mut ViewContext<Self>) -> bool {
         if let AuthOnboardingState::Terminal(handle) = &self.auth_onboarding_state {
             handle.update(ctx, |workspace, ctx| {
@@ -1541,38 +1444,6 @@ impl RootView {
             })
         } else {
             log::warn!("Auth not complete before trying to fill input");
-        }
-        true
-    }
-
-    /// Shows the user the settings view of their newly joined team
-    /// within the app.
-    pub fn handle_team_intent_link_action(&mut self, _: &(), ctx: &mut ViewContext<Self>) -> bool {
-        let window_id = ctx.window_id();
-        if let AuthOnboardingState::Terminal(_) = &self.auth_onboarding_state {
-            ctx.windows().show_window_and_focus_app(window_id);
-        } else {
-            report_error!("Auth not complete before handling a team intent link");
-        }
-
-        // Use the team tester model to notify relevant subscribers to refresh their data.
-        TeamTesterStatus::handle(ctx).update(ctx, |model, ctx| {
-            model.initiate_data_pollers(true, ctx);
-        });
-        true
-    }
-
-    pub fn open_team_settings_page(&mut self, _: &(), ctx: &mut ViewContext<Self>) -> bool {
-        let window_id = ctx.window_id();
-        if let AuthOnboardingState::Terminal(handle) = &self.auth_onboarding_state {
-            ctx.dispatch_typed_action_for_view(
-                window_id,
-                handle.id(),
-                &WorkspaceAction::ShowSettingsPage(SettingsSection::Teams),
-            );
-            ctx.windows().show_window_and_focus_app(window_id);
-        } else {
-            report_error!("Auth not complete before trying to open team settings page");
         }
         true
     }

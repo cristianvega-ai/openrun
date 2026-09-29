@@ -217,9 +217,6 @@ impl SupportedPlatforms {
 /// An enum representing the reason for a change event.
 #[derive(Debug, Clone, Copy)]
 pub enum ChangeEventReason {
-    /// The change was initiated from a cloud sync
-    CloudSync,
-
     /// The change was initiated from a local setting change
     LocalChange,
 

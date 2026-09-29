@@ -32,7 +32,6 @@ pub(super) struct WorkspaceMouseStates {
     pub(super) notifications_mailbox: MouseStateHandle,
     pub(super) tools_panel_icon: MouseStateHandle,
     pub(super) title_bar_search_bar: MouseStateHandle,
-    pub(super) team_switcher_pill: MouseStateHandle,
 }
 
 #[derive(Debug)]

@@ -100,7 +100,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Cloud-object infrastructure: model, sync queue, update manager and listener](#cloud-object-infrastructure-model-sync-queue-update-manager-and-listener) — deleted `CloudModel`, `CloudViewModel`, `ObjectActions`, `UpdateManager`, the real-time listener, the sync queue, the object API client and the object `ModelEvent`s; the persisted cloud-object rows are no longer read or written; the three `cloud_object_*` crates are gone
 - [Telemetry call sites: terminal, editor and code layer](#telemetry-call-sites-terminal-editor-and-code-layer) — deleted every telemetry emission in terminal, pane group, editor, code, code review, search, URI, prompt, persistence, undo-close, view components, system, quit warning and repo metadata, with the parameters, fields and helpers that only fed them
 - [Telemetry call sites: workspace, settings and the rest](#telemetry-call-sites-workspace-settings-and-the-rest) — deleted the `send_telemetry_*!` calls, the telemetry-only enums, helpers, fields and parameters in `workspace/`, `settings_view/`, `settings/`, `themes/`, `resource_center/`, `workflows/`, `notebooks/`, `launch_configs/`, `tab_configs/`, `lib.rs` and `root_view.rs`
-
+- [Teams and workspaces](#teams-and-workspaces) — deleted `app/src/workspaces/` (`UserWorkspaces`, `Team`, `Workspace`, billing metadata and team policies, the workspace poller), the Teams settings page and its modals, the title-bar team switcher, `warp://team` links, the window team id, team-enforced secret redaction and the workspace/team sqlite reads and writes
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2644,3 +2644,36 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Left for TEL-4 (no caller outside `server/telemetry/events.rs` now): `AvailableShell::telemetry_value` (`terminal/available_shells.rs`); `PrintTelemetryEvents` and the `TelemetryEvent` re-export in `lib.rs`; and the event variants and types with no caller (including `WorkflowSelectionSource::Notebook`, `AnonymousUserHitCloudObjectLimit`, `AddTabWithShellSource`, `LaunchConfigUiLocation`, `TabRenameEvent`, `TabTelemetryAction` and the prompt editor `OpenSource`). `workflow_selection_source` is still passed through `WorkspaceAction::RunWorkflow`, `pane_group` and `terminal/input.rs` (37 references); it only fed events.
 - `crates/onboarding` still calls `warp_core::send_telemetry_from_ctx!` directly (outside the TEL-2 and TEL-3 directories); TEL-4 removes it with the framework.
 - Left for TEAM-1: `TeamsPageAction::LeaveTeam` is now reported as never constructed.
+
+## Teams and workspaces
+**Why:** Teams, workspaces and organization plans exist only on Warp's servers. With accounts, Warp Drive and billing gone (user decisions 1 and 6), nothing can create, join or read a team, so its model, persistence, settings page and every switcher and deep link go too.
+
+**Removed:**
+- `app/src/workspaces/` (`UserWorkspaces` and its events, `Team`, `Workspace`, `BillingMetadata`/`Tier` and the remaining plan policies, `CustomerType`, `WorkspaceMemberUsageInfo`, the `TeamContext*` scoped policies, `SoleTeamError`, `TransferTeamOwnership*`, `set_team_for_window`, `switch_window_to_team`, the session-sharing and shared-notebook/-workflow policies, `TeamUpdateManager`, `TeamTesterStatus`, the GraphQL conversions and their tests) and their singleton registrations in `lib.rs` and the test setup helpers.
+- `server/server_api/team.rs` (`TeamClient`), `server/server_api/workspace.rs` (`WorkspaceClient`), `ServerApiProvider::{get_team_client, get_workspace_client}`, `server/team_scope.rs`, `server/retry_strategies.rs` and `server/graphql/`.
+- `settings_view/{teams_page, join_teams_modal, transfer_ownership_confirmation_modal, tab_menu}.rs` with `SettingsSection::Teams`, `SettingsPageViewHandle::Teams`, the Teams nav row and the "Open Team Settings" menu binding (`workspace:show_settings_teams_page`, `CustomAction::OpenTeamSettings`). `drive/cloud_action_confirmation_dialog.rs` (only the teams page used it) took the last file of `app/src/drive/` with it.
+- The title-bar team switcher pill and menu, `WorkspaceAction::{OpenNewWindowForTeam, BrowseTeams, ShowTeamSwitcherMenu}`, `NewWorkspaceSource::TeamSwitched`, `NewWorkspaceSource::Session::initial_team_uid`, `NewWorkspaceSource::team_uid`, `RootView::{handle_team_intent_link_action, open_team_settings_page, open_team_settings_with_email_invite_*}` with their global actions, and `TerminalAction::OpenTeamSettingsPage`.
+- `UriHost::Team` (`warp://team`, `warp://team/settings`) and the `warp://settings/teams?invite=` sub-page; both now log an unrecognized-URL warning or open no page.
+- `WindowSnapshot::team_uid` and the `windows.team_uid` read and write, `ModelEvent::{UpsertWorkspace, UpsertWorkspaces, SetCurrentWorkspace}` with their writers, `PersistedData::{workspaces, current_workspace_uid}` with the team, team member, team settings, workspace and workspace-team reads, and the diesel models `Team`, `NewTeam`, `TeamMemberRow`, `NewTeamMember`, `TeamSetting`, `NewTeamSettings`, `Workspace`, `NewWorkspace`, `WorkspaceTeam` and `NewWorkspaceTeam`.
+- Team-enforced secret redaction: `PrivacySettings::{enterprise_secret_regex_list, is_enterprise_secret_redaction_enabled, set_enterprise_secret_redaction_settings}`, `EnterpriseSecretRegex`, the Personal/Enterprise tabs and the "Enabled by your organization" state of the Secret redaction widget, and in `secret_redaction` the `SecretLevel`/`RegexLevelMetadata` machinery (`Secret::secret_level`, `find_secrets_in_text_with_levels*`) that only told enterprise and user patterns apart. The `warp_errors` dependency of that crate went with its last use.
+- `settings::ChangeEventReason::CloudSync`.
+- Helpers that only the team screens used: `word_block_editor.rs`, `view_components/clickable_text_input.rs`, `PrimaryRightBiasedTheme`, `settings_page::render_banner`, `Dialog::with_width` and the team-creation input helpers of `terminal/view/block_onboarding/util.rs`.
+- Telemetry: `TelemetryEvent::ChangedInviteViewOption` (its payload type went).
+- Tests of the removed code: the team-navigation and open-window-for-team tests of `workspace::view_tests`, `team_member_is_disabled_round_trips_through_sqlite_cache`, the window `team_uid` round-trip test, and the Teams page tests.
+
+**Modified:**
+- `secret_redaction::set_user_secret_regexes` replaces `set_user_and_enterprise_secret_regexes`; the secret grid marks every match the same way. User-level redaction is unchanged: safe mode, the display modes, the custom regex list and the default regexes seeded for everyone work as before, and `get_secret_obfuscation_mode` now depends on safe mode alone.
+- The Secret redaction settings widget lists the user's regexes and the recommended ones, without tabs.
+- `SettingsSection::from_slug("Teams")` returns the default page, next to the other removed pages, so a stored Teams settings pane opens the default page.
+- Tests that need a top-level nav row after the terminal umbrella (`settings_view::mod_tests`, `settings_navigation`) use Privacy and Appearance in place of Teams.
+
+**Persisted state:** the sqlite tables `teams`, `team_members`, `team_settings`, `workspaces`, `workspace_teams` and the `windows.team_uid` column are neither read nor written; any row in them is ignored (DB-1 drops them; no migration here). `save_app_state` still clears the pane tables that hold foreign keys to `pane_leaves`. The `persistence` crate keeps the table definitions and the queryable `Window` (with `team_uid`) for the DB-1 migration. New tests: a stored `Teams` settings pane restores on the default page, a stored `windows.team_uid` is ignored on restore, and `team_uid`/`workspace` keys in the settings file do not fail any setting.
+
+**User-visible impact:** no Teams page, team switcher, "Browse teams" entry or invite/join deep links, and no organization-enforced secret redaction. Terminal behaviour is otherwise unchanged.
+
+**Notes:**
+- Left for SRV-1: the team, workspace and billing GraphQL types and mutations in `crates/graphql`, the `Team`/`Owner` types in `crates/cloud_objects` (including `CloudObjectEventEntrypoint`), `send_team_scoped_graphql_request` and the team-scoped public API calls in `warp_server_client`.
+- Left for TEL-4: the team telemetry variants (`OpenTeamFromURI`, `TeamCreated`, `TeamJoined`, `TeamLeft`, `TeamLinkCopied`, `RemovedUserFromTeam`, `InviteTeammates`) and their `team_uid` payloads.
+- Left for DB-1: the tables and columns above, and the diesel `Window.team_uid`.
+- Left for AUTH-2: `warp_server_auth::user_uid` is no longer re-exported from `app/src/auth`.
+- Left for WASM-2: `workspace/home.rs` still describes the web home page.
