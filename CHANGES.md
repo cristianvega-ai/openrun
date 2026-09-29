@@ -109,6 +109,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Dead SQLite tables and columns](#dead-sqlite-tables-and-columns) — one migration drops the AI, MCP, Warp Drive, team, account and experiment tables, the pane kinds and columns that went with them, and the pane-tree rows of removed pane kinds
 - [Server configuration and channel collapse](#server-configuration-and-channel-collapse) — `Channel` is now `{Oss, Integration}`; deleted the server, telemetry, autoupdate and crash-reporting channel config, the `WARP_*` server-URL overrides, the Warp headers and IAP logic in `http_client`, and the dogfood/preview/release flag lists
 - [Comments, provenance references and test fixtures](#comments-provenance-references-and-test-fixtures) — removed ticket, issue and PR references, `warpdotdev` links and mentions of removed features from kept comments, replaced `warp.dev` sample URLs in tests with `example.com`, and scrubbed the SQLite fixtures
+- [Server-config leftovers](#server-config-leftovers) — removed the dead installation-detection subcommand lookup in `warp_cli` and the local warp-server instructions in `AGENTS.md`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2914,3 +2915,21 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Confirmed dead but not removed: the editor's remote-peer layer (`EditorView::{register_remote_peer, unregister_remote_peer, set_remote_peer_selection_data, apply_remote_operations}`, their model and buffer counterparts, `Peer`, `PeerSelectionData`, `registered_peers`) has no caller. Removing it cascades into the remote-selection drawing in `editor/view/element.rs` and the CRDT operation types that the buffer tests still exercise, so it is left for AI-33.
 - `app/src/search/action/data_source.rs::is_excluded_binding` excludes the deleted `workspace:search_drive` action; it is dead but removing it turns three `filter_map`s into `map`s, so it stays for AI-33. `flake.nix` still copies the deleted `specs/` directory into the vendored `warp-workflows` crate (SWP-16/packaging).
 - The `ui_tests::test_restore_snapshot_with_code_file` integration test is `#[ignore]`d upstream and fails with and without this change.
+
+## Server-config leftovers
+**Why:** After the server configuration and channel collapse, a sweep for anything still shaped like server configuration (URL overrides, origin checks, Firebase keys, staging switches, local-server instructions) found only two leftovers.
+
+**Removed:**
+- `warp_cli::installation_detection_server_subcommand`: it looked up an `installation-detection-server` subcommand that no longer exists (the local HTTP server was removed), so calling it would have panicked. It had no callers.
+- The "Running with local warp-server" section of `AGENTS.md` (`WITH_LOCAL_SERVER`, `SERVER_ROOT_URL`, `WS_SERVER_URL`): nothing reads those variables any more.
+
+**Modified:** nothing.
+
+**Persisted state:** none.
+
+**User-visible impact:** none.
+
+**Notes:**
+- Verified already gone (removed by "Server configuration and channel collapse"): `WARP_SERVER_ROOT_URL`, `WARP_WS_SERVER_URL` and the other server-URL arguments in `warp_cli`; the `X-Warp-*` header injection, `is_warp_server_origin`, staging comments and their tests in `http_client`; and the `firebase_auth_api_key` field and every other server field in `app/src/bin/*` and `crates/integration/src/bin/integration.rs`. `rg -i 'server_root|warp_server|staging|firebase|firebase_auth_api_key|X-Warp'` over `app/src` and `crates` now finds only allowlisted redaction patterns and fixtures, unrelated wgpu/editor "staging" buffers, and unrelated test data.
+- `http_client` is kept for `node_runtime` (LSP downloads) and `local_control`.
+- Still open elsewhere: `authors` in the manifests and the `about.toml` comment (SWP-15), top-level docs (SWP-16), `CocoaSentry`, `LogExpensiveFramesInSentry` and the `warp-server` doc comment in `warp_features` (FLAGS-1), `WARP_LOCAL_SKIP_METAL` in `crates/warpui/build.rs` (SWP-17).
