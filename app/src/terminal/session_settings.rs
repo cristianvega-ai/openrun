@@ -255,12 +255,6 @@ define_settings_group!(SessionSettings, settings: [
         supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
-    should_add_agent_mode_chip: ShouldAddAgentModeChip {
-        type: bool,
-        default: true,
-        supported_platforms: SupportedPlatforms::ALL,
-        private: true,
-    },
     notifications: Notifications {
         type: NotificationsSettings,
         default: NotificationsSettings::default(),

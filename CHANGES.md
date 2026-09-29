@@ -138,6 +138,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Audit follow-ups: stale docs, orphaned test file and new tests](#audit-follow-ups-stale-docs-orphaned-test-file-and-new-tests) — fixed the settings-page skill and SSH test README, deleted an orphaned test file, renamed a stale integration test, and added tests for CLI-agent sending, the shortcuts panel, the referral themes and the language-server palette entries
 - [Shell variable serializer tests](#shell-variable-serializer-tests) — tests for `serialize_variables_for_shell` after it left the removed env_vars module (commit a0f567643, task DRV-2)
 - [Log path test comment](#log-path-test-comment) — reworded a channel comment in the log path tests (commit bf304fe57, task AI-33)
+- [Final audit: findings kept on purpose, and two dead settings](#final-audit-findings-kept-on-purpose-and-two-dead-settings) — records the SWP-18 findings that were left as they are, with the reason, and removes two private settings nothing read
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3444,3 +3445,22 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 - `crates/warp_logging/src/native_tests.rs`: comment only.
 
 **User-visible impact:** None.
+
+## Final audit: findings kept on purpose, and two dead settings
+**Why:** SWP-18 (final audit at `bf304fe57`) listed minor findings; FIX-1 fixed most of them (see the sections above). These stay on purpose.
+
+**Removed:**
+- The private settings `AgentModeOnboardingBlockShown` (`GeneralSettings`) and `ShouldAddAgentModeChip` (`SessionSettings`): leftovers of Agent Mode with no reader. A stale key in a user's preferences is ignored on load.
+
+**Kept on purpose:**
+- V1 F9: the legacy settings-slug map in `settings_view/mod.rs` (`"Account"`, `"Billing and usage"`, `"Environments"`, `"Oz"`, `"Teams"`, ...). It maps stored or deep-linked slugs of removed pages onto pages that exist, is tested, and is the only place outside this file that names them.
+- V1 F12: the two binaries named `integration`. `app/src/bin/integration.rs` is the app under test (`Channel::Integration`) and `crates/integration/src/bin/integration.rs` is the test runner; both belong to decision 12.
+- V1 F13: `reqwest-eventsource` in the wasm section of `app/Cargo.toml` is only a comment about `futures-timer` (WASM-2, decision 18).
+- V2 F7: the secret-redaction pattern names "Warp API Key", "Anthropic API Key", "OpenAI API Key" and "Fireworks API Key" in `secret_redaction` and the default `custom_secret_regex_list`. They redact keys that users paste into their own terminal; nothing contacts the vendors.
+- V2 F5: `stored_credentials` and the "Unable to remove stored account credentials" log line belong to the one-time removal of the credential a pre-fork install left in secure storage (AUTH-1). V2 F6: `maybe_register_app_as_login_item` is a local OS login-item registration and opens no connection.
+- V2 F3 and V3 F6: `test_restore_snapshot_with_code_file` and `test_create_session_with_split_pane_while_bootstrapping` are `#[ignore]`d and fail identically at baseline and without any sandbox; `test_up_arrow_history` is not registered in the integration binary. They are not regressions and are left ignored.
+- V2 F4: the keystroke-driven interactive run needs macOS accessibility permission, which the verifier did not have; launch-URL runs, 44 integration tests and unit tests covered it instead.
+
+**User-visible impact:** None.
+
+**Notes:** `session.same_line_prompt_block_state` and `git_prompt_dirty_indicator` also have no readers but are not Warp AI leftovers; they are left for a later settings clean-up. Also left: `Figma` as a plain word in comments, and the Icon variants that no code uses (the icon set is a general library).

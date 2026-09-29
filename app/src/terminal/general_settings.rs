@@ -172,12 +172,6 @@ define_settings_group!(GeneralSettings, settings: [
         supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
-    agent_mode_onboarding_block_shown: AgentModeOnboardingBlockShown {
-        type: bool,
-        default: false,
-        supported_platforms: SupportedPlatforms::ALL,
-        private: true,
-    },
     user_default_shell_unsupported_banner_state: UserDefaultShellUnsupportedBannerState {
         type: BannerState,
         default: BannerState::default(),
