@@ -4,11 +4,9 @@ use chrono::NaiveDateTime;
 use diesel::prelude::*;
 
 use super::schema::{
-    app, blocks, cloud_objects_refreshes, code_pane_tabs, code_panes, code_review_panes, commands,
-    folders, generic_string_objects, ignored_suggestions, notebook_panes, notebooks,
-    object_actions, object_metadata, object_permissions, pane_branches, pane_leaves, pane_nodes,
-    panels, projects, settings_panes, tab_groups, tabs, terminal_panes, user_profiles, windows,
-    workflow_panes, workflows, workspace_language_server, workspace_metadata,
+    app, blocks, code_pane_tabs, code_panes, code_review_panes, commands, ignored_suggestions,
+    notebook_panes, pane_branches, pane_leaves, pane_nodes, panels, projects, settings_panes,
+    tab_groups, tabs, terminal_panes, windows, workspace_language_server, workspace_metadata,
 };
 
 #[derive(Insertable)]
@@ -27,72 +25,10 @@ pub struct Window {
     pub origin_y: Option<f32>,
     pub quake_mode: bool,
     pub universal_search_width: Option<f32>,
-    pub warp_ai_width: Option<f32>,
     pub voltron_width: Option<f32>,
-    pub warp_drive_index_width: Option<f32>,
     pub fullscreen_state: i32,
-    pub agent_management_filters: Option<String>,
     pub left_panel_open: Option<bool>,
     pub vertical_tabs_panel_open: Option<bool>,
-    pub team_uid: Option<String>,
-}
-
-#[derive(Identifiable, Insertable, Queryable)]
-pub struct GenericStringObject {
-    pub id: i32,
-    pub data: String,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = generic_string_objects)]
-pub struct NewGenericStringObject<'a> {
-    pub data: &'a str,
-}
-
-#[derive(Insertable, Queryable)]
-pub struct Workflow {
-    pub id: i32,
-    pub data: String,
-}
-
-/// A type representing a `Workflow` that is newly created. We purposefully
-/// do not include the `id` here since it is unset.
-#[derive(Insertable)]
-#[diesel(table_name = workflows)]
-pub struct NewWorkflow {
-    pub data: String,
-}
-
-#[derive(Identifiable, Insertable, Queryable)]
-pub struct Notebook {
-    pub id: i32,
-    pub title: Option<String>,
-    pub data: Option<String>,
-    pub ai_document_id: Option<String>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = notebooks)]
-pub struct NewNotebook {
-    pub title: Option<String>,
-    pub data: Option<String>,
-    pub ai_document_id: Option<String>,
-}
-
-#[derive(Insertable, Identifiable, Queryable)]
-pub struct Folder {
-    pub id: i32,
-    pub name: String,
-    pub is_open: bool,
-    pub is_warp_pack: bool,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = folders)]
-pub struct NewFolder {
-    pub name: String,
-    pub is_open: bool,
-    pub is_warp_pack: bool,
 }
 
 #[derive(Clone, Identifiable, Queryable, AsChangeset)]
@@ -153,74 +89,6 @@ impl PartialEq for Project {
 
 impl Eq for Project {}
 
-#[derive(Insertable, Queryable)]
-#[diesel(table_name = object_permissions)]
-pub struct ObjectPermissions {
-    pub id: i32,
-    pub object_metadata_id: i32,
-    pub subject_type: String,
-    pub subject_id: Option<String>,
-    pub subject_uid: String,
-    pub permissions_last_updated_at: Option<i64>,
-    pub object_guests: Option<Vec<u8>>,
-    pub anyone_with_link_access_level: Option<String>,
-    pub anyone_with_link_source: Option<Vec<u8>>,
-}
-
-#[derive(Insertable, Queryable)]
-#[diesel(table_name = object_permissions)]
-pub struct NewObjectPermissions {
-    pub object_metadata_id: i32,
-    pub subject_type: String,
-    pub subject_id: Option<String>,
-    pub subject_uid: String,
-    pub permissions_last_updated_at: Option<i64>,
-    pub object_guests: Option<Vec<u8>>,
-    pub anyone_with_link_access_level: Option<&'static str>,
-    pub anyone_with_link_source: Option<Vec<u8>>,
-}
-
-#[derive(Insertable, Queryable)]
-#[diesel(table_name = object_metadata)]
-pub struct ObjectMetadata {
-    pub id: i32,
-    pub is_pending: bool,
-    pub object_type: String,
-    pub revision_ts: Option<i64>,
-    pub server_id: Option<String>,
-    pub client_id: Option<String>,
-    pub shareable_object_id: i32,
-    pub author_id: Option<i32>,
-    pub retry_count: i32,
-    pub metadata_last_updated_ts: Option<i64>,
-    pub trashed_ts: Option<i64>,
-    pub folder_id: Option<String>,
-    pub is_welcome_object: bool,
-    pub creator_uid: Option<String>,
-    pub last_editor_uid: Option<String>,
-    pub current_editor: Option<String>,
-}
-
-#[derive(Insertable, Queryable)]
-#[diesel(table_name = object_metadata)]
-pub struct NewObjectMetadata {
-    pub is_pending: bool,
-    pub object_type: String,
-    pub revision_ts: Option<i64>,
-    pub server_id: Option<String>,
-    pub client_id: Option<String>,
-    pub shareable_object_id: i32,
-    pub author_id: Option<i32>,
-    pub retry_count: i32,
-    pub metadata_last_updated_ts: Option<i64>,
-    pub trashed_ts: Option<i64>,
-    pub folder_id: Option<String>,
-    pub is_welcome_object: bool,
-    pub creator_uid: Option<String>,
-    pub last_editor_uid: Option<String>,
-    pub current_editor: Option<String>,
-}
-
 #[derive(Insertable)]
 #[diesel(table_name = windows)]
 pub struct NewWindow {
@@ -231,11 +99,8 @@ pub struct NewWindow {
     pub origin_y: Option<f32>,
     pub quake_mode: bool,
     pub universal_search_width: Option<f32>,
-    pub warp_ai_width: Option<f32>,
     pub voltron_width: Option<f32>,
-    pub warp_drive_index_width: Option<f32>,
     pub fullscreen_state: i32,
-    pub agent_management_filters: Option<String>,
     pub left_panel_open: Option<bool>,
     pub vertical_tabs_panel_open: Option<bool>,
 }
@@ -327,17 +192,7 @@ pub struct NotebookPane {
     // This is hardcoded in the database, and not used in the app, but Diesel requires it so that
     // fields are in the same order as the table's columns.
     pub kind: String,
-    pub notebook_id: Option<String>,
     pub local_path: Option<Vec<u8>>,
-}
-
-#[derive(Identifiable, Queryable, Selectable)]
-#[diesel(table_name = workflow_panes)]
-#[diesel(primary_key(id))]
-pub struct WorkflowPane {
-    pub id: i32,
-    pub kind: String,
-    pub workflow_id: Option<String>,
 }
 
 #[derive(Identifiable, Queryable, Selectable)]
@@ -425,13 +280,8 @@ pub const TERMINAL_PANE_KIND: &str = "terminal";
 /// The [`pane_leaves::kind`] value for notebook panes.
 pub const NOTEBOOK_PANE_KIND: &str = "notebook";
 
-/// The [`pane_leaves::kind`] value for EVC panes.
-
 /// The [`pane_leaves::kind`] value for code panes.
 pub const CODE_PANE_KIND: &str = "code";
-
-/// The [`pane_leaves::kind`] value for workflow panes.
-pub const WORKFLOW_PANE_KIND: &str = "workflow";
 
 /// The [`pane_leaves::kind`] value for settings panes.
 pub const SETTINGS_PANE_KIND: &str = "settings";
@@ -456,15 +306,7 @@ pub struct NewTerminalPane {
 #[diesel(table_name = notebook_panes)]
 pub struct NewNotebookPane {
     pub id: i32,
-    pub notebook_id: Option<String>,
     pub local_path: Option<Vec<u8>>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = workflow_panes)]
-pub struct NewWorkflowPane {
-    pub id: i32,
-    pub workflow_id: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -543,9 +385,7 @@ pub struct NewBlock<'a> {
     pub user: Option<&'a str>,
     pub host: Option<&'a str>,
     pub prompt_snapshot: Option<&'a String>,
-    pub ai_metadata: Option<&'a String>,
     pub is_local: Option<bool>,
-    pub agent_view_visibility: Option<String>,
 }
 
 #[derive(Identifiable, Queryable, Selectable, Associations)]
@@ -576,9 +416,7 @@ pub struct Block {
     /// is different from PS1 and RPROMPT1
     pub prompt_snapshot: Option<String>,
     pub block_id: String,
-    pub ai_metadata: Option<String>,
     pub is_local: Option<bool>,
-    pub agent_view_visibility: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -594,7 +432,6 @@ pub struct NewCommand {
     pub hostname: Option<String>,
     pub session_id: Option<i64>,
     pub git_branch: Option<String>,
-    pub cloud_workflow_id: Option<String>,
     pub workflow_command: Option<String>,
     pub is_agent_executed: Option<bool>,
 }
@@ -613,61 +450,8 @@ pub struct Command {
     pub hostname: Option<String>,
     pub session_id: Option<i64>,
     pub git_branch: Option<String>,
-    pub cloud_workflow_id: Option<String>,
     pub workflow_command: Option<String>,
     pub is_agent_executed: Option<bool>,
-}
-
-#[derive(Identifiable, Queryable, Insertable)]
-#[diesel(table_name = user_profiles)]
-#[diesel(primary_key(firebase_uid))]
-pub struct UserProfile {
-    pub firebase_uid: String,
-    pub photo_url: String,
-    pub email: String,
-    pub display_name: Option<String>,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = cloud_objects_refreshes)]
-pub struct NewCloudObjectsRefresh {
-    pub time_of_next_refresh: NaiveDateTime,
-}
-
-#[derive(Identifiable, Queryable)]
-#[diesel(table_name = cloud_objects_refreshes)]
-pub struct CloudObjectsRefresh {
-    pub id: i32,
-    pub time_of_next_refresh: NaiveDateTime,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = object_actions)]
-pub struct NewPersistedObjectAction {
-    pub hashed_object_id: String,
-    pub timestamp: Option<NaiveDateTime>,
-    pub action: String,
-    pub data: Option<String>,
-    pub count: Option<i32>,
-    pub oldest_timestamp: Option<NaiveDateTime>,
-    pub latest_timestamp: Option<NaiveDateTime>,
-    pub pending: Option<bool>,
-    pub processed_at_timestamp: Option<NaiveDateTime>,
-}
-
-#[derive(Identifiable, Queryable, Insertable, Debug)]
-#[diesel(table_name = object_actions)]
-pub struct PersistedObjectAction {
-    pub id: i32,
-    pub hashed_object_id: String,
-    pub timestamp: Option<NaiveDateTime>,
-    pub action: String,
-    pub data: Option<String>,
-    pub count: Option<i32>,
-    pub oldest_timestamp: Option<NaiveDateTime>,
-    pub latest_timestamp: Option<NaiveDateTime>,
-    pub pending: Option<bool>,
-    pub processed_at_timestamp: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Insertable)]

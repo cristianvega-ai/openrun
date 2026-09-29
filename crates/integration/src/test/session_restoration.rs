@@ -323,9 +323,9 @@ pub fn test_restore_snapshot_with_background_output() -> Builder {
         )
 }
 
-/// Tests restoring a database that still holds a legacy cloud object row.
+/// Tests restoring a database that still holds legacy cloud object rows.
 ///
-/// The row is ignored and the app starts normally.
+/// The migration drops the tables that held them and the app starts normally.
 pub fn test_restore_snapshot_with_legacy_object_row() -> Builder {
     new_builder()
         .with_setup(|_utils| {

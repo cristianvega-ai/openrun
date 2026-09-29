@@ -3,13 +3,14 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use diesel::connection::SimpleConnection;
+use diesel_migrations::MigrationHarness as _;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
 
 use super::{
     app_database_file_path, database_file_path_for_current_scope, database_file_path_for_scope,
-    decode_path, deduplicate_events, encode_path, get_all_workspace_metadata, read_sqlite_data,
-    save_app_state, save_workspace_metadata, setup_database, start_writer,
+    decode_path, deduplicate_events, encode_path, establish_connection, get_all_workspace_metadata,
+    read_sqlite_data, save_app_state, save_workspace_metadata, setup_database, start_writer,
 };
 use crate::app_state::{
     AppState, BranchSnapshot, CodePaneSnapShot, CodePaneTabSnapshot, LeafContents, LeafSnapshot,
@@ -888,29 +889,6 @@ fn test_sqlite_restore_opens_default_settings_page_for_stored_teams_section() {
 }
 
 #[test]
-fn test_sqlite_restore_ignores_stored_window_team_uid() {
-    let tempdir = tempfile::tempdir().expect("tempdir should be created");
-    let database_path = tempdir.path().join("warp.sqlite");
-    let mut conn = setup_database(&database_path).expect("database should initialize");
-
-    let app_state = AppState {
-        windows: vec![test_terminal_window_snapshot(true)],
-        active_window_index: Some(0),
-        block_lists: Default::default(),
-    };
-    save_app_state(&mut conn, &app_state).expect("app state should save");
-    conn.batch_execute("UPDATE windows SET team_uid = 'stale-team'")
-        .expect("stored team should be written");
-
-    let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
-        .expect("a stored team must not fail the read")
-        .app_state
-        .expect("app state should be present for the full scope");
-
-    assert_eq!(restored.windows, app_state.windows);
-}
-
-#[test]
 fn test_sqlite_restore_skips_removed_pane_kinds_without_losing_the_tab() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");
@@ -987,45 +965,7 @@ fn test_sqlite_restore_skips_removed_pane_kinds_without_losing_the_tab() {
 }
 
 #[test]
-fn test_sqlite_save_succeeds_over_stale_mcp_server_pane_rows() {
-    let tempdir = tempfile::tempdir().expect("tempdir should be created");
-    let database_path = tempdir.path().join("warp.sqlite");
-    let mut conn = setup_database(&database_path).expect("database should initialize");
-
-    let app_state = AppState {
-        windows: vec![window_with_tabs(
-            vec![tab_with_root(PaneNodeSnapshot::Branch(BranchSnapshot {
-                direction: SplitDirection::Vertical,
-                children: vec![
-                    (PaneFlex(0.5), terminal_leaf(1)),
-                    (PaneFlex(0.5), settings_leaf()),
-                ],
-            }))],
-            0,
-        )],
-        active_window_index: Some(0),
-        block_lists: Default::default(),
-    };
-    save_app_state(&mut conn, &app_state).expect("app state should save");
-    rewrite_settings_panes_as_kind(&mut conn, "mcp_server");
-    conn.batch_execute(
-        "INSERT INTO mcp_server_panes (id, kind)
-         SELECT pane_node_id, kind FROM pane_leaves WHERE kind = 'mcp_server';",
-    )
-    .expect("stale mcp_server pane row should be inserted");
-
-    let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
-        .expect("stale pane rows must not fail the read")
-        .app_state
-        .expect("app state should be present for the full scope");
-    assert_eq!(terminal_uuid(&restored.windows[0].tabs[0].root), vec![1]);
-
-    save_app_state(&mut conn, &app_state)
-        .expect("saving must not trip over the stale mcp_server pane rows");
-}
-
-#[test]
-fn test_sqlite_restore_and_save_survive_stale_workflow_pane_rows() {
+fn test_sqlite_restore_and_save_survive_stale_workflow_pane_leaf() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");
     let mut conn = setup_database(&database_path).expect("database should initialize");
@@ -1046,14 +986,9 @@ fn test_sqlite_restore_and_save_survive_stale_workflow_pane_rows() {
     };
     save_app_state(&mut conn, &app_state).expect("app state should save");
     rewrite_settings_panes_as_kind(&mut conn, "workflow");
-    conn.batch_execute(
-        "INSERT INTO workflow_panes (id, workflow_id)
-         SELECT pane_node_id, NULL FROM pane_leaves WHERE kind = 'workflow';",
-    )
-    .expect("stale workflow pane row should be inserted");
 
     let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
-        .expect("stale workflow pane rows must not fail the read")
+        .expect("a stale workflow pane leaf must not fail the read")
         .app_state
         .expect("app state should be present for the full scope");
     assert_eq!(
@@ -1063,7 +998,7 @@ fn test_sqlite_restore_and_save_survive_stale_workflow_pane_rows() {
     );
 
     save_app_state(&mut conn, &app_state)
-        .expect("saving must not trip over the stale workflow pane rows");
+        .expect("saving must not trip over the stale workflow pane leaf");
 }
 
 #[test]
@@ -1263,4 +1198,169 @@ fn stored_ignored_suggestions_of_removed_types_are_dropped() {
         get_all_ignored_suggestions(&mut conn).expect("suggestions should load"),
         vec![("git status".to_owned(), SuggestionType::ShellCommand)]
     );
+}
+
+/// A database at the schema before the migration that dropped the AI, Warp Drive, team and
+/// account tables, with rows in every dropped table and column (see the file for the layout).
+const PRE_DROP_DEAD_TABLES_SEED: &str =
+    include_str!("../../../crates/persistence/test_data/pre_drop_dead_tables_seed.sql");
+
+/// Creates a database at `database_path` whose migrations stop right before the one that drops
+/// the dead tables, and fills it with [`PRE_DROP_DEAD_TABLES_SEED`].
+fn seed_database_before_dropping_dead_tables(database_path: &std::path::Path) {
+    let mut conn =
+        establish_connection(database_path.to_str().expect("path should be utf-8"), false)
+            .expect("database should open");
+    let pending = conn
+        .pending_migrations(::persistence::MIGRATIONS)
+        .expect("pending migrations should list");
+    for migration in pending
+        .iter()
+        .take_while(|migration| migration.name().version().to_string().as_str() < "20260929000000")
+    {
+        conn.run_migration(migration.as_ref())
+            .expect("earlier migration should run");
+    }
+    conn.batch_execute(PRE_DROP_DEAD_TABLES_SEED)
+        .expect("seed should insert");
+}
+
+#[test]
+fn test_sqlite_restores_a_session_saved_before_the_dead_tables_were_dropped() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    seed_database_before_dropping_dead_tables(&database_path);
+
+    // The app runs the remaining migrations when it opens the database.
+    let mut conn = setup_database(&database_path).expect("database should migrate");
+    let data = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+        .expect("the migrated session should load");
+    let restored = data.app_state.expect("app state should be present");
+
+    assert_eq!(restored.windows.len(), 2);
+    assert_eq!(restored.active_window_index, Some(0));
+
+    let window = &restored.windows[0];
+    assert_eq!(
+        window
+            .tabs
+            .iter()
+            .map(|tab| tab.custom_title.as_deref())
+            .collect::<Vec<_>>(),
+        vec![Some("kept split"), Some("mixed")],
+        "tabs made only of removed panes are gone"
+    );
+    assert_eq!(
+        window.active_tab_index, 1,
+        "the active tab is still the mixed tab"
+    );
+    assert!(window.tabs[0].group_id.is_some(), "the tab group is kept");
+    assert!(window.tabs[1].pinned);
+    assert_eq!(window.voltron_width, Some(500.0));
+    assert_eq!(window.universal_search_width, Some(300.0));
+
+    let PaneNodeSnapshot::Leaf(LeafSnapshot {
+        contents: LeafContents::Terminal(first_terminal),
+        custom_vertical_tabs_title,
+        is_focused,
+    }) = &window.tabs[0].root
+    else {
+        panic!("the split with one surviving pane restores as that pane");
+    };
+    assert_eq!(first_terminal.uuid, vec![1, 1]);
+    assert_eq!(first_terminal.cwd.as_deref(), Some("/work/one"));
+    assert_eq!(
+        custom_vertical_tabs_title.as_deref(),
+        Some("first terminal")
+    );
+    assert!(*is_focused);
+
+    let PaneNodeSnapshot::Branch(BranchSnapshot {
+        direction,
+        children,
+    }) = &window.tabs[1].root
+    else {
+        panic!("the mixed tab keeps its split");
+    };
+    assert_eq!(*direction, SplitDirection::Horizontal);
+    let contents: Vec<_> = children
+        .iter()
+        .map(|(_, child)| match child {
+            PaneNodeSnapshot::Leaf(leaf) => &leaf.contents,
+            PaneNodeSnapshot::Branch(_) => panic!("the emptied inner split is gone"),
+        })
+        .collect();
+    assert_eq!(contents.len(), 5);
+    assert!(matches!(
+        contents[0],
+        LeafContents::Code(CodePaneSnapShot::Local { tabs, .. }) if tabs.len() == 1
+    ));
+    assert!(matches!(
+        contents[1],
+        LeafContents::Terminal(terminal) if terminal.uuid == vec![2, 2]
+    ));
+    assert!(matches!(
+        contents[2],
+        LeafContents::Notebook(NotebookPaneSnapshot::LocalFileNotebook { path })
+            if path.as_deref() == Some(std::path::Path::new("/work/notes.md"))
+    ));
+    assert!(matches!(
+        contents[3],
+        LeafContents::Settings(SettingsPaneSnapshot::Local {
+            current_page: SettingsSection::Privacy,
+            ..
+        })
+    ));
+    assert!(matches!(contents[4], LeafContents::CodeReview(_)));
+
+    assert!(
+        restored.windows[1].tabs.is_empty(),
+        "a window whose only tab held removed panes has no tabs left"
+    );
+
+    let block_ids = |uuid: Vec<u8>| -> Vec<String> {
+        restored.block_lists[&crate::app_state::PaneUuid(uuid)]
+            .iter()
+            .map(|block| block.id.as_str().to_owned())
+            .collect()
+    };
+    assert_eq!(
+        block_ids(vec![1, 1]),
+        vec!["plain", "attached", "null-metadata", "garbled-metadata"],
+        "blocks that belonged to an agent conversation are gone"
+    );
+    assert_eq!(block_ids(vec![2, 2]), vec!["second-terminal"]);
+
+    assert_eq!(data.command_history.len(), 2);
+    assert_eq!(data.projects.len(), 1);
+    assert_eq!(data.ignored_suggestions.len(), 1);
+    assert_eq!(data.workspace_metadata.len(), 1);
+    assert_eq!(
+        data.workspace_language_servers
+            .get(std::path::Path::new("/work/one"))
+            .and_then(|servers| servers.get(&lsp::supported_servers::LSPServerType::RustAnalyzer)),
+        Some(&crate::workspace_metadata::EnablementState::Yes)
+    );
+
+    save_app_state(&mut conn, &restored).expect("the restored session should save again");
+    let resaved = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+        .expect("the saved session should load")
+        .app_state
+        .expect("app state should be present");
+    assert_eq!(resaved.windows.len(), restored.windows.len());
+    // Tab groups get a fresh id each time they are read.
+    let without_group_ids = |tabs: &[TabSnapshot]| -> Vec<TabSnapshot> {
+        tabs.iter()
+            .cloned()
+            .map(|mut tab| {
+                tab.group_id = None;
+                tab
+            })
+            .collect()
+    };
+    assert_eq!(
+        without_group_ids(&resaved.windows[0].tabs),
+        without_group_ids(&restored.windows[0].tabs)
+    );
+    assert_eq!(resaved.windows[0].active_tab_index, 1);
 }

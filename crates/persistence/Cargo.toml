@@ -19,3 +19,8 @@ diesel = { workspace = true, features = [
 # via some mechanism that the feature resolver has access to, we can't
 # make it optional.
 diesel_migrations = "2.2.0"
+
+[dev-dependencies]
+diesel = { workspace = true, features = ["sqlite", "chrono"] }
+diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
+libsqlite3-sys = { version = "0.33.0", features = ["bundled"] }

@@ -106,6 +106,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Network log console and the ServerApi provider](#network-log-console-and-the-serverapi-provider) — deleted the in-app network log pane, its Privacy-page entry and binding, `ServerApiProvider`/`ServerApi`, the IAP manager and the staging-access toast; nothing outside `server/telemetry/` is left in `app/src/server/`
 - [Warp server client crates](#warp-server-client-crates) — deleted `warp_graphql` (`crates/graphql`), `warp_graphql_schema`, `warp_server_client`, `warp_server_auth`, `firebase`, `cloud_objects`, `websocket`, `channel_versions` and `field_mask`, with `cynic`, `graphql-ws-client`, `tungstenite`, and the SSE and websocket error support
 - [Telemetry framework](#telemetry-framework) — deleted the event enum, registration macros, context provider and event store, plus the last telemetry-only plumbing (`workflow_selection_source`, `anonymous_id`, `TelemetryConfig`, `--print-telemetry-events`)
+- [Dead SQLite tables and columns](#dead-sqlite-tables-and-columns) — one migration drops the AI, MCP, Warp Drive, team, account and experiment tables, the pane kinds and columns that went with them, and the pane-tree rows of removed pane kinds
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2812,3 +2813,43 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - `.agents/skills/add-telemetry` was already removed with the Warp-process skills.
 - `server/telemetry/secret_redaction.rs` (kept by TEL-1 for the agent SDK) was already deleted with the Oz CLI and agent SDK; nothing needed moving. User-level secret redaction lives in `crates/secret_redaction`.
 - `CFG-1` also removes the telemetry parts of the channel config; whichever lands second keeps the other's deletions.
+
+## Dead SQLite tables and columns
+**Why:** With the AI, Warp Drive, team and account features gone, the sqlite tables and columns that stored their state were never read or written again. The app kept declaring some to diesel only because `save_app_state` still cleared the per-pane tables (their rows point at `pane_leaves`). One new migration removes all of it. Historical migrations are untouched.
+
+**Removed (migration `2026-09-29-000000_drop_dead_tables`, with a `down.sql` that recreates the empty tables and columns):**
+- AI and agent tables: `agent_conversations`, `agent_tasks`, `ai_queries`, `active_mcp_servers`, `mcp_environment_variables`, `mcp_server_installations`, `project_rules`.
+- Pane tables of removed pane kinds: `ai_document_panes`, `ai_memory_panes`, `ambient_agent_panes`, `mcp_server_panes`, `workflow_panes`, `env_var_collection_panes`.
+- Warp Drive tables: `object_metadata`, `object_permissions`, `object_actions`, `cloud_objects_refreshes`, `generic_string_objects`, `workflows`, `notebooks`, `folders`.
+- Team and account tables: `teams`, `team_members`, `team_settings`, `workspaces`, `workspace_teams`, `users`, `user_profiles`, `current_user_information`; and `server_experiments`.
+- Columns: `terminal_panes.{llm_model_override, active_profile_id, conversation_ids, active_conversation_id}`, `notebook_panes.notebook_id`, `blocks.{ai_metadata, agent_view_visibility}`, `commands.cloud_workflow_id` (the earlier notes called it `blocks.cloud_workflow_id`), `windows.{warp_ai_width, warp_drive_index_width, agent_management_filters, team_uid}`. (`teams`/`workspaces.feature_model_choice_json` went with their tables.) All are plain `ALTER TABLE ... DROP COLUMN`; none is indexed, keyed or used by a `CHECK` of another column, so no table rebuild was needed.
+- `crates/persistence`: the diesel models `GenericStringObject`, `Workflow`, `Notebook`, `Folder`, `ObjectPermissions`, `ObjectMetadata`, `WorkflowPane`, `UserProfile`, `CloudObjectsRefresh`, `PersistedObjectAction` (and their `New*` forms), `WORKFLOW_PANE_KIND` and the dropped fields of `Window`, `NewWindow`, `NotebookPane`, `Block`, `NewBlock`, `Command` and `NewCommand`; every dropped table and column from `schema.rs`.
+- `crates/persistence/schema.patch` and the `patch_file` entry of `diesel.toml`: the only patched column (`object_metadata.revision_ts`) is gone, so `schema.rs` is now exactly what `diesel print-schema` generates. The "schema.patch" section of `app/src/persistence/README.md` went with it.
+- `app/src/persistence/sqlite.rs`: the six pane-table deletes in `save_app_state` and the `None` writes for the dropped columns. `block_list.rs`: `is_agent_block`, the restore-time filter for agent blocks; the migration deletes those blocks instead.
+- Tests of the removed state: the stale `mcp_server_panes` row test and the stale `windows.team_uid` test in `sqlite_tests.rs`, and `restored_blocks_tests.rs` (its scenarios now run through the migration test).
+
+**Modified:**
+- The migration first drops the per-kind pane tables, then rewrites the pane tree so it stays consistent:
+  - `notebook_panes` rows without a local path (cloud notebook panes) are deleted.
+  - `pane_leaves` keeps only the kinds the app can still restore (`terminal`, `notebook`, `code`, `settings`, `code_review`). That removes `get_started`, `ai_document`, `ai_memory`, `ambient_agent`, `env_var_collection`, `mcp_server`, `workflow`, `execution_profile_editor` and any leftover kind such as `welcome`, whether or not it had a table.
+  - Leaf `pane_nodes` without a pane are deleted, then every split (`pane_branches` + `pane_nodes`) with no pane left below it. A split that keeps one child stays as it is, because restore already collapses it.
+  - Tabs with no `pane_nodes` are deleted with their `panels` row, and each window's `active_tab_index` is moved back by the number of deleted tabs before it, so the same tab stays active. Windows are never deleted; one that loses all its tabs restores empty, as it did before.
+  - Blocks created in or requested by an agent (non-null `ai_metadata`, or `agent_view_visibility` with an `Agent` entry) are deleted before the two columns go, matching what restore used to skip.
+- Foreign keys are enforced while the app migrates, so every table is dropped after the tables that reference it.
+- SETPARSE-1's restore code stays as a safety net. `read_node` still skips a leaf kind it does not know and `read_root_node`/`read_sqlite_data` still drop tabs with nothing restorable and clamp the active tab. The `match` on the stored kind needs a default arm anyway, and the arm keeps a database written by a newer build (or damaged) from failing the whole session read. The `notebook` arm's skip of a row without a local path also stays, since `local_path` is nullable. Their tests (`test_sqlite_restore_skips_*`) still run on rewritten pane kinds and now need no dropped table.
+- `crates/persistence` gets `[dev-dependencies]` on diesel's sqlite backend and bundled `libsqlite3-sys`, so `cargo nextest run -p persistence` can run the migration.
+
+**Persisted state:** migrated by this change; this is the one place that changes the schema. A database from any earlier version migrates in one step. Data that goes: AI conversations, tasks and queries (and the up-arrow history entries built from them), MCP installations, cached Warp Drive objects and their permissions and actions, teams and workspaces, the stored account, server experiments, and saved panes of removed kinds. Local workflows, command history, blocks of terminal sessions, projects, ignored suggestions, workspace metadata and language-server settings are untouched.
+
+**User-visible impact:** none for a user who upgrades: their windows, tabs, terminal, code, notebook (markdown file), settings and code-review panes and terminal blocks restore as before. A tab that held only a removed pane (Get Started, plan, memory, cloud-agent, env-var, MCP or profile-editor pane) is gone from the restored session, as it already was from SETPARSE-1 on. The freed pages stay in the database file until a `VACUUM`, which the migration does not run.
+
+**Tests:**
+- `crates/persistence/src/migration_tests.rs`: seeds a database at the previous schema (`crates/persistence/test_data/pre_drop_dead_tables_seed.sql`) with rows in every dropped table and column, including foreign-key-linked pane rows, then runs the migration with foreign keys on and checks the dropped tables, indexes, triggers and columns, the pane tree, the tabs and active-tab index, the agent blocks, that kept tables keep their data, `foreign_key_check`, an empty database, and revert then re-run.
+- `app/src/persistence/sqlite_tests.rs` (`test_sqlite_restores_a_session_saved_before_the_dead_tables_were_dropped`): the same seed goes through `setup_database`, then `read_sqlite_data` must restore the two windows, the surviving tabs and split, the active tab, the terminal, code, notebook, settings and code-review panes, the terminal blocks and the kept tables; the session saves and reloads again.
+- Copies of real databases (`~/Library/Application Support/dev.warp.Warp-Stable` and two others) were migrated with foreign keys on: `integrity_check` ok, `foreign_key_check` empty, tabs, blocks and commands counts unchanged.
+
+**Notes:**
+- `workspace_metadata` is still in use (per-repo language-server enablement and the repo list) and `workspace_language_server` references it, so it is kept although server.md lists it. `projects`, `ignored_suggestions`, `panels`, `code_review_panes` and `windows.voltron_width`/`universal_search_width` are live too.
+- `commands.is_agent_executed` stays: history still hides commands an agent ran (`terminal/history.rs`, command search). Dropping it would need those rows deleted and the field removed from the history types. Left for AI-33.
+- The `SettingsFileLastSyncedHash` private preference is not stored in sqlite (nothing in the repo reads or writes it any more), so there was nothing to remove here.
+- The integration sqlite fixtures under `crates/integration/tests/data/` are older than the migration and are migrated on startup by the tests that use them; they were not regenerated. `test_json_object.sqlite` (461 cloud-object rows) now exercises dropping populated Warp Drive tables.

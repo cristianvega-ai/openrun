@@ -15,22 +15,6 @@ const MAX_TERMINAL_BLOCKS_TO_PERSIST_PER_SESSION: i64 = 100;
 
 type PersistedBlocks = HashMap<PaneUuid, Vec<SerializedBlock>>;
 
-/// Whether a stored block was created by, or attached to, an agent conversation. Sessions saved
-/// before agents were removed can contain such rows; they are not restored.
-fn is_agent_block(block: &Block) -> bool {
-    let has_agent_metadata = block
-        .ai_metadata
-        .as_deref()
-        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
-        .is_some_and(|value| !value.is_null());
-    let created_in_agent_view = block
-        .agent_view_visibility
-        .as_deref()
-        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
-        .is_some_and(|value| value.get("Agent").is_some());
-    has_agent_metadata || created_in_agent_view
-}
-
 /// Returns the most recent [`MAX_BLOCK_COUNT_PER_SESSION`] block list items for each session. The
 /// items are in chronological order.
 pub(super) fn get_all_restored_blocks(
@@ -52,11 +36,7 @@ pub(super) fn get_all_restored_blocks(
         .map(|(blocks, terminal_pane)| {
             (
                 PaneUuid(terminal_pane.uuid),
-                blocks
-                    .into_iter()
-                    .filter(|block| !is_agent_block(block))
-                    .map(Into::into)
-                    .collect(),
+                blocks.into_iter().map(Into::into).collect(),
             )
         })
         .collect::<HashMap<_, Vec<SerializedBlock>>>();
@@ -152,9 +132,7 @@ fn create_block<'a>(
         user: block.shell_host.as_ref().map(|host| host.user.as_str()),
         host: block.shell_host.as_ref().map(|host| host.hostname.as_str()),
         prompt_snapshot: block.prompt_snapshot.as_ref(),
-        ai_metadata: None,
         is_local: Some(is_local),
-        agent_view_visibility: None,
     }
 }
 
@@ -166,7 +144,3 @@ pub(super) fn delete_blocks(conn: &mut SqliteConnection, pane_id: Vec<u8>) -> Re
         Ok(())
     })
 }
-
-#[cfg(test)]
-#[path = "restored_blocks_tests.rs"]
-mod restored_blocks_tests;
