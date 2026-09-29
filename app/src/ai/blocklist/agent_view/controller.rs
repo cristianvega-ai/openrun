@@ -136,8 +136,6 @@ pub enum AgentViewEntryOrigin {
     InlineHistoryMenu,
     InlineConversationMenu,
     ConversationListView,
-    /// Entered agent view because the default session mode setting is Agent.
-    DefaultSessionMode,
 
     /// Entered agent view by long-running command.
     LongRunningCommand,

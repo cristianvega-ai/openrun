@@ -2786,6 +2786,129 @@ fn test_new_session_menu_is_capped_to_window_height() {
     });
 }
 
+fn terminal_tab_config(name: &str, source_path: Option<PathBuf>) -> crate::tab_configs::TabConfig {
+    crate::tab_configs::TabConfig {
+        name: name.to_string(),
+        title: Some(name.to_string()),
+        color: None,
+        panes: vec![TabConfigPaneNode {
+            id: "main".to_string(),
+            pane_type: Some(TabConfigPaneType::Terminal),
+            split: None,
+            children: None,
+            is_focused: Some(true),
+            directory: None,
+            commands: None,
+            shell: None,
+        }],
+        params: HashMap::new(),
+        source_path,
+    }
+}
+
+/// The default tab config is a terminal feature: it applies while AI is unavailable.
+#[test]
+fn test_add_default_tab_opens_default_tab_config_while_ai_is_off() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let workspace = mock_workspace(&mut app);
+
+        let config_path = PathBuf::from("/tmp/default-tab-config.toml");
+        app.update(|ctx| {
+            AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                settings
+                    .is_any_ai_enabled
+                    .set_value(false, ctx)
+                    .expect("disable AI");
+            });
+            assert!(!AISettings::as_ref(ctx).is_any_ai_enabled(ctx));
+            WarpConfig::handle(ctx).update(ctx, |config, ctx| {
+                config.set_tab_configs(
+                    vec![terminal_tab_config(
+                        "Default Config",
+                        Some(config_path.clone()),
+                    )],
+                    ctx,
+                );
+            });
+            GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
+                settings
+                    .default_tab_config_path
+                    .set_value(config_path.to_string_lossy().into_owned(), ctx)
+                    .expect("set default tab config path");
+            });
+            AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                settings
+                    .default_session_mode_internal
+                    .set_value(DefaultSessionMode::TabConfig, ctx)
+                    .expect("set default session mode");
+            });
+            assert_eq!(
+                AISettings::as_ref(ctx).default_session_mode(),
+                DefaultSessionMode::TabConfig
+            );
+        });
+
+        let tabs_before = workspace.read(&app, |workspace, _| workspace.tab_count());
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+
+        workspace.read(&app, |workspace, ctx| {
+            assert_eq!(workspace.tab_count(), tabs_before + 1);
+            assert_eq!(
+                workspace
+                    .active_tab_pane_group()
+                    .as_ref(ctx)
+                    .custom_title(ctx),
+                Some("Default Config".to_string())
+            );
+        });
+    });
+}
+
+/// A default tab config that no longer exists reverts the setting to Terminal.
+#[test]
+fn test_add_default_tab_reverts_to_terminal_when_default_tab_config_is_missing() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let workspace = mock_workspace(&mut app);
+
+        app.update(|ctx| {
+            GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
+                settings
+                    .default_tab_config_path
+                    .set_value("/tmp/missing-tab-config.toml".to_string(), ctx)
+                    .expect("set default tab config path");
+            });
+            AISettings::handle(ctx).update(ctx, |settings, ctx| {
+                settings
+                    .default_session_mode_internal
+                    .set_value(DefaultSessionMode::TabConfig, ctx)
+                    .expect("set default session mode");
+            });
+        });
+
+        let tabs_before = workspace.read(&app, |workspace, _| workspace.tab_count());
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+
+        workspace.read(&app, |workspace, ctx| {
+            assert_eq!(workspace.tab_count(), tabs_before + 1);
+            assert_eq!(
+                AISettings::as_ref(ctx).default_session_mode(),
+                DefaultSessionMode::Terminal
+            );
+            assert!(
+                GeneralSettings::as_ref(ctx)
+                    .default_tab_config_path()
+                    .is_empty()
+            );
+        });
+    });
+}
+
 #[test]
 fn test_open_tab_config_with_params_does_not_use_worktree_branch_as_implicit_title() {
     App::test((), |mut app| async move {

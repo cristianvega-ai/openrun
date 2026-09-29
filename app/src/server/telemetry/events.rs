@@ -854,7 +854,6 @@ pub enum TelemetryAgentViewEntryOrigin {
     SlashInit,
     ProjectEntry,
     ClearBuffer,
-    DefaultSessionMode,
     LinearDeepLink,
     JumpToLatestAgentMessage,
 }
@@ -891,7 +890,6 @@ impl From<AgentViewEntryOrigin> for TelemetryAgentViewEntryOrigin {
             AgentViewEntryOrigin::Keybinding(_) => Self::Keybinding,
             AgentViewEntryOrigin::ProjectEntry => Self::ProjectEntry,
             AgentViewEntryOrigin::ClearBuffer => Self::ClearBuffer,
-            AgentViewEntryOrigin::DefaultSessionMode => Self::DefaultSessionMode,
             AgentViewEntryOrigin::LinearDeepLink => Self::LinearDeepLink,
             AgentViewEntryOrigin::JumpToLatestAgentMessage => Self::JumpToLatestAgentMessage,
         }

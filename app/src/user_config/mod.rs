@@ -115,6 +115,16 @@ impl WarpConfig {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_tab_configs(
+        &mut self,
+        tab_configs: Vec<TabConfig>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        self.tab_configs = tab_configs;
+        ctx.emit(WarpConfigUpdateEvent::TabConfigs);
+    }
+
     pub fn launch_configs(&self) -> &Vec<LaunchConfig> {
         &self.launch_configs
     }

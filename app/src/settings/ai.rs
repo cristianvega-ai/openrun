@@ -101,8 +101,6 @@ pub enum DefaultSessionMode {
     /// New sessions start in the terminal mode (default).
     #[default]
     Terminal,
-    /// New sessions start in agent view.
-    Agent,
     /// New sessions open a user-defined tab config.
     /// The specific config is identified by the companion `default_tab_config_path` setting.
     TabConfig,
@@ -121,7 +119,7 @@ settings::macros::implement_setting_for_enum!(
 
 /// Modes that earlier builds offered and that no longer exist. A stored value naming one of
 /// these opens new sessions in the default mode instead of invalidating the setting.
-const RETIRED_DEFAULT_SESSION_MODES: [&str; 2] = ["cloud_agent", "docker_sandbox"];
+const RETIRED_DEFAULT_SESSION_MODES: [&str; 3] = ["agent", "cloud_agent", "docker_sandbox"];
 
 impl DefaultSessionMode {
     /// Reads a stored mode name in either the settings-file (`tab_config`) or the serialized
@@ -139,7 +137,6 @@ impl DefaultSessionMode {
             .collect::<String>();
         match snake_case.as_str() {
             "terminal" => Some(Self::Terminal),
-            "agent" => Some(Self::Agent),
             "tab_config" => Some(Self::TabConfig),
             retired if RETIRED_DEFAULT_SESSION_MODES.contains(&retired) => {
                 log::warn!("Ignoring retired default session mode {name:?}");
@@ -152,7 +149,6 @@ impl DefaultSessionMode {
     fn file_name(&self) -> &'static str {
         match self {
             DefaultSessionMode::Terminal => "terminal",
-            DefaultSessionMode::Agent => "agent",
             DefaultSessionMode::TabConfig => "tab_config",
         }
     }
@@ -182,7 +178,6 @@ impl DefaultSessionMode {
     pub fn display_name(&self) -> &'static str {
         match self {
             DefaultSessionMode::Terminal => "Terminal",
-            DefaultSessionMode::Agent => "Agent",
             DefaultSessionMode::TabConfig => "Tab Config",
         }
     }
@@ -740,8 +735,6 @@ define_settings_group!(AISettings, settings: [
         private: true,
     }
 
-    // The raw stored default mode for new sessions. Use `default_session_mode()` to retrieve the
-    // effective value, which is gated on AI availability.
     default_session_mode_internal: DefaultSessionMode,
 
     // Controls how agent thinking/reasoning traces are displayed.
@@ -844,20 +837,8 @@ impl AISettings {
             && !self.is_ai_disabled_due_to_remote_session_org_policy(app)
     }
 
-    pub fn default_session_mode(&self, app: &AppContext) -> DefaultSessionMode {
-        let mode = *self.default_session_mode_internal.value();
-        match mode {
-            // Terminal and TabConfig don't require AI.
-            DefaultSessionMode::Terminal | DefaultSessionMode::TabConfig => mode,
-            // Agent requires AI to be enabled.
-            DefaultSessionMode::Agent => {
-                if self.is_any_ai_enabled(app) {
-                    mode
-                } else {
-                    DefaultSessionMode::Terminal
-                }
-            }
-        }
+    pub fn default_session_mode(&self) -> DefaultSessionMode {
+        *self.default_session_mode_internal.value()
     }
 
     pub fn is_active_ai_enabled(&self, app: &warpui::AppContext) -> bool {

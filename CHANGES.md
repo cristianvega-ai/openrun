@@ -84,6 +84,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Cloud environments, schedules, runners, managed secrets and isolation platform](#cloud-environments-schedules-runners-managed-secrets-and-isolation-platform) — removed Oz cloud environments, scheduled agents, self-hosted workers and runners, Oz API keys, managed secrets, the isolation platform, the Gemini Enterprise and OIDC Bedrock credential mints, and `OzConfig`
 - [Agent management view and conversation list](#agent-management-view-and-conversation-list) — removed the agent management view, the left-panel conversation list and its delete dialog, the header-toolbar and `warpctrl` entries for them, and the legacy Warp-agent toast; notifications, tab icons and the notifications mailbox now describe CLI-agent sessions only
 - [Offline guardrails (draft)](#offline-guardrails-draft) — `script/offline_audit`, its allowlist, cargo-deny bans with wrappers and a non-blocking `offline-audit` CI job that report what still reaches Warp services
+- [Default session mode is a terminal setting](#default-session-mode-is-a-terminal-setting) — the Settings > Features default-mode dropdown no longer greys out without AI, and the Agent mode is gone; the default tab config applies to new tabs
 
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
@@ -2214,3 +2215,22 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Comment lines are skipped in the `network` check (`--include-comments` restores them); `hyper` is matched as a whole word so `hyperlink` and the Hyper terminal do not count; `git` and `gh` subprocesses are counted but never reported.
 - Unchanged in the draft and left to finalisation: the two-minute idle `integration` session of 9.4a, the SSH integration tests (`test_ssh_*`), which the CI job excludes with a filter until they are deleted or ignored, and dropping `continue-on-error`.
 - The runtime step of the CI job could not be run locally (it needs Linux, `unshare` and `strace`); the log parser was tested against a hand-written `strace` sample.
+
+## Default session mode is a terminal setting
+**Why:** "Default mode for new sessions" (Settings > Features) chooses what a new tab opens: a plain terminal or one of the user's tab configs. Its dropdown was disabled whenever AI was off, which is always the case now, so users could not pick a default tab config. The Agent mode it also offered opens the agent view and cannot exist here.
+
+**Removed:**
+- `DefaultSessionMode::Agent`, the "Agent" option of the dropdown and the `agent` search term. A stored `agent` value reads as Terminal, like the retired `cloud_agent` and `docker_sandbox`.
+- The AI gating of the setting: the dropdown's enable/disable on `is_any_ai_enabled` and its refresh on `IsAnyAIEnabled`, the AI check in `AISettings::default_session_mode` (which no longer takes an `AppContext`), and the "New Terminal Tab" and "New Agent Tab" menu shortcuts that swapped depending on an Agent default.
+- The agent-view auto-entry for new tabs and panes: `DefaultSessionModeBehavior` (workspace and pane group), `Workspace::enter_agent_view_on_active_tab`, the unused `PaneGroup::add_terminal_pane_ignoring_default_session_mode`, `AgentViewEntryOrigin::DefaultSessionMode` and its telemetry twin. `add_new_session_tab_with_default_mode` and `add_new_session_tab_internal_with_default_session_mode_behavior` are merged into `add_new_session_tab`; `add_session` and `add_session_in_directory` lose the behavior argument.
+
+**Modified:**
+- The Features page shows the dropdown enabled with Terminal plus every loaded tab config. New tabs (`AddDefaultTab`: the tab bar `+`, Cmd-T, the vertical-tabs `+`) already opened the default tab config without an AI check; two tests now cover that with AI off (`test_add_default_tab_opens_default_tab_config_while_ai_is_off`, and the revert to Terminal when the default config file is missing).
+- The default worktree config always uses `pane_type = "terminal"`. The new-session menu sidecar has no Agent item.
+- `WarpConfig::set_tab_configs` (test-only) seeds tab configs in workspace tests.
+
+**User-visible impact:** Users can choose Terminal or a tab config as the default for new sessions from Settings > Features. The setting used to be greyed out.
+
+**Notes:**
+- The Features page has no other terminal setting greyed out by the AI toggle. `SlashCommandsInTerminalModeWidget` (AI-gated, hidden) and `show_terminal_zero_state_block` are left to AI-24/AI-27/AI-28. `AtContextMenuInTerminalModeWidget` ("@" context menu) is not AI-gated but is an AI-context feature: AI-24.
+- Left for AI-25: the "Agent" item of the unified new-session menu and the "New Agent Tab" menu item, binding and `AddAgentTab` action (all already hidden or disabled without AI), the `default_session_mode_internal`/`DefaultSessionMode` types still living in `AISettings` (they must survive it), and the agent-oriented tab helpers (`add_terminal_tab_in_ai_mode` and friends).

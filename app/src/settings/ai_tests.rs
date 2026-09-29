@@ -305,7 +305,7 @@ fn retired_default_session_modes_read_as_the_default_mode() {
     use settings_value::SettingsValue as _;
     use warpui_extras::user_preferences::toml_backed::TomlBackedUserPreferences;
 
-    for retired in ["cloud_agent", "docker_sandbox"] {
+    for retired in ["agent", "cloud_agent", "docker_sandbox"] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.toml");
         std::fs::write(
@@ -334,15 +334,15 @@ fn retired_default_session_modes_read_as_the_default_mode() {
         DefaultSessionMode::Terminal
     );
     assert_eq!(
+        serde_json::from_str::<DefaultSessionMode>("\"Agent\"").unwrap(),
+        DefaultSessionMode::Terminal
+    );
+    assert_eq!(
         serde_json::from_str::<DefaultSessionMode>("\"TabConfig\"").unwrap(),
         DefaultSessionMode::TabConfig
     );
 
-    for mode in [
-        DefaultSessionMode::Terminal,
-        DefaultSessionMode::Agent,
-        DefaultSessionMode::TabConfig,
-    ] {
+    for mode in [DefaultSessionMode::Terminal, DefaultSessionMode::TabConfig] {
         assert_eq!(
             DefaultSessionMode::from_file_value(&mode.to_file_value()),
             Some(mode)

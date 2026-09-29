@@ -3,7 +3,7 @@ use std::sync::Arc;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::{AppContext, ModelHandle, View, ViewContext, ViewHandle};
 
-use super::super::{DefaultSessionModeBehavior, Direction};
+use super::super::Direction;
 use super::view::PaneView;
 use super::{DetachType, PaneConfiguration, PaneContent, PaneGroup, PaneId};
 use crate::app_state::{LeafContents, NotebookPaneSnapshot};
@@ -185,7 +185,6 @@ fn subscribe_to_link_model(
                 None, /* chosen_shell */
                 Some(path.clone()),
                 None,
-                DefaultSessionModeBehavior::Apply,
                 ctx,
             );
         }
