@@ -137,7 +137,6 @@ use crate::menu::{
     MenuVariant,
 };
 use crate::modal::{Modal, ModalEvent, ModalViewState};
-use crate::network::{NetworkStatus, NetworkStatusEvent};
 use crate::notification::NotificationContext;
 use crate::palette::{PaletteMode, PaletteSource};
 #[cfg(feature = "local_fs")]
@@ -1732,12 +1731,6 @@ impl Workspace {
             new_session_sidecar_menu,
             move_to_group_sidecar_menu,
         ) = Self::build_menus(ctx);
-
-        // Subscribe to network changes
-        ctx.subscribe_to_model(
-            &NetworkStatus::handle(ctx),
-            Self::handle_network_status_event,
-        );
 
         let palette =
             ctx.add_typed_action_view(|ctx| CommandPalette::new(NavigationMode::Normal, ctx));
@@ -5710,19 +5703,6 @@ impl Workspace {
         });
     }
 
-    fn toggle_debug_network_status(&self, ctx: &mut ViewContext<Self>) {
-        NetworkStatus::handle(ctx).update(ctx, |network_status, network_ctx| {
-            let is_reachable = network_status.is_online();
-            let new_is_reachable = !is_reachable;
-            if new_is_reachable {
-                log::info!("Manually toggled network status to be reachable");
-            } else {
-                log::info!("Manually toggled network status to be not reachable");
-            }
-            network_status.reachability_changed(new_is_reachable, network_ctx);
-        });
-    }
-
     fn toggle_show_memory_stats(&self, ctx: &mut ViewContext<Self>) {
         DebugSettings::handle(ctx).update(ctx, |debug_settings, ctx| {
             report_if_error!(debug_settings.show_memory_stats.toggle_and_save_value(ctx));
@@ -7354,15 +7334,6 @@ impl Workspace {
     /// Returns the pane group with the matching EntityId, or None if it doesn't exist.
     fn get_pane_group_view_with_id(&self, id: EntityId) -> Option<&ViewHandle<PaneGroup>> {
         self.tab_views().find(|view| view.id() == id)
-    }
-
-    pub fn handle_network_status_event(
-        &mut self,
-        _handle: ModelHandle<NetworkStatus>,
-        _event: &NetworkStatusEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        ctx.notify();
     }
 
     pub fn toggle_block_snackbar(&mut self, ctx: &mut ViewContext<Self>) {
@@ -12195,7 +12166,7 @@ impl Workspace {
     }
 
     /// Adds the configurable right-side toolbar items plus the fixed controls
-    /// (offline indicator, settings menu, etc.) that are not configurable.
+    /// (settings menu, etc.) that are not configurable.
     fn add_configurable_right_side_tab_bar_controls(
         &self,
         target: &mut Flex,
@@ -12203,16 +12174,6 @@ impl Workspace {
         appearance: &Appearance,
         ctx: &AppContext,
     ) {
-        let is_online = NetworkStatus::as_ref(ctx).is_online();
-
-        if !is_online {
-            target.add_child(
-                Container::new(self.render_offline_button(appearance))
-                    .with_margin_right(4.)
-                    .finish(),
-            );
-        }
-
         for item in config.right_items() {
             if let Some(button) = self.render_header_toolbar_button(&item, appearance, ctx) {
                 target.add_child(button);
@@ -12484,43 +12445,6 @@ impl Workspace {
         .finish();
 
         SavePosition::new(Align::new(button).finish(), USER_MENU_BUTTON_POSITION_ID).finish()
-    }
-
-    fn render_offline_button(&self, appearance: &Appearance) -> Box<dyn Element> {
-        let ui_builder = appearance.ui_builder().clone();
-
-        let tool_tip_label_text = "Some features may be unavailable offline".to_string();
-        let icon = ConstrainedBox::new(
-            Container::new(
-                icons::Icon::CloudOffline
-                    .to_warpui_icon(appearance.theme().foreground())
-                    .finish(),
-            )
-            .with_uniform_padding(3.)
-            .finish(),
-        )
-        .with_width(icons::ICON_DIMENSIONS)
-        .with_height(icons::ICON_DIMENSIONS)
-        .finish();
-
-        let hoverable = Hoverable::new(self.mouse_states.offline_icon.clone(), |state| {
-            let mut stack = Stack::new().with_child(icon);
-            if state.is_hovered() {
-                let tool_tip = ui_builder.tool_tip(tool_tip_label_text);
-                stack.add_positioned_overlay_child(
-                    tool_tip.build().finish(),
-                    OffsetPositioning::offset_from_parent(
-                        vec2f(0., 4.),
-                        ParentOffsetBounds::WindowByPosition,
-                        ParentAnchor::BottomMiddle,
-                        ChildAnchor::TopMiddle,
-                    ),
-                );
-            }
-            stack.finish()
-        });
-
-        Align::new(hoverable.finish()).finish()
     }
 
     fn render_tab_bar_icon_button_tooltip(
@@ -14170,7 +14094,6 @@ impl TypedActionView for Workspace {
             }
             ToggleRecordingMode => self.toggle_recording_mode(ctx),
             ToggleInBandGenerators => self.toggle_in_band_generators(ctx),
-            ToggleDebugNetworkStatus => self.toggle_debug_network_status(ctx),
             ToggleShowMemoryStats => self.toggle_show_memory_stats(ctx),
             ToggleUserMenu => self.toggle_user_menu(ctx),
             ToggleKeybindingsPage => self.toggle_keybindings_page(ctx),
@@ -14835,10 +14758,6 @@ impl View for Workspace {
     fn keymap_context(&self, app: &AppContext) -> warpui::keymap::Context {
         let mut context = Self::default_keymap_context();
 
-        if NetworkStatus::as_ref(app).is_online() {
-            context.set.insert("IsOnline");
-        }
-
         if self
             .active_tab_pane_group()
             .as_ref(app)
@@ -14963,11 +14882,6 @@ impl View for Workspace {
                 .value()
             {
                 context.set.insert(flags::IN_BAND_GENERATORS_FLAG);
-            }
-
-            let network_status = NetworkStatus::as_ref(app);
-            if network_status.is_online() {
-                context.set.insert(flags::DEBUG_NETWORK_ONLINE_FLAG);
             }
 
             if debug_settings.should_show_memory_stats() {

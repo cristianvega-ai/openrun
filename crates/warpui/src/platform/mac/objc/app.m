@@ -9,7 +9,6 @@
 #import "hotkey.h"
 #import "menus.h"
 
-#import "reachability.h"
 
 static void *NSAppThemeChangeContext = &NSAppThemeChangeContext;
 
@@ -110,13 +109,6 @@ NSUInteger activeScreenId() {
     // Whether we have a pending active window change notification.
     BOOL hasPendingActiveWindowChange;
 
-    // Internet reachability.
-    Reachability *internetReachable;
-
-    // Track the current reachable state so we don't double fire reachability state
-    // changed events.
-    NSNumber *isReachable;
-
     // Whether we should force termination.
     BOOL forceTermination;
 
@@ -199,8 +191,6 @@ NSUInteger activeScreenId() {
 - (void)dealloc {
     [NSApp removeObserver:self forKeyPath:@"effectiveAppearance" context:NSAppThemeChangeContext];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [internetReachable stopNotifier];
-    [internetReachable release];
     [super dealloc];
 }
 
@@ -419,47 +409,6 @@ static BOOL isSystemInitiatedTermination(void) {
             [obj itemNeedsUpdate:item];
         }
     }
-}
-
-- (void)setReachabilityListener {
-    internetReachable = [[Reachability reachabilityWithHostname:@"0.0.0.0"] retain];
-
-    // Internet is reachable.
-    internetReachable.reachableBlock = ^(Reachability *reach __unused) {
-      // Update the UI on the main thread.
-      dispatch_async(dispatch_get_main_queue(), ^{
-        if (self->isReachable == nil || [self->isReachable intValue] == 0) {
-            self->isReachable = [NSNumber numberWithBool:YES];
-            if (self->rustWrapper) warp_app_internet_reachability_changed(self, YES);
-        }
-      });
-    };
-
-    // Internet is not reachable.
-    internetReachable.unreachableBlock = ^(Reachability *reach __unused) {
-      // Update the UI on the main thread.
-      dispatch_async(dispatch_get_main_queue(), ^{
-        if (self->isReachable == nil || [self->isReachable intValue] > 0) {
-            self->isReachable = [NSNumber numberWithBool:NO];
-            if (self->rustWrapper) warp_app_internet_reachability_changed(self, NO);
-        }
-      });
-    };
-
-    // Dispatch an initial call to check internet reachability so app could get notified
-    // of the reachability status it starts in.
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(void) {
-      BOOL internetIsReachable = [internetReachable isReachable];
-      dispatch_async(dispatch_get_main_queue(), ^{
-        if (self->isReachable == nil) {
-            self->isReachable = [NSNumber numberWithBool:internetIsReachable];
-            if (self->rustWrapper)
-                warp_app_internet_reachability_changed(self, internetIsReachable);
-        }
-      });
-    });
-
-    [internetReachable startNotifier];
 }
 
 // Returns a new NSMenu in the mac dock. Gets called every time we pull up the dock menu

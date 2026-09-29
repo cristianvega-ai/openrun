@@ -26,8 +26,6 @@ use self::key_events::convert_keyboard_input_event;
 use super::CustomEvent;
 use super::app::ClipboardEvent;
 use super::window::DEFAULT_TITLEBAR_HEIGHT;
-#[cfg(windows)]
-use super::windows::{WindowsNetworkConnectionPoint, add_network_connection_listener};
 use crate::Event::{ClearMarkedText, SetMarkedText, TypedCharacters};
 use crate::actions::StandardAction;
 use crate::r#async::Timer;
@@ -242,9 +240,6 @@ impl LogicalPositionExt for winit::dpi::LogicalPosition<f32> {
 struct State {
     windows: HashMap<winit::window::WindowId, WindowState>,
     pending_active_window_change: Option<ActiveWindowChange>,
-
-    #[cfg(windows)]
-    network_connection_listener: Option<WindowsNetworkConnectionPoint>,
 }
 
 /// This enum holds the state needed to convert multiple emitted
@@ -571,22 +566,6 @@ impl EventLoop {
                         self.proxy.clone(),
                         &self.ui_app.background_executor(),
                     );
-                    if self.callbacks.has_internet_reachability_changed_callback() {
-                        super::linux::watch_network_status_changed(
-                            self.proxy.clone(),
-                            &self.ui_app.background_executor(),
-                        );
-                    }
-                }
-
-                #[cfg(windows)]
-                match add_network_connection_listener(self.proxy.clone()) {
-                    Ok(listener) => {
-                        self.state.network_connection_listener = Some(listener);
-                    }
-                    Err(e) => {
-                        log::warn!("Creating a network connection listener failed: {e:?}");
-                    }
                 }
 
                 // Initialize soft keyboard support on mobile WASM devices.
@@ -765,12 +744,6 @@ impl EventLoop {
                 self.callbacks.cpu_awakened();
             }
 
-            Event::UserEvent(CustomEvent::InternetConnected) => {
-                self.callbacks.internet_reachability_changed(true);
-            }
-            Event::UserEvent(CustomEvent::InternetDisconnected) => {
-                self.callbacks.internet_reachability_changed(false)
-            }
             Event::UserEvent(CustomEvent::SystemThemeChanged) => {
                 self.callbacks.os_appearance_changed();
             }
@@ -938,11 +911,6 @@ impl EventLoop {
                         },
                     );
                 });
-
-                #[cfg(windows)]
-                if let Some(network_listener) = self.state.network_connection_listener.take() {
-                    network_listener.clean_up();
-                }
 
                 self.callbacks.app_will_terminate();
 

@@ -192,24 +192,6 @@ pub(crate) fn add_paste_listener(event_loop_proxy: winit::event_loop::EventLoopP
     .forget();
 }
 
-pub(crate) fn add_network_connection_listener(
-    event_loop_proxy: winit::event_loop::EventLoopProxy<CustomEvent>,
-) {
-    let event_loop_proxy_clone = event_loop_proxy.clone();
-
-    EventListener::new(&gloo::utils::window(), "offline", move |_event| {
-        let _ = event_loop_proxy_clone
-            .send_event(crate::windowing::winit::app::CustomEvent::InternetDisconnected);
-    })
-    .forget();
-
-    EventListener::new(&gloo::utils::window(), "online", move |_event| {
-        let _ = event_loop_proxy
-            .send_event(crate::windowing::winit::app::CustomEvent::InternetConnected);
-    })
-    .forget();
-}
-
 pub(crate) fn add_system_theme_listener(
     event_loop_proxy: winit::event_loop::EventLoopProxy<CustomEvent>,
 ) {

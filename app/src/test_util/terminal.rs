@@ -12,7 +12,6 @@ use crate::AgentNotificationsModel;
 use crate::code::outline::RepoOutlines;
 use crate::code_review::git_repo_model::GitRepoModels;
 use crate::context_chips::prompt::Prompt;
-use crate::network::NetworkStatus;
 use crate::search::files::model::FileSearchModel;
 use crate::settings::PrivacySettings;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
@@ -33,7 +32,6 @@ use crate::workspace_metadata::PersistedWorkspace;
 /// Initializes all of the necessary models to use a terminal view.
 pub fn initialize_app_for_terminal_view(app: &mut App) {
     initialize_history_persistence_for_tests(app);
-    app.add_singleton_model(|_| NetworkStatus::new());
     app.add_singleton_model(|_| SystemStats::new());
     app.add_singleton_model(|_| Prompt::mock());
     app.add_singleton_model(|_| Appearance::mock());

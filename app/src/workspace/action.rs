@@ -371,7 +371,6 @@ pub enum WorkspaceAction {
     LogReviewCommentSendStatusForActiveTab,
     ToggleRecordingMode,
     ToggleInBandGenerators,
-    ToggleDebugNetworkStatus,
     ToggleShowMemoryStats,
     RunCommand(String),
     InsertInInput {
@@ -660,7 +659,6 @@ impl WorkspaceAction {
             | LogReviewCommentSendStatusForActiveTab
             | ToggleRecordingMode
             | ToggleInBandGenerators
-            | ToggleDebugNetworkStatus
             | ToggleShowMemoryStats
             | RunCommand { .. }
             | InsertInInput { .. }

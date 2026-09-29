@@ -39,6 +39,5 @@ BOOL warp_app_are_key_bindings_disabled_for_window(id app, id window);
 BOOL warp_app_has_binding_for_keystroke(id app, id event);
 BOOL warp_app_has_custom_action_for_keystroke(id app, id event);
 void warp_app_disable_warning_modal(id app);
-void warp_app_internet_reachability_changed(id app, BOOL can_reach);
 void warp_app_process_modal_response(id app, NSUInteger modal_id, NSModalResponse response,
                                      BOOL disable_modal);

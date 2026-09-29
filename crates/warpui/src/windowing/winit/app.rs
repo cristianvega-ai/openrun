@@ -63,12 +63,6 @@ pub enum CustomEvent {
     AboutToSleep,
     #[cfg_attr(not(any(target_os = "linux", target_os = "freebsd")), allow(dead_code))]
     ResumedFromSleep,
-    /// The application is connected to the internet.
-    #[cfg_attr(any(target_os = "macos"), allow(dead_code))]
-    InternetConnected,
-    /// The application is disconnected from the internet.
-    #[cfg_attr(any(target_os = "macos"), allow(dead_code))]
-    InternetDisconnected,
     /// The system theme (light/dark) changed.
     /// TODO: theming on Windows
     #[cfg_attr(any(target_os = "macos", target_os = "windows"), allow(dead_code))]
@@ -187,9 +181,6 @@ impl App {
                 super::linux::ensure_cursor_theme();
             } else if #[cfg(target_family = "wasm")] {
                 crate::platform::wasm::add_paste_listener(event_loop.create_proxy());
-                if callbacks.on_internet_reachability_changed.is_some() {
-                    crate::platform::wasm::add_network_connection_listener(event_loop.create_proxy());
-                }
                 crate::platform::wasm::add_system_theme_listener(event_loop.create_proxy());
                 crate::platform::wasm::setup_visual_viewport_resize_listener(event_loop.create_proxy());
             }

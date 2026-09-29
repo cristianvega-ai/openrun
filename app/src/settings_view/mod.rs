@@ -363,7 +363,6 @@ pub mod flags {
     pub const RECORDING_MODE_FLAG: &str = "Recording_Mode_Enabled";
     pub const IN_BAND_GENERATORS_FLAG: &str = "In_Band_Generators_Enabled";
     pub const WARP_SAME_LINE_PROMPT_FLAG: &str = "Warp_Same_Line_Prompt_Enabled";
-    pub const DEBUG_NETWORK_ONLINE_FLAG: &str = "Network_Status_Online";
     pub const DEBUG_SHOW_MEMORY_STATS_FLAG: &str = "Debug_Memory_Statistics";
     pub const ALLOW_NATIVE_WAYLAND: &str = "Allow_Native_Wayland";
     pub const IS_BLOCK_AI_SUMMARIES_ENABLED: &str = "IsBlockAISummariesEnabled";
@@ -452,12 +451,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                     WorkspaceAction::ToggleInBandGenerators,
                     &id!("Workspace"),
                     flags::IN_BAND_GENERATORS_FLAG,
-                ),
-                ToggleSettingActionPair::new(
-                    "debug network status",
-                    WorkspaceAction::ToggleDebugNetworkStatus,
-                    &id!("Workspace"),
-                    flags::DEBUG_NETWORK_ONLINE_FLAG,
                 ),
                 ToggleSettingActionPair::new(
                     "memory statistics",

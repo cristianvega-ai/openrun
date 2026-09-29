@@ -32,9 +32,6 @@ pub struct AppCallbacks {
         Option<Box<dyn FnMut(WindowId, &mut AppContext) -> ApproveTerminateResult>>,
     /// Callback for when the user clicks "don't show again" on the warning modal.
     pub on_disable_warning_modal: Option<Box<dyn FnMut(&mut AppContext)>>,
-    /// Callback on when the internet reachability to a specific host has changed.
-    /// The host name here could be a string for an IP address or domain (e.g. www.example.com).
-    pub on_internet_reachability_changed: Option<Box<dyn FnMut(bool, &mut AppContext)>>,
     pub on_active_window_changed: Option<Box<dyn FnMut(&mut AppContext)>>,
     pub on_new_window_requested: Option<Box<dyn FnMut(&mut AppContext)>>,
     pub on_window_moved: Option<Box<dyn FnMut(&mut AppContext)>>,
@@ -174,26 +171,6 @@ impl AppCallbackDispatcher {
             self.ui_app.update(|ctx| callback(window_id, ctx))
         } else {
             ApproveTerminateResult::Terminate
-        }
-    }
-
-    // Dead code is allowed on wasm as when we register the network connection
-    // listener on wasm, we don't yet have access to an `AppCallbackDispatcher`,
-    // so we directly check the `Callbacks` object instead.
-    // TODO: implement events for internet reachability changes
-    #[cfg_attr(any(target_family = "wasm", target_os = "windows"), allow(dead_code))]
-    pub fn has_internet_reachability_changed_callback(&self) -> bool {
-        self.callbacks.on_internet_reachability_changed.is_some()
-    }
-
-    pub fn internet_reachability_changed(&mut self, is_reachable: bool) {
-        if is_reachable {
-            log::info!("application can reach internet");
-        } else {
-            log::info!("application can not reach internet");
-        }
-        if let Some(callback) = &mut self.callbacks.on_internet_reachability_changed {
-            self.ui_app.update(|ctx| callback(is_reachable, ctx));
         }
     }
 

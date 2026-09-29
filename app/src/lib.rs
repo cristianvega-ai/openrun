@@ -30,7 +30,6 @@ mod local_control;
 mod login_item;
 mod menu;
 mod modal;
-mod network;
 mod notebooks;
 mod notification;
 mod palette;
@@ -164,7 +163,6 @@ use crate::context_chips::prompt::Prompt;
 use crate::default_terminal::DefaultTerminal;
 pub use crate::global_resource_handles::{GlobalResourceHandles, GlobalResourceHandlesProvider};
 use crate::gpu_state::GPUState;
-use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::notification::NotificationContext;
 use crate::palette::{PaletteMode, PaletteSource};
@@ -829,7 +827,6 @@ pub(crate) fn initialize_app(
     let display_count = ctx.windows().display_count();
     ctx.add_singleton_model(|_| DisplayCount(display_count));
 
-    ctx.add_singleton_model(|_| NetworkStatus::new());
     ctx.add_singleton_model(|_| SystemStats::new());
     ctx.add_singleton_model(|_| KeybindingChangedNotifier::new());
     ctx.add_singleton_model(|_| TabShortcutModifierState::new());
@@ -905,10 +902,6 @@ pub(crate) fn initialize_app(
 
 pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppCallbacks {
     warpui::platform::AppCallbacks {
-        on_internet_reachability_changed: Some(Box::new(move |reachable, ctx| {
-            NetworkStatus::handle(ctx)
-                .update(ctx, move |me, ctx| me.reachability_changed(reachable, ctx));
-        })),
         on_screen_changed: Some(Box::new(move |ctx| {
             ctx.dispatch_global_action(
                 "root_view:move_quake_mode_window_from_screen_change",

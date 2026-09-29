@@ -707,13 +707,6 @@ fn debug_menu_items() -> Vec<MenuItem> {
         debug_menu_items.push(toggle_bootstrap_block_menu_item());
 
         debug_menu_items.push(MenuItem::Custom(CustomMenuItem::new(
-            "Manually Toggle Network Status",
-            move |ctx| ctx.dispatch_global_action("workspace:toggle_debug_network_status", &()),
-            no_updates,
-            None,
-        )));
-
-        debug_menu_items.push(MenuItem::Custom(CustomMenuItem::new(
             EXPORT_DEFAULT_SETTINGS_CSV_MENU_ITEM_NAME,
             move |ctx| {
                 let default_settings = SettingsManager::handle(ctx).as_ref(ctx).default_values();

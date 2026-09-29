@@ -279,11 +279,6 @@ pub unsafe extern "C-unwind" fn warp_app_will_finish_launching(this: &mut Object
             .delegate()
             .expect("the warp app always has a delegate");
 
-        if app.callbacks.has_internet_reachability_changed_callback() {
-            // `setReachabilityListener` is a custom warp app-delegate selector.
-            let _: () = msg_send![&*app_delegate, setReachabilityListener];
-        }
-
         if let Some(menu_bar_builder) = app.menu_bar_builder.take() {
             let menu_bar = app.callbacks.with_mutable_app_context(menu_bar_builder);
             let nsmenu = make_main_menu(menu_bar);
@@ -311,17 +306,6 @@ pub unsafe extern "C-unwind" fn warp_app_will_finish_launching(this: &mut Object
 pub(crate) extern "C-unwind" fn warp_app_did_become_active(this: &mut Object, _: Sel, _: id) {
     let app = unsafe { get_app(this) };
     app.callbacks.app_became_active();
-}
-
-#[unsafe(no_mangle)]
-pub(crate) extern "C-unwind" fn warp_app_internet_reachability_changed(
-    this: &mut Object,
-    can_reach: u8,
-) {
-    let is_reachable = can_reach != 0;
-
-    let app = unsafe { get_app(this) };
-    app.callbacks.internet_reachability_changed(is_reachable);
 }
 
 /// Returns whether or not we can proceed with termination.

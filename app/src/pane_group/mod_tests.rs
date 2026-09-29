@@ -15,7 +15,6 @@ use watcher::HomeDirectoryWatcher;
 use super::*;
 use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
-use crate::network::NetworkStatus;
 use crate::notebooks::editor::keys::NotebookKeybindings;
 use crate::resource_center::TipsCompleted;
 use crate::search::files::model::FileSearchModel;
@@ -41,7 +40,6 @@ use crate::{AgentNotificationsModel, GlobalResourceHandles, GlobalResourceHandle
 fn initialize_app(app: &mut App) {
     initialize_settings_for_tests(app);
     app.add_singleton_model(|_ctx| PtySpawner::new_for_test());
-    app.add_singleton_model(|_| NetworkStatus::new());
     app.add_singleton_model(|_| SystemStats::new());
 
     // Initialize repository and directory watchers.

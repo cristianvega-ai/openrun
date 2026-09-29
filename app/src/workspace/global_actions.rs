@@ -8,7 +8,6 @@ use warpui::{AppContext, SingletonEntity, TypedActionView};
 
 use crate::GlobalResourceHandlesProvider;
 use crate::app_state::get_app_state;
-use crate::network::NetworkStatus;
 use crate::persistence::ModelEvent;
 use crate::root_view::OpenPath;
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
@@ -24,10 +23,6 @@ pub fn init_global_actions(app: &mut AppContext) {
     app.add_global_action("workspace:toggle_scroll_reporting", toggle_scroll_reporting);
     app.add_global_action("workspace:toggle_focus_reporting", toggle_focus_reporting);
     app.add_global_action("workspace:save_app", save_app);
-    app.add_global_action(
-        "workspace:toggle_debug_network_status",
-        toggle_debug_network_status,
-    );
     app.add_global_action("workspace:open_repository", open_repository);
     app.add_global_action("app:undo_close", undo_close);
 }
@@ -95,19 +90,6 @@ fn save_app(_: &(), ctx: &mut AppContext) {
     if let Err(err) = model_event_sender.send(event) {
         report_error!(anyhow::Error::new(err).context("Error trying to send model event"));
     }
-}
-
-fn toggle_debug_network_status(_: &(), ctx: &mut AppContext) {
-    NetworkStatus::handle(ctx).update(ctx, move |me, ctx| {
-        let is_reachable = me.is_online();
-        let new_is_reachable = !is_reachable;
-        if new_is_reachable {
-            log::info!("Manually toggled network status to be reachable");
-        } else {
-            log::info!("Manually toggled network status to be not reachable");
-        }
-        me.reachability_changed(new_is_reachable, ctx)
-    });
 }
 
 /// Reopens the last closed item (window or tab).

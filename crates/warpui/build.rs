@@ -147,9 +147,6 @@ fn compile_objc_lib() {
     println!("cargo:rerun-if-changed=src/platform/mac/objc/window.m");
     println!("cargo:rerun-if-changed=src/platform/mac/objc/window_blur.m");
     println!("cargo:rerun-if-changed=src/platform/mac/objc/window_blur.h");
-    // Referenced from https://github.com/tonymillion/Reachability
-    println!("cargo:rerun-if-changed=src/platform/mac/objc/reachability.h");
-    println!("cargo:rerun-if-changed=src/platform/mac/objc/reachability.m");
     println!("cargo:rerun-if-changed=src/platform/mac/objc/alert.h");
     println!("cargo:rerun-if-changed=src/platform/mac/objc/fullscreen_queue.h");
     println!("cargo:rerun-if-changed=src/platform/mac/objc/fullscreen_queue.m");
@@ -167,7 +164,6 @@ fn compile_objc_lib() {
         .file("src/platform/mac/objc/app.m")
         .file("src/platform/mac/objc/host_view.m")
         .file("src/platform/mac/objc/hotkey.m")
-        .file("src/platform/mac/objc/reachability.m")
         .file("src/platform/mac/objc/keycode.m")
         .file("src/platform/mac/objc/menus.m")
         .file("src/platform/mac/objc/notifications/notifications.m")
