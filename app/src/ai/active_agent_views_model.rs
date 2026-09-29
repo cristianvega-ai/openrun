@@ -245,29 +245,6 @@ impl ActiveAgentViewsModel {
             .is_some()
     }
 
-    /// Returns the terminal view ID that has an active conversation with the given ID.
-    pub fn get_terminal_view_id_for_conversation(
-        &self,
-        conversation_id: AIConversationId,
-        ctx: &AppContext,
-    ) -> Option<EntityId> {
-        for (terminal_view_id, handles) in &self.agent_view_handles {
-            let Some(controller) = handles.controller.upgrade(ctx) else {
-                continue;
-            };
-            let is_active = controller
-                .as_ref(ctx)
-                .agent_view_state()
-                .active_conversation_id()
-                .is_some_and(|id| id == conversation_id);
-            if is_active {
-                return Some(*terminal_view_id);
-            }
-        }
-
-        None
-    }
-
     /// Get all currently open conversation IDs.
     /// A conversation is considered open if it is in an expanded agent view.
     pub fn get_all_open_conversation_ids(&self, ctx: &AppContext) -> HashSet<AIConversationId> {

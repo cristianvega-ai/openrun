@@ -84,10 +84,6 @@ pub fn init_global_actions(app: &mut AppContext) {
     app.add_global_action("workspace:save_app", save_app);
     app.add_global_action("workspace:fork_ai_conversation", fork_ai_conversation);
     app.add_global_action(
-        "workspace:summarize_ai_conversation",
-        summarize_ai_conversation,
-    );
-    app.add_global_action(
         "workspace:toggle_debug_network_status",
         toggle_debug_network_status,
     );
@@ -219,15 +215,6 @@ fn fork_ai_conversation(params: &ForkAIConversationParams, ctx: &mut AppContext)
             initial_prompt: params.initial_prompt.clone(),
             initial_attachments: vec![],
             destination: params.destination,
-        },
-    );
-}
-
-fn summarize_ai_conversation(prompt: &Option<String>, ctx: &mut AppContext) {
-    dispatch_to_active_workspace(
-        ctx,
-        WorkspaceAction::SummarizeAIConversation {
-            prompt: prompt.clone(),
         },
     );
 }

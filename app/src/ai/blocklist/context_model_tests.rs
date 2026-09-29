@@ -16,9 +16,6 @@ use warpui::{App, EntityId, ModelHandle, SingletonEntity};
 use super::{BlocklistAIContextModel, PendingAttachment, PendingFile};
 use crate::ai::agent::AIAgentContext;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::agent_conversations_model::{
-    AgentConversationEntry, AgentConversationListEntryState, AgentConversationListPolicy,
-};
 use crate::ai::blocklist::agent_view::{AgentViewEntryOrigin, EnterAgentViewError};
 use crate::ai::blocklist::conversation_selection::{
     ConversationSelection, ConversationSelectionEvent,
@@ -67,16 +64,6 @@ impl TestConversationSelection {
             terminal_surface_id,
             selected_conversation_id: None,
         }
-    }
-}
-
-impl AgentConversationListPolicy for TestConversationSelection {
-    fn classify_entry(
-        &self,
-        _: &AgentConversationEntry,
-        _: &warpui::AppContext,
-    ) -> AgentConversationListEntryState {
-        AgentConversationListEntryState::Unavailable
     }
 }
 

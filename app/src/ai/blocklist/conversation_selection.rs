@@ -7,11 +7,6 @@ use super::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 use crate::ai::agent::conversation::{
     AIConversation, AIConversationAutoexecuteMode, AIConversationId,
 };
-use crate::ai::agent_conversations_model::AgentConversationListPolicy;
-#[cfg(any(test, feature = "test-util"))]
-use crate::ai::agent_conversations_model::{
-    AgentConversationEntry, AgentConversationListEntryState,
-};
 
 /// Handle to a terminal surface's conversation-selection implementation.
 pub type ConversationSelectionHandle = ModelHandle<Box<dyn ConversationSelection>>;
@@ -57,7 +52,7 @@ pub enum ConversationSelectionEvent {
 /// A selected conversation receives the surface's next query; without one, the next query starts a
 /// new conversation. Implementations also describe whether that selection is actively presented
 /// and whether it occupies the full surface, without exposing surface-specific presentation state.
-pub trait ConversationSelection: AgentConversationListPolicy {
+pub trait ConversationSelection: 'static {
     /// Returns the conversation targeted by the next query.
     fn selected_conversation_id(&self, app: &AppContext) -> Option<AIConversationId>;
 
@@ -123,17 +118,6 @@ impl Entity for Box<dyn ConversationSelection> {
 /// Inert [`ConversationSelection`] stub for tests: no selection, no-op writes.
 #[cfg(any(test, feature = "test-util"))]
 pub(crate) struct MockConversationSelection;
-
-#[cfg(any(test, feature = "test-util"))]
-impl AgentConversationListPolicy for MockConversationSelection {
-    fn classify_entry(
-        &self,
-        _: &AgentConversationEntry,
-        _: &AppContext,
-    ) -> AgentConversationListEntryState {
-        AgentConversationListEntryState::Unavailable
-    }
-}
 
 #[cfg(any(test, feature = "test-util"))]
 impl ConversationSelection for MockConversationSelection {

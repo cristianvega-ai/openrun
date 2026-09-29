@@ -19,7 +19,6 @@ use warp_core::command::ExitCode;
 use warp_core::context_flag::ContextFlag;
 use warp_errors::report_if_error;
 use warp_terminal::focus_env::add_session_focus_env_vars;
-use warp_terminal::shell::{ShellName, ShellType};
 #[cfg(feature = "local_fs")]
 use warp_util::path::LineAndColumnArg;
 use warp_util::path::convert_wsl_to_windows_host_path;
@@ -35,7 +34,7 @@ use warpui::{
     ViewHandle, WindowId,
 };
 
-use crate::ai::agent::conversation::{AIConversation, AIConversationId};
+use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::{
     BlocklistAIHistoryModel, InputConfig, InputType, SerializedBlockListItem,
 };
@@ -84,20 +83,13 @@ use crate::terminal::local_tty::{
     TerminalViewSurfaceConfig, create_terminal_view_surface, terminal_view_restored_blocks,
 };
 use crate::terminal::model::session::Session;
-use crate::terminal::model::terminal_model::ConversationTranscriptViewerStatus;
 use crate::terminal::session_settings::{NewSessionSource, SessionSettings};
-use crate::terminal::view::load_ai_conversation::{
-    RestoreConversationEntryBehavior, RestoredAIConversation,
-};
 use crate::terminal::view::ssh_file_upload::FileUploadId;
 use crate::terminal::view::{
     BlockNotification, ConversationRestorationInNewPaneType, ExecuteCommandEvent,
     LeftPanelTargetView, SyncEvent, TerminalViewState,
 };
-use crate::terminal::{
-    MockTerminalManager, ShellLaunchData, ShellLaunchState, TerminalManager, TerminalModel,
-    TerminalView,
-};
+use crate::terminal::{ShellLaunchData, TerminalManager, TerminalModel, TerminalView};
 use crate::undo_close::{UndoCloseStack, UndoCloseStackEvent};
 use crate::util::bindings::{CustomAction, is_binding_pty_compliant};
 #[cfg(feature = "local_fs")]
@@ -1971,29 +1963,6 @@ impl PaneGroup {
         pane_group
     }
 
-    /// Helper that creates the initial [`PaneData`] and [`InitialFocus`] given a terminal view.
-    /// This is a common case in creating a new pane group with a single terminal session.
-    fn terminal_pane_data(
-        uuid: Vec<u8>,
-        view: ViewHandle<TerminalView>,
-        terminal_manager: ModelHandle<Box<dyn TerminalManager>>,
-        model_event_sender: Option<SyncSender<ModelEvent>>,
-        pane_contents: &mut HashMap<PaneId, Box<dyn AnyPaneContent>>,
-        pane_history: &mut Vec<PaneId>,
-        ctx: &mut ViewContext<Self>,
-    ) -> (PaneData, InitialFocus) {
-        let pane_data = TerminalPane::new(uuid, terminal_manager, view, model_event_sender, ctx);
-        let terminal_pane_id = pane_data.terminal_pane_id();
-        let pane_id = terminal_pane_id.into();
-        pane_contents.insert(pane_id, Box::new(pane_data));
-        pane_history.push(pane_id);
-        let focus = InitialFocus {
-            focused_pane: Some(pane_id),
-            active_session: Some(terminal_pane_id),
-        };
-        (PaneData::new(pane_id), focus)
-    }
-
     /// Initial layout for a [`PaneGroup`] with a single terminal pane.
     #[allow(clippy::too_many_arguments)]
     fn initial_single_terminal_pane(
@@ -2153,151 +2122,6 @@ impl PaneGroup {
             Box::new(initial_layout),
             ctx,
         )
-    }
-
-    /// Create a new pane group for a view-only cloud conversation.
-    pub fn new_for_conversation_transcript_viewer(
-        conversation: AIConversation,
-        tips_completed: ModelHandle<TipsCompleted>,
-        user_default_shell_unsupported_banner_model_handle: ModelHandle<BannerState>,
-        server_api: Arc<ServerApi>,
-        model_event_sender: Option<SyncSender<ModelEvent>>,
-        ctx: &mut ViewContext<Self>,
-    ) -> Self {
-        let model_event_sender_clone = model_event_sender.clone();
-        let initial_layout = move |resources,
-                                   pane_contents: &mut HashMap<PaneId, Box<dyn AnyPaneContent>>,
-                                   pane_history: &mut Vec<PaneId>,
-                                   view_bounds: RectF,
-                                   ctx: &mut ViewContext<Self>| {
-            let (view, terminal_manager) = PaneGroup::create_conversation_viewer(
-                conversation.clone(),
-                resources,
-                view_bounds.size(),
-                ctx,
-            );
-
-            Self::terminal_pane_data(
-                Uuid::new_v4().as_bytes().to_vec(),
-                view,
-                terminal_manager,
-                model_event_sender_clone,
-                pane_contents,
-                pane_history,
-                ctx,
-            )
-        };
-        Self::new_internal(
-            tips_completed,
-            user_default_shell_unsupported_banner_model_handle,
-            server_api,
-            model_event_sender,
-            Box::new(initial_layout),
-            ctx,
-        )
-    }
-
-    /// Create a new pane group with a loading state for a conversation viewer.
-    /// The actual conversation data will be loaded asynchronously.
-    pub fn new_for_conversation_transcript_viewer_loading(
-        tips_completed: ModelHandle<TipsCompleted>,
-        user_default_shell_unsupported_banner_model_handle: ModelHandle<BannerState>,
-        server_api: Arc<ServerApi>,
-        model_event_sender: Option<SyncSender<ModelEvent>>,
-        ctx: &mut ViewContext<Self>,
-    ) -> Self {
-        let model_event_sender_clone = model_event_sender.clone();
-        let initial_layout = move |resources,
-                                   pane_contents: &mut HashMap<PaneId, Box<dyn AnyPaneContent>>,
-                                   pane_history: &mut Vec<PaneId>,
-                                   view_bounds: RectF,
-                                   ctx: &mut ViewContext<Self>| {
-            let (terminal_view, terminal_manager) = Self::create_loading_terminal_manager_and_view(
-                resources,
-                view_bounds.size(),
-                ctx.window_id(),
-                ctx,
-            );
-
-            BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, _ctx| {
-                history_model
-                    .mark_terminal_surface_as_conversation_transcript_viewer(terminal_view.id());
-            });
-
-            Self::terminal_pane_data(
-                Uuid::new_v4().as_bytes().to_vec(),
-                terminal_view,
-                terminal_manager,
-                model_event_sender_clone,
-                pane_contents,
-                pane_history,
-                ctx,
-            )
-        };
-        Self::new_internal(
-            tips_completed,
-            user_default_shell_unsupported_banner_model_handle,
-            server_api,
-            model_event_sender,
-            Box::new(initial_layout),
-            ctx,
-        )
-    }
-
-    /// Load conversation data into a conversation viewer that was created with a loading state.
-    /// Uses the active session view as the target.
-    pub fn load_data_into_conversation_transcript_viewer(
-        &mut self,
-        conversation: AIConversation,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        // Get the active terminal view
-        let Some(terminal_view) = self.active_session_view(ctx) else {
-            report_error!("No active terminal view to load conversation into");
-            return;
-        };
-        self.load_data_into_transcript_viewer(terminal_view, conversation, ctx);
-    }
-
-    /// Load conversation data into a specific transcript viewer terminal view.
-    fn load_data_into_transcript_viewer(
-        &mut self,
-        terminal_view: ViewHandle<TerminalView>,
-        conversation: AIConversation,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let terminal_manager = self
-            .find_pane_id_for_terminal_view(terminal_view.id(), ctx)
-            .and_then(|pid| pid.as_terminal_pane_id())
-            .and_then(|tpid| self.terminal_session_by_id(tpid))
-            .map(|session| session.terminal_manager(ctx));
-
-        BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, _ctx| {
-            history_model
-                .mark_terminal_surface_as_conversation_transcript_viewer(terminal_view.id());
-        });
-
-        if let Some(ref terminal_manager) = terminal_manager {
-            terminal_manager.update(ctx, |terminal_manager, _ctx| {
-                terminal_manager
-                    .model()
-                    .lock()
-                    .set_conversation_transcript_viewer_status(Some(
-                        ConversationTranscriptViewerStatus::ViewingLocalConversation,
-                    ));
-            });
-        }
-
-        terminal_view.update(ctx, |view, ctx| {
-            view.restore_conversation_after_view_creation(
-                RestoredAIConversation::new(conversation),
-                true,
-                RestoreConversationEntryBehavior::EnterRestoredConversation,
-                ctx,
-            );
-        });
-
-        ctx.notify();
     }
 
     fn handle_windowing_state_update(
@@ -3791,92 +3615,6 @@ impl PaneGroup {
         (terminal_view, terminal_manager)
     }
 
-    fn create_conversation_viewer(
-        conversation: AIConversation,
-        resources: TerminalViewResources,
-        initial_size: Vector2F,
-        ctx: &mut ViewContext<Self>,
-    ) -> (
-        ViewHandle<TerminalView>,
-        ModelHandle<Box<dyn TerminalManager>>,
-    ) {
-        let restored_blocks = conversation.to_serialized_blocklist_items();
-        let terminal_init = MockTerminalManager::create_model(
-            ShellLaunchState::ShellSpawned {
-                available_shell: None,
-                display_name: ShellName::blank(),
-                shell_type: ShellType::Zsh,
-            },
-            resources,
-            Some(&restored_blocks),
-            Some(ConversationRestorationInNewPaneType::Historical {
-                conversation,
-                should_use_live_appearance: true,
-            }),
-            initial_size,
-            ctx.window_id(),
-            ctx,
-        );
-        let terminal_manager = terminal_init.manager;
-        let terminal_view = terminal_init.view;
-
-        terminal_manager.update(ctx, |terminal_manager, _ctx| {
-            terminal_manager
-                .model()
-                .lock()
-                .set_conversation_transcript_viewer_status(Some(
-                    ConversationTranscriptViewerStatus::ViewingLocalConversation,
-                ));
-        });
-
-        BlocklistAIHistoryModel::handle(ctx).update(ctx, |history_model, _ctx| {
-            history_model
-                .mark_terminal_surface_as_conversation_transcript_viewer(terminal_view.id());
-        });
-
-        (terminal_view, terminal_manager)
-    }
-
-    /// Creates a loading terminal view with MockTerminalManager in loading state.
-    /// This is used by both `new_for_conversation_transcript_viewer_loading` and `create_loading_terminal_pane`.
-    fn create_loading_terminal_manager_and_view(
-        resources: TerminalViewResources,
-        view_bounds_size: Vector2F,
-        window_id: WindowId,
-        ctx: &mut ViewContext<Self>,
-    ) -> (
-        ViewHandle<TerminalView>,
-        ModelHandle<Box<dyn TerminalManager>>,
-    ) {
-        let terminal_init = MockTerminalManager::create_model(
-            ShellLaunchState::ShellSpawned {
-                available_shell: None,
-                display_name: ShellName::blank(),
-                shell_type: ShellType::Zsh,
-            },
-            resources,
-            None, // No restored blocks
-            None, // No conversation restoration
-            view_bounds_size,
-            window_id,
-            ctx,
-        );
-        let terminal_manager = terminal_init.manager;
-        let terminal_view = terminal_init.view;
-
-        // Set the conversation transcript viewer status to Loading
-        terminal_manager.update(ctx, |terminal_manager, _ctx| {
-            terminal_manager
-                .model()
-                .lock()
-                .set_conversation_transcript_viewer_status(Some(
-                    ConversationTranscriptViewerStatus::Loading,
-                ));
-        });
-
-        (terminal_view, terminal_manager)
-    }
-
     /// Whether to use the user-specified startup directory when starting
     /// a new session. On Windows, we ignore this custom directory setting in
     /// WSL sessions. On all other systems, we honor the custom directory.
@@ -3903,98 +3641,6 @@ impl PaneGroup {
         _ctx: &ViewContext<Self>,
     ) -> bool {
         false
-    }
-
-    /// Creates a loading terminal pane that shows a spinner while conversation data is being fetched.
-    /// Returns the pane ID so it can be replaced later with the real terminal pane.
-    pub fn add_loading_conversation_pane(
-        &mut self,
-        direction: Direction,
-        base_pane_id: Option<PaneId>,
-        ctx: &mut ViewContext<Self>,
-    ) -> PaneId {
-        let uuid = Uuid::new_v4();
-        let resources = TerminalViewResources {
-            tips_completed: self.tips_completed.clone(),
-            server_api: self.server_api.clone(),
-            model_event_sender: self.model_event_sender.clone(),
-        };
-
-        let view_bounds = Self::estimated_view_bounds(ctx);
-        let (terminal_view, terminal_manager) = Self::create_loading_terminal_manager_and_view(
-            resources,
-            view_bounds.size(),
-            ctx.window_id(),
-            ctx,
-        );
-
-        let pane_data = TerminalPane::new(
-            uuid.as_bytes().to_vec(),
-            terminal_manager,
-            terminal_view,
-            self.model_event_sender.clone(),
-            ctx,
-        );
-        let pane_id: PaneId = pane_data.terminal_pane_id().into();
-
-        let _ = self.add_pane(direction, base_pane_id, Box::new(pane_data), true, ctx);
-
-        pane_id
-    }
-
-    /// Replaces a loading pane with a real terminal pane that has a conversation restored.
-    /// Returns true if replacement was successful.
-    pub fn replace_loading_pane_with_terminal(
-        &mut self,
-        loading_pane_id: PaneId,
-        conversation: AIConversation,
-        ctx: &mut ViewContext<Self>,
-    ) -> bool {
-        let restoration = ConversationRestorationInNewPaneType::Historical {
-            conversation,
-            should_use_live_appearance: true,
-        };
-
-        // Get the initial working directory from the restored conversation.
-        let startup_directory = restoration
-            .initial_working_directory()
-            .map(PathBuf::from)
-            .filter(|path| path.is_dir());
-
-        let uuid = Uuid::new_v4();
-        let resources = TerminalViewResources {
-            tips_completed: self.tips_completed.clone(),
-            server_api: self.server_api.clone(),
-            model_event_sender: self.model_event_sender.clone(),
-        };
-
-        let view_bounds = Self::estimated_view_bounds(ctx);
-        let (view, terminal_manager) = PaneGroup::create_session(
-            startup_directory,
-            HashMap::new(),
-            uuid.as_bytes(),
-            resources,
-            None,
-            Some(restoration),
-            self.user_default_shell_unsupported_banner_model_handle
-                .clone(),
-            view_bounds.size(),
-            self.model_event_sender.clone(),
-            None, // chosen_shell
-            None, // initial_input_config
-            ctx,
-        );
-
-        let pane_data = TerminalPane::new(
-            uuid.as_bytes().to_vec(),
-            terminal_manager,
-            view,
-            self.model_event_sender.clone(),
-            ctx,
-        );
-
-        // Use replace_pane to swap loading pane with new terminal pane
-        self.replace_pane(loading_pane_id, pane_data, false, ctx)
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -18,7 +18,6 @@ use super::tab_settings::{
 };
 use super::view::WorkspaceBanner;
 use crate::ai::agent::AIAgentExchangeId;
-use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::PendingAttachment;
 use crate::palette::PaletteMode;
@@ -52,18 +51,6 @@ pub enum InitContent {
 pub struct CommandSearchOptions {
     pub filter: Option<search::QueryFilter>,
     pub init_content: InitContent,
-}
-
-/// Specifies how to restore a conversation when it's not already open in a pane.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
-pub enum RestoreConversationLayout {
-    /// Restore the conversation into the currently active pane.
-    ActivePane,
-    /// Restore the conversation in a new split pane.
-    SplitPane,
-    /// Restore the conversation in a new tab.
-    #[default]
-    NewTab,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -435,18 +422,6 @@ pub enum WorkspaceAction {
         page: SettingsSection,
         widget_id: &'static str,
     },
-    /// Navigate to an existing AI conversation, focusing on its terminal view.
-    ///
-    /// If the conversation is not in an open pane, restore it based on the layout setting or override.
-    RestoreOrNavigateToConversation {
-        pane_view_locator: Option<PaneViewLocator>,
-        window_id: Option<WindowId>,
-        conversation_id: AIConversationId,
-        terminal_view_id: Option<EntityId>,
-        /// If provided, use this layout to restore the conversation.
-        /// Otherwise, fall back to the user's setting.
-        restore_layout: Option<RestoreConversationLayout>,
-    },
     /// Fork an existing AI conversation.
     /// Optionally summarizes the conversation after forking and/or sends an initial prompt.
     ForkAIConversation {
@@ -464,10 +439,6 @@ pub enum WorkspaceAction {
         initial_attachments: Vec<PendingAttachment>,
         /// Where to open the forked conversation.
         destination: ForkedConversationDestination,
-    },
-    /// Summarize the active AI conversation in the focused pane.
-    SummarizeAIConversation {
-        prompt: Option<String>,
     },
     /// Install the Warp Control CLI command to /usr/local/bin
     #[cfg(target_os = "macos")]
@@ -530,11 +501,6 @@ pub enum WorkspaceAction {
         ai_block_view_id: EntityId,
         exchange_id: AIAgentExchangeId,
         conversation_id: AIConversationId,
-    },
-    /// Load cloud conversation data into a transcript viewer.
-    /// Used when CloudConversations is enabled and the sandbox is not running.
-    OpenConversationTranscriptViewer {
-        conversation_id: ServerConversationToken,
     },
     /// Open a full-window lightbox displaying the given images.
     OpenLightbox {
@@ -669,10 +635,8 @@ impl WorkspaceAction {
             | ScrollToSettingsWidget { .. }
             | RunWorkflow { .. }
             | OpenFileInNewTab { .. }
-            | RestoreOrNavigateToConversation { .. }
             | NewCodeFile
             | ForkAIConversation { .. }
-            | SummarizeAIConversation { .. }
             | OpenRepository { .. }
             | SelectTabConfig(_)
             | ToggleVerticalTabsPanel
@@ -795,7 +759,6 @@ impl WorkspaceAction {
             | ToggleNotificationMailbox { .. }
             | ShowRewindConfirmationDialog { .. }
             | ExecuteRewindAIConversation { .. }
-            | OpenConversationTranscriptViewer { .. }
             | OpenLightbox { .. }
             | UpdateLightboxImage { .. }
             | ShowSessionConfigModal

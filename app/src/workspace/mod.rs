@@ -19,8 +19,8 @@ pub mod util;
 pub mod view;
 
 pub use action::{
-    CommandSearchOptions, InitContent, RestoreConversationLayout, TabContextMenuAnchor,
-    VerticalTabsPaneContextMenuTarget, WorkspaceAction,
+    CommandSearchOptions, InitContent, TabContextMenuAnchor, VerticalTabsPaneContextMenuTarget,
+    WorkspaceAction,
 };
 pub use active_session::ActiveSession;
 pub use global_actions::{

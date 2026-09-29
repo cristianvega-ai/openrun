@@ -7,7 +7,7 @@ use persistence::model::{AgentConversationData, ConversationUsageMetadata};
 use warp_core::features::FeatureFlag;
 use warpui::{App, EntityId, SingletonEntity};
 
-use super::entry::{AgentConversationEntryId, AgentConversationNavigationSubject};
+use super::entry::AgentConversationEntryId;
 use super::query::{DEFAULT_RESULT_COUNT, MAX_SEARCH_RESULTS};
 use super::{
     AgentConversationsModel, AgentConversationsModelEvent, ConversationMetadata,
@@ -27,7 +27,7 @@ use crate::auth::AuthStateProvider;
 use crate::cloud_object::{Owner, Revision, ServerMetadata, ServerPermissions};
 use crate::server::ids::ServerId;
 use crate::test_util::ai_agent_tasks::{create_api_task, create_message};
-use crate::workspace::{WorkspaceAction, WorkspaceRegistry};
+use crate::workspace::WorkspaceRegistry;
 use crate::workspaces::user_workspaces::TeamlessScopeForTest;
 
 /// Subscribes a counter to `model` and returns it so individual cases can assert how many
@@ -344,77 +344,6 @@ fn test_get_entries_includes_cloud_metadata_only_entry() {
             assert!(entry.backing.has_cloud_data);
             assert!(!entry.backing.has_loaded_conversation);
             assert!(!entry.backing.has_local_persisted_data);
-        });
-    });
-}
-
-#[test]
-fn test_resolve_open_action_handles_server_token_subject_without_entry() {
-    App::test((), |mut app| async move {
-        add_entry_projection_test_models(&mut app);
-        app.add_singleton_model(|_| create_test_model());
-
-        let server_token = ServerConversationToken::new("server-token-subject".to_string());
-        app.update(|ctx| {
-            let action = AgentConversationsModel::resolve_open_action(
-                AgentConversationNavigationSubject::ServerToken(server_token.clone()),
-                None,
-                ctx,
-            );
-
-            assert!(matches!(
-                action,
-                Some(WorkspaceAction::OpenConversationTranscriptViewer {
-                    conversation_id,
-                }) if conversation_id == server_token
-            ));
-        });
-    });
-}
-
-#[test]
-fn test_resolve_open_action_opens_metadata_only_cloud_conversation_by_server_token() {
-    App::test((), |mut app| async move {
-        let token = "metadata-only-token";
-        add_entry_projection_test_models(&mut app);
-        BlocklistAIHistoryModel::handle(&app).update(&mut app, |model, _| {
-            model.merge_cloud_conversation_metadata(vec![create_server_conversation_metadata(
-                "Cloud conversation",
-                token,
-            )]);
-        });
-        app.add_singleton_model(|_| create_test_model());
-
-        app.update(|ctx| {
-            let entries =
-                AgentConversationsModel::as_ref(ctx).get_entries(&TeamlessScopeForTest, ctx);
-            let entry = entries
-                .iter()
-                .find(|entry| {
-                    entry
-                        .identity
-                        .server_conversation_token
-                        .as_ref()
-                        .is_some_and(|server_token| server_token.as_str() == token)
-                })
-                .expect("metadata-only cloud entry should exist");
-
-            assert!(entry.backing.has_cloud_data);
-            assert!(!entry.backing.has_loaded_conversation);
-            assert!(!entry.backing.has_local_persisted_data);
-
-            let action = AgentConversationsModel::resolve_open_action(
-                AgentConversationNavigationSubject::Entry(entry.id),
-                None,
-                ctx,
-            );
-
-            assert!(matches!(
-                action,
-                Some(WorkspaceAction::OpenConversationTranscriptViewer {
-                    conversation_id,
-                }) if conversation_id.as_str() == token
-            ));
         });
     });
 }

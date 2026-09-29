@@ -1,12 +1,10 @@
 use chrono::{DateTime, Utc};
-use warpui::AppContext;
 
 use super::{AgentRunDisplayStatus, ConversationMetadata};
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::history_model::{AIConversationMetadata, BlocklistAIHistoryModel};
 use crate::ai::conversation_navigation::ConversationNavigationData;
-use crate::workspace::RestoreConversationLayout;
 
 /// Stable projection identity used by list and navigation surfaces.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -26,14 +24,6 @@ impl From<AIConversationId> for AgentConversationEntryId {
     fn from(id: AIConversationId) -> Self {
         AgentConversationEntryId::Conversation(id)
     }
-}
-
-/// Navigation request input for resolving an entry or server-token handle at action time.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AgentConversationNavigationSubject {
-    Entry(AgentConversationEntryId),
-    #[allow(dead_code)]
-    ServerToken(ServerConversationToken),
 }
 
 /// Normalized row data for agent conversation navigation surfaces.
@@ -71,21 +61,6 @@ pub struct AgentConversationBackingData {
     pub has_loaded_conversation: bool,
     pub has_local_persisted_data: bool,
     pub has_cloud_data: bool,
-}
-
-impl AgentConversationEntry {
-    pub fn has_open_action(
-        &self,
-        restore_layout: Option<RestoreConversationLayout>,
-        app: &AppContext,
-    ) -> bool {
-        super::AgentConversationsModel::resolve_open_action(
-            AgentConversationNavigationSubject::Entry(self.id),
-            restore_layout,
-            app,
-        )
-        .is_some()
-    }
 }
 
 fn conversation_title(

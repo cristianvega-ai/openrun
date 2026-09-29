@@ -4,9 +4,7 @@ mod query;
 
 use std::collections::{HashMap, HashSet};
 
-pub use entry::{
-    AgentConversationEntry, AgentConversationEntryId, AgentConversationNavigationSubject,
-};
+pub use entry::{AgentConversationEntry, AgentConversationEntryId};
 use fuzzy_match::FuzzyMatchResult;
 use itertools::Itertools;
 #[cfg(test)]
@@ -19,32 +17,11 @@ use warpui::color::ColorU;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
-use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{AIConversationId, ConversationStatus};
 use crate::ai::blocklist::{BlocklistAIHistoryEvent, BlocklistAIHistoryModel};
 use crate::ai::conversation_navigation::ConversationNavigationData;
 use crate::ui_components::icons::Icon;
-use crate::workspace::{RestoreConversationLayout, WorkspaceAction};
 use crate::workspaces::user_workspaces::TeamScope;
-
-/// Frontend-specific classification of a normalized conversation-list entry.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AgentConversationListEntryState {
-    Selected,
-    OpenElsewhere,
-    Available,
-    Unavailable,
-}
-
-/// Per-frontend policy for classifying normalized conversation-list entries.
-pub trait AgentConversationListPolicy: 'static {
-    /// Classifies `entry` as selected, open elsewhere, available, or unavailable.
-    fn classify_entry(
-        &self,
-        entry: &AgentConversationEntry,
-        app: &AppContext,
-    ) -> AgentConversationListEntryState;
-}
 
 /// A normalized conversation entry paired with optional title-match metadata.
 pub struct AgentConversationQueryResult {
@@ -74,28 +51,6 @@ impl AgentRunDisplayStatus {
                 blocked_action: blocked_action.clone(),
             },
         }
-    }
-
-    pub fn to_conversation_status(&self) -> ConversationStatus {
-        match self {
-            AgentRunDisplayStatus::ConversationInProgress => ConversationStatus::InProgress,
-            AgentRunDisplayStatus::ConversationSucceeded => ConversationStatus::Success,
-            AgentRunDisplayStatus::ConversationError => ConversationStatus::Error,
-            AgentRunDisplayStatus::ConversationBlocked { blocked_action } => {
-                ConversationStatus::Blocked {
-                    blocked_action: blocked_action.clone(),
-                }
-            }
-            AgentRunDisplayStatus::ConversationCancelled => ConversationStatus::Cancelled,
-        }
-    }
-
-    pub fn is_cancellable(&self) -> bool {
-        self.is_working()
-    }
-
-    pub fn is_working(&self) -> bool {
-        matches!(self, AgentRunDisplayStatus::ConversationInProgress)
     }
 
     pub fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
@@ -259,101 +214,6 @@ impl AgentConversationsModel {
                         entry::entry_for_historical_metadata(metadata, nav_data, history_model)
                     })
             })
-    }
-
-    pub fn resolve_open_action(
-        subject: AgentConversationNavigationSubject,
-        restore_layout: Option<RestoreConversationLayout>,
-        app: &AppContext,
-    ) -> Option<WorkspaceAction> {
-        let model = Self::as_ref(app);
-        match subject {
-            AgentConversationNavigationSubject::Entry(id) => model
-                .get_entry_by_id(&id, app)
-                .and_then(|entry| model.resolve_entry_open_action(&entry, restore_layout, app)),
-            AgentConversationNavigationSubject::ServerToken(server_token) => model
-                .entry_for_server_token(&server_token, app)
-                .and_then(|entry| model.resolve_entry_open_action(&entry, restore_layout, app))
-                .or_else(|| {
-                    Some(WorkspaceAction::OpenConversationTranscriptViewer {
-                        conversation_id: server_token,
-                    })
-                }),
-        }
-    }
-
-    fn resolve_entry_open_action(
-        &self,
-        entry: &AgentConversationEntry,
-        restore_layout: Option<RestoreConversationLayout>,
-        app: &AppContext,
-    ) -> Option<WorkspaceAction> {
-        let active_views_model = ActiveAgentViewsModel::as_ref(app);
-
-        if let Some(conversation_id) = entry.identity.local_conversation_id
-            && active_views_model.is_conversation_open(conversation_id, app)
-        {
-            if let Some(nav_data) = self
-                .conversations
-                .get(&conversation_id)
-                .map(|metadata| &metadata.nav_data)
-            {
-                return Some(WorkspaceAction::RestoreOrNavigateToConversation {
-                    conversation_id,
-                    window_id: nav_data.window_id,
-                    pane_view_locator: nav_data.pane_view_locator,
-                    terminal_view_id: nav_data.terminal_view_id,
-                    restore_layout,
-                });
-            }
-
-            if let Some(terminal_view_id) =
-                active_views_model.get_terminal_view_id_for_conversation(conversation_id, app)
-            {
-                return Some(WorkspaceAction::FocusTerminalViewInWorkspace { terminal_view_id });
-            }
-        }
-
-        if let Some(conversation_id) = entry.identity.local_conversation_id {
-            let nav_data = self
-                .conversations
-                .get(&conversation_id)
-                .map(|metadata| &metadata.nav_data);
-            if !entry.backing.has_cloud_data
-                || entry.backing.has_local_persisted_data
-                || entry.backing.has_loaded_conversation
-                || nav_data.is_some()
-            {
-                return Some(WorkspaceAction::RestoreOrNavigateToConversation {
-                    conversation_id,
-                    window_id: nav_data.and_then(|nav_data| nav_data.window_id),
-                    pane_view_locator: None,
-                    terminal_view_id: nav_data.and_then(|nav_data| nav_data.terminal_view_id),
-                    restore_layout,
-                });
-            }
-        }
-
-        entry
-            .identity
-            .server_conversation_token
-            .as_ref()
-            .map(|token| WorkspaceAction::OpenConversationTranscriptViewer {
-                conversation_id: token.clone(),
-            })
-    }
-
-    fn entry_for_server_token(
-        &self,
-        server_token: &ServerConversationToken,
-        app: &AppContext,
-    ) -> Option<AgentConversationEntry> {
-        let history_model = BlocklistAIHistoryModel::as_ref(app);
-        let conversation_id = history_model.find_conversation_id_by_server_token(server_token)?;
-        self.get_entry_by_id(
-            &AgentConversationEntryId::Conversation(conversation_id),
-            app,
-        )
     }
 
     fn handle_history_event(
