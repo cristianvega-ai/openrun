@@ -1,4 +1,5 @@
 use pathfinder_color::ColorU;
+use warpui::assets::asset_cache::AssetSource;
 use warpui::elements::{
     CacheOption, ConstrainedBox, Flex, Icon, Image, MainAxisAlignment, MainAxisSize, ParentElement,
     Rect, Stack,
@@ -28,9 +29,10 @@ impl View for RootView {
     }
 
     fn render(&self, _: &AppContext) -> Box<dyn Element> {
-        let asset_source = ::asset_cache::url_source(
-            "https://i.ebayimg.com/images/g/B~gAAOSwhNthhdjn/s-l1600.jpg",
-        );
+        let asset_source = AssetSource::LocalFile {
+            path: concat!(env!("CARGO_MANIFEST_DIR"), "/examples/assets/rustyrain.gif").to_string(),
+            content_version: None,
+        };
 
         Stack::new()
             .with_child(Rect::new().with_background_color(ColorU::white()).finish())

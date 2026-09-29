@@ -12,7 +12,7 @@ use warpui_core::assets::asset_cache::{AssetCache, AssetSource, AssetState};
 use warpui_core::fonts::{Properties, Style, Weight};
 use warpui_core::image_cache::ImageType;
 use warpui_core::text_layout::{StyleAndFont, TextStyle};
-use warpui_core::{App, SingletonEntity};
+use warpui_core::{App, AppContext, SingletonEntity};
 
 use super::{
     BlockLocation, LayOutArgs, LayoutTask, MAX_LAYOUT_CONTENT_CHARS_PER_PARALLEL_CHUNK,
@@ -21,11 +21,14 @@ use super::{
 };
 use crate::content::buffer::{StyledBufferBlock, StyledBufferRun, StyledTextBlock};
 use crate::content::edit::{
-    EditDelta, ParsedUrl, TemporaryBlock, highlight_urls, layout_mermaid_block_for_test,
-    resolve_asset_source, resolve_asset_source_relative_to_directory,
+    EditDelta, ParsedUrl, TemporaryBlock, highlight_urls, is_remote_image_source,
+    layout_mermaid_block_for_test, resolve_asset_source,
+    resolve_asset_source_relative_to_directory,
 };
 use crate::content::mermaid_diagram::{mermaid_asset_source, mermaid_diagram_layout};
-use crate::content::text::{BufferBlockStyle, CodeBlockType, TextStylesWithMetadata};
+use crate::content::text::{
+    BufferBlockItem, BufferBlockStyle, CodeBlockType, TextStylesWithMetadata,
+};
 use crate::render::layout::{
     TextLayout, add_link_to_style_and_font, markdown_inline_to_text_and_style_runs,
 };
@@ -707,7 +710,7 @@ fn test_resolve_asset_source_relative_to_directory_uses_base_directory() {
         resolve_asset_source_relative_to_directory("diagram.png", Some(Path::new("/tmp/session")));
 
     match asset_source {
-        AssetSource::LocalFile { path, .. } => {
+        Some(AssetSource::LocalFile { path, .. }) => {
             assert_eq!(Path::new(&path), Path::new("/tmp/session/diagram.png"));
         }
         source => panic!("expected local file asset source, got {source:?}"),
@@ -740,10 +743,10 @@ fn test_resolve_asset_source_versions_local_files_for_markdown_layout() {
     let initial = resolve_asset_source(&image_name, Some(&document_path));
     assert!(matches!(
         &initial,
-        AssetSource::LocalFile {
+        Some(AssetSource::LocalFile {
             content_version: Some(_),
             ..
-        }
+        })
     ));
 
     std::fs::write(&image_path, b"updated image contents").expect("update image contents");
@@ -757,20 +760,145 @@ fn test_resolve_asset_source_versions_local_files_for_markdown_layout() {
 }
 
 #[test]
-fn test_resolve_asset_source_leaves_non_local_markdown_images_unchanged() {
+fn test_resolve_asset_source_leaves_data_uri_markdown_images_unchanged() {
     let document_path = Path::new("/tmp/document.md");
-    let base_directory = document_path.parent();
+    let source = "data:image/png;base64,iVBORw0KGgo=";
+
+    let resolved = resolve_asset_source(source, Some(document_path));
+    assert!(resolved.is_some());
+    assert_eq!(
+        resolved,
+        resolve_asset_source_relative_to_directory(source, document_path.parent()),
+    );
+}
+
+#[test]
+fn test_resolve_asset_source_blocks_remote_markdown_images() {
+    let document_path = Path::new("/tmp/document.md");
 
     for source in [
+        "http://example.com/image.png",
         "https://example.com/image.png",
-        "data:image/png;base64,iVBORw0KGgo=",
+        "HTTPS://example.com/image.png",
     ] {
+        assert!(is_remote_image_source(source), "{source}");
         assert_eq!(
             resolve_asset_source(source, Some(document_path)),
-            resolve_asset_source_relative_to_directory(source, base_directory),
-            "non-local source should not be changed: {source}"
+            None,
+            "remote source must not resolve to a fetchable asset: {source}"
+        );
+        assert_eq!(
+            resolve_asset_source_relative_to_directory(source, document_path.parent()),
+            None,
+            "remote source must not resolve to a fetchable asset: {source}"
         );
     }
+}
+
+#[test]
+fn test_resolve_asset_source_keeps_local_markdown_images() {
+    let document_path = Path::new("/tmp/session/document.md");
+
+    for (source, expected) in [
+        ("diagram.png", "/tmp/session/diagram.png"),
+        ("assets/diagram.png", "/tmp/session/assets/diagram.png"),
+        ("/var/images/diagram.png", "/var/images/diagram.png"),
+    ] {
+        assert!(!is_remote_image_source(source), "{source}");
+        match resolve_asset_source_relative_to_directory(source, document_path.parent()) {
+            Some(AssetSource::LocalFile { path, .. }) => {
+                assert_eq!(Path::new(&path), Path::new(expected), "{source}");
+            }
+            other => panic!("expected local file asset source for {source}, got {other:?}"),
+        }
+    }
+}
+
+fn image_block(source: &str) -> StyledBufferBlock {
+    StyledBufferBlock::Item(BufferBlockItem::Image {
+        alt_text: "diagram".to_string(),
+        source: source.to_string(),
+        title: None,
+    })
+}
+
+fn lay_out_image(ctx: &AppContext, source: &str, document_path: Option<&Path>) -> BlockItem {
+    let text_layout = TextLayout::new(ctx.font_cache().text_layout_system(), &TEST_STYLES, 800.);
+    let block = image_block(source);
+    let (item, has_trailing_newline) = LayoutTask::from_styled_block(
+        &block,
+        &text_layout,
+        &RenderLayoutOptions::default(),
+        CharOffset::from(1),
+        ctx,
+        document_path,
+    )
+    .run(&text_layout, BlockLocation::Middle, false)
+    .expect("image layout should succeed");
+    assert!(has_trailing_newline);
+    item
+}
+
+#[test]
+fn test_remote_image_lays_out_as_alt_text_link_without_asset_source() {
+    App::test((), |app| async move {
+        app.read(|ctx| {
+            let document_path = Path::new("/tmp/document.md");
+            for source in ["http://example.com/a.png", "https://example.com/a.png"] {
+                match lay_out_image(ctx, source, Some(document_path)) {
+                    BlockItem::Image {
+                        alt_text,
+                        source: laid_out_source,
+                        asset_source,
+                        config,
+                    } => {
+                        assert_eq!(alt_text, "diagram");
+                        assert_eq!(laid_out_source, source);
+                        assert!(
+                            asset_source.is_none(),
+                            "remote image must not get a fetchable asset source"
+                        );
+                        assert_eq!(
+                            config.height,
+                            TEST_STYLES.base_line_height(),
+                            "blocked image should take a single line"
+                        );
+                    }
+                    other => panic!("expected image block, got {other:?}"),
+                }
+            }
+        });
+    })
+}
+
+#[test]
+fn test_local_and_relative_images_still_lay_out_with_asset_source() {
+    App::test((), |app| async move {
+        app.read(|ctx| {
+            let document_path = Path::new("/tmp/session/document.md");
+            for (source, expected) in [
+                ("diagram.png", "/tmp/session/diagram.png"),
+                ("/var/images/diagram.png", "/var/images/diagram.png"),
+            ] {
+                match lay_out_image(ctx, source, Some(document_path)) {
+                    BlockItem::Image {
+                        asset_source: Some(AssetSource::LocalFile { path, .. }),
+                        config,
+                        ..
+                    } => {
+                        assert_eq!(Path::new(&path), Path::new(expected));
+                        assert!(config.height > TEST_STYLES.base_line_height());
+                    }
+                    other => panic!("expected local image block for {source}, got {other:?}"),
+                }
+            }
+
+            match lay_out_image(ctx, "data:image/png;base64,iVBORw0KGgo=", None) {
+                BlockItem::Image { asset_source, .. } => assert!(asset_source.is_some()),
+                other => panic!("expected image block, got {other:?}"),
+            }
+        });
+    })
 }
 
 #[test]

@@ -214,6 +214,17 @@ impl<'a> Positioned<'a, BlockItem> {
                     link,
                 }
             }
+            BlockItem::Image {
+                source,
+                asset_source: None,
+                ..
+            } => Location::Text {
+                char_offset: self.start_char_offset,
+                clamped: true,
+                wrap_direction: WrapDirection::Down,
+                block_start: self.start_char_offset,
+                link: Some(source.clone()),
+            },
             BlockItem::HorizontalRule { .. }
             | BlockItem::Image { .. }
             | BlockItem::TrailingNewLine(_)

@@ -102,6 +102,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Telemetry call sites: workspace, settings and the rest](#telemetry-call-sites-workspace-settings-and-the-rest) — deleted the `send_telemetry_*!` calls, the telemetry-only enums, helpers, fields and parameters in `workspace/`, `settings_view/`, `settings/`, `themes/`, `resource_center/`, `workflows/`, `notebooks/`, `launch_configs/`, `tab_configs/`, `lib.rs` and `root_view.rs`
 - [Teams and workspaces](#teams-and-workspaces) — deleted `app/src/workspaces/` (`UserWorkspaces`, `Team`, `Workspace`, billing metadata and team policies, the workspace poller), the Teams settings page and its modals, the title-bar team switcher, `warp://team` links, the window team id, team-enforced secret redaction and the workspace/team sqlite reads and writes
 - [User model](#user-model) — deleted `app/src/auth/`, `AuthStateProvider`, `AuthManager` and the user, anonymous-id and account-credential types; the app has no user entity at all
+- [Remote images and remote asset fetching](#remote-images-and-remote-asset-fetching) — remote `http(s)` markdown images render as alt text plus a link instead of being downloaded; removed `asset_cache::url_source`, the URL asset cache, the URL-based fallback-font loader and the `reqwest` dependency of `asset_cache`
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2709,3 +2710,23 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Left for DB-1: `users`, `user_profiles` and `current_user_information` (`user_uid`, `firebase_uid` columns).
 - Left for FLAGS-1: the `default_adeberry_theme` cargo feature is not in the default set, so the `DefaultAdeberryTheme` new-user theme override never runs in a release build; it is kept as it was.
 - `crates/cloud_objects` still uses `UserUid` (owners, guests, subjects); it goes with the crate in SRV-1.
+
+## Remote images and remote asset fetching
+**Why:** Nothing in the app may fetch a URL on its own (decision 10). The markdown viewer downloaded every `http(s)` image it rendered, and `warpui_core` and `asset_cache` carried a general-purpose URL loader for images and fonts.
+
+**Removed:**
+- `asset_cache::url_source`, `url_source_with_persistence`, `AssetCacheExt::load_asset_from_url`, the URL asset markers and the HTTP and disk-cache helpers behind them. `asset_cache` keeps only `data:` URI sources and no longer depends on `reqwest`, `url`, `async-compat`, `async-fs`, `cfg-if`, `log` or `warp_errors`.
+- The URL-based fallback-font loader in `warpui_core`: `App::set_fallback_font_source_provider` and `set_fallback_font_fn`, `fonts::external_fallback` (`ExternalFontFamily`, `FallbackFontModel`, `FallbackFontEvent`, `FontBytes`), the request and redraw plumbing in `App` and `Presenter`, and `Line::chars_with_missing_glyphs` (only that loader read it). Nothing on desktop registered a fallback font family, so glyph lookup behaves as before: the font, then the platform's own fallback fonts (CoreText, DirectWrite, fontconfig).
+- `AvatarContent::Image` and `PeerSelectionData::image_url` (a remote avatar loaded by URL; the one caller, remote collaborator cursors, now always shows the initial).
+- The remote images in the `warpui` `image` example and the `ui_components` library example; they use a local GIF and the bundled `dev.png`.
+
+**Modified:**
+- `resolve_asset_source_relative_to_directory` returns `Option<AssetSource>` and yields `None` for `http://` and `https://` sources (new `is_remote_image_source`). `BlockItem::Image::asset_source` is an `Option`.
+- A blocked image lays out as one line of text. `RenderableImage` draws the alt text (the URL when the alt text is empty) in the hyperlink colour, and hit-testing returns the image URL as the link, so clicking it opens the browser through the existing link handling. Local, relative, absolute-path and `data:` images render as before. Markdown round-trips are unchanged: the buffer still holds `![alt](url)`.
+
+**User-visible impact:** remote images in a markdown file or notebook no longer load; the alt text shows as a link the user can click. Nothing is downloaded until they do.
+
+**Notes:**
+- Fallback fonts: no user impact. The Warp web client was the only registrant of downloadable Noto families (removed with the web target), so scripts the primary font lacks still depend on the operating system's fallback fonts.
+- A click anywhere on the blocked image's line opens the link, not only on the text.
+- `warp_errors` still pulls `reqwest` in through its `reqwest-errors` feature (enabled by `warp_core`), so `cargo tree -i reqwest` lists `asset_cache` only as a transitive dependent through `warpui_core`; `asset_cache` itself declares no `reqwest`.

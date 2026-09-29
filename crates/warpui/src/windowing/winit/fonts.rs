@@ -1004,7 +1004,6 @@ impl TextLayoutSystem {
 
         let mut run_builder = RunBuilder::new(text_styles_map, initial_font_id, str_index_map);
         let mut caret_positions = vec![];
-        let mut chars_with_missing_glyphs = vec![];
         let mut last_glyph_offset: usize = 0;
 
         run_builder.reserve_capacity(layout_line.glyphs.len());
@@ -1026,13 +1025,6 @@ impl TextLayoutSystem {
                     last_offset,
                 });
                 last_glyph_offset = last_offset;
-            }
-
-            // A glyph_id of 0 implies that no glyph was found for this character.
-            if glyph.glyph_id == 0
-                && let Some(ch) = Self::char_for_glyph(&glyph, text)
-            {
-                chars_with_missing_glyphs.push(ch);
             }
 
             run_builder.push_glyph(glyph, |id| {
@@ -1064,17 +1056,7 @@ impl TextLayoutSystem {
             descent: layout_line.max_descent,
             clip_config,
             caret_positions,
-            chars_with_missing_glyphs,
         }
-    }
-
-    fn char_for_glyph(glyph: &LayoutGlyph, text: &str) -> Option<char> {
-        if !text.is_char_boundary(glyph.start) {
-            log::warn!("Expected glyph start to be a char boundary");
-            return None;
-        }
-
-        text[glyph.start..].chars().next()
     }
 
     /// Produces an [`AttrsList`] to layout text given a list of `style_runs` and the `text` the

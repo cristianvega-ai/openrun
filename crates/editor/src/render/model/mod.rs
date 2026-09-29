@@ -822,7 +822,9 @@ pub enum BlockItem {
     Image {
         alt_text: String,
         source: String,
-        asset_source: AssetSource,
+        /// `None` for remote `http(s)` images, which are never fetched and instead render as a
+        /// link showing the alt text.
+        asset_source: Option<AssetSource>,
         config: ImageBlockConfig,
     },
     Table(Box<LaidOutTable>),

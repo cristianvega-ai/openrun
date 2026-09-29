@@ -7513,16 +7513,7 @@ impl EditorView {
             .map(|(replica_id, peer)| {
                 let color = peer.selection_data.colors.cursor;
                 let avatar = Avatar::new(
-                    peer.selection_data
-                        .image_url
-                        .clone()
-                        .map(|url| AvatarContent::Image {
-                            url,
-                            display_name: peer.selection_data.display_name.clone(),
-                        })
-                        .unwrap_or(AvatarContent::DisplayName(
-                            peer.selection_data.display_name.clone(),
-                        )),
+                    AvatarContent::DisplayName(peer.selection_data.display_name.clone()),
                     UiComponentStyles {
                         border_color: Some(color.into()),
                         background: Some(color.into()),

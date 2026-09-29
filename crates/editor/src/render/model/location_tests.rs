@@ -171,6 +171,71 @@ fn test_table_hit_testing_accounts_for_horizontal_scroll() {
     );
 }
 
+fn test_image_block(source: &str, asset_source: Option<AssetSource>) -> BlockItem {
+    BlockItem::Image {
+        alt_text: "diagram".to_string(),
+        source: source.to_string(),
+        asset_source,
+        config: ImageBlockConfig {
+            width: 120.0.into_pixels(),
+            height: 20.0.into_pixels(),
+            spacing: COMMAND_SPACING,
+        },
+    }
+}
+
+#[test]
+fn test_hit_blocked_remote_image_returns_link() {
+    let mut model = RenderState::new_for_test(
+        TEST_STYLES.clone(),
+        200.0.into_pixels(),
+        160.0.into_pixels(),
+    );
+    let image = test_image_block("https://example.com/diagram.png", None);
+    let y = (image.height().as_f32() / 2.0).into_pixels();
+    model.set_content(SumTree::from_item(image));
+
+    assert_eq!(
+        model.render_coordinates_to_location(40.0.into_pixels(), y, &Default::default()),
+        Location::Text {
+            char_offset: CharOffset::zero(),
+            clamped: true,
+            wrap_direction: WrapDirection::Down,
+            block_start: CharOffset::zero(),
+            link: Some("https://example.com/diagram.png".to_string()),
+        }
+    );
+}
+
+#[test]
+fn test_hit_local_image_has_no_link() {
+    let mut model = RenderState::new_for_test(
+        TEST_STYLES.clone(),
+        200.0.into_pixels(),
+        160.0.into_pixels(),
+    );
+    let image = test_image_block(
+        "diagram.png",
+        Some(AssetSource::LocalFile {
+            path: "/tmp/diagram.png".to_string(),
+            content_version: None,
+        }),
+    );
+    let y = (image.height().as_f32() / 2.0).into_pixels();
+    model.set_content(SumTree::from_item(image));
+
+    assert_eq!(
+        model.render_coordinates_to_location(40.0.into_pixels(), y, &Default::default()),
+        Location::Text {
+            char_offset: CharOffset::zero(),
+            clamped: true,
+            wrap_direction: WrapDirection::Down,
+            block_start: CharOffset::zero(),
+            link: None,
+        }
+    );
+}
+
 #[test]
 fn test_hit_mermaid_block_uses_block_locations_even_with_forced_text_selection() {
     let width = 200.;

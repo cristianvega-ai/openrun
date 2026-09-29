@@ -775,8 +775,6 @@ pub(crate) fn initialize_app(
             )
         });
 
-    ctx.set_fallback_font_source_provider(|url| ::asset_cache::url_source(url));
-
     ctx.set_default_binding_validator(is_binding_cross_platform);
 
     // Initialize timestamp for session id and last active event

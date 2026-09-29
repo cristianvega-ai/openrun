@@ -18,7 +18,7 @@ use warpui_core::units::{IntoPixels, Pixels};
 use super::model::{BlockSpacing, ParagraphStyles, RenderState, RichTextStyles};
 use crate::content::text::{BufferBlockStyle, TextStylesWithMetadata};
 
-const HYPERLINK_UNDERLINE_COLOR: u32 = 0x7aa6daff;
+pub(crate) const HYPERLINK_COLOR: u32 = 0x7aa6daff;
 
 /// Cap on the number of `char`s shaped into a single text frame.
 ///
@@ -275,7 +275,7 @@ pub(crate) fn line_height(line: &Line) -> f32 {
 }
 
 pub(crate) fn add_link_to_style_and_font(mut style: StyleAndFont) -> StyleAndFont {
-    let hyperlink_color = ColorU::from_u32(HYPERLINK_UNDERLINE_COLOR);
+    let hyperlink_color = ColorU::from_u32(HYPERLINK_COLOR);
     style.style = style
         .style
         .with_underline_color(hyperlink_color)

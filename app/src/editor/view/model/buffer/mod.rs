@@ -120,7 +120,6 @@ pub struct PeerSelectionData {
     pub colors: CursorColors,
     /// Whether or not the peer's cursors are drawn.
     pub display_name: String,
-    pub image_url: Option<String>,
     pub should_draw_cursors: bool,
 }
 

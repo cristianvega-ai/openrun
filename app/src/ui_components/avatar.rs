@@ -1,8 +1,8 @@
 use pathfinder_geometry::vector::vec2f;
 use warp_core::ui::icons::Icon;
 use warpui::elements::{
-    self, Align, Border, CacheOption, ChildAnchor, ConstrainedBox, Container, Element, Image,
-    OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Stack, Text,
+    self, Align, Border, ChildAnchor, ConstrainedBox, Container, Element, OffsetPositioning,
+    ParentAnchor, ParentElement, ParentOffsetBounds, Stack, Text,
 };
 use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 
@@ -14,13 +14,6 @@ pub enum AvatarContent {
 
     /// Renders the icon directly.
     Icon(Icon),
-
-    /// Renders the image on a colored background.
-    Image {
-        url: String,
-        /// The first initial is rendered prior to loading the image.
-        display_name: String,
-    },
 }
 
 #[derive(Clone)]
@@ -46,16 +39,6 @@ impl UiComponent for Avatar {
     fn build(self) -> Container {
         let styles = self.styles;
         let inner_element = match self.content {
-            AvatarContent::Image { url, display_name } => {
-                let mut image = Image::new(asset_cache::url_source(url), CacheOption::BySize)
-                    .before_load(
-                        Align::new(Self::first_initial(&display_name, self.styles)).finish(),
-                    );
-                if let Some(radius) = styles.border_radius {
-                    image = image.with_corner_radius(radius);
-                }
-                image.finish()
-            }
             AvatarContent::Icon(icon) => {
                 let icon_size = {
                     let height = styles.height.unwrap_or_default();

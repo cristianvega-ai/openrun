@@ -15,10 +15,7 @@ use vec1::{Vec1, vec1};
 
 use crate::Scene;
 use crate::elements::{DEFAULT_UI_LINE_HEIGHT_RATIO, Fill};
-use crate::fonts::{
-    Cache as FontCache, FamilyId, FontId, GlyphId, Properties, RequestedFallbackFontSource,
-    TextLayoutSystem,
-};
+use crate::fonts::{Cache as FontCache, FamilyId, FontId, GlyphId, Properties, TextLayoutSystem};
 use crate::geometry::rect::RectF;
 use crate::geometry::vector::vec2f;
 use crate::platform::LineStyle;
@@ -191,14 +188,6 @@ impl LayoutCache {
                     .map(|first_line_head_indent_value| first_line_head_indent_value.into()),
                 clip_config: None,
             };
-            for line in text_frame.lines() {
-                for ch in &line.chars_with_missing_glyphs {
-                    text_layout_system.request_fallback_font_for_char(
-                        *ch,
-                        RequestedFallbackFontSource::TextFrame(key.clone()),
-                    );
-                }
-            }
             self.text_frame_cache.insert(key, text_frame.clone());
             text_frame
         }
@@ -255,12 +244,6 @@ impl LayoutCache {
                 first_line_head_indent: None,
                 clip_config: Some(clip_config),
             };
-            for ch in &line.chars_with_missing_glyphs {
-                text_layout_system.request_fallback_font_for_char(
-                    *ch,
-                    RequestedFallbackFontSource::Line(key.clone()),
-                );
-            }
             self.line_cache.insert(key, line.clone());
             line
         }
@@ -507,7 +490,6 @@ pub struct Line {
     /// On winit platforms, cosmic-text gives us one caret position per
     /// codepoint, meaning ligatures will have multiple caret positions.
     pub caret_positions: Vec<CaretPosition>,
-    pub chars_with_missing_glyphs: Vec<char>,
 }
 
 /// Default baseline offset calculation for Lines.
@@ -839,7 +821,6 @@ impl TextFrame {
             descent: DEFAULT_FONT_SIZE * (1. - DEFAULT_TOP_BOTTOM_RATIO),
             clip_config: None,
             caret_positions,
-            chars_with_missing_glyphs: vec![],
         };
         TextFrame {
             lines: vec1![line],
@@ -971,7 +952,6 @@ impl Line {
                 start_offset: glyph_index,
                 last_offset: glyph_index,
             }],
-            chars_with_missing_glyphs: vec![],
         }
     }
 
@@ -988,7 +968,6 @@ impl Line {
             descent: DEFAULT_FONT_SIZE * (1. - DEFAULT_TOP_BOTTOM_RATIO),
             clip_config: None,
             caret_positions: Default::default(),
-            chars_with_missing_glyphs: Default::default(),
         }
     }
 

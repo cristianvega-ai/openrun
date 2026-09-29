@@ -70,25 +70,27 @@ pub(crate) fn layout_mermaid_block_for_test(
 /// Supports the following markdown image formats per the CommonMark spec:
 /// https://spec.commonmark.org/0.31.2/#images
 /// - Inline data: base64 `data:` URIs (e.g. notebook image outputs)
-/// - URLs: `http://` or `https://` prefixed paths
 /// - Absolute paths: paths starting with `/`
 /// - Relative paths: all other paths, resolved relative to the document location
+///
+/// Remote `http://` and `https://` images are never fetched, so they resolve to `None`.
+/// See [`is_remote_image_source`].
 ///
 /// Note: Path canonicalization is not available on WASM targets.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn resolve_asset_source_relative_to_directory(
     source: &str,
     base_directory: Option<&Path>,
-) -> AssetSource {
+) -> Option<AssetSource> {
     if let Some(data_uri_source) = asset_cache::data_uri_source(source) {
-        data_uri_source
-    } else if source.starts_with("http://") || source.starts_with("https://") {
-        asset_cache::url_source(source)
+        Some(data_uri_source)
+    } else if is_remote_image_source(source) {
+        None
     } else if source.starts_with("/") {
-        AssetSource::LocalFile {
+        Some(AssetSource::LocalFile {
             path: source.to_string(),
             content_version: None,
-        }
+        })
     } else {
         let resolved_path = if let Some(base_directory) = base_directory {
             base_directory.join(source)
@@ -96,40 +98,53 @@ pub fn resolve_asset_source_relative_to_directory(
             Path::new(source).to_path_buf()
         };
 
-        AssetSource::LocalFile {
+        Some(AssetSource::LocalFile {
             path: match resolved_path.canonicalize() {
                 Ok(canon) => canon.to_string_lossy().to_string(),
                 Err(_) => resolved_path.to_string_lossy().to_string(),
             },
             content_version: None,
-        }
+        })
     }
+}
+
+/// Whether a markdown image source points at a remote `http://` or `https://` resource.
+///
+/// The editor never fetches these automatically. They are rendered as a link showing the alt
+/// text, which the user can click to open in their browser.
+pub fn is_remote_image_source(source: &str) -> bool {
+    let has_prefix = |prefix: &str| {
+        source
+            .get(..prefix.len())
+            .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+    };
+    has_prefix("http://") || has_prefix("https://")
 }
 
 /// Resolve an image source when its Markdown block is laid out.
 ///
 /// Local-file metadata is read here so refreshes get a new cache key, while
 /// ordinary frame rendering continues to reuse the resolved source without I/O.
-fn resolve_asset_source(source: &str, base_path: Option<&Path>) -> AssetSource {
+fn resolve_asset_source(source: &str, base_path: Option<&Path>) -> Option<AssetSource> {
     let base_directory = base_path.map(|base| base.parent().unwrap_or(base));
     resolve_asset_source_relative_to_directory(source, base_directory)
-        .with_local_file_content_version()
+        .map(AssetSource::with_local_file_content_version)
 }
 
 #[cfg(target_arch = "wasm32")]
 pub fn resolve_asset_source_relative_to_directory(
     source: &str,
     _base_directory: Option<&Path>,
-) -> AssetSource {
+) -> Option<AssetSource> {
     if let Some(data_uri_source) = asset_cache::data_uri_source(source) {
-        data_uri_source
-    } else if source.starts_with("http://") || source.starts_with("https://") {
-        asset_cache::url_source(source)
+        Some(data_uri_source)
+    } else if is_remote_image_source(source) {
+        None
     } else {
-        AssetSource::LocalFile {
+        Some(AssetSource::LocalFile {
             path: source.to_string(),
             content_version: None,
-        }
+        })
     }
 }
 
@@ -834,8 +849,13 @@ impl<'a> LayoutTask<'a> {
                         .from_block_style(&BufferBlockStyle::PlainText);
                     // Default size for images - will scale based on actual image dimensions
                     let max_width = layout.max_width() - spacing.x_axis_offset();
-                    let default_height = layout.rich_text_styles().base_line_height()
-                        * DEFAULT_IMAGE_HEIGHT_LINE_MULTIPLIER.into_pixels();
+                    let line_height = layout.rich_text_styles().base_line_height();
+                    // Remote images render as a single line of link text rather than an image.
+                    let default_height = if is_remote_image_source(source) {
+                        line_height
+                    } else {
+                        line_height * DEFAULT_IMAGE_HEIGHT_LINE_MULTIPLIER.into_pixels()
+                    };
                     Self::Image {
                         alt_text: alt_text.clone(),
                         source: source.clone(),
