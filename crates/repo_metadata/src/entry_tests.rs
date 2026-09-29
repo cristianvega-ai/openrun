@@ -367,7 +367,6 @@ fn ignored_directory_stays_lazy() {
             200,
             0,
             &IgnoredPathStrategy::IncludeLazy,
-            super::BudgetExceededBehavior::StopAndLazyLoad,
         ))
         .unwrap();
         let target_dir = find_entry(&tree, &repo.join("target"))
@@ -396,7 +395,6 @@ fn build_tree_marks_descendants_of_ignored_directory_as_ignored() {
         10,
         0,
         &IgnoredPathStrategy::Include,
-        super::BudgetExceededBehavior::StopAndLazyLoad,
     ))
     .unwrap();
 
@@ -439,7 +437,6 @@ fn lazy_loaded_ignored_directory_marks_loaded_children_as_ignored() {
         10,
         0,
         &IgnoredPathStrategy::IncludeLazy,
-        super::BudgetExceededBehavior::StopAndLazyLoad,
     ))
     .unwrap();
 
@@ -646,7 +643,6 @@ fn build_with_budget(root: &std::path::Path, budget: usize) -> super::Entry {
             max_depth: 200,
             current_depth: 0,
             ignored_path_strategy: &super::IgnoredPathStrategy::IncludeLazy,
-            budget_exceeded_behavior: super::BudgetExceededBehavior::StopAndLazyLoad,
         },
         false,
     ))
@@ -775,55 +771,4 @@ fn build_tree_gitignored_files_do_not_consume_budget() {
         !ignored_dir.loaded(),
         "gitignored dirs stay lazy and never consume the budget"
     );
-}
-
-#[test]
-fn build_tree_fail_fast_errors_when_budget_exceeded() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
-    for i in 0..10 {
-        fs::write(root.join(format!("f{i}.txt")), "").unwrap();
-    }
-
-    let mut files = Vec::new();
-    let mut gitignores = Vec::new();
-    let mut file_limit = 5;
-    let result = run(Entry::build_tree(
-        &root,
-        &mut files,
-        &mut gitignores,
-        Some(&mut file_limit),
-        200,
-        0,
-        &IgnoredPathStrategy::Exclude,
-        super::BudgetExceededBehavior::FailFast,
-    ));
-    assert!(
-        matches!(result, Err(super::BuildTreeError::ExceededMaxFileLimit)),
-        "FailFast must abort when the file budget is exceeded"
-    );
-}
-
-#[test]
-fn build_tree_fail_fast_succeeds_within_budget() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
-    for i in 0..3 {
-        fs::write(root.join(format!("f{i}.txt")), "").unwrap();
-    }
-
-    let mut files = Vec::new();
-    let mut gitignores = Vec::new();
-    let mut file_limit = 10;
-    let result = run(Entry::build_tree(
-        &root,
-        &mut files,
-        &mut gitignores,
-        Some(&mut file_limit),
-        200,
-        0,
-        &IgnoredPathStrategy::Exclude,
-        super::BudgetExceededBehavior::FailFast,
-    ));
-    assert!(result.is_ok(), "FailFast must succeed when within budget");
 }

@@ -1,4 +1,3 @@
-
 use serde_json::json;
 
 use super::{settings_schema_json, strip_empty_enum_entries, strip_numeric_metadata};

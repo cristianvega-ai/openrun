@@ -13496,10 +13496,6 @@ impl Workspace {
             context.set.insert(flags::CODE_AS_DEFAULT_EDITOR);
         }
 
-        if *input_settings.show_hint_text.value() {
-            context.set.insert(flags::SHOW_INPUT_HINT_TEXT_CONTEXT_FLAG);
-        }
-
         if *editor_settings.enable_autosuggestions {
             context.set.insert(flags::AUTOSUGGESTIONS_ENABLED_FLAG);
         }

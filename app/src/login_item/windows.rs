@@ -83,9 +83,9 @@ fn current_exe_path() -> Option<PathBuf> {
 
 /// Returns the per-channel registry value name used under the `Run` subkey.
 ///
-/// Using the channel's application name keeps Dogfood / Preview / Stable installs
-/// isolated (`Warp`, `WarpPreview`, `WarpDev`, etc.) so installing multiple
-/// channels doesn't cause one to overwrite another's startup entry.
+/// Using the channel's application name keeps installs of different channels
+/// isolated so installing more than one doesn't cause one to overwrite another's
+/// startup entry.
 fn login_item_value_name() -> String {
     ChannelState::app_id().application_name().to_owned()
 }

@@ -120,6 +120,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Linux and Windows compile fixes](#linux-and-windows-compile-fixes) — fixed a Windows-only compile error and Linux/Windows-only warnings found by cross-target checks
 - [Editor peer layer, single-variant enums and grid storage mode](#editor-peer-layer-single-variant-enums-and-grid-storage-mode) — removed the unused editor remote-peer layer and its drawing, avatar status icons, `is_excluded_binding`, single-variant enums and `Storage::is_sequential`
 - [Setting surfaces](#setting-surfaces) — removed `SettingSurfaces`, `SettingsMode` and the `surface:` argument of the settings macros
+- [Unused input hint setting, tree budget mode, icons and theme accessors](#unused-input-hint-setting-tree-budget-mode-icons-and-theme-accessors) — removed the no-op `show_hint_text` setting, `BudgetExceededBehavior`, unused icons and theme accessors, and dogfood/preview wording
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3155,3 +3156,18 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - The generated settings JSON schema no longer has an `x-warp-surfaces` key on each setting.
 
 **User-visible impact:** None. `settings.toml` and the default settings file are unchanged; only the generated JSON schema loses one extension key.
+
+## Unused input hint setting, tree budget mode, icons and theme accessors
+**Why:** More leftovers that only the review of `pub` items and settings could find.
+
+**Removed:**
+- The `terminal.input.show_hint_text` setting ("input hint text"): the hint it hid only ever showed with AI enabled, so the toggle changed nothing. Also gone: its Features-page action and toggle binding, the input context menu item, the `SHOW_INPUT_HINT_TEXT_CONTEXT_FLAG` context flag and the `InputSettingsChangedEvent::ShowHintText` handler. A stale `show_hint_text` key in `settings.toml` is ignored.
+- `BudgetExceededBehavior` (with `FailFast`) and `BuildTreeError::ExceededMaxFileLimit` in `repo_metadata`: only tests used `FailFast`, so the tree builder always stops and lazy-loads. `Entry::build_tree` and `BuildTreeOptions` lost the parameter.
+- Icons and their SVGs that nothing uses: `QrCode`, `AiAssistant`, `Share`, `Share3`, `Sharing`, `Cloud`, `CloudFilled`, `CreateTeam`, `AddTeammates`, `WarpDrive`, `Gift`, `CreditCard`, `ThumbsUp`, `ThumbsDown`, `HeartHand`, `LogOut`, `Cognition`, `Aws`, `Stars`, `Docker`, `Linear`.
+- Theme accessors with no users: `block_selection_as_context_background_color`, `block_selection_as_context_border_color`, `block_banner_background`.
+
+**Modified:**
+- `assert_secrets_redacted_for_ai` is `assert_secrets_redacted` (it checks redaction of text sent to a CLI agent).
+- Comments that named the dogfood, preview or stable channels now describe debug builds.
+
+**User-visible impact:** The "input hint text" toggle disappears from the input context menu and the command palette; it had no effect.

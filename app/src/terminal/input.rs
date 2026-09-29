@@ -2559,10 +2559,6 @@ impl Input {
         ctx: &mut ViewContext<Self>,
     ) {
         match event {
-            InputSettingsChangedEvent::ShowHintText { .. } => {
-                self.set_zero_state_hint_text(ctx);
-                ctx.notify();
-            }
             InputSettingsChangedEvent::SyntaxHighlighting { .. } => {
                 if !*input_settings.as_ref(ctx).syntax_highlighting.value() {
                     self.clear_decorations(ctx);

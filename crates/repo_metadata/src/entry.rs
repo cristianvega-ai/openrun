@@ -24,8 +24,6 @@ pub const LAZY_LOAD_FILE_LIMIT: usize = 5000;
 
 #[derive(Debug, Error)]
 pub enum BuildTreeError {
-    #[error("Repo size exceeded max file limit")]
-    ExceededMaxFileLimit,
     #[error("File is ignored")]
     Ignored,
     #[error("IO error reading path.")]
@@ -59,19 +57,6 @@ pub enum IgnoredPathStrategy {
     Include,
 }
 
-/// What the tree builder does when the per-build file budget is exhausted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BudgetExceededBehavior {
-    /// Stop descending and leave the remaining directories as unloaded
-    /// placeholders (lazy-loaded on demand). The build still succeeds with a
-    /// partial, breadth-first tree. This is the default for the shared file
-    /// tree and `@`-context.
-    StopAndLazyLoad,
-    /// Abort the build and return [`BuildTreeError::ExceededMaxFileLimit`].
-    /// Use this for consumers that must not operate on a partial tree.
-    FailFast,
-}
-
 /// Filesystem entry.
 #[derive(Debug, Clone)]
 pub enum Entry {
@@ -83,7 +68,6 @@ pub(crate) struct BuildTreeOptions<'a> {
     pub max_depth: usize,
     pub current_depth: usize,
     pub ignored_path_strategy: &'a IgnoredPathStrategy,
-    pub budget_exceeded_behavior: BudgetExceededBehavior,
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
@@ -124,8 +108,9 @@ impl Entry {
     /// Builds a tree of entries from a given path, handling gitignored files and directories.
     /// After max_depth is reached, children are lazy-loaded to prevent deeply nested trees.
     /// IgnoredPathStrategy determines what happens when ignored files are encountered.
-    /// `budget_exceeded_behavior` controls what happens once the file budget is
-    /// exhausted (see [`BudgetExceededBehavior`]).
+    /// Once the file budget is exhausted, the remaining directories are left as unloaded
+    /// placeholders (lazy-loaded on demand) and the build succeeds with a partial,
+    /// breadth-first tree.
     #[allow(clippy::too_many_arguments)]
     pub async fn build_tree(
         path: impl Into<PathBuf>,
@@ -135,7 +120,6 @@ impl Entry {
         max_depth: usize,
         current_depth: usize,
         ignored_path_strategy: &IgnoredPathStrategy,
-        budget_exceeded_behavior: BudgetExceededBehavior,
     ) -> Result<Self, BuildTreeError> {
         Self::build_tree_with_options(
             path,
@@ -146,7 +130,6 @@ impl Entry {
                 max_depth,
                 current_depth,
                 ignored_path_strategy,
-                budget_exceeded_behavior,
             },
             false,
         )
@@ -173,7 +156,6 @@ impl Entry {
                 max_depth,
                 current_depth,
                 ignored_path_strategy,
-                budget_exceeded_behavior: BudgetExceededBehavior::StopAndLazyLoad,
             },
             ancestor_is_ignored,
         )
@@ -214,11 +196,6 @@ impl Entry {
             ancestor_is_ignored,
         )? {
             EvaluatedEntry::File { ignored } => {
-                if quota == Some(0)
-                    && options.budget_exceeded_behavior == BudgetExceededBehavior::FailFast
-                {
-                    return Err(BuildTreeError::ExceededMaxFileLimit);
-                }
                 let metadata = consume_file(&root_path, ignored, files, &mut quota);
                 write_back_quota(remaining_file_quota, quota);
                 Ok(Self::File(metadata))
@@ -243,17 +220,10 @@ impl Entry {
                 }
 
                 while let Some(job) = queue.pop_front() {
-                    // Budget handling. With `StopAndLazyLoad` (the default), once
-                    // the file quota is exhausted we stop expanding directories
-                    // and leave them as unloaded placeholders. With `FailFast` we
-                    // keep descending and abort below as soon as a file would
-                    // exceed the budget.
-                    let should_expand = match options.budget_exceeded_behavior {
-                        BudgetExceededBehavior::FailFast => true,
-                        BudgetExceededBehavior::StopAndLazyLoad => {
-                            quota.is_none_or(|remaining| remaining > 0)
-                        }
-                    };
+                    // Budget handling: once the file quota is exhausted we stop
+                    // expanding directories and leave them as unloaded
+                    // placeholders.
+                    let should_expand = quota.is_none_or(|remaining| remaining > 0);
                     if !should_expand {
                         continue;
                     }
@@ -299,12 +269,6 @@ impl Entry {
                             job.ignored,
                         ) {
                             Ok(EvaluatedEntry::File { ignored }) => {
-                                if quota == Some(0)
-                                    && options.budget_exceeded_behavior
-                                        == BudgetExceededBehavior::FailFast
-                                {
-                                    return Err(BuildTreeError::ExceededMaxFileLimit);
-                                }
                                 let metadata =
                                     consume_file(&child_path, ignored, files, &mut quota);
                                 let child_index = nodes.len();

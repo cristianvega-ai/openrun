@@ -9,7 +9,7 @@ use futures::channel::oneshot;
 use ignore::gitignore::Gitignore;
 use itertools::Itertools;
 use rayon::prelude::*;
-use repo_metadata::entry::{BudgetExceededBehavior, IgnoredPathStrategy, is_file_parsable};
+use repo_metadata::entry::{IgnoredPathStrategy, is_file_parsable};
 use repo_metadata::{Entry, FileId, FileMetadata, RepositoryUpdate, matches_gitignores};
 use streaming_iterator::StreamingIterator;
 use syntax_tree::TextSlice;
@@ -50,7 +50,6 @@ pub async fn build_outline(
         MAX_DEPTH,
         0,
         &IgnoredPathStrategy::Exclude, // override_ignore_for_files
-        BudgetExceededBehavior::StopAndLazyLoad,
     )
     .await?;
 

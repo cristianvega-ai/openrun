@@ -55,7 +55,7 @@ define_settings_group!(DebugSettings, settings: [
 
 impl DebugSettings {
     pub fn should_show_memory_stats(&self) -> bool {
-        // We only want to show memory stats in dogfood and not in tests.
+        // We only want to show memory stats in builds with debug features and not in tests.
         *self.show_memory_stats.value()
             && warp_core::channel::ChannelState::enable_debug_features()
             && !cfg!(test)

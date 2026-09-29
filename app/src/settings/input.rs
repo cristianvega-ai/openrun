@@ -58,14 +58,6 @@ impl settings_value::SettingsValue for InlineMenuHeights {
 
 define_settings_group!(InputSettings,
     settings: [
-        show_hint_text: ShowHintText {
-            type: bool,
-            default: true,
-            supported_platforms: SupportedPlatforms::ALL,
-            private: false,
-            toml_path: "terminal.input.show_hint_text",
-            description: "Whether hint text is shown in the terminal input.",
-        },
         completions_open_while_typing: CompletionsOpenWhileTyping {
             type: bool,
             default: false,

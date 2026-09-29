@@ -44,9 +44,7 @@ use warp_util::standardized_path::StandardizedPath;
 
 #[cfg(feature = "local_fs")]
 use crate::entry::LAZY_LOAD_FILE_LIMIT;
-use crate::entry::{
-    BudgetExceededBehavior, BuildTreeError, BuildTreeOptions, Entry, FileId, IgnoredPathStrategy,
-};
+use crate::entry::{BuildTreeError, BuildTreeOptions, Entry, FileId, IgnoredPathStrategy};
 use crate::repository::Repository;
 use crate::{RepoMetadataError, gitignores_for_directory, matches_gitignores};
 cfg_if::cfg_if! {
@@ -862,7 +860,6 @@ impl LocalRepoMetadataModel {
                         max_depth: 1, // Only first level.
                         current_depth: 0,
                         ignored_path_strategy: &IgnoredPathStrategy::Include,
-                        budget_exceeded_behavior: BudgetExceededBehavior::StopAndLazyLoad,
                     },
                     false,
                 )
@@ -1276,7 +1273,6 @@ impl LocalRepoMetadataModel {
                         max_depth: MAX_TREE_DEPTH,
                         current_depth: 0,
                         ignored_path_strategy: &IgnoredPathStrategy::IncludeLazy,
-                        budget_exceeded_behavior: BudgetExceededBehavior::StopAndLazyLoad,
                     },
                     is_ignored,
                 )
@@ -1584,7 +1580,6 @@ impl LocalRepoMetadataModel {
                         max_depth: MAX_TREE_DEPTH,
                         current_depth: 0,
                         ignored_path_strategy: &IgnoredPathStrategy::IncludeLazy,
-                        budget_exceeded_behavior: BudgetExceededBehavior::StopAndLazyLoad,
                     },
                     false,
                 )

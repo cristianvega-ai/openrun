@@ -20,7 +20,7 @@ pub fn assert_secret_tooltip_open(open: bool) -> AssertionCallback {
 }
 
 /// Assert that secrets are properly redacted in both modes
-pub fn assert_secrets_redacted_for_ai(
+pub fn assert_secrets_redacted(
     test_text: String,
     expected_phone_redaction: String,
     expected_api_key_redaction: String,
@@ -47,12 +47,12 @@ pub fn assert_secrets_redacted_for_ai(
 
                 if !redacted_text.contains(&expected_phone_redaction) {
                     return AssertionOutcome::failure(format!(
-                        "Phone number should be redacted in text sent to AI: {redacted_text}"
+                        "Phone number should be redacted in text sent to a CLI agent: {redacted_text}"
                     ));
                 }
                 if !redacted_text.contains(&expected_api_key_redaction) {
                     return AssertionOutcome::failure(format!(
-                        "API key should be redacted in text sent to AI: {redacted_text}"
+                        "API key should be redacted in text sent to a CLI agent: {redacted_text}"
                     ));
                 }
                 if redacted_text.contains(&original_phone) {

@@ -405,7 +405,7 @@ fn test_agent_deeplinks_are_rejected() {
 // -- handle_incoming_uri validation errors -----------------------------------
 
 /// `validate_custom_uri` returns `anyhow::Error`s whose messages feed the
-/// non-dogfood `log::warn!("Custom URI is invalid: {e:?}")` fallback in
+/// `log::warn!("Custom URI is invalid: {e:?}")` fallback in
 /// `handle_incoming_uri`. Those messages must never embed the full URL, its
 /// query string, or its fragment — otherwise the fallback warn line becomes
 /// a second secret leak.

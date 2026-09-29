@@ -63,7 +63,7 @@ use pathfinder_color::ColorU;
 use regex::Regex;
 use repo_metadata::repositories::RepoDetectionSource;
 use serde::Serialize;
-use settings::{Setting, ToggleableSetting};
+use settings::Setting;
 use ssh_file_upload::{FileUpload, FileUploadEvent};
 use use_agent_footer::UseAgentToolbar;
 use vec1::vec1;
@@ -926,7 +926,6 @@ pub enum InputContextMenuAction {
     SelectAll,
     Paste,
     ShowCommandSearch,
-    ToggleInputHintText,
 }
 
 // Manually implementing Debug to avoid leaking sensitive information in logs
@@ -968,7 +967,6 @@ impl fmt::Debug for InputContextMenuAction {
             SelectAll => f.write_str("SelectAll"),
             Paste => f.write_str("Paste"),
             ShowCommandSearch => f.write_str("CommandSearch"),
-            ToggleInputHintText => f.write_str("ToggleInputHintText"),
         }
     }
 }
@@ -7517,22 +7515,7 @@ impl TerminalView {
                 .into_item(),
         ]);
 
-        // Section 3: input hint text toggle
-        let input_settings = InputSettings::as_ref(ctx);
-        let inverse_action = if *input_settings.show_hint_text {
-            "Hide"
-        } else {
-            "Show"
-        };
-        items.push(MenuItem::Separator);
-        items.push(
-            MenuItemFields::new(format!("{inverse_action} input hint text"))
-                .with_on_select_action(TerminalAction::InputContextMenuItem(
-                    InputContextMenuAction::ToggleInputHintText,
-                ))
-                .into_item(),
-        );
-        // Section 5: All Pane related
+        // Section 3: All Pane related
         let current_shell = model.shell_launch_state().available_shell();
         let pane_context_menu_items = self.pane_context_menu_items(current_shell, ctx);
         if !pane_context_menu_items.is_empty() {
@@ -8517,12 +8500,6 @@ impl TerminalView {
 
     fn command_search_from_input(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.emit(Event::ShowCommandSearch(Default::default()))
-    }
-
-    fn toggle_input_hint_text(&mut self, ctx: &mut ViewContext<Self>) {
-        InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
-            report_if_error!(input_settings.show_hint_text.toggle_and_save_value(ctx));
-        });
     }
 
     fn copy_prompt(
@@ -11590,7 +11567,6 @@ impl TerminalView {
             SelectAll => self.select_all_text_from_input(ctx),
             Paste => self.paste_in_input(ctx),
             ShowCommandSearch => self.command_search_from_input(ctx),
-            ToggleInputHintText => self.toggle_input_hint_text(ctx),
         }
         self.close_context_menu(ctx, false);
     }

@@ -456,22 +456,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
 
     toggle_binding_pairs.push(
         ToggleSettingActionPair::new(
-            "input hint text",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleShowInputHintText,
-            )),
-            context,
-            flags::SHOW_INPUT_HINT_TEXT_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .show_hint_text
-                .is_supported_on_current_platform(),
-        ),
-    );
-
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
             "editing commands with Vim keybindings",
             builder(SettingsAction::FeaturesPageToggle(
                 FeaturesPageAction::ToggleVimMode,
@@ -693,7 +677,6 @@ pub enum FeaturesPageAction {
     ToggleAliasExpansion,
     ToggleMiddleClickPaste,
     ToggleCodeAsDefaultEditor,
-    ToggleShowInputHintText,
     ToggleUseAudibleBell,
     TogglePreferLowPowerGPU,
     ToggleVimMode,
@@ -789,7 +772,7 @@ const MAX_MOUSE_SCROLL_MULTIPLIER: f32 = 20.0;
 
 const TAB_KEYSTROKE_STR: &str = "Tab";
 
-/// Function to get maximum value for max grid size: 10 million for dogfood/dev builds,
+/// Function to get maximum value for max grid size: 10 million when debug features are enabled,
 /// 1 million for release builds.
 ///
 /// TODO: address the use of f32 in blocklist rendering code that leads to precision errors
@@ -1334,11 +1317,6 @@ impl TypedActionView for FeaturesPageView {
                             .middle_click_paste_enabled
                             .toggle_and_save_value(ctx)
                     );
-                });
-            }
-            ToggleShowInputHintText => {
-                InputSettings::handle(ctx).update(ctx, |input_settings, ctx| {
-                    report_if_error!(input_settings.show_hint_text.toggle_and_save_value(ctx));
                 });
             }
             ToggleLinkTooltip => {

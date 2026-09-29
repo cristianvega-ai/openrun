@@ -214,7 +214,7 @@ pub fn prompt_chip_logging_workflow(shell_family: ShellFamily) -> Option<Workflo
         command: tail_command_for_shell(shell_family, &log_file_path),
         tags: vec!["warp".into(), "debug".into()],
         description: Some(
-            "Shows the diagnostic log of shell commands run by prompt context chips (dogfood only)"
+            "Shows the diagnostic log of shell commands run by prompt context chips (debug builds only)"
                 .into(),
         ),
         arguments: vec![],

@@ -16,8 +16,6 @@ use crate::ui::color::Opacity;
 use crate::ui::color::blend::Blend;
 use crate::ui::color::contrast::{MinimumAllowedContrast, pick_best_foreground_color};
 
-const BLOCK_SELECTION_OPACITY: Opacity = 10;
-
 #[derive(Serialize, Copy, Clone, Debug, Deserialize, Getters, PartialEq, Eq)]
 #[get = "pub"]
 // TODO handle optional fields (so users can specify some and not all)
@@ -285,16 +283,6 @@ impl WarpTheme {
         accent_overlay_2(self)
     }
 
-    pub fn block_selection_as_context_background_color(&self) -> Fill {
-        let color_fill: Fill = self.terminal_colors.normal.yellow.into();
-        color_fill.with_opacity(BLOCK_SELECTION_OPACITY)
-    }
-
-    pub fn block_selection_as_context_border_color(&self) -> Fill {
-        let color_fill: Fill = self.terminal_colors.normal.yellow.into();
-        color_fill
-    }
-
     // Although text selection colors aren't yet themed, declaring them in this file
     // will make it easier to theme text selection colors in the future!
     pub fn text_selection_color(&self) -> Fill {
@@ -345,10 +333,6 @@ impl WarpTheme {
 
     pub fn subshell_background(&self) -> Fill {
         Fill::Solid(neutral_4(self))
-    }
-
-    pub fn block_banner_background(&self) -> Fill {
-        Fill::Solid(neutral_3(self))
     }
 
     /// Background color for tooltips.
