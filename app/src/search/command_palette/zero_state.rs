@@ -12,7 +12,6 @@ use warpui::{
 use crate::appearance::Appearance;
 use crate::search::QueryFilter;
 use crate::search::command_palette::FilterChipRenderer;
-use crate::settings::AISettings;
 
 /// A zero-state view for the command palette.
 pub struct ZeroState {
@@ -71,7 +70,7 @@ impl ZeroState {
     }
 
     /// Returns the set of valid query filters for this zero state view.
-    fn valid_query_filters(app: &AppContext) -> impl Iterator<Item = QueryFilter> + use<> {
+    fn valid_query_filters() -> impl Iterator<Item = QueryFilter> + use<> {
         let mut valid_filters = vec![];
 
         // Don't show Files filter if the user is a viewer of a shared session
@@ -83,10 +82,6 @@ impl ZeroState {
 
         if ContextFlag::LaunchConfigurations.is_enabled() {
             valid_filters.push(QueryFilter::LaunchConfigurations);
-        }
-
-        if AISettings::as_ref(app).is_any_ai_enabled(app) {
-            valid_filters.push(QueryFilter::Conversations);
         }
 
         valid_filters.into_iter()
@@ -105,7 +100,7 @@ impl View for ZeroState {
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
         let mut flex = Flex::column()
-            .with_child(self.render_filter_chips(appearance, Self::valid_query_filters(app)));
+            .with_child(self.render_filter_chips(appearance, Self::valid_query_filters()));
 
         let zero_state_items = self.items.as_ref(app).render(app);
         flex.add_child(Shrinkable::new(1., zero_state_items).finish());

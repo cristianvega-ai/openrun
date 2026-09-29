@@ -13,7 +13,7 @@ fn parses_typed_create_and_setting_list_params() {
         "tab",
         "create",
         "--type",
-        "agent",
+        "default",
         "--session",
         "session_1",
     ])
@@ -21,7 +21,7 @@ fn parses_typed_create_and_setting_list_params() {
     let ControlCommand::Tab(TabCommand::Create(args)) = args.command else {
         panic!("expected tab create command");
     };
-    assert_eq!(args.tab_type, Some(CliTabType::Agent));
+    assert_eq!(args.tab_type, Some(CliTabType::Default));
     assert_eq!(args.target.session.as_deref(), Some("session_1"));
 
     let err = ControlArgs::try_parse_from(["warpctrl", "tab", "create", "--shell", "zsh"])

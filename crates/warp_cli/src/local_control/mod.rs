@@ -65,7 +65,7 @@ impl ControlArgs {
 
     /// Parse Warp Control arguments only when the wrapper-injected mode flag is present.
     ///
-    /// Startup calls this before the normal Warp/Oz parser. Arguments through
+    /// Startup calls this before the normal Warp parser. Arguments through
     /// `--warpctrl` are removed, and the remaining arguments are parsed as if
     /// the standalone command name were `warpctrl`.
     pub fn from_control_mode_env() -> Option<Self> {
@@ -795,8 +795,6 @@ pub struct KeybindingGetArgs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum CliTabType {
     Terminal,
-    Agent,
-    CloudAgent,
     Default,
 }
 
@@ -804,8 +802,6 @@ impl From<CliTabType> for local_control::protocol::TabType {
     fn from(value: CliTabType) -> Self {
         match value {
             CliTabType::Terminal => Self::Terminal,
-            CliTabType::Agent => Self::Agent,
-            CliTabType::CloudAgent => Self::CloudAgent,
             CliTabType::Default => Self::Default,
         }
     }

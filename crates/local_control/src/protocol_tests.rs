@@ -26,11 +26,11 @@ fn strict_params_serialize_without_synthetic_discriminators() {
     let action = Action::with_params(
         ActionKind::TabCreate,
         TabCreateParams {
-            tab_type: Some(TabType::Agent),
+            tab_type: Some(TabType::Default),
         },
     )
     .expect("tab.create params serialize");
-    assert_eq!(action.params, serde_json::json!({ "tab_type": "agent" }));
+    assert_eq!(action.params, serde_json::json!({ "tab_type": "default" }));
     assert!(action.params.get("type").is_none());
     assert!(action.params.get("shell").is_none());
 

@@ -21,7 +21,7 @@ use crate::default_terminal::DefaultTerminal;
 use crate::features::{FeatureFlag, runtime_flags_menu_items};
 use crate::root_view::OpenLaunchConfigArg;
 use crate::server::telemetry::LaunchConfigUiLocation;
-use crate::settings::{AISettings, BlockVisibilitySettings, DebugSettings, SelectionSettings};
+use crate::settings::{BlockVisibilitySettings, DebugSettings, SelectionSettings};
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
 use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::settings::{SpacingMode, TerminalSettings};
@@ -795,8 +795,7 @@ fn feedback_menu_item() -> MenuItem {
     MenuItem::Custom(CustomMenuItem::new(
         "Send Feedback...",
         move |ctx| {
-            // Route through the root-view action so workspace windows can open the
-            // guided AI flow, while non-workspace windows still fall back to the
+            // Routed through the root view so windows without a workspace fall back to the
             // browser-based feedback form.
             ctx.dispatch_global_action("root_view:send_feedback", &());
         },
@@ -856,9 +855,6 @@ fn make_launch_config_menu_items(ctx: &mut AppContext) -> Vec<MenuItem> {
 }
 
 fn make_new_elements_menu_items(ctx: &AppContext) -> Vec<MenuItem> {
-    // Dynamically assign the workspace:new_tab keystroke (cmd-t) to whichever item
-    // matches the user's "Default mode for new sessions" setting. The non-default item
-    // shows its dedicated keystroke instead.
     let mut new_elements_menu = vec![
         MenuItem::Custom(CustomMenuItem::new(
             "New Window",
@@ -891,28 +887,6 @@ fn make_new_elements_menu_items(ctx: &AppContext) -> Vec<MenuItem> {
                 changes
             },
             Some(Keystroke::parse("cmd-t").expect("Valid keystroke")),
-        )),
-        MenuItem::Custom(CustomMenuItem::new(
-            "New Agent Tab",
-            open_new_agent_tab_or_window,
-            move |_props: &MenuItemProperties, ctx: &mut AppContext| {
-                let mut changes = MenuItemPropertyChanges::default();
-                let is_any_ai_enabled = AISettings::handle(ctx)
-                    .read(ctx, |ai_settings, ctx| ai_settings.is_any_ai_enabled(ctx));
-                if !is_any_ai_enabled {
-                    changes.disabled = Some(true);
-                    return changes;
-                }
-                let trigger = Trigger::Custom(CustomAction::NewAgentTab.into());
-                let binding = ctx
-                    .get_key_bindings()
-                    .find(|b| b.trigger == &trigger || b.original_trigger == Some(&trigger));
-                if let Some(binding) = binding {
-                    changes.keystroke = Some(bindings::trigger_to_keystroke(binding.trigger));
-                }
-                changes
-            },
-            None,
         )),
         non_updateable_custom_item(CustomAction::NewFile, ctx),
     ];
@@ -962,15 +936,6 @@ fn custom_action_dispatcher(action: CustomAction) -> impl Fn(&mut AppContext) + 
 fn open_new_default_tab_or_window(ctx: &mut AppContext) {
     match WindowManager::handle(ctx).as_ref(ctx).active_window() {
         Some(wid) => ctx.dispatch_custom_action(CustomAction::NewTab, wid),
-        _ => open_new_window(ctx),
-    }
-}
-
-/// Dispatch events to open an agent tab in the active window
-/// or make a new window if there is no active window.
-fn open_new_agent_tab_or_window(ctx: &mut AppContext) {
-    match WindowManager::handle(ctx).as_ref(ctx).active_window() {
-        Some(wid) => ctx.dispatch_custom_action(CustomAction::NewAgentTab, wid),
         _ => open_new_window(ctx),
     }
 }

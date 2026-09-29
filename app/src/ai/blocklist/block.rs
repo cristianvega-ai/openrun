@@ -2666,13 +2666,7 @@ impl AIBlock {
                 CodeDiffViewEvent::Rejected => {
                     me.cancel_action(&action_id_clone, ctx);
                 }
-                CodeDiffViewEvent::EditModeChanged { enabled } => {
-                    if *enabled {
-                        ctx.emit(AIBlockEvent::OpenCodeWithDiff { view: view.clone() })
-                    } else {
-                        ctx.notify()
-                    }
-                }
+                CodeDiffViewEvent::EditModeChanged { .. } => ctx.notify(),
                 CodeDiffViewEvent::ToggledEditVisibility => {
                     ctx.emit(AIBlockEvent::ToggleCodeDiffVisibility);
                     ctx.notify();
@@ -5129,11 +5123,6 @@ pub enum AIBlockEvent {
         is_visible: bool,
     },
     ToggleCodeDiffVisibility,
-
-    /// Open a Warp Text instance with the requested code diff.
-    OpenCodeWithDiff {
-        view: ViewHandle<CodeDiffView>,
-    },
 
     #[cfg(feature = "local_fs")]
     OpenDetectedFilePath {

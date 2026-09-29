@@ -73,34 +73,12 @@ fn root_view_new_uses_local_onboarding_state() {
 }
 
 #[test]
-fn onboarding_slides_skip_content_deep_link_terminal() {
+fn onboarding_slides_wrap_terminal_workspace() {
     App::test((), |mut app| async move {
         crate::workspace::view::tests::initialize_app(&mut app);
-        let deep_link_workspace =
-            crate::workspace::view::tests::mock_workspace_opened_from_content_deep_link(&mut app);
         let plain_workspace = crate::workspace::view::tests::mock_workspace(&mut app);
 
         let root_view = new_root_view(&mut app);
-
-        root_view.update(&mut app, |root_view, ctx| {
-            root_view.auth_onboarding_state =
-                AuthOnboardingState::Terminal(deep_link_workspace.clone());
-            root_view
-                .auth_onboarding_state
-                .try_open_onboarding_slides(ctx);
-        });
-        app.read(|ctx| {
-            let AuthOnboardingState::Terminal(workspace) =
-                &root_view.as_ref(ctx).auth_onboarding_state
-            else {
-                panic!("a content deep-link workspace must not be wrapped in onboarding");
-            };
-            assert_eq!(
-                workspace.id(),
-                deep_link_workspace.id(),
-                "a content deep-link workspace must not be replaced by onboarding"
-            );
-        });
 
         root_view.update(&mut app, |root_view, ctx| {
             root_view.auth_onboarding_state =
@@ -110,13 +88,10 @@ fn onboarding_slides_skip_content_deep_link_terminal() {
                 .try_open_onboarding_slides(ctx);
         });
         app.read(|ctx| {
-            assert!(
-                matches!(
-                    root_view.as_ref(ctx).auth_onboarding_state,
-                    AuthOnboardingState::Onboarding { .. }
-                ),
-                "a workspace opened with no content deep link should still get onboarding"
-            );
+            assert!(matches!(
+                root_view.as_ref(ctx).auth_onboarding_state,
+                AuthOnboardingState::Onboarding { .. }
+            ));
         });
     });
 }

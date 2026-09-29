@@ -263,7 +263,6 @@ pub(crate) fn materialize_default_worktree_config(
     template_toml: &str,
     config_name: &str,
     repo_path: &str,
-    pane_type: &str,
 ) -> Result<(String, TabConfig), String> {
     let worktree_path = crate::tab_configs::tab_config::generated_worktree_path_string(
         Path::new(repo_path),
@@ -279,12 +278,13 @@ pub(crate) fn materialize_default_worktree_config(
         );
     }
 
-    replace_default_worktree_placeholders(&mut toml_value, repo_path, pane_type, &worktree_path);
+    replace_default_worktree_placeholders(&mut toml_value, repo_path, &worktree_path);
 
     if let Some(doc) = toml_value.as_table_mut()
         && let Some(params) = doc.get_mut("params").and_then(toml::Value::as_table_mut)
     {
         params.remove("repo");
+        // Templates written by earlier builds declare the pane type as a parameter.
         params.remove("pane_type");
         if params.is_empty() {
             doc.remove("params");
@@ -303,7 +303,6 @@ pub(crate) fn materialize_default_worktree_config(
 fn replace_default_worktree_placeholders(
     value: &mut toml::Value,
     repo_path: &str,
-    pane_type: &str,
     worktree_path: &str,
 ) {
     match value {
@@ -314,17 +313,17 @@ fn replace_default_worktree_placeholders(
                     worktree_path,
                 )
                 .replace("{{repo}}", repo_path)
-                .replace("{{pane_type}}", pane_type)
+                .replace("{{pane_type}}", "terminal")
                 .replace("{{worktree_path_prefix}}", "");
         }
         toml::Value::Array(array) => {
             for value in array {
-                replace_default_worktree_placeholders(value, repo_path, pane_type, worktree_path);
+                replace_default_worktree_placeholders(value, repo_path, worktree_path);
             }
         }
         toml::Value::Table(table) => {
             for (_, value) in table.iter_mut() {
-                replace_default_worktree_placeholders(value, repo_path, pane_type, worktree_path);
+                replace_default_worktree_placeholders(value, repo_path, worktree_path);
             }
         }
         toml::Value::Boolean(_)

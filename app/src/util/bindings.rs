@@ -105,7 +105,6 @@ pub enum CustomAction {
     ToggleProjectExplorer,
     OpenRepository,
     NewTerminalTab,
-    NewAgentTab,
     GoToLine,
     ToggleGlobalSearch,
 }
@@ -411,8 +410,7 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         | CustomAction::HistorySearch
         | CustomAction::DisableSyncTerminalInputs
         | CustomAction::ToggleSyncAllTerminalInputsInAllTabs
-        | CustomAction::OpenTeamSettings
-        | CustomAction::NewAgentTab => None,
+        | CustomAction::OpenTeamSettings => None,
     }
 }
 

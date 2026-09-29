@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::{CommandTemplate, LaunchConfig, PaneMode, PaneTemplateType, TabTemplate};
+use super::{CommandTemplate, LaunchConfig, PaneTemplateType, TabTemplate};
 use crate::app_state::{
     AppState, BranchSnapshot, LeafContents, LeafSnapshot, NotebookPaneSnapshot, PaneFlex,
     PaneNodeSnapshot, SplitDirection, TabGroupSnapshot, TabSnapshot, TerminalPaneSnapshot,
@@ -110,7 +110,6 @@ fn test_config_from_snapshot_flattens_single_pane() {
             is_focused: Some(true),
             cwd: PathBuf::from("/some/dir"),
             commands: vec![],
-            pane_mode: PaneMode::Terminal,
             shell: None,
         },
     )
@@ -182,14 +181,12 @@ fn test_config_from_snapshot_filters_panes() {
                     is_focused: Some(true),
                     cwd: PathBuf::from("/path/to/dir"),
                     commands: vec![],
-                    pane_mode: PaneMode::Terminal,
                     shell: None,
                 },
                 PaneTemplateType::PaneTemplate {
                     is_focused: Some(false),
                     cwd: PathBuf::from("/some/dir"),
                     commands: vec![],
-                    pane_mode: PaneMode::Terminal,
                     shell: None,
                 },
             ]
@@ -244,10 +241,36 @@ windows:
                 exec: "echo hello".to_string()
             }],
             is_focused: None,
-            pane_mode: PaneMode::Terminal,
             shell: None,
         }
     );
+}
+
+#[test]
+fn test_retired_pane_mode_field_is_ignored() {
+    for pane_mode in ["terminal", "agent"] {
+        let config: LaunchConfig = serde_yaml::from_str(&format!(
+            r#"
+name: Retired Pane Mode
+windows:
+  - tabs:
+      - layout:
+          cwd: /tmp
+          pane_mode: {pane_mode}
+"#
+        ))
+        .expect("launch config with a retired pane_mode should parse");
+
+        assert_eq!(
+            config.windows[0].tabs[0].layout,
+            PaneTemplateType::PaneTemplate {
+                cwd: PathBuf::from("/tmp"),
+                commands: vec![],
+                is_focused: None,
+                shell: None,
+            }
+        );
+    }
 }
 
 #[test]
@@ -281,7 +304,6 @@ windows:
                     cwd: PathBuf::from("/tmp/left"),
                     commands: vec![],
                     is_focused: Some(false),
-                    pane_mode: PaneMode::Terminal,
                     shell: None,
                 },
                 PaneTemplateType::PaneTemplate {
@@ -290,7 +312,6 @@ windows:
                         exec: "echo focused".to_string()
                     }],
                     is_focused: Some(true),
-                    pane_mode: PaneMode::Terminal,
                     shell: None,
                 },
             ],
@@ -329,14 +350,12 @@ windows:
                         exec: "echo first".to_string()
                     }],
                     is_focused: None,
-                    pane_mode: PaneMode::Terminal,
                     shell: None,
                 },
                 PaneTemplateType::PaneTemplate {
                     cwd: PathBuf::from("/tmp/right"),
                     commands: vec![],
                     is_focused: None,
-                    pane_mode: PaneMode::Terminal,
                     shell: None,
                 },
             ],
@@ -668,7 +687,6 @@ fn tab_in_group(group: Option<usize>) -> TabTemplate {
             cwd: PathBuf::from("/tmp"),
             commands: vec![],
             is_focused: None,
-            pane_mode: PaneMode::Terminal,
             shell: None,
         },
         commands: vec![],

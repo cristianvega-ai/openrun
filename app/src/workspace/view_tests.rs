@@ -177,22 +177,6 @@ pub(crate) fn initialize_app_with_team_client(app: &mut App, team_client: Arc<dy
     app.update(workspace::init);
 }
 
-pub(crate) fn mock_workspace_opened_from_content_deep_link(app: &mut App) -> ViewHandle<Workspace> {
-    let global_resource_handles = GlobalResourceHandles::mock(app);
-    let (_, workspace) = app.add_window(WindowStyle::NotStealFocus, |ctx| {
-        Workspace::new(
-            global_resource_handles,
-            NewWorkspaceSource::FromCloudConversationId {
-                conversation_id: crate::ai::agent::api::ServerConversationToken::new(
-                    "test-server-token".to_string(),
-                ),
-            },
-            ctx,
-        )
-    });
-    workspace
-}
-
 pub(crate) fn mock_workspace(app: &mut App) -> ViewHandle<Workspace> {
     let global_resource_handles = GlobalResourceHandles::mock(app);
     let active_window_id = app.read(|ctx| ctx.windows().active_window());
