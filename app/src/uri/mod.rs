@@ -14,7 +14,6 @@ use self::docker::open_docker_container;
 use crate::features::FeatureFlag;
 use crate::launch_configs::launch_config::LaunchConfig;
 use crate::root_view::{OpenLaunchConfigArg, open_new_window_get_handles};
-use crate::server::telemetry::LaunchConfigUiLocation;
 use crate::settings_view::{
     OpenTeamsSettingsModalArgs, SettingsSection, settings_widget_deeplink_target,
 };
@@ -126,7 +125,6 @@ impl UriHost {
                             "root_view:open_launch_config",
                             &OpenLaunchConfigArg {
                                 launch_config: config.clone(),
-                                ui_location: LaunchConfigUiLocation::Uri,
                                 open_in_active_window: false,
                             },
                         )

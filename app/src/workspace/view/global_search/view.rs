@@ -6,11 +6,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_channel::Sender;
-use instant::Instant;
 use pathfinder_geometry::vector::vec2f;
 use string_offset::{ByteOffset, CharCounter};
 use warp_core::r#async::debounce;
-use warp_core::send_telemetry_from_ctx;
 use warp_core::ui::Icon;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::theme::color::internal_colors;
@@ -37,7 +35,6 @@ use warpui::{
     ViewHandle, WeakViewHandle,
 };
 
-use crate::TelemetryEvent;
 use crate::code::icon_from_file_path;
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
 use crate::editor::{
@@ -319,8 +316,6 @@ pub struct GlobalSearchView {
     is_search_in_progress: bool,
     capped_matches: bool,
     last_error: Option<String>,
-    /// When the current search started, for completion telemetry.
-    search_started_at: Option<Instant>,
     scroll_state: ScrollStateHandle,
     uniform_list_state: UniformListState,
     handle: WeakViewHandle<GlobalSearchView>,
@@ -696,7 +691,6 @@ impl GlobalSearchView {
             is_search_in_progress: false,
             capped_matches: false,
             last_error: None,
-            search_started_at: None,
             scroll_state: ScrollStateHandle::default(),
             uniform_list_state: UniformListState::new(),
             handle,
@@ -809,7 +803,6 @@ impl GlobalSearchView {
     fn cancel_search(&mut self, ctx: &mut ViewContext<Self>) {
         self.is_search_in_progress = false;
         self.current_search_id = None;
-        self.search_started_at = None;
 
         self.find_model.update(ctx, |model, model_ctx| {
             model.abort_search(model_ctx);
@@ -918,10 +911,7 @@ impl GlobalSearchView {
     fn handle_find_model_event(&mut self, event: &GlobalSearchEvent, ctx: &mut ViewContext<Self>) {
         match event {
             GlobalSearchEvent::Started { search_id } => {
-                send_telemetry_from_ctx!(TelemetryEvent::GlobalSearchQueryStarted, ctx);
-
                 self.current_search_id = Some(*search_id);
-                self.search_started_at = Some(Instant::now());
 
                 self.is_search_in_progress = true;
                 self.reset_search_state(false);
@@ -960,16 +950,6 @@ impl GlobalSearchView {
                 self.is_search_in_progress = false;
                 self.total_match_count = *total_match_count;
 
-                if let Some(started_at) = self.search_started_at.take() {
-                    send_telemetry_from_ctx!(
-                        TelemetryEvent::GlobalSearchQueryCompleted {
-                            duration_ms: started_at.elapsed().as_millis() as u64,
-                            total_match_count: *total_match_count,
-                            capped: self.capped_matches,
-                        },
-                        ctx
-                    );
-                }
                 ctx.notify();
             }
             GlobalSearchEvent::Failed { search_id, error } => {
@@ -978,7 +958,6 @@ impl GlobalSearchView {
                 }
 
                 self.is_search_in_progress = false;
-                self.search_started_at = None;
                 self.reset_search_state(false);
                 self.last_error = Some(error.clone());
                 ctx.notify();

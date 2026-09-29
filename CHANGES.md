@@ -99,6 +99,8 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Warp help, docs and feedback links](#warp-help-docs-and-feedback-links) — removed the Help menu, every warp.dev docs, Slack, privacy, feedback and issue link from the UI, and the resource-center main page; the resource center is now the keyboard-shortcuts panel
 - [Cloud-object infrastructure: model, sync queue, update manager and listener](#cloud-object-infrastructure-model-sync-queue-update-manager-and-listener) — deleted `CloudModel`, `CloudViewModel`, `ObjectActions`, `UpdateManager`, the real-time listener, the sync queue, the object API client and the object `ModelEvent`s; the persisted cloud-object rows are no longer read or written; the three `cloud_object_*` crates are gone
 - [Telemetry call sites: terminal, editor and code layer](#telemetry-call-sites-terminal-editor-and-code-layer) — deleted every telemetry emission in terminal, pane group, editor, code, code review, search, URI, prompt, persistence, undo-close, view components, system, quit warning and repo metadata, with the parameters, fields and helpers that only fed them
+- [Telemetry call sites: workspace, settings and the rest](#telemetry-call-sites-workspace-settings-and-the-rest) — deleted the `send_telemetry_*!` calls, the telemetry-only enums, helpers, fields and parameters in `workspace/`, `settings_view/`, `settings/`, `themes/`, `resource_center/`, `workflows/`, `notebooks/`, `launch_configs/`, `tab_configs/`, `lib.rs` and `root_view.rs`
+
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -2618,3 +2620,27 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 
 **Notes:**
 - Left for TEL-3 or TEL-4: `telemetry_value` (`AvailableShell`) and `telemetry_source_name` (`CodeSource`), still called from `workspace/` and `events.rs`; the `telemetry_payload` method of `DataSourceRunError` in `warp_search_core`; the event-source enums in `events.rs` (`PaletteSource`, `FileTreeSource`, `LaunchConfigUiLocation`, ...) still used as payloads in `workspace/` and `root_view.rs`.
+
+## Telemetry call sites: workspace, settings and the rest
+**Why:** TEL-1 turned the `send_telemetry_*!` macros into no-ops, so the events were already discarded. The call sites still built event payloads (reading settings, cloning values, tracking "was this the first change") and kept the per-feature telemetry enums alive. This removes them in the workspace, settings, themes, notebooks and startup code so that the framework (TEL-4) can be deleted without touching these modules again.
+
+**Removed:**
+- `workspace/view/vertical_tabs/telemetry.rs`, `tab_configs/telemetry.rs` and `notebooks/telemetry.rs` — the vertical-tabs, tab-config and notebook telemetry enums (`VerticalTabsTelemetryEvent`, `TabConfigsTelemetryEvent`, `NotebookTelemetryAction` and their helper types) with their `register_telemetry_event!` registrations.
+- Every `send_telemetry_from_ctx!` and `send_telemetry_from_app_ctx!` call in `workspace/`, `settings_view/`, `settings/`, `themes/`, `resource_center/`, `workflows/`, `notebooks/`, `launch_configs/`, `lib.rs` and `root_view.rs` (131 call sites) and the `send_telemetry_*` and `AgentModeEntrypoint*` re-exports of `lib.rs`.
+- `FeaturesPageAction::telemetry_event` (about 450 lines of setting-to-event mapping) and its `to_string` helper, `NewSessionShellAction::telemetry_event`, and the `TryFrom<&TeamsPageAction> for TelemetryEvent` conversion.
+- Telemetry-only helpers and state: `SettingsImportView::send_completed_import_telemetry_event`, `ImportedConfigModel::maybe_send_multiple_hotkeys_telemetry_event`, `ParsedTerminalSetting`, `ThemeChooser::record_open_theme`, `FileNotebookView::{send_telemetry_action, open_telemetry_metadata}`, `GlobalSearchView::search_started_at`, the "should track" and moved-tab bookkeeping in `Workspace`, and locals that held old and new setting values for events.
+- Telemetry-only parameters and fields: `should_set_defaults` of the opacity and blur setters, `force_open` of the left panel's `handle_action_with_force_open` (folded into `handle_action`), `entrypoint` and `cli_agent` of `RightPanelUpdateParams` and `Workspace::open_right_panel`, the `VerticalTabsChipEntrypoint` arguments of the vertical-tabs badge renderers, `WorkspaceAction::AddTabWithShell::source`, the field of `WorkspaceAction::OpenPromptEditor` (now a unit variant) and `OpenLaunchConfigArg::ui_location`, with `integration_testing::type_getters` and its use in the launch-config integration tests.
+- Notebook editor events that only fed telemetry: `EditorViewEvent::{OpenedBlockInsertionMenu, OpenedFindBar, CopiedBlock, NavigatedCommands, ChangedSelectionMode}` and `RichTextEditorModelEvent::SwitchedSelectionMode`. `NotebooksEditorModel::{copy, cut, select_at, clear_command_selections}` no longer return the block info or selection flag, and `RichTextEditorView::{copy, cut}` and `EditorViewAction::CopyTextToClipboard` no longer take an entrypoint or block info.
+- In `server/telemetry/events.rs`, only the variants whose payload types were deleted here: `NotebookAction` (with `NotebookActionEvent`) and `CompletedSettingsImport`.
+
+**Modified:**
+- Match arms that only reported an event and wrapped a `Result` (`ToggleFocusPaneOnHover`, dim inactive panes, thin strokes, the CLI agent toolbar toggle, the external editor toggles) now use `report_if_error!` or `if let Err`, with the same logging as before.
+- `search/command_palette/new_session/new_session_option.rs`, `search/command_palette/view.rs`, `uri/mod.rs` and `app_menus.rs` drop the removed action and argument fields at their construction sites; no other behavior changed.
+
+**User-visible impact:** none. The events were discarded already.
+
+**Notes:**
+- Side effects are unchanged: every setting write, dispatch, toast and log stays; only the payload construction and the send are gone. The `report_error!` for a missing terminal config in the settings-import completion helper is gone with the helper, which existed only to assemble the event.
+- Left for TEL-4 (no caller outside `server/telemetry/events.rs` now): `AvailableShell::telemetry_value` (`terminal/available_shells.rs`); `PrintTelemetryEvents` and the `TelemetryEvent` re-export in `lib.rs`; and the event variants and types with no caller (including `WorkflowSelectionSource::Notebook`, `AnonymousUserHitCloudObjectLimit`, `AddTabWithShellSource`, `LaunchConfigUiLocation`, `TabRenameEvent`, `TabTelemetryAction` and the prompt editor `OpenSource`). `workflow_selection_source` is still passed through `WorkspaceAction::RunWorkflow`, `pane_group` and `terminal/input.rs` (37 references); it only fed events.
+- `crates/onboarding` still calls `warp_core::send_telemetry_from_ctx!` directly (outside the TEL-2 and TEL-3 directories); TEL-4 removes it with the framework.
+- Left for TEAM-1: `TeamsPageAction::LeaveTeam` is now reported as never constructed.

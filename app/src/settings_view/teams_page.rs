@@ -52,9 +52,7 @@ use crate::editor::{EditorView, Event as EditorEvent, SingleLineEditorOptions, T
 use crate::menu::{self, Menu, MenuItem, MenuItemFields};
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::network::NetworkStatus;
-use crate::send_telemetry_from_ctx;
 use crate::server::ids::ServerId;
-use crate::server::telemetry::TelemetryEvent;
 use crate::themes::theme::Blend;
 use crate::themes::{self};
 use crate::ui_components::buttons::icon_button;
@@ -263,25 +261,6 @@ impl TeamsPageAction {
                 | ShowWorkspaceTeams { .. }
                 | JoinWorkspaceFromDiscovery { .. }
         )
-    }
-}
-
-impl TryFrom<&TeamsPageAction> for TelemetryEvent {
-    type Error = anyhow::Error;
-    fn try_from(action: &TeamsPageAction) -> Result<Self, Self::Error> {
-        match action {
-            TeamsPageAction::CopyLink(_) => Ok(TelemetryEvent::TeamLinkCopied),
-            TeamsPageAction::ChangeInviteViewOption(option) => {
-                Ok(TelemetryEvent::ChangedInviteViewOption(*option))
-            }
-            TeamsPageAction::SendEmailInvites { .. } => Ok(TelemetryEvent::SendEmailInvites),
-            // Some Team events are logged from the server so we do not want to log
-            // them from the client as well. For more details see:
-            // https://docs.google.com/document/d/1va3_qfkHtDFKZqYaMgNUn5nwU4f8NByzyhg1uolHlck/edit
-            _ => Err(anyhow::anyhow!(
-                "We do not log this telemetry event from the client."
-            )),
-        }
     }
 }
 
@@ -730,10 +709,6 @@ impl TypedActionView for TeamsPageView {
                 self.set_team_member_role(*user_uid, *team_uid, *role, ctx);
             }
         };
-
-        if let Ok(event) = TelemetryEvent::try_from(action) {
-            send_telemetry_from_ctx!(event, ctx);
-        }
     }
 }
 

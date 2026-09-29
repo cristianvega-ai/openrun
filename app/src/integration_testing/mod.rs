@@ -27,7 +27,6 @@ pub mod subshell;
 pub mod tab;
 pub mod terminal;
 pub mod themes;
-pub mod type_getters;
 pub mod view_getters;
 pub mod window;
 pub mod workflow;

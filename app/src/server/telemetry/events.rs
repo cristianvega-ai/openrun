@@ -21,14 +21,12 @@ use crate::code::editor_management::CodeSource;
 use crate::features::FeatureFlag;
 use crate::launch_configs::save_modal::SaveState;
 use crate::notebooks::NotebookLocation;
-use crate::notebooks::telemetry::NotebookTelemetryAction;
 use crate::palette::PaletteMode;
 use crate::pane_group::PaneDragDropLocation;
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::search::QueryFilter;
 use crate::search::command_search::searcher::CommandSearchItemAction;
 use crate::server::ids::ServerId;
-use crate::settings::import::config::ParsedTerminalSetting;
 use crate::settings::import::model::TerminalType;
 use crate::settings_view::TeamsInviteOption;
 use crate::tab::TabTelemetryAction;
@@ -131,14 +129,6 @@ impl NotebookTelemetryMetadata {
         self.markdown_table_count = Some(markdown_table_count);
         self
     }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NotebookActionEvent {
-    #[serde(flatten)]
-    pub action: NotebookTelemetryAction,
-    #[serde(flatten)]
-    pub metadata: NotebookTelemetryMetadata,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -967,7 +957,6 @@ pub enum TelemetryEvent {
         entrypoint: AICommandSearchEntrypoint,
     },
     OpenNotebook(NotebookTelemetryMetadata),
-    NotebookAction(NotebookActionEvent),
     OpenedAltScreenFind,
     UserInitiatedClose {
         initiated_on: CloseTarget,
@@ -1422,11 +1411,6 @@ pub enum TelemetryEvent {
         triggering_footprint_bytes: u64,
         /// The OS footprint, not RSS, at confirmation time.
         confirmation_footprint_bytes: u64,
-    },
-    /// The user imported settings from another terminal.
-    CompletedSettingsImport {
-        terminal_type: TerminalType,
-        imported_settings: Vec<ParsedTerminalSetting>,
     },
     /// The user focused a terminal option to import settings from.
     SettingsImportConfigFocused(TerminalType),
@@ -1980,7 +1964,6 @@ impl TelemetryEvent {
                 Some(json!({ "entrypoint": entrypoint }))
             }
             TelemetryEvent::OpenNotebook(metadata) => Some(json!(metadata)),
-            TelemetryEvent::NotebookAction(event) => Some(json!(event)),
             TelemetryEvent::UserInitiatedClose { initiated_on } => {
                 Some(json!({ "initiated_on": initiated_on }))
             }
@@ -2309,12 +2292,6 @@ impl TelemetryEvent {
                 "triggering_footprint_bytes": triggering_footprint_bytes,
                 "confirmation_footprint_bytes": confirmation_footprint_bytes,
             })),
-            TelemetryEvent::CompletedSettingsImport {
-                terminal_type,
-                imported_settings,
-            } => Some(
-                json!({ "terminal_type": terminal_type, "imported_settings": imported_settings}),
-            ),
             TelemetryEvent::SettingsImportConfigFocused(terminal_type_and_profile) => {
                 Some(json!({"terminal_and_type_profile": terminal_type_and_profile}))
             }
@@ -2905,7 +2882,6 @@ impl TelemetryEvent {
             | TelemetryEvent::CommandSearchResultAccepted { .. }
             | TelemetryEvent::AICommandSearchOpened { .. }
             | TelemetryEvent::OpenNotebook(_)
-            | TelemetryEvent::NotebookAction(_)
             | TelemetryEvent::OpenedAltScreenFind
             | TelemetryEvent::UserInitiatedClose { .. }
             | TelemetryEvent::QuitModalShown { .. }
@@ -3018,7 +2994,6 @@ impl TelemetryEvent {
             | TelemetryEvent::MemoryUsageStats { .. }
             | TelemetryEvent::MemoryUsageHigh { .. }
             | TelemetryEvent::TransientMemorySpike { .. }
-            | TelemetryEvent::CompletedSettingsImport { .. }
             | TelemetryEvent::SettingsImportConfigFocused(_)
             | TelemetryEvent::SettingsImportResetButtonClicked
             | TelemetryEvent::ITermMultipleHotkeys
@@ -3184,7 +3159,7 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             | Self::AnonymousUserHitCloudObjectLimit => EnablementState::Always,
 
             Self::AgentModeChangedInputType => EnablementState::Always,
-            Self::OpenNotebook | Self::NotebookAction => EnablementState::Always,
+            Self::OpenNotebook => EnablementState::Always,
             Self::AgentTipShown | Self::AgentTipClicked | Self::ToggleShowAgentTips => {
                 EnablementState::Flag(FeatureFlag::AgentTips)
             }
@@ -3411,8 +3386,7 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::BlockCompletedOnDogfoodOnly => EnablementState::ChannelSpecific {
                 channels: vec![Channel::Local, Channel::Dev],
             },
-            Self::CompletedSettingsImport
-            | Self::SettingsImportConfigFocused
+            Self::SettingsImportConfigFocused
             | Self::SettingsImportResetButtonClicked
             | Self::ITermMultipleHotkeys => EnablementState::Always,
             Self::ToggleIntelligentAutosuggestionsSetting => EnablementState::Always,
@@ -3662,7 +3636,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::CommandSearchResultAccepted => "Command Search Result Accepted",
             Self::AICommandSearchOpened => "AI Command Search opened",
             Self::OpenNotebook => "Notebook Opened",
-            Self::NotebookAction => "Notebook Action",
             Self::OpenedAltScreenFind => "Opened alt screen find bar",
             Self::UserInitiatedClose => "User Initiated Closing Something",
             Self::QuitModalShown => "Quit Modal Shown",
@@ -3796,7 +3769,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
                 "Toggle Intelligent Autosuggestions Setting"
             }
             Self::ToggleVoiceInputSetting => "Toggle Voice Input Setting",
-            Self::CompletedSettingsImport => "Completed Settings Import",
             Self::SettingsImportConfigFocused => "Focused Config in Settings Import",
             Self::SettingsImportResetButtonClicked => {
                 "Clicked Reset to Defaults Button in Settings Import"
@@ -4116,9 +4088,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
                 "Opened the modal for AI Command Search, where you can use natural language to search for commands"
             }
             Self::OpenNotebook => "Opened a notebook",
-            Self::NotebookAction => {
-                "Took an action on a notebook: edit, delete, modified font size, etc."
-            }
             Self::OpenedAltScreenFind => "Opened the Find bar in the Alt Screen",
             Self::UserInitiatedClose => "Attempted to either quit the app or close a window",
             Self::QuitModalShown => {
@@ -4394,9 +4363,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
                 "User submitted a repository URL from the clone repo view"
             }
             Self::GetStartedSkipToTerminal => "User clicked skip to terminal from get started view",
-            Self::CompletedSettingsImport => {
-                "Imported a terminal's settings via the settings import onboarding block"
-            }
             Self::SettingsImportConfigFocused => {
                 "Selected a terminal in the settings import onboarding block"
             }

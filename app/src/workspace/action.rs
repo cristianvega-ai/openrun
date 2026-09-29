@@ -17,10 +17,9 @@ use super::tab_settings::{
 };
 use super::view::WorkspaceBanner;
 use crate::palette::PaletteMode;
-use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::search;
 use crate::server::ids::ServerId;
-use crate::server::telemetry::{AddTabWithShellSource, PaletteSource};
+use crate::server::telemetry::PaletteSource;
 use crate::settings_view::{SettingsAction as SettingsTabAction, SettingsSection};
 use crate::tab::{NewSessionMenuItem, SelectedTabColor};
 use crate::tab_configs::TabConfig;
@@ -215,7 +214,6 @@ pub enum WorkspaceAction {
     },
     AddTabWithShell {
         shell: AvailableShell,
-        source: AddTabWithShellSource,
     },
     OpenNewSessionMenu {
         anchor: NewSessionMenuAnchor,
@@ -343,9 +341,7 @@ pub enum WorkspaceAction {
     ToggleSyncTerminalInputsInTab,
     /// An action to force terminal input syncing off
     DisableTerminalInputSync,
-    OpenPromptEditor {
-        open_source: PromptEditorOpenSource,
-    },
+    OpenPromptEditor,
     OpenCLIAgentToolbarEditor,
     OpenHeaderToolbarEditor,
     ShowHeaderToolbarContextMenu {
@@ -665,7 +661,7 @@ impl WorkspaceAction {
             | ToggleSyncAllTerminalInputsInAllTabs
             | ToggleSyncTerminalInputsInTab
             | DisableTerminalInputSync
-            | OpenPromptEditor { .. }
+            | OpenPromptEditor
             | OpenCLIAgentToolbarEditor
             | OpenHeaderToolbarEditor
             | ShowHeaderToolbarContextMenu { .. }
