@@ -143,7 +143,6 @@ pub(crate) struct Props<'a> {
     pub(super) has_accepted_edits: bool,
     pub(super) finish_reason: Option<&'a FinishReason>,
     pub(super) terminal_view_id: EntityId,
-    pub(super) is_conversation_transcript_viewer: bool,
     pub(super) aws_bedrock_credentials_error_view:
         Option<&'a ViewHandle<AwsBedrockCredentialsErrorView>>,
     pub(super) imported_comments: &'a HashMap<AIAgentActionId, ImportedCommentGroup>,
@@ -2472,8 +2471,7 @@ fn render_response_footer(props: Props, app: &AppContext) -> Option<Box<dyn Elem
     let ui_builder = appearance.ui_builder().clone();
 
     // Thumbs up/down buttons.
-    // (we hide these when you're in view-only mode).
-    if !is_passive_code_diff && !props.is_conversation_transcript_viewer {
+    if !is_passive_code_diff {
         let thumbs_up_button = icon_button(
             appearance,
             Icon::ThumbsUp,
@@ -2566,59 +2564,6 @@ fn render_response_footer(props: Props, app: &AppContext) -> Option<Box<dyn Elem
                 .with_margin_right(2.)
                 .finish(),
         );
-    }
-
-    if !FeatureFlag::AgentView.is_enabled() {
-        let ui_builder = appearance.ui_builder().clone();
-        let continue_button = icon_button(
-            appearance,
-            Icon::CornerRight,
-            false,
-            props.state_handles.continue_conversation_handle.clone(),
-        )
-        .with_tooltip(move || {
-            ui_builder
-                .tool_tip("Continue conversation".to_string())
-                .build()
-                .finish()
-        })
-        .with_style(style_override)
-        .with_hovered_styles(style_override_with_background)
-        .with_active_styles(style_override_with_background)
-        .build()
-        .on_click(|ctx, _, _| ctx.dispatch_typed_action(AIBlockAction::ContinueConversation))
-        .finish();
-
-        flex.add_child(continue_button);
-    }
-
-    #[cfg(not(target_family = "wasm"))]
-    if !props.is_conversation_transcript_viewer {
-        let fork_button_tooltip = "Fork conversation";
-
-        let ui_builder = appearance.ui_builder().clone();
-        let fork_button = icon_button(
-            appearance,
-            Icon::ArrowSplit,
-            false,
-            props.state_handles.fork_conversation_handle.clone(),
-        )
-        .with_tooltip(move || {
-            ui_builder
-                .tool_tip(fork_button_tooltip.to_string())
-                .build()
-                .finish()
-        })
-        .with_style(style_override)
-        .with_hovered_styles(style_override_with_background)
-        .with_active_styles(style_override_with_background)
-        .build()
-        .on_click(|ctx, _, _| {
-            ctx.dispatch_typed_action(AIBlockAction::ForkConversation);
-        })
-        .finish();
-
-        flex.add_child(fork_button);
     }
 
     // Review changes button.

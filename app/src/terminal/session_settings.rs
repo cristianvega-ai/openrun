@@ -11,7 +11,7 @@ use warp_core::settings::macros::define_settings_group;
 use warp_core::settings::{RespectUserSyncSetting, SupportedPlatforms, SyncToCloud};
 pub use working_directory_config::*;
 
-use crate::ai::blocklist::agent_view::toolbar_item::AgentToolbarItemKind;
+use crate::chip_configurator::ConfigurableToolbarItem;
 use crate::context_chips::ContextChipKind;
 use crate::context_chips::prompt::PromptSelection;
 use crate::terminal::view::cli_agent_footer::toolbar_item::{
@@ -136,41 +136,10 @@ impl GithubPrPromptChipDefaultValidation {
     }
 }
 
-/// Drops items that are no longer offered from a saved toolbar layout.
-fn without_retired_items(items: &[AgentToolbarItemKind]) -> Vec<AgentToolbarItemKind> {
-    items
-        .iter()
-        .filter(|item| {
-            !matches!(
-                item,
-                AgentToolbarItemKind::ShareSession | AgentToolbarItemKind::VoiceInput
-            )
-        })
-        .cloned()
-        .collect()
-}
-
-/// A toolbar item that may be a context chip.
-pub trait ToolbarItem: Clone {
-    fn context_chip_kind(&self) -> Option<&ContextChipKind>;
-}
-
-impl ToolbarItem for AgentToolbarItemKind {
-    fn context_chip_kind(&self) -> Option<&ContextChipKind> {
-        AgentToolbarItemKind::context_chip_kind(self)
-    }
-}
-
-impl ToolbarItem for CLIAgentToolbarItemKind {
-    fn context_chip_kind(&self) -> Option<&ContextChipKind> {
-        CLIAgentToolbarItemKind::context_chip_kind(self)
-    }
-}
-
 /// Shared behavior for toolbar chip selection types.
 /// Each variant stores either a `Default` (resolved via type-specific defaults) or `Custom` left/right item lists.
 pub trait ToolbarChipSelection {
-    type Item: ToolbarItem;
+    type Item: ConfigurableToolbarItem;
 
     fn default_left_items() -> Vec<Self::Item>;
     fn default_right_items() -> Vec<Self::Item>;
@@ -201,58 +170,6 @@ pub trait ToolbarChipSelection {
         let mut items = self.left_items();
         items.extend(self.right_items());
         items
-    }
-}
-
-#[derive(
-    Clone,
-    Debug,
-    Default,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Eq,
-    schemars::JsonSchema,
-    settings_value::SettingsValue,
-)]
-#[schemars(
-    description = "Agent toolbar layout configuration.",
-    rename_all = "snake_case"
-)]
-pub enum AgentToolbarChipSelection {
-    #[default]
-    #[schemars(description = "Use the default toolbar layout.")]
-    Default,
-    #[schemars(description = "Use a custom arrangement of toolbar items.")]
-    Custom {
-        left: Vec<AgentToolbarItemKind>,
-        right: Vec<AgentToolbarItemKind>,
-    },
-}
-
-impl ToolbarChipSelection for AgentToolbarChipSelection {
-    type Item = AgentToolbarItemKind;
-
-    fn default_left_items() -> Vec<AgentToolbarItemKind> {
-        AgentToolbarItemKind::default_left()
-    }
-
-    fn default_right_items() -> Vec<AgentToolbarItemKind> {
-        AgentToolbarItemKind::default_right()
-    }
-
-    fn left_items(&self) -> Vec<AgentToolbarItemKind> {
-        match self {
-            Self::Default => Self::default_left_items(),
-            Self::Custom { left, .. } => without_retired_items(left),
-        }
-    }
-
-    fn right_items(&self) -> Vec<AgentToolbarItemKind> {
-        match self {
-            Self::Default => Self::default_right_items(),
-            Self::Custom { right, .. } => without_retired_items(right),
-        }
     }
 }
 
@@ -392,16 +309,6 @@ define_settings_group!(SessionSettings, settings: [
         toml_path: "agents.warp_agent.input.show_model_selectors_in_prompt",
         description: "Whether to show AI model selectors in the input prompt.",
     },
-    agent_footer_chip_selection: AgentToolbarChipSelectionSetting {
-        type: AgentToolbarChipSelection,
-        default: AgentToolbarChipSelection::default(),
-        supported_platforms: SupportedPlatforms::ALL,
-        sync_to_cloud: SyncToCloud::Globally(RespectUserSyncSetting::Yes),
-        surface: settings::SettingSurfaces::GUI,
-        private: false,
-        toml_path: "agents.warp_agent.input.agent_toolbar_chip_selection_setting",
-        description: "Controls the layout of context chips in the Agent Mode toolbar.",
-    },
     cli_agent_footer_chip_selection: CLIAgentToolbarChipSelectionSetting {
         type: CLIAgentToolbarChipSelection,
         default: CLIAgentToolbarChipSelection::default(),
@@ -445,3 +352,7 @@ settings::macros::implement_setting_for_enum!(
     max_table_depth: 1,
     description: "Controls the working directory used when opening new sessions.",
 );
+
+#[cfg(test)]
+#[path = "session_settings_tests.rs"]
+mod tests;

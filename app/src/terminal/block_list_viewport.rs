@@ -228,10 +228,6 @@ pub enum ScrollPositionUpdate {
     ScrollToTopOfRichContent {
         index: TotalIndex,
     },
-    AfterEnterAgentView,
-    AfterExitAgentView {
-        saved_position: ScrollPosition,
-    },
 }
 
 /// The direction that blocks flow in the viewport.
@@ -841,7 +837,7 @@ impl<'a> ViewportState<'a> {
             ScrollPositionUpdate::AfterHome => ScrollPosition::FixedAtPosition {
                 scroll_lines: self.scroll_lines_from_scroll_top(Lines::zero()),
             },
-            ScrollPositionUpdate::AfterEnd | ScrollPositionUpdate::AfterEnterAgentView => {
+            ScrollPositionUpdate::AfterEnd => {
                 if matches!(
                     self.input_mode,
                     InputMode::PinnedToBottom | InputMode::Waterfall
@@ -886,7 +882,6 @@ impl<'a> ViewportState<'a> {
                     scroll_lines: self.scroll_lines_from_scroll_top(scroll_top),
                 }
             }
-            ScrollPositionUpdate::AfterExitAgentView { saved_position } => saved_position,
         }
     }
 

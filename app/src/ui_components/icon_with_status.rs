@@ -2,7 +2,7 @@ use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
 use warp_core::ui::icons::Icon as WarpIcon;
 use warp_core::ui::theme::color::internal_colors;
-use warp_core::ui::theme::{ColorScheme, Fill as WarpThemeFill, WarpTheme};
+use warp_core::ui::theme::{Fill as WarpThemeFill, WarpTheme};
 use warpui::elements::{
     ChildAnchor, ConstrainedBox, Container, CornerRadius, Element, OffsetPositioning, ParentAnchor,
     ParentElement, ParentOffsetBounds, Radius, Stack,
@@ -10,7 +10,7 @@ use warpui::elements::{
 
 use crate::terminal::CLIAgent;
 use crate::themes::theme::Fill as ThemeFill;
-use crate::ui_components::agent_status::{AgentStatus, StatusColorStyle};
+use crate::ui_components::agent_status::AgentStatus;
 
 // Sub-component size ratios, expressed as fractions of `total_size`. The brand circle is
 // ~76% wide and the status badge is ~57% wide, with the badge's bottom-right anchored at
@@ -103,9 +103,6 @@ pub(crate) enum IconWithStatusVariant {
     },
     /// A pre-built icon element on an overlay background.
     NeutralElement { icon_element: Box<dyn Element> },
-    /// A Warp agent conversation: monochrome Warp glyph and circle, using a
-    /// foreground/background pair that flips for light and dark themes.
-    OzAgent { status: Option<AgentStatus> },
     /// A CLI agent icon on the agent's brand color background.
     CLIAgent {
         agent: CLIAgent,
@@ -160,23 +157,6 @@ pub(crate) fn render_icon_with_status_with_badge_style(
             internal_colors::fg_overlay_2(theme),
             total_size,
         ),
-        IconWithStatusVariant::OzAgent { status } => {
-            let (circle_background, glyph_color) = warp_agent_circle_colors(theme);
-            let circle = render_circle(
-                WarpIcon::Agent.to_warpui_icon(glyph_color).finish(),
-                circle_background,
-                total_size,
-            );
-            render_with_optional_status_badge(
-                circle,
-                status.as_ref(),
-                total_size,
-                overlay_extra_overhang_ratio,
-                badge_style,
-                theme,
-                status_container_background,
-            )
-        }
         IconWithStatusVariant::CLIAgent { agent, status } => {
             let brand_color = agent
                 .brand_color()
@@ -200,13 +180,6 @@ pub(crate) fn render_icon_with_status_with_badge_style(
                 status_container_background,
             )
         }
-    }
-}
-
-fn warp_agent_circle_colors(theme: &WarpTheme) -> (WarpThemeFill, WarpThemeFill) {
-    match theme.inferred_color_scheme() {
-        ColorScheme::LightOnDark => (WarpThemeFill::black(), WarpThemeFill::white()),
-        ColorScheme::DarkOnLight => (WarpThemeFill::white(), WarpThemeFill::black()),
     }
 }
 
@@ -278,7 +251,7 @@ fn render_with_optional_status_badge(
             .with_height(total_size)
             .finish();
     };
-    let (icon, color) = status.status_icon_and_color(theme, StatusColorStyle::Standard);
+    let (icon, color) = status.status_icon_and_color(theme);
     let badge_icon_diameter = badge_icon_size(total_size, badge_style);
     let pad = badge_padding(total_size, badge_style);
     let badge_icon = ConstrainedBox::new(icon.to_warpui_icon(WarpThemeFill::Solid(color)).finish())
@@ -318,7 +291,3 @@ fn render_with_optional_status_badge(
         .with_height(total_size)
         .finish()
 }
-
-#[cfg(test)]
-#[path = "icon_with_status_tests.rs"]
-mod tests;

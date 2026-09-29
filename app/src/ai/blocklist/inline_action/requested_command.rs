@@ -29,9 +29,6 @@ use crate::ai::agent::{
     AIAgentCitation, AIAgentOutputMessageType, RequestCommandOutputResult, icons,
 };
 use crate::ai::blocklist::action_model::AIActionStatus;
-use crate::ai::blocklist::block::cli_controller::{
-    LongRunningCommandControlState, UserTakeOverReason,
-};
 use crate::ai::blocklist::block::view_impl::output::action_icon;
 use crate::ai::blocklist::block::view_impl::{
     CONTENT_HORIZONTAL_PADDING, CONTENT_ITEM_VERTICAL_MARGIN,
@@ -54,9 +51,8 @@ use crate::menu::{Event as MenuEvent, Menu, MenuItemFields, MenuVariant};
 use crate::settings::InputModeSettings;
 use crate::terminal::TerminalModel;
 use crate::terminal::block_list_viewport::InputMode;
-use crate::terminal::model::block::Block;
+use crate::terminal::model::block::{Block, LongRunningCommandControlState, UserTakeOverReason};
 use crate::ui_components::blended_colors;
-use crate::util::bindings::keybinding_name_to_keystroke;
 use crate::view_components::action_button::{ButtonSize, KeystrokeSource, NakedTheme};
 use crate::view_components::compactible_action_button::{
     CompactibleActionButton, LARGE_SIZE_SWITCH_THRESHOLD, MEDIUM_SIZE_SWITCH_THRESHOLD,
@@ -563,12 +559,7 @@ impl RequestedCommandView {
             } else {
                 ENTER_ACCEPT_REQUESTED_COMMAND_KEYSTROKE.displayed()
             };
-            let auto_keystroke = keybinding_name_to_keystroke(
-                crate::terminal::TOGGLE_AUTOEXECUTE_MODE_KEYBINDING,
-                ctx,
-            )
-            .map(|k| k.displayed())
-            .unwrap_or_default();
+            let auto_keystroke = String::new();
 
             let accept_item = MenuItemFields::new_with_label(
                 REQUESTED_COMMAND_ACCEPT_LABEL,

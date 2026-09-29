@@ -78,7 +78,6 @@ use crate::server::telemetry::AgentModeCodeFileNavigationSource;
 use crate::terminal::ShellLaunchData;
 use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
-use crate::util::bindings::keybinding_name_to_keystroke;
 use crate::view_components::DismissibleToast;
 use crate::view_components::action_button::{
     ActionButton, ButtonSize, KeystrokeSource, NakedTheme,
@@ -397,12 +396,7 @@ impl CodeDiffView {
             let accept_keystroke = accept_keystroke_source(is_passive)
                 .displayed(ctx)
                 .unwrap_or_default();
-            let auto_keystroke = keybinding_name_to_keystroke(
-                crate::terminal::TOGGLE_AUTOEXECUTE_MODE_KEYBINDING,
-                ctx,
-            )
-            .map(|k| k.displayed())
-            .unwrap_or_default();
+            let auto_keystroke = String::new();
 
             let accept_item = MenuItemFields::new_with_label(
                 REQUESTED_EDIT_ACCEPT_LABEL,
@@ -2066,10 +2060,6 @@ impl CodeDiffView {
                 ctx
             );
         }
-    }
-
-    pub fn set_original_pane_id(&mut self, original_pane_id: Option<PaneId>) {
-        self.original_pane_id = original_pane_id;
     }
 
     fn close_and_focus(&self, pane_to_focus: PaneId, ctx: &mut ViewContext<Self>) {

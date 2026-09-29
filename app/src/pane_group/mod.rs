@@ -34,11 +34,9 @@ use warpui::{
     ViewHandle, WindowId,
 };
 
-use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::blocklist::{BlocklistAIHistoryModel, SerializedBlockListItem};
 use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
 use crate::ai::llms::{LLMId, LLMPreferences};
-use crate::ai::restored_conversations::RestoredAgentConversations;
 #[cfg(feature = "local_fs")]
 use crate::app_state::CodePaneSnapShot;
 use crate::app_state::{
@@ -78,15 +76,12 @@ use crate::terminal::input::{InputConfig, InputType};
 #[cfg(feature = "local_tty")]
 use crate::terminal::local_tty::TerminalManager as LocalTtyTerminalManager;
 #[cfg(feature = "local_tty")]
-use crate::terminal::local_tty::{
-    TerminalViewSurfaceConfig, create_terminal_view_surface, terminal_view_restored_blocks,
-};
+use crate::terminal::local_tty::{TerminalViewSurfaceConfig, create_terminal_view_surface};
 use crate::terminal::model::session::Session;
 use crate::terminal::session_settings::{NewSessionSource, SessionSettings};
 use crate::terminal::view::ssh_file_upload::FileUploadId;
 use crate::terminal::view::{
-    BlockNotification, ConversationRestorationInNewPaneType, ExecuteCommandEvent,
-    LeftPanelTargetView, SyncEvent, TerminalViewState,
+    BlockNotification, ExecuteCommandEvent, LeftPanelTargetView, SyncEvent, TerminalViewState,
 };
 use crate::terminal::{ShellLaunchData, TerminalManager, TerminalModel, TerminalView};
 use crate::undo_close::{UndoCloseStack, UndoCloseStackEvent};
@@ -418,7 +413,6 @@ pub enum Event {
     TerminalViewStateChanged,
     /// Event used to propagate guided onboarding tutorial completion to the workspace.
     OpenPromptEditor,
-    OpenAgentToolbarEditor,
     OpenCLIAgentToolbarEditor,
     /// tell the workspace to open a file within Warp.
     OpenFileInWarp {
@@ -520,7 +514,6 @@ pub enum Event {
     },
     OpenThemeChooser,
     InvalidatedActiveConversation,
-    OpenConversationHistory,
     OpenFilesPalette {
         source: PaletteSource,
     },
@@ -617,8 +610,6 @@ pub struct NewTerminalOptions {
     pub env_vars: HashMap<OsString, OsString>,
     /// If true, do not show the Code Mode homepage UX.
     pub hide_homepage: bool,
-    /// The AI conversation to restore when the terminal is created.
-    pub conversation_restoration: Option<ConversationRestorationInNewPaneType>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1084,7 +1075,6 @@ impl PaneGroup {
                     uuid.as_bytes(),
                     resources,
                     None,
-                    None, // no conversation restoration for launch config
                     user_default_shell_unsupported_banner_model_handle,
                     view_size,
                     model_event_sender.clone(),
@@ -1287,52 +1277,12 @@ impl PaneGroup {
                     .map(PathBuf::from)
                     .filter(|path| path.is_dir());
 
-                // Filter conversation IDs to only include those that have task messages
-                // and are not entirely passive (ignored suggestions).
-                // This prevents showing the "Previous session" banner when there's nothing to restore
-                // and avoids restoring passive code diffs that the user never acted on.
-                let filtered_conversation_ids: Vec<AIConversationId> = terminal_snapshot
-                    .conversation_ids_to_restore
-                    .iter()
-                    .filter(|&conversation_id| {
-                        RestoredAgentConversations::handle(ctx).update(ctx, |store, _| {
-                            store
-                                .get_conversation(conversation_id)
-                                .is_some_and(|persisted_conv| {
-                                    // Filter conversations that contain no tasks.
-                                    if persisted_conv.all_tasks().next().is_none() {
-                                        return false;
-                                    }
-
-                                    // Filter conversations that are entirely passive.
-                                    !persisted_conv.is_entirely_passive()
-                                })
-                        })
-                    })
-                    .copied()
-                    .collect();
-
-                let conversation_restoration = {
-                    let conversations = RestoredAgentConversations::handle(ctx)
-                        .update(ctx, |store, _| {
-                            store.take_conversations(&filtered_conversation_ids)
-                        });
-                    vec1::Vec1::try_from_vec(conversations)
-                        .ok()
-                        .map(
-                            |conversations| ConversationRestorationInNewPaneType::Startup {
-                                conversations,
-                                active_conversation_id: terminal_snapshot.active_conversation_id,
-                            },
-                        )
-                };
                 let (terminal_view, terminal_manager) = PaneGroup::create_session(
                     startup_directory,
                     HashMap::new(),
                     uuid.0.as_slice(),
                     resources,
                     block_list,
-                    conversation_restoration,
                     user_default_shell_unsupported_banner_model_handle,
                     view_size,
                     model_event_sender.clone(),
@@ -1978,7 +1928,6 @@ impl PaneGroup {
             uuid.as_bytes(),
             resources,
             None,
-            options.conversation_restoration,
             unsupported_banner_model_handle,
             view_bounds.size(),
             model_event_sender.clone(),
@@ -2156,7 +2105,6 @@ impl PaneGroup {
             Some(self.focused_pane_id(ctx)),
             self.active_session_id(ctx),
             chosen_shell,
-            None, /* conversation_restoration */
             ctx,
         );
         ctx.emit(Event::AppStateChanged);
@@ -2179,7 +2127,6 @@ impl PaneGroup {
             Some(base_pane_id),
             base_session_id,
             chosen_shell,
-            None, /* conversation_restoration */
             ctx,
         );
         ctx.emit(Event::AppStateChanged);
@@ -2598,15 +2545,6 @@ impl PaneGroup {
         if let Some(replacement_id) = self.panes.replacement_pane_for_original(pane_id) {
             self.panes.revert_temporary_replacement(replacement_id);
             self.handle_pane_count_change(ctx);
-            // The visible content of this slot changed; refresh agent-view
-            // back-button labels on both sides.
-            for refresh_pane_id in [pane_id, replacement_id] {
-                if let Some(terminal_view) = self.terminal_view_from_pane_id(refresh_pane_id, ctx) {
-                    terminal_view.update(ctx, |view, ctx| {
-                        view.update_agent_view_back_button_state(ctx);
-                    });
-                }
-            }
             ctx.emit(Event::TerminalViewStateChanged);
             ctx.emit(Event::AppStateChanged);
         } else if !self.panes.is_pane_in_tree(pane_id) {
@@ -3521,7 +3459,6 @@ impl PaneGroup {
         terminal_session_uuid: &[u8],
         resources: TerminalViewResources,
         restored_blocks: Option<&Vec<SerializedBlockListItem>>,
-        conversation_restoration: Option<ConversationRestorationInNewPaneType>,
         user_default_shell_unsupported_banner_model_handle: ModelHandle<BannerState>,
         initial_size: Vector2F,
         model_event_sender: Option<SyncSender<ModelEvent>>,
@@ -3536,23 +3473,9 @@ impl PaneGroup {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "local_tty")] {
-                let all_restored_blocks =
-                    terminal_view_restored_blocks(restored_blocks, &conversation_restoration);
-                let has_conversation_restoration = matches!(
-                    &conversation_restoration,
-                    Some(
-                        ConversationRestorationInNewPaneType::Startup { .. }
-                            | ConversationRestorationInNewPaneType::Historical { .. }
-                    )
-                );
-                let is_historical = matches!(
-                    &conversation_restoration,
-                    Some(ConversationRestorationInNewPaneType::Historical { .. })
-                );
-                let should_use_live_appearance = conversation_restoration
-                    .as_ref()
-                    .map(|restoration| restoration.should_use_live_appearance())
-                    .unwrap_or(false);
+                let all_restored_blocks = restored_blocks
+                    .filter(|blocks| !blocks.is_empty())
+                    .cloned();
                 let has_restored_command_blocks = all_restored_blocks
                     .as_ref()
                     .is_some_and(|blocks| !blocks.is_empty());
@@ -3574,10 +3497,6 @@ impl PaneGroup {
                                 model_event_sender: model_event_sender_for_surface,
                                 window_id,
                                 initial_input_config,
-                                conversation_restoration,
-                                has_conversation_restoration,
-                                is_historical,
-                                should_use_live_appearance,
                                 has_restored_command_blocks,
                             },
                             surface_init,
@@ -3598,7 +3517,6 @@ impl PaneGroup {
                     },
                     resources,
                     None,
-                    conversation_restoration,
                     initial_size,
                     ctx.window_id(),
                     ctx,
@@ -3646,19 +3564,9 @@ impl PaneGroup {
         base_pane_id_for_split: Option<PaneId>,
         base_pane_id_for_context: Option<TerminalPaneId>,
         chosen_shell: Option<AvailableShell>,
-        conversation_restoration: Option<ConversationRestorationInNewPaneType>,
         ctx: &mut ViewContext<Self>,
     ) -> TerminalPaneId {
-        // If restoring a conversation, use its startup working directory if it exists.
-        // For forks this is the conversation's latest working directory so the
-        // fork continues where the source conversation left off.
-        let startup_directory_from_conversation = conversation_restoration
-            .as_ref()
-            .and_then(|restoration| restoration.startup_working_directory())
-            .map(PathBuf::from)
-            .filter(|path| path.is_dir());
-
-        let startup_directory = startup_directory_from_conversation.or_else(|| {
+        let startup_directory = {
             let ignore_custom_startup_directory =
                 self.should_ignore_custom_startup_directory(&chosen_shell, ctx);
 
@@ -3674,13 +3582,12 @@ impl PaneGroup {
                         ignore_custom_startup_directory,
                     )
             })
-        });
+        };
         self.add_session_in_directory(
             direction,
             base_pane_id_for_split,
             chosen_shell,
             startup_directory,
-            conversation_restoration,
             ctx,
         )
     }
@@ -3694,7 +3601,6 @@ impl PaneGroup {
         startup_directory: Option<PathBuf>,
         env_vars: HashMap<OsString, OsString>,
         chosen_shell: Option<AvailableShell>,
-        conversation_restoration: Option<ConversationRestorationInNewPaneType>,
         ctx: &mut ViewContext<Self>,
     ) -> (TerminalPane, ViewHandle<TerminalView>) {
         let uuid = Uuid::new_v4();
@@ -3711,7 +3617,6 @@ impl PaneGroup {
             uuid.as_bytes(),
             resources,
             None,
-            conversation_restoration,
             self.user_default_shell_unsupported_banner_model_handle
                 .clone(),
             view_bounds.size(),
@@ -3739,16 +3644,10 @@ impl PaneGroup {
         base_pane_id: Option<PaneId>,
         chosen_shell: Option<AvailableShell>,
         startup_directory: Option<PathBuf>,
-        conversation_restoration: Option<ConversationRestorationInNewPaneType>,
         ctx: &mut ViewContext<Self>,
     ) -> TerminalPaneId {
-        let (pane_data, _) = self.create_terminal_pane_data(
-            startup_directory,
-            HashMap::new(),
-            chosen_shell,
-            conversation_restoration,
-            ctx,
-        );
+        let (pane_data, _) =
+            self.create_terminal_pane_data(startup_directory, HashMap::new(), chosen_shell, ctx);
         let new_pane_id = pane_data.terminal_pane_id();
 
         let _ = self.add_pane(direction, base_pane_id, Box::new(pane_data), true, ctx);

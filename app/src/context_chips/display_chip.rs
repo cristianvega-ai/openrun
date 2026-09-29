@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use pathfinder_color::ColorU;
-use pathfinder_geometry::vector::{Vector2F, vec2f};
+use pathfinder_geometry::vector::vec2f;
 use warp_core::ui::theme::Fill;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::elements::{
@@ -16,8 +16,8 @@ use warpui::keymap::Keystroke;
 use warpui::platform::Cursor;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::{
-    AppContext, Element, Entity, EntityId, Gradient, ModelHandle, SingletonEntity, TypedActionView,
-    View, ViewContext, ViewHandle,
+    AppContext, Element, Entity, EntityId, ModelHandle, SingletonEntity, TypedActionView, View,
+    ViewContext, ViewHandle,
 };
 
 use super::directory_fetcher::{
@@ -27,7 +27,7 @@ use super::display_menu::{
     ChipMenuType, DisplayChipMenu, FixedFooter, GenericMenuItem, PromptDisplayMenuEvent,
 };
 use super::{
-    ChipResult, ChipValue, ContextChipKind, agent_view_chip_color, github_pr_display_text_from_url,
+    ChipResult, ChipValue, ContextChipKind, footer_chip_color, github_pr_display_text_from_url,
     render_text_from_kind,
 };
 
@@ -259,7 +259,7 @@ pub(crate) struct UdiChipConfig {
     /// Whether to truncate text to UDI_CHIP_MAX_NUM_CHARACTERS
     truncate_text: bool,
     border_override: Option<Border>,
-    is_in_agent_view: bool,
+    is_in_footer: bool,
     /// When `true`, the chip paints its hover background instead of its
     /// default background. The chip's background is opaque, so callers must
     /// toggle this from their `Hoverable` rather than wrap the chip in an
@@ -276,7 +276,7 @@ impl UdiChipConfig {
             text,
             truncate_text: true,
             border_override: None,
-            is_in_agent_view: false,
+            is_in_footer: false,
             hovered: false,
         }
     }
@@ -289,7 +289,7 @@ impl UdiChipConfig {
             text,
             truncate_text: true,
             border_override: None,
-            is_in_agent_view: false,
+            is_in_footer: false,
             hovered: false,
         }
     }
@@ -302,7 +302,7 @@ impl UdiChipConfig {
             text,
             truncate_text: true,
             border_override: None,
-            is_in_agent_view: false,
+            is_in_footer: false,
             hovered: false,
         }
     }
@@ -322,8 +322,8 @@ impl UdiChipConfig {
         self
     }
 
-    fn for_agent_view(mut self) -> Self {
-        self.is_in_agent_view = true;
+    fn for_footer(mut self) -> Self {
+        self.is_in_footer = true;
         self
     }
 }
@@ -348,7 +348,7 @@ pub struct DisplayChip {
     on_click_values: Vec<String>,
     session_context: Option<SessionContext>,
     menu_positioning_provider: Arc<dyn MenuPositioningProvider>,
-    is_in_agent_view: bool,
+    is_in_footer: bool,
     /// Cached display string for the code review keybinding.
     code_review_keybinding: Option<String>,
     /// The terminal view this chip belongs to, used to check CLI agent session state.
@@ -795,7 +795,7 @@ impl DisplayChip {
         Self::new_internal(chip_result, next_chip_kind, config, false, ctx)
     }
 
-    pub fn new_for_agent_view(
+    pub fn new_for_footer(
         chip_result: ChipResult,
         next_chip_kind: Option<ContextChipKind>,
         config: DisplayChipConfig,
@@ -865,7 +865,7 @@ impl DisplayChip {
         chip_result: ChipResult,
         next_chip_kind: Option<ContextChipKind>,
         config: DisplayChipConfig,
-        is_in_agent_view: bool,
+        is_in_footer: bool,
         ctx: &mut ViewContext<Self>,
     ) -> Self {
         let display_chip_kind = match chip_result.kind {
@@ -1085,7 +1085,7 @@ impl DisplayChip {
             on_click_values: chip_result.on_click_values,
             session_context: config.session_context,
             menu_positioning_provider: config.menu_positioning_provider,
-            is_in_agent_view,
+            is_in_footer,
             code_review_keybinding,
             terminal_view_id: config.terminal_view_id,
         }
@@ -1282,22 +1282,22 @@ impl DisplayChip {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let font_color = if self.is_in_agent_view {
-            agent_view_chip_color(appearance)
+        let font_color = if self.is_in_footer {
+            footer_chip_color(appearance)
         } else {
             appearance.theme().ansi_fg_green()
         };
 
         let is_interactive = !self.is_cli_agent_session_active(app);
-        let is_in_agent_view = self.is_in_agent_view;
+        let is_in_footer = self.is_in_footer;
         let chip_text = self.text.clone();
         let hover = Hoverable::new(self.mouse_state.clone(), move |state| {
             let hovered = state.is_hovered() && is_interactive;
             let mut config =
                 UdiChipConfig::new_with_icon(Icon::GitBranch, font_color, chip_text.clone())
                     .with_hovered(hovered);
-            if is_in_agent_view {
-                config = config.for_agent_view();
+            if is_in_footer {
+                config = config.for_footer();
             }
             let chip_element = render_udi_chip(config, appearance);
 
@@ -1349,22 +1349,22 @@ impl DisplayChip {
 
     fn github_pull_request_chip(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let font_color = if self.is_in_agent_view {
-            agent_view_chip_color(appearance)
+        let font_color = if self.is_in_footer {
+            footer_chip_color(appearance)
         } else {
             appearance.theme().ansi_fg_green()
         };
         let chip_text =
             github_pr_display_text_from_url(&self.text).unwrap_or_else(|| self.text.clone());
         let url = self.text.clone();
-        let is_in_agent_view = self.is_in_agent_view;
+        let is_in_footer = self.is_in_footer;
 
         let hover = Hoverable::new(self.mouse_state.clone(), move |state| {
             let mut config =
                 UdiChipConfig::new_with_icon(Icon::Github, font_color, chip_text.clone())
                     .with_hovered(state.is_hovered());
-            if is_in_agent_view {
-                config = config.for_agent_view();
+            if is_in_footer {
+                config = config.for_footer();
             }
             let chip_element = render_udi_chip(config, appearance);
 
@@ -1402,12 +1402,12 @@ impl DisplayChip {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
         // Same color as the plain git branch chip (see `git_branch_chip`).
-        let font_color = if self.is_in_agent_view {
-            agent_view_chip_color(appearance)
+        let font_color = if self.is_in_footer {
+            footer_chip_color(appearance)
         } else {
             theme.ansi_fg_green()
         };
-        let font_family = if self.is_in_agent_view {
+        let font_family = if self.is_in_footer {
             appearance.ui_font_family()
         } else {
             appearance.monospace_font_family()
@@ -1565,7 +1565,7 @@ impl DisplayChip {
         let theme = appearance.theme();
         let udi_icon_size = udi_icon_size(appearance, app);
         let font_size = udi_font_size(appearance);
-        let font_family = if self.is_in_agent_view {
+        let font_family = if self.is_in_footer {
             appearance.ui_font_family()
         } else {
             appearance.monospace_font_family()
@@ -1664,20 +1664,20 @@ impl DisplayChip {
 
         let button = if allow_show_menu {
             let chip_text = self.text.clone();
-            let font_color = if self.is_in_agent_view {
-                agent_view_chip_color(appearance)
+            let font_color = if self.is_in_footer {
+                footer_chip_color(appearance)
             } else {
                 theme.ansi_fg_cyan()
             };
 
-            let is_in_agent_view = self.is_in_agent_view;
+            let is_in_footer = self.is_in_footer;
             Hoverable::new(self.mouse_state.clone(), move |state| {
                 let hovered = !menu_open && state.is_hovered();
                 let mut config =
                     UdiChipConfig::new_with_icon(Icon::Folder, font_color, chip_text.clone())
                         .with_hovered(hovered);
-                if is_in_agent_view {
-                    config = config.for_agent_view();
+                if is_in_footer {
+                    config = config.for_footer();
                 }
 
                 let chip_element = render_udi_chip(config, appearance);
@@ -1702,20 +1702,20 @@ impl DisplayChip {
             .finish()
         } else {
             // Non-interactive chip (either show_menu is false or a CLI agent session is active)
-            let font_color = if self.is_in_agent_view {
-                agent_view_chip_color(appearance)
+            let font_color = if self.is_in_footer {
+                footer_chip_color(appearance)
             } else {
                 theme.ansi_fg_cyan()
             };
 
             let chip_text = self.text.clone();
-            let is_in_agent_view = self.is_in_agent_view;
+            let is_in_footer = self.is_in_footer;
 
             Hoverable::new(self.mouse_state.clone(), move |state| {
                 let mut config =
                     UdiChipConfig::new_with_icon(Icon::Folder, font_color, chip_text.clone());
-                if is_in_agent_view {
-                    config = config.for_agent_view();
+                if is_in_footer {
+                    config = config.for_footer();
                 }
 
                 let chip_element = render_udi_chip(config, appearance);
@@ -1763,29 +1763,29 @@ impl DisplayChip {
 
     fn ssh_chip(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let color = if self.is_in_agent_view {
-            agent_view_chip_color(appearance)
+        let color = if self.is_in_footer {
+            footer_chip_color(appearance)
         } else {
             appearance.theme().ansi_fg_blue()
         };
 
         let mut config = UdiChipConfig::new_with_icon(Icon::User, color, self.text.clone());
-        if self.is_in_agent_view {
-            config = config.for_agent_view();
+        if self.is_in_footer {
+            config = config.for_footer();
         }
         render_udi_chip(config, appearance)
     }
 
     fn subshell_chip(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let color = if self.is_in_agent_view {
-            agent_view_chip_color(appearance)
+        let color = if self.is_in_footer {
+            footer_chip_color(appearance)
         } else {
             appearance.theme().ansi_fg_blue()
         };
         let mut config = UdiChipConfig::new_with_icon(Icon::Terminal, color, self.text.clone());
-        if self.is_in_agent_view {
-            config = config.for_agent_view();
+        if self.is_in_footer {
+            config = config.for_footer();
         }
 
         render_udi_chip(config, appearance)
@@ -1793,14 +1793,14 @@ impl DisplayChip {
 
     fn virtual_environment_chip(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let color = if self.is_in_agent_view {
-            agent_view_chip_color(appearance)
+        let color = if self.is_in_footer {
+            footer_chip_color(appearance)
         } else {
             appearance.theme().ansi_fg_yellow()
         };
         let mut config = UdiChipConfig::new_with_icon(Icon::Terminal, color, self.text.clone());
-        if self.is_in_agent_view {
-            config = config.for_agent_view();
+        if self.is_in_footer {
+            config = config.for_footer();
         }
 
         render_udi_chip(config, appearance)
@@ -1808,14 +1808,14 @@ impl DisplayChip {
 
     fn conda_environment_chip(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let color = if self.is_in_agent_view {
-            agent_view_chip_color(appearance)
+        let color = if self.is_in_footer {
+            footer_chip_color(appearance)
         } else {
             appearance.theme().ansi_fg_yellow()
         };
         let mut config = UdiChipConfig::new_with_icon(Icon::Terminal, color, self.text.clone());
-        if self.is_in_agent_view {
-            config = config.for_agent_view();
+        if self.is_in_footer {
+            config = config.for_footer();
         }
 
         render_udi_chip(config, appearance)
@@ -1830,18 +1830,18 @@ impl DisplayChip {
         let appearance = Appearance::as_ref(app);
 
         let chip_text = self.text.clone();
-        let is_in_agent_view = self.is_in_agent_view;
+        let is_in_footer = self.is_in_footer;
         let hoverable = Hoverable::new(self.mouse_state.clone(), move |state| {
-            let color = if is_in_agent_view {
-                agent_view_chip_color(appearance)
+            let color = if is_in_footer {
+                footer_chip_color(appearance)
             } else {
                 appearance.theme().ansi_fg_green()
             };
             let hovered = state.is_hovered() && !popup_open;
             let mut config = UdiChipConfig::new_with_icon(Icon::NodeJS, color, chip_text.clone())
                 .with_hovered(hovered);
-            if is_in_agent_view {
-                config = config.for_agent_view();
+            if is_in_footer {
+                config = config.for_footer();
             }
             render_udi_chip(config, appearance)
         })
@@ -1874,7 +1874,7 @@ impl DisplayChip {
 
     fn render_chip(&self, app: &AppContext) -> Option<Box<dyn Element>> {
         let appearance = Appearance::as_ref(app);
-        let font_family = if self.is_in_agent_view {
+        let font_family = if self.is_in_footer {
             appearance.ui_font_family()
         } else {
             appearance.monospace_font_family()
@@ -1917,7 +1917,7 @@ impl DisplayChip {
                     &mut text,
                     self.chip_kind.clone(),
                     self.text.clone(),
-                    self.is_in_agent_view,
+                    self.is_in_footer,
                     appearance,
                 );
 
@@ -1939,7 +1939,7 @@ impl View for DisplayChip {
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         match self.render_chip(app) {
             Some(chip) => {
-                if self.is_in_agent_view {
+                if self.is_in_footer {
                     chip
                 } else {
                     Container::new(chip)
@@ -1981,7 +1981,6 @@ pub enum PromptDisplayChipEvent {
     OpenTextFileInCodeEditor(String),
     ToggleMenu { open: bool },
     OpenCodeReview,
-    OpenConversationHistory,
     OpenCommandPaletteFiles,
     TryExecuteCommand(PromptChipShellCommand),
     RunAgentQuery(String),
@@ -2150,45 +2149,6 @@ impl ActionButtonTheme for UdiPromptChipHintButton {
     }
 }
 
-pub struct EnterAgentViewButton;
-
-impl ActionButtonTheme for EnterAgentViewButton {
-    fn background(&self, hovered: bool, appearance: &Appearance) -> Option<Fill> {
-        Some(if hovered {
-            internal_colors::fg_overlay_2(appearance.theme())
-        } else {
-            internal_colors::fg_overlay_1(appearance.theme())
-        })
-    }
-
-    fn text_color(
-        &self,
-        _hovered: bool,
-        _background: Option<Fill>,
-        appearance: &Appearance,
-    ) -> ColorU {
-        appearance
-            .theme()
-            .main_text_color(appearance.theme().background())
-            .into_solid()
-    }
-
-    fn border_gradient(&self, appearance: &Appearance) -> Option<(Vector2F, Vector2F, Gradient)> {
-        Some((
-            vec2f(0.0, 0.0),
-            vec2f(3.0, 3.0),
-            Gradient {
-                start: appearance.theme().ansi_fg_magenta(),
-                end: appearance.theme().ansi_fg_yellow(),
-            },
-        ))
-    }
-
-    fn should_opt_out_of_contrast_adjustment(&self) -> bool {
-        true
-    }
-}
-
 pub(crate) fn chip_container(
     content: Box<dyn Element>,
     border_override: Option<Border>,
@@ -2233,7 +2193,7 @@ pub(crate) fn render_udi_chip(config: UdiChipConfig, appearance: &Appearance) ->
         config.text.clone()
     };
 
-    let font_family = if config.is_in_agent_view {
+    let font_family = if config.is_in_footer {
         appearance.ui_font_family()
     } else {
         appearance.monospace_font_family()
@@ -2243,7 +2203,7 @@ pub(crate) fn render_udi_chip(config: UdiChipConfig, appearance: &Appearance) ->
         .with_color(Fill::Solid(config.color).into())
         .with_line_height_ratio(appearance.line_height_ratio());
 
-    if !config.is_in_agent_view {
+    if !config.is_in_footer {
         rendered_text = rendered_text.with_style(Properties::default().weight(Weight::Semibold))
     }
 

@@ -4,21 +4,18 @@ use warpui::elements::{
     ConstrainedBox, CrossAxisAlignment, Flex, MainAxisAlignment, MainAxisSize, ParentElement,
     Shrinkable,
 };
-use warpui::prelude::{ChildView, Container};
+use warpui::prelude::Container;
 use warpui::text_layout::ClipConfig;
-use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::{
     AppContext, Element, ModelHandle, SingletonEntity, TypedActionView, ViewContext,
     WeakModelHandle,
 };
 
 use super::{Event, PaneConfiguration, TerminalAction, TerminalViewState};
-use crate::ai::agent::conversation::{AIConversation, ConversationStatus};
 use crate::appearance::Appearance;
 use crate::features::FeatureFlag;
 use crate::menu::{MenuItem, MenuItemFields};
 use crate::pane_group::focus_state::{PaneFocusHandle, PaneGroupFocusEvent, PaneGroupFocusState};
-use crate::pane_group::pane::view::PaneHeaderAction;
 use crate::pane_group::pane::view::header::components::{
     CenteredHeaderEdgeWidth, header_edge_min_width, render_pane_header_buttons,
     render_pane_header_title_text, render_three_column_header,
@@ -28,18 +25,9 @@ use crate::pane_group::pane::{PaneStack, view};
 use crate::pane_group::{BackingView, SplitPaneState, TOGGLE_MAXIMIZE_PANE_BINDING_NAME};
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::{TerminalManager, TerminalView};
-use crate::ui_components::agent_icon::terminal_view_agent_icon_variant;
-use crate::ui_components::buttons::icon_button_with_color;
-use crate::ui_components::icon_with_status::render_icon_with_status;
 use crate::ui_components::{blended_colors, icons};
 use crate::util::bindings::keybinding_name_to_display_string;
 use crate::workspace::tab_settings::TabSettings;
-
-/// Total size of the agent icon-with-status component rendered in the pane header.
-/// Sub-components (circle, badge, cloud) are derived inside `render_icon_with_status`.
-/// Sized so the component fits comfortably within `PANE_HEADER_HEIGHT` (34px) with a
-/// few pixels of vertical buffer.
-const PANE_HEADER_AGENT_SIZE: f32 = 26.;
 
 impl TerminalView {
     /// Returns a reference to the focus handle if one has been set.
@@ -96,42 +84,18 @@ impl TerminalView {
             });
     }
 
-    /// Set the pane title from agent chrome when available, falling back to the regular terminal title.
+    /// Set the pane title from the CLI agent session when available, falling back to the regular
+    /// terminal title.
     pub(super) fn update_pane_configuration(&mut self, ctx: &mut ViewContext<Self>) {
-        let selected_conversation_title = self.selected_conversation_display_title(ctx);
-        let selected_cli_agent_title = self.selected_cli_agent_title_for_chrome(ctx);
-
         // Prefer CLI agent session text before the terminal title,
         // matching the vertical-tab behavior in terminal_primary_line_data().
-        let new_pane_title = if let Some(cli_agent_title) = selected_cli_agent_title {
-            self.is_using_conversation_for_pane_header_title = false;
-            cli_agent_title
-        } else if self.is_long_running_and_user_controlled() && !self.terminal_title.is_empty() {
-            self.is_using_conversation_for_pane_header_title = false;
-            self.terminal_title.clone()
-        } else {
-            match selected_conversation_title {
-                Some(conversation_title) => {
-                    self.is_using_conversation_for_pane_header_title = true;
-                    conversation_title
-                }
-                None => self.terminal_title.clone(),
-            }
-        };
+        let new_pane_title = self
+            .selected_cli_agent_title_for_chrome(ctx)
+            .unwrap_or_else(|| self.terminal_title.clone());
         self.pane_configuration.update(ctx, |pane_config, ctx| {
             pane_config.set_title(new_pane_title, ctx);
             pane_config.refresh_pane_header_overflow_menu_items(ctx);
             pane_config.notify_header_content_changed(ctx);
-        });
-        self.update_agent_view_pane_header(ctx);
-    }
-
-    /// Refreshes the pane header based on agent view state.
-    /// This should be called when entering/exiting agent view or when the conversation changes.
-    pub(super) fn update_agent_view_pane_header(&mut self, ctx: &mut ViewContext<Self>) {
-        self.pane_configuration.update(ctx, |pane_config, ctx| {
-            pane_config.notify_header_content_changed(ctx);
-            pane_config.refresh_pane_header_overflow_menu_items(ctx);
         });
     }
 
@@ -151,72 +115,16 @@ impl TerminalView {
             .map_or(SplitPaneState::NotInSplitPane, |h| h.split_pane_state(app))
     }
 
-    /// Renders the back button for the pane header, or an empty element if the
-    /// back button should not be shown.
-    fn maybe_render_header_back_button(&self, app: &AppContext) -> Box<dyn Element> {
-        if warpui::platform::is_mobile_device() {
-            return Flex::row().finish();
-        }
-
-        let in_nav_stack = self
-            .pane_stack
-            .as_ref()
-            .and_then(|h| h.upgrade(app))
-            .is_some_and(|stack| stack.as_ref(app).depth() > 1);
-
-        let is_transcript_viewer = self.model.lock().is_conversation_transcript_viewer();
-        let has_parent_terminal = !is_transcript_viewer;
-        let is_fullscreen_agent_view = self.agent_view_controller.as_ref(app).is_fullscreen();
-
-        if in_nav_stack || (is_fullscreen_agent_view && has_parent_terminal) {
-            Flex::row()
-                .with_cross_axis_alignment(CrossAxisAlignment::Center)
-                .with_child(ChildView::new(&self.agent_view_back_button).finish())
-                .finish()
-        } else {
-            Flex::row().finish()
-        }
-    }
-
     fn render_header_title(
         &self,
-        is_fullscreen_agent_view: bool,
         header_ctx: &view::HeaderRenderContext,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
         let pane_config = self.pane_configuration.as_ref(app);
         let title = pane_config.title().to_owned();
-        let clip_config = if self.is_using_conversation_for_pane_header_title {
-            ClipConfig::ellipsis()
-        } else {
-            ClipConfig::start()
-        };
-
-        let theme = appearance.theme();
-        let render_agent_circle = |variant| {
-            render_icon_with_status(
-                variant,
-                PANE_HEADER_AGENT_SIZE,
-                0.,
-                theme,
-                theme.background(),
-            )
-        };
-        let pane_indicator = if self.is_using_conversation_for_pane_header_title
-            || (self.is_long_running()
-                && self
-                    .ai_context_model
-                    .as_ref(app)
-                    .selected_conversation(app)
-                    .is_some())
-        {
-            // Conversation-bound terminal: same shared helper — produces an OzAgent variant for
-            // local conversations and a CLIAgent variant for the (rare) CLI-backed terminal.
-            terminal_view_agent_icon_variant(self, app).map(render_agent_circle)
-        } else {
-            self.render_terminal_mode_indicator(app)
-        };
+        let clip_config = ClipConfig::start();
+        let pane_indicator = self.render_terminal_mode_indicator(app);
 
         let is_pane_dragging = header_ctx.draggable_state.is_dragging();
         let mut center_row = Flex::row()
@@ -232,19 +140,7 @@ impl TerminalView {
             // from infinite constraints on flex children.
             center_row.add_child(title_text);
         } else {
-            let title_element =
-                if is_fullscreen_agent_view && self.is_using_conversation_for_pane_header_title {
-                    Shrinkable::new(
-                        1.0,
-                        ConstrainedBox::new(title_text)
-                            .with_max_width(400.0)
-                            .finish(),
-                    )
-                    .finish()
-                } else {
-                    Shrinkable::new(1.0, title_text).finish()
-                };
-            center_row.add_child(title_element);
+            center_row.add_child(Shrinkable::new(1.0, title_text).finish());
         }
 
         center_row.finish()
@@ -258,33 +154,15 @@ impl TerminalView {
         app: &AppContext,
     ) -> (Box<dyn Element>, f32) {
         let appearance = Appearance::as_ref(app);
-        let is_fullscreen_agent_view = self.agent_view_controller.as_ref(app).is_fullscreen();
         let icon_color = Some(
             appearance
                 .theme()
                 .sub_text_color(appearance.theme().background()),
         );
-        let button_size = if is_fullscreen_agent_view {
-            Some(24.0)
-        } else {
-            None
-        };
-
-        let mut icon_button_count: u32 = 0;
-
-        let button_element = if self.can_show_conversation_details_ui(app) {
-            Some(self.render_conversation_details_toggle_button(app))
-        } else {
-            None
-        };
 
         let mut right_row = Flex::row()
             .with_cross_axis_alignment(CrossAxisAlignment::Center)
             .with_main_axis_size(MainAxisSize::Min);
-        if let Some(button) = button_element {
-            icon_button_count += 1;
-            right_row.add_child(button);
-        }
         let show_close_button = self
             .focus_handle
             .as_ref()
@@ -295,10 +173,10 @@ impl TerminalView {
                 appearance,
                 show_close_button,
                 icon_color,
-                button_size,
+                None,
             ),
         );
-        icon_button_count += show_close_button as u32 + header_ctx.has_overflow_items as u32;
+        let icon_button_count = show_close_button as u32 + header_ctx.has_overflow_items as u32;
 
         let min_width = header_edge_min_width(icon_button_count);
         (right_row.finish(), min_width)
@@ -309,10 +187,8 @@ impl TerminalView {
         header_ctx: &view::HeaderRenderContext,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let is_fullscreen_agent_view = self.agent_view_controller.as_ref(app).is_fullscreen();
-
-        let left = self.maybe_render_header_back_button(app);
-        let center = self.render_header_title(is_fullscreen_agent_view, header_ctx, app);
+        let left = Flex::row().finish();
+        let center = self.render_header_title(header_ctx, app);
         let (right, min_actions_width) = self.render_header_actions(header_ctx, app);
 
         let header = render_three_column_header(
@@ -392,10 +268,8 @@ impl BackingView for TerminalView {
     }
 
     fn should_render_header(&self, app: &AppContext) -> bool {
-        let is_fullscreen_agent_view = self.agent_view_controller.as_ref(app).is_fullscreen();
-        is_fullscreen_agent_view
-            || FeatureFlag::ContextWindowUsageV2.is_enabled()
-                && self.split_pane_state(app).is_in_split_pane()
+        FeatureFlag::ContextWindowUsageV2.is_enabled()
+            && self.split_pane_state(app).is_in_split_pane()
     }
 
     fn render_header_content(
@@ -427,57 +301,7 @@ impl BackingView for TerminalView {
 }
 
 impl TerminalView {
-    /// Render the info button for toggling the conversation details panel.
-    fn render_conversation_details_toggle_button(&self, app: &AppContext) -> Box<dyn Element> {
-        let appearance = Appearance::as_ref(app);
-        let theme = appearance.theme();
-        let is_open = self.is_conversation_details_panel_open;
-        let ui_builder = appearance.ui_builder().clone();
-
-        // Use main text color when panel is open (hover-like appearance), sub color when closed
-        let icon_color = if is_open {
-            blended_colors::text_main(theme, theme.background()).into()
-        } else {
-            blended_colors::text_sub(theme, theme.background()).into()
-        };
-
-        let button = icon_button_with_color(
-            appearance,
-            icons::Icon::Info,
-            is_open, // show active background when panel is open
-            self.conversation_details_panel_toggle_mouse_state.clone(),
-            icon_color,
-        );
-
-        // Add explicit background when panel is open
-        let button = if is_open {
-            button.with_style(UiComponentStyles::default().set_background(theme.surface_2().into()))
-        } else {
-            button
-        };
-
-        button
-            .with_tooltip(move || {
-                let tooltip_text = if is_open {
-                    "Hide details"
-                } else {
-                    "Show details"
-                };
-                ui_builder
-                    .tool_tip(tooltip_text.to_string())
-                    .build()
-                    .finish()
-            })
-            .build()
-            .on_click(|ctx, _, _| {
-                ctx.dispatch_typed_action::<PaneHeaderAction<TerminalAction, TerminalAction>>(
-                    PaneHeaderAction::CustomAction(TerminalAction::ToggleConversationDetailsPanel),
-                );
-            })
-            .finish()
-    }
-
-    /// Render the indicator for terminal mode (no conversation selected).
+    /// Render the indicator for the terminal.
     /// Shows error indicator if terminal is in error state, otherwise shell indicator on Windows.
     fn render_terminal_mode_indicator(&self, app: &AppContext) -> Option<Box<dyn Element>> {
         let appearance = Appearance::as_ref(app);
@@ -517,83 +341,6 @@ impl TerminalView {
         None
     }
 
-    fn selected_conversation_for_user_facing_chrome<'a>(
-        &'a self,
-        ctx: &'a AppContext,
-    ) -> Option<&'a AIConversation> {
-        self.ai_context_model
-            .as_ref(ctx)
-            .selected_conversation(ctx)
-            .filter(|conversation| !conversation.is_entirely_passive())
-    }
-
-    fn selected_conversation_display_title_for_chrome(
-        &self,
-        conversation: &AIConversation,
-    ) -> String {
-        conversation
-            .title()
-            .filter(|title| !title.is_empty())
-            .unwrap_or_else(default_agent_conversation_title)
-    }
-
-    /// Selected conversation status for chrome, or [`ConversationStatus::InProgress`] while the
-    /// active block is long-running (terminal-derived; not mirrored in history events).
-    pub fn selected_conversation_status(&self, ctx: &AppContext) -> Option<ConversationStatus> {
-        let long_running = self.is_long_running();
-
-        let Some(conversation) = self.selected_conversation_for_user_facing_chrome(ctx) else {
-            return None;
-        };
-
-        if long_running {
-            return Some(ConversationStatus::InProgress);
-        }
-
-        if self.selected_conversation_is_empty(ctx) {
-            return None;
-        }
-
-        Some(conversation.status().clone())
-    }
-
-    pub fn selected_conversation_is_empty(&self, ctx: &AppContext) -> bool {
-        self.selected_conversation_for_user_facing_chrome(ctx)
-            .is_some_and(|conversation| conversation.is_empty())
-    }
-
-    /// Returns the conversation status for display purposes, suppressing the status when the
-    /// conversation is empty (no exchanges yet) AND nothing else makes the run "busy". This
-    /// avoids showing a misleading "In progress" indicator on a brand-new conversation; real
-    /// InProgress states (long-running shell commands) come through
-    /// because [`Self::selected_conversation_status`] surfaces them as `InProgress`.
-    pub fn selected_conversation_status_for_display(
-        &self,
-        ctx: &AppContext,
-    ) -> Option<ConversationStatus> {
-        let status = self.selected_conversation_status(ctx)?;
-        if matches!(status, ConversationStatus::InProgress)
-            || !self.selected_conversation_is_empty(ctx)
-        {
-            Some(status)
-        } else {
-            None
-        }
-    }
-
-    pub fn selected_conversation_display_title(&self, ctx: &AppContext) -> Option<String> {
-        self.selected_conversation_for_user_facing_chrome(ctx)
-            .map(|conversation| self.selected_conversation_display_title_for_chrome(conversation))
-    }
-
-    pub fn selected_conversation_latest_user_prompt_for_tab_name(
-        &self,
-        ctx: &AppContext,
-    ) -> Option<String> {
-        self.selected_conversation_for_user_facing_chrome(ctx)
-            .and_then(AIConversation::latest_user_query)
-    }
-
     fn selected_cli_agent_title_for_chrome(&self, ctx: &AppContext) -> Option<String> {
         let session = CLIAgentSessionsModel::as_ref(ctx)
             .session(self.view_id)
@@ -608,8 +355,4 @@ impl TerminalView {
             session.session_context.title_like_text()
         }
     }
-}
-
-fn default_agent_conversation_title() -> String {
-    "New agent conversation".to_owned()
 }

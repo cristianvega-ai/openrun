@@ -10,7 +10,7 @@ pub use super::git_repo_models::GitRepoModels;
 use crate::context_chips::display_chip::GitBranchTrackingStatus;
 
 /// Public metadata exposed to consumers — the subset of diff metadata
-/// that the git chip (prompt display, agent view footer) needs.
+/// that the git chip (prompt display, CLI agent footer) needs.
 #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 #[derive(Debug, Clone)]
 pub struct GitStatusMetadata {

@@ -55,7 +55,7 @@ use crate::terminal::view::TerminalViewState;
 use crate::terminal::{CLIAgent, TerminalView};
 use crate::themes::theme::Fill as ThemeFill;
 use crate::ui_components::agent_icon::terminal_view_agent_icon_variant;
-use crate::ui_components::agent_status::{AgentStatus, StatusColorStyle, render_status_element};
+use crate::ui_components::agent_status::{AgentStatus, render_status_element};
 use crate::ui_components::buttons::combo_inner_button;
 use crate::ui_components::icon_with_status::{IconWithStatusVariant, render_icon_with_status};
 use crate::ui_components::icons::Icon as UiIcon;
@@ -6480,7 +6480,7 @@ fn render_detail_badge(
 
 fn render_detail_status_pill(status: &AgentStatus, appearance: &Appearance) -> Box<dyn Element> {
     let theme = appearance.theme();
-    let (icon, color) = status.status_icon_and_color(theme, StatusColorStyle::Standard);
+    let (icon, color) = status.status_icon_and_color(theme);
     Container::new(
         Flex::row()
             .with_main_axis_size(MainAxisSize::Min)

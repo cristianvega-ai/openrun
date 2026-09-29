@@ -180,7 +180,7 @@ pub enum ButtonSize {
     UDIButton,
     /// Sizing for prompt chips in the UDI.
     UDIPromptChip,
-    /// Sizing for buttons in the AgentView input.
+    /// Sizing for buttons in the CLI agent footer.
     AgentInputButton,
 }
 
@@ -257,12 +257,6 @@ impl ActionButton {
         self
     }
 
-    /// Set an icon color derived from the current theme's ANSI palette.
-    pub fn with_icon_ansi_color(mut self, icon_ansi_color: AnsiColorIdentifier) -> Self {
-        self.icon_ansi_color = Some(icon_ansi_color);
-        self
-    }
-
     /// Set the tooltip text shown on hover.
     pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
         self.tooltip = Some(tooltip.into());
@@ -308,12 +302,6 @@ impl ActionButton {
     /// Renders the keybinding as plain text without individual key boxes.
     pub fn with_compact_keybinding(mut self, compact: bool) -> Self {
         self.compact_keybinding = compact;
-        self
-    }
-
-    /// Renders the keybinding before the label (but after the icon).
-    pub fn with_keybinding_before_label(mut self, before_label: bool) -> Self {
-        self.keybinding_before_label = before_label;
         self
     }
 
@@ -370,11 +358,6 @@ impl ActionButton {
     /// Configure tooltip alignment. If not specified, defaults to Right for historical reasons.
     pub fn with_tooltip_alignment(mut self, alignment: TooltipAlignment) -> Self {
         self.tooltip_alignment = alignment;
-        self
-    }
-
-    pub fn with_max_label_width(mut self, max_label_width: f32) -> Self {
-        self.max_label_width = Some(max_label_width);
         self
     }
 

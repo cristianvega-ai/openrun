@@ -108,7 +108,7 @@ use super::{
 };
 #[allow(unused_imports)]
 use crate::ASSETS;
-use crate::ai::agent::{AIAgentContext, CancellationReason, EntrypointType};
+use crate::ai::agent::{CancellationReason, EntrypointType};
 use crate::ai::blocklist::{
     AttachmentType, BlocklistAIContextEvent, BlocklistAIContextModel, BlocklistAIController,
     BlocklistAIHistoryModel, ai_indicator_height,
@@ -128,8 +128,8 @@ use crate::editor::{
     AttachedImage as AttachedImageRawData, AutosuggestionLocation,
     BaselinePositionComputationMethod, CommandXRayAnchor, CursorColors, DisplayPoint, EditOrigin,
     EditorAction, EditorDecoratorElements, EditorOptions, EditorSnapshot, EditorView,
-    Event as EditorEvent, ImageContextOptions, InteractionState, MAX_IMAGES_PER_CONVERSATION,
-    PathTransformerFn, PlainTextEditorViewAction, Point as BufferPoint, PropagateAndNoOpEscapeKey,
+    Event as EditorEvent, ImageContextOptions, InteractionState, PathTransformerFn,
+    PlainTextEditorViewAction, Point as BufferPoint, PropagateAndNoOpEscapeKey,
     PropagateAndNoOpNavigationKeys, PropagateHorizontalNavigationKeys, TextRun,
     default_cursor_colors, position_id_for_cached_point, position_id_for_cursor,
     position_id_for_first_cursor,
@@ -558,10 +558,7 @@ pub enum Event {
     SyncInput(SyncInputType),
     ShowCommandSearch(CommandSearchOptions),
     CtrlD,
-    CtrlC {
-        // The number of chars cleared from the buffer, if the ctrl-c triggered a buffer clear.
-        cleared_buffer_len: usize,
-    },
+    CtrlC,
     ExecuteCommand(Box<ExecuteCommandEvent>),
     ExecuteAIQuery,
     EmacsBindingUsed,
@@ -578,7 +575,6 @@ pub enum Event {
     AttachDiffSetContext {
         diff_mode: DiffMode,
     },
-    OpenConversationHistory,
     OpenFilesPalette {
         source: PaletteSource,
     },
@@ -634,9 +630,6 @@ pub enum InputAction {
 
     /// Triggers a slash command from a custom keybinding. The string is the command name.
     TriggerSlashCommandFromKeybinding(&'static str),
-
-    /// Clears attached blocks and text selection context.
-    ClearAttachedContext,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
@@ -1916,15 +1909,6 @@ impl Input {
         });
         ctx.subscribe_to_model(&ai_context_model, |me, context_model, event, ctx| {
             match event {
-                BlocklistAIContextEvent::PendingQueryStateUpdated => {
-                    me.remove_excess_images(ctx);
-                    me.update_image_context_options(ctx);
-                    me.set_zero_state_hint_text(ctx);
-                    // The editor view renders the follow up icon, so we need to re-render the editor view.
-                    me.editor().update(ctx, |_, ctx| {
-                        ctx.notify();
-                    })
-                }
                 BlocklistAIContextEvent::UpdatedPendingContext { .. } => {
                     me.update_image_context_options(ctx);
                     me.attachment_chips = context_model
@@ -2502,47 +2486,6 @@ impl Input {
         ctx.notify();
     }
 
-    /// When the active conversation is changed, the number of attached images may exceed the
-    /// limit of images for a conversation
-    pub fn remove_excess_images(&mut self, ctx: &mut ViewContext<Self>) {
-        let num_images_attached = self.ai_context_model.as_ref(ctx).pending_images().len();
-
-        let Some(conversation) = self.ai_context_model.as_ref(ctx).selected_conversation(ctx)
-        else {
-            return;
-        };
-
-        let num_images_in_conversation = conversation
-            .get_root_task()
-            .into_iter()
-            .flat_map(|task| {
-                task.all_contexts()
-                    .filter(|context| matches!(context, AIAgentContext::Image(_)))
-            })
-            .count();
-
-        let excess_images = (num_images_in_conversation + num_images_attached)
-            .saturating_sub(MAX_IMAGES_PER_CONVERSATION);
-
-        let images_removed = self.ai_context_model.update(ctx, |context_model, ctx| {
-            context_model.remove_last_pending_images(excess_images, ctx)
-        });
-
-        if images_removed > 0 {
-            let window_id = ctx.window_id();
-
-            let message = if images_removed == 1 {
-                "1 image was removed - limit is 20 per conversation.".into()
-            } else {
-                format!("{images_removed} images were removed - limit is 20 per conversation.")
-            };
-
-            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                toast_stack.add_persistent_toast(DismissibleToast::error(message), window_id, ctx);
-            });
-        }
-    }
-
     pub fn update_image_context_options(&mut self, ctx: &mut ViewContext<Self>) {
         let input_mode_model = self.input_mode_model.as_ref(ctx);
 
@@ -2554,17 +2497,6 @@ impl Input {
 
         let num_images_attached = self.ai_context_model.as_ref(ctx).pending_images().len();
 
-        let conversation = self.ai_context_model.as_ref(ctx).selected_conversation(ctx);
-
-        let num_images_in_conversation = conversation
-            .and_then(|conversation| conversation.get_root_task())
-            .into_iter()
-            .flat_map(|task| {
-                task.all_contexts()
-                    .filter(|context| matches!(context, AIAgentContext::Image(_)))
-            })
-            .count();
-
         // Image context is available whenever the feature flag is enabled and we're in AI input
         // mode, including cloud mode
         let image_context_options = if FeatureFlag::ImageAsContext.is_enabled()
@@ -2574,7 +2506,6 @@ impl Input {
                 unsupported_model: !vision_supported,
                 is_processing_attached_images: self.is_processing_attached_images,
                 num_images_attached,
-                num_images_in_conversation,
             }
         } else {
             ImageContextOptions::Disabled
@@ -2584,13 +2515,6 @@ impl Input {
             editor.update_image_context_options(image_context_options, ctx);
             ctx.notify();
         });
-    }
-
-    pub fn clear_attached_context(&mut self, ctx: &mut ViewContext<Self>) {
-        self.ai_context_model.update(ctx, |model, ctx| {
-            model.reset_context_to_default(ctx);
-        });
-        ctx.emit(Event::ClearSelectionsWhenShellMode);
     }
 
     pub fn input_mode_model(&self) -> &ModelHandle<InputModeModel> {
@@ -2645,10 +2569,6 @@ impl Input {
             }
             PromptDisplayEvent::OpenCodeReview => {
                 ctx.emit(Event::OpenCodeReviewPane);
-            }
-            PromptDisplayEvent::OpenConversationHistory => {
-                // Emit event to open command palette with conversation filter
-                ctx.emit(Event::OpenConversationHistory);
             }
             PromptDisplayEvent::OpenCommandPaletteFiles => {
                 ctx.emit(Event::OpenFilesPalette {
@@ -5457,12 +5377,10 @@ impl Input {
             EditorEvent::CmdEnter => self.input_cmd_enter(ctx),
             EditorEvent::CtrlEnter => self.input_ctrl_enter(ctx),
             EditorEvent::Escape => self.editor_escape(ctx),
-            EditorEvent::CtrlC { cleared_buffer_len } => {
+            EditorEvent::CtrlC { .. } => {
                 self.close_input_suggestions(/*should_focus_input=*/ true, ctx);
 
-                ctx.emit(Event::CtrlC {
-                    cleared_buffer_len: *cleared_buffer_len,
-                });
+                ctx.emit(Event::CtrlC);
             }
             EditorEvent::DeleteAllLeft => {
                 if self.is_locked_in_shell_mode(ctx)
@@ -5858,42 +5776,25 @@ impl Input {
         num_images_to_add: usize,
         ctx: &mut ViewContext<Self>,
     ) -> usize {
-        let (num_images_attached, num_images_in_conversation) =
-            self.editor.read(ctx, |editor, _| {
-                (
-                    editor.image_context_options.num_images_attached(),
-                    editor.image_context_options.num_images_in_conversation(),
-                )
-            });
+        let num_images_attached = self.editor.read(ctx, |editor, _| {
+            editor.image_context_options.num_images_attached()
+        });
 
-        // Calculate how many images we can add based on per-query limit
         let available_per_query = MAX_IMAGE_COUNT_FOR_QUERY.saturating_sub(num_images_attached);
 
-        // Calculate how many images we can add based on per-conversation limit
-        let total_images_current = num_images_attached + num_images_in_conversation;
-        let available_per_conversation =
-            MAX_IMAGES_PER_CONVERSATION.saturating_sub(total_images_current);
-
-        // Take the more restrictive limit
-        let max_attachable = available_per_query.min(available_per_conversation);
-
         // Determine how many we can actually attach
-        let images_to_attach = num_images_to_add.min(max_attachable);
+        let images_to_attach = num_images_to_add.min(available_per_query);
         let excess_images = num_images_to_add.saturating_sub(images_to_attach);
 
         // Show toast for excess images if any
         if excess_images > 0 {
-            let (limit_name, limit_value) = if available_per_query < available_per_conversation {
-                ("per query", MAX_IMAGE_COUNT_FOR_QUERY)
-            } else {
-                ("per conversation", MAX_IMAGES_PER_CONVERSATION)
-            };
-
             let message = if excess_images == 1 {
-                format!("1 image wasn't attached - limit is {limit_value} images {limit_name}.")
+                format!(
+                    "1 image wasn't attached - limit is {MAX_IMAGE_COUNT_FOR_QUERY} images per query."
+                )
             } else {
                 format!(
-                    "{excess_images} images weren't attached - limit is {limit_value} images {limit_name}."
+                    "{excess_images} images weren't attached - limit is {MAX_IMAGE_COUNT_FOR_QUERY} images per query."
                 )
             };
             self.show_image_paste_error(ctx, message);
@@ -8313,9 +8214,6 @@ impl TypedActionView for Input {
             }
             InputAction::OpenInlineHistoryMenu => {
                 self.open_inline_history_menu(ctx);
-            }
-            InputAction::ClearAttachedContext => {
-                self.clear_attached_context(ctx);
             }
         }
     }

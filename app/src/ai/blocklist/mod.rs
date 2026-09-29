@@ -1,11 +1,9 @@
 //! This module contains model, controller, and view logic for Blocklist AI.
 mod action_model;
-pub mod agent_view;
 pub mod block;
 pub mod code_block;
 mod context_model;
 mod controller;
-pub(crate) mod conversation_selection;
 pub(crate) mod diff_storage;
 pub(crate) mod diff_types;
 
@@ -16,7 +14,6 @@ pub mod inline_action;
 mod permissions;
 mod persistence;
 pub mod prompt;
-pub mod summarization_cancel_dialog;
 
 pub(crate) mod telemetry_banner;
 pub(crate) mod view_util;
@@ -37,17 +34,10 @@ pub use controller::BlocklistAIController;
 #[cfg(test)]
 pub(crate) use controller::response_stream::ResponseStream;
 pub(crate) use controller::response_stream::ResponseStreamId;
-pub(crate) use controller::{
-    BlocklistAIControllerEvent, ClientIdentifiers, SessionContext, SlashCommandRequest,
-};
-pub(crate) use conversation_selection::{
-    ConversationSelection, ConversationSelectionEvent, ConversationSelectionHandle,
-    PendingQueryState,
-};
+pub(crate) use controller::{BlocklistAIControllerEvent, ClientIdentifiers, SessionContext};
 pub(crate) use history_model::{
-    AIQueryHistory, AIQueryHistoryOutputStatus, BeginConversationRenameError,
-    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, ConversationStatusUpdate, FORK_PREFIX,
-    PRE_REWIND_PREFIX,
+    AIQueryHistory, AIQueryHistoryOutputStatus, BlocklistAIHistoryEvent, BlocklistAIHistoryModel,
+    ConversationStatusUpdate,
 };
 #[cfg(test)]
 pub(crate) use permissions::is_agent_mode_autonomy_allowed;

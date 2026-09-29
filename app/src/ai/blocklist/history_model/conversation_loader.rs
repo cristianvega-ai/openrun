@@ -243,8 +243,7 @@ impl BlocklistAIHistoryModel {
 
         // Fallback: load directly from the server. This handles cases where
         // cloud metadata hasn't been merged into the local history model yet
-        // (e.g. timing on startup, or conversations only surfaced via
-        // AgentConversationsModel).
+        // (e.g. timing on startup).
         log::warn!(
             "No local metadata for server token {}, falling back to server fetch",
             server_token.as_str()

@@ -6,7 +6,6 @@
 pub mod input_context;
 mod pending_response_streams;
 pub mod response_stream;
-mod slash_command;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -16,7 +15,6 @@ use input_context::{input_context_for_request, parse_context_attachments};
 use itertools::Itertools;
 use parking_lot::FairMutex;
 use pending_response_streams::PendingResponseStreams;
-pub use slash_command::*;
 use warp_core::assertions::safe_assert;
 use warp_errors::report_error;
 use warp_multi_agent_api::{Task, ToolType, message};
@@ -29,7 +27,6 @@ use self::response_stream::{PendingResume, RecoveryBudget, ResponseStream, Respo
 use super::ResponseStreamId;
 use super::action_model::{BlocklistAIActionEvent, BlocklistAIActionModel};
 use super::context_model::{BlocklistAIContextModel, PendingAttachment, PendingFile};
-use super::conversation_selection::{ConversationSelectionEvent, ConversationSelectionHandle};
 use super::history_model::BlocklistAIHistoryModel;
 use crate::ai::agent::api::{self, ServerConversationToken};
 use crate::ai::agent::conversation::{AIConversation, AIConversationId, ConversationStatus};
@@ -323,7 +320,6 @@ impl BlocklistAIController {
     #[allow(clippy::too_many_arguments)]
     pub fn new<T: Entity>(
         context_model: ModelHandle<BlocklistAIContextModel>,
-        conversation_selection: ConversationSelectionHandle,
         action_model: ModelHandle<BlocklistAIActionModel>,
         active_session: ModelHandle<ActiveSession>,
         terminal_model: Arc<FairMutex<TerminalModel>>,
@@ -459,33 +455,6 @@ impl BlocklistAIController {
             me.send_follow_up_for_conversation(*conversation_id, ctx);
         });
 
-        ctx.subscribe_to_model(&conversation_selection, |me, _, event, ctx| {
-            let ConversationSelectionEvent::Deactivated {
-                conversation_id,
-                final_exchange_count,
-                is_exit_before_new_entrance,
-            } = event
-            else {
-                return;
-            };
-            if *is_exit_before_new_entrance || *final_exchange_count == 0 {
-                return;
-            }
-            let history = BlocklistAIHistoryModel::handle(ctx);
-            let Some(conversation) = history.as_ref(ctx).conversation(conversation_id) else {
-                return;
-            };
-            if conversation.is_viewing_shared_session() {
-                return;
-            }
-            if conversation.status().is_in_progress() {
-                me.cancel_conversation_progress(
-                    *conversation_id,
-                    CancellationReason::ManuallyCancelled,
-                    ctx,
-                );
-            }
-        });
         Self {
             context_model,
             action_model,
@@ -534,11 +503,6 @@ impl BlocklistAIController {
         };
         if let Some(active_conversation_id) = active_conversation_id {
             self.cancel_conversation_progress(active_conversation_id, cancellation_reason, ctx);
-        }
-
-        if let Some(slash_command_request) = SlashCommandRequest::from_query(query.as_str()) {
-            slash_command_request.send_request(self, ctx);
-            return;
         }
 
         let (query, user_query_mode) = extract_user_query_mode(query);
@@ -844,27 +808,6 @@ impl BlocklistAIController {
         )
     }
 
-    /// Sends the given user query to the AI model, skipping long running command detection.
-    /// We use this when we fork a conversation and immediately send an initial query, to avoid
-    /// a race condition where restored command blocks may appear long running when the initial query is sent,
-    /// causing the query to go to the lrc subagent.
-    pub fn send_user_query_in_conversation_no_lrc_subagent(
-        &mut self,
-        query: String,
-        conversation_id: AIConversationId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.send_user_query_in_conversation_internal(
-            query,
-            conversation_id,
-            true, // skip_running_command_detection
-            HashMap::new(),
-            EntrypointType::UserInitiated,
-            None,
-            ctx,
-        );
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn send_user_query_in_conversation_internal(
         &mut self,
@@ -991,40 +934,15 @@ impl BlocklistAIController {
         ai_input: AIAgentInput,
         ctx: &mut ModelContext<Self>,
     ) {
-        let target_conversation = self.context_model.as_ref(ctx).selected_conversation_id(ctx);
-        let which_task = match target_conversation {
-            Some(id) => {
-                let Some(conversation) = BlocklistAIHistoryModel::as_ref(ctx).conversation(&id)
-                else {
-                    report_error!(
-                        "Tried to send custom AI input query as follow-up in non-existent conversation"
-                    );
-                    return;
-                };
-                WhichTask::Task {
-                    conversation_id: conversation.id(),
-                    task_id: conversation.get_root_task_id().clone(),
-                }
-            }
-            None => WhichTask::NewConversation,
-        };
         self.send_query(
             InputQuery {
-                which_task,
+                which_task: WhichTask::NewConversation,
                 input_query: InputQueryType::AIInputType { ai_input },
                 additional_attachments: HashMap::new(),
             },
             EntrypointType::UserInitiated,
             ctx,
         )
-    }
-
-    pub fn send_slash_command_request(
-        &mut self,
-        slash_command: SlashCommandRequest,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        slash_command.send_request(self, ctx);
     }
 
     /// Mark a conversation to follow up after its actions complete and attempt to send immediately
@@ -1259,11 +1177,7 @@ impl BlocklistAIController {
         &self,
         ctx: &'a mut ModelContext<Self>,
     ) -> &'a AIConversation {
-        let is_autoexecute_override = self
-            .context_model
-            .as_ref(ctx)
-            .pending_query_autoexecute_override(ctx)
-            .is_autoexecute_any_action();
+        let is_autoexecute_override = false;
         let history_model = BlocklistAIHistoryModel::handle(ctx);
         let id = history_model.update(ctx, |history_model, ctx| {
             // We don't mark passive conversations as "the active conversation" (at least when they first appear).

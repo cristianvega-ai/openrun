@@ -79,10 +79,8 @@ pub struct WorkspaceState {
     pub is_resource_center_open: bool,
     pub is_command_search_open: bool,
     pub is_prompt_editor_open: bool,
-    pub is_agent_toolbar_editor_open: bool,
     pub is_cli_agent_toolbar_editor_open: bool,
     pub is_header_toolbar_editor_open: bool,
-    pub is_rewind_confirmation_dialog_open: bool,
     pub is_native_quit_modal_open: bool,
     pub is_notification_mailbox_open: bool,
     pub is_tab_config_params_modal_open: bool,
@@ -109,7 +107,6 @@ impl WorkspaceState {
             || self.is_launch_config_save_modal_open
             || self.is_command_search_open
             || self.is_prompt_editor_open
-            || self.is_agent_toolbar_editor_open
             || self.is_cli_agent_toolbar_editor_open
             || self.is_header_toolbar_editor_open
             || self.is_tab_config_params_modal_open
@@ -136,7 +133,6 @@ impl WorkspaceState {
         self.is_launch_config_save_modal_open = false;
         self.is_command_search_open = false;
         self.is_prompt_editor_open = false;
-        self.is_agent_toolbar_editor_open = false;
         self.is_cli_agent_toolbar_editor_open = false;
         self.is_header_toolbar_editor_open = false;
         self.is_tab_config_params_modal_open = false;

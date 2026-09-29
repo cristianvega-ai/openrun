@@ -22,7 +22,6 @@ use crate::ai::agent::{
     AIAgentActionId, AIAgentExchangeId, AIAgentInput as FullAIAgentInput, AIIdentifiers,
     EntrypointType, ServerOutputId, SuggestedLoggingId,
 };
-use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::ai::blocklist::{AIBlockResponseRating, CommandExecutionPermissionAllowedReason};
 use crate::ai::execution_profiles::AskUserQuestionPermission;
 use crate::channel::Channel;
@@ -307,7 +306,6 @@ pub enum PaletteSource {
     QuitModal,
     LogOutModal,
     IntegrationTest,
-    ConversationManager,
     ContextChip,
     PaneHeader,
     AgentTip,
@@ -362,8 +360,6 @@ pub enum CLIAgentType {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationAgentVariant {
-    /// Warp's built-in agent (Oz).
-    Oz,
     /// A CLI agent (e.g., Claude Code, Gemini CLI, etc.).
     CLIAgent(CLIAgentType),
 }
@@ -820,81 +816,6 @@ impl From<FullAIAgentInput> for AIAgentInput {
 }
 
 /// The origin of an agent view entry, for telemetry purposes.
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TelemetryAgentViewEntryOrigin {
-    Input,
-    ConversationSelector,
-    AgentModeHomepage,
-    AgentViewBlock,
-    AIDocument,
-    AutoFollowUp,
-    RestoreExistingConversation,
-    AgentRequestedNewConversation,
-    AcceptedPromptSuggestion,
-    AcceptedUnitTestSuggestion,
-    AcceptedPassiveCodeDiff,
-    InlineCodeReview,
-    Cli,
-    ImageAdded,
-    SlashCommand,
-    CodeReviewContext,
-    ContinueConversationButton,
-    ViewPassiveCodeDiffDetails,
-    ResumeConversationButton,
-    LongRunningCommand,
-    HistoryMenu,
-    InlineConversationMenu,
-    PromptChip,
-    OnboardingCallout,
-    ConversationListView,
-    Onboarding,
-    Keybinding,
-    SlashInit,
-    ProjectEntry,
-    ClearBuffer,
-    LinearDeepLink,
-    JumpToLatestAgentMessage,
-}
-
-impl From<AgentViewEntryOrigin> for TelemetryAgentViewEntryOrigin {
-    fn from(origin: AgentViewEntryOrigin) -> Self {
-        match origin {
-            AgentViewEntryOrigin::Input => Self::Input,
-            AgentViewEntryOrigin::ConversationSelector => Self::ConversationSelector,
-            AgentViewEntryOrigin::AgentModeHomepage => Self::AgentModeHomepage,
-            AgentViewEntryOrigin::AgentViewBlock => Self::AgentViewBlock,
-            AgentViewEntryOrigin::AIDocument => Self::AIDocument,
-            AgentViewEntryOrigin::AutoFollowUp => Self::AutoFollowUp,
-            AgentViewEntryOrigin::RestoreExistingConversation => Self::RestoreExistingConversation,
-            AgentViewEntryOrigin::AgentRequestedNewConversation => {
-                Self::AgentRequestedNewConversation
-            }
-            AgentViewEntryOrigin::AcceptedPromptSuggestion => Self::AcceptedPromptSuggestion,
-            AgentViewEntryOrigin::AcceptedUnitTestSuggestion => Self::AcceptedUnitTestSuggestion,
-            AgentViewEntryOrigin::AcceptedPassiveCodeDiff => Self::AcceptedPassiveCodeDiff,
-            AgentViewEntryOrigin::InlineCodeReview => Self::InlineCodeReview,
-            AgentViewEntryOrigin::Cli => Self::Cli,
-            AgentViewEntryOrigin::ImageAdded => Self::ImageAdded,
-            AgentViewEntryOrigin::SlashCommand { .. } => Self::SlashCommand,
-            AgentViewEntryOrigin::CodeReviewContext => Self::CodeReviewContext,
-            AgentViewEntryOrigin::LongRunningCommand => Self::LongRunningCommand,
-            AgentViewEntryOrigin::ContinueConversationButton => Self::ContinueConversationButton,
-            AgentViewEntryOrigin::ViewPassiveCodeDiffDetails => Self::ViewPassiveCodeDiffDetails,
-            AgentViewEntryOrigin::ResumeConversationButton => Self::ResumeConversationButton,
-            AgentViewEntryOrigin::InlineHistoryMenu => Self::HistoryMenu,
-            AgentViewEntryOrigin::InlineConversationMenu => Self::InlineConversationMenu,
-            AgentViewEntryOrigin::PromptChip => Self::PromptChip,
-            AgentViewEntryOrigin::ConversationListView => Self::ConversationListView,
-            AgentViewEntryOrigin::Keybinding(_) => Self::Keybinding,
-            AgentViewEntryOrigin::ProjectEntry => Self::ProjectEntry,
-            AgentViewEntryOrigin::ClearBuffer => Self::ClearBuffer,
-            AgentViewEntryOrigin::LinearDeepLink => Self::LinearDeepLink,
-            AgentViewEntryOrigin::JumpToLatestAgentMessage => Self::JumpToLatestAgentMessage,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Serialize)]
 pub enum SlashMenuSource {
     SlashButton,
@@ -2221,20 +2142,6 @@ pub enum TelemetryEvent {
     ToggleUseAgentToolbarSetting {
         /// Whether the setting is enabled or disabled.
         is_enabled: bool,
-    },
-    /// Emitted when the user enters the agent view.
-    AgentViewEntered {
-        /// The origin/entrypoint for entering the agent view.
-        origin: TelemetryAgentViewEntryOrigin,
-        /// Whether a request was automatically triggered upon entry (e.g., prompt was provided).
-        did_auto_trigger_request: bool,
-    },
-    /// Emitted when the user exits the agent view.
-    AgentViewExited {
-        /// The origin/entrypoint that was used when entering the agent view.
-        origin: TelemetryAgentViewEntryOrigin,
-        /// Whether the conversation was empty (had no exchanges) when exiting.
-        was_empty: bool,
     },
     /// Emitted when the inline conversation menu is opened.
     InlineConversationMenuOpened {
@@ -3580,17 +3487,6 @@ impl TelemetryEvent {
             TelemetryEvent::ToggleUseAgentToolbarSetting { is_enabled } => Some(json!({
                 "is_enabled": is_enabled,
             })),
-            TelemetryEvent::AgentViewEntered {
-                origin,
-                did_auto_trigger_request,
-            } => Some(json!({
-                "origin": origin,
-                "did_auto_trigger_request": did_auto_trigger_request,
-            })),
-            TelemetryEvent::AgentViewExited { origin, was_empty } => Some(json!({
-                "origin": origin,
-                "was_empty": was_empty,
-            })),
             TelemetryEvent::InlineConversationMenuOpened { is_in_agent_view } => Some(json!({
                 "is_in_agent_view": is_in_agent_view,
             })),
@@ -3954,8 +3850,6 @@ impl TelemetryEvent {
             | TelemetryEvent::ConversationListItemOpened { .. }
             | TelemetryEvent::ConversationListItemDeleted
             | TelemetryEvent::ConversationListLinkCopied { .. }
-            | TelemetryEvent::AgentViewEntered { .. }
-            | TelemetryEvent::AgentViewExited { .. }
             | TelemetryEvent::InlineConversationMenuOpened { .. }
             | TelemetryEvent::InlineConversationMenuItemSelected { .. }
             | TelemetryEvent::AgentShortcutsViewToggled { .. }
@@ -4063,9 +3957,7 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             | Self::ConversationListLinkCopied => {
                 EnablementState::Flag(FeatureFlag::AgentViewConversationListView)
             }
-            Self::AgentViewEntered
-            | Self::AgentViewExited
-            | Self::InlineConversationMenuOpened
+            Self::InlineConversationMenuOpened
             | Self::InlineConversationMenuItemSelected
             | Self::AgentShortcutsViewToggled => EnablementState::Always,
             Self::CreateProjectPromptSubmitted => EnablementState::Flag(FeatureFlag::GetStartedTab),
@@ -4503,8 +4395,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::ConversationListItemOpened => "ConversationList.ItemOpened",
             Self::ConversationListItemDeleted => "ConversationList.ItemDeleted",
             Self::ConversationListLinkCopied => "ConversationList.LinkCopied",
-            Self::AgentViewEntered => "AgentView.Entered",
-            Self::AgentViewExited => "AgentView.Exited",
             Self::InlineConversationMenuOpened => "AgentView.InlineConversationMenuOpened",
             Self::InlineConversationMenuItemSelected => {
                 "AgentView.InlineConversationMenuItemSelected"
@@ -5436,8 +5326,6 @@ impl TelemetryEventDesc for TelemetryEventDiscriminants {
             Self::ConversationListLinkCopied => {
                 "Copied a conversation link from the conversation list"
             }
-            Self::AgentViewEntered => "User entered the Agent View",
-            Self::AgentViewExited => "User exited the Agent View",
             Self::InlineConversationMenuOpened => {
                 "User opened the inline conversation menu in Agent View"
             }

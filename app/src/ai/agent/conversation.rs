@@ -71,7 +71,7 @@ use crate::terminal::general_settings::GeneralSettings;
 use crate::terminal::model::block::{
     AgentInteractionMetadata, AgentViewVisibility, BlockId, SerializedAIMetadata, SerializedBlock,
 };
-use crate::ui_components::agent_status::{AgentStatus, StatusColorStyle};
+use crate::ui_components::agent_status::AgentStatus;
 use crate::ui_components::icons::Icon;
 use crate::workspaces::user_profiles::UserProfileWithUID;
 use crate::{BlocklistAIHistoryModel, GlobalResourceHandlesProvider};
@@ -1416,13 +1416,6 @@ impl AIConversation {
     #[cfg_attr(target_family = "wasm", allow(unused))]
     pub fn exchange_with_id(&self, exchange_id: AIAgentExchangeId) -> Option<&AIAgentExchange> {
         self.task_store.exchange_by_id(exchange_id)
-    }
-
-    /// Returns the exchange that preceded the exchange with the given id, if there is one.
-    pub fn previous_exchange(&self, exchange_id: &AIAgentExchangeId) -> Option<&AIAgentExchange> {
-        self.exchanges_reversed()
-            .skip_while(|e| e.id != *exchange_id)
-            .nth(1)
     }
 
     /// Returns the last exchange that didn't contain a passive request.
@@ -4512,48 +4505,14 @@ impl ConversationStatus {
         }
     }
 
-    pub fn status_icon_and_color(
-        &self,
-        theme: &WarpTheme,
-        color_style: StatusColorStyle,
-    ) -> (Icon, ColorU) {
+    pub fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
         match self {
-            ConversationStatus::InProgress => (
-                Icon::ClockLoader,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_magenta(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_magenta(),
-                },
-            ),
-            ConversationStatus::Success => (
-                Icon::Check,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_green(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_green(),
-                },
-            ),
-            ConversationStatus::Error => (
-                Icon::Triangle,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_red(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_red(),
-                },
-            ),
-            ConversationStatus::TransientError => (
-                Icon::ClockLoader,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_yellow(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_yellow(),
-                },
-            ),
+            ConversationStatus::InProgress => (Icon::ClockLoader, theme.ansi_fg_magenta()),
+            ConversationStatus::Success => (Icon::Check, theme.ansi_fg_green()),
+            ConversationStatus::Error => (Icon::Triangle, theme.ansi_fg_red()),
+            ConversationStatus::TransientError => (Icon::ClockLoader, theme.ansi_fg_yellow()),
             ConversationStatus::Cancelled => (Icon::StopFilled, internal_colors::neutral_5(theme)),
-            ConversationStatus::Blocked { .. } => (
-                Icon::StopFilled,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_yellow(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_yellow(),
-                },
-            ),
+            ConversationStatus::Blocked { .. } => (Icon::StopFilled, theme.ansi_fg_yellow()),
         }
     }
 

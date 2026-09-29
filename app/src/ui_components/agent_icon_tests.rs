@@ -8,9 +8,7 @@ use crate::ui_components::icon_with_status::IconWithStatusVariant;
 fn cli_fields(variant: Option<IconWithStatusVariant>) -> Option<(CLIAgent, Option<AgentStatus>)> {
     match variant? {
         IconWithStatusVariant::CLIAgent { agent, status } => Some((agent, status)),
-        IconWithStatusVariant::OzAgent { .. }
-        | IconWithStatusVariant::Neutral { .. }
-        | IconWithStatusVariant::NeutralElement { .. } => {
+        IconWithStatusVariant::Neutral { .. } | IconWithStatusVariant::NeutralElement { .. } => {
             panic!("a CLI agent session must only produce the CLI agent variant")
         }
     }

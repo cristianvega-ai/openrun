@@ -3,12 +3,12 @@
 use warp_core::features::FeatureFlag;
 use warp_util::path::user_friendly_path;
 use warpui::elements::{
-    ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Flex, Hoverable,
+    ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Flex, Hoverable,
     Icon as ElementIcon, MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius,
     SavePosition, Text,
 };
 use warpui::platform::Cursor;
-use warpui::{AppContext, Element, EntityId, SingletonEntity, ViewHandle};
+use warpui::{AppContext, Element, EntityId, SingletonEntity};
 
 use crate::ai::agent::AIAgentExchangeId;
 use crate::ai::agent::conversation::AIConversationId;
@@ -21,7 +21,6 @@ use crate::terminal::block_list_element::render_hoverable_block_button;
 use crate::terminal::view::{TerminalAction, WARP_PROMPT_HEIGHT_LINES};
 use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
-use crate::view_components::action_button::ActionButton;
 
 /// Data required to render the AI block header.
 pub(super) struct Props<'a> {
@@ -30,12 +29,10 @@ pub(super) struct Props<'a> {
     pub(super) conversation_id: &'a AIConversationId,
     pub(super) attached_blocks_chip_mouse_state: &'a MouseStateHandle,
     pub(super) overflow_menu_mouse_state: &'a MouseStateHandle,
-    pub(super) rewind_button: &'a ViewHandle<ActionButton>,
     pub(super) num_attached_context_blocks: usize,
     pub(super) has_attached_context_selected_text: bool,
     pub(super) directory_context: &'a DirectoryContext,
     pub(super) is_selected_text_attached_as_context: bool,
-    pub(super) is_restored: bool,
 }
 
 /// Render the AI Block's header which is the "AI prompt" that displays context about the AI query.
@@ -106,20 +103,11 @@ pub(super) fn render(props: Props, app: &AppContext) -> Option<Box<dyn Element>>
 
     let mut right_row = Flex::row().with_cross_axis_alignment(CrossAxisAlignment::Center);
 
-    if FeatureFlag::RevertToCheckpoints.is_enabled() && !props.is_restored {
-        right_row.add_child(
-            Container::new(ChildView::new(props.rewind_button).finish())
-                .with_margin_right(4.)
-                .finish(),
-        );
-    }
-
     right_row.add_child(render_overflow_menu_button(
         props.overflow_menu_mouse_state.clone(),
         *props.view_id,
         *props.exchange_id,
         *props.conversation_id,
-        props.is_restored,
         app,
     ));
 
@@ -209,7 +197,6 @@ pub(super) fn render_overflow_menu_button(
     ai_block_view_id: EntityId,
     exchange_id: AIAgentExchangeId,
     conversation_id: AIConversationId,
-    is_restored: bool,
     app: &AppContext,
 ) -> Box<dyn Element> {
     let appearance = Appearance::as_ref(app);
@@ -237,7 +224,6 @@ pub(super) fn render_overflow_menu_button(
                     ai_block_view_id,
                     exchange_id,
                     conversation_id,
-                    is_restored,
                 });
             },
         ))

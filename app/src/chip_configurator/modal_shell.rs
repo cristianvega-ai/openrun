@@ -1,6 +1,6 @@
 //! Shared rendering for chip editors that use a left/right zones layout.
 //!
-//! The agent toolbar editor and header toolbar editor share the same editable
+//! The CLI agent toolbar editor and header toolbar editor share the same editable
 //! chip sections (available bank, left/right drop zones, restore-default link).
 //! Modal consumers wrap those sections in a title, cancel/save buttons, and blur
 //! overlay, while settings consumers can render the sections inline.

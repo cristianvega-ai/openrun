@@ -1,11 +1,8 @@
 use std::collections::HashSet;
-use std::fs::read;
-use std::io::{Cursor, Write};
-use std::path::Path;
+use std::io::Write;
 use std::time::Duration;
 
 use command::blocking::Command;
-use prost::Message;
 use warpui::integration::{AssertionOutcome, TestStep};
 use warpui::{SingletonEntity, async_assert};
 
@@ -30,78 +27,6 @@ pub const AGENT_MODE_RUNNING_STEP_GROUP_NAME: &str = "Agent mode running";
 /// Where `capture_impl_artifacts` persists the implementation conversation's
 /// git diff. Falls back to a fixed /tmp path when unset.
 pub const IMPL_CODE_DIFF_OUTPUT_FILE_ENV_VAR: &str = "IMPL_CODE_DIFF_OUTPUT_FILE";
-
-use super::hydrate_ai_conversation_assertion;
-
-/// Assumes that the terminal input is currently not in AI input mode.
-pub fn enter_agent_view() -> TestStep {
-    new_step_with_default_assertions("Enter Agent View")
-        .with_keystrokes(&["ctrl-shift-enter"])
-        .add_named_assertion(
-            "Assert that we are in Agent View and AI input mode",
-            move |app, window_id| {
-                let terminal_view = terminal_view(app, window_id, 0, 0);
-                terminal_view.read(app, |terminal_view, app| {
-                    let is_prompt_input_mode = terminal_view
-                        .input()
-                        .read(app, |input, app| input.input_type(app).is_prompt());
-                    let transcript_scope = {
-                        let model = terminal_view.model.lock();
-                        *model.block_list().transcript_scope()
-                    };
-                    async_assert!(
-                        is_prompt_input_mode && transcript_scope.is_conversation(),
-                        "Expected fullscreen Agent View + AI input mode, got transcript_scope={transcript_scope:?}, is_prompt_input_mode={is_prompt_input_mode}"
-                    )
-                })
-            },
-        )
-}
-
-/// Assumes that the terminal input is currently in AI input mode.
-pub fn exit_agent_view() -> TestStep {
-    new_step_with_default_assertions("Exit Agent View")
-        .with_keystrokes(&["escape"])
-        .add_named_assertion(
-            "Assert that we exited Agent View and are not in AI input mode",
-            move |app, window_id| {
-                let terminal_view = terminal_view(app, window_id, 0, 0);
-                terminal_view.read(app, |terminal_view, app| {
-                    let is_prompt_input_mode = terminal_view
-                        .input()
-                        .read(app, |input, app| input.input_type(app).is_prompt());
-                    let transcript_scope = {
-                        let model = terminal_view.model.lock();
-                        *model.block_list().transcript_scope()
-                    };
-                    async_assert!(
-                        !is_prompt_input_mode && !transcript_scope.is_conversation(),
-                        "Expected inactive Agent View + non-AI input mode, got transcript_scope={transcript_scope:?}, is_prompt_input_mode={is_prompt_input_mode}"
-                    )
-                })
-            },
-        )
-}
-
-/// Hydrates a conversation from a protobuf file.
-/// File should be generated into the `input_data` directory.
-/// See the agent_mode_eval README for more details.
-pub fn hydrate_ai_conversation(file_name: &str) -> TestStep {
-    let file_bytes = get_input_data(file_name);
-    let Ok(request) = warp_multi_agent_api::Request::decode(file_bytes) else {
-        panic!("Failed to decode request from protobuf");
-    };
-
-    let tasks = request
-        .task_context
-        .map(|ctx| ctx.tasks)
-        .unwrap_or_default();
-
-    new_step_with_default_assertions("Hydrate AI conversation").add_named_assertion(
-        "Assert that conversation was hydrated successfully",
-        hydrate_ai_conversation_assertion(tasks),
-    )
-}
 
 /// Attach the latest block in the blocklist (command + output) to the AI query.
 pub fn attach_recent_block_as_context() -> TestStep {
@@ -389,14 +314,6 @@ pub fn set_preferred_coding_llm(llm_id: &str) -> TestStep {
             async_assert!(true, "Successfully updated preferred coding LLM")
         },
     )
-}
-
-fn get_input_data(file_name: &str) -> Cursor<Vec<u8>> {
-    let input_data_dir = std::env::var("INPUT_DATA_DIR").expect(
-        "INPUT_DATA_DIR is not set. This is needed to hydrate conversations from eval tests.",
-    );
-    let path = Path::new(&input_data_dir).join(file_name);
-    Cursor::new(read(&path).expect("Failed to read binary input data"))
 }
 
 /// Sets the execution profile to not auto-execute commands.

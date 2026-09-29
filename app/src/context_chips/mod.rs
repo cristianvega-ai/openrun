@@ -412,13 +412,9 @@ impl ContextChipKind {
         }
     }
 
-    pub fn default_styles(
-        &self,
-        appearance: &Appearance,
-        is_in_agent_view: bool,
-    ) -> RendererStyles {
-        if is_in_agent_view {
-            return RendererStyles::new(agent_view_chip_color(appearance), Properties::default());
+    pub fn default_styles(&self, appearance: &Appearance, is_in_footer: bool) -> RendererStyles {
+        if is_in_footer {
+            return RendererStyles::new(footer_chip_color(appearance), Properties::default());
         }
         let prompt_colors: PromptColors = appearance.theme().clone().into();
 
@@ -624,7 +620,7 @@ pub fn chips_to_string(chips: impl Iterator<Item = ChipResult>) -> String {
     prompt
 }
 
-pub(crate) fn agent_view_chip_color(appearance: &Appearance) -> ColorU {
+pub(crate) fn footer_chip_color(appearance: &Appearance) -> ColorU {
     let theme = appearance.theme();
     readable_chip_label_color(theme, Fill::Solid(blended_colors::neutral_1(theme)))
 }
@@ -658,10 +654,10 @@ pub fn render_text_from_kind(
     text: &mut Text,
     kind: ContextChipKind,
     value: String,
-    is_in_agent_view: bool,
+    is_in_footer: bool,
     appearance: &Appearance,
 ) {
-    let styles = kind.default_styles(appearance, is_in_agent_view);
+    let styles = kind.default_styles(appearance, is_in_footer);
     let prompt_colors: PromptColors = appearance.theme().clone().into();
 
     // Keep in sync with `ContextChipKind::display_value`
@@ -669,7 +665,7 @@ pub fn render_text_from_kind(
         ContextChipKind::ShellGitBranch | ContextChipKind::GitBranchStatus => {
             text.add_text_with_highlights(
                 "git:(",
-                if is_in_agent_view {
+                if is_in_footer {
                     styles.value_color
                 } else {
                     prompt_colors.input_prompt_git
@@ -680,7 +676,7 @@ pub fn render_text_from_kind(
         ContextChipKind::SvnBranch => {
             text.add_text_with_highlights(
                 "svn:(",
-                if is_in_agent_view {
+                if is_in_footer {
                     styles.value_color
                 } else {
                     prompt_colors.input_prompt_svn
@@ -691,7 +687,7 @@ pub fn render_text_from_kind(
         ContextChipKind::SvnDirtyItems => {
             text.add_text_with_highlights(
                 "±",
-                if is_in_agent_view {
+                if is_in_footer {
                     styles.value_color
                 } else {
                     prompt_colors.input_prompt_svn
@@ -702,12 +698,12 @@ pub fn render_text_from_kind(
         ContextChipKind::KubernetesContext => {
             text.add_text_with_highlights(
                 "⎈ ",
-                if is_in_agent_view {
+                if is_in_footer {
                     styles.value_color
                 } else {
                     prompt_colors.input_prompt_kubernetes
                 },
-                if is_in_agent_view {
+                if is_in_footer {
                     styles.font_properties
                 } else {
                     Properties::default().weight(Weight::Thin)
@@ -723,7 +719,7 @@ pub fn render_text_from_kind(
         ContextChipKind::ShellGitBranch | ContextChipKind::GitBranchStatus => {
             text.add_text_with_highlights(
                 ")",
-                if is_in_agent_view {
+                if is_in_footer {
                     styles.value_color
                 } else {
                     prompt_colors.input_prompt_git
@@ -734,7 +730,7 @@ pub fn render_text_from_kind(
         ContextChipKind::SvnBranch => {
             text.add_text_with_highlights(
                 ")",
-                if is_in_agent_view {
+                if is_in_footer {
                     styles.value_color
                 } else {
                     prompt_colors.input_prompt_svn

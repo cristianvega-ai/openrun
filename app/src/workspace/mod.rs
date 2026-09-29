@@ -10,7 +10,6 @@ mod home;
 mod lightbox_view;
 mod native_modal;
 mod registry;
-pub mod rewind_confirmation_dialog;
 pub mod sync_inputs;
 pub mod tab_group;
 pub mod tab_settings;
@@ -23,9 +22,6 @@ pub use action::{
     WorkspaceAction,
 };
 pub use active_session::ActiveSession;
-pub use global_actions::{
-    ForkAIConversationParams, ForkFromExchange, ForkedConversationDestination,
-};
 use serde::{Deserialize, Serialize};
 pub use util::{PaneViewLocator, TabMovement, active_terminal_in_window};
 pub use view::{
@@ -73,7 +69,6 @@ pub fn init(app: &mut AppContext) {
     modal::init(app);
     native_modal::init(app);
     lightbox_view::init(app);
-    rewind_confirmation_dialog::init(app);
     crate::tab_configs::remove_confirmation_dialog::init(app);
     tab_configs::session_config_modal::init(app);
     view::global_search::view::GlobalSearchView::init(app);

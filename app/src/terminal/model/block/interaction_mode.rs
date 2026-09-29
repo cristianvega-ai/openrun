@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use serde::{Deserialize, Deserializer, Serialize};
 use warp_terminal::model::Point;
 use warp_terminal::model::grid::Dimensions;
 
@@ -6,12 +6,153 @@ use super::{Block, SerializedAIMetadata};
 use crate::ai::agent::AIAgentActionId;
 use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::task::TaskId;
-use crate::ai::blocklist::block::cli_controller::{
-    LongRunningCommandControlState, UserTakeOverReason,
-};
 use crate::terminal::model::RespectObfuscatedSecrets;
 use crate::terminal::model::grid::RespectDisplayedOutput;
 use crate::terminal::model::grid::grid_handler::GridHandler;
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub enum UserTakeOverReason {
+    Manual,
+    /// The user interrupted the command and took control. `should_auto_resume` is `true` for a
+    /// live interrupt (e.g. Ctrl-C) that keeps the conversation alive so it resumes once the
+    /// command completes, and `false` for teardown flows (stop/rewind) that have cancelled it.
+    Stop {
+        should_auto_resume: bool,
+    },
+    /// The agent explicitly transferred control to the user via the
+    /// TransferShellCommandControlToUser tool call.
+    TransferFromAgent {
+        /// The reason the agent gave for transferring control.
+        reason: String,
+    },
+}
+
+impl<'de> Deserialize<'de> for UserTakeOverReason {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // `Current` mirrors the derived shape so serde can parse it without recursing back into
+        // this impl. `LegacyStop` accepts the bare `"Stop"` persisted before `should_auto_resume`
+        // existed: an externally tagged enum can't accept `Stop` as both a unit (legacy) and a
+        // struct (current) variant, and `#[serde(default)]` can't bridge the two, so the forms are
+        // unioned as `untagged`.
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Wire {
+            Current(Current),
+            LegacyStop(LegacyStop),
+        }
+
+        #[derive(Deserialize)]
+        enum Current {
+            Manual,
+            Stop { should_auto_resume: bool },
+            TransferFromAgent { reason: String },
+        }
+
+        #[derive(Deserialize)]
+        enum LegacyStop {
+            Stop,
+        }
+
+        Ok(match Wire::deserialize(deserializer)? {
+            Wire::Current(Current::Manual) => Self::Manual,
+            Wire::Current(Current::Stop { should_auto_resume }) => {
+                Self::Stop { should_auto_resume }
+            }
+            Wire::Current(Current::TransferFromAgent { reason }) => {
+                Self::TransferFromAgent { reason }
+            }
+            Wire::LegacyStop(LegacyStop::Stop) => Self::Stop {
+                should_auto_resume: false,
+            },
+        })
+    }
+}
+
+impl UserTakeOverReason {
+    pub fn is_stop(&self) -> bool {
+        matches!(self, Self::Stop { .. })
+    }
+
+    /// Returns `true` if the conversation should resume once the user-controlled command
+    /// completes. Only a teardown `Stop` opts out.
+    pub fn should_auto_resume(&self) -> bool {
+        match self {
+            Self::Manual | Self::TransferFromAgent { .. } => true,
+            Self::Stop { should_auto_resume } => *should_auto_resume,
+        }
+    }
+
+    pub fn transfer_reason(&self) -> Option<&str> {
+        match self {
+            Self::TransferFromAgent { reason } => Some(reason.as_str()),
+            _ => None,
+        }
+    }
+}
+
+/// Represents which party is in control of the active long running command.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum LongRunningCommandControlState {
+    /// The agent is in control.
+    ///
+    /// When the agent has control, the user cannot submit input to the command.
+    Agent {
+        /// `true` if the agent is blocked on approval from the user for submitting input.
+        is_blocked: bool,
+        /// `true` if agent responses should be hidden in the UI.
+        should_hide_responses: bool,
+    },
+    /// The user is in control.
+    User { reason: UserTakeOverReason },
+}
+
+impl LongRunningCommandControlState {
+    pub fn is_agent_in_control(&self) -> bool {
+        matches!(self, Self::Agent { .. })
+    }
+
+    pub fn is_agent_blocked(&self) -> bool {
+        matches!(
+            self,
+            Self::Agent {
+                is_blocked: true,
+                ..
+            }
+        )
+    }
+
+    pub fn is_user_in_control(&self) -> bool {
+        matches!(self, Self::User { .. })
+    }
+
+    /// Returns `true` if a completing user-controlled command should auto-resume the conversation.
+    pub fn should_auto_resume(&self) -> bool {
+        match self {
+            Self::Agent { .. } => false,
+            Self::User { reason } => reason.should_auto_resume(),
+        }
+    }
+
+    pub fn should_hide_responses(&self) -> bool {
+        matches!(
+            self,
+            Self::Agent {
+                should_hide_responses: true,
+                ..
+            }
+        )
+    }
+
+    pub fn user_take_over_reason(&self) -> Option<&UserTakeOverReason> {
+        match &self {
+            LongRunningCommandControlState::Agent { .. } => None,
+            LongRunningCommandControlState::User { reason } => Some(reason),
+        }
+    }
+}
 
 impl Block {
     /// `true` if the command is executing and the user has opened the agent mode input.
@@ -51,43 +192,9 @@ impl Block {
         }
     }
 
-    pub fn set_is_agent_tagged_in(&mut self, value: bool) {
-        if let InteractionMode::User(UserMode {
-            did_user_tag_in_agent,
-        }) = &mut self.interaction_mode
-        {
-            *did_user_tag_in_agent = value;
-        }
-    }
-
     /// Returns `true` if an agent is monitoring/interacting with this command.
     pub fn is_agent_monitoring(&self) -> bool {
         self.is_active_and_long_running() && self.long_running_control_state().is_some()
-    }
-
-    /// Returns `true` if the agent is either in control or has been tagged in by the user.
-    pub fn is_agent_in_control_or_tagged_in(&self) -> bool {
-        self.is_agent_in_control() || self.is_agent_tagged_in()
-    }
-
-    pub fn cli_subagent_task_id(&self) -> Option<&TaskId> {
-        self.agent_interaction_metadata()
-            .and_then(|metadata| metadata.subagent_task_id())
-    }
-
-    pub fn upgrade_cli_subagent_task_id(&mut self, new_task_id: TaskId) -> anyhow::Result<()> {
-        if let InteractionMode::Agent(AgentInteractionMetadata {
-            subagent_task_id: Some(task_id),
-            ..
-        }) = &mut self.interaction_mode
-        {
-            *task_id = new_task_id;
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "Tried to upgrade CLI subagent task ID for block with no prior CLI subagent task ID."
-            ))
-        }
     }
 
     /// Returns `true` if this command is active and the agent is in control.
@@ -133,19 +240,6 @@ impl Block {
             && self
                 .long_running_control_state()
                 .is_some_and(LongRunningCommandControlState::is_user_in_control)
-    }
-
-    pub fn update_is_agent_blocked(&mut self, new_value: bool) {
-        if let InteractionMode::Agent(AgentInteractionMetadata {
-            long_running_control_state:
-                Some(LongRunningCommandControlState::Agent {
-                    ref mut is_blocked, ..
-                }),
-            ..
-        }) = self.interaction_mode
-        {
-            *is_blocked = new_value;
-        }
     }
 
     /// Hands control to the user with a non-resuming `Stop`. Used by teardown paths (rewind,
@@ -232,18 +326,6 @@ impl Block {
         })
     }
 
-    pub fn set_agent_interaction_mode_for_agent_monitored_command(
-        &mut self,
-        task_id: &TaskId,
-        conversation_id: AIConversationId,
-    ) -> Result<(), UpdateInteractionModeError> {
-        let new_mode = self
-            .interaction_mode
-            .to_agent_monitored(task_id, conversation_id)?;
-        self.interaction_mode = new_mode;
-        Ok(())
-    }
-
     pub fn set_agent_interaction_mode(
         &mut self,
         agent_interaction_metadata: AgentInteractionMetadata,
@@ -256,35 +338,6 @@ impl Block {
         serialized_metadata: SerializedAIMetadata,
     ) {
         self.interaction_mode = InteractionMode::from_serialized_ai_metadata(serialized_metadata);
-    }
-
-    pub fn take_over_control_for_user(
-        &mut self,
-        reason: UserTakeOverReason,
-    ) -> Result<(), UpdateInteractionModeError> {
-        self.interaction_mode.take_over_for_user(reason)
-    }
-
-    pub fn handoff_control_to_agent(&mut self) -> Result<(), UpdateInteractionModeError> {
-        self.interaction_mode.handoff_to_agent()
-    }
-
-    /// Returns true if the interaction mode is agent-monitored and subagent response visibility was actually toggled.
-    pub fn toggle_subagent_response_visibility(&mut self) -> bool {
-        match &mut self.interaction_mode {
-            InteractionMode::Agent(AgentInteractionMetadata {
-                long_running_control_state:
-                    Some(LongRunningCommandControlState::Agent {
-                        should_hide_responses,
-                        ..
-                    }),
-                ..
-            }) => {
-                *should_hide_responses = !*should_hide_responses;
-                true
-            }
-            _ => false,
-        }
     }
 }
 
@@ -337,34 +390,6 @@ pub enum InteractionMode {
 }
 
 impl InteractionMode {
-    fn to_agent_monitored(
-        &self,
-        task_id: &TaskId,
-        conversation_id: AIConversationId,
-    ) -> Result<Self, UpdateInteractionModeError> {
-        let requested_command_action_id = match self {
-            InteractionMode::User(_) => None,
-            InteractionMode::Agent(metadata) => {
-                if metadata.conversation_id != conversation_id {
-                    return Err(UpdateInteractionModeError::UnexpectedConversationId);
-                }
-                metadata.requested_command_action_id.clone()
-            }
-        };
-
-        Ok(Self::Agent(AgentInteractionMetadata {
-            requested_command_action_id,
-            conversation_id,
-            subagent_task_id: Some(task_id.clone()),
-            long_running_control_state: Some(LongRunningCommandControlState::Agent {
-                is_blocked: false,
-                should_hide_responses: false,
-            }),
-            has_agent_written_to_block: false,
-            should_hide_block: false,
-        }))
-    }
-
     fn new_agent(metadata: AgentInteractionMetadata) -> Self {
         Self::Agent(metadata)
     }
@@ -407,52 +432,6 @@ impl InteractionMode {
         if let Self::Agent(metadata) = self {
             metadata.should_hide_block = value;
         }
-    }
-
-    fn take_over_for_user(
-        &mut self,
-        reason: UserTakeOverReason,
-    ) -> Result<(), UpdateInteractionModeError> {
-        let Self::Agent(AgentInteractionMetadata {
-            long_running_control_state,
-            ..
-        }) = self
-        else {
-            return Err(UpdateInteractionModeError::InvalidTakeOver);
-        };
-
-        if !long_running_control_state
-            .as_ref()
-            .is_some_and(|state| state.is_agent_in_control())
-        {
-            return Err(UpdateInteractionModeError::InvalidTakeOver);
-        }
-
-        *long_running_control_state = Some(LongRunningCommandControlState::User { reason });
-        Ok(())
-    }
-
-    fn handoff_to_agent(&mut self) -> Result<(), UpdateInteractionModeError> {
-        let Self::Agent(AgentInteractionMetadata {
-            long_running_control_state,
-            ..
-        }) = self
-        else {
-            return Err(UpdateInteractionModeError::InvalidHandOff);
-        };
-
-        if !long_running_control_state
-            .as_ref()
-            .is_some_and(|state| state.is_user_in_control())
-        {
-            return Err(UpdateInteractionModeError::InvalidHandOff);
-        }
-
-        *long_running_control_state = Some(LongRunningCommandControlState::Agent {
-            is_blocked: false,
-            should_hide_responses: false,
-        });
-        Ok(())
     }
 }
 

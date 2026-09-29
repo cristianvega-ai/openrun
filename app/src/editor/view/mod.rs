@@ -122,8 +122,6 @@ const DEFAULT_TAB_SIZE: usize = 4;
 
 pub const ACCEPT_AUTOSUGGESTION_KEYBINDING_NAME: &str = "editor_view:insert_autosuggestion";
 
-pub const MAX_IMAGES_PER_CONVERSATION: usize = 200;
-
 use warpui::clipboard_utils::CLIPBOARD_IMAGE_MIME_TYPES;
 
 #[derive(Clone, Copy)]
@@ -1583,7 +1581,6 @@ pub enum ImageContextOptions {
         unsupported_model: bool,
         is_processing_attached_images: bool,
         num_images_attached: usize,
-        num_images_in_conversation: usize,
     },
 
     /// Attaching image context is disabled.
@@ -1597,7 +1594,6 @@ impl ImageContextOptions {
                 unsupported_model,
                 is_processing_attached_images,
                 num_images_attached,
-                num_images_in_conversation,
             } => {
                 if *unsupported_model {
                     return false;
@@ -1608,11 +1604,6 @@ impl ImageContextOptions {
                 }
 
                 if *num_images_attached >= MAX_IMAGE_COUNT_FOR_QUERY {
-                    return false;
-                }
-
-                let total_images = *num_images_attached + *num_images_in_conversation;
-                if total_images >= MAX_IMAGES_PER_CONVERSATION {
                     return false;
                 }
 
@@ -1628,16 +1619,6 @@ impl ImageContextOptions {
                 num_images_attached,
                 ..
             } => *num_images_attached,
-            _ => 0,
-        }
-    }
-
-    pub fn num_images_in_conversation(&self) -> usize {
-        match self {
-            ImageContextOptions::Enabled {
-                num_images_in_conversation,
-                ..
-            } => *num_images_in_conversation,
             _ => 0,
         }
     }
@@ -3446,19 +3427,6 @@ impl EditorView {
         self.enter_settings.clone()
     }
 
-    /// Clears the transient editor-height shrink-delay state.
-    ///
-    /// The shrink-delay is useful when height briefly drops during autosuggestion churn, but
-    /// certain mode transitions (for example entering Agent View from multiline PS1/classic input)
-    /// intentionally remove decorator content in one step. In that case, carrying over the
-    /// previous baseline for even one frame causes visible layout jitter.
-    pub fn reset_height_shrink_delay(&mut self, ctx: &mut ViewContext<Self>) {
-        let mut editor_height_shrink_delay = self.editor_height_shrink_delay.lock();
-        editor_height_shrink_delay.editor_height_before_shrink = 0.;
-        editor_height_shrink_delay.editor_height_shrink_start = None;
-        ctx.notify();
-    }
-
     pub fn set_propagate_vertical_navigation_keys(
         &mut self,
         propagate_vertical_navigation_keys: PropagateAndNoOpNavigationKeys,
@@ -4740,7 +4708,6 @@ impl EditorView {
 
         let is_unsupported_model = self.image_context_options.is_unsupported_model();
         let num_images_attached = self.image_context_options.num_images_attached();
-        let num_images_in_conversation = self.image_context_options.num_images_in_conversation();
 
         ctx.open_file_picker(
             move |result, ctx| {
@@ -4777,23 +4744,12 @@ impl EditorView {
 
                         // Apply image count limits.
                         let num_images_user_attached = image_paths.len();
-                        let num_excess_images_by_query_limit = (image_paths.len()
-                            + num_images_attached)
+                        let num_excess_images = (image_paths.len() + num_images_attached)
                             .saturating_sub(MAX_IMAGE_COUNT_FOR_QUERY);
-                        let num_excess_images_by_conversation_limit =
-                            (image_paths.len() + num_images_attached + num_images_in_conversation)
-                                .saturating_sub(MAX_IMAGES_PER_CONVERSATION);
-                        let num_excess_images = num_excess_images_by_query_limit
-                            .max(num_excess_images_by_conversation_limit);
 
                         if num_excess_images > 0 {
-                            let limit_reason = if num_excess_images
-                                == num_excess_images_by_query_limit
-                            {
-                                format!("limit is {MAX_IMAGE_COUNT_FOR_QUERY} per query")
-                            } else {
-                                format!("limit is {MAX_IMAGES_PER_CONVERSATION} per conversation")
-                            };
+                            let limit_reason =
+                                format!("limit is {MAX_IMAGE_COUNT_FOR_QUERY} per query");
 
                             let message = if num_excess_images == 1 {
                                 format!("1 image wasn't attached - {limit_reason}.")

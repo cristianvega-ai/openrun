@@ -16,8 +16,6 @@ use warpui::{App, ModelHandle};
 use watcher::HomeDirectoryWatcher;
 
 use super::*;
-use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
-use crate::ai::agent_conversations_model::AgentConversationsModel;
 use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::ai::blocklist::local_agent_task_sync_model::LocalAgentTaskSyncModel;
 use crate::ai::document::ai_document_model::AIDocumentModel;
@@ -111,7 +109,6 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(move |_| BlocklistAIHistoryModel::new(vec![], &conversations));
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
     app.add_singleton_model(LocalAgentTaskSyncModel::new);
-    app.add_singleton_model(|_| ActiveAgentViewsModel::new());
     app.add_singleton_model(crate::ai::blocklist::BlocklistAIPermissions::new);
     app.add_singleton_model(AgentNotificationsModel::new);
     app.add_singleton_model(|ctx| AIExecutionProfilesModel::new(ctx));
@@ -130,7 +127,6 @@ fn initialize_app_with_history(app: &mut App, conversations: Vec<AgentConversati
     app.add_singleton_model(|_| IgnoredSuggestionsModel::new(vec![]));
     app.add_singleton_model(AIDocumentModel::new);
     app.add_singleton_model(|_| History::new(vec![]));
-    app.add_singleton_model(AgentConversationsModel::new);
 }
 
 struct MockOptions {

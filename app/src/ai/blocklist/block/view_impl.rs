@@ -916,7 +916,6 @@ impl View for AIBlock {
                         .state_handles
                         .attached_blocks_chip_state_handle,
                     overflow_menu_mouse_state: &self.state_handles.overflow_menu_handle,
-                    rewind_button: &self.rewind_button,
                     num_attached_context_blocks: self.num_attached_context_blocks,
                     has_attached_context_selected_text: self.has_attached_context_selected_text,
                     directory_context: &self.directory_context,
@@ -928,7 +927,6 @@ impl View for AIBlock {
                         .as_ref(app)
                         .pending_context_selected_text()
                         .is_some(),
-                    is_restored: self.is_restored(),
                 },
                 app,
             ) {
@@ -984,7 +982,6 @@ impl View for AIBlock {
                                 self.view_id,
                                 self.client_ids.client_exchange_id,
                                 self.client_ids.conversation_id,
-                                self.is_restored(),
                                 app,
                             ))
                             .finish()
@@ -1001,10 +998,6 @@ impl View for AIBlock {
         }
 
         let has_accepted_edits = self.has_accepted_file_edits_since_last_query(app);
-        let terminal_model = self.terminal_model.lock();
-        let is_conversation_transcript_viewer = terminal_model.is_conversation_transcript_viewer();
-        drop(terminal_model);
-
         contents.add_child(output::render(
             output::Props {
                 model: self.model.as_ref(),
@@ -1046,7 +1039,6 @@ impl View for AIBlock {
                 current_todo_list: self.current_todo_list(app),
                 finish_reason: self.finish_reason.as_ref(),
                 terminal_view_id: self.terminal_view_id,
-                is_conversation_transcript_viewer,
                 aws_bedrock_credentials_error_view: self
                     .aws_bedrock_credentials_error_view
                     .as_ref(),

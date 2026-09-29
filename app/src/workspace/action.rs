@@ -11,15 +11,11 @@ use warpui::platform::Cursor;
 use warpui::platform::keyboard::KeyCode;
 use warpui::{EntityId, WindowId};
 
-use super::global_actions::{ForkFromExchange, ForkedConversationDestination};
 use super::tab_settings::{
     VerticalTabsCompactSubtitle, VerticalTabsDisplayGranularity, VerticalTabsPrimaryInfo,
     VerticalTabsTabItemMode, VerticalTabsViewMode,
 };
 use super::view::WorkspaceBanner;
-use crate::ai::agent::AIAgentExchangeId;
-use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::PendingAttachment;
 use crate::palette::PaletteMode;
 use crate::prompt::editor_modal::OpenSource as PromptEditorOpenSource;
 use crate::search;
@@ -420,24 +416,6 @@ pub enum WorkspaceAction {
         page: SettingsSection,
         widget_id: &'static str,
     },
-    /// Fork an existing AI conversation.
-    /// Optionally summarizes the conversation after forking and/or sends an initial prompt.
-    ForkAIConversation {
-        conversation_id: AIConversationId,
-        /// When Some, fork from the given response (or exchange if `fork_from_exact_exchange`
-        /// is true). When None, fork from the last exchange.
-        fork_from_exchange: Option<ForkFromExchange>,
-        /// Whether to summarize the conversation after forking.
-        summarize_after_fork: bool,
-        /// Prompt to use for summarization when `summarize_after_fork` is true.
-        summarization_prompt: Option<String>,
-        /// Initial prompt to send in the forked conversation (sent after summarization if enabled).
-        initial_prompt: Option<String>,
-        /// Attachments (images/files) to send along with the initial prompt in the forked pane.
-        initial_attachments: Vec<PendingAttachment>,
-        /// Where to open the forked conversation.
-        destination: ForkedConversationDestination,
-    },
     /// Install the Warp Control CLI command to /usr/local/bin
     #[cfg(target_os = "macos")]
     InstallWarpctrl,
@@ -487,18 +465,6 @@ pub enum WorkspaceAction {
     SampleProcess,
     ToggleNotificationMailbox {
         select_first: bool,
-    },
-    /// Show the rewind confirmation dialog before rewinding an AI conversation
-    ShowRewindConfirmationDialog {
-        ai_block_view_id: EntityId,
-        exchange_id: AIAgentExchangeId,
-        conversation_id: AIConversationId,
-    },
-    /// Execute the actual rewind after confirmation
-    ExecuteRewindAIConversation {
-        ai_block_view_id: EntityId,
-        exchange_id: AIAgentExchangeId,
-        conversation_id: AIConversationId,
     },
     /// Open a full-window lightbox displaying the given images.
     OpenLightbox {
@@ -634,7 +600,6 @@ impl WorkspaceAction {
             | RunWorkflow { .. }
             | OpenFileInNewTab { .. }
             | NewCodeFile
-            | ForkAIConversation { .. }
             | OpenRepository { .. }
             | SelectTabConfig(_)
             | ToggleVerticalTabsPanel
@@ -755,8 +720,6 @@ impl WorkspaceAction {
             | ToggleHiddenFiles
             | OpenGlobalSearch
             | ToggleNotificationMailbox { .. }
-            | ShowRewindConfirmationDialog { .. }
-            | ExecuteRewindAIConversation { .. }
             | OpenLightbox { .. }
             | UpdateLightboxImage { .. }
             | ShowSessionConfigModal

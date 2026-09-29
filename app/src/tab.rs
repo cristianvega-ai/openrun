@@ -1202,7 +1202,7 @@ impl<'a> TabComponent<'a> {
         let conversation =
             BlocklistAIHistoryModel::as_ref(app).active_conversation(terminal_view_ref.id())?;
 
-        // Show in-progress indicator when a shell command is running in the AgentView.
+        // Show in-progress indicator when a shell command is running in the conversation.
         // This matches vertical-tab behavior.
         if is_long_running {
             return Some(Indicator::Agent {

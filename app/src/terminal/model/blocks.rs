@@ -149,7 +149,6 @@ pub enum BlockHeightItem {
     RestoredBlockSeparator {
         /// The height of the separator in `Lines` when visible (when `is_hidden` is false).
         height_when_visible: BlockHeight,
-        is_historical_conversation_restoration: bool,
         /// Whether this separator is hidden (e.g., in agent view).
         is_hidden: bool,
     },
@@ -886,15 +885,11 @@ impl BlockList {
     }
 
     #[cfg(feature = "local_fs")]
-    pub(in crate::terminal) fn append_session_restoration_separator_to_block_list(
-        &mut self,
-        is_historical_conversation_restoration: bool,
-    ) {
+    pub(in crate::terminal) fn append_session_restoration_separator_to_block_list(&mut self) {
         self.insert_non_block_item_before_block(
             self.active_block_index(),
             BlockHeightItem::RestoredBlockSeparator {
                 height_when_visible: BlockHeight::from(RESTORED_BLOCK_SEPARATOR_HEIGHT),
-                is_historical_conversation_restoration,
                 is_hidden: false,
             },
         );
@@ -1066,44 +1061,6 @@ impl BlockList {
         if self.pinned_to_bottom == Some(view_id) {
             self.pinned_to_bottom = None;
         }
-    }
-
-    pub fn update_agent_view_conversation_id_for_rich_content(
-        &mut self,
-        rich_content_view_id: EntityId,
-        agent_view_conversation_id: Option<AIConversationId>,
-    ) {
-        let Some(&index) = self
-            .removable_blocklist_item_positions
-            .get(&RemovableBlocklistItem::RichContent(rich_content_view_id))
-        else {
-            return;
-        };
-
-        let transcript_scope = &self.transcript_scope;
-        self.block_heights = {
-            let mut cursor = self.block_heights.cursor::<TotalIndex, ()>();
-            let mut new_tree = cursor.slice(&index, SeekBias::Right);
-
-            if let Some(BlockHeightItem::RichContent(item)) = cursor.item() {
-                let should_hide = RichContentItem {
-                    agent_view_conversation_id,
-                    ..*item
-                }
-                .should_hide_for_transcript_scope(transcript_scope);
-                new_tree.push(BlockHeightItem::RichContent(RichContentItem {
-                    agent_view_conversation_id,
-                    should_hide,
-                    ..*item
-                }));
-                cursor.next();
-            }
-
-            new_tree.push_tree(cursor.suffix());
-            new_tree
-        };
-
-        self.event_proxy.send_wakeup_event();
     }
 
     /// Marks the rich content item with the given view ID as needing its height
@@ -1587,14 +1544,9 @@ impl BlockList {
                 let mut cursor = self.block_heights.cursor::<TotalIndex, ()>();
                 cursor.seek(index, SeekBias::Right);
                 if let Some(BlockHeightItem::RichContent(rich_content)) = cursor.item()
-                    && rich_content.content_type.is_some_and(|content_type| {
-                        matches!(
-                            content_type,
-                            RichContentType::AIBlock
-                                | RichContentType::EnterAgentView
-                                | RichContentType::InlineAgentViewHeader
-                        )
-                    })
+                    && rich_content
+                        .content_type
+                        .is_some_and(|content_type| content_type == RichContentType::AIBlock)
                 {
                     self.dirty_rich_content_items.insert(*view_id);
                 }
@@ -2031,39 +1983,6 @@ impl BlockList {
         items
     }
 
-    /// Updates whether an AI rich-content item is a navigable user-query segment.
-    /// Used when streaming exchange inputs become renderable after initial mount.
-    pub fn set_agent_transcript_user_query_for_rich_content(
-        &mut self,
-        rich_content_view_id: EntityId,
-        is_agent_transcript_user_query: bool,
-    ) {
-        let Some(&index) = self
-            .removable_blocklist_item_positions
-            .get(&RemovableBlocklistItem::RichContent(rich_content_view_id))
-        else {
-            return;
-        };
-
-        self.block_heights = {
-            let mut cursor = self.block_heights.cursor::<TotalIndex, ()>();
-            let mut new_tree = cursor.slice(&index, SeekBias::Right);
-
-            if let Some(BlockHeightItem::RichContent(item)) = cursor.item() {
-                new_tree.push(BlockHeightItem::RichContent(RichContentItem {
-                    is_agent_transcript_user_query,
-                    ..*item
-                }));
-                cursor.next();
-            }
-
-            new_tree.push_tree(cursor.suffix());
-            new_tree
-        };
-
-        self.event_proxy.send_wakeup_event();
-    }
-
     /// Return the height of the last non hidden rich content block after a block index. If there is no non hidden rich content block, return None.
     pub fn last_non_hidden_rich_content_block_after_block(
         &self,
@@ -2217,13 +2136,10 @@ impl BlockList {
                     }
                     BlockHeightItem::RestoredBlockSeparator {
                         height_when_visible,
-                        is_historical_conversation_restoration,
                         ..
                     } => {
                         new_sum_tree.push(BlockHeightItem::RestoredBlockSeparator {
                             height_when_visible: *height_when_visible,
-                            is_historical_conversation_restoration:
-                                *is_historical_conversation_restoration,
                             // Don't show restored block separators in the agent view.
                             is_hidden: transcript_scope.is_conversation(),
                         });
@@ -2867,52 +2783,6 @@ impl BlockList {
         self.block_heights().summary().height.as_f64() < f64::EPSILON
     }
 
-    /// Returns `true` if there is any visible content item in the blocklist that
-    /// passes the given predicate.
-    ///
-    /// This checks for:
-    /// - Visible command blocks (non-background, non-hidden)
-    /// - Rich content (AI blocks, etc.)
-    /// - Inline banners
-    ///
-    /// Excludes gaps and separators as they are visual dividers, not content.
-    pub fn has_visible_block_height_item_where<F>(&self, predicate: F) -> bool
-    where
-        F: Fn(&BlockHeightItem) -> bool,
-    {
-        let mut cursor = self
-            .block_heights
-            .cursor::<TotalIndex, BlockHeightSummary>();
-        cursor.seek(&TotalIndex(0), SeekBias::Right);
-
-        while let Some(item) = cursor.item() {
-            let is_visible = match item {
-                BlockHeightItem::Block(height) if *height > BlockHeight::zero() => {
-                    // Check if this is a non-background block (matching BlockFilter::commands())
-                    let block_index = BlockIndex::from(cursor.start().block_count);
-                    self.block_at(block_index)
-                        .is_some_and(|block| !block.is_background())
-                }
-                BlockHeightItem::RichContent(rich_content) => !rich_content.should_hide,
-                BlockHeightItem::InlineBanner {
-                    height_when_visible,
-                    is_hidden,
-                    ..
-                } if *height_when_visible > BlockHeight::zero() && !is_hidden => true,
-                // Exclude gaps, restored block separators, and subshell separators
-                _ => false,
-            };
-
-            if is_visible && predicate(item) {
-                return true;
-            }
-
-            cursor.next();
-        }
-
-        false
-    }
-
     pub fn needs_bracketed_paste(&self) -> bool {
         self.active_block().needs_bracketed_paste()
     }
@@ -3468,13 +3338,6 @@ impl BlockList {
         }
 
         contents.trim().to_string()
-    }
-
-    pub(crate) fn removable_blocklist_item_position(
-        &self,
-        item: &RemovableBlocklistItem,
-    ) -> Option<&TotalIndex> {
-        self.removable_blocklist_item_positions.get(item)
     }
 
     /// Returns the current absolute row range for one rich-content view.

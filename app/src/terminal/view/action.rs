@@ -21,9 +21,8 @@ use super::{
 };
 use crate::ai::agent::AIAgentExchangeId;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::code_review::telemetry_event::CodeReviewPaneEntrypoint;
-use crate::server::telemetry::{AgentModeRewindEntrypoint, PaletteSource, ToggleBlockFilterSource};
+use crate::server::telemetry::{PaletteSource, ToggleBlockFilterSource};
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::block_list_element::{
     BlockHoverAction, BlockListMenuSource, BlockSelectAction, BlockTextSelectAction,
@@ -109,7 +108,6 @@ pub enum TerminalAction {
     SelectPriorBlock,
     SelectBookmarkDown,
     SelectBookmarkUp,
-    JumpToLatestAgentMessage,
     BookmarkSelectedBlock,
     ScrollToBottomOfSelectedBlocks,
     ScrollToTopOfSelectedBlocks,
@@ -163,26 +161,6 @@ pub enum TerminalAction {
     /// Open the overflow context menu for an AI block with copy options
     OpenAIBlockOverflowMenu {
         ai_block_view_id: EntityId,
-        exchange_id: AIAgentExchangeId,
-        conversation_id: AIConversationId,
-        is_restored: bool,
-    },
-    /// Show the confirmation dialog before rewinding an AI conversation
-    RewindAIConversation {
-        ai_block_view_id: EntityId,
-        exchange_id: AIAgentExchangeId,
-        conversation_id: AIConversationId,
-        /// The entrypoint from which this action was triggered (for telemetry).
-        entrypoint: AgentModeRewindEntrypoint,
-    },
-    /// Actually execute the rewind (called after user confirms in the dialog)
-    ExecuteRewindAIConversation {
-        ai_block_view_id: EntityId,
-        exchange_id: AIAgentExchangeId,
-        conversation_id: AIConversationId,
-    },
-    /// Execute rewind from the inline menu (looks up ai_block_view_id from exchange_id)
-    ExecuteRewindFromInlineMenu {
         exchange_id: AIAgentExchangeId,
         conversation_id: AIConversationId,
     },
@@ -239,8 +217,6 @@ pub enum TerminalAction {
     ClearMarkedText,
     HideTelemetryBannerPermanently,
     ShowInitializationBlock,
-    /// This is for debugging, dev only for now
-    LoadAgentModeConversation,
     /// Removes a pending attachment (image or file) by index in the unified list.
     DeleteAttachment {
         index: usize,
@@ -251,15 +227,10 @@ pub enum TerminalAction {
         index: usize,
     },
     AttachFile,
-    ToggleAutoexecuteMode,
-    ResumeConversation,
-    ForkConversationFromLastKnownGoodState,
     ToggleCodeReviewPane {
         entrypoint: CodeReviewPaneEntrypoint,
     },
-    SummarizeConversation,
     AddProjectAtCurrentDirectory,
-    OpenConversationsPalette,
     PickRepoToOpen,
     OpenFilesPalette {
         source: PaletteSource,
@@ -267,14 +238,6 @@ pub enum TerminalAction {
     DismissCodeToolbeltTooltip,
     /// Start a Language Server for the current working directory (if supported)
     StartLspServer,
-    ToggleLongRunningCommandControl,
-    ToggleHideCliResponses,
-    ExitAgentView,
-    StartNewAgentConversation {
-        origin: AgentViewEntryOrigin,
-    },
-    /// Toggle the conversation details panel
-    ToggleConversationDetailsPanel,
     OpenInlineHistoryMenu,
     AwsBedrockLoginBanner(AwsBedrockLoginBannerAction),
     AwsCliNotInstalledBanner(AwsCliNotInstalledBannerAction),
@@ -352,7 +315,6 @@ impl fmt::Debug for TerminalAction {
             ReinputCommandsWithSudo => f.write_str("ReinputCommandsWithSudo"),
             ClearBuffer => f.write_str("ClearBuffer"),
             SelectBookmarkUp => f.write_str("SelectBookmarkUp"),
-            JumpToLatestAgentMessage => f.write_str("JumpToLatestAgentMessage"),
             SelectBookmarkDown => f.write_str("SelectBookmarkDown"),
             Focus => f.write_str("Focus"),
             FocusInputAndClearSelection => f.write_str("FocusInputAndClearSelection"),
@@ -439,9 +401,6 @@ impl fmt::Debug for TerminalAction {
             MiddleClickOnInput => write!(f, "MiddleClickOnInput"),
             OpenAIBlockAttachedBlocksMenu { .. } => write!(f, "OpenAIBlockAttachedBlocksMenu"),
             OpenAIBlockOverflowMenu { .. } => write!(f, "OpenAIBlockOverflowMenu"),
-            RewindAIConversation { .. } => write!(f, "RewindAIConversation"),
-            ExecuteRewindAIConversation { .. } => write!(f, "ExecuteRewindAIConversation"),
-            ExecuteRewindFromInlineMenu { .. } => write!(f, "ExecuteRewindFromInlineMenu"),
             SelectAIAttachedBlock(_) => write!(f, "SelectAIAttachedBlock"),
             DragAndDropFiles(_) => write!(f, "DragAndDropFiles"),
             HyperlinkClick(hyperlink_url) => write!(f, "HyperlinkClick({hyperlink_url:?})"),
@@ -458,34 +417,17 @@ impl fmt::Debug for TerminalAction {
             ClearMarkedText => write!(f, "ClearMarkedText"),
             HideTelemetryBannerPermanently => write!(f, "HideTelemetryBannerPermanently"),
             ShowInitializationBlock => write!(f, "ShowInitializationBlock"),
-            LoadAgentModeConversation => write!(f, "LoadAgentModeConversation"),
             DeleteAttachment { index } => write!(f, "DeleteAttachment({index:?})"),
             OpenAttachmentLightbox { index } => {
                 write!(f, "OpenAttachmentLightbox({index:?})")
             }
             AttachFile => write!(f, "AttachFile"),
-            ToggleAutoexecuteMode => write!(f, "ToggleAutoexecuteMode"),
-            ResumeConversation => write!(f, "ResumeConversation"),
-            ForkConversationFromLastKnownGoodState => {
-                write!(f, "ForkConversationFromLastKnownGoodState")
-            }
             ToggleCodeReviewPane { .. } => write!(f, "ToggleCodeReviewPane"),
             AddProjectAtCurrentDirectory => write!(f, "AddProjectAtCurrentDirectory"),
-            OpenConversationsPalette => write!(f, "OpenConversationsPalette"),
             PickRepoToOpen => write!(f, "PickRepoToOpen"),
             OpenFilesPalette { .. } => write!(f, "OpenFilesPalette"),
             DismissCodeToolbeltTooltip => write!(f, "DismissCodeToolbeltTooltip"),
             StartLspServer => write!(f, "StartLspServer"),
-            SummarizeConversation => write!(f, "SummarizeConversation"),
-            ToggleLongRunningCommandControl => {
-                write!(f, "TakeOverLongRunningCommandControlForUser")
-            }
-            ToggleHideCliResponses => write!(f, "ToggleHideCliResponses"),
-            ExitAgentView => write!(f, "ExitAgentView"),
-            StartNewAgentConversation { origin } => {
-                write!(f, "StartNewAgentConversation {{ origin: {origin:?} }}")
-            }
-            ToggleConversationDetailsPanel => write!(f, "ToggleConversationDetailsPanel"),
             OpenInlineHistoryMenu => write!(f, "OpenInlineHistoryMenu"),
             AwsBedrockLoginBanner(action) => write!(f, "AwsBedrockLoginBanner({action:?})"),
             AwsCliNotInstalledBanner(action) => write!(f, "AwsCliNotInstalledBanner({action:?})"),

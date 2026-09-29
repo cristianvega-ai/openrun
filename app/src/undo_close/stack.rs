@@ -8,7 +8,6 @@ use warpui::{
 
 use super::UndoCloseSettings;
 use super::settings::UndoCloseSettingsChangedEvent;
-use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::blocklist::BlocklistAIHistoryModel;
 use crate::pane_group::{PaneGroup, PaneId};
 use crate::send_telemetry_from_app_ctx;
@@ -75,9 +74,6 @@ impl ClosedItem {
         match self {
             ClosedItem::Window(data) => {
                 let ClosedWindowData { window_id, .. } = *data;
-                ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
-                    model.remove_focused_state_for_window(window_id, ctx);
-                });
                 if let Some(workspace) = window_workspace(window_id, ctx) {
                     workspace.update(ctx, |workspace, ctx| {
                         for pane_group in workspace.tab_views() {
@@ -176,13 +172,6 @@ impl UndoCloseStack {
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn is_empty(&self) -> bool {
         self.stack.is_empty()
-    }
-
-    /// Returns true only if the pane group is present in the undo close stack as part of a closed tab.
-    pub fn is_pane_group_tab_in_stack(&self, pane_group_id: EntityId) -> bool {
-        self.stack
-            .iter()
-            .any(|undo_data| matches!(&undo_data.closed_item, ClosedItem::Tab { data, .. } if data.pane_group.id() == pane_group_id))
     }
 
     /// Handles a window being closed, adding the necessary data to the undo

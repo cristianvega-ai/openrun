@@ -1,12 +1,10 @@
 use warpui::{SingletonEntity, UpdateView};
 
 use super::{
-    AIAgentExchangeId, AIConversationId, AgentModeRewindEntrypoint, AppContext,
-    BlocklistAIHistoryModel, CONTEXT_MENU_WIDTH, ChannelState, ClipboardContent, ContextMenuAction,
-    ContextMenuState, ContextMenuType, EntityId, FeatureFlag, ForkAIConversationParams,
-    ForkFromExchange, ForkedConversationDestination, MenuItem, MenuItemFields, RichContentLink,
-    ServerConversationToken, ServerOutputId, TerminalAction, TerminalModel, TerminalView, Tip,
-    TipHint, Vector2F, ViewContext, fork_label_for_query,
+    AIAgentExchangeId, AIConversationId, AppContext, BlocklistAIHistoryModel, CONTEXT_MENU_WIDTH,
+    ChannelState, ClipboardContent, ContextMenuAction, ContextMenuState, ContextMenuType, EntityId,
+    MenuItem, MenuItemFields, RichContentLink, ServerConversationToken, ServerOutputId,
+    TerminalAction, TerminalModel, TerminalView, Tip, TipHint, ViewContext,
     mark_feature_used_and_write_to_user_defaults,
 };
 
@@ -191,54 +189,6 @@ impl TerminalView {
         }
     }
 
-    pub(super) fn fork_ai_conversation(
-        &self,
-        conversation_id: AIConversationId,
-        fork_from_exchange: Option<ForkFromExchange>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        ctx.dispatch_global_action(
-            "workspace:fork_ai_conversation",
-            ForkAIConversationParams {
-                conversation_id,
-                fork_from_exchange,
-                summarize_after_fork: false,
-                summarization_prompt: None,
-                initial_prompt: None,
-                destination: ForkedConversationDestination::SplitPane,
-            },
-        );
-    }
-
-    fn conversation_server_token(
-        &self,
-        conversation_id: AIConversationId,
-        ctx: &AppContext,
-    ) -> Option<ServerConversationToken> {
-        let history_model = BlocklistAIHistoryModel::as_ref(ctx);
-        // Prefer loaded conversation data when available.
-        history_model
-            .conversation(&conversation_id)
-            .and_then(|conversation| conversation.debugging_server_conversation_token().cloned())
-            .or_else(|| {
-                // Restored entries may only have server metadata loaded.
-                history_model
-                    .get_server_conversation_metadata(&conversation_id)
-                    .map(|metadata| metadata.server_conversation_token.clone())
-            })
-    }
-
-    fn conversation_debug_request_id(
-        &self,
-        conversation_id: AIConversationId,
-        ctx: &AppContext,
-    ) -> Option<ServerOutputId> {
-        BlocklistAIHistoryModel::as_ref(ctx)
-            .conversation(&conversation_id)
-            .and_then(|conversation| conversation.root_task_exchanges().last())
-            .and_then(|exchange| exchange.output_status.server_output_id())
-    }
-
     fn copy_debugging_menu_items(
         &self,
         conversation_token: ServerConversationToken,
@@ -291,137 +241,17 @@ impl TerminalView {
         self.copy_debugging_menu_items(conversation_token.clone(), server_output_id)
     }
 
-    fn conversation_menu_items(
-        &self,
-        conversation_id: AIConversationId,
-        ctx: &mut ViewContext<Self>,
-    ) -> Vec<MenuItem<TerminalAction>> {
-        let mut items = Vec::new();
-
-        items.push(
-            MenuItemFields::new("Copy conversation text")
-                .with_on_select_action(TerminalAction::ContextMenu(
-                    ContextMenuAction::CopyConversationText { conversation_id },
-                ))
-                .into_item(),
-        );
-
-        items.push(
-            MenuItemFields::new("Fork")
-                .with_on_select_action(TerminalAction::ContextMenu(
-                    ContextMenuAction::ForkAIConversation { conversation_id },
-                ))
-                .into_item(),
-        );
-
-        if let Some(conversation_token) = self.conversation_server_token(conversation_id, ctx) {
-            let server_output_id = self.conversation_debug_request_id(conversation_id, ctx);
-            let debugging_items =
-                self.copy_debugging_menu_items(conversation_token, server_output_id);
-            if !debugging_items.is_empty() {
-                if !items.is_empty() {
-                    items.push(MenuItem::Separator);
-                }
-                for (button_text, action) in debugging_items {
-                    items.push(
-                        MenuItemFields::new(button_text)
-                            .with_on_select_action(TerminalAction::ContextMenu(action))
-                            .into_item(),
-                    );
-                }
-            }
-        }
-
-        items
-    }
-
-    pub(super) fn open_agent_view_entry_context_menu(
-        &mut self,
-        conversation_id: AIConversationId,
-        agent_view_entry_block_id: EntityId,
-        position: Vector2F,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.show_context_menu(
-            ContextMenuState {
-                menu_type: ContextMenuType::AgentViewEntryConversation {
-                    agent_view_entry_block_id,
-                    position,
-                },
-            },
-            self.conversation_menu_items(conversation_id, ctx),
-            ctx,
-        );
-    }
-
     pub(super) fn open_ai_block_overflow_context_menu(
         &mut self,
         ai_block_view_id: EntityId,
         ai_exchange_id: AIAgentExchangeId,
         ai_conversation_id: AIConversationId,
-        is_restored: bool,
         ctx: &mut ViewContext<Self>,
     ) {
         let mut menu_items = {
             let model = self.model.lock();
             self.ai_block_copying_menu_items(ai_block_view_id, None, &model, ctx)
         };
-
-        if !cfg!(target_family = "wasm") {
-            let fork_label = fork_label_for_query(
-                &self
-                    .rich_content_views
-                    .iter()
-                    .find_map(|rc| {
-                        let meta = rc.ai_block_metadata()?;
-                        (meta.ai_block_handle.id() == ai_block_view_id).then(|| {
-                            meta.ai_block_handle
-                                .as_ref(ctx)
-                                .get_preceding_user_query(ctx)
-                        })
-                    })
-                    .unwrap_or_default(),
-            );
-            menu_items.push(
-                MenuItemFields::new(fork_label)
-                    .with_on_select_action(TerminalAction::ContextMenu(
-                        ContextMenuAction::ForkAIConversationFromBlock {
-                            ai_block_view_id,
-                            exchange_id: ai_exchange_id,
-                            conversation_id: ai_conversation_id,
-                        },
-                    ))
-                    .into_item(),
-            );
-
-            if ChannelState::channel().is_dogfood() {
-                menu_items.push(
-                    MenuItemFields::new("Fork from here")
-                        .with_on_select_action(TerminalAction::ContextMenu(
-                            ContextMenuAction::ForkAIConversationFromExactExchange {
-                                ai_block_view_id,
-                                exchange_id: ai_exchange_id,
-                                conversation_id: ai_conversation_id,
-                            },
-                        ))
-                        .into_item(),
-                );
-            }
-        }
-
-        // We can't revert restored blocks since we don't restore the full diff
-        if FeatureFlag::RevertToCheckpoints.is_enabled() && !is_restored {
-            menu_items.push(
-                MenuItemFields::new("Rewind to before here")
-                    .with_on_select_action(TerminalAction::RewindAIConversation {
-                        ai_block_view_id,
-                        exchange_id: ai_exchange_id,
-                        conversation_id: ai_conversation_id,
-                        entrypoint: AgentModeRewindEntrypoint::ContextMenu,
-                    })
-                    .into_item(),
-            );
-        }
 
         let debugging_items =
             self.create_copy_debugging_menu_item(ai_exchange_id, ai_conversation_id, ctx);

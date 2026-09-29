@@ -6,18 +6,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use parking_lot::FairMutex;
-use warp_core::features::FeatureFlag;
 use warpui::{
     AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle,
 };
 
-use super::agent_view::{AgentViewEntryOrigin, EnterAgentViewError};
 use super::block::DirectoryContext;
-use super::{ConversationSelectionEvent, ConversationSelectionHandle};
-use crate::ai::agent::conversation::{
-    AIConversation, AIConversationAutoexecuteMode, AIConversationId, ConversationStatus,
-};
-use crate::ai::agent::todos::AIAgentTodoList;
 use crate::ai::agent::{AIAgentAttachment, AIAgentContext};
 use crate::ai::block_context::BlockContext;
 use crate::ai::document::ai_document_model::AIDocumentId;
@@ -25,7 +18,6 @@ use crate::ai::llms::{LLMPreferences, LLMPreferencesEvent};
 use crate::code::outline::RepoOutlines;
 use crate::code_review::github_repo_model::GitHubRepoModel;
 use crate::terminal::TerminalModel;
-use crate::terminal::event::{BlockCompletedEvent, BlockType};
 use crate::terminal::model::block::{BlockId, BlockMetadata};
 use crate::terminal::model::session::Sessions;
 use crate::terminal::model_events::{ModelEvent, ModelEventDispatcher};
@@ -98,8 +90,6 @@ pub struct BlocklistAIContextModel {
     /// Storage for diff hunk attachments that can be referenced in queries
     pending_inline_diff_hunk_attachments: HashMap<String, AIAgentAttachment>,
 
-    conversation_selection: ConversationSelectionHandle,
-
     /// The ID of the terminal surface this model is associated with.
     terminal_surface_id: EntityId,
 
@@ -108,11 +98,6 @@ pub struct BlocklistAIContextModel {
     /// AI document ID to be included as context with the next AI query.
     /// When set, the document content will be attached as plain text context.
     pending_document_id: Option<AIDocumentId>,
-
-    /// Block IDs of user-executed commands to be auto-attached as context.
-    /// When `AgentViewBlockContext` is enabled, completed user commands are tracked here
-    /// and automatically included as context with the next user query.
-    auto_attached_agent_view_user_block_ids: Vec<BlockId>,
 }
 
 pub fn block_context_from_terminal_model(
@@ -156,38 +141,11 @@ impl BlocklistAIContextModel {
         terminal_model: Arc<FairMutex<TerminalModel>>,
         terminal_surface_id: EntityId,
         team_context_resolver: TeamContextResolver,
-        conversation_selection: ConversationSelectionHandle,
         ctx: &mut ModelContext<Self>,
     ) -> Self {
         ctx.subscribe_to_model(
             model_event_dispatcher,
             move |me, _, event, ctx| match event {
-                ModelEvent::BlockCompleted(BlockCompletedEvent {
-                    block_type: BlockType::User(user_block_completed),
-                    block_id,
-                    ..
-                }) => {
-                    // If AgentViewBlockContext is enabled and we're in agent view, track user-executed
-                    // blocks for auto-attachment as context.
-                    if FeatureFlag::AgentViewBlockContext.is_enabled()
-                        && me
-                            .conversation_selection
-                            .as_ref(ctx)
-                            .is_conversation_fullscreen(ctx)
-                        && !user_block_completed.was_part_of_agent_interaction
-                    {
-                        me.auto_attached_agent_view_user_block_ids
-                            .push(block_id.clone());
-                    }
-
-                    // If the block that finished was part of an agent interaction (i.e. LRC finishing),
-                    // we should preserve input context.
-                    if !FeatureFlag::AgentViewBlockContext.is_enabled()
-                        && !user_block_completed.was_part_of_agent_interaction
-                    {
-                        me.reset_context_to_default(ctx);
-                    }
-                }
                 ModelEvent::BlockMetadataReceived(e) => {
                     me.apply_block_metadata_directory_context(&e.block_metadata, &sessions, ctx);
                 }
@@ -211,16 +169,6 @@ impl BlocklistAIContextModel {
             }
         });
 
-        ctx.subscribe_to_model(&conversation_selection, |me, _, event, ctx| match event {
-            ConversationSelectionEvent::Changed => {
-                ctx.emit(BlocklistAIContextEvent::PendingQueryStateUpdated);
-            }
-            ConversationSelectionEvent::Activated { .. }
-            | ConversationSelectionEvent::Deactivated { .. } => {
-                me.auto_attached_agent_view_user_block_ids.clear();
-            }
-        });
-
         Self {
             terminal_model,
             directory_context: Default::default(),
@@ -228,12 +176,10 @@ impl BlocklistAIContextModel {
             pending_context_block_ids: HashSet::new(),
             pending_context_selected_text: None,
             pending_attachments: Default::default(),
-            conversation_selection,
             terminal_surface_id,
             team_context_resolver,
             pending_inline_diff_hunk_attachments: Default::default(),
             pending_document_id: None,
-            auto_attached_agent_view_user_block_ids: Vec::new(),
         }
     }
 
@@ -242,7 +188,6 @@ impl BlocklistAIContextModel {
     pub(crate) fn new_for_test(
         terminal_model: Arc<FairMutex<TerminalModel>>,
         terminal_surface_id: EntityId,
-        conversation_selection: ConversationSelectionHandle,
     ) -> Self {
         Self {
             terminal_model,
@@ -251,12 +196,10 @@ impl BlocklistAIContextModel {
             pending_context_block_ids: HashSet::new(),
             pending_context_selected_text: None,
             pending_attachments: Default::default(),
-            conversation_selection,
             terminal_surface_id,
             team_context_resolver: UserWorkspaces::teamless_context_resolver_for_test(),
             pending_inline_diff_hunk_attachments: Default::default(),
             pending_document_id: None,
-            auto_attached_agent_view_user_block_ids: Vec::new(),
         }
     }
 
@@ -268,7 +211,6 @@ impl BlocklistAIContextModel {
         self.clear_pending_attachments(ctx);
         self.clear_diff_hunk_attachments();
         self.set_pending_document(None, ctx);
-        self.auto_attached_agent_view_user_block_ids.clear();
     }
 
     /// Returns `true` if the next AI query has any context that should force the input to be
@@ -391,18 +333,6 @@ impl BlocklistAIContextModel {
             for block_id in &self.pending_context_block_ids {
                 if let Some(block_context) = self.transform_block_to_context(block_id, false) {
                     context.push(block_context);
-                }
-            }
-
-            // Add auto-attached user-executed blocks (when AgentViewBlockContext is enabled)
-            if FeatureFlag::AgentViewBlockContext.is_enabled() {
-                for block_id in &self.auto_attached_agent_view_user_block_ids {
-                    // Skip if already in pending_context_block_ids to avoid duplicates
-                    if !self.pending_context_block_ids.contains(block_id)
-                        && let Some(block_context) = self.transform_block_to_context(block_id, true)
-                    {
-                        context.push(block_context);
-                    }
                 }
             }
 
@@ -592,164 +522,6 @@ impl BlocklistAIContextModel {
         }
     }
 
-    /// Returns the number of images removed
-    pub fn remove_last_pending_images(
-        &mut self,
-        images_to_remove: usize,
-        ctx: &mut ModelContext<Self>,
-    ) -> usize {
-        let image_indices: Vec<usize> = self
-            .pending_attachments
-            .iter()
-            .enumerate()
-            .filter(|(_, a)| matches!(a, PendingAttachment::Image(_)))
-            .map(|(i, _)| i)
-            .collect();
-        let len = image_indices.len();
-
-        if images_to_remove == 0 || len == 0 {
-            return 0;
-        }
-
-        let to_remove = images_to_remove.min(len);
-        // Remove from the end to avoid shifting indices.
-        for &idx in image_indices.iter().rev().take(to_remove) {
-            self.pending_attachments.remove(idx);
-        }
-
-        ctx.emit(BlocklistAIContextEvent::UpdatedPendingContext {
-            previous_block_ids: self.pending_context_block_ids.clone(),
-            requires_block_resync: false,
-            requires_text_resync: false,
-        });
-
-        to_remove
-    }
-
-    /// Convenience function to set pending query state to continue an existing conversation by ID.
-    pub fn set_pending_query_state_for_existing_conversation(
-        &mut self,
-        conversation_id: AIConversationId,
-        origin: AgentViewEntryOrigin,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.conversation_selection.update(ctx, |selection, ctx| {
-            selection.select_existing_conversation(conversation_id, origin, ctx);
-        });
-    }
-
-    /// Sets the pending query state to the defaults for a *new* conversation (i.e. not a
-    /// followup).
-    pub fn set_pending_query_state_for_new_conversation(
-        &mut self,
-        origin: AgentViewEntryOrigin,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        self.conversation_selection.update(ctx, |selection, ctx| {
-            selection.select_new_conversation(origin, ctx);
-        });
-    }
-
-    /// Starts and selects a new conversation, entering Agent View when this is a GUI selection.
-    pub(crate) fn try_start_new_conversation(
-        &mut self,
-        origin: AgentViewEntryOrigin,
-        ctx: &mut ModelContext<Self>,
-    ) -> Result<AIConversationId, EnterAgentViewError> {
-        self.conversation_selection.update(ctx, |selection, ctx| {
-            selection.try_start_new_conversation(origin, ctx)
-        })
-    }
-
-    /// Returns `true` if a new conversation may be created.
-    pub fn can_start_new_conversation(&self) -> bool {
-        let terminal_model = self.terminal_model.lock();
-        if FeatureFlag::AgentView.is_enabled() {
-            !terminal_model
-                .block_list()
-                .active_block()
-                .is_active_and_long_running()
-        } else {
-            !terminal_model
-                .block_list()
-                .active_block()
-                .is_agent_in_control()
-        }
-    }
-
-    /// Returns the conversation ID the pending query is following up for, if any.
-    /// None if the pending query should start a new conversation.
-    pub fn selected_conversation_id(&self, ctx: &AppContext) -> Option<AIConversationId> {
-        self.conversation_selection
-            .as_ref(ctx)
-            .selected_conversation_id(ctx)
-    }
-
-    pub fn selected_conversation<'a>(&self, ctx: &'a AppContext) -> Option<&'a AIConversation> {
-        self.conversation_selection
-            .as_ref(ctx)
-            .selected_conversation(ctx)
-    }
-
-    pub fn selected_conversation_todolist<'a>(
-        &self,
-        ctx: &'a AppContext,
-    ) -> Option<&'a AIAgentTodoList> {
-        self.selected_conversation(ctx)
-            .and_then(|c| c.active_todo_list())
-            .and_then(|todo_list| {
-                // Don't show todo list if it's empty or finished
-                if todo_list.is_empty() || todo_list.is_finished() {
-                    None
-                } else {
-                    Some(todo_list)
-                }
-            })
-    }
-
-    pub fn pending_query_autoexecute_override(
-        &self,
-        ctx: &AppContext,
-    ) -> AIConversationAutoexecuteMode {
-        self.conversation_selection
-            .as_ref(ctx)
-            .pending_query_autoexecute_override(ctx)
-    }
-
-    pub fn toggle_pending_query_autoexecute(&mut self, ctx: &mut ModelContext<Self>) {
-        self.conversation_selection.update(ctx, |selection, ctx| {
-            selection.toggle_pending_query_autoexecute(ctx);
-        });
-    }
-
-    /// Returns true if the pending query targets an existing conversation
-    /// (as opposed to starting a new one).
-    pub fn is_targeting_existing_conversation(&self, ctx: &AppContext) -> bool {
-        self.conversation_selection
-            .as_ref(ctx)
-            .selected_conversation_id(ctx)
-            .is_some()
-    }
-
-    /// Returns the status of the selected conversation for purposes of rendering the input hint
-    /// text, or `None` if there is no selected conversation to display (either because no
-    /// conversation is selected, or because the selected conversation is empty/passive/untitled
-    /// and should be treated as a "new" conversation). Mirrors the `agent_indicator` pattern in
-    /// `app/src/tab.rs`.
-    pub fn selected_conversation_status_for_hint(
-        &self,
-        app: &AppContext,
-    ) -> Option<ConversationStatus> {
-        let conversation = self.selected_conversation(app)?;
-        if conversation.is_empty()
-            || conversation.is_entirely_passive()
-            || conversation.title().is_none()
-        {
-            return None;
-        }
-        Some(conversation.status().clone())
-    }
-
     /// Returns true if there are any blocks that can be used as AI context.
     pub fn can_attach_blocks(&self) -> bool {
         let terminal_model = self.terminal_model.lock();
@@ -882,8 +654,6 @@ pub enum BlocklistAIContextEvent {
         requires_block_resync: bool,
         requires_text_resync: bool,
     },
-    /// Emitted whenever the value changes.
-    PendingQueryStateUpdated,
 }
 
 impl Entity for BlocklistAIContextModel {

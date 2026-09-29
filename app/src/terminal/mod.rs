@@ -29,7 +29,6 @@ pub mod blockgrid_element;
 mod blockgrid_renderer;
 mod bootstrap;
 pub mod color;
-pub mod conversation_restoration;
 pub mod event;
 pub mod event_listener;
 pub mod find;
@@ -82,10 +81,7 @@ use model_events::{ModelEvent, ModelEventDispatcher};
 pub use secret_regex_updater::CustomSecretRegexUpdater;
 pub use shell_launch_state::ShellLaunchState;
 pub use terminal_manager::TerminalManager;
-pub use view::{
-    CANCEL_COMMAND_KEYBINDING, TOGGLE_AUTOEXECUTE_MODE_KEYBINDING,
-    TOGGLE_HIDE_CLI_RESPONSES_KEYBINDING,
-};
+pub use view::CANCEL_COMMAND_KEYBINDING;
 
 use crate::settings::SelectionSettings;
 /// The broadcast channel capacity for PTY reads.

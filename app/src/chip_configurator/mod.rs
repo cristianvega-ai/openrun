@@ -59,7 +59,7 @@ impl ConfigurableItem {
         appearance: &Appearance,
     ) -> Option<Self> {
         if let Some(chip_kind) = kind.context_chip_kind() {
-            return ContextChipRenderer::default_from_kind_with_agent_view(
+            return ContextChipRenderer::default_from_kind_in_footer(
                 chip_kind.clone(),
                 ChipAvailability::Enabled,
                 true,

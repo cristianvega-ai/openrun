@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use num_traits::Float as _;
 use parking_lot::FairMutex;
-use pathfinder_geometry::vector::vec2f;
 use vec1::Vec1;
 use warp_core::features::FeatureFlag;
 use warp_util::user_input::UserInput;
@@ -15,9 +14,8 @@ use warpui::geometry::vector::Vector2F;
 use warpui::text::SelectionType;
 use warpui::units::{IntoLines, IntoPixels, Lines, Pixels};
 use warpui::{
-    AfterLayoutContext, AppContext, ClipBounds, Element, EntityId, Event, EventContext,
-    LayoutContext, ModelHandle, PaintContext, SizeConstraint, end_trace, record_trace_event,
-    start_trace,
+    AfterLayoutContext, AppContext, Element, EntityId, Event, EventContext, LayoutContext,
+    ModelHandle, PaintContext, SizeConstraint, end_trace, record_trace_event, start_trace,
 };
 
 use super::should_intercept_mouse;
@@ -44,9 +42,6 @@ use crate::terminal::view::{
 };
 use crate::terminal::{SizeInfo, TerminalModel, grid_renderer, should_right_click_paste};
 
-const CLI_SUBAGENT_HORIZONTAL_MARGIN: f32 = 8.;
-const CLI_SUBAGENT_VERTICAL_MARGIN: f32 = 8.;
-
 pub struct AltScreenElement {
     model: Arc<FairMutex<TerminalModel>>,
     find_model: ModelHandle<TerminalFindModel>,
@@ -72,8 +67,6 @@ pub struct AltScreenElement {
     visible_lines: Option<Lines>,
 
     cursor_hint_text: Option<Box<dyn Element>>,
-
-    cli_subagent_view: Option<Box<dyn Element>>,
 }
 
 impl AltScreenElement {
@@ -86,7 +79,6 @@ impl AltScreenElement {
         selection_range: Option<Vec1<Range<Point>>>,
         appearance: &Appearance,
         cursor_hint_text: Option<Box<dyn Element>>,
-        cli_subagent_view: Option<Box<dyn Element>>,
     ) -> Self {
         let highlighted_url = terminal_view_render_context
             .highlighted_url
@@ -137,7 +129,6 @@ impl AltScreenElement {
             },
             visible_lines: None,
             cursor_hint_text,
-            cli_subagent_view,
         }
     }
 
@@ -507,33 +498,12 @@ impl Element for AltScreenElement {
             cursor_hint_text.layout(constraint, ctx, app);
         }
 
-        if let Some(cli_subagent_view) = &mut self.cli_subagent_view {
-            cli_subagent_view.layout(
-                SizeConstraint {
-                    min: vec2f(0., 0.),
-                    max: vec2f(
-                        constraint.max.x() * 0.3 - CLI_SUBAGENT_HORIZONTAL_MARGIN,
-                        constraint.max.y() - CLI_SUBAGENT_VERTICAL_MARGIN * 3.,
-                    ),
-                },
-                ctx,
-                app,
-            );
-        }
-
         constraint.max
     }
 
-    fn after_layout(&mut self, ctx: &mut AfterLayoutContext, app: &AppContext) {
+    fn after_layout(&mut self, _ctx: &mut AfterLayoutContext, _app: &AppContext) {
         let size = self.size.expect("Size should be set in `layout()`");
         self.visible_lines = Some(size.y().into_pixels().to_lines(self.line_height()).floor());
-
-        // We want to make sure to call after_layout on each of the elements that were actually laid out.
-        if let Some(cli_subagent_view) = &mut self.cli_subagent_view
-            && cli_subagent_view.size().is_some()
-        {
-            cli_subagent_view.after_layout(ctx, app);
-        }
     }
 
     fn paint(&mut self, origin: Vector2F, ctx: &mut PaintContext, app: &AppContext) {
@@ -639,26 +609,6 @@ impl Element for AltScreenElement {
 
         self.render_selections(&self.grid_render_params.size_info, origin, ctx);
 
-        if let Some(cli_subagent_view) = &mut self.cli_subagent_view {
-            ctx.scene.start_layer(ClipBounds::ActiveLayer);
-            let size = cli_subagent_view
-                .size()
-                .expect("Subagent output was laid out already.");
-            cli_subagent_view.paint(
-                vec2f(
-                    self.bounds.expect("bounds set during paint.").max_x()
-                        - CLI_SUBAGENT_HORIZONTAL_MARGIN
-                        - size.x(),
-                    self.bounds.expect("bounds set during paint.").max_y()
-                        - CLI_SUBAGENT_VERTICAL_MARGIN
-                        - size.y(),
-                ),
-                ctx,
-                app,
-            );
-            ctx.scene.stop_layer();
-        }
-
         record_trace_event!("alt_screen_element:paint:selection_rendered");
         end_trace!();
     }
@@ -673,12 +623,6 @@ impl Element for AltScreenElement {
         ctx: &mut EventContext,
         app: &AppContext,
     ) -> bool {
-        if let Some(cli_subagent_view) = &mut self.cli_subagent_view
-            && cli_subagent_view.dispatch_event(event, ctx, app)
-        {
-            return true;
-        }
-
         let bounds = self
             .bounds
             .expect("Bounds should be set before event dispatching");

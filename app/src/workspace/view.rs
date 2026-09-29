@@ -98,9 +98,6 @@ use super::action::{
 };
 use super::lightbox_view::{LightboxParams, LightboxView, LightboxViewEvent};
 use super::native_modal::{NativeModal, NativeModalEvent};
-use super::rewind_confirmation_dialog::{
-    RewindConfirmationDialog, RewindConfirmationEvent, RewindDialogSource,
-};
 use super::tab_settings::{
     HeaderToolbarChipSelection, NewTabPlacement, TabSettings, TabSettingsChangedEvent,
     VerticalTabsDisplayGranularity, WorkspaceDecorationVisibility,
@@ -113,14 +110,7 @@ use super::{ActiveSession, TabBarDropTargetData, TabBarLocation, WorkspaceRegist
 use crate::agent_notifications::toast_stack::AgentNotificationToastStack;
 use crate::agent_notifications::view::{NotificationMailboxView, NotificationMailboxViewEvent};
 use crate::agent_notifications::{AgentNotificationsEvent, NotificationFilter};
-use crate::ai::agent::AIAgentInput;
-use crate::ai::agent::conversation::{AIConversation, AIConversationId};
-use crate::ai::blocklist::agent_view::editor::{AgentToolbarEditorEvent, AgentToolbarEditorModal};
-use crate::ai::blocklist::{
-    FORK_PREFIX, PendingAttachment, SerializedBlockListItem, SlashCommandRequest,
-};
-use crate::ai::execution_profiles::profiles::AIExecutionProfilesModel;
-use crate::ai::llms::LLMPreferences;
+use crate::ai::blocklist::SerializedBlockListItem;
 use crate::app_state::{
     LeafContents, LeafSnapshot, LeftPanelDisplayedTab, LeftPanelSnapshot, NotebookPaneSnapshot,
     PaneNodeSnapshot, PaneUuid, RightPanelSnapshot, SettingsPaneSnapshot, TabGroupSnapshot,
@@ -198,8 +188,8 @@ use crate::settings::{
     AISettings, AccessibilitySettings, AliasExpansionSettings, AppEditorSettings,
     BlockVisibilitySettings, CLIAgentSettings, CLIAgentSettingsChangedEvent, CodeSettings,
     CodeSettingsChangedEvent, CtrlTabBehavior, CursorBlink, DebugSettings, DefaultSessionMode,
-    FontSettings, GPUSettings, InputSettings, MonospaceFontSize, PaneSettings, PrivacySettings,
-    SelectionSettings, SshSettings, ThemeSettings, active_theme_kind, respect_system_theme,
+    FontSettings, GPUSettings, InputSettings, MonospaceFontSize, PaneSettings, SelectionSettings,
+    SshSettings, ThemeSettings, active_theme_kind, respect_system_theme,
 };
 use crate::settings_view::keybindings::{KeybindingChangedEvent, KeybindingChangedNotifier};
 use crate::settings_view::pane_manager::SettingsPaneManager;
@@ -254,13 +244,9 @@ use crate::terminal::shell::ShellType;
 use crate::terminal::view::cli_agent_footer::editor::{
     CLIAgentToolbarEditorEvent, CLIAgentToolbarEditorModal,
 };
-use crate::terminal::view::load_ai_conversation::{
-    RestorationDirState, RestoreConversationEntryBehavior, RestoredAIConversation,
-};
 use crate::terminal::view::ssh_file_upload::FileUploadId;
 use crate::terminal::view::{
-    ConversationRestorationInNewPaneType, LeftPanelTargetView, NOTIFICATIONS_TROUBLESHOOT_URL,
-    SyncEvent, SyncInputType, TerminalAction,
+    LeftPanelTargetView, NOTIFICATIONS_TROUBLESHOOT_URL, SyncEvent, SyncInputType,
 };
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::terminal::{self, BlockListSettings, SizeInfo, TerminalModel, TerminalView};
@@ -316,13 +302,11 @@ use crate::workspace::view::left_panel::{
     LeftPanelAction, LeftPanelEvent, LeftPanelView, ToolPanelView,
 };
 use crate::workspace::view::right_panel::{RightPanelEvent, RightPanelView};
-use crate::workspace::{ForkFromExchange, ForkedConversationDestination};
 use crate::workspace_metadata::PersistedWorkspace;
 use crate::workspaces::update_manager::TeamUpdateManager;
 use crate::workspaces::user_workspaces::UserWorkspaces;
 use crate::{
-    AgentNotificationsModel, BlocklistAIHistoryModel, GlobalResourceHandles, TelemetryEvent,
-    send_telemetry_from_ctx,
+    AgentNotificationsModel, GlobalResourceHandles, TelemetryEvent, send_telemetry_from_ctx,
 };
 
 /// The padding that should be applied to the workspace as a whole.
@@ -467,9 +451,6 @@ const MOBILE_OVERLAY_SCRIM_ALPHA: u8 = 128;
 
 pub const NEW_TAB_BUTTON_POSITION_ID: &str = "new_tab_button";
 pub const NEW_SESSION_MENU_BUTTON_POSITION_ID: &str = "new_session_menu_button";
-
-// The max length of the title of a fork toast (after which we truncate it).
-const MAX_FORK_TOAST_TITLE_LENGTH: usize = 100;
 
 // The max length of the window title (matching conversation title truncation).
 const MAX_WINDOW_TITLE_LENGTH: usize = 80;
@@ -627,10 +608,6 @@ struct RightPanelUpdateParams<'a> {
 struct PendingSessionConfigReplacement {
     old_pane_group_id: EntityId,
 }
-fn query_for_rewind_prefill(inputs: &[AIAgentInput]) -> Option<String> {
-    inputs.iter().find_map(AIAgentInput::display_query)
-}
-
 /// Snapshot of a tab used to move it between workspaces or into a new window.
 /// Built by `Workspace::tab_transfer_info_at_index` and consumed by
 /// `insert_transferred_tab_at_index`. Captures the pane group handle, visual
@@ -723,13 +700,11 @@ pub struct Workspace {
     session_config_modal: ModalViewState<Modal<SessionConfigModal>>,
     pending_session_config_replacement: Option<PendingSessionConfigReplacement>,
     new_worktree_modal: ModalViewState<Modal<NewWorktreeModal>>,
-    rewind_confirmation_dialog: ViewHandle<RewindConfirmationDialog>,
     resource_center_view: ViewHandle<ResourceCenterView>,
     command_search_view: ViewHandle<CommandSearchView>,
     settings_file_error: Option<crate::settings::SettingsFileError>,
     settings_error_banner_dismissed: bool,
     prompt_editor_modal: ViewHandle<PromptEditorModal>,
-    agent_toolbar_editor_modal: ViewHandle<AgentToolbarEditorModal>,
     cli_agent_toolbar_editor_modal: ViewHandle<CLIAgentToolbarEditorModal>,
     header_toolbar_editor_modal: ViewHandle<HeaderToolbarEditorModal>,
     header_toolbar_context_menu: ViewHandle<Menu<WorkspaceAction>>,
@@ -1190,16 +1165,6 @@ impl Workspace {
         modal
     }
 
-    fn build_agent_toolbar_editor_modal(
-        ctx: &mut ViewContext<Self>,
-    ) -> ViewHandle<AgentToolbarEditorModal> {
-        let modal = ctx.add_typed_action_view(AgentToolbarEditorModal::new);
-        ctx.subscribe_to_view(&modal, |me, _, event, ctx| {
-            me.handle_agent_toolbar_editor_modal_event(event, ctx);
-        });
-        modal
-    }
-
     fn build_cli_agent_toolbar_editor_modal(
         ctx: &mut ViewContext<Self>,
     ) -> ViewHandle<CLIAgentToolbarEditorModal> {
@@ -1286,18 +1251,6 @@ impl Workspace {
         });
 
         theme_deletion_modal
-    }
-
-    fn build_rewind_confirmation_dialog(
-        ctx: &mut ViewContext<Self>,
-    ) -> ViewHandle<RewindConfirmationDialog> {
-        let rewind_confirmation_dialog =
-            ctx.add_typed_action_view(|_| RewindConfirmationDialog::new());
-        ctx.subscribe_to_view(&rewind_confirmation_dialog, move |me, _, event, ctx| {
-            me.handle_rewind_confirmation_dialog_event(event, ctx);
-        });
-
-        rewind_confirmation_dialog
     }
 
     fn build_native_modal_view(ctx: &mut ViewContext<Self>) -> ViewHandle<NativeModal> {
@@ -1993,7 +1946,6 @@ impl Workspace {
 
         let session_config_modal = Self::build_session_config_modal(ctx);
 
-        let rewind_confirmation_dialog = Self::build_rewind_confirmation_dialog(ctx);
         let command_search_view = ctx.add_typed_action_view(CommandSearchView::new);
         ctx.subscribe_to_view(&command_search_view, |me, _, event, ctx| {
             me.handle_command_search_event(event, ctx);
@@ -2115,7 +2067,6 @@ impl Workspace {
             .collect();
 
         let prompt_editor_modal = Self::build_prompt_editor_modal(ctx);
-        let agent_toolbar_editor_modal = Self::build_agent_toolbar_editor_modal(ctx);
         let cli_agent_toolbar_editor_modal = Self::build_cli_agent_toolbar_editor_modal(ctx);
 
         Self::observe_server_api(ctx);
@@ -2188,7 +2139,6 @@ impl Workspace {
             session_config_modal,
             pending_session_config_replacement: None,
             new_worktree_modal,
-            rewind_confirmation_dialog,
             resource_center_view,
             command_search_view,
             settings_file_error,
@@ -2199,7 +2149,6 @@ impl Workspace {
             toast_stack,
             cached_keybindings,
             prompt_editor_modal,
-            agent_toolbar_editor_modal,
             cli_agent_toolbar_editor_modal,
             header_toolbar_editor_modal: Self::build_header_toolbar_editor_modal(ctx),
             header_toolbar_context_menu: Self::build_header_toolbar_context_menu(ctx),
@@ -2688,7 +2637,6 @@ impl Workspace {
                         NewSessionSource::Window,
                         None,  /* previous_active_window */
                         None,  /* chosen_shell */
-                        None,  /* ai_conversation */
                         false, /* hide_homepage */
                         ctx,
                     );
@@ -2897,7 +2845,6 @@ impl Workspace {
                 NewSessionSource::Window,
                 previous_active_window,
                 shell,
-                None,  /* ai_conversation */
                 false, /* hide_homepage */
                 ctx,
             );
@@ -3884,20 +3831,6 @@ impl Workspace {
         match event {
             PromptEditorModalEvent::Close => {
                 self.current_workspace_state.is_prompt_editor_open = false;
-                self.focus_active_tab(ctx);
-                ctx.notify();
-            }
-        }
-    }
-
-    fn handle_agent_toolbar_editor_modal_event(
-        &mut self,
-        event: &AgentToolbarEditorEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            AgentToolbarEditorEvent::Close => {
-                self.current_workspace_state.is_agent_toolbar_editor_open = false;
                 self.focus_active_tab(ctx);
                 ctx.notify();
             }
@@ -4988,7 +4921,6 @@ impl Workspace {
             NewSessionSource::Tab,
             Some(ctx.window_id()),
             None,
-            None,
             false,
             ctx,
         );
@@ -5273,7 +5205,6 @@ impl Workspace {
         self.add_new_session_tab(
             NewSessionSource::Tab,
             Some(ctx.window_id()),
-            None,
             None,
             false,
             ctx,
@@ -6141,7 +6072,7 @@ impl Workspace {
             // A tab may not have any active session, say if it only contains notebook(s). If
             // that's the case, create a new tab.
             if active_session_handle.is_none() {
-                self.add_new_session_tab(NewSessionSource::Tab, None, None, None, false, ctx);
+                self.add_new_session_tab(NewSessionSource::Tab, None, None, false, ctx);
             }
             active_session_handle = self
                 .active_tab_pane_group()
@@ -8030,35 +7961,6 @@ impl Workspace {
         self.tab_views().find(|view| view.id() == id)
     }
 
-    fn handle_rewind_confirmation_dialog_event(
-        &mut self,
-        event: &RewindConfirmationEvent,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            RewindConfirmationEvent::Cancel => {
-                self.current_workspace_state
-                    .is_rewind_confirmation_dialog_open = false;
-                self.focus_active_tab(ctx);
-                ctx.notify();
-            }
-            RewindConfirmationEvent::Confirm { rewind_source } => {
-                self.current_workspace_state
-                    .is_rewind_confirmation_dialog_open = false;
-                self.handle_action(
-                    &WorkspaceAction::ExecuteRewindAIConversation {
-                        ai_block_view_id: rewind_source.ai_block_view_id,
-                        exchange_id: rewind_source.exchange_id,
-                        conversation_id: rewind_source.conversation_id,
-                    },
-                    ctx,
-                );
-                self.focus_active_tab(ctx);
-                ctx.notify();
-            }
-        }
-    }
-
     pub fn handle_network_status_event(
         &mut self,
         _handle: ModelHandle<NetworkStatus>,
@@ -8872,7 +8774,6 @@ impl Workspace {
             NewSessionSource::Tab,
             Some(ctx.window_id()),
             None,
-            None,
             hide_homepage,
             ctx,
         );
@@ -8897,7 +8798,6 @@ impl Workspace {
             NewSessionSource::Tab,
             Some(ctx.window_id()),
             Some(shell),
-            None,
             false,
             ctx,
         );
@@ -8909,33 +8809,20 @@ impl Workspace {
         new_session_source: NewSessionSource,
         previous_session_window_id: Option<WindowId>,
         chosen_shell: Option<AvailableShell>,
-        conversation_restoration: Option<ConversationRestorationInNewPaneType>,
         hide_homepage: bool,
         ctx: &mut ViewContext<Self>,
     ) {
-        // If restoring a conversation, use its startup working directory if it exists.
-        // For forks this is the conversation's latest working directory so the
-        // fork continues where the source conversation left off.
-        let startup_directory_from_conversation = conversation_restoration
-            .as_ref()
-            .and_then(|restoration| restoration.startup_working_directory())
-            .map(PathBuf::from)
-            .filter(|path| path.is_dir());
-
-        let startup_directory = startup_directory_from_conversation.or_else(|| {
-            self.get_new_tab_startup_directory(
-                new_session_source,
-                previous_session_window_id,
-                chosen_shell.as_ref(),
-                ctx,
-            )
-        });
+        let startup_directory = self.get_new_tab_startup_directory(
+            new_session_source,
+            previous_session_window_id,
+            chosen_shell.as_ref(),
+            ctx,
+        );
 
         self.add_tab_with_pane_layout(
             PanesLayout::SingleTerminal(Box::new(NewTerminalOptions {
                 shell: chosen_shell,
                 initial_directory: startup_directory,
-                conversation_restoration,
                 hide_homepage,
                 ..Default::default()
             })),
@@ -9257,438 +9144,6 @@ impl Workspace {
             None,
             ctx,
         );
-    }
-
-    /// Fork an existing AI conversation.
-    /// Optionally summarizes the conversation after forking and/or sends an initial prompt.
-    /// When cloud conversation storage is enabled and the source has a server token,
-    /// a server-side fork is created first so the new conversation immediately gets
-    /// cloud storage and a server identity.
-    #[allow(clippy::too_many_arguments)]
-    fn fork_ai_conversation(
-        &mut self,
-        conversation_id: AIConversationId,
-        fork_from_exchange: Option<ForkFromExchange>,
-        summarize_after_fork: bool,
-        summarization_prompt: Option<String>,
-        initial_prompt: Option<String>,
-        initial_attachments: Vec<PendingAttachment>,
-        destination: ForkedConversationDestination,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let history_model = BlocklistAIHistoryModel::handle(ctx);
-        let window_id = ctx.window_id();
-
-        let source_terminal_view_id = history_model
-            .as_ref(ctx)
-            .all_live_conversations()
-            .into_iter()
-            .find(|(_, convo)| convo.id() == conversation_id)
-            .map(|(terminal_surface_id, _)| terminal_surface_id);
-
-        // An empty prompt should not be provided as a query for the new forked conversation.
-        let initial_prompt = initial_prompt.and_then(|prompt| {
-            if prompt.trim().is_empty() {
-                None
-            } else {
-                Some(prompt)
-            }
-        });
-
-        // True when the fork is paired with a follow-up that fires immediately after restore
-        // (a prompt to send, or a `/summarize` triggered by `summarize_after_fork`).
-        // Used to suppress the `couldn't find original conversation directory` ephemeral hint
-        // for cloud-to-local forks, which would otherwise mask the warping indicator while the
-        // agent processes the follow-up. See `BlocklistAIStatusBar::render`'s
-        // `ephemeral_message_model.current_message().is_none()` gate.
-        let has_initial_query = summarize_after_fork || initial_prompt.is_some();
-
-        let cloud_storage_enabled =
-            PrivacySettings::as_ref(ctx).is_cloud_conversation_storage_enabled;
-
-        // Load the conversation data asynchronously
-        let future = history_model
-            .as_ref(ctx)
-            .load_conversation_data(conversation_id, ctx);
-
-        ctx.spawn(future, move |workspace, source_conversation, ctx| {
-            let Some(source_conversation) = source_conversation else {
-                report_error!(
-                    "Failed to load Oz conversation for forking.",
-                    extra: { "conversation_id" => %conversation_id }
-                );
-                WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                    let toast = DismissibleToast::error(
-                        "Failed to load conversation for forking.".to_owned(),
-                    );
-                    toast_stack.add_ephemeral_toast(toast, window_id, ctx);
-                });
-                return;
-            };
-
-            let source_server_token = source_conversation
-                .server_conversation_token()
-                .map(|t| t.as_str().to_string());
-            let title_for_fork = source_conversation.title();
-
-            // Skip the server-side fork when forking from a specific exchange.
-            // The server's ForkConversation copies the entire GCS conversation
-            // data, which includes exchanges after the fork point. This creates
-            // a mismatch with the locally-truncated fork and causes TaskNotFound
-            // errors during cloud-to-cloud handoff replay.
-            let should_server_fork =
-                cloud_storage_enabled && fork_from_exchange.is_none();
-            if let Some(source_token) = source_server_token.filter(|_| should_server_fork) {
-                let ai_client = ServerApiProvider::as_ref(ctx).get_ai_client();
-                ctx.spawn(
-                    async move {
-                        ai_client
-                            .fork_conversation(source_token, title_for_fork)
-                            .await
-                    },
-                    move |workspace, result, ctx| {
-                        let server_forked_id = match result {
-                            Ok(response) => Some(response.forked_conversation_id),
-                            Err(err) => {
-                                log::warn!("Server-side fork failed, proceeding with local-only fork: {err:#}");
-                                None
-                            }
-                        };
-                        workspace.create_local_fork(
-                            source_conversation,
-                            conversation_id,
-                            fork_from_exchange,
-                            summarize_after_fork,
-                            summarization_prompt,
-                            initial_prompt,
-                            initial_attachments,
-                            destination,
-                            has_initial_query,
-                            source_terminal_view_id,
-                            server_forked_id,
-                            window_id,
-                            ctx,
-                        );
-                    },
-                );
-            } else {
-                workspace.create_local_fork(
-                    source_conversation,
-                    conversation_id,
-                    fork_from_exchange,
-                    summarize_after_fork,
-                    summarization_prompt,
-                    initial_prompt,
-                    initial_attachments,
-                    destination,
-                    has_initial_query,
-                    source_terminal_view_id,
-                    None,
-                    window_id,
-                    ctx,
-                );
-            }
-        });
-    }
-
-    /// Completes the fork by creating the local conversation and restoring it into a pane.
-    /// If `server_forked_conversation_id` is provided, the local fork is bound to the
-    /// server-side fork so it immediately has cloud storage and a server identity.
-    #[allow(clippy::too_many_arguments)]
-    fn create_local_fork(
-        &mut self,
-        source_conversation: AIConversation,
-        conversation_id: AIConversationId,
-        fork_from_exchange: Option<ForkFromExchange>,
-        summarize_after_fork: bool,
-        summarization_prompt: Option<String>,
-        initial_prompt: Option<String>,
-        initial_attachments: Vec<PendingAttachment>,
-        destination: ForkedConversationDestination,
-        has_initial_query: bool,
-        source_terminal_view_id: Option<EntityId>,
-        server_forked_conversation_id: Option<String>,
-        window_id: WindowId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let history_model = BlocklistAIHistoryModel::handle(ctx);
-        let fork_result = history_model.update(ctx, |history_model, ctx| {
-            if let Some(fork_from) = fork_from_exchange {
-                history_model.fork_conversation_at_exchange(
-                    &source_conversation,
-                    fork_from.exchange_id,
-                    fork_from.fork_from_exact_exchange,
-                    FORK_PREFIX,
-                    None,
-                    ctx,
-                )
-            } else {
-                history_model.fork_conversation(
-                    &source_conversation,
-                    FORK_PREFIX,
-                    true, /* preserve_task_ids */
-                    None,
-                    ctx,
-                )
-            }
-        });
-
-        let mut forked_conversation = match fork_result {
-            Ok(forked_conversation) => forked_conversation,
-            Err(e) => {
-                report_error!(e.context("Conversation forking failed"));
-                WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                    let toast = DismissibleToast::error("Conversation forking failed.".to_owned());
-                    toast_stack.add_ephemeral_toast(toast, window_id, ctx);
-                });
-                return;
-            }
-        };
-
-        if let Some(server_id) = server_forked_conversation_id {
-            let forked_id = forked_conversation.id();
-            forked_conversation.set_server_conversation_token(server_id.clone());
-            history_model.update(ctx, |history_model, ctx| {
-                history_model.set_server_conversation_token_for_conversation_and_persist(
-                    forked_id, server_id, ctx,
-                );
-            });
-        }
-
-        // Handle forking into the current pane
-        if destination.is_current_pane() {
-            if let Some(terminal_view) = self.active_session_view(ctx) {
-                let forked_conversation_id = forked_conversation.id();
-                terminal_view.update(ctx, move |terminal_view, ctx| {
-                    terminal_view.restore_conversation_after_view_creation(
-                        RestoredAIConversation::new(forked_conversation.clone()),
-                        true,
-                        RestoreConversationEntryBehavior::EnterRestoredConversation,
-                        ctx,
-                    );
-                    terminal_view
-                        .maybe_show_restore_context_hint(RestorationDirState::Unchanged, ctx);
-
-                    terminal_view.redetermine_global_focus(ctx);
-                });
-
-                Self::handle_forked_conversation_prompts(
-                    terminal_view,
-                    summarize_after_fork,
-                    summarization_prompt.clone(),
-                    initial_prompt.clone(),
-                    initial_attachments.clone(),
-                    forked_conversation_id,
-                    ctx,
-                );
-
-                Self::show_fork_toast(conversation_id, window_id, ctx);
-                return;
-            }
-            // If no active session view, fall through to create a new pane
-            log::warn!("CurrentPane fork requested with no active session view");
-        }
-
-        // Respect the explicit destination: SplitPane opens a split pane, NewTab opens a
-        // new tab. `open_conversation_layout_preference` is only consulted as a fallback by
-        // `restore_or_navigate_to_conversation`; fork callers always pass an explicit
-        // destination, so overriding SplitPane with NewTab here would silently defeat the
-        // user's choice (e.g. `/fork` with Enter explicitly picks SplitPane).
-        let should_open_in_new_tab = destination.is_new_tab();
-
-        if should_open_in_new_tab {
-            let forked_conversation_id = forked_conversation.id();
-            self.add_new_session_tab(
-                NewSessionSource::Tab,
-                Some(window_id),
-                None,
-                Some(ConversationRestorationInNewPaneType::Forked {
-                    conversation: forked_conversation,
-                    has_initial_query,
-                }),
-                false,
-                ctx,
-            );
-
-            // Handle sending summarize and/or initial prompt to the forked conversation
-            if let Some(terminal_view) = self
-                .active_tab_pane_group()
-                .as_ref(ctx)
-                .active_session_view(ctx)
-            {
-                // Copy model selection and execution profile from source to new terminal view
-                if let Some(source_id) = source_terminal_view_id {
-                    Self::copy_model_and_profile_to_terminal_view(
-                        source_id,
-                        terminal_view.id(),
-                        ctx,
-                    );
-                }
-
-                Self::handle_forked_conversation_prompts(
-                    terminal_view,
-                    summarize_after_fork,
-                    summarization_prompt.clone(),
-                    initial_prompt.clone(),
-                    initial_attachments.clone(),
-                    forked_conversation_id,
-                    ctx,
-                );
-            }
-
-            Self::show_fork_toast(conversation_id, window_id, ctx);
-            return;
-        }
-
-        let active_pane_group = self.active_tab_pane_group();
-        let active_pane_group_id = active_pane_group.id();
-        let created_pane_id: PaneId = active_pane_group.update(ctx, |pane_group, ctx| {
-            let active_pane_id = pane_group.focused_pane_id(ctx);
-
-            let new_pane_id = pane_group.add_session(
-                PaneGroupDirection::Right,
-                Some(active_pane_id),
-                active_pane_id.as_terminal_pane_id(),
-                None, /* chosen_shell */
-                Some(ConversationRestorationInNewPaneType::Forked {
-                    conversation: forked_conversation.clone(),
-                    has_initial_query,
-                }),
-                ctx,
-            );
-
-            new_pane_id.into()
-        });
-
-        // Handle sending summarize and/or initial prompt to the forked conversation
-        let forked_conversation_id = forked_conversation.id();
-        let tab_pane_group_handle = active_pane_group.clone();
-        if let Some(terminal_view) = tab_pane_group_handle.as_ref(ctx).focused_session_view(ctx) {
-            // Copy model selection and execution profile from source to new terminal view
-            if let Some(source_id) = source_terminal_view_id {
-                Self::copy_model_and_profile_to_terminal_view(source_id, terminal_view.id(), ctx);
-            }
-
-            Self::handle_forked_conversation_prompts(
-                terminal_view,
-                summarize_after_fork,
-                summarization_prompt,
-                initial_prompt,
-                initial_attachments,
-                forked_conversation_id,
-                ctx,
-            );
-        }
-        // After splitting, focus the newly created pane
-        let locator = PaneViewLocator {
-            pane_group_id: active_pane_group_id,
-            pane_id: created_pane_id,
-        };
-        self.focus_pane(locator, ctx);
-
-        Self::show_fork_toast(conversation_id, window_id, ctx);
-    }
-
-    /// Handle sending summarize and/or initial prompt to a forked conversation.
-    /// If `initial_attachments` are provided, they are added to the new pane's context
-    /// model so they are included when the initial prompt is sent.
-    fn handle_forked_conversation_prompts(
-        terminal_view: ViewHandle<TerminalView>,
-        summarize_after_fork: bool,
-        summarization_prompt: Option<String>,
-        initial_prompt: Option<String>,
-        initial_attachments: Vec<PendingAttachment>,
-        forked_conversation_id: AIConversationId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !summarize_after_fork && initial_prompt.is_none() {
-            return;
-        }
-
-        terminal_view.update(ctx, |terminal_view, terminal_view_ctx| {
-            if summarize_after_fork {
-                terminal_view
-                    .ai_controller()
-                    .update(terminal_view_ctx, |controller, ctx| {
-                        controller.send_slash_command_request(
-                            SlashCommandRequest::Summarize {
-                                prompt: summarization_prompt,
-                            },
-                            ctx,
-                        );
-                    });
-            } else if let Some(prompt) = initial_prompt {
-                // Add any attachments to the new pane's context model before sending,
-                // so images/files from the source pane are included with the prompt.
-                if !initial_attachments.is_empty() {
-                    terminal_view.ai_context_model().update(
-                        terminal_view_ctx,
-                        |context_model, ctx| {
-                            context_model.append_pending_attachments(initial_attachments, ctx);
-                        },
-                    );
-                }
-                terminal_view
-                    .ai_controller()
-                    .update(terminal_view_ctx, |controller, ctx| {
-                        controller.send_user_query_in_conversation_no_lrc_subagent(
-                            prompt,
-                            forked_conversation_id,
-                            ctx,
-                        );
-                    });
-            }
-        });
-    }
-
-    /// Copy the execution profile and per-pane model override from the source
-    /// terminal view to a new terminal view, reproducing the source pane's
-    /// model resolution on the new pane.
-    fn copy_model_and_profile_to_terminal_view(
-        source_terminal_view_id: EntityId,
-        new_terminal_view_id: EntityId,
-        ctx: &mut AppContext,
-    ) {
-        let source_profile_id = AIExecutionProfilesModel::as_ref(ctx)
-            .active_profile(Some(source_terminal_view_id), ctx)
-            .id()
-            .clone();
-        AIExecutionProfilesModel::handle(ctx).update(ctx, |profiles, ctx| {
-            profiles.set_active_profile(new_terminal_view_id, source_profile_id, ctx);
-        });
-        LLMPreferences::handle(ctx).update(ctx, |prefs, ctx| {
-            prefs.copy_agent_mode_selection(source_terminal_view_id, new_terminal_view_id, ctx);
-        });
-    }
-
-    /// Show a toast notification for a forked conversation.
-    fn show_fork_toast(
-        conversation_id: AIConversationId,
-        window_id: WindowId,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        let history_model = BlocklistAIHistoryModel::handle(ctx);
-        let source_title = history_model
-            .as_ref(ctx)
-            .conversation(&conversation_id)
-            .and_then(|c| c.title())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "Conversation".to_string());
-
-        let title = if source_title.chars().count() > MAX_FORK_TOAST_TITLE_LENGTH {
-            let truncated: String = source_title
-                .chars()
-                .take(MAX_FORK_TOAST_TITLE_LENGTH)
-                .collect();
-            format!("{truncated}...")
-        } else {
-            source_title
-        };
-
-        WorkspaceToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-            let toast = DismissibleToast::default(format!("Forked \"{title}\""));
-            toast_stack.add_ephemeral_toast(toast, window_id, ctx);
-        });
     }
 
     /// True when reordering the tab at `index` in `direction` would not
@@ -10018,15 +9473,6 @@ impl Workspace {
         ctx.notify();
     }
 
-    fn open_conversations_palette(&mut self, ctx: &mut ViewContext<Self>) {
-        self.palette.update(ctx, |view, ctx| {
-            view.reset(ctx);
-            view.set_active_query_filter(QueryFilter::Conversations, ctx);
-            view.set_initial_selection_offset(0, ctx);
-        });
-        ctx.notify();
-    }
-
     fn open_ctrl_tab_palette(
         &mut self,
         query_filter: QueryFilter,
@@ -10214,7 +9660,6 @@ impl Workspace {
             },
             PaletteMode::LaunchConfig => self.open_launch_config_palette(ctx),
             PaletteMode::Files => self.open_files_palette(ctx),
-            PaletteMode::Conversations => self.open_conversations_palette(ctx),
         }
 
         ctx.focus(&self.palette);
@@ -10582,9 +10027,6 @@ impl Workspace {
             }
             pane_group::Event::OpenPromptEditor => {
                 self.open_prompt_editor(PromptEditorOpenSource::InputContextMenu, ctx);
-            }
-            pane_group::Event::OpenAgentToolbarEditor => {
-                self.open_agent_toolbar_editor(ctx);
             }
             pane_group::Event::OpenCLIAgentToolbarEditor => {
                 self.open_cli_agent_toolbar_editor(ctx);
@@ -11121,14 +10563,6 @@ impl Workspace {
             }
             pane_group::Event::OpenThemeChooser => {
                 self.show_theme_chooser_for_custom_theme(ctx);
-            }
-            pane_group::Event::OpenConversationHistory => {
-                self.open_palette_action(
-                    PaletteMode::Conversations,
-                    PaletteSource::ConversationManager,
-                    None,
-                    ctx,
-                );
             }
             pane_group::Event::OpenFilesPalette { source } => {
                 self.open_palette_action(PaletteMode::Files, *source, None, ctx);
@@ -11890,11 +11324,6 @@ impl Workspace {
                 self.focus_theme_chooser(ctx);
             } else if self.current_workspace_state.is_resource_center_open {
                 ctx.focus(&self.resource_center_view);
-            } else if self
-                .current_workspace_state
-                .is_rewind_confirmation_dialog_open
-            {
-                ctx.focus(&self.rewind_confirmation_dialog);
             } else if self.current_workspace_state.is_native_quit_modal_open {
                 ctx.focus(&self.native_modal);
             } else {
@@ -11964,20 +11393,6 @@ impl Workspace {
                         })
                 })
             })
-    }
-
-    pub fn show_rewind_confirmation_dialog(
-        &mut self,
-        source: RewindDialogSource,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.rewind_confirmation_dialog.update(ctx, |view, _| {
-            view.set_rewind_source(source);
-        });
-        self.current_workspace_state
-            .is_rewind_confirmation_dialog_open = true;
-        ctx.focus(&self.rewind_confirmation_dialog);
-        ctx.notify();
     }
 
     pub fn show_native_modal(
@@ -12387,14 +11802,6 @@ impl Workspace {
             },
             ctx
         );
-    }
-
-    fn open_agent_toolbar_editor(&mut self, ctx: &mut ViewContext<Self>) {
-        self.agent_toolbar_editor_modal
-            .update(ctx, |modal, ctx| modal.open(ctx));
-        self.close_all_overlays(ctx);
-        self.current_workspace_state.is_agent_toolbar_editor_open = true;
-        ctx.focus(&self.agent_toolbar_editor_modal);
     }
 
     fn open_cli_agent_toolbar_editor(&mut self, ctx: &mut ViewContext<Self>) {
@@ -15620,7 +15027,6 @@ impl TypedActionView for Workspace {
                     NewSessionSource::Tab,
                     Some(window_id),
                     None,
-                    None,
                     *hide_homepage,
                     ctx,
                 );
@@ -16410,26 +15816,6 @@ impl TypedActionView for Workspace {
                 TerminalSessionFallbackBehavior::default(),
                 ctx,
             ),
-            ForkAIConversation {
-                conversation_id,
-                fork_from_exchange,
-                summarize_after_fork,
-                summarization_prompt,
-                initial_prompt,
-                initial_attachments,
-                destination,
-            } => {
-                self.fork_ai_conversation(
-                    *conversation_id,
-                    *fork_from_exchange,
-                    *summarize_after_fork,
-                    summarization_prompt.clone(),
-                    initial_prompt.clone(),
-                    initial_attachments.clone(),
-                    *destination,
-                    ctx,
-                );
-            }
             #[cfg(feature = "local_fs")]
             FileRenamed { old_path, new_path } => {
                 self.rename_tabs_with_file_path(old_path, new_path, ctx);
@@ -16584,54 +15970,6 @@ impl TypedActionView for Workspace {
                         },
                         ctx,
                     );
-                }
-            }
-            ShowRewindConfirmationDialog {
-                ai_block_view_id,
-                exchange_id,
-                conversation_id,
-            } => {
-                self.show_rewind_confirmation_dialog(
-                    RewindDialogSource {
-                        ai_block_view_id: *ai_block_view_id,
-                        exchange_id: *exchange_id,
-                        conversation_id: *conversation_id,
-                    },
-                    ctx,
-                );
-            }
-            ExecuteRewindAIConversation {
-                ai_block_view_id,
-                exchange_id,
-                conversation_id,
-            } => {
-                // Extract the user query before the rewind to prefill the input
-                let user_query = BlocklistAIHistoryModel::as_ref(ctx)
-                    .conversation(conversation_id)
-                    .and_then(|c| c.root_task_exchanges().find(|e| e.id == *exchange_id))
-                    .and_then(|e| query_for_rewind_prefill(&e.input));
-
-                // Dispatch to the active terminal to execute the rewind
-                if let Some(terminal_view) = self
-                    .active_tab_pane_group()
-                    .as_ref(ctx)
-                    .focused_session_view(ctx)
-                {
-                    terminal_view.update(ctx, |terminal, ctx| {
-                        terminal.handle_action(
-                            &TerminalAction::ExecuteRewindAIConversation {
-                                ai_block_view_id: *ai_block_view_id,
-                                exchange_id: *exchange_id,
-                                conversation_id: *conversation_id,
-                            },
-                            ctx,
-                        );
-                    });
-                }
-
-                // Prefill the input after the rewind
-                if let Some(query) = user_query {
-                    self.insert_in_input(&query, true, false, ctx);
                 }
             }
             OpenLightbox {
@@ -16889,16 +16227,6 @@ impl View for Workspace {
             }
             if terminal_view.is_long_running() {
                 context.set.insert("LongRunningCommand");
-            }
-
-            let agent_view_state = terminal_view
-                .agent_view_controller()
-                .as_ref(app)
-                .agent_view_state();
-            if agent_view_state.is_fullscreen() {
-                context.set.insert(flags::ACTIVE_AGENT_VIEW);
-            } else if agent_view_state.is_inline() {
-                context.set.insert(flags::ACTIVE_INLINE_AGENT_VIEW);
             }
         }
 
@@ -17483,10 +16811,6 @@ impl View for Workspace {
             stack.add_child(ChildView::new(&self.prompt_editor_modal).finish());
         }
 
-        if self.current_workspace_state.is_agent_toolbar_editor_open {
-            stack.add_child(ChildView::new(&self.agent_toolbar_editor_modal).finish());
-        }
-
         if self
             .current_workspace_state
             .is_cli_agent_toolbar_editor_open
@@ -17500,21 +16824,6 @@ impl View for Workspace {
 
         if let Some(lightbox_view) = &self.lightbox_view {
             stack.add_child(ChildView::new(lightbox_view).finish());
-        }
-
-        if self
-            .current_workspace_state
-            .is_rewind_confirmation_dialog_open
-        {
-            stack.add_positioned_overlay_child(
-                ChildView::new(&self.rewind_confirmation_dialog).finish(),
-                OffsetPositioning::offset_from_parent(
-                    Vector2F::zero(),
-                    ParentOffsetBounds::WindowByPosition,
-                    ParentAnchor::Center,
-                    ChildAnchor::Center,
-                ),
-            );
         }
 
         if self.current_workspace_state.is_native_quit_modal_open {

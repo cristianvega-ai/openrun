@@ -62,7 +62,6 @@ use super::{GlobalCodeReviewEvent, GlobalCodeReviewModel};
 #[cfg(feature = "local_fs")]
 use crate::TelemetryEvent;
 use crate::ai::agent::AIAgentAttachment;
-use crate::ai::blocklist::agent_view::AgentViewEntryOrigin;
 use crate::appearance::Appearance;
 use crate::code::ShowCommentEditorProvider;
 #[cfg(not(target_family = "wasm"))]
@@ -5844,19 +5843,6 @@ impl CodeReviewView {
                         base,
                         ctx,
                     );
-
-                    // Enter agent view if not already active
-                    if !terminal_view
-                        .agent_view_controller()
-                        .as_ref(ctx)
-                        .is_active()
-                    {
-                        terminal_view.enter_agent_view_for_new_conversation(
-                            None,
-                            AgentViewEntryOrigin::CodeReviewContext,
-                            ctx,
-                        );
-                    }
                 });
             }
         }
@@ -6055,19 +6041,6 @@ impl CodeReviewView {
                         .update(ctx, |context_model, _| {
                             context_model.register_diff_hunk_attachment(diff_hunk_key, attachment);
                         });
-
-                    // Enter agent view if not already active
-                    if !terminal_view
-                        .agent_view_controller()
-                        .as_ref(ctx)
-                        .is_active()
-                    {
-                        terminal_view.enter_agent_view_for_new_conversation(
-                            None,
-                            AgentViewEntryOrigin::CodeReviewContext,
-                            ctx,
-                        );
-                    }
                 });
             }
         }

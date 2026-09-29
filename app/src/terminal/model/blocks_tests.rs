@@ -976,7 +976,6 @@ pub fn test_insert_non_block_item() {
         first_block_index,
         BlockHeightItem::RestoredBlockSeparator {
             height_when_visible: BlockHeight::from(RESTORED_BLOCK_SEPARATOR_HEIGHT),
-            is_historical_conversation_restoration: false,
             is_hidden: false,
         },
     );
@@ -987,7 +986,6 @@ pub fn test_insert_non_block_item() {
         block_list.active_block_index(),
         BlockHeightItem::RestoredBlockSeparator {
             height_when_visible: BlockHeight::from(RESTORED_BLOCK_SEPARATOR_HEIGHT),
-            is_historical_conversation_restoration: false,
             is_hidden: false,
         },
     );

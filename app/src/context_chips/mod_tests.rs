@@ -1,6 +1,6 @@
 //! Tests for [`readable_chip_label_color`], the shared chip label/icon color
-//! used by the agent input footer context chips and by the configurator control
-//! chips (agent toolbelt + header toolbar editors).
+//! used by the CLI agent footer context chips and by the configurator control
+//! chips (CLI agent toolbelt + header toolbar editors).
 //!
 //! The old code colored chip labels with `sub_text_color` (a 60%-opacity
 //! sub-text color). The contrast helpers are alpha-blind, so that muted color

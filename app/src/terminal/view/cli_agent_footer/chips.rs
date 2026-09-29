@@ -38,12 +38,8 @@ impl CLIAgentFooter {
 
             let view_handle = ctx.add_typed_action_view(|ctx| {
                 let config = self.display_chip_config.clone();
-                let mut chip = DisplayChip::new_for_agent_view(
-                    chip_result.clone(),
-                    next_chip_kind,
-                    config,
-                    ctx,
-                );
+                let mut chip =
+                    DisplayChip::new_for_footer(chip_result.clone(), next_chip_kind, config, ctx);
                 chip.maybe_set_git_line_changes_info(git_line_changes_info.clone());
                 chip.update_session_context(self.display_chip_config.session_context.clone(), ctx);
                 chip

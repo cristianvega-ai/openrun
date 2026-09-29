@@ -11,7 +11,6 @@ use super::{
     DetachType, PaneConfiguration, PaneContent, PaneId, PaneStackEvent, PaneView, TerminalPaneId,
 };
 use crate::AIExecutionProfilesModel;
-use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 #[cfg(feature = "local_fs")]
 use crate::ai::blocklist::BlocklistAIHistoryEvent;
 use crate::ai::blocklist::BlocklistAIHistoryModel;
@@ -20,7 +19,6 @@ use crate::app_state::{LeafContents, TerminalPaneSnapshot};
 use crate::code::buffer_location::LocalOrRemotePath;
 #[cfg(feature = "local_fs")]
 use crate::pane_group::CodeSource;
-use crate::pane_group::Event::OpenConversationHistory;
 use crate::pane_group::{self, Direction, PaneGroup};
 use crate::persistence::{BlockCompleted, ModelEvent};
 use crate::session_management::SessionNavigationData;
@@ -210,18 +208,6 @@ impl PaneContent for TerminalPane {
                 },
             );
         }
-
-        // Store the pane group entity ID on the agent view controller so the
-        // message bar can perform pane-group-scoped visibility checks.
-        let pane_group_id = ctx.view_id();
-        let terminal_view = self.terminal_view(ctx);
-        let agent_view_controller = terminal_view.as_ref(ctx).agent_view_controller().clone();
-        agent_view_controller.update(ctx, |controller, _ctx| {
-            controller.set_pane_group_id(pane_group_id);
-        });
-        ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
-            model.register_agent_view_controller(&agent_view_controller, terminal_view_id, ctx);
-        });
     }
 
     fn detach(
@@ -245,10 +231,6 @@ impl PaneContent for TerminalPane {
         // Unsubscribe from all views in the pane stack.
         let pane_stack = self.view.as_ref(ctx).pane_stack().clone();
         let contents = pane_stack.as_ref(ctx).entries().to_vec();
-        let terminal_view_ids = contents
-            .iter()
-            .map(|(_, view)| view.id())
-            .collect::<Vec<_>>();
         for (manager, view) in contents {
             // Notify the view that it's being detached so it can react appropriately
             // (e.g. the shared-session viewer tears down its network only when the detach
@@ -259,16 +241,7 @@ impl PaneContent for TerminalPane {
             ctx.unsubscribe_to_view(&view);
         }
 
-        // Notify the active agent views model that the terminal view has been closed
-        // (and that any active views are no longer active). On a `HiddenForClose` detach,
-        // `attach` will re-register via `register_agent_view_controller` when the tab is
-        // restored, so this is safe to run unconditionally.
         let terminal_view_id = self.terminal_view(ctx).id();
-        ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
-            for terminal_view_id in terminal_view_ids {
-                model.unregister_agent_view_controller(terminal_view_id, ctx);
-            }
-        });
 
         // Clean up any active CLI agent session so its notification is removed.
         // Skip this for moves — the session is still running and will re-register in the new tab.
@@ -281,13 +254,6 @@ impl PaneContent for TerminalPane {
         ctx.unsubscribe_to_model(&pane_stack);
 
         ctx.unsubscribe_to_view(&self.view);
-        ctx.unsubscribe_to_model(
-            &self
-                .terminal_view(ctx)
-                .as_ref(ctx)
-                .agent_view_controller()
-                .clone(),
-        );
 
         #[cfg(feature = "local_fs")]
         {
@@ -302,60 +268,31 @@ impl PaneContent for TerminalPane {
         // Capture the current input_config from the input mode model
         let current_input_config = view.input_config(app.as_ref());
 
-        if view.model.lock().is_conversation_transcript_viewer() {
-            LeafContents::Terminal(TerminalPaneSnapshot {
-                uuid: self.uuid.clone(),
-                cwd: None,
-                is_active,
-                is_read_only: false,
-                shell_launch_data: None,
-                input_config: None,
-                llm_model_override: None,
-                active_profile_id: None,
-                conversation_ids_to_restore: vec![],
-                active_conversation_id: None,
-            })
-        } else {
-            let llm_model_override =
-                LLMPreferences::as_ref(app).get_base_llm_override(self.terminal_view(app).id());
+        let llm_model_override =
+            LLMPreferences::as_ref(app).get_base_llm_override(self.terminal_view(app).id());
 
-            let active_profile_id = AIExecutionProfilesModel::as_ref(app)
-                .active_profile(Some(self.terminal_view(app).id()), app)
-                .sync_id();
+        let active_profile_id = AIExecutionProfilesModel::as_ref(app)
+            .active_profile(Some(self.terminal_view(app).id()), app)
+            .sync_id();
 
-            // Collect all conversation IDs for this terminal view
-            let conversation_ids_to_restore = BlocklistAIHistoryModel::as_ref(app)
-                .all_live_conversations_for_terminal_surface(self.terminal_view(app).id())
-                .map(|conversation| conversation.id())
-                .collect();
+        // Collect all conversation IDs for this terminal view
+        let conversation_ids_to_restore = BlocklistAIHistoryModel::as_ref(app)
+            .all_live_conversations_for_terminal_surface(self.terminal_view(app).id())
+            .map(|conversation| conversation.id())
+            .collect();
 
-            // Capture agent view state: if fullscreen, store the active conversation ID
-            let active_conversation_id = view
-                .agent_view_controller()
-                .as_ref(app)
-                .agent_view_state()
-                .display_mode()
-                .filter(|mode| mode.is_fullscreen())
-                .and_then(|_| {
-                    view.agent_view_controller()
-                        .as_ref(app)
-                        .agent_view_state()
-                        .active_conversation_id()
-                });
-
-            LeafContents::Terminal(TerminalPaneSnapshot {
-                uuid: self.uuid.clone(),
-                cwd: view.pwd_if_local(app),
-                is_active,
-                is_read_only: view.model.lock().is_read_only(),
-                shell_launch_data: view.shell_launch_data_if_local(app),
-                input_config: Some(current_input_config),
-                llm_model_override,
-                active_profile_id,
-                conversation_ids_to_restore,
-                active_conversation_id,
-            })
-        }
+        LeafContents::Terminal(TerminalPaneSnapshot {
+            uuid: self.uuid.clone(),
+            cwd: view.pwd_if_local(app),
+            is_active,
+            is_read_only: view.model.lock().is_read_only(),
+            shell_launch_data: view.shell_launch_data_if_local(app),
+            input_config: Some(current_input_config),
+            llm_model_override,
+            active_profile_id,
+            conversation_ids_to_restore,
+            active_conversation_id: None,
+        })
     }
 
     fn has_application_focus(&self, ctx: &mut ViewContext<PaneGroup>) -> bool {
@@ -538,9 +475,6 @@ fn handle_terminal_view_event(
             Event::OpenPromptEditor => {
                 ctx.emit(pane_group::Event::OpenPromptEditor);
             }
-            Event::OpenAgentToolbarEditor => {
-                ctx.emit(pane_group::Event::OpenAgentToolbarEditor);
-            }
             Event::OpenCLIAgentToolbarEditor => {
                 ctx.emit(pane_group::Event::OpenCLIAgentToolbarEditor);
             }
@@ -643,9 +577,6 @@ fn handle_terminal_view_event(
                 ctx.emit(pane_group::Event::FileUploadPasswordPending {
                     local_pane_id: terminal_pane_id,
                 });
-            }
-            Event::OpenConversationHistory => {
-                ctx.emit(OpenConversationHistory);
             }
             Event::FileUploadFinished(exit_code) => {
                 ctx.emit(pane_group::Event::FileUploadFinished {

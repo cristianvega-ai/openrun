@@ -4,21 +4,17 @@ use std::sync::Arc;
 #[cfg(feature = "local_fs")]
 use std::sync::Mutex;
 
-use anyhow::anyhow;
 use chrono::{DateTime, Local, NaiveDateTime};
 #[cfg(feature = "local_fs")]
 use diesel::SqliteConnection;
-use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use warp_core::features::FeatureFlag;
 use warp_multi_agent_api::RequestCharges;
 use warp_multi_agent_api::client_action::{Action, StartNewConversation};
-use warp_multi_agent_api::message::tool_call::Tool;
 use warp_multi_agent_api::response_event::stream_finished::{
     ConversationUsageMetadata, TokenUsage,
 };
-use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity};
+use warpui::{Entity, EntityId, ModelContext, SingletonEntity};
 
 use super::RequestInput;
 use super::controller::response_stream::ResponseStreamId;
@@ -30,7 +26,6 @@ use crate::ai::agent::conversation::{
     UpdateConversationError,
 };
 use crate::ai::agent::task::TaskId;
-use crate::ai::agent::task::helper::{MessageExt, ToolCallExt};
 use crate::ai::agent::todos::AIAgentTodoList;
 use crate::ai::agent::{
     AIAgentActionId, AIAgentExchange, AIAgentExchangeId, AIAgentInput, AIAgentOutputStatus,
@@ -182,11 +177,6 @@ pub enum UpdateHistoryError {
     #[error("Failed to find conversation with ID {0:?}")]
     ConversationNotFound(AIConversationId),
 }
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub enum ForkConversationError {
-    #[error("cannot fork an empty conversation")]
-    EmptyConversation,
-}
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum BeginConversationRenameError {
@@ -245,7 +235,6 @@ pub struct BlocklistAIHistoryModel {
     /// A set of terminal surfaces that are read-only conversation transcript viewers.
     /// This is view/UI state (not conversation state) and is used to filter transcript viewer
     /// conversations out of local history and navigation.
-    conversation_transcript_viewer_terminal_surface_ids: HashSet<EntityId>,
 
     /// AI queries that were read from the SQLite DB. These exchanges do not contain as much
     /// information as the other exchanges we store because they are only used for display in
@@ -372,21 +361,6 @@ impl BlocklistAIHistoryModel {
     /// Returns a list of all conversations that have been cleared across all terminal surfaces.
     pub fn all_cleared_conversations(&self) -> Vec<(EntityId, &AIConversation)> {
         self.cleared_conversation_ids_for_terminal_surface
-            .iter()
-            .flat_map(|(terminal_surface_id, conversation_ids)| {
-                conversation_ids.iter().filter_map(|conversation_id| {
-                    self.conversations_by_id
-                        .get(conversation_id)
-                        .map(|conversation| (*terminal_surface_id, conversation))
-                })
-            })
-            .collect::<Vec<_>>()
-    }
-
-    /// Returns all live conversations paired with their terminal surface IDs.
-    /// This includes terminal surfaces that have been closed.
-    pub fn all_live_conversations(&self) -> Vec<(EntityId, &AIConversation)> {
-        self.live_conversation_ids_for_terminal_surface
             .iter()
             .flat_map(|(terminal_surface_id, conversation_ids)| {
                 conversation_ids.iter().filter_map(|conversation_id| {
@@ -651,32 +625,6 @@ impl BlocklistAIHistoryModel {
             .insert(new_token, conversation_id);
         self.update_cached_metadata_for_conversation(conversation_id);
         true
-    }
-
-    /// Sets a live conversation's server token, updates the reverse index,
-    /// synchronizes cached metadata, persists the rebound token to SQLite,
-    /// and emits refresh events for live consumers.
-    pub fn set_server_conversation_token_for_conversation_and_persist(
-        &mut self,
-        conversation_id: AIConversationId,
-        token: String,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        if !self.set_server_conversation_token_for_conversation(conversation_id, token) {
-            return;
-        }
-        self.persist_conversation_state(conversation_id, ctx);
-        let terminal_surface_id = self.terminal_surface_id_for_conversation(&conversation_id);
-        ctx.emit(BlocklistAIHistoryEvent::UpdatedConversationMetadata {
-            terminal_surface_id,
-            conversation_id,
-        });
-        if let Some(terminal_surface_id) = terminal_surface_id {
-            ctx.emit(BlocklistAIHistoryEvent::ConversationServerTokenAssigned {
-                conversation_id,
-                terminal_surface_id,
-            });
-        }
     }
 
     /// Sets server metadata for a conversation and emits the ConversationMetadataUpdated event.
@@ -1084,28 +1032,6 @@ impl BlocklistAIHistoryModel {
         }
     }
 
-    pub fn on_forked_conversation(
-        &mut self,
-        conversation_id: AIConversationId,
-        terminal_surface_id: EntityId,
-        ctx: &mut ModelContext<Self>,
-    ) {
-        // When a conversation is forked and restored for a new terminal surface,
-        // we want to emit UpdatedStreamingExchange events for every exchange
-        // to ensure that all of the existing exchanges are persisted correctly.
-        if let Some(conversation) = self.conversations_by_id.get(&conversation_id) {
-            for exchange in conversation.all_exchanges().into_iter() {
-                let is_hidden = conversation.is_exchange_hidden(exchange.id);
-                ctx.emit(BlocklistAIHistoryEvent::UpdatedStreamingExchange {
-                    exchange_id: exchange.id,
-                    terminal_surface_id,
-                    conversation_id,
-                    is_hidden,
-                });
-            }
-        }
-    }
-
     pub fn initialize_output_for_response_stream(
         &mut self,
         stream_id: &ResponseStreamId,
@@ -1246,282 +1172,6 @@ impl BlocklistAIHistoryModel {
         });
 
         Ok(new_conversation_id)
-    }
-
-    /// Checks whether a conversation can be forked without mutating history.
-    pub fn validate_fork_source(
-        source_conversation: &AIConversation,
-    ) -> Result<(), ForkConversationError> {
-        if source_conversation.is_empty() {
-            return Err(ForkConversationError::EmptyConversation);
-        }
-        Ok(())
-    }
-
-    /// Forks an existing conversation by creating a new conversation
-    /// and copying the existing conversation's tasks into the new conversation.
-    ///
-    /// The `prefix` parameter specifies the prefix added to the root task description
-    /// (e.g., `FORK_PREFIX` for forks, `PRE_REWIND_PREFIX` for pre-rewind backups).
-    ///
-    /// When `preserve_task_ids` is true, the forked conversation reuses the source's task ids
-    /// instead of minting new ones. Used by local-to-cloud handoff so the local
-    /// fork's task store matches the cloud-side fork. The cloud agent's
-    /// `ClientAction`s reference those task ids; if we minted new ones locally
-    /// they would fail to resolve.
-    pub fn fork_conversation(
-        &mut self,
-        source_conversation: &AIConversation,
-        prefix: &str,
-        preserve_task_ids: bool,
-        title_override: Option<&str>,
-        app: &AppContext,
-    ) -> Result<AIConversation, anyhow::Error> {
-        Self::validate_fork_source(source_conversation)?;
-        let tasks: Vec<warp_multi_agent_api::Task> = source_conversation
-            .all_tasks()
-            .filter_map(|t| t.source().cloned())
-            .collect();
-
-        let updated_tasks_with_new_ids =
-            update_forked_task_properties(tasks, prefix, preserve_task_ids, title_override);
-        let Some(sqlite_sender) = GlobalResourceHandlesProvider::as_ref(app)
-            .get()
-            .model_event_sender
-            .clone()
-        else {
-            return Err(anyhow!("No sqlite sender available."));
-        };
-
-        // We preserve reverted action IDs. Orphaned IDs (for actions not in fork) are harmless.
-        // The reverted states are only copied to the new conversation if the revert happened before the user clicked fork,
-        // but regardless of when the revert happened relative to the fork point.
-        //
-        // Example:
-        // 1. Agent edit action
-        // 2. Agent edit action
-        // 3. User reverts edit from 1
-        // 4. **User clicks fork**
-        // 5. User reverts edit from 2
-        //
-        // In this example, the forked conversation will always show edit 1 as reverted and edit 2 as not reverted,
-        // regardless of if the fork point is between 2 and 3 or 3 and 4. This is because we preserve all prior reverts,
-        // either if they game before or after the fork point. However, once forked, we don't copy later reverts.
-        let reverted_action_ids = if source_conversation.reverted_action_ids().is_empty() {
-            None
-        } else {
-            Some(
-                source_conversation
-                    .reverted_action_ids()
-                    .clone()
-                    .into_iter()
-                    .map_into()
-                    .collect(),
-            )
-        };
-
-        let conversation_data = AgentConversationData {
-            server_conversation_token: None,
-            conversation_usage_metadata: Some(source_conversation.usage_metadata()),
-            reverted_action_ids,
-            forked_from_server_conversation_token: source_conversation
-                .server_conversation_token()
-                .map(|t| t.as_str().to_string()),
-            // We reset artifacts on fork
-            artifacts_json: None,
-            root_task_is_optimistic: None,
-            run_id: None,
-            autoexecute_override: Some(source_conversation.autoexecute_override().into()),
-        };
-        let forked_conversation_id = AIConversationId::new();
-        if let Err(e) = sqlite_sender.send(ModelEvent::UpdateMultiAgentConversation {
-            conversation_id: forked_conversation_id.to_string(),
-            updated_tasks: updated_tasks_with_new_ids.clone(),
-            conversation_data: conversation_data.clone(),
-        }) {
-            return Err(anyhow!("Failed to persist forked conversation: {e:?}."));
-        }
-
-        // Insert this conversation into the history model memory so we don't need to read from DB to restore this forked conversation
-        // (otherwise, we can run into a race condition where the conversation is not found in the DB because we haven't finished writing to the db).
-        let forked_conversation = self.insert_forked_conversation_from_tasks(
-            forked_conversation_id,
-            updated_tasks_with_new_ids.clone(),
-            conversation_data.clone(),
-        )?;
-
-        Ok(forked_conversation)
-    }
-
-    /// Forks an existing conversation at a specific exchange boundary. When `exact_exchange`
-    /// is true, the fork includes all messages up to and including the selected exchange.
-    /// Otherwise, it extends through the full response (every message after the user's query
-    /// until the next root-task user query).
-    ///
-    /// The `prefix` parameter specifies the prefix added to the root task description
-    /// (e.g., `FORK_PREFIX` for forks, `PRE_REWIND_PREFIX` for pre-rewind backups).
-    pub fn fork_conversation_at_exchange(
-        &mut self,
-        source_conversation: &AIConversation,
-        from_exchange_id: AIAgentExchangeId,
-        fork_from_exact_exchange: bool,
-        prefix: &str,
-        title_override: Option<&str>,
-        app: &AppContext,
-    ) -> Result<AIConversation, anyhow::Error> {
-        let conversation = source_conversation;
-
-        let exchanges_by_task: Vec<(TaskId, Vec<&AIAgentExchange>)> =
-            conversation.all_exchanges_by_task();
-
-        let root_task_id = conversation.get_root_task_id().clone();
-
-        let mut message_ids_to_retain_by_task: HashMap<TaskId, HashSet<MessageId>> = HashMap::new();
-        // Each task's last retained exchange. Retention keeps a prefix of each
-        // task's exchanges, so only tool calls in this exchange can have been
-        // severed from their results (which land in the next, dropped exchange).
-        let mut fork_point_exchange_by_task: HashMap<TaskId, &AIAgentExchange> = HashMap::new();
-        let mut found_from_exchange_id = false;
-        'outer: for (task_id, task_exchanges) in exchanges_by_task.into_iter() {
-            for exchange in task_exchanges {
-                // In the non-exact case, we continue past the selected exchange until we reach
-                // the next user query (effectively forking from the selected 'response').
-                if found_from_exchange_id && task_id == root_task_id && exchange.has_user_query() {
-                    break 'outer;
-                }
-
-                let message_ids_to_retain = message_ids_to_retain_by_task
-                    .entry(task_id.clone())
-                    .or_default();
-                message_ids_to_retain.extend(exchange.added_message_ids.iter().cloned());
-                fork_point_exchange_by_task.insert(task_id.clone(), exchange);
-                if exchange.id == from_exchange_id {
-                    if fork_from_exact_exchange {
-                        break 'outer;
-                    }
-                    found_from_exchange_id = true;
-                }
-            }
-        }
-
-        if message_ids_to_retain_by_task.is_empty() {
-            return Err(anyhow!(
-                "No messages found for block in conversation {}.",
-                conversation.id()
-            ));
-        }
-
-        // Build truncated tasks by retaining only messages whose IDs are in
-        // `allowed_message_ids`. Tasks whose message list becomes empty and
-        // which are non-root tasks are dropped. Client `tool_call`s in the
-        // fork-point exchange whose `tool_call_result` was truncated away are
-        // reconciled so every `tool_use` stays paired (see
-        // `reconcile_dangling_tool_calls_in_forked_task`).
-        let truncated_tasks: Vec<warp_multi_agent_api::Task> = conversation
-            .all_tasks()
-            .filter_map(|t| {
-                if let Some(message_ids_to_retain) = message_ids_to_retain_by_task.get(t.id()) {
-                    let source_task = t.source()?;
-                    let mut truncated_task = source_task.clone();
-                    truncated_task
-                        .messages
-                        .retain(|m| message_ids_to_retain.contains(&MessageId::new(m.id.clone())));
-                    if truncated_task.messages.is_empty() {
-                        return None;
-                    }
-                    if let Some(fork_point_exchange) = fork_point_exchange_by_task.get(t.id()) {
-                        reconcile_dangling_tool_calls_in_forked_task(
-                            &mut truncated_task,
-                            &source_task.messages,
-                            &fork_point_exchange.added_message_ids,
-                        );
-                    }
-                    Some(truncated_task)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        if truncated_tasks.is_empty() {
-            return Err(anyhow!(
-                "Truncated tasks for forked conversation at block are empty for conversation {}.",
-                conversation.id()
-            ));
-        }
-
-        let updated_tasks_with_new_ids =
-            update_forked_task_properties(truncated_tasks, prefix, false, title_override);
-
-        let Some(sqlite_sender) = GlobalResourceHandlesProvider::as_ref(app)
-            .get()
-            .model_event_sender
-            .clone()
-        else {
-            return Err(anyhow!("No sqlite sender available."));
-        };
-
-        // We preserve reverted action IDs. Orphaned IDs (for actions not in fork) are harmless.
-        // The reverted states are only copied to the new conversation if the revert happened before the user clicked fork,
-        // but regardless of when the revert happened relative to the fork point.
-        //
-        // Example:
-        // 1. Agent edit action
-        // 2. Agent edit action
-        // 3. User reverts edit from 1
-        // 4. **User clicks fork**
-        // 5. User reverts edit from 2
-        //
-        // In this example, the forked conversation will always show edit 1 as reverted and edit 2 as not reverted,
-        // regardless of if the fork point is between 2 and 3 or 3 and 4. This is because we preserve all prior reverts,
-        // either if they game before or after the fork point. However, once forked, we don't copy later reverts.
-        let reverted_action_ids = if conversation.reverted_action_ids().is_empty() {
-            None
-        } else {
-            Some(
-                conversation
-                    .reverted_action_ids()
-                    .clone()
-                    .into_iter()
-                    .map_into()
-                    .collect(),
-            )
-        };
-
-        // Start forked conversations without usage metadata for now; this can
-        // be recomputed based on the retained exchanges in a follow-up.
-        let conversation_data = AgentConversationData {
-            server_conversation_token: None,
-            conversation_usage_metadata: None,
-            reverted_action_ids,
-            forked_from_server_conversation_token: conversation
-                .server_conversation_token()
-                .map(|t| t.as_str().to_string()),
-            // We reset artifacts on fork
-            artifacts_json: None,
-            root_task_is_optimistic: None,
-            run_id: None,
-            autoexecute_override: Some(conversation.autoexecute_override().into()),
-        };
-
-        let forked_conversation_id = AIConversationId::new();
-        if let Err(e) = sqlite_sender.send(ModelEvent::UpdateMultiAgentConversation {
-            conversation_id: forked_conversation_id.to_string(),
-            updated_tasks: updated_tasks_with_new_ids.clone(),
-            conversation_data: conversation_data.clone(),
-        }) {
-            return Err(anyhow!(
-                "Failed to persist forked conversation at block: {e:?}."
-            ));
-        }
-
-        let forked_conversation = self.insert_forked_conversation_from_tasks(
-            forked_conversation_id,
-            updated_tasks_with_new_ids,
-            conversation_data,
-        )?;
-
-        Ok(forked_conversation)
     }
 
     pub fn apply_client_actions(
@@ -1943,22 +1593,6 @@ impl BlocklistAIHistoryModel {
             .any(|conversation_ids| conversation_ids.contains(&conversation_id))
     }
 
-    pub fn mark_terminal_surface_as_conversation_transcript_viewer(
-        &mut self,
-        terminal_surface_id: EntityId,
-    ) {
-        self.conversation_transcript_viewer_terminal_surface_ids
-            .insert(terminal_surface_id);
-    }
-
-    pub fn is_terminal_surface_conversation_transcript_viewer(
-        &self,
-        terminal_surface_id: EntityId,
-    ) -> bool {
-        self.conversation_transcript_viewer_terminal_surface_ids
-            .contains(&terminal_surface_id)
-    }
-
     /// Returns [`AIQueryHistory`]s from all sources: live conversations, cleared conversations,
     /// and persisted queries from conversations not loaded in memory.
     ///
@@ -2096,12 +1730,6 @@ impl BlocklistAIHistoryModel {
     ) {
         if let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) {
             conversation.set_is_viewing_shared_session(is_viewing_shared_session);
-        }
-    }
-
-    pub fn set_has_code_review_opened_to_true(&mut self, conversation_id: AIConversationId) {
-        if let Some(conversation) = self.conversations_by_id.get_mut(&conversation_id) {
-            conversation.mark_code_review_as_opened();
         }
     }
 
@@ -2308,12 +1936,6 @@ impl BlocklistAIHistoryModel {
         &mut self,
         terminal_surface_id: EntityId,
     ) {
-        if self.is_terminal_surface_conversation_transcript_viewer(terminal_surface_id) {
-            // We don't mark conversation transcript viewer conversations as historical,
-            // as they are stored separately and should not be persisted/displayed as regular user conversations.
-            return;
-        }
-
         // There's a slight concern here that the conversations we're preserving might not have persisted successfully
         // because of some unexpected error. Attempting to then restore these conversations would lead to unexpected behavior.
         // In the future it might be worthwhile to check that these conversations exist in the database before marking them as historical,
@@ -2797,192 +2419,6 @@ impl From<&AIAgentOutputStatus> for AIQueryHistoryOutputStatus {
         }
     }
 }
-
-/// Mirrors the server's `isClientToolCall`: true for tool calls the client
-/// executes. Server and subagent tool calls are managed by the server's
-/// runtime and must not be reconciled — notably the `RunPrimaryAgent`
-/// bootstrap call at the start of every root task is unresolved by design (it
-/// anchors the primary agent on the server's run stack), and pairing it with a
-/// synthesized `Cancel` would pop the primary agent on the fork's next
-/// request, breaking the conversation.
-fn is_client_tool_call(tool_call: &warp_multi_agent_api::message::ToolCall) -> bool {
-    !matches!(
-        tool_call.tool,
-        None | Some(Tool::Server(_)) | Some(Tool::Subagent(_))
-    )
-}
-
-/// Reconciles client `tool_call`s in the fork-point exchange
-/// (`fork_point_message_ids`, the task's last retained exchange) whose
-/// `tool_call_result` was dropped by the truncation: a call and its result
-/// carry different `request_id`s, so they land in different exchanges and the
-/// fork point separates them. An unpaired `tool_use` fails the fork's next
-/// request with an Anthropic `400 invalid_request_error`.
-///
-/// Each severed call gets its real result pulled forward from
-/// `source_task_messages` (the task's pre-truncation history), or a
-/// synthesized `Cancel` when none exists (a genuinely in-flight call). The
-/// result is inserted immediately after its `tool_call`. Tool calls outside
-/// the fork-point exchange were dangling in the source too, and are left
-/// untouched so the fork reproduces the source history faithfully.
-fn reconcile_dangling_tool_calls_in_forked_task(
-    task: &mut warp_multi_agent_api::Task,
-    source_task_messages: &[warp_multi_agent_api::Message],
-    fork_point_message_ids: &HashSet<MessageId>,
-) {
-    let fork_point_message_ids: HashSet<&str> =
-        fork_point_message_ids.iter().map(|id| &**id).collect();
-    let resolved_tool_call_ids: HashSet<&str> = task
-        .messages
-        .iter()
-        .filter_map(|m| m.tool_call_result().map(|r| r.tool_call_id.as_str()))
-        .collect();
-
-    // Collect each dangling tool_call's position, id, and request_id up front so
-    // we don't mutate the message list while iterating it.
-    let dangling: Vec<(usize, String, String)> = task
-        .messages
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, message)| {
-            if !fork_point_message_ids.contains(message.id.as_str()) {
-                return None;
-            }
-            let tool_call = message.tool_call()?;
-            (is_client_tool_call(tool_call)
-                && !resolved_tool_call_ids.contains(tool_call.tool_call_id.as_str()))
-            .then(|| {
-                (
-                    idx,
-                    tool_call.tool_call_id.clone(),
-                    message.request_id.clone(),
-                )
-            })
-        })
-        .collect();
-
-    // Common case: nothing dangling, so skip scanning the source history.
-    if dangling.is_empty() {
-        return;
-    }
-
-    // Real results from the source history, keyed by tool_call_id, so a dropped
-    // result can be pulled forward.
-    let source_results_by_tool_call_id: HashMap<&str, &warp_multi_agent_api::Message> =
-        source_task_messages
-            .iter()
-            .filter_map(|m| m.tool_call_result().map(|r| (r.tool_call_id.as_str(), m)))
-            .collect();
-
-    // Insert from the back so earlier indices remain valid as we splice.
-    for (idx, tool_call_id, request_id) in dangling.into_iter().rev() {
-        let reconciled = source_results_by_tool_call_id
-            .get(tool_call_id.as_str())
-            .map(|real| (*real).clone())
-            .unwrap_or_else(|| {
-                // Synthesized `Cancel` carries the call's `request_id` so it
-                // groups into the same exchange as its `tool_call` on restore.
-                warp_multi_agent_api::Message {
-                    id: Uuid::new_v4().to_string(),
-                    task_id: task.id.clone(),
-                    server_message_data: String::new(),
-                    citations: vec![],
-                    fetched_memories: vec![],
-                    message: Some(warp_multi_agent_api::message::Message::ToolCallResult(
-                        warp_multi_agent_api::message::ToolCallResult {
-                            tool_call_id: tool_call_id.clone(),
-                            context: None,
-                            result: Some(
-                                warp_multi_agent_api::message::tool_call_result::Result::Cancel(()),
-                            ),
-                        },
-                    )),
-                    request_id: request_id.clone(),
-                    timestamp: None,
-                }
-            });
-        task.messages.insert(idx + 1, reconciled);
-    }
-}
-
-/// Updates the given tasks, which are presumed to be clones of tasks from a source conversation to be
-/// used to back a fork or copy of the source conversation.
-///
-/// When `preserve_task_ids` is false, reassigns new task IDs to each forked task to ensure task IDs
-/// remain globally unique. When true, leaves task IDs as-is so the local fork's task store matches
-/// an externally-known set of task ids whose ClientActions must resolve in the local fork.
-///
-/// Always prepends the given prefix to the root task's description.
-fn update_forked_task_properties(
-    tasks: Vec<warp_multi_agent_api::Task>,
-    prefix: &str,
-    preserve_task_ids: bool,
-    title_override: Option<&str>,
-) -> Vec<warp_multi_agent_api::Task> {
-    let root_description = |current: &str| match title_override {
-        Some(title) => title.to_owned(),
-        None => format!("{prefix}{current}"),
-    };
-
-    if preserve_task_ids {
-        return tasks
-            .into_iter()
-            .map(|mut t| {
-                let is_root = t
-                    .dependencies
-                    .as_ref()
-                    .map(|deps| deps.parent_task_id.is_empty())
-                    .unwrap_or(true);
-                if is_root {
-                    t.description = root_description(&t.description);
-                }
-                t
-            })
-            .collect();
-    }
-
-    let mut old_to_new_task_ids = HashMap::new();
-    fn get_new_task_id(new_ids: &mut HashMap<String, String>, old_task_id: &str) -> String {
-        new_ids
-            .entry(old_task_id.to_owned())
-            .or_insert_with(|| Uuid::new_v4().to_string())
-            .clone()
-    }
-
-    tasks
-        .into_iter()
-        .map(|mut t| {
-            let new_id = get_new_task_id(&mut old_to_new_task_ids, &t.id);
-            // Update task id to avoid duplicate tasks across conversations and ensure
-            // all messages reference the new task id.
-            t.id = new_id.clone();
-            for message in &mut t.messages {
-                message.task_id = new_id.clone();
-                if let Some(subagent) = message.tool_call_mut().and_then(|tc| tc.subagent_mut()) {
-                    subagent.task_id =
-                        get_new_task_id(&mut old_to_new_task_ids, &subagent.task_id).clone();
-                }
-            }
-            if let Some(deps) = t
-                .dependencies
-                .as_mut()
-                .filter(|deps| !deps.parent_task_id.is_empty())
-            {
-                deps.parent_task_id =
-                    get_new_task_id(&mut old_to_new_task_ids, &deps.parent_task_id).clone();
-            } else {
-                t.description = root_description(&t.description);
-            }
-            t
-        })
-        .collect()
-}
-
-/// The default prefix used when forking a conversation.
-pub const FORK_PREFIX: &str = "(Fork) ";
-
-/// The prefix used when saving a conversation before a rewind operation.
-pub const PRE_REWIND_PREFIX: &str = "(Pre-Rewind) ";
 
 #[cfg(test)]
 #[path = "history_model_tests.rs"]

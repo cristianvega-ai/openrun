@@ -4290,7 +4290,6 @@ fn test_paste_clipboard_with_text_only_should_paste_text_normally() {
                 unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
-                num_images_in_conversation: 0,
             };
             editor
         });
@@ -4344,7 +4343,6 @@ fn test_paste_clipboard_with_image_only_should_switch_to_agent_mode() {
                 unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
-                num_images_in_conversation: 0,
             };
             editor
         });
@@ -4387,7 +4385,6 @@ fn test_paste_clipboard_with_supported_image_and_text_should_handle_both() {
                 unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
-                num_images_in_conversation: 0,
             };
             editor
         });
@@ -4431,7 +4428,6 @@ fn test_paste_clipboard_with_unsupported_image_and_text_should_show_error() {
                 unsupported_model: false,
                 is_processing_attached_images: false,
                 num_images_attached: 0,
-                num_images_in_conversation: 0,
             };
             editor
         });

@@ -1,5 +1,4 @@
 //! Shared types for message bar rendering across terminal and agent views.
-pub mod attached_context;
 pub mod common;
 
 use std::borrow::Cow;
@@ -56,14 +55,6 @@ impl Message {
         } else {
             self.items.push(MessageItem::text(text.to_owned()));
         }
-    }
-
-    /// Sets the color override for all text items in the message.
-    pub fn with_text_color(mut self, color: ColorU) -> Self {
-        for item in &mut self.items {
-            item.set_text_color(color);
-        }
-        self
     }
 
     /// Sets the color override for all items in the message.

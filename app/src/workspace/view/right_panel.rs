@@ -1300,21 +1300,21 @@ impl RightPanelView {
 
         let active_cli_agent = terminal_view.read(ctx, |t, ctx| t.active_cli_agent(ctx));
 
-        let (result, destination) = if active_cli_agent.is_some() {
-            let r = terminal_view.update(ctx, |terminal, ctx| {
-                terminal.send_review_to_cli_agent_or_rich_input(&comments, ctx)
+        if active_cli_agent.is_none() {
+            log::warn!("No CLI agent is running in the terminal chosen for review comments");
+            code_review_view.update(ctx, |view, ctx| {
+                view.handle_review_submission_result(ReviewSubmissionResult::Error, ctx);
             });
-            let dest = if terminal_view.read(ctx, |t, ctx| t.is_cli_agent_rich_input_open(ctx)) {
-                CodeReviewContextDestination::RichInput
-            } else {
-                CodeReviewContextDestination::Pty
-            };
-            (r, dest)
+            return;
+        }
+
+        let result = terminal_view.update(ctx, |terminal, ctx| {
+            terminal.send_review_to_cli_agent_or_rich_input(&comments, ctx)
+        });
+        let destination = if terminal_view.read(ctx, |t, ctx| t.is_cli_agent_rich_input_open(ctx)) {
+            CodeReviewContextDestination::RichInput
         } else {
-            let r = terminal_view.update(ctx, |terminal, ctx| {
-                terminal.send_inline_review(comments, ctx)
-            });
-            (r, CodeReviewContextDestination::AgentReview)
+            CodeReviewContextDestination::Pty
         };
 
         if let Err(err) = &result {

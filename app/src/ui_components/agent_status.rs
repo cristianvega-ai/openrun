@@ -8,18 +8,11 @@ use warpui::Element;
 use warpui::color::ColorU;
 use warpui::elements::{ConstrainedBox, Container, CornerRadius, Radius};
 
+use crate::ai::agent::conversation::ConversationStatus;
 use crate::ui_components::icons::Icon;
 
 /// Padding around the status icon rendered by [`render_status_element`].
 pub const STATUS_ELEMENT_PADDING: f32 = 2.;
-
-#[derive(Clone, Copy)]
-pub enum StatusColorStyle {
-    /// Foreground-blend colors (`ansi_fg`) used by the regular status badge.
-    Standard,
-    /// Background-blend colors (`ansi_bg`) used by the cloud overlay badge.
-    Cloud,
-}
 
 /// The displayed state of an agent run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,41 +42,13 @@ impl std::fmt::Display for AgentStatus {
 }
 
 impl AgentStatus {
-    pub fn status_icon_and_color(
-        &self,
-        theme: &WarpTheme,
-        color_style: StatusColorStyle,
-    ) -> (Icon, ColorU) {
+    pub fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
         match self {
-            AgentStatus::InProgress => (
-                Icon::ClockLoader,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_magenta(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_magenta(),
-                },
-            ),
-            AgentStatus::Success => (
-                Icon::Check,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_green(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_green(),
-                },
-            ),
-            AgentStatus::Error => (
-                Icon::Triangle,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_red(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_red(),
-                },
-            ),
+            AgentStatus::InProgress => (Icon::ClockLoader, theme.ansi_fg_magenta()),
+            AgentStatus::Success => (Icon::Check, theme.ansi_fg_green()),
+            AgentStatus::Error => (Icon::Triangle, theme.ansi_fg_red()),
             AgentStatus::Cancelled => (Icon::StopFilled, internal_colors::neutral_5(theme)),
-            AgentStatus::Blocked => (
-                Icon::StopFilled,
-                match color_style {
-                    StatusColorStyle::Standard => theme.ansi_fg_yellow(),
-                    StatusColorStyle::Cloud => theme.ansi_bg_yellow(),
-                },
-            ),
+            AgentStatus::Blocked => (Icon::StopFilled, theme.ansi_fg_yellow()),
         }
     }
 }
@@ -95,7 +60,13 @@ pub trait StatusElementStyle {
 
 impl StatusElementStyle for AgentStatus {
     fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
-        AgentStatus::status_icon_and_color(self, theme, StatusColorStyle::Standard)
+        AgentStatus::status_icon_and_color(self, theme)
+    }
+}
+
+impl StatusElementStyle for ConversationStatus {
+    fn status_icon_and_color(&self, theme: &WarpTheme) -> (Icon, ColorU) {
+        ConversationStatus::status_icon_and_color(self, theme)
     }
 }
 

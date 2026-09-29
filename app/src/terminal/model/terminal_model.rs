@@ -79,16 +79,6 @@ use crate::terminal::{
 /// Max size of the window title stack.
 const TITLE_STACK_MAX_DEPTH: usize = 4096;
 
-/// The status of a conversation transcript viewer.
-/// This tracks both the loading state and the type of conversation being viewed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConversationTranscriptViewerStatus {
-    /// Loading conversation data from the server.
-    Loading,
-    /// Viewing a loaded conversation transcript.
-    ViewingLocalConversation,
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct FindOptions {
     pub query: Option<Arc<String>>,
@@ -461,7 +451,6 @@ pub struct TerminalModel {
 
     /// If Some, this terminal is displaying a read-only conversation transcript.
     /// Tracks both the loading state and the type of conversation being viewed.
-    conversation_transcript_viewer_status: Option<ConversationTranscriptViewerStatus>,
 
     /// When some, the TerminalModel emits the event [Event::DetectedEndOfSshLogin]. This
     /// event is emitted either as the initial check or the confirmation check.
@@ -1053,7 +1042,6 @@ impl TerminalModel {
             handled_exit: false,
             shell_launch_state: shell_state,
             obfuscate_secrets,
-            conversation_transcript_viewer_status: None,
             notify_on_end_of_ssh_login: None,
             is_receiving_hook: IsReceivingHook::No,
             image_id_to_metadata: HashMap::new(),
@@ -1145,31 +1133,7 @@ impl TerminalModel {
     }
 
     pub fn is_read_only(&self) -> bool {
-        self.handled_exit || self.is_conversation_transcript_viewer()
-    }
-
-    pub fn is_conversation_transcript_viewer(&self) -> bool {
-        self.conversation_transcript_viewer_status.is_some()
-    }
-
-    pub fn is_loading_conversation_transcript(&self) -> bool {
-        matches!(
-            self.conversation_transcript_viewer_status,
-            Some(ConversationTranscriptViewerStatus::Loading)
-        )
-    }
-
-    pub fn conversation_transcript_viewer_status(
-        &self,
-    ) -> Option<&ConversationTranscriptViewerStatus> {
-        self.conversation_transcript_viewer_status.as_ref()
-    }
-
-    pub fn set_conversation_transcript_viewer_status(
-        &mut self,
-        status: Option<ConversationTranscriptViewerStatus>,
-    ) {
-        self.conversation_transcript_viewer_status = status;
+        self.handled_exit
     }
 
     pub fn colors(&self) -> color::List {
