@@ -150,6 +150,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [CI: main runs are not cancelled](#ci-main-runs-are-not-cancelled) — a push to `main` no longer cancels the run of the previous push; only pull request runs are cancelled by newer pushes
 - [Offline audit: independent of the dependency build state](#offline-audit-independent-of-the-dependency-build-state) — the audit skips `warp-workflows`' build-generated `src/generated_workflows/`, so it gives the same result on a fresh and on a cached cargo checkout; CI fetches dependencies first
 - [CI: the network-sandbox steps finish](#ci-the-network-sandbox-steps-finish) — `strace --seccomp-bpf` stops the sandboxed tests only at the traced calls (bash's shell bootstrap went from ~20 s to a fraction of that), the sandbox is a script with a canary that proves the connection check fails, and the steps are split with timeouts
+- [CI: sync queue cancellation race](#ci-sync-queue-cancellation-race) — `SyncQueue::cancel_all` no longer lets the processor start the next queued task mid-cancel; the sync-queue tests wait on a start signal instead of a 50 ms sleep (ENG-193)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3687,3 +3688,16 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 **User-visible impact:** none.
 
 **Notes:** this could not be reproduced locally (no Linux or container runtime on the development machine); the diagnosis comes from the timing pattern in the run 36738819928 log, and the smoke step is the first check of the fix in CI. If bash still bootstraps slowly without the ptrace stops, the fallback is `WARP_SHELL_PATH` set to zsh for the integration step, as the `Unit tests` job does, plus a separate bash subset.
+
+## CI: sync queue cancellation race
+**Why:** `sync_queue::tests::cancel_all_cancels_running_and_queued_tasks` failed in the Linux `Unit tests` job of runs 36747125103 and 36763876464 and passed in others (ENG-193). Non-integration tests get no retries, so one unlucky schedule turned `main` red.
+
+**Root cause:** a real race in `SyncQueue::cancel_all` (`crates/warp_core/src/sync_queue.rs`), not only a slow test. `cancel_all` first aborted the running task and then cleared the task map. Between the two steps the processor could see the aborted task finish, take the next queued task id and remove that task from the map before it was cleared. The task then ran and delivered its result, although the caller had cancelled it (the failing assertion was `queued task receiver should be cancelled`). The processor also removed a task from the map and registered its abort handle in two separate steps, so `cancel_all` running in between missed the handle and the task kept running. The tests made the window wider by sleeping 50 ms and hoping the processor had started.
+
+**Modified:**
+- `crates/warp_core/src/sync_queue.rs`: `cancel_all` holds the task map lock while it clears the map and then aborts the active task. The processor removes a task from the map and registers its abort handle under the same lock (same lock order, map then handle). A cancel now either happens before the processor takes a task (the task is gone) or after it registered its handle (the task is aborted).
+- `crates/warp_core/src/sync_queue_tests.rs`: the four tests that slept 50 ms to let the processor start a task now wait (30 s timeout) for a signal the test task sends from `run()`.
+
+**User-visible impact:** none in practice; cancelling queued syncs can no longer let one more queued task run.
+
+**Notes:** reproduced before the fix with a scratch loop (20,000 enqueue/cancel rounds failed at round 16,407). After the fix: 90,000 rounds under CPU load and 500 runs of the sync-queue tests with `--stress-count`, idle and under load from 36 `yes` processes, pass with no failures.

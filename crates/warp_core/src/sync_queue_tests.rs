@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 use futures::StreamExt;
 use futures::channel::oneshot;
@@ -17,12 +17,17 @@ impl IsTransientError for TestError {
     }
 }
 
+/// How long a test waits for the processor to start a task before failing.
+const START_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// A test task that has an identifier and can optionally block on a signal
 /// before completing.
 struct TestTask {
     id: u32,
     /// If set, the task waits for this signal before returning.
     gate: Option<oneshot::Receiver<()>>,
+    /// If set, notified as soon as the processor starts running the task.
+    started: Option<mpsc::Sender<()>>,
 }
 
 impl SyncQueueTaskTrait for TestTask {
@@ -33,6 +38,9 @@ impl SyncQueueTaskTrait for TestTask {
     fn run(&mut self) -> Self::Fut {
         let id = self.id;
         let gate = self.gate.take();
+        if let Some(started) = self.started.take() {
+            let _ = started.send(());
+        }
         Box::pin(async move {
             if let Some(gate) = gate {
                 let _ = gate.await;
@@ -49,12 +57,42 @@ fn create_queue() -> (SyncQueue<TestTask>, Arc<Background>) {
 }
 
 fn ungated_task(id: u32) -> TestTask {
-    TestTask { id, gate: None }
+    TestTask {
+        id,
+        gate: None,
+        started: None,
+    }
 }
 
 fn gated_task(id: u32) -> (TestTask, oneshot::Sender<()>) {
     let (tx, rx) = oneshot::channel();
-    (TestTask { id, gate: Some(rx) }, tx)
+    let task = TestTask {
+        id,
+        gate: Some(rx),
+        started: None,
+    };
+    (task, tx)
+}
+
+/// Like [`gated_task`], but also returns a handle that can wait until the
+/// processor has started running the task.
+fn gated_task_with_start_signal(id: u32) -> (TestTask, oneshot::Sender<()>, StartSignal) {
+    let (mut task, gate_tx) = gated_task(id);
+    let (started_tx, started_rx) = mpsc::channel();
+    task.started = Some(started_tx);
+    (task, gate_tx, StartSignal(started_rx))
+}
+
+struct StartSignal(mpsc::Receiver<()>);
+
+impl StartSignal {
+    /// Blocks until the processor has taken the task off the queue and begun
+    /// running it.
+    fn wait(&self) {
+        self.0
+            .recv_timeout(START_TIMEOUT)
+            .expect("processor should start the task");
+    }
 }
 
 #[test]
@@ -62,7 +100,7 @@ fn has_queued_task_finds_matching_task() {
     let (queue, _executor) = create_queue();
 
     // Enqueue a blocking task to hold the processor so subsequent tasks stay queued.
-    let (blocker, gate_tx) = gated_task(0);
+    let (blocker, gate_tx, blocker_started) = gated_task_with_start_signal(0);
     drop(futures::executor::block_on(
         queue.enqueue_with_result(blocker, None, "blocker"),
     ));
@@ -79,8 +117,8 @@ fn has_queued_task_finds_matching_task() {
         "task-2",
     )));
 
-    // Give the processor time to start executing the blocker.
-    std::thread::sleep(Duration::from_millis(50));
+    // Wait until the processor is executing the blocker.
+    blocker_started.wait();
 
     // Tasks 1 and 2 should be queued (not executing).
     assert!(queue.has_queued_task(|task| task.id == 1));
@@ -96,15 +134,15 @@ fn has_queued_task_does_not_match_executing_task() {
     let (queue, _executor) = create_queue();
 
     // Enqueue a task that will block — it will be picked up by the processor.
-    let (blocker, gate_tx) = gated_task(1);
+    let (blocker, gate_tx, blocker_started) = gated_task_with_start_signal(1);
     drop(futures::executor::block_on(queue.enqueue_with_result(
         blocker,
         None,
         "blocking-task",
     )));
 
-    // Give the background processor time to pick up the task.
-    std::thread::sleep(Duration::from_millis(50));
+    // Wait until the background processor has picked up the task.
+    blocker_started.wait();
 
     // The task should be executing (removed from the map), not queued.
     assert!(!queue.has_queued_task(|task| task.id == 1));
@@ -118,7 +156,7 @@ fn cancel_all_cancels_running_and_queued_tasks() {
 
     // Enqueue a task that blocks — this will be the "running" task.
     // We intentionally drop gate_tx so the task will never complete on its own.
-    let (blocker, _gate_tx) = gated_task(1);
+    let (blocker, _gate_tx, running_started) = gated_task_with_start_signal(1);
     let running_rx =
         futures::executor::block_on(queue.enqueue_with_result(blocker, None, "running-task"));
 
@@ -129,8 +167,9 @@ fn cancel_all_cancels_running_and_queued_tasks() {
         "queued-task",
     ));
 
-    // Give the processor time to start executing the first task.
-    std::thread::sleep(Duration::from_millis(50));
+    // Wait until the processor is executing the first task; the second one
+    // can only be queued behind it.
+    running_started.wait();
 
     // Cancel everything.
     queue.cancel_all();
@@ -207,12 +246,12 @@ fn streaming_cancel_all_clears_queued_tasks() {
     let _rx = queue.subscribe();
 
     // Enqueue a blocking task so subsequent tasks stay queued.
-    let (blocker, _gate_tx) = gated_task(0);
+    let (blocker, _gate_tx, blocker_started) = gated_task_with_start_signal(0);
     queue.enqueue(blocker, None, "blocker");
     queue.enqueue(ungated_task(1), None, "task-1");
 
-    // Give the processor time to start the blocker.
-    std::thread::sleep(Duration::from_millis(50));
+    // Wait until the processor is executing the blocker.
+    blocker_started.wait();
 
     assert!(queue.has_queued_task(|task| task.id == 1));
     queue.cancel_all();
