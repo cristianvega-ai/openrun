@@ -148,6 +148,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Background tabs stop polling GitHub](#background-tabs-stop-polling-github) — a terminal or code-review panel in a tab that is not selected releases its `gh` model after 30 seconds and refreshes when the tab is shown again, unless the vertical tabs panel shows PR badges
 - [Offline audit: narrow exceptions, git dependency sources and a self-test](#offline-audit-narrow-exceptions-git-dependency-sources-and-a-self-test) — the audit reads the sources of git dependencies, checks the completion generator classification, replaces directory-wide exceptions with per-line ones, pins the DXC binaries by hash, catches more ways to start a network tool and has a `--self-test` that runs in CI
 - [CI: main runs are not cancelled](#ci-main-runs-are-not-cancelled) — a push to `main` no longer cancels the run of the previous push; only pull request runs are cancelled by newer pushes
+- [Offline audit: independent of the dependency build state](#offline-audit-independent-of-the-dependency-build-state) — the audit skips `warp-workflows`' build-generated `src/generated_workflows/`, so it gives the same result on a fresh and on a cached cargo checkout; CI fetches dependencies first
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3650,3 +3651,14 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 - `.github/workflows/ci.yml` — `cancel-in-progress` is now `${{ github.event_name == 'pull_request' }}`. Runs on `main` (and other pushed branches) finish; a new push to a pull request still cancels that pull request's older run. The concurrency group is unchanged, so runs of the same ref queue one behind the other.
 
 **User-visible impact:** none in the app. More CI minutes are used when several commits land on `main` in a row.
+
+## Offline audit: independent of the dependency build state
+**Why:** in CI the strict unused-entry check failed on `net-dep | git-dep:warp-workflows/src/generated_workflows/*` (ENG-189). `warp-workflows` writes that directory into its cargo git checkout from a build script, so it exists in a checkout that was built (a cached one, or any developer machine) and not in a fresh one. The entry matched nothing there, the audit failed, and the `--self-test` step after it was skipped.
+
+**Modified:**
+- `script/offline_audit`: the git dependency search skips `**/generated_workflows/**` (`DEP_BUILD_OUTPUT_GLOBS`, with the reason). The texts are bundled workflow commands for the user's shell, never run by the app. The matching allowlist entry is gone. A self-test case checks that a build-generated directory is skipped while the same text elsewhere in a dependency is found (44 cases).
+- `.github/workflows/ci.yml`: a `cargo fetch --locked` step before the static audit, so the dependency sources the audit reads are present without a build.
+
+**User-visible impact:** none.
+
+**Notes:** checked with a scratch `CARGO_HOME` after `cargo fetch` (unbuilt checkouts) against the built checkouts in `~/.cargo`: with an empty allowlist the `depsrc` findings are identical, and the audit and self-test pass in both. Nothing else in the entries depends on the build state.

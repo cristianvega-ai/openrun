@@ -143,6 +143,11 @@ jobs:
         with:
           tool: nextest,cargo-deny
 
+      # The static audit reads the sources of git dependencies (found with `cargo metadata`). Fetch
+      # them first so it does not depend on a cached build; it skips build-generated directories.
+      - name: Fetch dependencies
+        run: cargo fetch --locked
+
       # Greps for Warp hosts and services, network-capable code outside its allowed consumers
       # (including the sources of git dependencies and the completion generator classification),
       # banned crates and `cargo deny check bans licenses sources`. Exceptions are listed, with

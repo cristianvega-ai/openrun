@@ -137,6 +137,12 @@ SCRIPT_DIRS = ["app/assets", "resources", "script", "docker"]
 # Network-capable text in git dependencies. URLs are not searched there (doc comments are full of
 # them) except inside the completion generators, whose strings are commands.
 DEP_CODE_PATTERNS = NETWORK_RUST_PATTERNS + [COMMAND_PATTERN, NET_STRING_PATTERN]
+# Directories that a dependency's build script writes into its own source checkout. They exist only
+# in a checkout that has been built (a cached one in CI, a fresh one on a clean runner), so searching
+# them would make the result depend on the build state. `warp-workflows` generates Rust from its
+# committed YAML specs into `src/generated_workflows/`; the texts are commands for the user's shell
+# and the app never runs them.
+DEP_BUILD_OUTPUT_GLOBS = ["!**/generated_workflows/**"]
 DEP_GENERATOR_URL_PATTERN = r"https?://[A-Za-z0-9]"
 GENERATOR_DEP = "warp-command-signatures"
 GENERATOR_POLICY_DIR = "crates/warp_completer/src/signatures/legacy/generator_policy"
@@ -523,7 +529,10 @@ def check_dependency_sources(allow, dependencies=None, policy_dir=None):
         dependencies = git_dependency_dirs(cargo_metadata())
     code_args = ["-t", "rust", "--no-messages"] + NON_TEST_GLOBS + [
         "-g", "!**/examples/**", "-g", "!**/benches/**",
-    ] + pattern_args(DEP_CODE_PATTERNS)
+    ]
+    for glob in DEP_BUILD_OUTPUT_GLOBS:
+        code_args += ["-g", glob]
+    code_args += pattern_args(DEP_CODE_PATTERNS)
     for name, directory in dependencies:
         for path, line, text in rg_lines(code_args, [directory]):
             if is_comment(text):
@@ -868,6 +877,8 @@ def self_test_dependency_cases(base):
         ("dependency with a curl command",
          "fixture-dep", {"src/lib.rs": 'let c = "curl -s https://example.invalid";\n'}, None, "fail"),
         ("dependency with a network crate", "fixture-dep", {"src/lib.rs": "use reqwest::Client;\n"}, None, "fail"),
+        ("build-generated directory of a dependency", "fixture-dep",
+         {"src/generated_workflows/x.rs": 'let c = "curl -s https://example.invalid";\n'}, None, "pass"),
         ("dependency without network code", "fixture-dep", {"src/lib.rs": "pub fn add(a: u32) -> u32 { a }\n"}, None, "pass"),
         ("generator that is not classified", GENERATOR_DEP,
          {generators + "/spec.rs": add_known}, {"allowed.rs": unclassified, "denied.rs": "\n"}, "fail"),

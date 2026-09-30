@@ -87,6 +87,8 @@ net-url | crates/node_runtime/src/lib.rs | format!\("https://registry.npmjs.org/
 net-bind | crates/secret_redaction/src/lib_tests.rs | let double_colon = "::"; | a string used by a redaction test, not an address
 
 # --- git dependencies (9.2) ---
+# The audit skips `src/generated_workflows/` of warp-workflows (written by its build script from
+# committed YAML specs; absent in an unbuilt checkout), so nothing here may depend on it.
 # Completion generators of warp-command-signatures: shell commands the completion engine could run.
 # Each network one is denied by generator_policy/denied.rs, so these lines are inert. A new hit is
 # a new generator: classify it there first (the audit also fails on unclassified generator names).
@@ -107,8 +109,6 @@ net-dep | git-dep:warp-command-signatures/src/generators/sdk.rs | curl -s https:
 net-dep | git-dep:warp-command-signatures/src/generators/stepzen.rs | curl https://api\.github\.com/repos/steprz/ | denied generator stepzen/github_schemas
 net-dep | git-dep:warp-command-signatures/src/generators/asdf.rs | github\.com/asdf-vm/asdf-nodejs\.git | unit-test fixture string inside the dependency
 net-dep | git-dep:warp-command-signatures/src/generators/vagrant.rs | "http://example\.com/box" | unit-test fixture string inside the dependency
-# Bundled workflow texts: commands a user may choose to run in their own shell, never run by the app.
-net-dep | git-dep:warp-workflows/src/generated_workflows/* | command: r####"(curl|npx -y)  | workflow text (a command for the user's shell), only run if the user picks the workflow
 
 # --- developer and CI bootstrap (9.2) ---
 # These fetch third-party toolchains for building the app; nothing here ships in the app.
