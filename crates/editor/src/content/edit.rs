@@ -72,8 +72,8 @@ pub(crate) fn layout_mermaid_block_for_test(
 /// - Absolute paths: paths starting with `/`
 /// - Relative paths: all other paths, resolved relative to the document location
 ///
-/// Remote `http://` and `https://` images are never fetched, so they resolve to `None`.
-/// See [`is_remote_image_source`].
+/// Blocked sources (see [`is_blocked_image_source`]) are never loaded, so they resolve to `None`
+/// before any path is canonicalized, stat'ed or read.
 ///
 /// Note: Path canonicalization is not available on WASM targets.
 #[cfg(not(target_arch = "wasm32"))]
@@ -83,7 +83,7 @@ pub fn resolve_asset_source_relative_to_directory(
 ) -> Option<AssetSource> {
     if let Some(data_uri_source) = asset_cache::data_uri_source(source) {
         Some(data_uri_source)
-    } else if is_remote_image_source(source) {
+    } else if is_blocked_image_source(source) {
         None
     } else if source.starts_with("/") {
         Some(AssetSource::LocalFile {
@@ -108,9 +108,6 @@ pub fn resolve_asset_source_relative_to_directory(
 }
 
 /// Whether a markdown image source points at a remote `http://` or `https://` resource.
-///
-/// The editor never fetches these automatically. They are rendered as a link showing the alt
-/// text, which the user can click to open in their browser.
 pub fn is_remote_image_source(source: &str) -> bool {
     let has_prefix = |prefix: &str| {
         source
@@ -118,6 +115,45 @@ pub fn is_remote_image_source(source: &str) -> bool {
             .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
     };
     has_prefix("http://") || has_prefix("https://")
+}
+
+/// Whether a markdown image source names a network share or device path, such as
+/// `//host/share/a.png`, `\\host\share\a.png`, `\\?\UNC\host\share\a.png` or `\\.\pipe\x`.
+///
+/// On Windows, stat'ing or reading such a path opens a connection to the named host (and can send
+/// the user's credentials), so it must never be touched. The check looks only at the text, so it
+/// behaves the same on every platform.
+fn is_network_or_device_path_source(source: &str) -> bool {
+    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
+    matches!(
+        source.trim_start().as_bytes(),
+        [first, second, ..] if is_separator(*first) && is_separator(*second)
+    )
+}
+
+/// Whether a markdown image source starts with a URL scheme other than `data:`, such as `smb://`
+/// or `file://`. Single-letter schemes are Windows drive letters (`C:\a.png`) and stay local.
+fn has_non_data_url_scheme(source: &str) -> bool {
+    let source = source.trim_start();
+    let Some((scheme, _)) = source.split_once(':') else {
+        return false;
+    };
+    let mut bytes = scheme.bytes();
+    scheme.len() >= 2
+        && bytes.next().is_some_and(|byte| byte.is_ascii_alphabetic())
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
+        && !scheme.eq_ignore_ascii_case("data")
+}
+
+/// Whether the editor must never load a markdown image source itself: `http(s)` URLs, network
+/// share and device paths, and any other URL scheme except `data:`.
+///
+/// The editor never fetches or reads these automatically. They are rendered as a link showing the
+/// alt text, which the user can click to open.
+pub fn is_blocked_image_source(source: &str) -> bool {
+    is_remote_image_source(source)
+        || is_network_or_device_path_source(source)
+        || has_non_data_url_scheme(source)
 }
 
 /// Resolve an image source when its Markdown block is laid out.
@@ -137,7 +173,7 @@ pub fn resolve_asset_source_relative_to_directory(
 ) -> Option<AssetSource> {
     if let Some(data_uri_source) = asset_cache::data_uri_source(source) {
         Some(data_uri_source)
-    } else if is_remote_image_source(source) {
+    } else if is_blocked_image_source(source) {
         None
     } else {
         Some(AssetSource::LocalFile {
@@ -849,8 +885,8 @@ impl<'a> LayoutTask<'a> {
                     // Default size for images - will scale based on actual image dimensions
                     let max_width = layout.max_width() - spacing.x_axis_offset();
                     let line_height = layout.rich_text_styles().base_line_height();
-                    // Remote images render as a single line of link text rather than an image.
-                    let default_height = if is_remote_image_source(source) {
+                    // Blocked images render as a single line of link text rather than an image.
+                    let default_height = if is_blocked_image_source(source) {
                         line_height
                     } else {
                         line_height * DEFAULT_IMAGE_HEIGHT_LINE_MULTIPLIER.into_pixels()

@@ -50,7 +50,8 @@ impl RenderableBlock for RenderableImage {
         let constraint = SizeConstraint::new(vec2f(0., 0.), size);
 
         let Some(asset_source) = asset_source else {
-            // Remote images are never fetched. Show the alt text as a link the user can click.
+            // Blocked sources (remote URLs, network shares) are never loaded. Show the alt text as a link
+            // the user can click.
             let base_text = &model.styles().base_text;
             let label = if alt_text.trim().is_empty() {
                 source

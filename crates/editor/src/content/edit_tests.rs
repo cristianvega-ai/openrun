@@ -20,8 +20,8 @@ use super::{
 };
 use crate::content::buffer::{StyledBufferBlock, StyledBufferRun, StyledTextBlock};
 use crate::content::edit::{
-    EditDelta, ParsedUrl, TemporaryBlock, highlight_urls, is_remote_image_source,
-    layout_mermaid_block_for_test, resolve_asset_source,
+    EditDelta, ParsedUrl, TemporaryBlock, highlight_urls, is_blocked_image_source,
+    is_remote_image_source, layout_mermaid_block_for_test, resolve_asset_source,
     resolve_asset_source_relative_to_directory,
 };
 use crate::content::mermaid_diagram::{mermaid_asset_source, mermaid_diagram_layout};
@@ -787,6 +787,117 @@ fn test_resolve_asset_source_blocks_remote_markdown_images() {
     }
 }
 
+/// Network shares, device paths and non-`data:` URL schemes, in the spellings Windows accepts.
+const BLOCKED_NON_HTTP_IMAGE_SOURCES: &[&str] = &[
+    "//srv/share/image.png",
+    r"\\srv\share\image.png",
+    r"\/srv/share/image.png",
+    r"/\srv\share\image.png",
+    r"\\?\UNC\srv\share\image.png",
+    "//?/UNC/srv/share/image.png",
+    r"\\.\pipe\image",
+    "  //srv/share/image.png",
+    "smb://srv/share/image.png",
+    "SMB://srv/share/image.png",
+    "file://srv/share/image.png",
+    "file:///etc/hosts",
+    "ftp://srv/image.png",
+];
+
+#[test]
+fn test_is_blocked_image_source_classifies_network_shares_and_schemes() {
+    for source in BLOCKED_NON_HTTP_IMAGE_SOURCES
+        .iter()
+        .copied()
+        .chain(["http://example.com/a.png", "HTTPS://example.com/a.png"])
+    {
+        assert!(is_blocked_image_source(source), "{source}");
+    }
+    for source in [
+        "diagram.png",
+        "assets/diagram.png",
+        "./diagram.png",
+        "../diagram.png",
+        r"..\diagram.png",
+        r"assets\diagram.png",
+        "/var/images/diagram.png",
+        r"C:\Users\a\diagram.png",
+        "C:/Users/a/diagram.png",
+        r"\rooted\diagram.png",
+        "data:image/png;base64,iVBORw0KGgo=",
+        "DATA:image/png;base64,iVBORw0KGgo=",
+    ] {
+        assert!(!is_blocked_image_source(source), "{source}");
+    }
+}
+
+#[test]
+fn test_resolve_asset_source_blocks_network_share_markdown_images() {
+    let document_path = Path::new("/tmp/document.md");
+
+    for source in BLOCKED_NON_HTTP_IMAGE_SOURCES {
+        assert_eq!(
+            resolve_asset_source_relative_to_directory(source, document_path.parent()),
+            None,
+            "network path must not resolve to a loadable asset: {source}"
+        );
+        assert_eq!(
+            resolve_asset_source_relative_to_directory(source, None),
+            None,
+            "network path must not resolve to a loadable asset without a base: {source}"
+        );
+        assert_eq!(
+            resolve_asset_source(source, Some(document_path)),
+            None,
+            "network path must not resolve to a loadable asset: {source}"
+        );
+    }
+}
+
+#[test]
+fn test_resolve_asset_source_keeps_drive_letter_and_backslash_relative_images() {
+    let document_path = Path::new("/tmp/session/document.md");
+
+    for source in [
+        r"C:\Users\a\diagram.png",
+        r"..\diagram.png",
+        r"assets\diagram.png",
+    ] {
+        assert!(
+            matches!(
+                resolve_asset_source_relative_to_directory(source, document_path.parent()),
+                Some(AssetSource::LocalFile { .. })
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn test_resolve_asset_source_never_resolves_unc_paths_on_windows() {
+    // `Path::join` with an absolute argument replaces the base, so without the guard these
+    // reach `canonicalize` and `metadata` on the network share.
+    assert!(Path::new(r"\\srv\share\image.png").is_absolute());
+    let base = Path::new(r"C:\docs");
+    for source in [
+        r"\\localhost\c$\Windows\win.ini",
+        r"\\?\UNC\localhost\c$\Windows\win.ini",
+        "//localhost/c$/Windows/win.ini",
+    ] {
+        assert_eq!(
+            resolve_asset_source_relative_to_directory(source, Some(base)),
+            None,
+            "{source}"
+        );
+        assert_eq!(
+            resolve_asset_source(source, Some(&base.join("document.md"))),
+            None,
+            "{source}"
+        );
+    }
+}
+
 #[test]
 fn test_resolve_asset_source_keeps_local_markdown_images() {
     let document_path = Path::new("/tmp/session/document.md");
@@ -855,6 +966,28 @@ fn test_remote_image_lays_out_as_alt_text_link_without_asset_source() {
                             TEST_STYLES.base_line_height(),
                             "blocked image should take a single line"
                         );
+                    }
+                    other => panic!("expected image block, got {other:?}"),
+                }
+            }
+        });
+    })
+}
+
+#[test]
+fn test_network_share_image_lays_out_as_alt_text_link_without_asset_source() {
+    App::test((), |app| async move {
+        app.read(|ctx| {
+            let document_path = Path::new("/tmp/document.md");
+            for source in BLOCKED_NON_HTTP_IMAGE_SOURCES {
+                match lay_out_image(ctx, source, Some(document_path)) {
+                    BlockItem::Image {
+                        asset_source,
+                        config,
+                        ..
+                    } => {
+                        assert!(asset_source.is_none(), "{source}");
+                        assert_eq!(config.height, TEST_STYLES.base_line_height(), "{source}");
                     }
                     other => panic!("expected image block, got {other:?}"),
                 }
