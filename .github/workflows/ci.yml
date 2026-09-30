@@ -208,32 +208,65 @@ jobs:
         if: ${{ !cancelled() }}
         timeout-minutes: 10
         run: |
+          WARP_SHELL_PATH=$(command -v bash)
+          export WARP_SHELL_PATH
           ./script/offline_sandbox net-smoke.log xvfb-run -a \
             cargo nextest run --locked --workspace --offline --retries 0 \
               -E "test(~test_bash_bootstraps_with_prompt_command_array)"
 
-      # Every test except the `integration` package, which boots the full app and gets its own step.
+      # Every test except the `integration` package, which boots the full app and gets its own
+      # steps. Set up like the `Unit tests` job: zsh for tests that spawn a shell and no X server
+      # (the Linux clipboard tests skip themselves without a display and fail under xvfb).
       - name: Run the unit tests in a network sandbox
         if: ${{ !cancelled() }}
         timeout-minutes: 30
         run: |
-          ./script/offline_sandbox net-unit.log xvfb-run -a \
-            cargo nextest run --locked --workspace --offline --no-fail-fast \
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
+          ./script/offline_sandbox net-unit.log \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
               -E "not package(integration)"
 
-      # The `integration` package. One retry instead of the profile's two: a test that fails
-      # because of the sandbox fails every time, so more retries only burn the time budget.
+      # The `integration` package, with zsh as the shell like the tests' reference setup. One
+      # retry instead of the ci profile's two: a test that fails because of the sandbox fails every
+      # time, so more retries only burn the time budget.
       - name: Run the integration tests in a network sandbox
         if: ${{ !cancelled() }}
-        timeout-minutes: 45
+        timeout-minutes: 40
         run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
           ./script/offline_sandbox net-integration.log xvfb-run -a \
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
               -E "package(integration)"
 
+      # The tests that are about bash (the bootstrap script and the prompt handling differ from
+      # zsh), run again with bash as the shell.
+      - name: Run the bash integration tests in a network sandbox
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        run: |
+          WARP_SHELL_PATH=$(command -v bash)
+          export WARP_SHELL_PATH
+          ./script/offline_sandbox net-integration-bash.log xvfb-run -a \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
+              -E "package(integration) and test(~bash)"
+
+      # Control for failures of the steps above: the same tests with bash as the shell and no
+      # sandbox. A test that fails here too is about the runner, not about the network sandbox.
+      - name: Control run outside the sandbox
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          WARP_SHELL_PATH=$(command -v bash)
+          export WARP_SHELL_PATH
+          xvfb-run -a cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
+            -E "package(integration) and (test(~test_git_prompt_chips) or test(~test_open_and_close_settings) or test(~test_waterfall_input_scrolling) or test(~test_restore_snapshot_with_markdown_file) or test(~context_menu_copies_metadata))"
+
       - name: Check the recorded connections
         if: ${{ !cancelled() }}
-        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log
+        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-bash.log
 
       # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
       # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in
