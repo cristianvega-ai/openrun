@@ -1,7 +1,7 @@
 //! The "legacy" implementation of internal command parsing logic that depends on the legacy:
 //! command signature struct (`warp_command_signatures::Signature`).
 use itertools::Itertools;
-use warp_command_signatures::{DynamicCompletionData, IsArgumentOptional, Opt, Signature};
+use warp_command_signatures::{IsArgumentOptional, Opt, Signature};
 
 use super::hir::{Command, Expression, ShellCommand};
 use super::{LiteCommand, ParseError, parse_unclassified_command};
@@ -12,20 +12,20 @@ use crate::parsers::{
     ArgumentError, FlagArgumentsCardinality, FlagSignature, ParsedExpression, ParsedToken,
     parse_arg, parse_dollar_expr,
 };
-use crate::signatures::CommandRegistry;
+use crate::signatures::{CommandRegistry, SpecDynamicData};
 
 #[derive(Clone, Copy)]
 /// A `Signature` (and its corresponding generator) contained at a given index.
 pub struct SignatureAtTokenIndex<'a> {
     pub signature: &'a Signature,
-    pub dynamic_completion_data: Option<&'a DynamicCompletionData>,
+    pub dynamic_completion_data: Option<&'a SpecDynamicData>,
     pub token_index: usize,
 }
 
 impl<'a> SignatureAtTokenIndex<'a> {
     pub fn new(
         signature: &'a Signature,
-        dynamic_completion_data: Option<&'a DynamicCompletionData>,
+        dynamic_completion_data: Option<&'a SpecDynamicData>,
         index: usize,
     ) -> Self {
         SignatureAtTokenIndex {

@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use smol_str::SmolStr;
 use warp_command_signatures::{
-    Argument, ArgumentType, DynamicCompletionData, Generator, GeneratorProcess, Signature,
-    Template, TemplateFilter, TemplateType,
+    Argument, ArgumentType, Generator, GeneratorProcess, Signature, Template, TemplateFilter,
+    TemplateType,
 };
 use warp_util::path::ShellFamily;
 
@@ -30,6 +30,7 @@ use crate::parsers::hir::{Command, FlagType, NamedArgument, ShellCommand};
 use crate::parsers::{
     ClassifiedCommand, ParseError, ParseErrorReason, ParsedToken, SignatureAtTokenIndex,
 };
+use crate::signatures::SpecDynamicData;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn complete(
@@ -133,7 +134,7 @@ async fn suggestions_for_parse_error(
     session_env_vars: Option<&HashMap<String, String>>,
     cursor: &Span,
     signature: &Signature,
-    dynamic_completion_data: Option<&DynamicCompletionData>,
+    dynamic_completion_data: Option<&SpecDynamicData>,
     line: &str,
     options: &CompleterOptions,
     ctx: &dyn CompletionContext,
@@ -288,7 +289,7 @@ async fn suggestions_for_last_argument(
     session_env_vars: Option<&HashMap<String, String>>,
     cursor: &Span,
     signature: &Signature,
-    dynamic_completion_data: Option<&DynamicCompletionData>,
+    dynamic_completion_data: Option<&SpecDynamicData>,
     options: &CompleterOptions,
     ctx: &dyn CompletionContext,
 ) -> (Vec<MatchedSuggestion>, bool) {
@@ -427,7 +428,7 @@ fn option_value_index(shell_command: &ShellCommand, completed: &Spanned<NamedArg
 #[allow(clippy::too_many_arguments)]
 async fn complete_option(
     signature: &Signature,
-    dynamic_completion_data: Option<&DynamicCompletionData>,
+    dynamic_completion_data: Option<&SpecDynamicData>,
     tokens_from_command: &[&str],
     has_trailing_whitespace: bool,
     command_env_vars: &[String],
@@ -482,7 +483,7 @@ async fn complete_positional(
     session_env_vars: Option<&HashMap<String, String>>,
     arguments: &[Argument],
     subcommands: &[Signature],
-    dynamic_completion_data: Option<&DynamicCompletionData>,
+    dynamic_completion_data: Option<&SpecDynamicData>,
     parsed_token: &ParsedToken,
     options: &CompleterOptions,
     ctx: &dyn CompletionContext,
@@ -563,7 +564,7 @@ async fn generate_suggestions_for_argument(
     command_env_vars: &[String],
     session_env_vars: Option<&HashMap<String, String>>,
     has_trailing_whitespace: bool,
-    dynamic_completion_data: Option<&DynamicCompletionData>,
+    dynamic_completion_data: Option<&SpecDynamicData>,
     options: &CompleterOptions,
     ctx: &dyn CompletionContext,
 ) -> Vec<MatchedSuggestion> {
@@ -655,7 +656,7 @@ async fn generate_suggestions_for_argument_type(
     command_env_vars: &[String],
     session_env_vars: Option<&HashMap<String, String>>,
     matcher: MatchStrategy,
-    dynamic_completion_data: Option<&DynamicCompletionData>,
+    dynamic_completion_data: Option<&SpecDynamicData>,
     ctx: &dyn CompletionContext,
 ) -> impl IntoIterator<Item = MatchedSuggestion> + use<> {
     match argument_type {
@@ -685,7 +686,7 @@ async fn generate_suggestions_for_argument_type(
 
             match filter_name.as_ref().and_then(|filter_name| {
                 argument.filter_template_by_name(
-                    dynamic_completion_data.map(DynamicCompletionData::filters),
+                    dynamic_completion_data.map(SpecDynamicData::filters),
                     filter_name,
                 )
             }) {
@@ -716,7 +717,7 @@ async fn generate_suggestions_for_argument_type(
 
             match filter_name.as_ref().and_then(|filter_name| {
                 argument.filter_template_by_name(
-                    dynamic_completion_data.map(DynamicCompletionData::filters),
+                    dynamic_completion_data.map(SpecDynamicData::filters),
                     filter_name,
                 )
             }) {
@@ -726,12 +727,21 @@ async fn generate_suggestions_for_argument_type(
         }
         ArgumentType::Generator(generator_name) => {
             let generator = match argument.generator_by_name(
-                dynamic_completion_data.map(DynamicCompletionData::generators),
+                dynamic_completion_data.map(SpecDynamicData::generators),
                 generator_name,
             ) {
                 None => return vec![],
                 Some(generator) => generator,
             };
+
+            let generator_allowed = dynamic_completion_data.is_some_and(|data| {
+                ctx.command_registry()
+                    .allows_generator(data.spec(), generator_name)
+            });
+            if !generator_allowed {
+                log::debug!("Generator {generator_name:?} is not on the local-only allow-list");
+                return vec![];
+            }
 
             let shell_command = shell_command(
                 generator,

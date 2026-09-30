@@ -30,6 +30,8 @@ The app itself opens a network connection, or runs a network tool of yours, only
   - When you click them, the commit and push dialog runs `git push`, and its pull request button runs `gh pr create`.
   - A repository terminal with no pull request chip in its prompt and no open code-review panel runs neither. Removing the chip from the prompt (Edit prompt again) turns the polling off. Local `git status` for the other prompt chips does not touch the network.
 
+Command completions never start a network tool. The bundled completion specs ship generators, shell commands the app runs while you type (autosuggestions) or press Tab. Only the generators on a reviewed local-only allow-list run: they read your repository, files and local daemons (git branches and tags, `package.json` scripts, running containers, `kubeconfig` contexts and the like). Generators that would call a package registry, GitHub, a cloud CLI, a cluster or a remote host are disabled, so `npm install <name>`, `cargo add <name>`, `gh pr ...`, `aws ...` or `kubectl get ...` complete from the static parts of the spec and local files only.
+
 Your shell and the programs you run in it, including SSH sessions and CLI agents, use the network as they normally would.
 
 `script/offline_audit` checks the repository for reintroduced Warp hosts, network-capable code and banned dependencies, and CI runs it.

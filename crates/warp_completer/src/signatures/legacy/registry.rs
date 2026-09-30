@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use itertools::Itertools;
 use memo_map::MemoMap;
-use warp_command_signatures::{Argument, DynamicCompletionData, IsArgumentOptional, Signature};
+use warp_command_signatures::{
+    Aliases, Argument, DynamicCompletionData, Filters, GeneratorName, Generators,
+    IsArgumentOptional, Signature,
+};
 
 use super::miss_cache::MissCache;
 use crate::completer::{CommandExitStatus, CompletionContext, TopLevelCommandCaseSensitivity};
@@ -134,22 +137,86 @@ impl<T> FromIterator<(String, T)> for CaseInsensitiveHashMap<T> {
     }
 }
 
+/// The dynamic completion data (generators, filters, aliases) of one spec, together with the
+/// name of the spec it was registered under. Generator execution is decided by that
+/// `(spec, generator)` identity, see [`super::generator_policy`].
+pub struct SpecDynamicData {
+    spec: String,
+    data: DynamicCompletionData,
+}
+
+impl SpecDynamicData {
+    fn new(spec: String, data: DynamicCompletionData) -> Self {
+        Self { spec, data }
+    }
+
+    pub fn spec(&self) -> &str {
+        &self.spec
+    }
+
+    pub fn generators(&self) -> &Generators {
+        self.data.generators()
+    }
+
+    pub fn filters(&self) -> &Filters {
+        self.data.filters()
+    }
+
+    pub fn aliases(&self) -> &Aliases {
+        self.data.aliases()
+    }
+}
+
+/// Which generators a registry may execute.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum GeneratorPolicy {
+    /// Only the generators on the reviewed local-only allow-list.
+    AllowListed,
+    /// Every generator. Only registries built from test fixtures use this.
+    #[cfg(any(test, feature = "test-util"))]
+    AllowAll,
+}
+
 pub struct CommandRegistry {
     signatures: SignatureCache,
-    dynamic_completion_data: CaseInsensitiveHashMap<DynamicCompletionData>,
+    dynamic_completion_data: CaseInsensitiveHashMap<SpecDynamicData>,
+    generator_policy: GeneratorPolicy,
 }
 
 impl CommandRegistry {
     pub(super) fn new<F>(
         signature_lookup_fn: F,
         dynamic_completion_data: HashMap<String, DynamicCompletionData>,
+        generator_policy: GeneratorPolicy,
     ) -> CommandRegistry
     where
         F: 'static + Send + Sync + Fn(&str) -> Option<Signature>,
     {
         CommandRegistry {
             signatures: SignatureCache::new(Box::new(signature_lookup_fn)),
-            dynamic_completion_data: dynamic_completion_data.into_iter().collect(),
+            dynamic_completion_data: dynamic_completion_data
+                .into_iter()
+                .map(|(spec, data)| {
+                    (
+                        spec.clone(),
+                        SpecDynamicData::new(spec.to_lowercase(), data),
+                    )
+                })
+                .collect(),
+            generator_policy,
+        }
+    }
+
+    /// Whether the generator `generator` of spec `spec` may run a command. Generators are
+    /// allowed by identity, never by inspecting their command line: see
+    /// [`super::generator_policy`].
+    pub fn allows_generator(&self, spec: &str, generator: &GeneratorName) -> bool {
+        match self.generator_policy {
+            GeneratorPolicy::AllowListed => {
+                super::generator_policy::is_generator_allowed(spec, &generator.0)
+            }
+            #[cfg(any(test, feature = "test-util"))]
+            GeneratorPolicy::AllowAll => true,
         }
     }
 
@@ -180,7 +247,7 @@ impl CommandRegistry {
         )
     }
 
-    /// Returns a replacement [`Signature`] and its corresponding [`DynamicCompletionData`] iff
+    /// Returns a replacement [`Signature`] and its corresponding [`SpecDynamicData`] iff
     /// the current signature has an argument that should be a top level command and we are in a
     /// position where we would be completing on arguments.
     /// For example: if we had a token list of `sudo git ` (note the whitespace) we should return
@@ -196,7 +263,7 @@ impl CommandRegistry {
         current_index: usize,
         token: &str,
         has_post_whitespace: bool,
-    ) -> Option<(&Signature, Option<&DynamicCompletionData>)> {
+    ) -> Option<(&Signature, Option<&SpecDynamicData>)> {
         if !signature.arguments().iter().any(Argument::is_command) {
             return None;
         }
@@ -266,7 +333,7 @@ impl CommandRegistry {
             }
             // Check if there is any alias at the current signature.
             if let Some(alias) =
-                curr_signature.alias(dynamic_completion_data.map(DynamicCompletionData::aliases))
+                curr_signature.alias(dynamic_completion_data.map(SpecDynamicData::aliases))
             {
                 // Get the shell command to execute for getting the alias.
                 let command_to_run = alias.command(&tokens[..token_idx + 1]);

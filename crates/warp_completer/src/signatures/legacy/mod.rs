@@ -1,9 +1,11 @@
 use std::sync::{Arc, OnceLock};
 
+mod generator_policy;
 mod miss_cache;
 pub mod registry;
 
-pub use registry::CommandRegistry;
+use registry::GeneratorPolicy;
+pub use registry::{CommandRegistry, SpecDynamicData};
 #[cfg(feature = "test-util")]
 use warp_command_signatures::Signature;
 
@@ -40,13 +42,18 @@ impl CommandRegistry {
                 signature
             },
             warp_command_signatures::dynamic_command_signature_data(),
+            GeneratorPolicy::AllowListed,
         )
     }
 
     /// Returns an empty [`CommandRegistry`] that contains no signatures nor
     /// generators.
     pub fn empty() -> Self {
-        CommandRegistry::new(|_| None, std::collections::HashMap::new())
+        CommandRegistry::new(
+            |_| None,
+            std::collections::HashMap::new(),
+            GeneratorPolicy::AllowListed,
+        )
     }
 
     /// Returns a [`CommandRegistry`] that uses the provided set of signatures
@@ -60,7 +67,7 @@ impl CommandRegistry {
             warp_command_signatures::DynamicCompletionData,
         >,
     ) -> Self {
-        let registry = CommandRegistry::new(|_| None, generators);
+        let registry = CommandRegistry::new(|_| None, generators, GeneratorPolicy::AllowAll);
         signatures
             .into_iter()
             .for_each(|signature| registry.register_signature(signature));

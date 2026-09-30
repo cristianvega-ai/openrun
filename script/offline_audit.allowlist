@@ -24,6 +24,8 @@ hosts | crates/secret_redaction/src/lib.rs | firebase | the redaction regex for 
 hosts | crates/secret_redaction/src/lib.rs | platform\.openai\.com | doc comment naming where the format of an OpenAI API key is documented; the redaction patterns detect such keys, nothing fetches the page
 hosts | crates/secret_redaction/src/lib_tests.rs | firebase | tests of that redaction regex
 hosts | crates/secret_redaction/src/lib_tests.rs | AIza | fake Google API key that the redaction tests must detect
+hosts | crates/warp_completer/src/signatures/legacy/generator_policy/denied.rs | "firebase" | the denied completion generator of the `firebase` CLI spec: a spec name, not a host
+hosts | crates/warp_completer/src/signatures/legacy/generator_policy_tests.rs | \|firebase\| | regex in the completion-generator policy test that names the `firebase` CLI as a network tool
 hosts | crates/lsp/src/config_tests.rs | firebase | path of an npm package (`node_modules/@firebase/auth`) used as a URI fixture
 hosts | crates/persistence/test_data/pre_drop_dead_tables_seed.sql | firebase | seeds the columns of the pre-DB-1 schema that the migration drops
 hosts | crates/integration/tests/data/test_json_object.sqlite | firebase_uid | legacy cloud-object fixture: its pre-DB-1 schema (users.firebase_uid) is dropped by the startup migration
@@ -39,6 +41,7 @@ net-rust | crates/http_client/* | * | the shared HTTP client; its consumers are 
 net-rust | crates/node_runtime/* | * | Node download for lsp only, through Downloader
 net-rust | crates/local_control/* | * | warpctrl over authenticated loopback HTTP
 net-rust | app/src/local_control/* | * | warpctrl over authenticated loopback HTTP
+net-rust | crates/warp_completer/src/signatures/legacy/generator_policy/allowed.rs | "hyper" | the allowed `hyper list` completion generator (the Hyper terminal's plugin lister), not the hyper crate
 net-rust | * | ^\s*(pub )?use std::net::\{?((IpAddr|Ipv4Addr|Ipv6Addr|SocketAddr)(, )?)+\}?; | address types only, no sockets
 
 # --- remote git operations (9.2) ---
