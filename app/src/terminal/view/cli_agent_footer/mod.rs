@@ -173,17 +173,12 @@ impl CLIAgentFooter {
         });
 
         let prompt_for_session_settings = prompt.clone();
-        ctx.subscribe_to_model(
-            &SessionSettings::handle(ctx),
-            move |me, _, event, ctx| match event {
-                SessionSettingsChangedEvent::CLIAgentToolbarChipSelectionSetting { .. }
-                | SessionSettingsChangedEvent::GithubPrChipDefaultValidation { .. } => {
-                    me.update_display_chips(&prompt_for_session_settings, ctx);
-                    ctx.notify();
-                }
-                _ => {}
-            },
-        );
+        ctx.subscribe_to_model(&SessionSettings::handle(ctx), move |me, _, event, ctx| {
+            if let SessionSettingsChangedEvent::CLIAgentToolbarChipSelectionSetting { .. } = event {
+                me.update_display_chips(&prompt_for_session_settings, ctx);
+                ctx.notify();
+            }
+        });
         ctx.observe(&prompt, |me, model, ctx| {
             me.update_display_chips(&model, ctx);
         });

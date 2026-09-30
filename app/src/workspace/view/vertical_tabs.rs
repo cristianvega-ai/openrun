@@ -48,7 +48,6 @@ use crate::tab::{
     tab_activate_binding_name, tab_position_id,
 };
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
-use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::view::TerminalViewState;
 use crate::terminal::{CLIAgent, TerminalView};
 use crate::themes::theme::Fill as ThemeFill;
@@ -5813,17 +5812,10 @@ pub(super) fn render_settings_popup(
             .with_margin_bottom(4.)
             .finish();
             popup_col.add_child(show_header);
-            let pr_validation_suppressed = SessionSettings::as_ref(app)
-                .github_pr_chip_default_validation
-                .is_suppressed();
-            let pr_link_info_tooltip = if show_pr_link && pr_validation_suppressed {
-                Some(ShowToggleInfoTooltip {
-                    mouse_state: state.show_pr_link_info_tooltip_mouse_state.clone(),
-                    tooltip_text: "Requires the GitHub CLI to be installed and authenticated",
-                })
-            } else {
-                None
-            };
+            let pr_link_info_tooltip = Some(ShowToggleInfoTooltip {
+                mouse_state: state.show_pr_link_info_tooltip_mouse_state.clone(),
+                tooltip_text: "Shown when the prompt or CLI agent toolbar has the pull request chip. Requires the GitHub CLI to be installed and authenticated",
+            });
 
             popup_col.add_child(render_show_toggle_option(
                 "PR link",

@@ -24,10 +24,11 @@ The app itself opens a network connection, or runs a network tool of yours, only
 - **Links you open yourself**, such as a URL clicked in terminal output.
 - **`warpctrl` local control**, off by default (Settings > Scripting). When enabled it listens on a loopback port and accepts connections from the local machine only.
 - **Your own git remotes and GitHub, through `git` and the GitHub CLI (`gh`), only while the UI that needs them is in use.** The app never talks to GitHub itself; it runs the `gh` and `git` on your machine, against the remotes your repository already has, and `gh` uses your own login.
+  - The GitHub pull request chip is **not** in the default prompt or the default CLI-agent footer, so a fresh install never runs `gh` on its own. Add the chip yourself to opt in: right-click the prompt, choose Edit prompt and drag the pull request chip into it (or add it to the CLI-agent footer layout). A prompt you saved earlier with the chip keeps it.
   - While a terminal in a git repository shows the GitHub pull request chip in its prompt or CLI-agent footer, the app runs `gh pr view` and `gh repo view` when the chip appears, when the branch changes, after you run a `gh` or `gt` command in that terminal, and about once a minute.
   - While the code-review panel is open, it does the same for its pull request button.
   - When you click them, the commit and push dialog runs `git push`, and its pull request button runs `gh pr create`.
-  - A repository terminal with no pull request chip in its prompt and no open code-review panel runs neither. Removing the chip from the prompt (right-click the prompt, then Edit prompt) turns the polling off. Local `git status` for the other prompt chips does not touch the network.
+  - A repository terminal with no pull request chip in its prompt and no open code-review panel runs neither. Removing the chip from the prompt (Edit prompt again) turns the polling off. Local `git status` for the other prompt chips does not touch the network.
 
 Your shell and the programs you run in it, including SSH sessions and CLI agents, use the network as they normally would.
 

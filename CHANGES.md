@@ -139,6 +139,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Shell variable serializer tests](#shell-variable-serializer-tests) — tests for `serialize_variables_for_shell` after it left the removed env_vars module (commit a0f567643, task DRV-2)
 - [Log path test comment](#log-path-test-comment) — reworded a channel comment in the log path tests (commit bf304fe57, task AI-33)
 - [Final audit: findings kept on purpose, and two dead settings](#final-audit-findings-kept-on-purpose-and-two-dead-settings) — records the SWP-18 findings that were left as they are, with the reason, and removes two private settings nothing read
+- [GitHub pull request chip out of the default prompt](#github-pull-request-chip-out-of-the-default-prompt) — a fresh install no longer runs `gh` (and so never contacts GitHub); users opt in by adding the chip; removed the default-chip validation setting
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3342,11 +3343,11 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 - `LocalDiffStateModel::{set_diff_mode_and_fetch_base, get_or_fetch_merge_base}` and the `should_fetch_base` parameter that ran `git fetch origin` (every caller passed `false`). The app no longer has any `git fetch`.
 
 **Modified:**
-- `TerminalView::needs_pr_info` is true only when the terminal is in a git repository and the active prompt or the CLI-agent footer contains the GitHub pull request chip (or the default prompt is re-validating a suppressed PR chip, which fails locally until `gh` is installed and logged in).
+- `TerminalView::needs_pr_info` is true only when the terminal is in a git repository and the active prompt or the CLI-agent footer contains the GitHub pull request chip. (FIX-1 also let the default prompt keep re-validating a suppressed default chip; FIX-2 removed that, see [GitHub pull request chip out of the default prompt](#github-pull-request-chip-out-of-the-default-prompt).)
 - `LocalGitHubRepoModel` runs its lookups through a small `GitHubCli` trait (production: the user's `gh`), so tests can count lookups without starting a process. `GitRepoModels` can be given a stub for tests.
 - README, CONTRIBUTING and AGENTS.md describe this fourth network path: the user's own remotes and GitHub through `gh` and `git`, only while that UI is in use. `script/offline_audit` gains a `net-git` check that fails on any Rust `["fetch" | "pull" | "clone" | "ls-remote" | "push" | "remote", ...]` git argument list other than the `git push` in `app/src/util/git.rs`.
 
-**User-visible impact:** A repository terminal whose prompt has no pull request chip, and no open code-review panel, runs no `gh` at all. The default prompt includes the chip, so a default setup still polls once a minute while a `gh` login exists; removing the chip from the prompt (right-click the prompt, then Edit prompt) stops it. Local `git status` for the other chips is unchanged.
+**User-visible impact:** A repository terminal whose prompt has no pull request chip, and no open code-review panel, runs no `gh` at all. When FIX-1 landed the default prompt still included the chip, so a default setup with a logged-in `gh` polled once a minute. FIX-2 took the chip out of the default prompt, so a default setup runs no `gh` at all; a user who adds the chip in the prompt editor opts in, and removing it stops the polling. Local `git status` for the other chips is unchanged.
 
 **Notes:** Tests: `terminal::view::tests::{repo_terminal_without_a_pr_chip_never_starts_gh, open_cli_agent_rich_input_in_a_repo_does_not_start_gh, git_branch_chip_reads_local_git_but_never_runs_gh, pr_chip_starts_gh_and_removing_it_stops_gh, terminal_outside_a_repo_never_needs_pr_info}`, `code_review::code_review_view::tests::gh_lookups_run_only_while_the_panel_is_open` and, for the model, `a_live_model_looks_up_the_pr_and_repository_and_keeps_polling`, `dropping_the_model_stops_all_gh_lookups`, `a_model_without_a_branch_only_looks_up_the_repository`. Judgment call: "a visible PR chip" is approximated by "the chip is in the active prompt or footer", because whether a PR exists is only known after asking `gh`.
 
@@ -3464,3 +3465,22 @@ Before: 14 errors, 3 warnings. After: 2 errors (both "unmaintained", no fixed ve
 **User-visible impact:** None.
 
 **Notes:** `session.same_line_prompt_block_state` and `git_prompt_dirty_indicator` also have no readers but are not Warp AI leftovers; they are left for a later settings clean-up. Also left: `Figma` as a plain word in comments, and the Icon variants that no code uses (the icon set is a general library).
+
+## GitHub pull request chip out of the default prompt
+**Why:** MASTER decision 22. After FIX-1 a default setup in a git repository still ran `gh pr view` and `gh repo view` once a minute, and a logged-in `gh` contacts `api.github.com`, so a user who never touched the prompt had the app reaching GitHub without asking. The chip is now opt-in.
+
+**Modified:**
+- `PromptConfiguration::default_prompt` no longer contains `ContextChipKind::GithubPullRequest`. `Prompt::from_user_settings` resolves `PromptSelection::Default` to it. The CLI-agent footer default (`CLIAgentToolbarItemKind::default_left/default_right`) never had the chip, and neither does the onboarding flow: the "customize" slide has no prompt controls and the onboarding prompt block only offers "Warp default" (reset to `PromptSelection::Default`) or the shell's own prompt.
+- The chip is still in `available_chips()`, so the prompt editor and the CLI-agent footer editor list it for users to add.
+- The vertical-tabs "PR link" toggle now always shows its info tooltip, which says the link needs the pull request chip in the prompt or CLI-agent toolbar and an authenticated GitHub CLI. Before, it appeared only after the removed validation had failed.
+
+**Removed:**
+- The private `SessionSettings::github_pr_chip_default_validation` setting, `GithubPrPromptChipDefaultValidation`, `PromptConfiguration::default_prompt_with_pr_chip_suppressed`, `TerminalView::should_retry_default_pr_chip_validation`, `LocalGitHubRepoModel::{maybe_validate_github_pr_default, maybe_suppress_github_pr_default}` and the change-event handlers for the setting in `Prompt`, `CurrentPrompt`, `TerminalView` and the CLI-agent footer. They existed to hide the default chip when `gh` was missing or logged out, and to keep `gh` running against a default prompt to detect a later login; with no default chip that would only have started `gh` for users who never asked for it. A stale value in a user's private preferences is ignored.
+
+**Existing users:** nothing is migrated.
+- A prompt the user saved (`saved_prompt` holds `CustomChipSelection`, which the prompt editor writes on Save) keeps exactly its chips, including the PR chip, and polls as FIX-1 made it. Likewise a saved CLI-agent footer layout.
+- An unset `saved_prompt`, or one holding `Default` (the state after "reset to default" or the onboarding "Warp default" choice), is the default prompt and now loses the chip. That is intended: those users never chose a layout. `PromptSelection::Default` is a variant meaning "whatever the default is", not a snapshot of the old chips, so nothing had to be detected.
+
+**User-visible impact:** A new or never-customized install shows no pull request chip in the prompt and runs no `gh`. To get it back: right-click the prompt, choose Edit prompt, and add the pull request chip. README, CONTRIBUTING, AGENTS.md and the `script/offline_audit` comment now say the chip is in no default layout.
+
+**Notes:** Tests: `context_chips::prompt::tests::{an_unset_prompt_setting_resolves_to_the_default_without_the_pr_chip, a_saved_prompt_with_the_pr_chip_keeps_it_after_a_restart, the_pr_chip_stays_available_in_the_prompt_editor}` use a real settings store (unset key versus a value written by the editor and read back after a simulated restart); `terminal::view::tests::{unset_prompt_setting_in_a_repo_never_starts_gh, saved_prompt_with_the_pr_chip_starts_gh_after_a_restart}` check that the unset setting starts no `gh` and the saved chip still does. The five FIX-1 gating tests are unchanged.

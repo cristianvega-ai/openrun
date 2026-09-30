@@ -141,7 +141,7 @@ use crate::code_review::diff_state::GitDeltaPreference;
 use crate::code_review::git_repo_model::{GitRepoModels, GitRepoStatusModel, GitStatusMetadata};
 use crate::code_review::github_repo_model::GitHubRepoModel;
 use crate::context_chips::ContextChipKind;
-use crate::context_chips::prompt::{Prompt, PromptSelection};
+use crate::context_chips::prompt::Prompt;
 use crate::context_chips::prompt_type::PromptType;
 use crate::editor::EditorAction;
 use crate::menu::{Event as MenuEvent, Menu, MenuItem, MenuItemFields};
@@ -2507,9 +2507,6 @@ impl TerminalView {
         // by git status.
         let is_using_warp_prompt = !*SessionSettings::as_ref(ctx).honor_ps1
             || InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
-        if is_using_warp_prompt && Self::should_retry_default_pr_chip_validation(ctx) {
-            return true;
-        }
         is_using_warp_prompt && Self::uses_git_status_chips(Prompt::as_ref(ctx).chip_kinds())
     }
 
@@ -2533,10 +2530,9 @@ impl TerminalView {
         let is_using_warp_prompt = !*SessionSettings::as_ref(ctx).honor_ps1
             || InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
         is_using_warp_prompt
-            && (Self::should_retry_default_pr_chip_validation(ctx)
-                || Prompt::as_ref(ctx)
-                    .chip_kinds()
-                    .contains(&ContextChipKind::GithubPullRequest))
+            && Prompt::as_ref(ctx)
+                .chip_kinds()
+                .contains(&ContextChipKind::GithubPullRequest)
     }
 
     /// Whether this terminal needs PR info. PR info is fetched with `gh`, which
@@ -2544,12 +2540,6 @@ impl TerminalView {
     /// footer justifies it.
     fn needs_pr_info(&self, ctx: &AppContext) -> bool {
         self.current_repo_path.is_some() && self.needs_pr_info_for_chip_ui(ctx)
-    }
-
-    fn should_retry_default_pr_chip_validation(ctx: &AppContext) -> bool {
-        let settings = SessionSettings::as_ref(ctx);
-        settings.github_pr_chip_default_validation.is_suppressed()
-            && matches!(*settings.saved_prompt, PromptSelection::Default)
     }
 
     /// Re-evaluate whether the terminal needs a PR-info subscription, and
@@ -10274,9 +10264,6 @@ impl TerminalView {
                 if !is_rich_input_chip_in_cli_toolbar(ctx) {
                     self.close_cli_agent_rich_input(ctx);
                 }
-                self.update_git_status_subscription(ctx);
-            }
-            SessionSettingsChangedEvent::GithubPrChipDefaultValidation { .. } => {
                 self.update_git_status_subscription(ctx);
             }
             _ => {}

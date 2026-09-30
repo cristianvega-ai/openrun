@@ -76,7 +76,7 @@ COMMAND_PATTERN = (
     r'Command::new\("(curl|wget|git|gh|npm|npx|pip3?|go|brew|apt(-get)?|yum|dnf|pacman)"'
 )
 # `git` and `gh` subprocesses run against the user's own remotes and repositories, only while a
-# pull request chip or the code-review panel is showing, or on an explicit user action (push, create a pull request).
+# pull request chip (in no default layout) or the code-review panel is showing, or on an explicit user action (push, create a pull request).
 ALLOWED_COMMANDS = {"git", "gh"}
 
 # Remote git operations. Only `push` is allowed, in `app/src/util/git.rs` (an explicit user action);

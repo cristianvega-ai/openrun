@@ -12,7 +12,7 @@ use warpui::notification::UserNotification;
 use warpui::{App, EntityIdSet, Presenter, WindowInvalidation};
 
 use super::*;
-use crate::context_chips::prompt::Prompt;
+use crate::context_chips::prompt::{Prompt, PromptConfiguration};
 use crate::editor::AutosuggestionLocation;
 use crate::pane_group::focus_state::PaneGroupFocusState;
 use crate::pane_group::{BackingView, TerminalPaneId};
@@ -38,6 +38,7 @@ use crate::terminal::model::ansi::{self, BootstrappedValue, InitShellValue, Pree
 use crate::terminal::model::blocks::{TotalIndex, insert_block};
 use crate::terminal::model::grid::Dimensions as _;
 use crate::terminal::model::terminal_model::WithinBlock;
+use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::{CLIAgent, MockTerminalManager, TerminalModel, should_right_click_paste};
 use crate::test_util::github_cli::CountingGitHubCli;
 use crate::test_util::terminal::{
@@ -4958,17 +4959,31 @@ fn terminal_in_repo_with_counting_gh(
     ViewHandle<TerminalView>,
     Arc<CountingGitHubCli>,
 ) {
+    terminal_in_repo_with_counting_gh_and_prompt(app, |app| {
+        Prompt::handle(app).update(app, |prompt, ctx| {
+            prompt
+                .update(prompt_chips, false, WarpPromptSeparator::None, ctx)
+                .expect("set the prompt chips");
+        });
+    })
+}
+
+/// Like [`terminal_in_repo_with_counting_gh`], with the prompt left to `set_up_prompt`.
+fn terminal_in_repo_with_counting_gh_and_prompt(
+    app: &mut App,
+    set_up_prompt: impl FnOnce(&mut App),
+) -> (
+    tempfile::TempDir,
+    ViewHandle<TerminalView>,
+    Arc<CountingGitHubCli>,
+) {
     initialize_app_for_terminal_view(app);
     app.add_singleton_model(|_| LocalShellState::NotLoaded);
     let gh = Arc::new(CountingGitHubCli::default());
     GitRepoModels::handle(app).update(app, |models, _| {
         models.set_github_cli_for_test(gh.clone());
     });
-    Prompt::handle(app).update(app, |prompt, ctx| {
-        prompt
-            .update(prompt_chips, false, WarpPromptSeparator::None, ctx)
-            .expect("set the prompt chips");
-    });
+    set_up_prompt(app);
     let (temp_dir, repo) = register_watched_repo(app);
     let terminal = add_window_with_terminal(app, None);
     terminal.update(app, |view, ctx| {
@@ -4995,6 +5010,79 @@ fn repo_terminal_without_a_pr_chip_never_starts_gh() {
 
         warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
         assert_eq!(gh.total_lookups(), 0, "no chip means no `gh` process");
+    });
+}
+
+/// Replaces the mock prompt with one that reads the user's saved prompt setting, the way the app does at startup.
+fn use_prompt_from_saved_settings(app: &mut App) {
+    Prompt::handle(app).update(app, |prompt, ctx| *prompt = Prompt::new(ctx));
+}
+
+#[test]
+fn unset_prompt_setting_in_a_repo_never_starts_gh() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) =
+            terminal_in_repo_with_counting_gh_and_prompt(&mut app, use_prompt_from_saved_settings);
+
+        app.read(|ctx| {
+            let saved = &SessionSettings::as_ref(ctx).saved_prompt;
+            assert!(!saved.is_value_explicitly_set());
+            assert!(
+                !Prompt::as_ref(ctx)
+                    .chip_kinds()
+                    .contains(&ContextChipKind::GithubPullRequest)
+            );
+        });
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.needs_pr_info(ctx));
+            assert!(view.github_repo_model.is_none());
+            assert!(
+                view.git_repo_status.is_some(),
+                "the default prompt's git chips still read the local repository"
+            );
+        });
+
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+        assert_eq!(
+            gh.total_lookups(),
+            0,
+            "a default setup must not run `gh` on its own"
+        );
+    });
+}
+
+#[test]
+fn saved_prompt_with_the_pr_chip_starts_gh_after_a_restart() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = terminal_in_repo_with_counting_gh_and_prompt(&mut app, |app| {
+            SessionSettings::handle(app).update(app, |settings, ctx| {
+                settings
+                    .saved_prompt
+                    .set_value(
+                        PromptConfiguration::from_chips(
+                            [
+                                ContextChipKind::WorkingDirectory,
+                                ContextChipKind::GithubPullRequest,
+                            ],
+                            false,
+                            WarpPromptSeparator::None,
+                        )
+                        .into(),
+                        ctx,
+                    )
+                    .expect("save the prompt");
+            });
+            use_prompt_from_saved_settings(app);
+        });
+
+        terminal.read(&app, |view, ctx| {
+            assert!(view.needs_pr_info(ctx));
+            assert!(view.github_repo_model.is_some());
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "a saved PR chip keeps looking up the repository"
+        );
     });
 }
 

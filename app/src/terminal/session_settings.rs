@@ -109,31 +109,6 @@ impl Default for NotificationsSettings {
     }
 }
 
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    Default,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Eq,
-    schemars::JsonSchema,
-    settings_value::SettingsValue,
-)]
-pub enum GithubPrPromptChipDefaultValidation {
-    #[default]
-    Unvalidated,
-    Validated,
-    Suppressed,
-}
-
-impl GithubPrPromptChipDefaultValidation {
-    pub fn is_suppressed(self) -> bool {
-        matches!(self, Self::Suppressed)
-    }
-}
-
 /// Shared behavior for toolbar chip selection types.
 /// Each variant stores either a `Default` (resolved via type-specific defaults) or `Custom` left/right item lists.
 pub trait ToolbarChipSelection {
@@ -289,13 +264,6 @@ define_settings_group!(SessionSettings, settings: [
         private: false,
         toml_path: "notifications.toast_duration_secs",
         description: "How long notification toasts are displayed, in seconds.",
-    },
-    // Tracks whether the `gh` CLI is installed and authenticated on this machine.
-    github_pr_chip_default_validation: GithubPrChipDefaultValidation {
-        type: GithubPrPromptChipDefaultValidation,
-        default: GithubPrPromptChipDefaultValidation::Unvalidated,
-        supported_platforms: SupportedPlatforms::ALL,
-        private: true,
     },
 ]);
 

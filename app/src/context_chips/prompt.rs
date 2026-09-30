@@ -200,10 +200,7 @@ impl Prompt {
         let session_settings = SessionSettings::handle(ctx);
         let settings = session_settings.as_ref(ctx);
         match settings.saved_prompt.clone() {
-            PromptSelection::Default => {
-                let suppress_pr = settings.github_pr_chip_default_validation.is_suppressed();
-                PromptConfiguration::default_prompt_with_pr_chip_suppressed(suppress_pr)
-            }
+            PromptSelection::Default => PromptConfiguration::default_prompt(),
             PromptSelection::CustomChipSelection(config) => config.normalize_custom_prompt_config(),
         }
     }
@@ -250,11 +247,7 @@ impl Prompt {
         event: &SessionSettingsChangedEvent,
         ctx: &mut ModelContext<Self>,
     ) {
-        if matches!(
-            event,
-            SessionSettingsChangedEvent::SavedPrompt { .. }
-                | SessionSettingsChangedEvent::GithubPrChipDefaultValidation { .. }
-        ) {
+        if matches!(event, SessionSettingsChangedEvent::SavedPrompt { .. }) {
             log::debug!("Loading new prompt configuration");
             self.config = Self::from_user_settings(ctx);
             ctx.emit(PromptEvent::Changed);
@@ -276,14 +269,13 @@ impl Entity for Prompt {
 impl SingletonEntity for Prompt {}
 
 impl PromptConfiguration {
-    /// The default Warp prompt, synthesized from legacy prompt settings.
+    /// The default prompt, used when no prompt has been saved.
     /// The order of chips is important and would affect a lot of users if rearranged.
+    ///
+    /// It has no `GithubPullRequest` chip: that chip makes the app run `gh`, which contacts
+    /// GitHub, so a user opts in by adding it in the prompt editor.
     pub fn default_prompt() -> Self {
-        Self::default_prompt_with_pr_chip_suppressed(false)
-    }
-
-    pub fn default_prompt_with_pr_chip_suppressed(suppress_pr_chip: bool) -> Self {
-        let mut chips = vec![
+        let chips = vec![
             ContextChipKind::CondaEnvironment,
             ContextChipKind::VirtualEnvironment,
             ContextChipKind::Ssh,
@@ -294,9 +286,6 @@ impl PromptConfiguration {
             ContextChipKind::GitDiffStats,
             ContextChipKind::KubernetesContext,
         ];
-        if !suppress_pr_chip {
-            chips.push(ContextChipKind::GithubPullRequest);
-        }
 
         Self::from_chips(chips, false, WarpPromptSeparator::None)
     }

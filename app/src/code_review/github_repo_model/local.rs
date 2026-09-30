@@ -3,8 +3,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::future::{BoxFuture, FutureExt as _};
-use settings::Setting as _;
-use warp_errors::report_if_error;
 use warpui::r#async::SpawnedFutureHandle;
 use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity as _};
 
@@ -12,7 +10,6 @@ use super::GitHubRepoEvent;
 use crate::code_review::git_repo_model::{GitRepoStatusEvent, GitRepoStatusModel};
 #[cfg(feature = "local_tty")]
 use crate::terminal::local_shell::LocalShellState;
-use crate::terminal::session_settings::{GithubPrPromptChipDefaultValidation, SessionSettings};
 use crate::util::git::{
     PrInfo, RepositoryInfo, get_pr_for_branch, get_repository_info, is_gh_auth_error,
     is_gh_missing_error,
@@ -356,7 +353,6 @@ impl LocalGitHubRepoModel {
     ) {
         match result {
             Ok(pr_info) => {
-                Self::maybe_validate_github_pr_default(ctx);
                 // Only emit when the updated branch is still current.
                 if self.branch.as_deref() == Some(branch.as_str()) {
                     let changed = self.pr_info.as_ref() != pr_info.as_ref();
@@ -369,44 +365,14 @@ impl LocalGitHubRepoModel {
             Err(e) => {
                 let error_msg = e.to_string();
                 if is_gh_missing_error(&error_msg) || is_gh_auth_error(&error_msg) {
-                    log::info!(
-                        "GitHubRepoModel: suppressing default PR chip \
-                         due to deterministic gh setup error"
-                    );
+                    log::info!("GitHubRepoModel: gh is missing or not logged in");
                     if self.pr_info.take().is_some() {
                         ctx.emit(GitHubRepoEvent::PrInfoChanged);
                     }
-                    Self::maybe_suppress_github_pr_default(ctx);
                 }
                 // On transient errors, keep existing PR info to avoid
                 // flashing the UI.
             }
-        }
-    }
-
-    fn maybe_suppress_github_pr_default(ctx: &mut ModelContext<Self>) {
-        let current = *SessionSettings::as_ref(ctx).github_pr_chip_default_validation;
-        if current != GithubPrPromptChipDefaultValidation::Suppressed {
-            SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
-                report_if_error!(
-                    settings
-                        .github_pr_chip_default_validation
-                        .set_value(GithubPrPromptChipDefaultValidation::Suppressed, ctx)
-                );
-            });
-        }
-    }
-
-    fn maybe_validate_github_pr_default(ctx: &mut ModelContext<Self>) {
-        let current = *SessionSettings::as_ref(ctx).github_pr_chip_default_validation;
-        if current != GithubPrPromptChipDefaultValidation::Validated {
-            SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
-                report_if_error!(
-                    settings
-                        .github_pr_chip_default_validation
-                        .set_value(GithubPrPromptChipDefaultValidation::Validated, ctx)
-                );
-            });
         }
     }
 }
