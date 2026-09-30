@@ -147,6 +147,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Completion generators: local-only allow-list](#completion-generators-local-only-allow-list) — the completion engine runs only generators on a reviewed local-only allow-list; the 141 that can reach npm, crates.io, GitHub, cloud CLIs, clusters or remote hosts are denied, and a drift test forces a decision for each new one
 - [Background tabs stop polling GitHub](#background-tabs-stop-polling-github) — a terminal or code-review panel in a tab that is not selected releases its `gh` model after 30 seconds and refreshes when the tab is shown again, unless the vertical tabs panel shows PR badges
 - [Offline audit: narrow exceptions, git dependency sources and a self-test](#offline-audit-narrow-exceptions-git-dependency-sources-and-a-self-test) — the audit reads the sources of git dependencies, checks the completion generator classification, replaces directory-wide exceptions with per-line ones, pins the DXC binaries by hash, catches more ways to start a network tool and has a `--self-test` that runs in CI
+- [CI: main runs are not cancelled](#ci-main-runs-are-not-cancelled) — a push to `main` no longer cancels the run of the previous push; only pull request runs are cancelled by newer pushes
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3641,3 +3642,11 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 - The bundled workflow texts in `warp-workflows` contain `curl` commands. They are commands for the user's own shell, never run by the app, and are accepted by one `net-dep` entry restricted to `command: r####"curl|npx -y` lines.
 - Still not covered by static checks: a bind whose address is only known at run time and sits more than 240 characters from the `bind(` call, a network call made through a crate other than the ones searched for, and the behaviour of code (the strace sandbox job in CI covers what the tests exercise). A green audit is not evidence of the visibility or loopback invariants; the tests and the sandbox are.
 - The hard-coded destinations the audit now lists (`nodejs.org`, `registry.npmjs.org`, `api.github.com` in the opt-in language server downloader) were already the documented opt-in path.
+
+## CI: main runs are not cancelled
+**Why:** the workflow had `cancel-in-progress: true` for every ref, so a push to `main` cancelled the run of the previous push. When commits land close together, most of them never got a finished result, including the long `offline-audit` job.
+
+**Modified:**
+- `.github/workflows/ci.yml` — `cancel-in-progress` is now `${{ github.event_name == 'pull_request' }}`. Runs on `main` (and other pushed branches) finish; a new push to a pull request still cancels that pull request's older run. The concurrency group is unchanged, so runs of the same ref queue one behind the other.
+
+**User-visible impact:** none in the app. More CI minutes are used when several commits land on `main` in a row.
