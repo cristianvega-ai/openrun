@@ -141,6 +141,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Final audit: findings kept on purpose, and two dead settings](#final-audit-findings-kept-on-purpose-and-two-dead-settings) — records the SWP-18 findings that were left as they are, with the reason, and removes two private settings nothing read
 - [GitHub pull request chip out of the default prompt](#github-pull-request-chip-out-of-the-default-prompt) — a fresh install no longer runs `gh` (and so never contacts GitHub); users opt in by adding the chip; removed the default-chip validation setting
 - [Final audit (SWP-18)](#final-audit-swp-18) — records the three independent audits (static, runtime network, functional and docs), the fixes they led to, the re-verification of the final tree with its exact commands and pass criteria, and the items that remain known
+- [CI checkout without Git LFS](#ci-checkout-without-git-lfs) — the CI checkout steps no longer fetch Git LFS objects, three of which are missing on GitHub and made every run fail at checkout
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3535,3 +3536,13 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 **User-visible impact:** none.
 
 **Notes:** the audits and the re-verification found nothing that contacts a Warp-owned service. The only outbound traffic the app can start is the four documented paths: opt-in language server downloads, links the user opens, opt-in loopback `warpctrl`, and the user's own `git` remotes and GitHub through `gh` while a pull request chip is showing or the code-review panel is open. `MASTER.md` decisions 1 to 22 hold on the final tree.
+
+## CI checkout without Git LFS
+**Why:** every CI run failed at the checkout step. The `*.pdb` files under `app/assets/windows/` are tracked with Git LFS (`.gitattributes`), and three of the four LFS objects are missing on the GitHub remote, so `actions/checkout` with `lfs: true` got a 404 on `git lfs fetch`. No CI job uses the content of those files.
+
+**Modified:**
+- `.github/workflows/ci.yml` — removed `lfs: true` from the `actions/checkout` step of all three jobs (format, clippy, tests). Checkout now leaves the four `.pdb` files as LFS pointer files.
+
+**User-visible impact:** none in the app. CI can check out the repository again.
+
+**Notes:** the `.pdb` files themselves and the `*.pdb` rule in `.gitattributes` are untouched. Deleting the unused files is tracked separately (REL-10, Linear ENG-167). The note in [Continuous integration](#continuous-integration) that CI "pulls Git LFS objects" no longer applies.
