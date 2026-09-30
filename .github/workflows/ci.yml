@@ -21,6 +21,15 @@ env:
   LINUX_BUILD_PACKAGES: >-
     build-essential cmake pkg-config protobuf-compiler libclang-dev
     libssl-dev libfreetype-dev libexpat1-dev libgit2-dev libfontconfig1-dev
+  # Integration tests that only pass with zsh as the shell. They run in their own step.
+  ZSH_ONLY_INTEGRATION_TESTS: >-
+    test(=shell_integration_tests::test_git_prompt_chips)
+    | test(=ui_tests::test_open_and_close_settings)
+    | test(=ui_tests::test_restore_snapshot_with_markdown_file)
+    | test(=ui_tests::test_tab_context_menu_copies_metadata)
+    | test(=ui_tests::test_vertical_pane_context_menu_copies_metadata)
+    | test(=ui_tests::test_vertical_tab_context_menu_copies_metadata)
+    | test(=ui_tests::test_waterfall_input_scrolling)
   # Shells and runtime libraries that unit tests load. Mirrors script/linux/install_runtime_deps
   # and script/linux/install_test_deps.
   LINUX_TEST_PACKAGES: >-
@@ -227,46 +236,35 @@ jobs:
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
               -E "not package(integration)"
 
-      # The `integration` package, with zsh as the shell like the tests' reference setup. One
-      # retry instead of the ci profile's two: a test that fails because of the sandbox fails every
-      # time, so more retries only burn the time budget.
+      # The `integration` package with bash, the shell these steps use everywhere else. One retry
+      # instead of the ci profile's two: a test that fails because of the sandbox fails every
+      # time, so more retries only burn the time budget. Seven tests are left out and run with zsh
+      # in the next step: their expectations (tab title `~`, the git branch chip, scroll layout)
+      # do not hold with bash on the runner, with or without the sandbox (a control run outside
+      # it failed the same seven; CHANGES.md, "CI: the network-sandbox steps finish").
       - name: Run the integration tests in a network sandbox
         if: ${{ !cancelled() }}
         timeout-minutes: 40
         run: |
-          WARP_SHELL_PATH=$(command -v zsh)
+          WARP_SHELL_PATH=$(command -v bash)
           export WARP_SHELL_PATH
           ./script/offline_sandbox net-integration.log xvfb-run -a \
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
-              -E "package(integration)"
+              -E "package(integration) and not ($ZSH_ONLY_INTEGRATION_TESTS)"
 
-      # The tests that are about bash (the bootstrap script and the prompt handling differ from
-      # zsh), run again with bash as the shell.
-      - name: Run the bash integration tests in a network sandbox
+      - name: Run the zsh integration tests in a network sandbox
         if: ${{ !cancelled() }}
-        timeout-minutes: 20
-        run: |
-          WARP_SHELL_PATH=$(command -v bash)
-          export WARP_SHELL_PATH
-          ./script/offline_sandbox net-integration-bash.log xvfb-run -a \
-            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
-              -E "package(integration) and test(~bash)"
-
-      # Control for failures of the steps above: the same tests with bash as the shell and no
-      # sandbox. A test that fails here too is about the runner, not about the network sandbox.
-      - name: Control run outside the sandbox
-        if: ${{ !cancelled() }}
-        continue-on-error: true
         timeout-minutes: 15
         run: |
-          WARP_SHELL_PATH=$(command -v bash)
+          WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
-          xvfb-run -a cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-            -E "package(integration) and (test(~test_git_prompt_chips) or test(~test_open_and_close_settings) or test(~test_waterfall_input_scrolling) or test(~test_restore_snapshot_with_markdown_file) or test(~context_menu_copies_metadata))"
+          ./script/offline_sandbox net-integration-zsh.log xvfb-run -a \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 --status-level all \
+              -E "package(integration) and ($ZSH_ONLY_INTEGRATION_TESTS)"
 
       - name: Check the recorded connections
         if: ${{ !cancelled() }}
-        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-bash.log
+        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-zsh.log
 
       # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
       # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in
