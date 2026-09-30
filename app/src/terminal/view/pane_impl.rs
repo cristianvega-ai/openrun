@@ -44,6 +44,11 @@ impl TerminalView {
             return;
         };
 
+        if matches!(event, PaneGroupFocusEvent::PrInfoVisibilityChanged) {
+            self.update_git_status_subscription(ctx);
+            return;
+        }
+
         if focus_handle.is_affected(event) {
             self.on_pane_state_change(ctx);
         }

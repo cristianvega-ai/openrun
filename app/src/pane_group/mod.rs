@@ -1475,6 +1475,15 @@ impl PaneGroup {
         self.focus_state.clone()
     }
 
+    /// Tells the terminals in this group whether something on screen shows their GitHub pull
+    /// request info. A terminal that stops being shown releases its `gh` polling after a grace
+    /// period.
+    pub fn set_pr_info_visible(&mut self, visible: bool, ctx: &mut ViewContext<Self>) {
+        self.focus_state.update(ctx, |focus_state, ctx| {
+            focus_state.set_pr_info_visible(visible, ctx);
+        });
+    }
+
     pub fn snapshot(&self, app: &AppContext) -> PaneNodeSnapshot {
         self.snapshot_for_node(app, &self.panes.root)
     }
@@ -1966,6 +1975,7 @@ impl PaneGroup {
             }
             PaneGroupFocusEvent::InSplitPaneChanged => ctx.notify(),
             PaneGroupFocusEvent::FocusedPaneMaximizedChanged => ctx.notify(),
+            PaneGroupFocusEvent::PrInfoVisibilityChanged => {}
         }
     }
 

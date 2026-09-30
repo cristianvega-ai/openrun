@@ -1508,6 +1508,7 @@ impl Workspace {
     pub(crate) fn open_vertical_tabs_panel_if_enabled(&mut self, ctx: &mut ViewContext<Self>) {
         if *TabSettings::as_ref(ctx).use_vertical_tabs {
             self.vertical_tabs_panel_open = true;
+            self.sync_tab_pr_info_visibility(ctx);
             self.sync_window_button_visibility(ctx);
             ctx.notify();
         }
@@ -2135,6 +2136,7 @@ impl Workspace {
             TabSettingsChangedEvent::UseVerticalTabs { .. } => {
                 let vertical_tabs_enabled = *TabSettings::as_ref(ctx).use_vertical_tabs;
                 self.vertical_tabs_panel_open = vertical_tabs_enabled;
+                self.sync_tab_pr_info_visibility(ctx);
 
                 if vertical_tabs_enabled {
                     Self::ensure_tabs_panel_in_config(ctx);
@@ -2159,6 +2161,7 @@ impl Workspace {
                     && *TabSettings::as_ref(ctx).show_vertical_tab_panel_in_restored_windows
                 {
                     self.vertical_tabs_panel_open = true;
+                    self.sync_tab_pr_info_visibility(ctx);
                 }
                 ctx.notify();
             }
@@ -2189,9 +2192,12 @@ impl Workspace {
             | TabSettingsChangedEvent::UseLatestUserPromptAsConversationTitleInTabNames {
                 ..
             }
-            | TabSettingsChangedEvent::VerticalTabsShowPrLink { .. }
             | TabSettingsChangedEvent::VerticalTabsShowDiffStats { .. }
             | TabSettingsChangedEvent::HideTitleBarSearchBarInVerticalTabs { .. } => {
+                ctx.notify();
+            }
+            TabSettingsChangedEvent::VerticalTabsShowPrLink { .. } => {
+                self.sync_tab_pr_info_visibility(ctx);
                 ctx.notify();
             }
             TabSettingsChangedEvent::VerticalTabsShowDetailsOnHover { .. } => {
@@ -3082,6 +3088,29 @@ impl Workspace {
         }
     }
 
+    /// Whether the vertical tabs panel is on screen with pull request badges, which show the PR
+    /// info of every tab and not just the selected one.
+    fn vertical_tabs_show_pr_badges(&self, ctx: &AppContext) -> bool {
+        let tab_settings = TabSettings::as_ref(ctx);
+        self.vertical_tabs_panel_open
+            && *tab_settings.use_vertical_tabs
+            && *tab_settings.vertical_tabs_show_pr_link.value()
+    }
+
+    /// Tells each tab whether something on screen shows its GitHub pull request info, so a
+    /// terminal in a background tab stops polling `gh` unless the vertical tabs panel shows PR
+    /// badges. Call it whenever the selected tab, the vertical tabs panel or the PR badge setting
+    /// changes.
+    fn sync_tab_pr_info_visibility(&self, ctx: &mut ViewContext<Self>) {
+        let show_all = self.vertical_tabs_show_pr_badges(ctx);
+        for (index, tab) in self.tabs.iter().enumerate() {
+            let visible = show_all || index == self.active_tab_index;
+            tab.pane_group.update(ctx, |pane_group, ctx| {
+                pane_group.set_pr_info_visible(visible, ctx);
+            });
+        }
+    }
+
     /// Change the active tab index. This must be used instead of setting `self.active_tab_index`
     /// directly, as it updates related state.
     pub(crate) fn set_active_tab_index(&mut self, index: usize, ctx: &mut ViewContext<Self>) {
@@ -3096,6 +3125,7 @@ impl Workspace {
         };
 
         self.active_tab_index = index;
+        self.sync_tab_pr_info_visibility(ctx);
 
         // The range selection's anchor is the active tab, so any change to
         // the active tab makes the existing selection stale; clear it.
@@ -4250,6 +4280,7 @@ impl Workspace {
         if use_vertical_tabs {
             if !self.vertical_tabs_panel_open {
                 self.vertical_tabs_panel_open = true;
+                self.sync_tab_pr_info_visibility(ctx);
                 self.sync_window_button_visibility(ctx);
             }
             self.open_tab_configs_menu(
@@ -5733,6 +5764,7 @@ impl Workspace {
 
     fn toggle_vertical_tabs_panel(&mut self, ctx: &mut ViewContext<Self>) {
         self.vertical_tabs_panel_open = !self.vertical_tabs_panel_open;
+        self.sync_tab_pr_info_visibility(ctx);
         if !self.vertical_tabs_panel_open {
             self.close_vertical_tabs_settings_popup();
             self.vertical_tabs_panel.clear_detail_sidecar();

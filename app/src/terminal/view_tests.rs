@@ -5221,6 +5221,240 @@ fn terminal_outside_a_repo_never_needs_pr_info() {
     });
 }
 
+/// A workspace whose only tab is a terminal in a watched repo with a PR chip in the prompt,
+/// with `gh` counted instead of run.
+fn workspace_with_pr_chip_terminal_in_repo(
+    app: &mut App,
+) -> (
+    tempfile::TempDir,
+    ViewHandle<crate::workspace::Workspace>,
+    ViewHandle<TerminalView>,
+    Arc<CountingGitHubCli>,
+) {
+    initialize_workspace_app(app);
+    app.add_singleton_model(|_| LocalShellState::NotLoaded);
+    let gh = Arc::new(CountingGitHubCli::default());
+    GitRepoModels::handle(app).update(app, |models, _| {
+        models.set_github_cli_for_test(gh.clone());
+    });
+    Prompt::handle(app).update(app, |prompt, ctx| {
+        prompt
+            .update(
+                [
+                    ContextChipKind::WorkingDirectory,
+                    ContextChipKind::GithubPullRequest,
+                ],
+                false,
+                WarpPromptSeparator::None,
+                ctx,
+            )
+            .expect("set the prompt chips");
+    });
+    let (temp_dir, repo) = register_watched_repo(app);
+    let workspace = mock_workspace(app);
+    let terminal = active_tab_terminal(app, &workspace);
+    terminal.update(app, |view, ctx| {
+        view.current_repo_path = Some(LocalOrRemotePath::Local(repo));
+        view.hidden_pr_info_grace = std::time::Duration::from_millis(60);
+        view.update_git_status_subscription(ctx);
+    });
+    terminal.read(app, |view, ctx| {
+        assert!(view.needs_pr_info(ctx));
+        assert!(view.github_repo_model.is_some());
+    });
+    (temp_dir, workspace, terminal, gh)
+}
+
+fn active_tab_terminal(
+    app: &App,
+    workspace: &ViewHandle<crate::workspace::Workspace>,
+) -> ViewHandle<TerminalView> {
+    workspace.read(app, |workspace, ctx| {
+        workspace
+            .active_tab_pane_group()
+            .as_ref(ctx)
+            .active_session_view(ctx)
+            .expect("the active tab has a terminal")
+    })
+}
+
+fn holds_github_model(app: &App, terminal: &ViewHandle<TerminalView>) -> bool {
+    terminal.read(app, |view, _| view.github_repo_model.is_some())
+}
+
+#[test]
+fn background_tab_releases_the_pr_model_after_the_grace_period() {
+    App::test((), |mut app| async move {
+        let (_repo, workspace, terminal, gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "a selected tab with a PR chip looks up the repository"
+        );
+
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+        assert_eq!(workspace.read(&app, |w, _| w.active_tab_index()), 1);
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.pr_info_on_screen(ctx));
+            assert!(view.needs_pr_info(ctx), "the layout still has the chip");
+        });
+        assert!(
+            holds_github_model(&app, &terminal),
+            "the handle is kept during the grace period"
+        );
+
+        assert_eventually!(
+            400 => !holds_github_model(&app, &terminal),
+            "a background tab must release its `gh` model after the grace period"
+        );
+        let lookups_when_released = gh.total_lookups();
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(150)).await;
+        assert_eq!(
+            gh.total_lookups(),
+            lookups_when_released,
+            "a released background tab runs no `gh`"
+        );
+    });
+}
+
+#[test]
+fn selecting_the_tab_again_after_the_grace_period_refreshes_immediately() {
+    App::test((), |mut app| async move {
+        let (_repo, workspace, terminal, gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+        assert_eventually!(
+            400 => !holds_github_model(&app, &terminal),
+            "the background tab releases its model"
+        );
+        let repository_lookups = gh.repository_lookups();
+
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::ActivateTab(0), ctx);
+        });
+        assert!(holds_github_model(&app, &terminal));
+        assert_eventually!(
+            200 => gh.repository_lookups() > repository_lookups,
+            "showing the tab again must look up GitHub immediately"
+        );
+    });
+}
+
+#[test]
+fn switching_back_within_the_grace_period_keeps_the_same_model() {
+    App::test((), |mut app| async move {
+        let (_repo, workspace, terminal, gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        terminal.update(&mut app, |view, _| {
+            view.hidden_pr_info_grace = std::time::Duration::from_secs(60);
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the selected tab looks up the repository"
+        );
+        let model_id = terminal.read(&app, |view, _| {
+            view.github_repo_model.as_ref().map(|m| m.id())
+        });
+        let lookups = gh.total_lookups();
+
+        for _ in 0..3 {
+            workspace.update(&mut app, |workspace, ctx| {
+                workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+                workspace.handle_action(&WorkspaceAction::ActivateTab(0), ctx);
+            });
+        }
+
+        assert_eq!(
+            terminal.read(&app, |view, _| view
+                .github_repo_model
+                .as_ref()
+                .map(|m| m.id())),
+            model_id
+        );
+        assert_eq!(
+            gh.total_lookups(),
+            lookups,
+            "flipping tabs within the grace period must not restart `gh`"
+        );
+    });
+}
+
+#[test]
+fn vertical_tabs_pr_badges_keep_background_tabs_polling() {
+    use crate::workspace::tab_settings::TabSettings;
+
+    App::test((), |mut app| async move {
+        let (_repo, workspace, terminal, _gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .use_vertical_tabs
+                .set_value(true, ctx)
+                .expect("enable vertical tabs");
+        });
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+
+        terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+        assert!(
+            holds_github_model(&app, &terminal),
+            "the vertical tabs panel shows this tab's PR badge"
+        );
+
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .vertical_tabs_show_pr_link
+                .set_value(false, ctx)
+                .expect("hide PR badges");
+        });
+        terminal.read(&app, |view, ctx| assert!(!view.pr_info_on_screen(ctx)));
+        assert_eventually!(
+            400 => !holds_github_model(&app, &terminal),
+            "without PR badges the background tab releases its model"
+        );
+
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .vertical_tabs_show_pr_link
+                .set_value(true, ctx)
+                .expect("show PR badges");
+        });
+        terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+        assert!(holds_github_model(&app, &terminal));
+    });
+}
+
+#[test]
+fn hidden_tab_does_not_stop_a_visible_tab_in_the_same_repo() {
+    App::test((), |mut app| async move {
+        let (_repo, workspace, first, gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        let repo = first.read(&app, |view, _| view.current_repo_path.clone());
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+        let second = active_tab_terminal(&app, &workspace);
+        second.update(&mut app, |view, ctx| {
+            view.current_repo_path = repo;
+            view.update_git_status_subscription(ctx);
+        });
+        assert!(holds_github_model(&app, &second));
+        assert_eventually!(
+            400 => !holds_github_model(&app, &first),
+            "the hidden tab releases its handle"
+        );
+
+        assert!(
+            holds_github_model(&app, &second),
+            "the shared model stays alive for the selected tab"
+        );
+        let lookups = gh.repository_lookups();
+        assert!(lookups >= 1);
+        second.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+    });
+}
+
 fn record_pty_writes(
     app: &mut App,
     terminal: &ViewHandle<TerminalView>,

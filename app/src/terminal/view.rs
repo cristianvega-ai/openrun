@@ -139,7 +139,7 @@ use crate::code::editor_management::CodeSource;
 use crate::code_review::comments::AgentReviewCommentBatch;
 use crate::code_review::diff_state::GitDeltaPreference;
 use crate::code_review::git_repo_model::{GitRepoModels, GitRepoStatusModel, GitStatusMetadata};
-use crate::code_review::github_repo_model::GitHubRepoModel;
+use crate::code_review::github_repo_model::{GitHubRepoModel, HIDDEN_CONSUMER_GRACE_PERIOD};
 use crate::context_chips::ContextChipKind;
 use crate::context_chips::prompt::Prompt;
 use crate::context_chips::prompt_type::PromptType;
@@ -1659,6 +1659,14 @@ pub struct TerminalView {
     /// Per-repo GitHub-info model for the current repository, if any.
     github_repo_model: Option<ModelHandle<GitHubRepoModel>>,
 
+    /// Pending release of [`Self::github_repo_model`] after this terminal's pull request info
+    /// stopped being on screen. Cancelled if it is shown again first.
+    pending_pr_info_release: Option<SpawnedFutureHandle>,
+
+    /// How long [`Self::github_repo_model`] is kept after this terminal's pull request info stops
+    /// being on screen, so that switching tabs back and forth does not restart `gh` each time.
+    hidden_pr_info_grace: Duration,
+
     /// Deferred code review open request, stashed when [`GitDeltaPreference::OnlyDirty`] is
     /// requested but git status metadata has not loaded yet. Consumed in
     /// [`Self::handle_git_repo_status_event`].
@@ -2392,6 +2400,8 @@ impl TerminalView {
             model_events_handle,
             git_repo_status: None,
             github_repo_model: None,
+            pending_pr_info_release: None,
+            hidden_pr_info_grace: HIDDEN_CONSUMER_GRACE_PERIOD,
             deferred_code_review_open: None,
             block_completed_callbacks: Default::default(),
             current_repo_path: None,
@@ -2442,6 +2452,9 @@ impl TerminalView {
     }
 
     fn clear_github_repo_model(&mut self, ctx: &mut ViewContext<Self>) {
+        if let Some(pending_release) = self.pending_pr_info_release.take() {
+            pending_release.abort();
+        }
         let Some(handle) = self.github_repo_model.take() else {
             return;
         };
@@ -2535,42 +2548,79 @@ impl TerminalView {
                 .contains(&ContextChipKind::GithubPullRequest)
     }
 
-    /// Whether this terminal needs PR info. PR info is fetched with `gh`, which
+    /// Whether this terminal's layout needs PR info. PR info is fetched with `gh`, which
     /// contacts GitHub, so only a PR chip in the active prompt or CLI-agent
     /// footer justifies it.
     fn needs_pr_info(&self, ctx: &AppContext) -> bool {
         self.current_repo_path.is_some() && self.needs_pr_info_for_chip_ui(ctx)
     }
 
+    /// Whether anything on screen shows this terminal's PR info: its tab is selected, or the
+    /// vertical tabs panel shows PR badges. A terminal outside a pane group always counts.
+    fn pr_info_on_screen(&self, app: &AppContext) -> bool {
+        self.focus_handle
+            .as_ref()
+            .is_none_or(|handle| handle.is_pr_info_visible(app))
+    }
+
     /// Re-evaluate whether the terminal needs a PR-info subscription, and
-    /// acquire or drop the handle accordingly.
+    /// acquire or drop the handle accordingly. While the PR info is not on
+    /// screen the handle is released after [`Self::hidden_pr_info_grace`].
     fn sync_pr_info_subscription(&mut self, ctx: &mut ViewContext<Self>) {
-        let needs_pr_info = self.needs_pr_info(ctx);
-        if needs_pr_info && self.github_repo_model.is_none() {
-            // Acquire a GitHub-info handle for the current repo.
-            let Some(repo) = self.current_repo_path.clone() else {
-                return;
-            };
-            let result = GitRepoModels::handle(ctx)
-                .update(ctx, |model, ctx| model.subscribe_github_repo(&repo, ctx));
-            match result {
-                Ok(handle) => {
-                    let weak_for_prompt = handle.downgrade();
-                    self.github_repo_model = Some(handle);
-                    self.current_prompt.update(ctx, |prompt_type, ctx| {
-                        if let PromptType::Dynamic { prompt } = prompt_type {
-                            prompt.update(ctx, |current_prompt, ctx| {
-                                current_prompt.set_github_repo_model(Some(weak_for_prompt), ctx);
-                            });
-                        }
-                    });
-                }
-                Err(err) => {
-                    log::warn!("TerminalView subscribe_github_repo failed: {err}");
-                }
-            }
-        } else if !needs_pr_info {
+        if !self.needs_pr_info(ctx) {
             self.clear_github_repo_model(ctx);
+            return;
+        }
+
+        if !self.pr_info_on_screen(ctx) {
+            if self.github_repo_model.is_some() && self.pending_pr_info_release.is_none() {
+                let grace = self.hidden_pr_info_grace;
+                self.pending_pr_info_release = Some(ctx.spawn(
+                    async move {
+                        Timer::after(grace).await;
+                    },
+                    |me, _, ctx| {
+                        me.pending_pr_info_release = None;
+                        if !me.pr_info_on_screen(ctx) {
+                            me.clear_github_repo_model(ctx);
+                        }
+                    },
+                ));
+            }
+            return;
+        }
+
+        if let Some(pending_release) = self.pending_pr_info_release.take() {
+            pending_release.abort();
+        }
+        if self.github_repo_model.is_some() {
+            return;
+        }
+
+        // Acquire a GitHub-info handle for the current repo.
+        let Some(repo) = self.current_repo_path.clone() else {
+            return;
+        };
+        let result = GitRepoModels::handle(ctx)
+            .update(ctx, |model, ctx| model.subscribe_github_repo(&repo, ctx));
+        match result {
+            Ok(handle) => {
+                let weak_for_prompt = handle.downgrade();
+                self.github_repo_model = Some(handle.clone());
+                self.current_prompt.update(ctx, |prompt_type, ctx| {
+                    if let PromptType::Dynamic { prompt } = prompt_type {
+                        prompt.update(ctx, |current_prompt, ctx| {
+                            current_prompt.set_github_repo_model(Some(weak_for_prompt), ctx);
+                        });
+                    }
+                });
+                // A model another view already holds does not fetch on its own, and the value
+                // may be stale from while this terminal was off screen.
+                handle.update(ctx, |model, ctx| model.refresh_pr_info(ctx));
+            }
+            Err(err) => {
+                log::warn!("TerminalView subscribe_github_repo failed: {err}");
+            }
         }
     }
 

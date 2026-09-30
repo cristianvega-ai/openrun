@@ -190,7 +190,8 @@ impl<P: BackingView> PaneHeader<P> {
                 PaneGroupFocusEvent::InSplitPaneChanged
                 | PaneGroupFocusEvent::FocusedPaneMaximizedChanged
                 | PaneGroupFocusEvent::FocusChanged { .. } => ctx.notify(),
-                PaneGroupFocusEvent::ActiveSessionChanged { .. } => {}
+                PaneGroupFocusEvent::ActiveSessionChanged { .. }
+                | PaneGroupFocusEvent::PrInfoVisibilityChanged => {}
             },
         );
         self.focus_handle = Some(focus_handle);

@@ -91,7 +91,9 @@ use crate::code_review::diff_state::{
 use crate::code_review::editor_state::CodeReviewEditorState;
 use crate::code_review::find_model::CodeReviewFindModel;
 use crate::code_review::git_repo_model::{GitRepoModels, GitRepoStatusEvent, GitRepoStatusModel};
-use crate::code_review::github_repo_model::{GitHubRepoEvent, GitHubRepoModel};
+use crate::code_review::github_repo_model::{
+    GitHubRepoEvent, GitHubRepoModel, HIDDEN_CONSUMER_GRACE_PERIOD,
+};
 use crate::code_review::hidden_lines::calculate_hidden_lines;
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
 use crate::editor::InteractionState;
@@ -592,6 +594,11 @@ pub struct CodeReviewView {
     git_repo_status: Option<ModelHandle<GitRepoStatusModel>>,
     /// Per-repo GitHub-info model for the current repository, if any.
     github_repo_model: Option<ModelHandle<GitHubRepoModel>>,
+    /// Pending release of [`Self::github_repo_model`] while the panel is open but its tab is not
+    /// on screen. Cancelled if polling is resumed first.
+    pending_github_release: Option<warpui::r#async::SpawnedFutureHandle>,
+    /// How long [`Self::github_repo_model`] is kept after the panel's tab leaves the screen.
+    hidden_github_grace: std::time::Duration,
 }
 
 impl CodeReviewView {
@@ -1245,6 +1252,8 @@ impl CodeReviewView {
             git_dialog: None,
             git_repo_status: None,
             github_repo_model: None,
+            pending_github_release: None,
+            hidden_github_grace: HIDDEN_CONSUMER_GRACE_PERIOD,
         };
         view.set_active_repo_comment_model(comment_batch_model, ctx);
         if has_repo {
@@ -5656,6 +5665,38 @@ impl CodeReviewView {
         self.git_repo_status = Some(handle);
     }
 
+    /// Pauses or resumes `gh` polling for an open panel whose tab left or re-entered the screen.
+    /// Unlike [`Self::on_close`] this keeps the rest of the panel's state and subscriptions. The
+    /// GitHub model is released after a grace period when paused, and re-subscribed with an
+    /// immediate refresh when resumed. A closed panel never polls, so this does nothing for it.
+    pub fn set_github_polling(&mut self, enabled: bool, ctx: &mut ViewContext<Self>) {
+        if !self.is_open {
+            return;
+        }
+        if enabled {
+            if let Some(pending_release) = self.pending_github_release.take() {
+                pending_release.abort();
+            }
+            if self.github_repo_model.is_none() {
+                self.subscribe_to_github_repo_model(ctx);
+                if let Some(handle) = self.github_repo_model.clone() {
+                    handle.update(ctx, |model, ctx| model.refresh_pr_info(ctx));
+                }
+            }
+        } else if self.github_repo_model.is_some() && self.pending_github_release.is_none() {
+            let grace = self.hidden_github_grace;
+            self.pending_github_release = Some(ctx.spawn(
+                async move {
+                    warpui::r#async::Timer::after(grace).await;
+                },
+                |me, _, ctx| {
+                    me.pending_github_release = None;
+                    me.unsubscribe_from_github_repo_model(ctx);
+                },
+            ));
+        }
+    }
+
     /// Subscribes to the per-repo GitHub-info model.
     fn subscribe_to_github_repo_model(&mut self, ctx: &mut ViewContext<Self>) {
         let Some(repo) = self.repo_path().cloned() else {
@@ -5688,6 +5729,9 @@ impl CodeReviewView {
     }
 
     fn unsubscribe_from_github_repo_model(&mut self, ctx: &mut ViewContext<Self>) {
+        if let Some(pending_release) = self.pending_github_release.take() {
+            pending_release.abort();
+        }
         if let Some(handle) = self.github_repo_model.take() {
             ctx.unsubscribe_to_model(&handle);
         }

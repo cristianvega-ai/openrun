@@ -857,3 +857,110 @@ fn gh_lookups_run_only_while_the_panel_is_open() {
         });
     });
 }
+
+#[test]
+fn gh_lookups_pause_while_the_panel_is_open_but_its_tab_is_hidden() {
+    App::test((), |mut app| async move {
+        initialize_test_app(&mut app);
+        app.add_singleton_model(DirectoryWatcher::new_for_testing);
+        let gh = Arc::new(CountingGitHubCli::default());
+        GitRepoModels::handle(&app).update(&mut app, |models, _| {
+            models.set_github_cli_for_test(gh.clone());
+        });
+
+        let temp_dir = tempfile::TempDir::new().expect("temp dir");
+        let repo_path = dunce::canonicalize(temp_dir.path()).expect("canonical repo path");
+        let standardized =
+            warp_util::standardized_path::StandardizedPath::from_local_canonicalized(&repo_path)
+                .expect("standardized path");
+        DetectedRepositories::handle(&app).update(&mut app, |repos, _| {
+            repos.insert_test_repo_root(standardized.clone());
+        });
+        DirectoryWatcher::handle(&app).update(&mut app, |watcher, ctx| {
+            watcher
+                .add_directory(standardized, ctx)
+                .expect("watch the repo directory");
+        });
+
+        let (window_id, _) = app.add_window(WindowStyle::NotStealFocus, |_| TestView);
+        let diff_state_model = app.add_model(DiffStateModel::new_for_test);
+        let view = app.add_view(window_id, |ctx| {
+            CodeReviewView::new(
+                Some(LocalOrRemotePath::Local(repo_path)),
+                diff_state_model,
+                None,
+                None,
+                ctx,
+            )
+        });
+
+        // A panel that was never opened has no GitHub model and runs no `gh`.
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
+        view.read(&app, |view, _| assert!(view.github_repo_model.is_none()));
+        assert_eq!(gh.total_lookups(), 0);
+
+        view.update(&mut app, |view, ctx| view.on_open(ctx));
+        let model = view.read(&app, |view, _| {
+            view.github_repo_model
+                .as_ref()
+                .expect("an open panel subscribes to GitHub info")
+                .downgrade()
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "an open code-review panel must look up the repository"
+        );
+
+        view.update(&mut app, |view, _| {
+            view.hidden_github_grace = std::time::Duration::from_millis(60);
+        });
+
+        // A hidden tab keeps the panel open but releases the GitHub model after the grace period.
+        view.update(&mut app, |view, ctx| view.set_github_polling(false, ctx));
+        view.read(&app, |view, _| {
+            assert!(view.is_open);
+            assert!(
+                view.github_repo_model.is_some(),
+                "kept during the grace period"
+            );
+        });
+        assert_eventually!(
+            400 => view.read(&app, |view, _| view.github_repo_model.is_none()),
+            "a hidden panel must release its GitHub model"
+        );
+        app.read(|ctx| {
+            assert!(
+                model.upgrade(ctx).is_none(),
+                "the GitHub model must be torn down when the hidden panel's grace period ends"
+            );
+        });
+        view.read(&app, |view, _| assert!(view.is_open));
+        let repository_lookups = gh.repository_lookups();
+
+        // Showing the tab again resumes polling with an immediate lookup.
+        view.update(&mut app, |view, ctx| view.set_github_polling(true, ctx));
+        view.read(&app, |view, _| assert!(view.github_repo_model.is_some()));
+        assert_eventually!(
+            200 => gh.repository_lookups() > repository_lookups,
+            "a panel that is shown again must look up the repository immediately"
+        );
+
+        // Hiding and showing within the grace period keeps the same model.
+        view.update(&mut app, |view, _| {
+            view.hidden_github_grace = std::time::Duration::from_secs(60);
+        });
+        let lookups = gh.total_lookups();
+        view.update(&mut app, |view, ctx| view.set_github_polling(false, ctx));
+        view.update(&mut app, |view, ctx| view.set_github_polling(true, ctx));
+        view.read(&app, |view, _| {
+            assert!(view.github_repo_model.is_some());
+            assert!(view.pending_github_release.is_none());
+        });
+        assert_eq!(gh.total_lookups(), lookups);
+
+        // A closed panel ignores the request.
+        view.update(&mut app, |view, ctx| view.on_close(ctx));
+        view.update(&mut app, |view, ctx| view.set_github_polling(true, ctx));
+        view.read(&app, |view, _| assert!(view.github_repo_model.is_none()));
+    });
+}

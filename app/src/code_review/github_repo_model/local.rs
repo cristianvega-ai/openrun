@@ -64,8 +64,9 @@ impl GitHubCli for SystemGitHubCli {
 /// `GitHubRepoModel` is created lazily when a consumer asks for it via
 /// [`crate::code_review::git_repo_model::GitRepoModels::subscribe_github_repo`].
 /// The only consumers are a terminal whose prompt or CLI-agent footer shows the
-/// GitHub PR chip and the open code-review panel. `gh` talks to GitHub, so
-/// nothing here runs unless one of them holds a handle.
+/// GitHub PR chip and the open code-review panel, and only while their tab is on
+/// screen (plus a short grace period). `gh` talks to GitHub, so nothing here runs
+/// unless one of them holds a handle.
 /// While at least one strong `ModelHandle<GitHubRepoModel>` is alive, the model:
 ///   - tracks the current branch by subscribing to its sibling
 ///     [`GitRepoStatusModel`] for `MetadataChanged` events,

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use warpui::{AppContext, Entity, ModelContext, ModelHandle};
 
 #[cfg(feature = "local_fs")]
@@ -10,6 +12,11 @@ pub use local::LocalGitHubRepoModel;
 #[cfg(all(test, feature = "local_fs"))]
 use crate::code_review::git_repo_model::GitRepoStatusModel;
 use crate::util::git::{PrInfo, RepositoryInfo};
+
+/// How long a consumer keeps its handle (and so `gh` polling) after the UI that shows the GitHub
+/// info leaves the screen, for example after switching tabs. Switching back within this time
+/// finds the model still alive, so quick tab flips do not restart `gh` each time.
+pub(crate) const HIDDEN_CONSUMER_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
 #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 #[derive(Debug)]

@@ -620,6 +620,11 @@ impl RightPanelView {
             }
         });
 
+        let previous_pane_group_id = self.active_pane_group.as_ref().map(|group| group.id());
+        if previous_pane_group_id.is_some_and(|id| id != pane_group_id) {
+            self.set_github_polling_for_selected_repo(previous_pane_group_id, false, ctx);
+        }
+
         self.active_pane_group = Some(pane_group);
 
         if let Some(state) = &mut self.code_review_state {
@@ -650,11 +655,37 @@ impl RightPanelView {
         if let Some(selected) = &selected {
             self.ensure_code_review_view_exists(selected, ctx);
         }
+        self.set_github_polling_for_selected_repo(Some(pane_group_id), true, ctx);
 
         let is_maximized = self.is_maximized(ctx);
         self.set_maximized(is_maximized, ctx);
 
         ctx.notify();
+    }
+
+    /// Pauses or resumes GitHub polling of the open code review panel of `pane_group_id`, which
+    /// is off screen while another tab is selected. Does nothing for a closed panel.
+    fn set_github_polling_for_selected_repo(
+        &self,
+        pane_group_id: Option<EntityId>,
+        enabled: bool,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        let (Some(pane_group_id), Some(repo_path)) = (
+            pane_group_id,
+            self.code_review_state
+                .as_ref()
+                .and_then(|state| state.selected_repo_path.clone()),
+        ) else {
+            return;
+        };
+        if let Some(view) = self
+            .working_directories_model
+            .as_ref(ctx)
+            .get_code_review_view(pane_group_id, &repo_path)
+        {
+            view.update(ctx, |view, ctx| view.set_github_polling(enabled, ctx));
+        }
     }
 
     #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]

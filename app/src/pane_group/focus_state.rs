@@ -12,6 +12,7 @@ pub struct PaneGroupFocusState {
     active_session_id: Option<TerminalPaneId>,
     in_split_pane: bool,
     is_focused_pane_maximized: bool,
+    is_pr_info_visible: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub enum PaneGroupFocusEvent {
     },
     InSplitPaneChanged,
     FocusedPaneMaximizedChanged,
+    PrInfoVisibilityChanged,
 }
 
 impl Entity for PaneGroupFocusState {
@@ -43,6 +45,7 @@ impl PaneGroupFocusState {
             active_session_id,
             in_split_pane,
             is_focused_pane_maximized: false,
+            is_pr_info_visible: true,
         }
     }
 
@@ -69,6 +72,12 @@ impl PaneGroupFocusState {
     /// Returns true if the focused pane is maximized.
     pub fn is_focused_pane_maximized(&self) -> bool {
         self.is_focused_pane_maximized
+    }
+
+    /// Returns true if something on screen shows this pane group's GitHub pull request info: the
+    /// group is the selected tab, or the vertical tabs panel shows pull request badges.
+    pub fn is_pr_info_visible(&self) -> bool {
+        self.is_pr_info_visible
     }
 
     /// Computes the split pane state for a given pane based on current focus state.
@@ -139,6 +148,14 @@ impl PaneGroupFocusState {
         }
     }
 
+    /// Sets whether something on screen shows this pane group's pull request info.
+    pub(super) fn set_pr_info_visible(&mut self, visible: bool, ctx: &mut ModelContext<Self>) {
+        if self.is_pr_info_visible != visible {
+            self.is_pr_info_visible = visible;
+            ctx.emit(PaneGroupFocusEvent::PrInfoVisibilityChanged);
+        }
+    }
+
     /// Toggles whether the focused pane is maximized.
     pub(super) fn toggle_focused_pane_maximized(&mut self, ctx: &mut ModelContext<Self>) {
         self.is_focused_pane_maximized = !self.is_focused_pane_maximized;
@@ -192,6 +209,11 @@ impl PaneFocusHandle {
         self.split_pane_state(app).is_focused()
     }
 
+    /// True if something on screen shows this pane group's pull request info.
+    pub fn is_pr_info_visible(&self, app: &AppContext) -> bool {
+        self.focus_state.as_ref(app).is_pr_info_visible()
+    }
+
     /// True if this pane is the active terminal session.
     pub fn is_active_session(&self, app: &AppContext) -> bool {
         self.pane_id
@@ -233,6 +255,7 @@ impl PaneFocusHandle {
             },
             PaneGroupFocusEvent::InSplitPaneChanged => true,
             PaneGroupFocusEvent::FocusedPaneMaximizedChanged => true,
+            PaneGroupFocusEvent::PrInfoVisibilityChanged => false,
         }
     }
 }
