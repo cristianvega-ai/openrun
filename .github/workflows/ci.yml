@@ -117,7 +117,7 @@ jobs:
   offline-audit:
     name: Offline audit
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -169,34 +169,93 @@ jobs:
         if: ${{ !cancelled() }}
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      # Runs every test, including the `integration` package that boots the full app, in a network
-      # namespace with only a loopback interface while strace records each connect and send.
-      - name: Run the tests in a network sandbox
+      # script/offline_sandbox runs a command in a network namespace with only a loopback
+      # interface while strace records each connect and send (see the script for the details).
+      #
+      # The canaries prove that the sandbox and the log check can fail: the sandbox makes one real
+      # outside connect and sends one datagram to a DNS port, and `offline_audit --net-log` must
+      # flag both. If strace stops recording (an unsupported option, a changed log format), this
+      # step fails instead of letting an empty log pass as "no connections".
+      - name: Check the sandbox catches a connection
         if: ${{ !cancelled() }}
         run: |
-          unshare --user --map-root-user --net sh -c '
-            ip link set lo up
-            strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -o net.log \
-              xvfb-run -a cargo nextest run --locked --workspace --offline --no-fail-fast
+          ./script/offline_sandbox net-canary-connect.log python3 -c '
+          import socket
+          s = socket.socket()
+          s.settimeout(2)
+          try:
+              s.connect(("203.0.113.7", 443))
+          except OSError as error:
+              print("connect failed as expected:", error)
           '
+          ./script/offline_sandbox net-canary-dns.log python3 -c '
+          import socket
+          s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          s.sendto(b"canary", ("127.0.0.1", 53))
+          print("sent a datagram to a DNS port")
+          '
+          for log in net-canary-connect.log net-canary-dns.log; do
+            if ./script/offline_audit --net-log "$log"; then
+              echo "::error::the recorded-connections check did not flag the canary in $log"
+              cat "$log"
+              exit 1
+            fi
+          done
+
+      # One test that boots the app and bootstraps bash, so a slow or broken sandbox shows up in
+      # minutes and not after the whole suite. No retries: it must pass the first time.
+      - name: Smoke test the sandbox
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        run: |
+          ./script/offline_sandbox net-smoke.log xvfb-run -a \
+            cargo nextest run --locked --workspace --offline --retries 0 \
+              -E "test(~test_bash_bootstraps_with_prompt_command_array)"
+
+      # Every test except the `integration` package, which boots the full app and gets its own step.
+      - name: Run the unit tests in a network sandbox
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        run: |
+          ./script/offline_sandbox net-unit.log xvfb-run -a \
+            cargo nextest run --locked --workspace --offline --no-fail-fast \
+              -E "not package(integration)"
+
+      # The `integration` package. One retry instead of the profile's two: a test that fails
+      # because of the sandbox fails every time, so more retries only burn the time budget.
+      - name: Run the integration tests in a network sandbox
+        if: ${{ !cancelled() }}
+        timeout-minutes: 45
+        run: |
+          ./script/offline_sandbox net-integration.log xvfb-run -a \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
+              -E "package(integration)"
 
       - name: Check the recorded connections
         if: ${{ !cancelled() }}
-        run: ./script/offline_audit --net-log net.log
+        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log
 
       # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
       # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in
       # the regular run because of its length.
       - name: Run an idle session in a network sandbox
         if: ${{ !cancelled() }}
+        timeout-minutes: 15
         run: |
-          unshare --user --map-root-user --net sh -c '
-            ip link set lo up
-            strace -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -o net-idle.log \
-              xvfb-run -a cargo nextest run --locked --workspace --offline --no-fail-fast \
-                --run-ignored only -E "test(~test_idle_session)"
-          '
+          ./script/offline_sandbox net-idle.log xvfb-run -a \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
+              --run-ignored only -E "test(~test_idle_session)"
 
       - name: Check the connections of the idle session
         if: ${{ !cancelled() }}
         run: ./script/offline_audit --net-log net-idle.log
+
+      # The logs show what was (not) contacted and are the evidence if a check fails.
+      - name: Upload the connection logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: net-logs
+          path: net-*.log
+          retention-days: 14
+          if-no-files-found: ignore

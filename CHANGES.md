@@ -149,6 +149,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Offline audit: narrow exceptions, git dependency sources and a self-test](#offline-audit-narrow-exceptions-git-dependency-sources-and-a-self-test) — the audit reads the sources of git dependencies, checks the completion generator classification, replaces directory-wide exceptions with per-line ones, pins the DXC binaries by hash, catches more ways to start a network tool and has a `--self-test` that runs in CI
 - [CI: main runs are not cancelled](#ci-main-runs-are-not-cancelled) — a push to `main` no longer cancels the run of the previous push; only pull request runs are cancelled by newer pushes
 - [Offline audit: independent of the dependency build state](#offline-audit-independent-of-the-dependency-build-state) — the audit skips `warp-workflows`' build-generated `src/generated_workflows/`, so it gives the same result on a fresh and on a cached cargo checkout; CI fetches dependencies first
+- [CI: the network-sandbox steps finish](#ci-the-network-sandbox-steps-finish) — `strace --seccomp-bpf` stops the sandboxed tests only at the traced calls (bash's shell bootstrap went from ~20 s to a fraction of that), the sandbox is a script with a canary that proves the connection check fails, and the steps are split with timeouts
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3662,3 +3663,25 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 **User-visible impact:** none.
 
 **Notes:** checked with a scratch `CARGO_HOME` after `cargo fetch` (unbuilt checkouts) against the built checkouts in `~/.cargo`: with an empty allowlist the `depsrc` findings are identical, and the audit and self-test pass in both. Nothing else in the entries depends on the build state.
+
+## CI: the network-sandbox steps finish
+**Why:** the `offline-audit` job never finished its sandbox (ENG-192, run 36738819928): the whole workspace suite ran under `strace -f` and hit the 120-minute timeout at 1683 of 5138 tests. The `integration` tests failed at "Wait for bootstrapping": of 246 started, 88 passed first try, about 69 passed on a retry and about 86 failed all three tries (22 to 32 s each), so retries used the budget.
+
+**Root cause:** `strace -f -e trace=...` without `--seccomp-bpf` makes every system call of every process a ptrace stop, even the ones it does not record. The integration tests start bash (the login shell of the sandbox's root user), and the app feeds it the bootstrap script (`bash_body.sh`, about 1600 lines) through the pty: readline reads it a byte at a time and the script forks many helpers. Under ptrace that took about 20 s (every bash test, passing or not, took 21 to 24 s; the `InitShell` hook arrived at once and `CommandFinished` of the bootstrap about 20 s later), longer than the test's bootstrap assertion. The tests that finished in 3 s were zsh-only tests that skip themselves under bash. The other candidates were ruled out with the log: the loopback interface was already brought up in the namespace, `hostname` and `whoami` in the bootstrap need no DNS. No integration test had run on Linux CI before (the `Unit tests` job excludes the package), so the slow path was never seen without `strace`.
+
+**Added:**
+- `script/offline_sandbox LOG COMMAND...`: the sandbox in one place. `unshare --user --map-root-user --net`, loopback up, then `strace --seccomp-bpf -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -o LOG`. `--seccomp-bpf` stops the command only at those four calls, so the recorded calls are the same and the rest runs at normal speed.
+- `script/offline_audit --self-test`: 10 cases for the strace log check (loopback IPv4, IPv6 and Unix sockets pass; an outside IPv4, IPv6 and IPv4-mapped address, DNS to a loopback stub, `sendto` and `sendmsg` to an outside address fail), 54 cases in all.
+
+**Modified:**
+- `.github/workflows/ci.yml`, job `offline-audit`:
+  - New step "Check the sandbox catches a connection": in the real sandbox, a Python process connects to an outside address and sends a datagram to port 53; `offline_audit --net-log` must fail on both logs, or the step fails. It guards the whole chain (namespace, `strace`, log format, parser) against silently recording nothing.
+  - New step "Smoke test the sandbox": one bash bootstrap integration test, no retries, 10-minute limit, so a slow or broken sandbox fails in minutes.
+  - The single "Run the tests in a network sandbox" step is two: unit tests (`not package(integration)`, 30-minute limit) and integration tests (`--retries 1` instead of the ci profile's 2, 45-minute limit). The idle session has `--retries 0` and a 15-minute limit; the job limit is 90 minutes.
+  - "Check the recorded connections" reads the logs of the smoke, unit and integration steps (`--net-log` takes several files). What it asserts is unchanged: any connect or send to a non-loopback address or port 53 fails.
+  - The logs (`net-*.log`) are uploaded as the `net-logs` artifact (14 days), also when a step fails.
+- `script/offline_audit`: `--net-log` takes one or more files.
+
+**User-visible impact:** none.
+
+**Notes:** this could not be reproduced locally (no Linux or container runtime on the development machine); the diagnosis comes from the timing pattern in the run 36738819928 log, and the smoke step is the first check of the fix in CI. If bash still bootstraps slowly without the ptrace stops, the fallback is `WARP_SHELL_PATH` set to zsh for the integration step, as the `Unit tests` job does, plus a separate bash subset.

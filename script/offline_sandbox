@@ -1,0 +1,29 @@
+#!/bin/sh
+# Runs a command in a network sandbox and records every connect and send it makes.
+#
+#   script/offline_sandbox LOG COMMAND [ARG...]
+#
+# The command runs in a fresh user and network namespace whose only interface is the loopback one,
+# so a non-loopback connection fails. `strace` writes each connect, sendto, sendmsg and sendmmsg of
+# the command and its children to LOG; `script/offline_audit --net-log LOG` turns that log into a
+# pass or fail. Needs Linux, `unshare` and `ip` (iproute2) and `strace`. Used by the
+# `offline-audit` job in .github/workflows/ci.yml.
+#
+# `--seccomp-bpf` makes `strace` stop the command only at the four traced calls. Without it, every
+# system call of every process is a ptrace stop. That made the shell bootstrap of the integration
+# tests (bash reads a long script one byte at a time from the pty) take 20 s instead of under 1 s.
+set -eu
+
+if [ "$#" -lt 2 ]; then
+  echo "usage: $0 LOG COMMAND [ARG...]" >&2
+  exit 2
+fi
+
+# shellcheck disable=SC2016 # The inner script is meant to expand its own variables.
+exec unshare --user --map-root-user --net sh -c '
+  set -eu
+  log=$1
+  shift
+  ip link set lo up
+  exec strace --seccomp-bpf -f -qq -e trace=connect,sendto,sendmsg,sendmmsg -o "$log" "$@"
+' offline_sandbox "$@"

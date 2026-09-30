@@ -12,10 +12,11 @@ Modes:
 
   script/offline_audit            Strict: exit 1 if any check has findings.
   script/offline_audit --report   List every finding and exit 0.
-  script/offline_audit --net-log net.log
-                                  Check a strace log of a sandboxed run (see the `offline-audit`
-                                  job in .github/workflows/ci.yml): fail on any connect or send to
-                                  a non-loopback address or to port 53.
+  script/offline_audit --net-log net.log [more.log ...]
+                                  Check the strace logs of sandboxed runs (made by
+                                  script/offline_sandbox, see the `offline-audit` job in
+                                  .github/workflows/ci.yml): fail on any connect or send to a
+                                  non-loopback address or to port 53.
   script/offline_audit --self-test
                                   Run the checks against small fixture trees: each prohibited
                                   construct must produce a finding and each reviewed one must pass.
@@ -867,6 +868,27 @@ def self_test_cases():
     ]
 
 
+def self_test_net_log_cases():
+    """(name, strace log text, expectation): what `check_net_log` must flag or accept."""
+    v4 = '1234 connect(%d, {sa_family=AF_INET, sin_port=htons(%d), sin_addr=inet_addr("%s")}, 16) = %s\n'
+    v6 = ('1234 connect(%d, {sa_family=AF_INET6, sin6_port=htons(%d), sin6_flowinfo=htonl(0), '
+          'inet_pton(AF_INET6, "%s", &sin6_addr), sin6_scope_id=0}, 28) = %s\n')
+    return [
+        ("net log: empty", "", "pass"),
+        ("net log: loopback connect", v4 % (3, 8080, "127.0.0.1", "0"), "pass"),
+        ("net log: loopback IPv6 connect", v6 % (3, 8080, "::1", "0"), "pass"),
+        ("net log: local socket", '1234 connect(3, {sa_family=AF_UNIX, sun_path="/run/x"}, 110) = 0\n', "pass"),
+        ("net log: outside connect", v4 % (3, 443, "203.0.113.7", "-1 ENETUNREACH (Network is unreachable)"), "fail"),
+        ("net log: outside IPv6 connect", v6 % (3, 443, "2001:db8::1", "-1 ENETUNREACH (Network is unreachable)"), "fail"),
+        ("net log: IPv4-mapped outside address", v6 % (3, 443, "::ffff:203.0.113.7", "-1 ENETUNREACH"), "fail"),
+        ("net log: DNS to the loopback stub", v4 % (3, 53, "127.0.0.53", "0"), "fail"),
+        ("net log: sendto outside", '1234 sendto(3, "x", 1, MSG_NOSIGNAL, {sa_family=AF_INET, sin_port=htons(9), '
+         'sin_addr=inet_addr("198.51.100.2")}, 16) = -1 ENETUNREACH\n', "fail"),
+        ("net log: sendmsg to outside", '1234 sendmsg(3, {msg_name={sa_family=AF_INET, sin_port=htons(9), '
+         'sin_addr=inet_addr("198.51.100.2")}, msg_namelen=16}, 0) = -1 ENETUNREACH\n', "fail"),
+    ]
+
+
 def self_test_dependency_cases(base):
     """Fixture git dependencies: (name, directory files, policy files, expectation)."""
     generators = "command-signatures/src/generators"
@@ -930,6 +952,13 @@ def run_self_test(allowlist_path):
                 findings = check_hosts(allow).findings + check_network(allow).findings
                 report(name, expectation, findings)
 
+        for name, log, expectation in self_test_net_log_cases():
+            with tempfile.TemporaryDirectory() as tree:
+                path = os.path.join(tree, "net.log")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(log)
+                report(name, expectation, check_net_log(path).findings)
+
         for name, package, files, policy, expectation in self_test_dependency_cases(None):
             with tempfile.TemporaryDirectory() as tree:
                 ROOT = tree
@@ -968,7 +997,7 @@ def main():
     parser.add_argument("--only", help="comma-separated groups to run: " + ", ".join(GROUPS))
     parser.add_argument("--include-comments", action="store_true", help="count comment lines in the network check")
     parser.add_argument("--skip-deny", action="store_true", help="do not run cargo deny")
-    parser.add_argument("--net-log", metavar="FILE", help="check an strace log instead of the tree")
+    parser.add_argument("--net-log", metavar="FILE", nargs="+", help="check strace logs instead of the tree")
     parser.add_argument("--self-test", action="store_true", help="run the checks against fixture trees")
     parser.add_argument("--allowlist", default=DEFAULT_ALLOWLIST, help="allowlist file")
     args = parser.parse_args()
@@ -979,9 +1008,10 @@ def main():
         return run_self_test(args.allowlist)
 
     if args.net_log:
-        result = check_net_log(args.net_log)
-        print_result(result, args.summary)
-        return 0 if args.report or not result.findings else 1
+        results = [check_net_log(path) for path in args.net_log]
+        for result in results:
+            print_result(result, args.summary)
+        return 0 if args.report or not any(result.findings for result in results) else 1
 
     if shutil.which("rg") is None:
         print("error: ripgrep (rg) is required", file=sys.stderr)
