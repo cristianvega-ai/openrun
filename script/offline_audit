@@ -16,15 +16,25 @@ Modes:
                                   Check a strace log of a sandboxed run (see the `offline-audit`
                                   job in .github/workflows/ci.yml): fail on any connect or send to
                                   a non-loopback address or to port 53.
+  script/offline_audit --self-test
+                                  Run the checks against small fixture trees: each prohibited
+                                  construct must produce a finding and each reviewed one must pass.
+                                  Guards the checks themselves against going blind.
 
 Allowed exceptions live in script/offline_audit.allowlist, one reasoned entry per line. An entry
 that matches nothing fails the audit, so the list shrinks with the code it covers. Requires
 python3 (3.9 or newer), ripgrep, and for the deps group cargo and cargo-deny.
+
+The network group also reads the source of every git dependency (found with `cargo metadata`):
+the completion generators of `warp-command-signatures` are shell commands the app runs, so their
+sources are checked like our own, and each generator must be classified in
+crates/warp_completer/src/signatures/legacy/generator_policy/.
 """
 
 import argparse
 import collections
 import fnmatch
+import hashlib
 import ipaddress
 import json
 import os
@@ -72,19 +82,64 @@ NETWORK_RUST_PATTERNS = [
     r"axum", r"opentelemetry_otlp",
 ]
 
+# Subprocesses that can reach a network. Every hit needs an allowlist entry for its file (check id
+# `net-cmd`): `git` and `gh` run against the user's own remotes and repositories, only while a pull
+# request chip (in no default layout) or the code-review panel is showing, or on an explicit user
+# action (push, create a pull request); `ssh` is the user's own SSH session.
 COMMAND_PATTERN = (
-    r'Command::new\("(curl|wget|git|gh|npm|npx|pip3?|go|brew|apt(-get)?|yum|dnf|pacman)"'
+    r'Command::new\("(curl|wget|git|gh|npm|npx|pip3?|go|brew|apt(-get)?|yum|dnf|pacman'
+    r'|ssh|scp|sftp|nc|ncat|netcat|telnet|ftp|rsync|socat)"'
 )
-# `git` and `gh` subprocesses run against the user's own remotes and repositories, only while a
-# pull request chip (in no default layout) or the code-review panel is showing, or on an explicit user action (push, create a pull request).
-ALLOWED_COMMANDS = {"git", "gh"}
+
+# A network tool at the start of a string literal or after a shell separator, such as the
+# argument of `sh -c`. Test files are skipped: their fixtures name plenty of commands.
+NET_STRING_PATTERN = (
+    r'"(?:[^"\\]*[;&|(]\s*)?(?:command\s+)?(?:curl|wget|nc|ncat|netcat|telnet|rsync|scp|sftp|ssh|socat'
+    r'|npx -y|gh api)[\s{]'
+)
 
 # Remote git operations. Only `push` is allowed, in `app/src/util/git.rs` (an explicit user action);
-# `fetch`, `pull`, `clone` and `ls-remote` must not be started by the app at all.
-GIT_REMOTE_PATTERN = r'\["(fetch|pull|clone|ls-remote|push|remote)"[,\]]'
+# `fetch`, `pull`, `clone` and `ls-remote` must not be started by the app at all. Matches the verb
+# as an element of an argument array and as a `.arg("verb")` call.
+GIT_REMOTE_PATTERN = r'(?:\[|\.arg\()\s*"(fetch|pull|clone|ls-remote|push|remote)"\s*[,\])]'
 
-SCRIPT_PATTERNS = [r"curl ", r"wget ", r"Invoke-WebRequest"]
+# The `gh` subcommands the app may run (`gh repo view`, `gh pr view`, `gh pr create`). In a file that
+# starts `gh`, an argument array that begins with a `gh` command must be one of these.
+GH_COMMANDS = {
+    "api", "auth", "repo", "pr", "issue", "run", "workflow", "release", "gist", "secret",
+    "ssh-key", "extension", "codespace", "search", "browse", "label", "cache", "ruleset",
+    "variable", "org", "alias", "config", "project", "attestation",
+}
+ALLOWED_GH_VERBS = {("repo", "view"), ("pr", "view"), ("pr", "create")}
+
+# Sockets bound to every interface. Never allowed without a reasoned exception (check id `net-bind`).
+UNSPECIFIED_ADDR_PATTERNS = [
+    r"0\.0\.0\.0", r"UNSPECIFIED", r"\[0, ?0, ?0, ?0\]", r"Ipv4Addr::new\(0, ?0, ?0, ?0\)",
+    r'"::"', r"\[::\]",
+]
+# Every TCP/UDP bind must name a loopback address within this many characters.
+BIND_PATTERN = r"(?:TcpListener|UdpSocket)::bind\("
+LOOPBACK_MARKERS = ("127.0.0.1", "127, 0, 0, 1", "LOCALHOST", "localhost", "::1")
+BIND_WINDOW = 240
+
+# Crates that may fetch or serve: a URL literal in their non-test sources needs a `net-url` entry.
+NET_URL_SCOPE = [
+    "crates/http_client", "crates/node_runtime", "crates/lsp", "crates/local_control",
+    "app/src/local_control",
+]
+
+SCRIPT_PATTERNS = [
+    r"curl ", r"wget ", r"Invoke-WebRequest", r"Invoke-RestMethod", r"\biwr ", r"\bnc ", r"\bncat ",
+    r"\bsocat ", r"urllib", r"urlopen", r"/dev/tcp/", r"Net::HTTP",
+]
 SCRIPT_DIRS = ["app/assets", "resources", "script", "docker"]
+
+# Network-capable text in git dependencies. URLs are not searched there (doc comments are full of
+# them) except inside the completion generators, whose strings are commands.
+DEP_CODE_PATTERNS = NETWORK_RUST_PATTERNS + [COMMAND_PATTERN, NET_STRING_PATTERN]
+DEP_GENERATOR_URL_PATTERN = r"https?://[A-Za-z0-9]"
+GENERATOR_DEP = "warp-command-signatures"
+GENERATOR_POLICY_DIR = "crates/warp_completer/src/signatures/legacy/generator_policy"
 
 LINK_PATTERNS = [r"open_url\(", r"hyperlink\(", r"with_href\(", r"OpenLink"]
 
@@ -118,30 +173,42 @@ class Result(object):
         self.skipped = None
 
     def add(self, path, line, text):
-        self.findings.append(Finding(path, line, text))
+        if path is None or not any(f.path == path and f.line == line for f in self.findings):
+            self.findings.append(Finding(path, line, text))
 
 
 class Allowlist(object):
     """Entries are `check | path glob | line regex or * | reason`, `#` starts a comment.
 
-    Fields are separated by a pipe with spaces around it, so a regex must not contain ` | `."""
+    Fields are separated by a pipe with spaces around it, so a regex must not contain ` | `.
 
-    def __init__(self, path):
+    `binary-pin` entries pin a binary file: the glob is its exact path and the regex field is the
+    lowercase SHA-256 of its content. Pinned files are not searched; the hash is verified instead."""
+
+    def __init__(self, path=None, lines=None):
         self.entries = []
         self.used = set()
-        if not os.path.exists(path):
-            return
-        with open(path, encoding="utf-8") as f:
-            for number, raw in enumerate(f, 1):
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                parts = [p.strip() for p in re.split(r"\s+\|\s+", line, maxsplit=3)]
-                if len(parts) != 4 or not parts[3]:
-                    sys.exit("%s:%d: expected `check | path glob | regex or * | reason`" % (path, number))
-                check, glob, regex, _reason = parts
-                compiled = None if regex == "*" else re.compile(regex, re.IGNORECASE)
-                self.entries.append((check, glob, compiled, number))
+        source = "allowlist"
+        if lines is None:
+            source = path
+            if not path or not os.path.exists(path):
+                return
+            with open(path, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        for number, raw in enumerate(lines, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in re.split(r"\s+\|\s+", line, maxsplit=3)]
+            if len(parts) != 4 or not parts[3]:
+                sys.exit("%s:%d: expected `check | path glob | regex or * | reason`" % (source, number))
+            check, glob, regex, _reason = parts
+            if check == "binary-pin" and (
+                "*" in glob or not re.fullmatch(r"[0-9a-f]{64}", regex)
+            ):
+                sys.exit("%s:%d: binary-pin needs an exact path and a lowercase sha256" % (source, number))
+            compiled = None if regex == "*" else re.compile(regex, re.IGNORECASE)
+            self.entries.append((check, glob, compiled, number))
 
     def allows(self, check, path, text):
         for index, (entry_check, glob, regex, _number) in enumerate(self.entries):
@@ -155,6 +222,14 @@ class Allowlist(object):
             return True
         return False
 
+    def pins(self):
+        """Returns [(index, path, sha256)] of the `binary-pin` entries."""
+        return [
+            (index, glob, regex.pattern)
+            for index, (check, glob, regex, _number) in enumerate(self.entries)
+            if check == "binary-pin"
+        ]
+
     def unused(self):
         return [
             (check, glob, number)
@@ -163,9 +238,9 @@ class Allowlist(object):
         ]
 
 
-def run(cmd, cwd=ROOT, check=False):
+def run(cmd, cwd=None, check=False):
     env = dict(os.environ)
-    proc = subprocess.run(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.run(cmd, cwd=cwd or ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if check and proc.returncode != 0:
         raise RuntimeError("%s failed:\n%s" % (" ".join(cmd), proc.stderr.decode("utf-8", "replace")))
     return proc
@@ -225,12 +300,26 @@ def area(path):
 
 def check_hosts(allow):
     result = Result("hosts", "Warp-owned hosts and services (9.1)")
-    args = ["-i", "-a", "--hidden", "-g", "!.git", "-g", "!target"] + pattern_args(HOST_PATTERNS)
+    pinned = allow.pins()
+    args = ["-i", "-a", "--hidden", "-g", "!.git", "-g", "!target"]
+    for _index, path, _digest in pinned:
+        args += ["-g", "!" + path]
+    args += pattern_args(HOST_PATTERNS)
     regex = re.compile("|".join(HOST_PATTERNS), re.IGNORECASE)
     for path, line, text in rg_lines(args):
         if allow.allows("hosts", path, text):
             continue
         result.add(path, line, clip(text, regex))
+    for index, path, digest in pinned:
+        full = os.path.join(ROOT, path)
+        if not os.path.isfile(full):
+            result.add(path, None, "pinned binary is missing")
+            continue
+        with open(full, "rb") as f:
+            actual = hashlib.sha256(f.read()).hexdigest()
+        allow.used.add(index)
+        if actual != digest:
+            result.add(path, None, "pinned binary changed: sha256 %s, pinned %s" % (actual, digest))
     return result
 
 
@@ -257,6 +346,18 @@ def is_comment(text):
     return text.lstrip().startswith("//") and not INCLUDE_COMMENTS
 
 
+def is_test_path(path):
+    name = os.path.basename(path)
+    return (
+        name.endswith("_tests.rs") or name in ("test.rs", "tests.rs")
+        or "/tests/" in path or "/testing/" in path
+    )
+
+
+NON_TEST_GLOBS = ["-g", "!*_tests.rs", "-g", "!**/tests/**", "-g", "!**/testing/**",
+                  "-g", "!**/test.rs", "-g", "!**/tests.rs"]
+
+
 def check_network(allow):
     result = Result("network", "Network-capable code (9.2)")
     args = ["-t", "rust", "-g", "!target"]
@@ -272,23 +373,31 @@ def check_network(allow):
     for path, line, text in rg_lines(args + ["-e", COMMAND_PATTERN]):
         if is_comment(text):
             continue
-        match = command_regex.search(text)
-        if match and match.group(1) in ALLOWED_COMMANDS:
-            allowed_commands[match.group(1)] += 1
-            continue
-        if not allow.allows("net-cmd", path, text):
+        if allow.allows("net-cmd", path, text):
+            allowed_commands[command_regex.search(text).group(1)] += 1
+        else:
             result.add(path, line, clip(text))
     if allowed_commands:
         result.notes.append(
-            "allowed subprocesses (only while their UI is in use, or on user action): "
+            "reviewed subprocesses (only while their UI is in use, or on user action): "
             + ", ".join("%s x%d" % item for item in sorted(allowed_commands.items()))
         )
+
+    for path, line, text in rg_lines(args + NON_TEST_GLOBS + ["-e", NET_STRING_PATTERN]):
+        if is_comment(text):
+            continue
+        if not allow.allows("net-string", path, text):
+            result.add(path, line, clip(text))
 
     for path, line, text in rg_lines(args + ["-e", GIT_REMOTE_PATTERN]):
         if is_comment(text):
             continue
         if not allow.allows("net-git", path, text):
             result.add(path, line, clip(text))
+
+    check_gh_verbs(result)
+    check_binds(allow, result)
+    check_net_urls(allow, result)
 
     script_paths = [d for d in SCRIPT_DIRS if os.path.exists(os.path.join(ROOT, d))]
     if script_paths:
@@ -298,6 +407,166 @@ def check_network(allow):
             if not allow.allows("net-script", path, text):
                 result.add(path, line, clip(text))
     return result
+
+
+def rust_files_containing(pattern):
+    proc = run(["rg", "--files-with-matches", "--no-messages", "--no-ignore-global", "--no-ignore-parent",
+                "-t", "rust", "-g", "!target", "-e", pattern, "--", "."])
+    return sorted(p[2:] if p.startswith("./") else p for p in proc.stdout.decode("utf-8", "replace").split())
+
+
+def check_gh_verbs(result):
+    """In a file that starts `gh`, every argument array that begins with a `gh` command must be one of
+    ALLOWED_GH_VERBS, so `gh api` and friends cannot appear next to the reviewed calls."""
+    array = re.compile(r'\[\s*"([a-z][a-z-]*)"\s*(?:,\s*"([a-z][a-z-]*)")?')
+    for path in rust_files_containing(r'Command::new\("gh"\)'):
+        with open(os.path.join(ROOT, path), encoding="utf-8", errors="replace") as f:
+            for number, text in enumerate(f, 1):
+                for match in array.finditer(text):
+                    command, sub = match.group(1), match.group(2)
+                    if command in GH_COMMANDS and (command, sub) not in ALLOWED_GH_VERBS:
+                        result.add(path, number, "gh %s %s is not one of the reviewed gh commands" % (command, sub or ""))
+
+
+def check_binds(allow, result):
+    """Sockets: no bind to every interface, and every TCP/UDP bind names a loopback address."""
+    unspecified = re.compile("|".join(UNSPECIFIED_ADDR_PATTERNS))
+    for path, line, text in rg_lines(["-t", "rust", "-g", "!target"] + pattern_args(UNSPECIFIED_ADDR_PATTERNS)):
+        if is_comment(text):
+            continue
+        if unspecified.search(text) and not allow.allows("net-bind", path, text):
+            result.add(path, line, clip(text) + "  [address of every interface]")
+    bind = re.compile(BIND_PATTERN)
+    for path in rust_files_containing(BIND_PATTERN):
+        if is_test_path(path):
+            continue
+        with open(os.path.join(ROOT, path), encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        for match in bind.finditer(content):
+            line = content.count("\n", 0, match.start()) + 1
+            text = content.splitlines()[line - 1]
+            window = content[match.start():match.start() + BIND_WINDOW]
+            if any(marker in window for marker in LOOPBACK_MARKERS):
+                continue
+            if not allow.allows("net-bind", path, text):
+                result.add(path, line, clip(text) + "  [bind without a loopback address]")
+
+
+def check_net_urls(allow, result):
+    """URL literals in the crates that may fetch or serve name the destinations we talk to."""
+    scope = [d for d in NET_URL_SCOPE if os.path.exists(os.path.join(ROOT, d))]
+    if not scope:
+        return
+    for path, line, text in rg_lines(["-t", "rust", "-g", "!target"] + NON_TEST_GLOBS + ["-e", URL_LITERAL], scope):
+        if is_comment(text) or text.lstrip().startswith(("///", "//!", "*")):
+            continue
+        if not allow.allows("net-url", path, text):
+            result.add(path, line, clip(text))
+
+
+# --- git dependencies -----------------------------------------------------------------------
+
+
+def cargo_metadata():
+    for extra in (["--offline"], []):
+        proc = run(["cargo", "metadata", "--format-version", "1", "--locked", "--all-features"] + extra)
+        if proc.returncode == 0:
+            return json.loads(proc.stdout)
+    raise RuntimeError("cargo metadata failed:\n" + proc.stderr.decode("utf-8", "replace"))
+
+
+def git_dependency_dirs(meta):
+    """Returns [(package name, source directory)] for every package that comes from a git source."""
+    found = collections.OrderedDict()
+    for package in sorted(meta["packages"], key=lambda p: p["name"]):
+        if (package.get("source") or "").startswith("git+"):
+            found.setdefault(os.path.dirname(package["manifest_path"]), package["name"])
+    return [(name, directory) for directory, name in found.items()]
+
+
+def parse_policy_pairs(path):
+    """Returns the set of (spec, generator) string pairs listed in a generator_policy source file."""
+    with open(path, encoding="utf-8") as f:
+        return set(re.findall(r'^\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"', f.read(), re.M))
+
+
+def generator_names_in_source(directory):
+    """Returns {generator name: (path, line)} for every `.add_generator(NAME, ...)` in a generators dir.
+    Names given as a `const NAME: &str` of the same file are resolved."""
+    names = {}
+    unresolved = []
+    for path in sorted(glob_rs(directory)):
+        with open(path, encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        consts = dict(re.findall(r'const (\w+): &str = "([^"]+)"', content))
+        for match in re.finditer(r'\.add_generator\(\s*(?:GeneratorName::new\(\s*)?("([^"]+)"|(\w+))', content):
+            line = content.count("\n", 0, match.start()) + 1
+            name = match.group(2) or consts.get(match.group(3))
+            if name is None:
+                unresolved.append((path, line, match.group(3)))
+            else:
+                names.setdefault(name, (path, line))
+    return names, unresolved
+
+
+def glob_rs(directory):
+    for base, _dirs, files in os.walk(directory):
+        for name in files:
+            if name.endswith(".rs") and not name.endswith("_tests.rs"):
+                yield os.path.join(base, name)
+
+
+def check_dependency_sources(allow, dependencies=None, policy_dir=None):
+    """Network-capable text in git dependencies, and the classification of completion generators."""
+    result = Result("depsrc", "Git dependency sources (9.2)")
+    if dependencies is None:
+        dependencies = git_dependency_dirs(cargo_metadata())
+    code_args = ["-t", "rust", "--no-messages"] + NON_TEST_GLOBS + [
+        "-g", "!**/examples/**", "-g", "!**/benches/**",
+    ] + pattern_args(DEP_CODE_PATTERNS)
+    for name, directory in dependencies:
+        for path, line, text in rg_lines(code_args, [directory]):
+            if is_comment(text):
+                continue
+            relative = "git-dep:%s/%s" % (name, os.path.relpath(path, directory)) if os.path.isabs(path) else path
+            if not allow.allows("net-dep", relative, text):
+                result.add(relative, line, clip(text))
+        if name == GENERATOR_DEP:
+            generators = os.path.join(directory, "command-signatures", "src", "generators")
+            if not os.path.isdir(generators):
+                generators = os.path.join(directory, "src", "generators")
+            check_generator_sources(
+                allow, result, name, directory, generators, policy_dir or os.path.join(ROOT, GENERATOR_POLICY_DIR)
+            )
+    return result
+
+
+def check_generator_sources(allow, result, name, directory, generators, policy_dir):
+    if not os.path.isdir(generators):
+        result.add(None, None, "%s: no generators directory at %s" % (name, generators))
+        return
+    for path, line, text in rg_lines(["-t", "rust", "--no-messages"] + NON_TEST_GLOBS + ["-e", DEP_GENERATOR_URL_PATTERN], [generators]):
+        if is_comment(text):
+            continue
+        relative = "git-dep:%s/%s" % (name, os.path.relpath(path, directory))
+        if not allow.allows("net-dep", relative, text):
+            result.add(relative, line, clip(text))
+    classified = set()
+    for filename in ("allowed.rs", "denied.rs"):
+        listed = os.path.join(policy_dir, filename)
+        if not os.path.exists(listed):
+            result.add(None, None, "generator policy list %s is missing" % listed)
+            return
+        classified |= {generator for _spec, generator in parse_policy_pairs(listed)}
+    names, unresolved = generator_names_in_source(generators)
+    for path, line, argument in unresolved:
+        result.add(os.path.relpath(path, generators), line, "generator name `%s` cannot be resolved statically" % argument)
+    for generator, (path, line) in sorted(names.items()):
+        if generator not in classified:
+            result.add(
+                "git-dep:%s/%s" % (name, os.path.basename(path)), line,
+                "generator `%s` is in neither allowed.rs nor denied.rs (%s)" % (generator, GENERATOR_POLICY_DIR),
+            )
 
 
 def check_links(_allow):
@@ -456,7 +725,7 @@ def check_net_log(path):
 
 GROUPS = collections.OrderedDict([
     ("hosts", [check_hosts, check_review]),
-    ("network", [check_network, check_links, check_url_hosts]),
+    ("network", [check_network, check_dependency_sources, check_links, check_url_hosts]),
     ("deps", [check_deps, check_deny]),
 ])
 
@@ -482,7 +751,10 @@ def print_result(result, summary):
         print("   %s (%d)" % (path, len(findings)))
         if not summary:
             for finding in findings:
-                print("      %d: %s" % (finding.line, finding.text))
+                if finding.line is None:
+                    print("      %s" % finding.text)
+                else:
+                    print("      %d: %s" % (finding.line, finding.text))
     print()
 
 
@@ -500,6 +772,183 @@ def print_areas(results):
     print()
 
 
+# --- self-test ---------------------------------------------------------------------------
+
+
+def self_test_cases():
+    """(name, files, expectation) with expectation "fail" (a finding is required) or "pass"."""
+    ok_git_rs = (
+        'let a = Command::new("git");\n'
+        'let b = Command::new("gh");\n'
+        'run_gh_command(p, &["repo", "view", "--json", "name"], None);\n'
+        'run_gh_command(p, &["pr", "view", "--json", "number"], None);\n'
+        'let args = ["pr", "create", "--base", base, "--fill"];\n'
+        'run_git_command(p, &["push", "origin"]);\n'
+    )
+    return [
+        ("empty tree", {}, "pass"),
+        # Prohibited constructs.
+        ("curl subprocess", {"app/src/val.rs": 'Command::new("curl").arg("https://example.invalid");\n'}, "fail"),
+        ("reqwest in an ordinary crate", {"crates/warp_util/src/val.rs": "reqwest::Client::new();\n"}, "fail"),
+        ("reqwest GET in another http_client file",
+         {"crates/http_client/src/val.rs": 'reqwest::Client::new().get("https://example.invalid");\n'}, "fail"),
+        ("reqwest GET on an unreviewed line of http_client/lib.rs",
+         {"crates/http_client/src/lib.rs": 'reqwest::Client::new().get("https://example.invalid");\n'}, "fail"),
+        ("reqwest GET in node_runtime",
+         {"crates/node_runtime/src/val.rs": 'reqwest::Client::new().get("https://example.invalid");\n'}, "fail"),
+        ("URL literal in node_runtime", {"crates/node_runtime/src/lib.rs": 'let u = "https://example.invalid/x";\n'}, "fail"),
+        ("URL literal in the lsp crate", {"crates/lsp/src/val.rs": 'let u = "https://example.invalid/x";\n'}, "fail"),
+        ("0.0.0.0 listener in local_control crate",
+         {"crates/local_control/src/val.rs": 'let _ = std::net::TcpListener::bind("0.0.0.0:7788");\n'}, "fail"),
+        ("0.0.0.0 listener in app local_control",
+         {"app/src/local_control/val.rs": 'let _ = tokio::net::TcpListener::bind("0.0.0.0:7788");\n'}, "fail"),
+        ("unspecified address on a reviewed listener line",
+         {"app/src/local_control/mod.rs":
+          "let l = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 0)));\n"}, "fail"),
+        ("bind to a configured address", {"app/src/val.rs": "std::net::TcpListener::bind(addr_from_config());\n"}, "fail"),
+        ("gh api in an unrelated file", {"app/src/val.rs": 'Command::new("gh").args(["api", "user"]);\n'}, "fail"),
+        ("gh api next to the reviewed gh calls",
+         {"app/src/util/git.rs": ok_git_rs + 'run_gh_command(p, &["api", "user"], None);\n'}, "fail"),
+        ("gh auth token in the reviewed file",
+         {"app/src/util/git.rs": ok_git_rs + 'let a = ["auth", "token"];\n'}, "fail"),
+        ("git .arg(\"fetch\") in an unrelated file",
+         {"app/src/val.rs": 'Command::new("git").arg("fetch").arg("origin");\n'}, "fail"),
+        ("git .arg(\"fetch\") in the reviewed git file",
+         {"app/src/util/git.rs": ok_git_rs + 'Command::new("git").arg("fetch");\n'}, "fail"),
+        ("git args([\"fetch\"]) in the reviewed git file",
+         {"crates/warp_util/src/git.rs": 'Command::new("git");\nrun_git_command(p, &["fetch", "origin"]);\n'}, "fail"),
+        ("curl inside a Rust command string",
+         {"crates/vendored_sigs/src/gen.rs":
+          "CommandBuilder::single_command(\"curl -sf 'https://registry.npmjs.org/-/v1/search?text=x'\");\n"}, "fail"),
+        ("sh -c with curl", {"app/src/val.rs":
+                             'std::process::Command::new("sh").arg("-c").arg("curl -s https://example.invalid");\n'}, "fail"),
+        ("ssh subprocess in an unrelated file", {"app/src/val.rs": 'std::process::Command::new("ssh").arg("host");\n'}, "fail"),
+        ("nc subprocess", {"app/src/val.rs": 'std::process::Command::new("nc").arg("host");\n'}, "fail"),
+        ("sftp command string in an unrelated file", {"app/src/val.rs": 'let c = String::from("sftp ");\n'}, "fail"),
+        ("nc in an asset script", {"app/assets/val.sh": "nc example.invalid 80\n"}, "fail"),
+        ("python urllib in an asset script",
+         {"app/assets/val.sh": "python3 -c \"import urllib.request as u; u.urlopen('https://example.invalid')\"\n"}, "fail"),
+        ("curl in an asset script", {"app/assets/val.sh": "curl https://example.invalid\n"}, "fail"),
+        ("warp host in an ordinary file", {"app/assets/val.txt": "https://app.warp.dev/x\n"}, "fail"),
+        ("changed pinned binary",
+         {"app/assets/windows/x64/dxcompiler.dll": "sEntry https://app.warp.dev/x\n",
+          "app/assets/windows/arm64/dxcompiler.dll": "sEntry\n"}, "fail"),
+        # Reviewed constructs.
+        ("reviewed http_client lines",
+         {"crates/http_client/src/lib.rs":
+          "use reqwest::IntoUrl;\n    wrapped: reqwest::Client,\nlet mut builder = reqwest::Client::builder();\n"
+          "pub async fn send(self) -> reqwest::Result<Response> {\n"}, "pass"),
+        ("reviewed node_runtime lines",
+         {"crates/node_runtime/src/lib.rs":
+          "    client: http_client::Client,\n            client: http_client::Client::new(),\n"
+          'format!("https://nodejs.org/dist/{}/{}", version, file_name)\n'
+          'let url = format!("https://registry.npmjs.org/{}", package_name);\n'}, "pass"),
+        ("reviewed loopback listener",
+         {"app/src/local_control/mod.rs":
+          "use std::net::SocketAddr;\nuse axum::routing::post;\n"
+          "let l = tokio::net::TcpListener::bind(SocketAddr::from((\n    [127, 0, 0, 1],\n    0,\n)));\n"
+          "axum::serve(listener, router).await;\n"}, "pass"),
+        ("reviewed git and gh calls", {"app/src/util/git.rs": ok_git_rs}, "pass"),
+        ("reviewed run_git_command", {"crates/warp_util/src/git.rs":
+                                      'let mut cmd = Command::new("git");\nrun_git_command(p, &["status"]);\n'}, "pass"),
+        ("reviewed user ssh session",
+         {"app/src/terminal/model/session/command_executor/remote_command_executor.rs": 'None => Command::new("ssh"),\n',
+          "app/src/terminal/ssh/util.rs": 'let mut command = String::from("sftp ");\n'}, "pass"),
+        ("reviewed build bootstrap script", {"script/install_rust": "curl https://sh.rustup.rs | sh\n"}, "pass"),
+    ]
+
+
+def self_test_dependency_cases(base):
+    """Fixture git dependencies: (name, directory files, policy files, expectation)."""
+    generators = "command-signatures/src/generators"
+    classified = 'pub(super) const X: &[(&str, &str)] = &[\n    ("spec", "known"),\n];\n'
+    unclassified = 'pub(super) const X: &[(&str, &str)] = &[\n    ("spec", "other"),\n];\n'
+    add_known = 'CommandSignatureGenerators::new("spec").add_generator(\n    "known",\n    Generator::script(x, y),\n)\n'
+    return [
+        ("dependency with a curl command",
+         "fixture-dep", {"src/lib.rs": 'let c = "curl -s https://example.invalid";\n'}, None, "fail"),
+        ("dependency with a network crate", "fixture-dep", {"src/lib.rs": "use reqwest::Client;\n"}, None, "fail"),
+        ("dependency without network code", "fixture-dep", {"src/lib.rs": "pub fn add(a: u32) -> u32 { a }\n"}, None, "pass"),
+        ("generator that is not classified", GENERATOR_DEP,
+         {generators + "/spec.rs": add_known}, {"allowed.rs": unclassified, "denied.rs": "\n"}, "fail"),
+        ("classified generator", GENERATOR_DEP,
+         {generators + "/spec.rs": add_known}, {"allowed.rs": classified, "denied.rs": "\n"}, "pass"),
+        ("generator with a new URL", GENERATOR_DEP,
+         {generators + "/spec.rs": add_known + 'let u = "https://example.invalid/list";\n'},
+         {"allowed.rs": classified, "denied.rs": "\n"}, "fail"),
+    ]
+
+
+def write_files(root, files):
+    for relative, content in files.items():
+        path = os.path.join(root, relative)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+
+def run_self_test(allowlist_path):
+    """Runs the checks against fixture trees, with the real allowlist. Returns 1 if any case differs."""
+    import tempfile
+
+    global ROOT
+    real_root = ROOT
+    with open(allowlist_path, encoding="utf-8") as f:
+        real_lines = f.read().splitlines()
+    lines = [line for line in real_lines if not line.startswith("binary-pin ")]
+    failures = []
+    total = 0
+
+    def report(name, expectation, findings):
+        nonlocal total
+        total += 1
+        good = bool(findings) if expectation == "fail" else not findings
+        print("  %-4s %-58s %s" % ("ok" if good else "FAIL", name, "%d finding(s)" % len(findings)))
+        if not good:
+            failures.append(name)
+            for finding in findings[:5]:
+                print("         %s:%s %s" % (finding.path, finding.line, finding.text))
+
+    try:
+        for name, files, expectation in self_test_cases():
+            with tempfile.TemporaryDirectory() as tree:
+                ROOT = tree
+                write_files(tree, files)
+                pinned = name == "changed pinned binary"
+                allow = Allowlist(lines=real_lines if pinned else lines)
+                findings = check_hosts(allow).findings + check_network(allow).findings
+                report(name, expectation, findings)
+
+        for name, package, files, policy, expectation in self_test_dependency_cases(None):
+            with tempfile.TemporaryDirectory() as tree:
+                ROOT = tree
+                dependency = os.path.join(tree, "dep")
+                write_files(dependency, files)
+                policy_dir = os.path.join(tree, "policy")
+                write_files(policy_dir, policy or {})
+                allow = Allowlist(lines=lines)
+                report(name, expectation, check_dependency_sources(allow, [(package, dependency)], policy_dir).findings)
+
+        for name, content, expectation in [
+            ("pinned binary with the pinned hash", b"pinned content", "pass"),
+            ("pinned binary with other content", b"other content", "fail"),
+        ]:
+            with tempfile.TemporaryDirectory() as tree:
+                ROOT = tree
+                digest = hashlib.sha256(b"pinned content").hexdigest()
+                os.makedirs(os.path.join(tree, "bin"))
+                with open(os.path.join(tree, "bin", "tool.dll"), "wb") as f:
+                    f.write(content + b" https://app.warp.dev\n")
+                digest = hashlib.sha256(b"pinned content https://app.warp.dev\n").hexdigest()
+                allow = Allowlist(lines=["binary-pin | bin/tool.dll | %s | fixture" % digest])
+                report(name, expectation, check_hosts(allow).findings)
+    finally:
+        ROOT = real_root
+
+    print("%d self-test case(s), %d failed" % (total, len(failures)))
+    return 1 if failures else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--report", action="store_true", help="list findings and exit 0")
@@ -509,10 +958,14 @@ def main():
     parser.add_argument("--include-comments", action="store_true", help="count comment lines in the network check")
     parser.add_argument("--skip-deny", action="store_true", help="do not run cargo deny")
     parser.add_argument("--net-log", metavar="FILE", help="check an strace log instead of the tree")
+    parser.add_argument("--self-test", action="store_true", help="run the checks against fixture trees")
     parser.add_argument("--allowlist", default=DEFAULT_ALLOWLIST, help="allowlist file")
     args = parser.parse_args()
     global INCLUDE_COMMENTS
     INCLUDE_COMMENTS = args.include_comments
+
+    if args.self_test:
+        return run_self_test(args.allowlist)
 
     if args.net_log:
         result = check_net_log(args.net_log)

@@ -141,11 +141,17 @@ jobs:
         with:
           tool: nextest,cargo-deny
 
-      # Greps for Warp hosts and services, network-capable code outside its allowed consumers,
+      # Greps for Warp hosts and services, network-capable code outside its allowed consumers
+      # (including the sources of git dependencies and the completion generator classification),
       # banned crates and `cargo deny check bans licenses sources`. Exceptions are listed, with
       # reasons, in script/offline_audit.allowlist.
       - name: Static audit
         run: ./script/offline_audit --summary
+
+      # Runs the audit's checks against fixture trees: every prohibited construct must be found
+      # and every reviewed one accepted, so a loosened pattern or allowlist entry fails here.
+      - name: Audit self-test
+        run: ./script/offline_audit --self-test
 
       - name: Build the tests
         if: ${{ !cancelled() }}

@@ -164,7 +164,7 @@ for itself.
 - Follow the Implementation Validation Order before opening a PR or pushing a code update. Do not repeat validation when the candidate has not changed.
 - CI is the broad cross-platform and workspace gate. Push once the targeted tests and lint checks pass and the formatter has run; address a later CI failure as a new revision.
 - Do not create public pull requests or public issues that disclose a non-public security vulnerability. Refer users to `SECURITY.md` for the proper disclosure methods instead.
-- Run `script/offline_audit` when a change touches networking, dependencies or hosts; new findings are regressions.
+- Run `script/offline_audit` when a change touches networking, dependencies or hosts; new findings are regressions. Run `script/offline_audit --self-test` when you change the audit or its allowlist, and keep allowlist entries to one file and one reviewed construct.
  - When opening PRs, use the PR template at `.github/pull_request_template.md`
  - If the PR removes or changes a feature, add a section to `CHANGES.md` (template at its top) and a bullet to its Contents list.
 

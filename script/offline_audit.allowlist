@@ -2,10 +2,17 @@
 #
 #   check | path glob | line regex (or *) | reason
 #
-# `check` is a check id: hosts, net-rust, net-cmd, net-git or net-script. The glob matches the
-# repo-relative path (`*` also crosses `/`). The regex is matched case-insensitively against the
-# matching line. Every entry needs a reason. An entry that matches nothing is reported, so remove
-# entries when the code they cover is gone.
+# `check` is a check id: hosts, net-rust, net-cmd, net-string, net-git, net-bind, net-url,
+# net-script, net-dep or binary-pin. The glob matches the repo-relative path (`*` also crosses `/`);
+# for git dependencies the path is `git-dep:<package>/<path inside the package>`. The regex is
+# matched case-insensitively against the matching line. Every entry needs a reason. An entry that
+# matches nothing is reported, so remove entries when the code they cover is gone.
+#
+# Keep entries as narrow as the code they cover: one file and a regex for the reviewed construct,
+# never a whole directory with `*`. A `binary-pin` entry pins a binary file: the glob is its exact
+# path, the regex field its lowercase SHA-256, and the file is skipped by the hosts search while the
+# hash is verified. `script/offline_audit --self-test` checks that the narrow entries still reject
+# what they must.
 
 # --- hosts (9.1) ---
 hosts | CHANGES.md | * | describes the removals
@@ -19,7 +26,8 @@ hosts | crates/persistence/migrations/2022-07-29-164418_add_users/up.sql | fireb
 hosts | crates/persistence/migrations/2023-08-07-205653_add_user_profiles_table/up.sql | firebase | historical migration, untouched (MASTER decision 14); DB-1 drops the table it creates
 hosts | crates/persistence/migrations/2026-09-29-000000_drop_dead_tables/down.sql | firebase | DB-1 down migration: recreates the dropped legacy tables, including their firebase_uid columns, to restore the old schema on rollback
 hosts | crates/warpui_extras/src/secure_storage/linux.rs | releases\.warp\.dev/channel_versions\.json | secure-storage key material, not a network call; changing it would orphan stored secrets (MASTER decision 13)
-hosts | app/assets/windows/*/dxcompiler.dll | * | third-party DirectX compiler binary; `sEntry` matches `sentry` case-insensitively
+binary-pin | app/assets/windows/x64/dxcompiler.dll | 75c019e3541980eea8ae661d81998d06f99627e3004c800532475a1c3551c6fb | third-party DirectX compiler binary (x64); `sEntry` matches `sentry` case-insensitively, so the file is pinned by hash instead of searched
+binary-pin | app/assets/windows/arm64/dxcompiler.dll | e9803ca5a658fd87985d549bbaaeecd0feaed4c9b6490d688b0470ed3c7f9111 | third-party DirectX compiler binary (arm64); same reason
 hosts | crates/secret_redaction/src/lib.rs | firebase | the redaction regex for leaked Firebase auth domains is a secret pattern, not a network call
 hosts | crates/secret_redaction/src/lib.rs | platform\.openai\.com | doc comment naming where the format of an OpenAI API key is documented; the redaction patterns detect such keys, nothing fetches the page
 hosts | crates/secret_redaction/src/lib_tests.rs | firebase | tests of that redaction regex
@@ -37,15 +45,70 @@ hosts | script/windows/windows-installer.iss | Warp\.dev | registry base stays u
 hosts | crates/warpui_extras/src/user_preferences/registry_backed.rs | Warp\.dev | registry base stays unchanged (MASTER decision 17)
 
 # --- network-capable Rust (9.2) ---
-net-rust | crates/http_client/* | * | the shared HTTP client; its consumers are audited individually
-net-rust | crates/node_runtime/* | * | Node download for lsp only, through Downloader
-net-rust | crates/local_control/* | * | warpctrl over authenticated loopback HTTP
-net-rust | app/src/local_control/* | * | warpctrl over authenticated loopback HTTP
+net-rust | crates/http_client/src/lib.rs | ^\s*use reqwest::IntoUrl;$ | the shared HTTP client wraps reqwest; its only consumers are node_runtime and the language server installer (deny.toml wrappers)
+net-rust | crates/http_client/src/lib.rs | reqwest::(Client|ClientBuilder|RequestBuilder|Request|Response|Result|Error|Body|Url)\b(?!::) | the wrapper's own types; a call such as `reqwest::Client::new()` or `reqwest::get` does not match
+net-rust | crates/http_client/src/lib.rs | reqwest::Client::builder\(\) | the wrapper builds its client here
+net-rust | crates/node_runtime/src/lib.rs | ^\s*client: http_client::Client(::new\(\))?,$ | Node download for lsp only, through the http_client wrapper
+net-rust | crates/node_runtime/src/lib.rs | -> &http_client::Client \{ | accessor of that client
+net-rust | crates/local_control/src/client.rs | ^\s*use std::net::Shutdown;$ | the warpctrl client shuts down its loopback stream
+net-rust | crates/local_control/src/client.rs | reqwest::blocking::Client::new\(\) | the warpctrl client; discovery accepts only 127.0.0.1 endpoints (discovery.rs)
+net-rust | app/src/local_control/mod.rs | ^\s*use axum::(body::Bytes|extract::State|http::header::\{AUTHORIZATION, HOST, ORIGIN\}|http::\{HeaderMap, StatusCode\}|response::\{IntoResponse, Response\}|routing::post|\{Json, Router\});$ | axum types of the loopback warpctrl server
+net-rust | app/src/local_control/mod.rs | tokio::net::TcpListener::bind\(SocketAddr::from\(\( | the warpctrl listener; the bind check requires a 127.0.0.1 address next to it
+net-rust | app/src/local_control/mod.rs | axum::serve\(listener, router\) | serves the warpctrl router on that listener
+net-rust | app/src/local_control/mod.rs | tokio::net::Unix(Listener|Stream) | Unix-socket credential broker for warpctrl
+net-rust | app/src/local_control/mod_tests.rs | ^\s*use axum::(body::Bytes|extract::State|http::header::\{AUTHORIZATION, HOST, ORIGIN\}|http::\{HeaderMap, HeaderValue\}); | axum types in the warpctrl server tests
+net-rust | app/src/local_control/mod_tests.rs | tokio::net::UnixStream::pair\(\)|axum::http::StatusCode | in-process socket pair and status codes in the warpctrl server tests
 net-rust | crates/warp_completer/src/signatures/legacy/generator_policy/allowed.rs | "hyper" | the allowed `hyper list` completion generator (the Hyper terminal's plugin lister), not the hyper crate
 net-rust | * | ^\s*(pub )?use std::net::\{?((IpAddr|Ipv4Addr|Ipv6Addr|SocketAddr)(, )?)+\}?; | address types only, no sockets
 
+# --- subprocesses that can reach a network (9.2) ---
+net-cmd | app/src/util/git.rs | Command::new\("git"\) | local git for the code-review panel and the commit dialog (MASTER decision 20)
+net-cmd | app/src/util/git.rs | Command::new\("gh"\) | the only `gh` in the app: `gh repo view`, `gh pr view` and `gh pr create`, checked by the gh command check of the audit (MASTER decisions 20, 22)
+net-cmd | app/src/search/files/model.rs | Command::new\("git"\) | `git status --porcelain` for changed files
+net-cmd | crates/warp_util/src/git.rs | Command::new\("git"\) | `run_git_command`: local git; remote verbs are rejected by the net-git check
+net-cmd | app/src/util/git_tests.rs | Command::new\("git"\) | test repository setup
+net-cmd | crates/integration/src/test/code_review.rs | Command::new\("git"\) | integration test repository setup
+net-cmd | app/src/terminal/model/session/command_executor/remote_command_executor.rs | Command::new\("ssh"\) | the user's own SSH session (ControlMaster command executor)
+
+# --- command strings (9.2) ---
+net-string | app/src/terminal/ssh/util.rs | String::from\("sftp "\) | `sftp` command line of the user's own SSH session
+net-string | app/src/terminal/view/ssh_file_upload.rs | String::from\("sftp "\) | SSH drag-and-drop upload over the user's own SSH session
+net-string | app/src/settings_view/warpify_page.rs | "ssh subshell warpify session" | label text, not a command
+
 # --- remote git operations (9.2) ---
 net-git | app/src/util/git.rs | "push" | `git push` from the commit and push dialog, an explicit user action (MASTER decision 20)
+
+# --- URLs in the crates that fetch (9.2) ---
+net-url | crates/lsp/src/install.rs | const GITHUB_API_URL: &str = "https://api.github.com"; | release lookup of the opt-in language server downloads
+net-url | crates/node_runtime/src/lib.rs | format!\("https://nodejs.org/dist/ | Node.js download of the opt-in language server downloads
+net-url | crates/node_runtime/src/lib.rs | format!\("https://registry.npmjs.org/ | npm package lookup of the opt-in language server downloads
+
+# --- sockets bound to every interface (9.2) ---
+net-bind | crates/secret_redaction/src/lib_tests.rs | let double_colon = "::"; | a string used by a redaction test, not an address
+
+# --- git dependencies (9.2) ---
+# Completion generators of warp-command-signatures: shell commands the completion engine could run.
+# Each network one is denied by generator_policy/denied.rs, so these lines are inert. A new hit is
+# a new generator: classify it there first (the audit also fails on unclassified generator names).
+net-dep | git-dep:warp-command-signatures/src/generators/deno.rs | cdn\.deno\.land/deno/meta/versions\.json | denied generator deno/deno_versions
+net-dep | git-dep:warp-command-signatures/src/generators/deployctl.rs | cdn\.deno\.land/deploy/meta/versions\.json | denied generator deployctl/deploy_versions
+net-dep | git-dep:warp-command-signatures/src/generators/elm.rs | package\.elm-lang\.org/search\.json | denied generator elm/elm_packages
+net-dep | git-dep:warp-command-signatures/src/generators/fig_teams.rs | npx -y fig-teams@latest | denied generators fig-teams@latest/teams_list and users_for_selected_team
+net-dep | git-dep:warp-command-signatures/src/generators/fig_token.rs | curl -sfL 'https://crates\.io/api/v1/crates | denied generator cargo/crates_io_search
+net-dep | git-dep:warp-command-signatures/src/generators/fig_token.rs | curl -sL 'https://api\.github\.com/users/ | denied generator degit/github_user_repos
+net-dep | git-dep:warp-command-signatures/src/generators/fig_token.rs | curl -s -H 'Accept: application/json' 'https://api\.npms\.io/v2/search | denied npms_search generators of bun, expo, expo-cli, ni, npm, pnpm, rush and yarn
+net-dep | git-dep:warp-command-signatures/src/generators/gh.rs | gh api graphql | denied generator gh/api_graphql_string_viewer
+net-dep | git-dep:warp-command-signatures/src/generators/hyper.rs | hyper | the allowed `hyper list` generator (the Hyper terminal's plugin lister), not the hyper crate
+net-dep | git-dep:warp-command-signatures/src/generators/mod.rs | mod hyper;|hyper::generator\(\) | registration of that generator
+net-dep | git-dep:warp-command-signatures/src/generators/npm.rs | curl -sf 'https://registry\.npmjs\.org/-/v1/search | denied generator npm/npm_registry_search
+net-dep | git-dep:warp-command-signatures/src/generators/ns.rs | curl -sfL .* https://api\.github\.com/repos/NativeScript/ | denied generators nativescript, ns and tns / nativescript_templates
+net-dep | git-dep:warp-command-signatures/src/generators/scp.rs | "ssh\{\} -o BatchMode=yes | denied generator scp/remote_paths
+net-dep | git-dep:warp-command-signatures/src/generators/sdk.rs | curl -s https://api\.sdkman\.io/ | denied generator sdk/available_versions
+net-dep | git-dep:warp-command-signatures/src/generators/stepzen.rs | curl https://api\.github\.com/repos/steprz/ | denied generator stepzen/github_schemas
+net-dep | git-dep:warp-command-signatures/src/generators/asdf.rs | github\.com/asdf-vm/asdf-nodejs\.git | unit-test fixture string inside the dependency
+net-dep | git-dep:warp-command-signatures/src/generators/vagrant.rs | "http://example\.com/box" | unit-test fixture string inside the dependency
+# Bundled workflow texts: commands a user may choose to run in their own shell, never run by the app.
+net-dep | git-dep:warp-workflows/src/generated_workflows/* | command: r####"(curl|npx -y)  | workflow text (a command for the user's shell), only run if the user picks the workflow
 
 # --- developer and CI bootstrap (9.2) ---
 # These fetch third-party toolchains for building the app; nothing here ships in the app.
@@ -58,3 +121,4 @@ net-script | script/macos/bootstrap | * | Homebrew and rustup installers
 net-script | script/windows/bootstrap.ps1 | * | rustup installer
 net-script | docker/linux-dev/Dockerfile | * | developer container image: installs curl, the GitHub CLI apt key and rustup while the image is built; never shipped in the app
 net-script | script/offline_audit | * | holds the audit patterns
+net-script | script/offline_audit.allowlist | * | documents the exceptions
