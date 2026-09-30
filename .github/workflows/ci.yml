@@ -29,7 +29,6 @@ env:
     | test(=ui_tests::test_tab_context_menu_copies_metadata)
     | test(=ui_tests::test_vertical_pane_context_menu_copies_metadata)
     | test(=ui_tests::test_vertical_tab_context_menu_copies_metadata)
-    | test(=ui_tests::test_waterfall_input_scrolling)
   # Shells and runtime libraries that unit tests load. Mirrors script/linux/install_runtime_deps
   # and script/linux/install_test_deps.
   LINUX_TEST_PACKAGES: >-
@@ -236,6 +235,20 @@ jobs:
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
               -E "not package(integration)"
 
+      # The app runs `gh` for the pull request of the current branch, and the runner image has a
+      # real `gh` (and other cloud CLIs) installed. In the integration tests `gh` looked up its
+      # API host, a DNS request from the tool and not from the app. Stubs first in the PATH make
+      # those tools fail at once, as they do on a machine where they are not set up.
+      - name: Replace the GitHub and cloud CLIs with stubs
+        run: |
+          stubs="$RUNNER_TEMP/offline-stubs"
+          mkdir -p "$stubs"
+          for tool in gh kubectl docker podman aws az gcloud gsutil terraform helm doctl; do
+            printf '#!/bin/sh\necho "%s: disabled in the offline sandbox" >&2\nexit 1\n' "$tool" > "$stubs/$tool"
+            chmod +x "$stubs/$tool"
+          done
+          echo "$stubs" >> "$GITHUB_PATH"
+
       # The `integration` package with bash, the shell these steps use everywhere else. One retry
       # instead of the ci profile's two: a test that fails because of the sandbox fails every
       # time, so more retries only burn the time budget. Seven tests are left out and run with zsh
@@ -250,7 +263,7 @@ jobs:
           export WARP_SHELL_PATH
           ./script/offline_sandbox net-integration.log xvfb-run -a \
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
-              -E "package(integration) and not ($ZSH_ONLY_INTEGRATION_TESTS)"
+              -E "package(integration) and not ($ZSH_ONLY_INTEGRATION_TESTS | test(=ui_tests::test_waterfall_input_scrolling))"
 
       - name: Run the zsh integration tests in a network sandbox
         if: ${{ !cancelled() }}
@@ -262,9 +275,23 @@ jobs:
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 --status-level all \
               -E "package(integration) and ($ZSH_ONLY_INTEGRATION_TESTS)"
 
+      # `test_waterfall_input_scrolling` asserts the pixel layout of the input and fails on the
+      # runner's virtual screen in both shells, with or without the sandbox (ENG-192). It is not
+      # part of the blocking steps; this one tries it on a larger screen and only reports.
+      - name: Run the waterfall layout test in a network sandbox
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
+          ./script/offline_sandbox net-waterfall.log xvfb-run -a -s "-screen 0 2560x1600x24" \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
+              -E "test(=ui_tests::test_waterfall_input_scrolling)"
+
       - name: Check the recorded connections
         if: ${{ !cancelled() }}
-        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-zsh.log
+        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-zsh.log net-waterfall.log
 
       # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
       # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in
@@ -280,6 +307,13 @@ jobs:
       - name: Check the connections of the idle session
         if: ${{ !cancelled() }}
         run: ./script/offline_audit --net-log net-idle.log
+
+      # A failing connection check names an address; this names the programs that ran, to tell
+      # the app from a tool it started.
+      - name: List the programs started in the sandbox
+        if: ${{ always() }}
+        run: |
+          cat net-*.log 2>/dev/null | sed -n 's/^[0-9]* execve("\([^"]*\)".*/\1/p' | sort | uniq -c | sort -rn | head -80
 
       # The logs show what was (not) contacted and are the evidence if a check fails.
       - name: Upload the connection logs
