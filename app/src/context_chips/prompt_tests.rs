@@ -1,15 +1,14 @@
 use serde_json::Value;
+use settings::Setting as _;
 use settings_value::SettingsValue as _;
 use warpui::{App, SingletonEntity};
 
 use super::Prompt;
-use crate::context_chips::ContextChipKind;
-use crate::context_chips::available_chips;
 use crate::context_chips::prompt::{PromptConfiguration, PromptSelection};
+use crate::context_chips::{ContextChipKind, available_chips};
 use crate::settings::WarpPromptSeparator;
 use crate::terminal::session_settings::{SavedPrompt, SessionSettings};
 use crate::test_util::settings::initialize_settings_for_tests;
-use settings::Setting as _;
 
 fn initialize_app(app: &mut App) {
     initialize_settings_for_tests(app);

@@ -3283,6 +3283,7 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 
 **Modified:**
 - Ran `./script/format` (22 files, imports only).
+- Ran it again during the SWP-18 re-verification: the pull request chip change (task FIX-2) had left `app/src/context_chips/prompt_tests.rs` with unmerged imports, so `./script/format --check` failed on `a6fab9930`. Imports only.
 
 ## Dependency advisory updates
 **Why:** `cargo deny check advisories` (cargo-deny 0.20.2, advisory DB of 2026-09-29) reported 12 distinct advisories on 11 crate versions (14 errors) plus 3 yanked-crate warnings, all published after the baseline commit. Decision 21: update the flagged crates now, semver-compatible first; anything that needs a code change or a pinned fork is recorded here rather than forced.
