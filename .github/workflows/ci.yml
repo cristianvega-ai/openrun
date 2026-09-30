@@ -235,19 +235,23 @@ jobs:
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
               -E "not package(integration)"
 
-      # The app runs `gh` for the pull request of the current branch, and the runner image has a
-      # real `gh` (and other cloud CLIs) installed. In the integration tests `gh` looked up its
-      # API host, a DNS request from the tool and not from the app. Stubs first in the PATH make
-      # those tools fail at once, as they do on a machine where they are not set up.
-      - name: Replace the GitHub and cloud CLIs with stubs
+      # Tools that the app or the shell start, not the app itself, can look up a host. The runner
+      # image has real ones: `gh` (the app runs it for the pull request of the current branch),
+      # other cloud CLIs, and Ubuntu's command-not-found helper, which the shell runs for a
+      # mistyped command and which starts `snap advise-snap` to ask the snap store. One sandboxed
+      # run recorded DNS requests from such a Go program. Stubs first in the PATH make the CLIs
+      # fail at once and the helper is made non-executable (the shell then just prints "command
+      # not found"), as on a machine where they are not set up.
+      - name: Disable the GitHub and cloud CLIs and command-not-found
         run: |
           stubs="$RUNNER_TEMP/offline-stubs"
           mkdir -p "$stubs"
-          for tool in gh kubectl docker podman aws az gcloud gsutil terraform helm doctl; do
+          for tool in gh kubectl docker podman aws az gcloud gsutil terraform helm doctl snap; do
             printf '#!/bin/sh\necho "%s: disabled in the offline sandbox" >&2\nexit 1\n' "$tool" > "$stubs/$tool"
             chmod +x "$stubs/$tool"
           done
           echo "$stubs" >> "$GITHUB_PATH"
+          sudo chmod -x /usr/lib/command-not-found
 
       # The `integration` package with bash, the shell these steps use everywhere else. One retry
       # instead of the ci profile's two: a test that fails because of the sandbox fails every
