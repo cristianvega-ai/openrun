@@ -178,6 +178,7 @@ jobs:
             -E 'package(warp_completer)'
 
       - name: Run the command executor tests
+        if: ${{ !cancelled() }}
         run: |
           cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
             -E 'package(warp) and test(~terminal::model::session::command_executor::)'

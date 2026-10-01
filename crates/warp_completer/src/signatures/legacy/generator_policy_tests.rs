@@ -1373,9 +1373,12 @@ fn git_completions_run_on_windows_only_with_the_offline_environment() {
         ("git stash apply ", "stash"),
         ("git tag -d ", "tag --list"),
     ] {
+        // The alias generator (`git config --get alias.<word>`) runs in every context, behind the
+        // token gate, as it always has.
         let plain = guarded().commands_for(input);
         assert!(
-            !plain.iter().any(|command| command.starts_with("git")),
+            !plain.iter().any(|command| command.starts_with("git")
+                && !command.starts_with("git config --get alias.")),
             "{input:?} ran git without the offline environment: {plain:?}"
         );
         let with_environment = guarded_with_environment().commands_for(input);
@@ -2452,7 +2455,9 @@ fn the_token_policy_table_is_sorted_allowed_and_holds_up() {
 }
 
 /// Plain input keeps completing: the engine passes inert words and, for a generator that
-/// quotes, a path with a space.
+/// quotes, a path with a space. Windows runs none of these generators except git's, which
+/// `git_completions_run_on_windows_only_with_the_offline_environment` covers.
+#[cfg(not(windows))]
 #[test]
 fn valid_inputs_still_reach_their_generators() {
     let guarded = guarded();
