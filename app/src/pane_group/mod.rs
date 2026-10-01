@@ -3085,11 +3085,13 @@ impl PaneGroup {
         if matches!(reason, ActivationReason::Hover) {
             if !ctx.windows().app_is_active() {
                 // Don't focus panes on hover if the app is not active.
+                log::debug!("Not focusing {id:?} on hover: the app is not active");
                 return;
             }
 
             if self.is_being_resized() || self.any_pane_being_dragged(ctx) {
                 // Don't focus panes on hover if the app is being resized or a pane is being dragged.
+                log::debug!("Not focusing {id:?} on hover: a pane is being resized or dragged");
                 return;
             }
 
@@ -3113,10 +3115,12 @@ impl PaneGroup {
                     .as_ref(ctx)
                     .has_highlighted_link()
             {
+                log::debug!("Not focusing {id:?} on mouse event: a link is highlighted");
                 return;
             }
         }
 
+        log::debug!("Focusing {id:?} on mouse event ({reason:?})");
         self.focus_pane_by_id(id, ctx);
     }
 

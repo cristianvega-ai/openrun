@@ -159,6 +159,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Completion generators: tokens as data, no environment network, no project code](#completion-generators-tokens-as-data-no-environment-network-no-project-code) — 104 more generators are denied (24 injectable, 24 environment-network verified, 33 likely, 25 project code), alias generators are denied by default, the allow-list shrinks from 333 to 229, and an injection corpus runs hostile tokens through every allowed token-taking generator
 - [Completion generators: restore the isolated tier](#completion-generators-restore-the-isolated-tier) — 21 generators whose tools reached a network or ran repository code in the environment alone run again on macOS and Linux local sessions, where the sandbox and the offline table were shown to stop it; the rest stay denied with measured reasons
 - [Fish leading-space commands stay out of history](#fish-leading-space-commands-stay-out-of-history) — `Shell::should_add_command_to_history` now leaves out a leading-space command for fish, as fish does, so it and its block are not saved; PowerShell is unchanged (HIST-2)
+- [CI: stress workflow for timing-dependent integration tests](#ci-stress-workflow-for-timing-dependent-integration-tests) — `stress.yml` runs a nextest filter N times on the audit job's runner, with or without the strace sandbox; debug logging of mouse moves and hover-focus decisions (CI-3)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3877,3 +3878,12 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 **User-visible impact:** in a fish session, a command typed with a leading space no longer enters up-arrow history or the database, and its block is not saved for session restore. The in-band commands the app runs in fish already used this convention.
 
 **Notes:** the fish behaviour is taken from the app's own code, which relies on it (`in_band_command_executor.rs`: leading space omits a command from fish history, "default, non-configurable"), and from fish's documented behaviour. It could not be checked against a fish binary: none is installed on the development machine, and no fish docs are in the installed share directories. The HIST-1 section's statement that fish and PowerShell are always saved is superseded for fish.
+
+## CI: stress workflow for timing-dependent integration tests
+**Why:** with retries off (CI-2), `ui_tests::test_focus_panes_on_hover`, `shell_integration_tests::test_background_output` and `test_ctrl_c` failed in the `Offline audit` job on the first try and never failed on a development machine (20 and 20 runs each with 36 busy loops on an 18-core Mac, bash 5.3). Their cause depends on timing on a 4-vCPU runner with Xvfb and `strace`, so the runner is the only place to measure.
+
+**Added:**
+- `.github/workflows/stress.yml`: manual workflow (`gh workflow run stress.yml -f filter=... -f count=30`). It sets up the runner like the audit job, builds the tests and runs the nextest filter `--stress-count` times with `--retries 0`, under `script/offline_sandbox` or without it (`-f sandbox=false`), with bash or zsh, with an optional `RUST_LOG`. It uses the audit job's rust-cache key and never saves.
+- `log::debug!` lines: every mouse move the window receives (position, synthetic or not) and why a hover does not focus a pane (`crates/warpui_core/src/core/app.rs`, `app/src/pane_group/mod.rs`).
+
+**User-visible impact:** none.

@@ -2505,7 +2505,14 @@ impl AppContext {
                 let last_mouse_moved_event: Rc<RefCell<Option<Event>>> =
                     ctx.get_last_mouse_moved_event(window_id);
                 match event {
-                    Event::MouseMoved { .. } => {
+                    Event::MouseMoved {
+                        position,
+                        is_synthetic,
+                        ..
+                    } => {
+                        log::debug!(
+                            "Mouse moved to {position:?} in window {window_id:?} (synthetic: {is_synthetic})"
+                        );
                         *last_mouse_moved_event.borrow_mut() = Some(event.clone())
                     }
                     // Update the last mouse moved event with the current state of the modifiers
