@@ -1231,8 +1231,24 @@ fn persist_command_in_session(
             );
         });
 
-        // The insert event is sent from a background task, so give it time to arrive.
+        // The insert event is sent from a background task. When the shell keeps the command in
+        // history the event is certain to come, so wait for it (a fixed short wait missed it on a
+        // loaded runner under `strace`); when it does not, the function returned before it
+        // spawned the task and there is nothing to wait for.
+        let command_is_kept_in_history = app.update(|ctx| {
+            sessions
+                .as_ref(ctx)
+                .get(session_id)
+                .is_some_and(|session| session.shell().should_add_command_to_history(command))
+        });
         let mut events = Vec::new();
+        if command_is_kept_in_history {
+            events.push(
+                receiver
+                    .recv_timeout(Duration::from_secs(60))
+                    .expect("the insert command event should have been sent"),
+            );
+        }
         while let Ok(event) = receiver.recv_timeout(Duration::from_millis(300)) {
             events.push(event);
         }

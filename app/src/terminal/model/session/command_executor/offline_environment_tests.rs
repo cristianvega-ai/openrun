@@ -821,27 +821,25 @@ mod real_pwsh {
     use std::time::Duration;
 
     use command::blocking::Command;
+    use instant::Instant;
 
     use super::*;
     use crate::terminal::model::session::LocalCommandExecutor;
     use crate::terminal::model::session::command_executor::network_sandbox::NetworkSandbox;
     use crate::terminal::model::session::command_executor::test_support::*;
 
-    /// Seconds an interactive `pwsh` runs. Its update check starts three seconds after the session
-    /// does (measured: 3.1 s), so this leaves room for a slow runner.
-    const INTERACTIVE_RUN: &str = "8";
-
-    /// Runs an interactive `pwsh` in a pseudo-terminal for a fixed time and then ends it. The
-    /// update check runs only when the session is interactive, which needs a terminal.
+    /// Runs an interactive `pwsh` in a pseudo-terminal until the file named by the second argument
+    /// exists, then ends it. The update check runs only when the session is interactive, which
+    /// needs a terminal.
     const PTY_SCRIPT: &str = r#"
 import os, pty, select, sys, time
-pwsh, seconds = sys.argv[1], float(sys.argv[2])
+pwsh, stop_file = sys.argv[1], sys.argv[2]
 pid, fd = pty.fork()
 if pid == 0:
     os.execv(pwsh, [pwsh, "-NoProfile"])
-deadline = time.time() + seconds
-while time.time() < deadline:
-    ready, _, _ = select.select([fd], [], [], 0.2)
+deadline = time.time() + 120
+while time.time() < deadline and not os.path.exists(stop_file):
+    ready, _, _ = select.select([fd], [], [], 0.1)
     if ready:
         try:
             if not os.read(fd, 4096):
@@ -944,37 +942,58 @@ os.waitpid(pid, 0)
         std::fs::write(&script, PTY_SCRIPT).unwrap();
         let table = OfflineEnvironment::compute(|_| None);
 
-        let run_interactive = |index: usize, with_table: bool| {
-            let home = temp.path().join(format!("home-{index}"));
-            std::fs::create_dir_all(&home).unwrap();
-            let mut variables = proxy_environment(&canary, &home);
-            variables.insert("TERM".to_owned(), "xterm".to_owned());
-            if with_table {
-                table.apply_to(&mut variables);
-            }
-            canary.reset();
-            let status = Command::new("python3")
-                .arg(&script)
-                .arg(&pwsh)
-                .arg(INTERACTIVE_RUN)
-                .env_clear()
-                .envs(&variables)
-                .env("PATH", system_path())
-                .status()
-                .unwrap();
-            assert!(status.success());
-            canary.requests()
-        };
+        // Starts an interactive pwsh and watches the canary until `done` says to stop, then ends
+        // pwsh. Returns the requests seen and how long that took.
+        let run_interactive =
+            |index: usize, with_table: bool, done: &dyn Fn(&[String], Duration) -> bool| {
+                let home = temp.path().join(format!("home-{index}"));
+                std::fs::create_dir_all(&home).unwrap();
+                let stop_file = temp.path().join(format!("stop-{index}"));
+                let mut variables = proxy_environment(&canary, &home);
+                variables.insert("TERM".to_owned(), "xterm".to_owned());
+                if with_table {
+                    table.apply_to(&mut variables);
+                }
+                canary.reset();
+                let mut child = Command::new("python3")
+                    .arg(&script)
+                    .arg(&pwsh)
+                    .arg(&stop_file)
+                    .env_clear()
+                    .envs(&variables)
+                    .env("PATH", system_path())
+                    .spawn()
+                    .unwrap();
+                let started = Instant::now();
+                loop {
+                    let requests = canary.requests();
+                    if done(&requests, started.elapsed()) {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                let elapsed = started.elapsed();
+                let requests = canary.requests();
+                std::fs::write(&stop_file, "stop").unwrap();
+                assert!(child.wait().unwrap().success());
+                (requests, elapsed)
+            };
 
-        // Control: without the table an interactive pwsh asks aka.ms for the latest release.
-        let control = run_interactive(0, false);
+        // Control: without the table an interactive pwsh asks aka.ms for the latest release, about
+        // three seconds after it starts (much later on a runner that traces every process).
+        let (control, took) = run_interactive(0, false, &|requests, elapsed| {
+            !requests.is_empty() || elapsed > Duration::from_secs(60)
+        });
         assert!(
             control.iter().any(|line| line.contains("aka.ms")),
             "fixture is insensitive: an interactive pwsh without the table never asked aka.ms \
-             for the latest release; requests: {control:?}"
+             for the latest release in {took:?}; requests: {control:?}"
         );
-        // With the table's variables it sends nothing.
-        let protected = run_interactive(1, true);
+        // With the table's variables it sends nothing, for twice as long as the control needed.
+        let hold = (took * 2 + Duration::from_secs(3)).max(Duration::from_secs(8));
+        let (protected, _) = run_interactive(1, true, &|requests, elapsed| {
+            !requests.is_empty() || elapsed > hold
+        });
         assert_eq!(
             protected,
             Vec::<String>::new(),
