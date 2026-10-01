@@ -157,6 +157,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [CI: no retry-only passes, strict lint on three platforms, faster bash executable listing](#ci-no-retry-only-passes-strict-lint-on-three-platforms-faster-bash-executable-listing) — the sandboxed test steps run with `--retries 0`; clippy `-D warnings` runs natively on Windows and macOS as well as Linux; `script/cross_clippy` lints the Windows and Linux targets from a Mac; the bash executable listing no longer walks `PATH` twice (CI-2)
 - [Completion generators: OS network sandbox](#completion-generators-os-network-sandbox) — local command executors run every generator, alias and helper subprocess inside a sandbox-exec profile (macOS) or a seccomp filter (Linux) that denies IP networking and fails closed; DNS and background URL-session escapes found and closed on macOS; none on Windows
 - [Completion generators: tokens as data, no environment network, no project code](#completion-generators-tokens-as-data-no-environment-network-no-project-code) — 104 more generators are denied (24 injectable, 24 environment-network verified, 33 likely, 25 project code), alias generators are denied by default, the allow-list shrinks from 333 to 229, and an injection corpus runs hostile tokens through every allowed token-taking generator
+- [Completion generators: restore the isolated tier](#completion-generators-restore-the-isolated-tier) — eleven generators whose tools reached a network or ran repository code in the environment alone run again on macOS and Linux local sessions, where the sandbox and the offline table were shown to stop it; the rest stay denied with measured reasons
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3835,3 +3836,30 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 - The `env-network-likely` class is a precaution: those tools were not run here. `brew`, `claude` and `codex` were not run against a canary.
 - Allowed external CLIs other than `rustup`, `npm`, `corepack`, `git`, `docker` were reviewed from their commands and documentation, not run against a canary.
 
+## Completion generators: restore the isolated tier
+**Why:** SEC-STOP (ENG-195) denied every generator whose tool could reach a network or run repository code in the environment alone. With the offline environment table (ENG-196) and the OS network sandbox (ENG-197) in place, the ones for which the real tool was shown to be quiet under both can run again. Anything without that evidence stays denied.
+
+**Modified:**
+- `crates/warp_completer/src/signatures/legacy/generator_policy*` : new `ALLOWED_WHEN_ISOLATED` list (in `allowed.rs`). A pair on it runs only when `GeneratorContext::network_isolated()` is true, which `SessionContext` answers from the session's executor: true only for `LocalCommandExecutor` with the sandbox applied (macOS and Linux local sessions). Never on Windows, whatever the context says. `CommandRegistry::allows_generator` takes the flag.
+- Restored (11 of the 245 denied), each checked by `restored_generators_tests.rs` against the command the bundled spec runs, through the production executor with both layers, after a control run that shows the fixture reaches the canary or the repository program without them:
+
+| Pair | Command | Left alone | Evidence |
+| --- | --- | --- | --- |
+| `cargo/bin_list`, `features_generators`, `test_targets` | `cargo metadata --no-deps --format-version 1` | rustup installs the pinned toolchain (2 GETs) | rustup 1.29.0; `rustup_*` tests, 0 requests under both layers, also each layer alone |
+| `cargo/read_manifest` | `cargo read-manifest` | same | same |
+| `cargo/spec` | `cargo install --list \| grep ...` | same | same |
+| `cargo/target_list` | `rustc --print target-list` | same | same |
+| `rustup/rustup_docs` | `find $(rustup docs --path ...)` | same | same |
+| `npm/workspace_generator` | `cat $(npm prefix)/package.json` | update-check GET | npm 11.12.1; 0 requests under both layers and each alone |
+| `git/tracked_files` | `git --no-optional-locks ls-files` | runs `core.fsmonitor` | git 2.54; a repository that also sets a clean filter, `diff.external`, a textconv driver and a `post-index-change` hook: no program ran under both layers |
+| `git/treeish`, `hub/treeish` | `git --no-optional-locks diff --cached --name-only` | runs `core.fsmonitor` | same |
+
+- Kept denied, with the measurement that decides it:
+  - `git/files_for_staging`, `git/get_changed_or_tracked_files`, `hub/status`, `hub/status_staged_or_unstaged`: `git status`, `diff --name-only` and `ls-files --modified` run a repository's `clean` filter when git has to compare a file's content (3 of 3 runs), and the environment table does not switch that off. `GIT_ATTR_SOURCE` set to the empty tree does stop it (tested by hand), but it needs git 2.40 and fails in SHA-256 repositories, so it is not in the table; a git-version check would be the way to restore these.
+  - The `yarn` generators (`all_dependencies_generator`, `config_list`, `workspace_names_generator`): `yarn` ran the project's `yarn-path` script for each of `config list`, `list` and `workspaces info` (corepack's network is the smaller problem).
+  - The `docker` generators: docker is not installed on the development machine, so the CLI was not run against the canary here (the docker tests skip with a message and run where docker exists, such as the Linux CI runners).
+  - The `env-network-likely` class (`az`, `gcloud`, `brew`, `go`, `dotnet`, `ng`, `nextflow`, ...): none of these tools was run against a canary, so there is no evidence beyond their documentation.
+
+**User-visible impact:** on macOS and Linux local sessions `cargo run --bin <Tab>`, `cargo run --target <Tab>`, `rustup doc <Tab>`, `npm install -w <Tab>` and git's tracked-file and staged-file completions work again; nothing changes on Windows or in sessions that are not isolated.
+
+**Notes:** the tier is not a proof for arbitrary projects. `cargo metadata --no-deps` was checked not to run a `rustc-wrapper` from a project's `.cargo/config.toml` (by hand), but other project configuration was not exercised.

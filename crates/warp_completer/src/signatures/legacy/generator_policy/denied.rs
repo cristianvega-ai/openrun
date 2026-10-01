@@ -13,11 +13,16 @@
 //!   `npm`, a registry) when run against a loopback canary: rustup proxies install a toolchain
 //!   named by `rust-toolchain.toml`, `docker` talks to whatever `DOCKER_HOST` or the current
 //!   context names, `npm` runs its update check, a corepack shim downloads the package manager
-//!   named by `packageManager`.
+//!   named by `packageManager`. The pairs that were later shown to be quiet with the OS network
+//!   sandbox and the offline environment table are in `ALLOWED_WHEN_ISOLATED` (`allowed.rs`)
+//!   instead. The `yarn` ones stay here: yarn also runs the project's `yarn-path` script
+//!   (measured: `yarn config list`, `list` and `workspaces info` each executed it).
 //! * `project-code`: runs code the project controls, or cannot be shown not to: interpreters
 //!   that load project files (`nx`, `lerna`, `Rscript` loads `./.Rprofile`, `python3 -c` imports
 //!   from the working directory first), and `git status`, `diff` and `ls-files`, which run the
-//!   `core.fsmonitor` program of a repository's own config.
+//!   `core.fsmonitor` program of a repository's own config. The `git status`-like ones also run
+//!   a repository's `clean` filter (measured, and not switched off by the environment table);
+//!   `ls-files` and `diff --cached`, which the table makes quiet, are in `ALLOWED_WHEN_ISOLATED`.
 //! * `env-network-likely`: a tool with a documented update check, telemetry, toolchain download,
 //!   remote include or remote mode, or one nobody reviewed. Not run against a canary here.
 //! * `injectable`: interpolates the user's unsubmitted tokens into the shell command without
@@ -62,15 +67,9 @@ pub(super) const DENIED_GENERATORS: &[(&str, &str, &str)] = &[
     ("brew", "services", "env-network-likely"),
     ("brew", "uninstall_cask", "env-network-likely"),
     ("bun", "npms_search", "network"),
-    ("cargo", "bin_list", "env-network-verified"),
     ("cargo", "crates_io_search", "network"),
     ("cargo", "dependencies", "maybe-network"),
-    ("cargo", "features_generators", "env-network-verified"),
-    ("cargo", "read_manifest", "env-network-verified"),
-    ("cargo", "spec", "env-network-verified"),
-    ("cargo", "target_list", "env-network-verified"),
     ("cargo", "test_list", "maybe-network"),
-    ("cargo", "test_targets", "env-network-verified"),
     ("claude", "installed_plugins", "env-network-likely"),
     ("claude", "mcp_servers", "maybe-network"),
     ("codex", "cloud_tasks", "network"),
@@ -146,8 +145,6 @@ pub(super) const DENIED_GENERATORS: &[(&str, &str, &str)] = &[
     ("gh", "repo_list_owner", "network"),
     ("git", "files_for_staging", "project-code"),
     ("git", "get_changed_or_tracked_files", "project-code"),
-    ("git", "tracked_files", "project-code"),
-    ("git", "treeish", "project-code"),
     ("go", "tool_generator", "env-network-likely"),
     ("gsutil", "gcloud_projects", "network"),
     ("gsutil", "gcs_buckets", "network"),
@@ -155,7 +152,6 @@ pub(super) const DENIED_GENERATORS: &[(&str, &str, &str)] = &[
     ("hexo", "list_post_draft", "project-code"),
     ("hub", "status", "project-code"),
     ("hub", "status_staged_or_unstaged", "project-code"),
-    ("hub", "treeish", "project-code"),
     ("just", "recipes", "project-code"),
     ("just", "variables", "project-code"),
     ("kool", "docker_compose_config", "env-network-likely"),
@@ -201,7 +197,6 @@ pub(super) const DENIED_GENERATORS: &[(&str, &str, &str)] = &[
     ("ni", "npms_search", "network"),
     ("npm", "npm_registry_search", "network"),
     ("npm", "npms_search", "network"),
-    ("npm", "workspace_generator", "env-network-verified"),
     ("ns", "nativescript_templates", "network"),
     ("nx", "apps", "project-code"),
     ("nx", "apps_and_libs", "project-code"),
@@ -243,7 +238,6 @@ pub(super) const DENIED_GENERATORS: &[(&str, &str, &str)] = &[
     ("ros2", "services", "lan"),
     ("ros2", "topics", "lan"),
     ("rush", "npms_search", "network"),
-    ("rustup", "rustup_docs", "env-network-verified"),
     ("scc", "format_multi", "injectable"),
     ("scp", "remote_paths", "network"),
     ("sdk", "available_versions", "network"),

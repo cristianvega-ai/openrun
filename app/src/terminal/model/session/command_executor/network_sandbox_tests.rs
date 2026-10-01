@@ -218,6 +218,15 @@ mod sandboxed {
     }
 
     #[test]
+    fn docker_cannot_reach_a_remote_daemon() {
+        let canary = Canary::start();
+        for mut scenario in docker_scenarios(&canary) {
+            scenario.commands = commands(&["docker ps -a --format '{{ json . }}'"]);
+            assert_sandbox_keeps_silent(scenario, &canary);
+        }
+    }
+
+    #[test]
     fn git_cannot_fetch_from_a_promisor_remote() {
         let canary = Canary::start();
         let Some(scenario) = git_lazy_fetch_scenario(&canary) else {

@@ -209,11 +209,12 @@ impl CommandRegistry {
 
     /// Whether the generator `generator` of spec `spec` may run a command. Generators are
     /// allowed by identity, never by inspecting their command line: see
-    /// [`super::generator_policy`].
-    pub fn allows_generator(&self, spec: &str, generator: &GeneratorName) -> bool {
+    /// [`super::generator_policy`]. `isolated` says whether the context keeps the command from
+    /// reaching a network (`GeneratorContext::network_isolated`).
+    pub fn allows_generator(&self, spec: &str, generator: &GeneratorName, isolated: bool) -> bool {
         match self.generator_policy {
             GeneratorPolicy::AllowListed => {
-                super::generator_policy::is_generator_allowed(spec, &generator.0)
+                super::generator_policy::is_generator_allowed(spec, &generator.0, isolated)
             }
             #[cfg(any(test, feature = "test-util"))]
             GeneratorPolicy::AllowAll => true,

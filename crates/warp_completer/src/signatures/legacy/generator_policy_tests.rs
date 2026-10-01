@@ -5,7 +5,9 @@ use async_trait::async_trait;
 use regex::Regex;
 use warp_command_signatures::{GeneratorProcess, Shell};
 
-use super::allowed::{ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS};
+use super::allowed::{
+    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS, ALLOWED_WHEN_ISOLATED,
+};
 use super::denied::{DENIED_ALIAS_GENERATORS, DENIED_GENERATORS};
 use super::{is_alias_generator_allowed, is_generator_allowed_on};
 use crate::completer::{
@@ -21,6 +23,8 @@ use crate::signatures::registry::GeneratorPolicy;
 struct RecordingContext {
     registry: Arc<CommandRegistry>,
     commands: Mutex<Vec<String>>,
+    /// What `network_isolated` reports.
+    isolated: bool,
     /// When set, `curl ...` commands are run through `sh` with a `PATH` that contains only this
     /// directory, so they can only ever reach the stub `curl` placed in it.
     #[cfg(unix)]
@@ -38,6 +42,7 @@ impl RecordingContext {
         Self {
             registry,
             commands: Mutex::new(Vec::new()),
+            isolated: false,
             #[cfg(unix)]
             stub_curl_dir: None,
             #[cfg(unix)]
@@ -143,10 +148,23 @@ impl GeneratorContext for RecordingContext {
     fn supports_parallel_execution(&self) -> bool {
         true
     }
+
+    fn network_isolated(&self) -> bool {
+        self.isolated
+    }
 }
 
 fn guarded() -> RecordingContext {
     RecordingContext::new(CommandRegistry::global_instance())
+}
+
+/// The bundled registry in a context whose commands cannot reach a network (macOS and Linux local
+/// sessions).
+#[cfg(not(windows))]
+fn guarded_isolated() -> RecordingContext {
+    let mut context = guarded();
+    context.isolated = true;
+    context
 }
 
 /// The bundled specs with every generator enabled, to prove that a test input really does reach
@@ -271,16 +289,16 @@ fn the_policy_decides_by_spec_and_generator_name() {
     use warp_command_signatures::GeneratorName;
     let registry = CommandRegistry::global_instance();
     let name = |name: &str| GeneratorName::new(name);
-    assert!(registry.allows_generator("git", &name("local_branches")));
-    assert!(!registry.allows_generator("npm", &name("npm_registry_search")));
-    assert!(!registry.allows_generator("cargo", &name("crates_io_search")));
+    assert!(registry.allows_generator("git", &name("local_branches"), false));
+    assert!(!registry.allows_generator("npm", &name("npm_registry_search"), false));
+    assert!(!registry.allows_generator("cargo", &name("crates_io_search"), false));
     // The same generator name is local in one spec and a network call in another.
-    assert!(registry.allows_generator("bat", &name("completions")));
-    assert!(!registry.allows_generator("softwareupdate", &name("completions")));
+    assert!(registry.allows_generator("bat", &name("completions"), false));
+    assert!(!registry.allows_generator("softwareupdate", &name("completions"), false));
     // Unknown pairs are denied.
-    assert!(!registry.allows_generator("git", &name("no_such_generator")));
-    assert!(!registry.allows_generator("no-such-spec", &name("local_branches")));
-    assert!(!CommandRegistry::empty().allows_generator("git", &name("no_such_generator")));
+    assert!(!registry.allows_generator("git", &name("no_such_generator"), false));
+    assert!(!registry.allows_generator("no-such-spec", &name("local_branches"), false));
+    assert!(!CommandRegistry::empty().allows_generator("git", &name("no_such_generator"), true));
 }
 
 #[test]
@@ -303,6 +321,17 @@ fn allow_and_deny_lists_are_sorted_unique_lowercase_and_disjoint() {
         .filter(|pair| allowed_set.contains(pair))
         .collect();
     assert!(overlap.is_empty(), "in both lists: {overlap:?}");
+    let isolated: Vec<_> = ALLOWED_WHEN_ISOLATED.to_vec();
+    assert!(
+        isolated.windows(2).all(|pair| pair[0] < pair[1]),
+        "isolated generators must be sorted by (spec, generator) without duplicates"
+    );
+    assert!(
+        isolated
+            .iter()
+            .all(|pair| !allowed_set.contains(pair) && !denied.contains(pair)),
+        "an isolated-tier generator is also in allowed.rs or denied.rs"
+    );
     assert!(
         DENIED_GENERATORS
             .iter()
@@ -381,7 +410,11 @@ fn sample_commands(spec: &str, generator: &warp_command_signatures::Generator) -
 
 #[test]
 fn every_bundled_generator_is_classified() {
-    let allowed: BTreeSet<_> = ALLOWED_GENERATORS.iter().copied().collect();
+    let allowed: BTreeSet<_> = ALLOWED_GENERATORS
+        .iter()
+        .chain(ALLOWED_WHEN_ISOLATED)
+        .copied()
+        .collect();
     let denied: BTreeSet<_> = DENIED_GENERATORS.iter().map(|(s, g, _)| (*s, *g)).collect();
     let bundled = bundled_generators();
 
@@ -494,13 +527,6 @@ const INJECTABLE_GENERATORS: &[(&str, &str, &str)] = &[
 /// update check, a corepack shim that downloads the package manager, and tools that run code the
 /// project (or the repository config) controls.
 const ENVIRONMENT_GENERATORS: &[(&str, &str, &str)] = &[
-    ("cargo", "bin_list", "env-network-verified"),
-    ("cargo", "features_generators", "env-network-verified"),
-    ("cargo", "read_manifest", "env-network-verified"),
-    ("cargo", "spec", "env-network-verified"),
-    ("cargo", "target_list", "env-network-verified"),
-    ("cargo", "test_targets", "env-network-verified"),
-    ("rustup", "rustup_docs", "env-network-verified"),
     ("docker", "all_docker_containers", "env-network-verified"),
     ("docker", "all_local_images", "env-network-verified"),
     ("docker", "docker_images", "env-network-verified"),
@@ -515,7 +541,6 @@ const ENVIRONMENT_GENERATORS: &[(&str, &str, &str)] = &[
         "running_docker_containers",
         "env-network-verified",
     ),
-    ("npm", "workspace_generator", "env-network-verified"),
     ("yarn", "all_dependencies_generator", "env-network-verified"),
     ("yarn", "config_list", "env-network-verified"),
     (
@@ -531,11 +556,8 @@ const ENVIRONMENT_GENERATORS: &[(&str, &str, &str)] = &[
     ),
     ("git", "files_for_staging", "project-code"),
     ("git", "get_changed_or_tracked_files", "project-code"),
-    ("git", "tracked_files", "project-code"),
-    ("git", "treeish", "project-code"),
     ("hub", "status", "project-code"),
     ("hub", "status_staged_or_unstaged", "project-code"),
-    ("hub", "treeish", "project-code"),
     ("nx", "apps", "project-code"),
     ("nx", "workspace_targets", "project-code"),
     ("lerna", "ls", "project-code"),
@@ -548,7 +570,7 @@ const ENVIRONMENT_GENERATORS: &[(&str, &str, &str)] = &[
 fn the_injectable_and_environment_dependent_generators_are_denied_with_their_class() {
     for (spec, name, class) in INJECTABLE_GENERATORS.iter().chain(ENVIRONMENT_GENERATORS) {
         assert!(
-            !is_generator_allowed_on(false, spec, name),
+            !is_generator_allowed_on(false, false, spec, name),
             "{spec}/{name} must not be allowed"
         );
         assert_eq!(
@@ -565,6 +587,64 @@ fn the_injectable_and_environment_dependent_generators_are_denied_with_their_cla
         assert!(!is_alias_generator_allowed(spec, alias), "{spec}/{alias}");
     }
     assert!(ALLOWED_ALIAS_GENERATORS.is_empty());
+}
+
+/// The restored tier: generators that look local but reached a network, or ran repository code,
+/// in the environment alone (see `ALLOWED_WHEN_ISOLATED`).
+#[test]
+fn isolated_generators_run_only_when_the_context_is_isolated() {
+    use super::generators_allowed_when_isolated;
+    assert_eq!(generators_allowed_when_isolated(), ALLOWED_WHEN_ISOLATED);
+    assert!(!ALLOWED_WHEN_ISOLATED.is_empty());
+    for (spec, name) in ALLOWED_WHEN_ISOLATED {
+        assert!(
+            !is_generator_allowed_on(false, false, spec, name),
+            "{spec}/{name} must not run when the context is not isolated"
+        );
+        assert!(
+            is_generator_allowed_on(false, true, spec, name),
+            "{spec}/{name} must run when the context is isolated"
+        );
+        assert!(
+            !is_generator_allowed_on(true, true, spec, name),
+            "{spec}/{name} must never run on Windows"
+        );
+    }
+    // Isolation does not unlock anything else.
+    for (spec, name, _) in DENIED_GENERATORS {
+        assert!(
+            !is_generator_allowed_on(false, true, spec, name),
+            "{spec}/{name} is denied even in an isolated context"
+        );
+    }
+}
+
+#[cfg(not(windows))]
+#[test]
+fn an_isolated_context_runs_the_restored_generators_and_a_plain_one_does_not() {
+    for (input, marker) in [
+        ("cargo run --bin ", "cargo metadata"),
+        ("npm install -w ", "npm prefix"),
+    ] {
+        let plain = guarded().commands_for(input);
+        assert!(
+            !plain.iter().any(|command| command.contains(marker)),
+            "{input:?} ran {marker:?} without isolation: {plain:?}"
+        );
+        let isolated = guarded_isolated().commands_for(input);
+        assert!(
+            isolated.iter().any(|command| command.contains(marker)),
+            "{input:?} should run {marker:?} in an isolated context, got {isolated:?}"
+        );
+    }
+    // Isolation does not make a network generator run.
+    for (input, marker) in NETWORK_INPUTS {
+        let executed = guarded_isolated().commands_for(input);
+        assert!(
+            !executed.iter().any(|command| command.contains(marker)),
+            "{input:?} ran the {marker:?} generator in an isolated context: {executed:?}"
+        );
+    }
 }
 
 /// The exact input of the RV-01 report, through the production suggestions engine and a real
@@ -612,8 +692,14 @@ fn windows_runs_only_generators_that_read_files_and_take_no_tokens() {
             ALLOWED_GENERATORS.contains(&(*spec, *name)),
             "{spec}/{name} is on the Windows list but not on the allow-list"
         );
-        assert!(is_generator_allowed_on(true, spec, name), "{spec}/{name}");
-        assert!(is_generator_allowed_on(false, spec, name), "{spec}/{name}");
+        assert!(
+            is_generator_allowed_on(true, false, spec, name),
+            "{spec}/{name}"
+        );
+        assert!(
+            is_generator_allowed_on(false, false, spec, name),
+            "{spec}/{name}"
+        );
     }
     assert!(
         ALLOWED_ON_WINDOWS.windows(2).all(|pair| pair[0] < pair[1]),
@@ -628,7 +714,7 @@ fn windows_runs_only_generators_that_read_files_and_take_no_tokens() {
         ("brew", "services"),
         ("kubectx", "context"),
     ] {
-        let allowed_elsewhere = is_generator_allowed_on(false, spec, name);
+        let allowed_elsewhere = is_generator_allowed_on(false, false, spec, name);
         assert_eq!(
             allowed_elsewhere,
             DENIED_GENERATORS
@@ -636,7 +722,10 @@ fn windows_runs_only_generators_that_read_files_and_take_no_tokens() {
                 .all(|(s, g, _)| !(*s == spec && *g == name)),
             "{spec}/{name}"
         );
-        assert!(!is_generator_allowed_on(true, spec, name), "{spec}/{name}");
+        assert!(
+            !is_generator_allowed_on(true, false, spec, name),
+            "{spec}/{name}"
+        );
     }
 
     let pure: BTreeSet<&str> = [
@@ -798,10 +887,10 @@ fn is_alias_generator_allowed_matches_the_listed_pairs() {
 fn is_generator_allowed_matches_the_listed_pairs() {
     use super::is_generator_allowed;
     for (spec, name) in ALLOWED_GENERATORS {
-        assert!(is_generator_allowed(spec, name), "{spec}/{name}");
+        assert!(is_generator_allowed(spec, name, false), "{spec}/{name}");
     }
     for (spec, name, _) in DENIED_GENERATORS {
-        assert!(!is_generator_allowed(spec, name), "{spec}/{name}");
+        assert!(!is_generator_allowed(spec, name, false), "{spec}/{name}");
     }
 }
 /// Types the package-manager commands that used to fetch from public registries, with a stub

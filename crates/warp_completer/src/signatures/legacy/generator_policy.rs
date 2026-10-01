@@ -23,6 +23,11 @@
 //! (`CommandRegistry::signature_with_alias_expansion`); they follow the same rule through
 //! `CommandRegistry::allows_alias_generator` and `ALLOWED_ALIAS_GENERATORS`, which is empty.
 //!
+//! `ALLOWED_WHEN_ISOLATED` lists the generators whose tool can reach a network or run repository
+//! code in the environment alone but was shown not to when the operating system denies the
+//! network to the command and the offline environment table is applied. They run only when the
+//! `GeneratorContext` reports `network_isolated()` (macOS and Linux local sessions).
+//!
 //! On Windows only the subset in `ALLOWED_ON_WINDOWS` runs: file reads and PowerShell cmdlets that
 //! take no tokens. There is no network sandbox there, so a generator that starts another program
 //! stays off.
@@ -51,24 +56,40 @@ mod allowed;
 #[cfg(test)]
 mod denied;
 
-use allowed::{ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS};
+use allowed::{
+    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS, ALLOWED_WHEN_ISOLATED,
+};
 
 /// Whether the generator named `generator` of the spec registered as `spec` (lowercase) may run
-/// a command on this platform.
-pub(super) fn is_generator_allowed(spec: &str, generator: &str) -> bool {
-    is_generator_allowed_on(cfg!(windows), spec, generator)
+/// a command on this platform. `isolated` says whether the context keeps the command from
+/// reaching a network (see [`ALLOWED_WHEN_ISOLATED`]).
+pub(super) fn is_generator_allowed(spec: &str, generator: &str, isolated: bool) -> bool {
+    is_generator_allowed_on(cfg!(windows), isolated, spec, generator)
 }
 
 /// [`is_generator_allowed`] for an explicit platform, so that the Windows tier is testable on
-/// every host.
-pub(super) fn is_generator_allowed_on(windows: bool, spec: &str, generator: &str) -> bool {
+/// every host. No generator of the isolated tier runs on Windows, whatever the context says.
+pub(super) fn is_generator_allowed_on(
+    windows: bool,
+    isolated: bool,
+    spec: &str,
+    generator: &str,
+) -> bool {
     let listed = |list: &[(&str, &str)]| {
         list.binary_search_by(|(listed_spec, listed_generator)| {
             (*listed_spec, *listed_generator).cmp(&(spec, generator))
         })
         .is_ok()
     };
-    listed(ALLOWED_GENERATORS) && (!windows || listed(ALLOWED_ON_WINDOWS))
+    if listed(ALLOWED_GENERATORS) {
+        return !windows || listed(ALLOWED_ON_WINDOWS);
+    }
+    isolated && !windows && listed(ALLOWED_WHEN_ISOLATED)
+}
+
+/// The generators that run only in an isolated context.
+pub(super) fn generators_allowed_when_isolated() -> &'static [(&'static str, &'static str)] {
+    ALLOWED_WHEN_ISOLATED
 }
 
 /// Whether the alias generator named `alias` of the spec registered as `spec` (lowercase) may

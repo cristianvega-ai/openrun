@@ -241,6 +241,35 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("youtube-dl", "pbpaste"),
 ];
 
+/// Generators that run only when the context reports that the operating system keeps the
+/// command from reaching a network (`GeneratorContext::network_isolated`: macOS and Linux local
+/// sessions, never Windows) and the offline environment table is applied. Each looks local but
+/// was shown to reach a network, or to run repository code, in the environment alone:
+///
+/// * `cargo/*`, `rustup/rustup_docs`: the rustup proxies install the toolchain a project's
+///   `rust-toolchain.toml` names (two GETs per command against a loopback canary).
+/// * `npm/workspace_generator`: `npm prefix` ends with an update-check request.
+/// * `git/tracked_files`, `git/treeish`, `hub/treeish`: `git ls-files` and `git diff --cached`
+///   run the `core.fsmonitor` program of a repository's config.
+///
+/// The real tools were run against a canary with the sandbox and the environment table each on
+/// its own and both together (`network_sandbox_tests.rs`, `offline_environment_tests.rs`,
+/// `restored_generators_tests.rs` in the app crate), and each pair here is checked by that last
+/// test against the command the bundled spec runs. Sorted, and disjoint from [`ALLOWED_GENERATORS`].
+pub(super) const ALLOWED_WHEN_ISOLATED: &[(&str, &str)] = &[
+    ("cargo", "bin_list"),
+    ("cargo", "features_generators"),
+    ("cargo", "read_manifest"),
+    ("cargo", "spec"),
+    ("cargo", "target_list"),
+    ("cargo", "test_targets"),
+    ("git", "tracked_files"),
+    ("git", "treeish"),
+    ("hub", "treeish"),
+    ("npm", "workspace_generator"),
+    ("rustup", "rustup_docs"),
+];
+
 /// Alias generators that may run. Empty: the bundled ones interpolate the typed word unquoted
 /// (`git`) or run `npm prefix` (`npm`, `yarn`).
 pub(super) const ALLOWED_ALIAS_GENERATORS: &[(&str, &str)] = &[];

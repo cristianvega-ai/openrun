@@ -400,6 +400,15 @@ mod real_tools {
     }
 
     #[test]
+    fn docker_does_not_use_a_remote_host_or_context() {
+        let canary = Canary::start();
+        for mut scenario in docker_scenarios(&canary) {
+            scenario.commands = commands(&["docker ps -a --format '{{ json . }}'"]);
+            assert_environment_keeps_silent(scenario, &canary);
+        }
+    }
+
+    #[test]
     fn git_fsmonitor_hook_does_not_run() {
         let canary = Canary::start();
         let Some(scenario) = git_fsmonitor_scenario() else {
@@ -428,7 +437,7 @@ mod real_tools {
             ("GIT_CONFIG_KEY_0".to_owned(), "user.name".to_owned()),
             ("GIT_CONFIG_VALUE_0".to_owned(), "session-user".to_owned()),
         ]);
-        scenario.commands = vec!["git config --get user.name; git status --porcelain"];
+        scenario.commands = commands(&["git config --get user.name; git status --porcelain"]);
         let ran = scenario.assert_silent_through(&canary, environment_only_executor);
         assert!(ran[0].success, "{}", ran[0].output);
         assert!(

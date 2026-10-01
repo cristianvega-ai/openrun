@@ -6,6 +6,8 @@ mod msys2_command_executor;
 mod network_sandbox;
 mod offline_environment;
 #[cfg(all(test, unix))]
+mod restored_generators_tests;
+#[cfg(all(test, unix))]
 mod test_support;
 #[cfg(feature = "local_tty")]
 mod wsl_command_executor;

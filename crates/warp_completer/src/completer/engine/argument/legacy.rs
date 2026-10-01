@@ -734,9 +734,12 @@ async fn generate_suggestions_for_argument_type(
                 Some(generator) => generator,
             };
 
+            let isolated = ctx
+                .generator_context()
+                .is_some_and(|generator_context| generator_context.network_isolated());
             let generator_allowed = dynamic_completion_data.is_some_and(|data| {
                 ctx.command_registry()
-                    .allows_generator(data.spec(), generator_name)
+                    .allows_generator(data.spec(), generator_name, isolated)
             });
             if !generator_allowed {
                 log::debug!("Generator {generator_name:?} is not on the local-only allow-list");

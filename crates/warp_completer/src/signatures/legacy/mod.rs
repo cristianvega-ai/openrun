@@ -11,6 +11,12 @@ use warp_command_signatures::Signature;
 
 static GLOBAL_REGISTRY: OnceLock<Arc<CommandRegistry>> = OnceLock::new();
 
+/// The `(spec, generator)` pairs that run only in a context whose commands cannot reach a network
+/// (`GeneratorContext::network_isolated`). For tests that check each against the real tool.
+pub fn generators_allowed_when_isolated() -> &'static [(&'static str, &'static str)] {
+    generator_policy::generators_allowed_when_isolated()
+}
+
 impl CommandRegistry {
     /// Returns a reference to a single global instance of the command registry.
     ///

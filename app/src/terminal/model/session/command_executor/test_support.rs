@@ -223,12 +223,12 @@ pub struct Scenario {
     pub cwd: PathBuf,
     pub path: String,
     pub variables: HashMap<String, String>,
-    pub commands: Vec<&'static str>,
+    pub commands: Vec<String>,
     pub control: Control,
     /// Directories the tool writes state into; emptied before every run so the control run
     /// cannot make the protected run look quiet.
     pub state_dirs: Vec<PathBuf>,
-    /// A file the tool's hook creates when it runs.
+    /// A file, or a directory, that the tool's hooks create entries in when they run.
     pub marker: Option<PathBuf>,
     /// How long to wait for a tool that reports in the background.
     pub settle: Duration,
@@ -239,7 +239,12 @@ impl Scenario {
     pub fn reset(&self, canary: &Canary) {
         canary.reset();
         if let Some(marker) = &self.marker {
-            let _ = std::fs::remove_file(marker);
+            if marker.is_dir() {
+                let _ = std::fs::remove_dir_all(marker);
+                std::fs::create_dir_all(marker).unwrap();
+            } else {
+                let _ = std::fs::remove_file(marker);
+            }
         }
         for dir in &self.state_dirs {
             let _ = std::fs::remove_dir_all(dir);
@@ -249,7 +254,27 @@ impl Scenario {
 
     pub fn reached(&self, canary: &Canary) -> bool {
         std::thread::sleep(self.settle);
-        !canary.requests().is_empty() || self.marker.as_ref().is_some_and(|marker| marker.exists())
+        !canary.requests().is_empty() || self.ran_a_hook()
+    }
+
+    /// Which hooks ran (the names of the files in the marker directory, or the marker file).
+    pub fn ran_hooks(&self) -> Vec<String> {
+        match &self.marker {
+            Some(marker) if marker.is_dir() => std::fs::read_dir(marker)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            Some(marker) if marker.exists() => vec![marker.display().to_string()],
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn ran_a_hook(&self) -> bool {
+        !self.ran_hooks().is_empty()
     }
 
     /// Runs every command without the layer under test and checks the fixture is sensitive.
@@ -295,6 +320,13 @@ impl Scenario {
             })
             .collect()
     }
+}
+
+pub fn commands(commands: &[&str]) -> Vec<String> {
+    commands
+        .iter()
+        .map(|command| (*command).to_owned())
+        .collect()
 }
 
 pub fn production_executor() -> LocalCommandExecutor {
@@ -346,13 +378,13 @@ pub fn rustup_scenario(canary: &Canary) -> Option<Scenario> {
         cwd: project,
         path,
         variables,
-        commands: vec![
+        commands: commands(&[
             "cargo metadata --format-version 1 --no-deps",
             "rustc --print target-list",
             "cargo read-manifest",
             "cargo install --list",
             "rustup docs --path",
-        ],
+        ]),
         control: Control::EveryCommand,
         state_dirs: vec![rustup_home, cargo_home],
         marker: None,
@@ -389,7 +421,7 @@ pub fn npm_scenario(canary: &Canary) -> Option<Scenario> {
         cwd: project,
         path,
         variables,
-        commands: vec!["npm prefix"],
+        commands: commands(&["npm prefix"]),
         control: Control::EveryCommand,
         state_dirs: vec![home, cache],
         marker: None,
@@ -424,7 +456,7 @@ pub fn corepack_scenario(canary: &Canary) -> Option<Scenario> {
         cwd: project,
         path,
         variables,
-        commands: vec!["corepack yarn --version"],
+        commands: commands(&["corepack yarn --version"]),
         control: Control::EveryCommand,
         state_dirs: vec![corepack_home],
         marker: None,
@@ -477,7 +509,7 @@ pub fn git_lazy_fetch_scenario(canary: &Canary) -> Option<Scenario> {
         cwd: clone,
         path: system_path(),
         variables: base_environment(&temp.path().join("home")),
-        commands: vec!["git cat-file -p HEAD:file"],
+        commands: commands(&["git cat-file -p HEAD:file"]),
         control: Control::EveryCommand,
         state_dirs: vec![],
         marker: None,
@@ -513,16 +545,148 @@ pub fn git_fsmonitor_scenario() -> Option<Scenario> {
         cwd: repo,
         path: system_path(),
         variables: base_environment(&temp.path().join("home")),
-        commands: vec![
+        commands: commands(&[
             "git status --porcelain",
             "git --no-optional-locks branch --no-color",
             "git diff",
             "git ls-files",
-        ],
+        ]),
         control: Control::SomeCommand,
         state_dirs: vec![],
         marker: Some(marker),
         settle: Duration::ZERO,
         _temp: temp,
     })
+}
+
+/// A repository whose config and hooks make git run five different programs on read commands:
+/// `core.fsmonitor`, a `clean` filter, `diff.external`, a textconv driver and the
+/// `post-index-change` hook. Each appends its name to a file in the marker directory. The file
+/// `f` is modified right after the index was written, with the index's own modification time,
+/// so that git has to run the clean filter to learn whether it changed.
+pub fn git_hostile_repository_scenario() -> Option<Scenario> {
+    require_tool("git")?;
+    let temp = tempfile::tempdir().unwrap();
+    let markers = temp.path().join("markers");
+    std::fs::create_dir_all(&markers).unwrap();
+    let repo = temp.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-q"]);
+
+    let hook = |name: &str, body: &str| {
+        let path = temp.path().join(format!("{name}.sh"));
+        std::fs::write(
+            &path,
+            format!(
+                "#!/bin/sh\necho x >> '{}/{name}'\n{body}",
+                markers.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    };
+    let fsmonitor = hook("fsmonitor", "printf '\\0'\n");
+    let clean = hook("clean", "cat\n");
+    let external = hook("external", "");
+    let textconv = hook("textconv", "cat \"$1\"\n");
+    let post_index_change = hook("post-index-change", "");
+
+    std::fs::write(repo.join(".gitattributes"), "f filter=evil diff=evil\n").unwrap();
+    std::fs::write(repo.join("f"), "one\n").unwrap();
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-qm", "one"]);
+    for (key, value) in [
+        ("core.fsmonitor", &fsmonitor),
+        ("filter.evil.clean", &clean),
+        ("diff.external", &external),
+        ("diff.evil.textconv", &textconv),
+    ] {
+        git(&repo, &["config", key, value.to_str().unwrap()]);
+    }
+    std::fs::create_dir_all(repo.join(".git/hooks")).unwrap();
+    std::fs::copy(
+        &post_index_change,
+        repo.join(".git/hooks/post-index-change"),
+    )
+    .unwrap();
+    // Same size, same modification time as the index: git can only tell by running the filter.
+    std::fs::write(repo.join("f"), "two\n").unwrap();
+    let status = Command::new("touch")
+        .args(["-r", ".git/index", "f"])
+        .current_dir(&repo)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    // Setting up ran some of the hooks already.
+    let _ = std::fs::remove_dir_all(&markers);
+    std::fs::create_dir_all(&markers).unwrap();
+
+    Some(Scenario {
+        name: "git repository with fsmonitor, filter, external diff, textconv and hook",
+        cwd: repo,
+        path: system_path(),
+        variables: base_environment(&temp.path().join("home")),
+        commands: Vec::new(),
+        control: Control::SomeCommand,
+        state_dirs: vec![],
+        marker: Some(markers),
+        settle: Duration::ZERO,
+        _temp: temp,
+    })
+}
+
+/// Docker pointed at the canary twice: through `DOCKER_HOST`, and through a docker context whose
+/// endpoint is the canary and that is the current one. Left alone the CLI pings the canary
+/// before anything else. Empty when docker is not installed.
+pub fn docker_scenarios(canary: &Canary) -> Vec<Scenario> {
+    let Some(docker) = require_tool("docker") else {
+        return Vec::new();
+    };
+    let mut scenarios = Vec::new();
+    for (name, via_context) in [
+        ("docker with a remote DOCKER_HOST", false),
+        ("docker with a remote current context", true),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        let config = temp.path().join("docker-config");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&config).unwrap();
+        let mut variables = base_environment(&home);
+        variables.insert(
+            "DOCKER_CONFIG".to_owned(),
+            config.to_string_lossy().into_owned(),
+        );
+        let endpoint = format!("tcp://127.0.0.1:{}", canary.port());
+        if via_context {
+            let status = Command::new(&docker)
+                .args(["context", "create", "remote", "--docker"])
+                .arg(format!("host={endpoint}"))
+                .envs(&variables)
+                .output()
+                .unwrap();
+            assert!(
+                status.status.success(),
+                "docker context create failed: {}",
+                String::from_utf8_lossy(&status.stderr)
+            );
+            variables.insert("DOCKER_CONTEXT".to_owned(), "remote".to_owned());
+        } else {
+            variables.insert("DOCKER_HOST".to_owned(), endpoint);
+        }
+        scenarios.push(Scenario {
+            name,
+            cwd: temp.path().to_path_buf(),
+            path: format!("{}:{}", docker.parent().unwrap().display(), system_path()),
+            variables,
+            commands: Vec::new(),
+            control: Control::EveryCommand,
+            state_dirs: vec![],
+            marker: None,
+            settle: Duration::ZERO,
+            _temp: temp,
+        });
+    }
+    scenarios
 }
