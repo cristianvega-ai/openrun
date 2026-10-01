@@ -6,7 +6,7 @@ name: Stress tests
 #
 #   gh workflow run stress.yml -f filter='test(=ui_tests::test_focus_panes_on_hover)' -f count=30
 #
-# A failing iteration fails the run; nothing here blocks a merge.
+# A failing iteration fails the run. The workflow does not run on push, so it never blocks a merge.
 on:
   workflow_dispatch:
     inputs:
