@@ -248,6 +248,8 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
 ///
 /// * `cargo/*`, `rustup/rustup_docs`: the rustup proxies install the toolchain a project's
 ///   `rust-toolchain.toml` names (two GETs per command against a loopback canary).
+/// * `docker/*` (ten listing commands): the docker CLI talks to whatever `DOCKER_HOST` or the
+///   current docker context names, which may be a remote daemon over `tcp://` or `ssh://`.
 /// * `npm/workspace_generator`: `npm prefix` ends with an update-check request.
 /// * `git/tracked_files`, `git/treeish`, `hub/treeish`: `git ls-files` and `git diff --cached`
 ///   run the `core.fsmonitor` program of a repository's config.
@@ -263,6 +265,16 @@ pub(super) const ALLOWED_WHEN_ISOLATED: &[(&str, &str)] = &[
     ("cargo", "spec"),
     ("cargo", "target_list"),
     ("cargo", "test_targets"),
+    ("docker", "all_docker_containers"),
+    ("docker", "all_local_images"),
+    ("docker", "docker_images"),
+    ("docker", "docker_volumes"),
+    ("docker", "list_docker_networks"),
+    ("docker", "list_docker_plugins"),
+    ("docker", "list_docker_volumes"),
+    ("docker", "paused_docker_containers"),
+    ("docker", "remove_images"),
+    ("docker", "running_docker_containers"),
     ("git", "tracked_files"),
     ("git", "treeish"),
     ("hub", "treeish"),

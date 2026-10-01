@@ -527,20 +527,6 @@ const INJECTABLE_GENERATORS: &[(&str, &str, &str)] = &[
 /// update check, a corepack shim that downloads the package manager, and tools that run code the
 /// project (or the repository config) controls.
 const ENVIRONMENT_GENERATORS: &[(&str, &str, &str)] = &[
-    ("docker", "all_docker_containers", "env-network-verified"),
-    ("docker", "all_local_images", "env-network-verified"),
-    ("docker", "docker_images", "env-network-verified"),
-    ("docker", "docker_volumes", "env-network-verified"),
-    ("docker", "list_docker_networks", "env-network-verified"),
-    ("docker", "list_docker_plugins", "env-network-verified"),
-    ("docker", "list_docker_volumes", "env-network-verified"),
-    ("docker", "paused_docker_containers", "env-network-verified"),
-    ("docker", "remove_images", "env-network-verified"),
-    (
-        "docker",
-        "running_docker_containers",
-        "env-network-verified",
-    ),
     ("yarn", "all_dependencies_generator", "env-network-verified"),
     ("yarn", "config_list", "env-network-verified"),
     (
@@ -624,6 +610,7 @@ fn isolated_generators_run_only_when_the_context_is_isolated() {
 fn an_isolated_context_runs_the_restored_generators_and_a_plain_one_does_not() {
     for (input, marker) in [
         ("cargo run --bin ", "cargo metadata"),
+        ("docker start ", "docker ps"),
         ("npm install -w ", "npm prefix"),
     ] {
         let plain = guarded().commands_for(input);

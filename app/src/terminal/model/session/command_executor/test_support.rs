@@ -108,10 +108,20 @@ pub fn find_tool(name: &str) -> Option<PathBuf> {
     })
 }
 
-/// The tool's path, or `None` after saying why the test is skipped.
+/// Tools whose absence on a CI runner is a failure, not a skip: the tests that use them are the
+/// evidence for the generator policy, and a skipped test is no evidence.
+const REQUIRED_ON_CI: &[&str] = &["git", "npm", "corepack", "rustup", "docker", "python3"];
+
+/// The tool's path, or `None` after saying why the test is skipped. On CI (`CI=true`), a tool in
+/// [`REQUIRED_ON_CI`] that is missing fails the test instead.
 pub fn require_tool(name: &str) -> Option<PathBuf> {
     let tool = find_tool(name);
     if tool.is_none() {
+        assert!(
+            !(std::env::var("CI").is_ok_and(|ci| ci == "true") && REQUIRED_ON_CI.contains(&name)),
+            "{name} is not installed on this CI runner, so the real-tool tests that need it \
+             would pass without testing anything"
+        );
         eprintln!("SKIPPED: {name} is not installed on this machine");
     }
     tool
