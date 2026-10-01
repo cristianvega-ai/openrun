@@ -2,27 +2,48 @@
 //!
 //! A `warp-command-signatures` spec can name a *generator*: a shell command the completion
 //! engine runs on every completion request to list things such as git branches or npm scripts.
-//! The bundled generators are not all local. Some run `curl` against public registries with the
-//! text the user is typing, and some call cloud CLIs, `gh`, `kubectl` or `ssh`. Completion
-//! requests fire while the user is still typing (autosuggestions) and on Tab, so an unreviewed
-//! generator is a network request the user never asked for.
+//! Completion requests fire while the user is still typing (autosuggestions) and on Tab, so a
+//! generator runs before the user submits anything. A generator must therefore never
+//!
+//! * execute shell syntax derived from the user's tokens,
+//! * touch a network, or
+//! * execute code the project controls.
+//!
+//! The bundled generators do not all meet that. Some run `curl` against public registries with
+//! the text the user is typing, some call cloud CLIs, `gh`, `kubectl` or `ssh`, some command
+//! lines interpolate the typed word unquoted, and some tools reach a network or run project
+//! files depending on the environment (a rustup proxy installing a toolchain, a remote
+//! `DOCKER_HOST`, `core.fsmonitor` in a repository's config).
 //!
 //! The policy is default-deny and works by identity, never by inspecting the command line: a
 //! generator runs only if its `(spec, generator name)` pair is in `allowed.rs`. The check is in
-//! `CommandRegistry::allows_generator`, called from the one place that executes generators
-//! (`completer::engine::argument::legacy`, before the shell command is even built). Alias
-//! generators are not covered because the bundled ones only read local files (a test checks it).
+//! `CommandRegistry::allows_generator`, called before the shell command is built, in
+//! `completer::engine::argument::legacy`. Alias generators, which the completion engine runs to
+//! expand an alias the user typed, are the second place a command is executed
+//! (`CommandRegistry::signature_with_alias_expansion`); they follow the same rule through
+//! `CommandRegistry::allows_alias_generator` and `ALLOWED_ALIAS_GENERATORS`, which is empty.
+//!
+//! On Windows only the subset in `ALLOWED_ON_WINDOWS` runs: file reads and PowerShell cmdlets that
+//! take no tokens. There is no network sandbox there, so a generator that starts another program
+//! stays off.
+//!
+//! An entry in `allowed.rs` records that someone read the command and the tool's behaviour. It
+//! is not a proof: only some tools were run against a canary (see `denied.rs` for which), and
+//! the rest of the allowed external CLIs are reviewed from their commands and documentation.
 //!
 //! # Classifying generators
 //!
 //! * `allowed.rs` lists the generators whose command reads only the local machine: files, the
 //!   repository, local daemons. If in doubt, deny.
-//! * `denied.rs` lists generators that can reach a network, with a class. It is not consulted at
+//! * `denied.rs` lists the generators that must not run, with a class. It is not consulted at
 //!   runtime; it lets the drift test tell a reviewed generator from an unclassified one.
 //! * The drift test (`generator_policy_tests.rs`) enumerates
 //!   `warp_command_signatures::dynamic_command_signature_data()` and fails, listing the pairs and
-//!   their commands, when a pair is in neither file. Bumping the `command-signatures` pin
-//!   therefore forces a review. Put each new pair in exactly one of the files, keeping both sorted.
+//!   their commands, when a generator or alias generator is in neither file. Bumping the
+//!   `command-signatures` pin therefore forces a review. Put each new pair in exactly one of the
+//!   files, keeping both sorted.
+//! * The injection corpus in the same test file runs every allowed token-taking generator with
+//!   hostile tokens in a shell and fails if anything but the generator's own command ran.
 //! * Stripping the network generators from our future `command-signatures` fork (DEP-05) is the
 //!   follow-up; this allow-list stays as the guard in this repository.
 
@@ -30,14 +51,32 @@ mod allowed;
 #[cfg(test)]
 mod denied;
 
-use allowed::ALLOWED_GENERATORS;
+use allowed::{ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS};
 
-/// Whether the generator named `generator` of the spec registered as `spec` (lowercase) is on
-/// the local-only allow-list.
+/// Whether the generator named `generator` of the spec registered as `spec` (lowercase) may run
+/// a command on this platform.
 pub(super) fn is_generator_allowed(spec: &str, generator: &str) -> bool {
-    ALLOWED_GENERATORS
-        .binary_search_by(|(allowed_spec, allowed_generator)| {
-            (*allowed_spec, *allowed_generator).cmp(&(spec, generator))
+    is_generator_allowed_on(cfg!(windows), spec, generator)
+}
+
+/// [`is_generator_allowed`] for an explicit platform, so that the Windows tier is testable on
+/// every host.
+pub(super) fn is_generator_allowed_on(windows: bool, spec: &str, generator: &str) -> bool {
+    let listed = |list: &[(&str, &str)]| {
+        list.binary_search_by(|(listed_spec, listed_generator)| {
+            (*listed_spec, *listed_generator).cmp(&(spec, generator))
+        })
+        .is_ok()
+    };
+    listed(ALLOWED_GENERATORS) && (!windows || listed(ALLOWED_ON_WINDOWS))
+}
+
+/// Whether the alias generator named `alias` of the spec registered as `spec` (lowercase) may
+/// run a command.
+pub(super) fn is_alias_generator_allowed(spec: &str, alias: &str) -> bool {
+    ALLOWED_ALIAS_GENERATORS
+        .binary_search_by(|(allowed_spec, allowed_alias)| {
+            (*allowed_spec, *allowed_alias).cmp(&(spec, alias))
         })
         .is_ok()
 }

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use memo_map::MemoMap;
 use warp_command_signatures::{
-    Aliases, Argument, DynamicCompletionData, Filters, GeneratorName, Generators,
-    IsArgumentOptional, Signature,
+    AliasGeneratorName, Aliases, Argument, DynamicCompletionData, Filters, GeneratorName,
+    Generators, IsArgumentOptional, Signature,
 };
 
 use super::miss_cache::MissCache;
@@ -220,6 +220,18 @@ impl CommandRegistry {
         }
     }
 
+    /// Whether the alias generator `alias` of spec `spec` may run a command, decided by
+    /// identity like [`Self::allows_generator`].
+    pub fn allows_alias_generator(&self, spec: &str, alias: &AliasGeneratorName) -> bool {
+        match self.generator_policy {
+            GeneratorPolicy::AllowListed => {
+                super::generator_policy::is_alias_generator_allowed(spec, &alias.0)
+            }
+            #[cfg(any(test, feature = "test-util"))]
+            GeneratorPolicy::AllowAll => true,
+        }
+    }
+
     pub fn registered_commands(&self) -> impl Iterator<Item = &str> {
         // Note we need to collect the keys because MemoMap uses a mutex under the hood to control
         // access to the underlying signature data. This means the mutex is locked as long as the
@@ -331,9 +343,21 @@ impl CommandRegistry {
                     signature_start_idx,
                 ));
             }
-            // Check if there is any alias at the current signature.
-            if let Some(alias) =
-                curr_signature.alias(dynamic_completion_data.map(SpecDynamicData::aliases))
+            // Check if there is any alias at the current signature. An alias generator is a
+            // command that runs while the user is typing, so it needs the same review as a
+            // completion generator.
+            let alias_generator_allowed = match (
+                curr_signature.alias_generator.as_ref(),
+                dynamic_completion_data,
+            ) {
+                (Some(alias_name), Some(data)) => {
+                    self.allows_alias_generator(data.spec(), alias_name)
+                }
+                _ => false,
+            };
+            if alias_generator_allowed
+                && let Some(alias) =
+                    curr_signature.alias(dynamic_completion_data.map(SpecDynamicData::aliases))
             {
                 // Get the shell command to execute for getting the alias.
                 let command_to_run = alias.command(&tokens[..token_idx + 1]);
