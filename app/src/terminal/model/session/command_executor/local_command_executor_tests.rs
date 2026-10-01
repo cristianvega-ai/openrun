@@ -15,6 +15,7 @@ mod unix {
     use nix::unistd::{Pid, mkfifo};
 
     use super::super::*;
+    use crate::terminal::model::session::command_executor::test_support::session_shell;
 
     const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -210,41 +211,6 @@ mod unix {
                 "descendant-ran"
             );
         });
-    }
-
-    /// The executable of a shell that a local session of that type is launched with, or `None`
-    /// outside CI with a message saying the test is skipped. With `CI` set a missing shell fails
-    /// the test: a run that skips fish and PowerShell proves nothing about them.
-    /// `OPENRUN_TEST_FISH` and `OPENRUN_TEST_PWSH` name an executable that is not on `PATH`.
-    fn session_shell(name: &str, override_variable: &str) -> Option<std::path::PathBuf> {
-        let found = match std::env::var_os(override_variable) {
-            Some(path) => Some(std::path::PathBuf::from(path)).filter(|path| path.is_file()),
-            None => {
-                let path_dirs = std::env::var_os("PATH").unwrap_or_default();
-                std::env::split_paths(&path_dirs)
-                    .chain(
-                        ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
-                            .into_iter()
-                            .map(std::path::PathBuf::from),
-                    )
-                    .map(|dir| dir.join(name))
-                    .find(|candidate| candidate.is_file())
-            }
-        };
-        let in_ci =
-            std::env::var_os("CI").is_some_and(|value| !value.is_empty() && value != "false");
-        if found.is_none() {
-            assert!(
-                !in_ci,
-                "{name} is not installed and CI is set: the session shell tests must run in {name} \
-                 (install it on the runner or set {override_variable})"
-            );
-            eprintln!(
-                "SKIPPED: {name} is not installed, so its session shell test does not run here (CI \
-                 installs it and fails without it; set {override_variable} to run it)"
-            );
-        }
-        found
     }
 
     /// Runs `command` the way a completion generator of a session of `shell_type` is run: through

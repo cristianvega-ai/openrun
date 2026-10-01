@@ -45,18 +45,40 @@ pub fn test_typeahead() -> Builder {
         )
 }
 
-/// Checks a typeahead command has the expected value.
+/// The text the terminal echoes for the ESC-i keybinding that asks the shell to report its input
+/// buffer.
+const ECHOED_INPUT_REPORTING_KEYBINDING: &str = "^[i";
+
+/// Checks a typeahead command ran as typed.
 ///
-/// There's a race condition sending the ESC-i keybinding to
-/// report input. In real user input, it's unlikely, but it
-/// happens in integration tests because of how quickly the
-/// command is entered.
+/// Warp writes ESC-i to the pty when a prompt appears. Typeahead lines are already queued in the
+/// pty, so the shell can still be between the prompt hook and its line editor, with the terminal
+/// in cooked mode, when ESC-i arrives. The terminal then echoes it as the two characters `^[i`
+/// in front of the command that the line editor reads next (`^[isleep 1`), and the line editor
+/// later receives the ESC-i itself and reports the buffer. Whether that happens depends on how
+/// fast the shell and the app are relative to each other: on a loaded CI runner it was seen on
+/// seven attempts in a row. zsh, which redraws the rest of the pending input with the line it
+/// runs, can also leave the typeahead lines that follow in the command text (`true`, then
+/// `sleep 1`, `pwd` and `ls -l` on later lines). Neither changes which command runs, so the
+/// first line, without the echoed `^[i`, must be the expected command and the block must have
+/// succeeded (an ESC-i that reached the command line as text would turn `sleep 1` into a failing
+/// command). Any other text that contains `^[i` is still reported as a failed precondition,
+/// which reruns the test, as before.
 macro_rules! check_command {
-    ($command:expr, $expected:expr) => {
-        let command = $command;
-        if command.contains("^[i") {
+    ($block:expr, $expected:expr) => {
+        let block = $block;
+        let command = block.command_to_string();
+        let without_echo = command.replace(ECHOED_INPUT_REPORTING_KEYBINDING, "");
+        let first_line = without_echo.lines().next().unwrap_or_default().trim();
+        if first_line == $expected {
+            assert!(
+                !block.has_failed(),
+                "typeahead command `{first_line}` failed: exit code {:?}",
+                block.exit_code()
+            );
+        } else if command.contains(ECHOED_INPUT_REPORTING_KEYBINDING) {
             return AssertionOutcome::PreconditionFailed(format!(
-                "Flake: input reporting keybinding sent too early on `{command}`"
+                "Flake: input reporting keybinding echoed into `{command}`"
             ));
         } else {
             assert_eq!(command, $expected);
@@ -128,25 +150,25 @@ pub fn test_input_reporting_posix_shells() -> Builder {
 
                         let sleep_3_block =
                             blocks.block_at(start_index).expect("Block should exist");
-                        check_command!(sleep_3_block.command_to_string(), "sleep 3");
+                        check_command!(sleep_3_block, "sleep 3");
 
                         let true_block = blocks
                             .block_at(start_index + BlockIndex::from(1))
                             .expect("Block should exist");
                         assert!(!true_block.is_background());
-                        check_command!(true_block.command_to_string(), "true");
+                        check_command!(true_block, "true");
 
                         let sleep_1_block = blocks
                             .block_at(start_index + BlockIndex::from(2))
                             .expect("Block should exist");
                         assert!(!sleep_1_block.is_background());
-                        check_command!(sleep_1_block.command_to_string(), "sleep 1");
+                        check_command!(sleep_1_block, "sleep 1");
 
                         let pwd_block = blocks
                             .block_at(start_index + BlockIndex::from(3))
                             .expect("Block should exist");
                         assert!(!pwd_block.is_background());
-                        check_command!(pwd_block.command_to_string(), "pwd");
+                        check_command!(pwd_block, "pwd");
 
                         // On shells that support input reporting, there will be
                         // an empty block that formerly held echoed typeahead. On

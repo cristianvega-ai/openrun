@@ -66,6 +66,14 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
     ("NXF_OFFLINE", "true"),
     // .NET CLI: no telemetry.
     ("DOTNET_CLI_TELEMETRY_OPTOUT", "1"),
+    // PowerShell 7 (`pwsh`): no usage telemetry and no check for a newer release. Update check
+    // verified (pwsh 7.6.6, `powershell_does_not_check_for_updates`): an interactive `pwsh`
+    // sends `CONNECT aka.ms:443` about three seconds after it starts, and with the variable it
+    // sends nothing. Telemetry is documented, not observed: the `pwsh -NoProfile -c` that
+    // generators run sent no request with or without either variable, so the loopback canary
+    // cannot tell the two apart.
+    ("POWERSHELL_TELEMETRY_OPTOUT", "1"),
+    ("POWERSHELL_UPDATECHECK", "Off"),
     // Azure CLI: no telemetry.
     ("AZURE_CORE_COLLECT_TELEMETRY", "false"),
     // Google Cloud CLI: no component-manager update check.

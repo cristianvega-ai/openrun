@@ -58,13 +58,16 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Free disk space
+        timeout-minutes: 10
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
 
+      # script/linux/ci_apt_install limits each apt-get call and retries it; the step limit is the
+      # backstop, so a stuck mirror or dpkg lock fails the step in minutes, not after an hour.
       - name: Install system packages
+        timeout-minutes: 25
         run: |
-          sudo apt-get update -y
           # shellcheck disable=SC2086 # The package list is meant to be word-split.
-          sudo apt-get install -y --no-install-recommends $LINUX_BUILD_PACKAGES
+          script/linux/ci_apt_install $LINUX_BUILD_PACKAGES
 
       - name: Install the Rust toolchain from rust-toolchain.toml
         run: rustup toolchain install
@@ -228,13 +231,14 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Free disk space
+        timeout-minutes: 10
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
 
       - name: Install system packages
+        timeout-minutes: 25
         run: |
-          sudo apt-get update -y
           # shellcheck disable=SC2086 # The package lists are meant to be word-split.
-          sudo apt-get install -y --no-install-recommends $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES
+          script/linux/ci_apt_install $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES
 
       # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`) as well
       # as bash and zsh, and fail when either is missing (`CI=true`). fish is in
@@ -290,13 +294,14 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Free disk space
+        timeout-minutes: 10
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
 
       - name: Install system packages
+        timeout-minutes: 25
         run: |
-          sudo apt-get update -y
           # shellcheck disable=SC2086 # The package lists are meant to be word-split.
-          sudo apt-get install -y --no-install-recommends $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES \
+          script/linux/ci_apt_install $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES \
             ripgrep strace xvfb iproute2
 
       # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`) as well

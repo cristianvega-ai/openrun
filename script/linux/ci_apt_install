@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+#
+# Installs apt packages on a CI runner without letting a stuck mirror, a held dpkg lock or a
+# prompt use up the job. A run hung for over an hour in `apt-get install` once; every call here
+# has a time limit, a failed attempt is retried with a pause, and the job step that calls this
+# script has its own `timeout-minutes` as the last backstop.
+#
+#   script/linux/ci_apt_install <package>...
+#
+# Limits (override with the environment variables of the same name):
+#   APT_UPDATE_TIMEOUT   seconds one `apt-get update` may take            (default 90)
+#   APT_INSTALL_TIMEOUT  seconds one `apt-get install` may take           (default 300)
+#   APT_ATTEMPTS         tries of update + install before giving up        (default 3)
+#   APT_BACKOFF          seconds before the second try; doubles each time  (default 15)
+#
+# Worst case with the defaults: 3 * (90 + 300) + 15 + 30 seconds, about 20 minutes. A normal run
+# takes one to two minutes.
+
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+  echo "usage: $0 <package>..." >&2
+  exit 2
+fi
+
+update_timeout=${APT_UPDATE_TIMEOUT:-90}
+install_timeout=${APT_INSTALL_TIMEOUT:-300}
+attempts=${APT_ATTEMPTS:-3}
+backoff=${APT_BACKOFF:-15}
+
+# Never ask a question. needrestart (Ubuntu 22.04+) would otherwise wait for an answer after
+# installing a library that a running service uses.
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+
+apt_options=(
+  # Per-file retries and network timeouts inside apt itself; the `timeout` below is the limit on
+  # the whole command.
+  -o Acquire::Retries=3
+  -o Acquire::http::Timeout=30
+  -o Acquire::https::Timeout=30
+  # Wait for a lock held by another apt/dpkg process (the runner's own background updates)
+  # instead of failing at once.
+  -o DPkg::Lock::Timeout=120
+)
+
+# Runs the apt-get command with a time limit as root. A command that is killed at the limit
+# exits with 124 (SIGTERM) or 137 (SIGKILL after the 15 s grace period).
+apt_get() {
+  local limit=$1
+  shift
+  sudo timeout --kill-after=15 "$limit" apt-get "${apt_options[@]}" "$@"
+}
+
+attempt=1
+while true; do
+  echo "::group::apt-get update and install (attempt $attempt of $attempts)"
+  status=0
+  apt_get "$update_timeout" update -y || status=$?
+  if [ "$status" -eq 0 ]; then
+    apt_get "$install_timeout" install -y --no-install-recommends "$@" || status=$?
+  fi
+  echo "::endgroup::"
+
+  if [ "$status" -eq 0 ]; then
+    exit 0
+  fi
+
+  if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+    echo "::warning::apt-get timed out (attempt $attempt of $attempts)"
+  else
+    echo "::warning::apt-get failed with status $status (attempt $attempt of $attempts)"
+  fi
+  if [ "$attempt" -ge "$attempts" ]; then
+    echo "::error::apt-get did not succeed in $attempts attempts"
+    exit 1
+  fi
+
+  # A command killed in the middle of an install leaves dpkg half-configured; finish that
+  # before trying again.
+  sudo timeout --kill-after=15 120 dpkg --configure -a || true
+  echo "Retrying in ${backoff}s"
+  sleep "$backoff"
+  backoff=$((backoff * 2))
+  attempt=$((attempt + 1))
+done

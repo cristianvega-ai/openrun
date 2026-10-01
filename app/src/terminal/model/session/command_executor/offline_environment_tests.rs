@@ -35,6 +35,8 @@ fn table_sets_every_documented_variable() {
         ("NX_NO_CLOUD", "true"),
         ("NXF_OFFLINE", "true"),
         ("DOTNET_CLI_TELEMETRY_OPTOUT", "1"),
+        ("POWERSHELL_TELEMETRY_OPTOUT", "1"),
+        ("POWERSHELL_UPDATECHECK", "Off"),
         ("AZURE_CORE_COLLECT_TELEMETRY", "false"),
         ("CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK", "1"),
     ] {
@@ -476,6 +478,191 @@ mod real_tools {
                 .lines()
                 .any(|line| line.starts_with("DOCKER_HOST=")),
             "a remote DOCKER_HOST reached the generator"
+        );
+    }
+}
+
+/// PowerShell 7 against a loopback proxy that records every request it receives. The real `pwsh`
+/// is needed: the claim is about what it does, not about what a stub would do.
+///
+/// Two things are checked, with different strength:
+///
+/// * `powershell_commands_run_with_the_telemetry_and_update_check_switched_off`: the command a
+///   PowerShell session's generators use (`pwsh -NoProfile -c`, through the production executor)
+///   has both variables set and makes no request. A control shows that the proxy sees `pwsh`'s
+///   own .NET HTTP traffic. But that command sends nothing without the variables either (the
+///   telemetry and the update check are not part of a `-c` run), so this does not show what the
+///   variables change.
+/// * `powershell_does_not_check_for_updates`: an interactive `pwsh` in a pseudo-terminal does
+///   ask `aka.ms` for the latest release about three seconds after it starts. With the
+///   variable, the same run sends nothing. That is the evidence for `POWERSHELL_UPDATECHECK`.
+///   Telemetry has no such test: no request was observed with or without
+///   `POWERSHELL_TELEMETRY_OPTOUT`, so that entry is documented, not verified.
+#[cfg(unix)]
+mod real_pwsh {
+    use std::path::{Path, PathBuf};
+    use std::time::Duration;
+
+    use command::blocking::Command;
+
+    use super::*;
+    use crate::terminal::model::session::LocalCommandExecutor;
+    use crate::terminal::model::session::command_executor::network_sandbox::NetworkSandbox;
+    use crate::terminal::model::session::command_executor::test_support::*;
+
+    /// Seconds an interactive `pwsh` runs. Its update check starts three seconds after the session
+    /// does (measured: 3.1 s), so this leaves room for a slow runner.
+    const INTERACTIVE_RUN: &str = "8";
+
+    /// Runs an interactive `pwsh` in a pseudo-terminal for a fixed time and then ends it. The
+    /// update check runs only when the session is interactive, which needs a terminal.
+    const PTY_SCRIPT: &str = r#"
+import os, pty, select, sys, time
+pwsh, seconds = sys.argv[1], float(sys.argv[2])
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(pwsh, [pwsh, "-NoProfile"])
+deadline = time.time() + seconds
+while time.time() < deadline:
+    ready, _, _ = select.select([fd], [], [], 0.2)
+    if ready:
+        try:
+            if not os.read(fd, 4096):
+                break
+        except OSError:
+            break
+try:
+    os.write(fd, b"exit\r")
+except OSError:
+    pass
+time.sleep(0.5)
+try:
+    os.kill(pid, 9)
+except OSError:
+    pass
+os.waitpid(pid, 0)
+"#;
+
+    fn proxy_environment(canary: &Canary, home: &Path) -> HashMap<String, String> {
+        let mut variables = base_environment(home);
+        for name in [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ] {
+            variables.insert(name.to_owned(), canary.url());
+        }
+        variables.insert("NO_PROXY".to_owned(), String::new());
+        variables.insert("no_proxy".to_owned(), String::new());
+        variables
+    }
+
+    fn pwsh_executor(pwsh: PathBuf) -> LocalCommandExecutor {
+        LocalCommandExecutor::new(Some(pwsh), ShellType::PowerShell)
+            .with_network_sandbox(NetworkSandbox::Off)
+    }
+
+    #[test]
+    fn powershell_commands_run_with_the_telemetry_and_update_check_switched_off() {
+        let Some(pwsh) = session_shell("pwsh", "OPENRUN_TEST_PWSH") else {
+            return;
+        };
+        let canary = Canary::start();
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        std::fs::create_dir_all(&home).unwrap();
+        let variables = proxy_environment(&canary, &home);
+        let run = |command: &str| {
+            run_as_generator(
+                pwsh_executor(pwsh.clone()),
+                command,
+                temp.path(),
+                &system_path(),
+                &variables,
+            )
+        };
+
+        // Control: with this proxy configuration `pwsh`'s own HTTP client reaches the canary. The
+        // host does not resolve, so nothing leaves the machine even if the proxy were ignored.
+        let ran = run(
+            "try { [System.Net.Http.HttpClient]::new().GetAsync('http://canary-control.invalid/').Result.StatusCode } catch { $_.Exception.Message }",
+        );
+        assert!(ran.output.contains("NotFound"), "{}", ran.output);
+        assert!(
+            canary
+                .requests()
+                .iter()
+                .any(|line| line.contains("canary-control.invalid")),
+            "the proxy canary did not see pwsh's HTTP request: {:?}",
+            canary.requests()
+        );
+        canary.reset();
+
+        // The command a generator of a PowerShell session runs, through the production executor.
+        let ran =
+            run("Write-Output \"$env:POWERSHELL_TELEMETRY_OPTOUT/$env:POWERSHELL_UPDATECHECK\"");
+        assert!(ran.success, "{}", ran.output);
+        assert_eq!(ran.output.trim(), "1/Off");
+        std::thread::sleep(Duration::from_secs(5));
+        assert_eq!(
+            canary.requests(),
+            Vec::<String>::new(),
+            "pwsh -NoProfile -c made a request"
+        );
+    }
+
+    #[test]
+    fn powershell_does_not_check_for_updates() {
+        let Some(pwsh) = session_shell("pwsh", "OPENRUN_TEST_PWSH") else {
+            return;
+        };
+        if require_tool("python3").is_none() {
+            return;
+        }
+        let canary = Canary::start();
+        let temp = tempfile::tempdir().unwrap();
+        let script = temp.path().join("interactive_pwsh.py");
+        std::fs::write(&script, PTY_SCRIPT).unwrap();
+        let table = OfflineEnvironment::compute(|_| None);
+
+        let run_interactive = |index: usize, with_table: bool| {
+            let home = temp.path().join(format!("home-{index}"));
+            std::fs::create_dir_all(&home).unwrap();
+            let mut variables = proxy_environment(&canary, &home);
+            variables.insert("TERM".to_owned(), "xterm".to_owned());
+            if with_table {
+                table.apply_to(&mut variables);
+            }
+            canary.reset();
+            let status = Command::new("python3")
+                .arg(&script)
+                .arg(&pwsh)
+                .arg(INTERACTIVE_RUN)
+                .env_clear()
+                .envs(&variables)
+                .env("PATH", system_path())
+                .status()
+                .unwrap();
+            assert!(status.success());
+            canary.requests()
+        };
+
+        // Control: without the table an interactive pwsh asks aka.ms for the latest release.
+        let control = run_interactive(0, false);
+        assert!(
+            control.iter().any(|line| line.contains("aka.ms")),
+            "fixture is insensitive: an interactive pwsh without the table never asked aka.ms \
+             for the latest release; requests: {control:?}"
+        );
+        // With the table's variables it sends nothing.
+        let protected = run_interactive(1, true);
+        assert_eq!(
+            protected,
+            Vec::<String>::new(),
+            "an interactive pwsh made a request with the offline table applied"
         );
     }
 }
