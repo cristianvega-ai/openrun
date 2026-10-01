@@ -404,6 +404,29 @@ impl CodeReviewView {
         )
     }
 
+    /// Whether the first hidden section of the given file's diff editor has been laid out, so
+    /// that [`Self::fully_expand_first_hidden_section_for_test`] can expand it.
+    pub fn first_hidden_section_is_laid_out_for_test(&self, path: &str, ctx: &AppContext) -> bool {
+        let CodeReviewViewState::Loaded(state) = self.state() else {
+            return false;
+        };
+        let Some(editor_state) = state
+            .file_states
+            .iter()
+            .find(|(_, file_state)| file_state.file_diff.file_path == path)
+            .and_then(|(_, file_state)| file_state.editor_state.as_ref())
+        else {
+            return false;
+        };
+        editor_state
+            .editor()
+            .as_ref(ctx)
+            .editor()
+            .read(ctx, |code_editor_view, ctx| {
+                code_editor_view.first_hidden_section_is_laid_out_for_test(ctx)
+            })
+    }
+
     /// Fully expand the first hidden section of the given file's diff editor,
     /// mirroring what a bar double-click does. Returns whether a section was
     /// expanded.

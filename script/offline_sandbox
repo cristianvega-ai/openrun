@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Runs a command in a network sandbox and records every connect and send it makes.
 #
 #   script/offline_sandbox LOG COMMAND [ARG...]
@@ -12,18 +12,72 @@
 # `--seccomp-bpf` makes `strace` stop the command only at the traced calls. Without it, every
 # system call of every process is a ptrace stop. That made the shell bootstrap of the integration
 # tests (bash reads a long script one byte at a time from the pty) take 20 s instead of under 1 s.
-set -eu
+#
+# `strace` 6.8 (Ubuntu 24.04) sometimes dies on its own, in the middle of a run, with
+# `strace: ptrace(PTRACE_LISTEN,pid:N,sig:0): Input/output error`: a traced process that the tests
+# kill (the app kills the process groups of the commands it started) races with the tracer's
+# handling of its group-stop. The tracee processes die with the tracer, so the run is lost
+# although no test failed. When that message is the reason the command ended, the command is
+# started again (at most 3 runs), a warning annotation names it, and the connections of every run
+# are kept in LOG. A command that fails for any other reason is not run again.
+#
+# Environment (for testing the script): OFFLINE_SANDBOX_STRACE is the tracer to run (default
+# `strace`) and OFFLINE_SANDBOX_NO_NAMESPACE=1 runs without `unshare` and `ip`.
+set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
   echo "usage: $0 LOG COMMAND [ARG...]" >&2
   exit 2
 fi
 
-# shellcheck disable=SC2016 # The inner script is meant to expand its own variables.
-exec unshare --user --map-root-user --net sh -c '
-  set -eu
+run_traced() {
+  local log=$1
+  shift
+  local strace_bin=${OFFLINE_SANDBOX_STRACE:-strace}
+  local max_runs=3
+  local errors
+  errors=$(mktemp)
+  local status=0 run
+
+  for run in $(seq 1 "$max_runs"); do
+    : > "$errors"
+    # The tracer's own messages share stderr with the command; the copy in a file tells them apart
+    # afterwards and the `tail` shows them as they come.
+    tail -n +1 -f "$errors" >&2 &
+    local mirror=$!
+    status=0
+    "$strace_bin" --seccomp-bpf -f -qq -e trace=connect,sendto,sendmsg,sendmmsg,execve \
+      -o "$log.run$run" "$@" 2>> "$errors" || status=$?
+    sleep 1
+    kill "$mirror" 2> /dev/null || true
+    wait "$mirror" 2> /dev/null || true
+
+    if [ "$status" -eq 0 ] || ! grep -q '^strace: ptrace(PTRACE_[A-Z_]*,.*Input/output error' "$errors"; then
+      break
+    fi
+    if [ "$run" -lt "$max_runs" ]; then
+      echo "::warning title=strace crashed::run $run of $max_runs: the tracer died with a ptrace I/O error (exit $status), which is not a test result; running the command again"
+    else
+      echo "::error title=strace crashed::run $run of $max_runs: the tracer died with a ptrace I/O error (exit $status) again; giving up"
+    fi
+  done
+
+  cat "$log".run* > "$log"
+  rm -f "$log".run* "$errors"
+  return "$status"
+}
+
+if [ "${OFFLINE_SANDBOX_INNER:-}" = 1 ]; then
+  if [ -z "${OFFLINE_SANDBOX_NO_NAMESPACE:-}" ]; then
+    ip link set lo up
+  fi
   log=$1
   shift
-  ip link set lo up
-  exec strace --seccomp-bpf -f -qq -e trace=connect,sendto,sendmsg,sendmmsg,execve -o "$log" "$@"
-' offline_sandbox "$@"
+  run_traced "$log" "$@"
+  exit $?
+fi
+
+if [ -n "${OFFLINE_SANDBOX_NO_NAMESPACE:-}" ]; then
+  OFFLINE_SANDBOX_INNER=1 exec "$0" "$@"
+fi
+OFFLINE_SANDBOX_INNER=1 exec unshare --user --map-root-user --net "$0" "$@"

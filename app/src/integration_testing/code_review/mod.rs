@@ -215,7 +215,8 @@ pub fn assert_code_review_scroll_region(expected_region: ScrollRegion) -> Assert
 }
 
 /// Polls until the given file's diff editor has at least `min` collapsed hidden
-/// sections. Use this to wait for the diff to lay out before interacting.
+/// sections and the first of them is laid out. Use this to wait for the diff to lay out before
+/// interacting.
 pub fn assert_min_hidden_sections(
     expected_file_path: impl Into<String>,
     min: usize,
@@ -237,8 +238,10 @@ pub fn assert_min_hidden_sections(
                 ));
             };
             async_assert!(
-                actual >= min,
-                "expected at least {min} hidden sections in {expected_file_path:?}, got {actual}"
+                actual >= min
+                    && code_review_view
+                        .first_hidden_section_is_laid_out_for_test(&expected_file_path, ctx),
+                "expected at least {min} hidden sections in {expected_file_path:?}, laid out, got {actual}"
             )
         })
     })

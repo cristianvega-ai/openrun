@@ -873,6 +873,20 @@ impl CodeEditorView {
         self.model.as_ref(ctx).hidden_ranges(ctx).iter().count()
     }
 
+    /// Whether the rendered content already has the first hidden section, which is what a bar
+    /// double-click expands. The model knows its hidden ranges before the content has been laid
+    /// out, so [`Self::hidden_section_count_for_test`] can be positive while this is still false.
+    #[cfg(feature = "integration_tests")]
+    pub fn first_hidden_section_is_laid_out_for_test(&self, ctx: &AppContext) -> bool {
+        self.model
+            .as_ref(ctx)
+            .render_state()
+            .as_ref(ctx)
+            .content()
+            .first_hidden_section_line_range()
+            .is_some()
+    }
+
     /// Fully expand the first hidden section the same way a bar double-click
     /// does: resolve the section's full line range from its offset and expand
     /// with [`ExpansionType::Both`]. Returns whether a section was expanded.
