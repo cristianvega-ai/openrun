@@ -4932,11 +4932,30 @@ fn visible_bootstrap_block_leaves_focus_on_tab_group_rename_editor() {
     });
 }
 
+/// Makes `path` a git repository whose current branch is `main`, so the repo has a branch name
+/// and the pull request lookup (`gh pr view` for the branch) has something to look up.
+fn init_git_repo_on_branch(path: &Path) {
+    let repository = git2::Repository::init(path).expect("init the repo");
+    repository
+        .set_head("refs/heads/main")
+        .expect("point HEAD at main");
+    let signature = git2::Signature::now("Test", "test@example.invalid").expect("signature");
+    let tree_id = repository
+        .treebuilder(None)
+        .and_then(|builder| builder.write())
+        .expect("empty tree");
+    let tree = repository.find_tree(tree_id).expect("find the empty tree");
+    repository
+        .commit(Some("HEAD"), &signature, &signature, "fixture", &tree, &[])
+        .expect("first commit");
+}
+
 /// Registers a fresh directory as a watched git repository and returns its
 /// canonical path, so `GitRepoModels` can build models for it.
 fn register_watched_repo(app: &mut App) -> (tempfile::TempDir, PathBuf) {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let repo = dunce::canonicalize(temp_dir.path()).expect("canonical repo path");
+    init_git_repo_on_branch(&repo);
     let standardized =
         StandardizedPath::from_local_canonicalized(repo.as_path()).expect("standardized path");
     DetectedRepositories::handle(app).update(app, |repos, _| {
@@ -5547,8 +5566,8 @@ fn prompt_in_the_selected_tab_keeps_polling_past_the_grace_period() {
     App::test((), |mut app| async move {
         let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
         assert_eventually!(
-            200 => gh.repository_lookups() >= 1,
-            "the selected tab looks up the repository"
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the first lookups of the repository and the pull request have run"
         );
         let model_id = terminal.read(&app, |view, _| {
             view.github_repo_model.as_ref().map(|m| m.id())
@@ -5574,13 +5593,11 @@ fn prompt_in_the_selected_tab_keeps_polling_past_the_grace_period() {
 #[test]
 fn alt_screen_releases_the_pr_model_and_leaving_it_looks_up_at_once() {
     App::test((), |mut app| async move {
+        // Only the short grace is shortened: the long one must not be what releases the model.
         let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
-        terminal.update(&mut app, |view, _| {
-            view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
-        });
         assert_eventually!(
-            200 => gh.repository_lookups() >= 1,
-            "the prompt looks up the repository"
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the first lookups of the repository and the pull request have run"
         );
 
         enter_alt_screen(&mut app, &terminal);
@@ -5619,8 +5636,8 @@ fn running_command_releases_the_pr_model_after_the_grace_period() {
             view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
         });
         assert_eventually!(
-            200 => gh.repository_lookups() >= 1,
-            "the prompt looks up the repository"
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the first lookups of the repository and the pull request have run"
         );
 
         start_long_running_command(&mut app, &terminal);
@@ -5647,8 +5664,8 @@ fn command_that_finishes_within_the_grace_period_starts_no_gh() {
     App::test((), |mut app| async move {
         let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
         assert_eventually!(
-            200 => gh.repository_lookups() >= 1,
-            "the prompt looks up the repository"
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the first lookups of the repository and the pull request have run"
         );
         warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
         let model_id = terminal.read(&app, |view, _| {
@@ -5692,11 +5709,15 @@ fn command_that_outlasts_the_grace_period_costs_one_lookup_pair_when_it_finishes
             view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
         });
         assert_eventually!(
-            200 => gh.repository_lookups() >= 1,
-            "the prompt looks up the repository"
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the prompt looks up the repository and, once the branch is known, the pull request"
         );
         warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
         let (repository_at_start, pr_at_start) = (gh.repository_lookups(), gh.pr_lookups());
+        assert!(
+            repository_at_start >= 1 && pr_at_start >= 1,
+            "a fresh start looks up both the repository and the pull request"
+        );
 
         start_long_running_command(&mut app, &terminal);
         assert_eventually!(
@@ -5717,6 +5738,123 @@ fn command_that_outlasts_the_grace_period_costs_one_lookup_pair_when_it_finishes
         warpui::r#async::Timer::after(std::time::Duration::from_millis(150)).await;
         assert_eq!(gh.repository_lookups(), repository_at_start * 2);
         assert_eq!(gh.pr_lookups(), pr_at_start * 2);
+    });
+}
+
+#[test]
+fn release_grace_constants_are_thirty_seconds_and_three_minutes() {
+    use crate::code_review::github_repo_model::{
+        HIDDEN_CONSUMER_GRACE_PERIOD, RUNNING_COMMAND_GRACE_PERIOD,
+    };
+
+    assert_eq!(
+        HIDDEN_CONSUMER_GRACE_PERIOD,
+        std::time::Duration::from_secs(30)
+    );
+    assert_eq!(
+        RUNNING_COMMAND_GRACE_PERIOD,
+        std::time::Duration::from_secs(180)
+    );
+}
+
+#[test]
+fn production_grace_is_short_for_alt_screen_and_long_for_a_plain_running_command() {
+    use crate::code_review::github_repo_model::{
+        HIDDEN_CONSUMER_GRACE_PERIOD, RUNNING_COMMAND_GRACE_PERIOD,
+    };
+
+    App::test((), |mut app| async move {
+        // No test overrides: the grace periods are the ones the app ships with.
+        let (_repo, terminal, gh) = terminal_in_repo_with_counting_gh(
+            &mut app,
+            vec![
+                ContextChipKind::WorkingDirectory,
+                ContextChipKind::GithubPullRequest,
+            ],
+        );
+        assert_eventually!(
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the first lookups of the repository and the pull request have run"
+        );
+        let grace = |app: &App| terminal.read(app, |view, ctx| view.pr_info_release_grace(ctx));
+        let scheduled = |app: &App| {
+            terminal.read(app, |view, _| {
+                view.pending_pr_info_release.as_ref().map(|p| p.grace)
+            })
+        };
+
+        enter_alt_screen(&mut app, &terminal);
+        assert_eq!(
+            grace(&app),
+            HIDDEN_CONSUMER_GRACE_PERIOD,
+            "alt screen: 30 s"
+        );
+        assert_eq!(
+            scheduled(&app),
+            Some(HIDDEN_CONSUMER_GRACE_PERIOD),
+            "the release is scheduled with the 30 s grace"
+        );
+        assert!(
+            holds_github_model(&app, &terminal),
+            "and only when it elapses"
+        );
+
+        leave_alt_screen(&mut app, &terminal);
+        assert_eq!(
+            scheduled(&app),
+            None,
+            "leaving the alt screen cancels the release"
+        );
+
+        start_long_running_command(&mut app, &terminal);
+        assert_eventually!(
+            200 => scheduled(&app).is_some(),
+            "a running command schedules a release"
+        );
+        assert_eq!(
+            grace(&app),
+            RUNNING_COMMAND_GRACE_PERIOD,
+            "plain command: 3 min"
+        );
+        assert_eq!(scheduled(&app), Some(RUNNING_COMMAND_GRACE_PERIOD));
+
+        enter_alt_screen(&mut app, &terminal);
+        assert_eq!(
+            scheduled(&app),
+            Some(HIDDEN_CONSUMER_GRACE_PERIOD),
+            "a command that goes full-screen is rescheduled to the 30 s grace"
+        );
+
+        leave_alt_screen(&mut app, &terminal);
+        finish_command(&mut app, &terminal);
+        assert_eq!(scheduled(&app), None);
+        assert!(holds_github_model(&app, &terminal));
+    });
+}
+
+#[test]
+fn production_grace_for_a_background_tab_is_short_even_while_a_command_runs() {
+    use crate::code_review::github_repo_model::HIDDEN_CONSUMER_GRACE_PERIOD;
+
+    App::test((), |mut app| async move {
+        let (_repo, workspace, terminal, _gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        terminal.update(&mut app, |view, _| {
+            view.hidden_pr_info_grace = HIDDEN_CONSUMER_GRACE_PERIOD;
+        });
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.pane_is_shown(ctx));
+            assert_eq!(
+                view.pr_info_release_grace(ctx),
+                HIDDEN_CONSUMER_GRACE_PERIOD
+            );
+            assert_eq!(
+                view.pending_pr_info_release.as_ref().map(|p| p.grace),
+                Some(HIDDEN_CONSUMER_GRACE_PERIOD)
+            );
+        });
     });
 }
 
@@ -5770,8 +5908,8 @@ fn cli_agent_footer_with_a_pr_chip_keeps_polling_in_the_alt_screen() {
             assert!(view.github_repo_model.is_some());
         });
         assert_eventually!(
-            200 => gh.repository_lookups() >= 1,
-            "the footer chip looks up the repository"
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the first lookups of the repository and the pull request have run"
         );
 
         enter_alt_screen(&mut app, &terminal);
@@ -5960,9 +6098,10 @@ fn maximized_pane_releases_the_pr_model_of_its_hidden_sibling() {
             terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
         }
         assert_eventually!(
-            200 => gh.repository_lookups() >= 1,
-            "the split panes look up the repository"
+            600 => gh.repository_lookups() >= 1 && gh.pr_lookups() >= 1,
+            "the split panes look up the repository and, once the branch is known, the pull request"
         );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
 
         pane_group.update(&mut app, |group, ctx| {
             group.handle_action(&PaneGroupAction::ToggleMaximizePane, ctx);
@@ -5988,6 +6127,14 @@ fn maximized_pane_releases_the_pr_model_of_its_hidden_sibling() {
             "the shown pane keeps its model"
         );
 
+        let (repository_lookups, pr_lookups) = (gh.repository_lookups(), gh.pr_lookups());
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(150)).await;
+        assert_eq!(
+            (gh.repository_lookups(), gh.pr_lookups()),
+            (repository_lookups, pr_lookups),
+            "nothing polls while the pane is covered"
+        );
+
         pane_group.update(&mut app, |group, ctx| {
             group.handle_action(&PaneGroupAction::ToggleMaximizePane, ctx);
         });
@@ -5995,6 +6142,19 @@ fn maximized_pane_releases_the_pr_model_of_its_hidden_sibling() {
         assert!(
             holds_github_model(&app, hidden),
             "un-maximizing re-acquires it"
+        );
+        // The shown pane kept the shared model alive, so re-acquiring it is a single `gh pr view`
+        // refresh and no new repository lookup.
+        assert_eventually!(
+            200 => gh.pr_lookups() == pr_lookups + 1,
+            "restoring the pane refreshes the pull request once"
+        );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+        assert_eq!(gh.pr_lookups(), pr_lookups + 1, "and only once");
+        assert_eq!(
+            gh.repository_lookups(),
+            repository_lookups,
+            "the repository is not looked up again"
         );
     });
 }

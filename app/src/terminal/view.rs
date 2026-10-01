@@ -1678,8 +1678,8 @@ pub struct TerminalView {
     /// not restart `gh` each time.
     hidden_pr_info_grace: Duration,
 
-    /// Like [`Self::hidden_pr_info_grace`] while the terminal is shown but a running command
-    /// hides the prompt.
+    /// Like [`Self::hidden_pr_info_grace`] while the terminal is shown and a command that is not a
+    /// full-screen program hides the prompt.
     hidden_pr_info_command_grace: Duration,
 
     /// Deferred code review open request, stashed when [`GitDeltaPreference::OnlyDirty`] is
@@ -2607,10 +2607,13 @@ impl TerminalView {
         self.pr_badge_on_screen(app) || (self.pane_is_shown(app) && self.pr_chip_on_screen(app))
     }
 
-    /// How long to keep the PR-info handle once nothing shows it: longer while the pane is shown
-    /// and only a running command hides the prompt.
+    /// How long to keep the PR-info handle once nothing shows it. A full-screen program or a pane
+    /// that is not shown (another tab, a maximized sibling) gets the short grace; a pane that is
+    /// shown while a plain command that has not finished hides the prompt gets the longer one,
+    /// because such commands often take minutes and end by showing the prompt again.
     fn pr_info_release_grace(&self, app: &AppContext) -> Duration {
-        if self.pane_is_shown(app) {
+        let alt_screen_active = self.model.lock().is_alt_screen_active();
+        if self.pane_is_shown(app) && !alt_screen_active {
             self.hidden_pr_info_command_grace
         } else {
             self.hidden_pr_info_grace
