@@ -12,6 +12,58 @@ use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions, offline_envir
 use crate::safe_warn;
 use crate::terminal::shell::{Shell, ShellType};
 
+/// What a WSL guest command gets: the command (with `PATH` assigned in front of it), the
+/// variables to pass through `wsl.exe` and the `WSLENV` that lets them cross into the guest.
+#[derive(Debug)]
+struct GuestEnvironment {
+    command: String,
+    variables: HashMap<String, String>,
+    wslenv: String,
+}
+
+/// The guest environment for `command`: the session's variables with the offline environment
+/// table applied. The guest does not inherit the app's environment, only what `WSLENV` lists.
+fn guest_environment(
+    shell_type: ShellType,
+    command: &str,
+    environment_variables: Option<HashMap<String, String>>,
+) -> GuestEnvironment {
+    let mut variables =
+        offline_environment::harden_isolated(environment_variables).unwrap_or_default();
+    let mut command = Cow::Borrowed(command);
+    if let Some(mut path_var) = variables.remove("PATH") {
+        // Unfortunately, bash's `compgen` is extremely slow with PATH contains a bunch of
+        // entries pointing to the Windows host. On my system, it takes around 2 minutes to
+        // complete! We special-case this to filter out all paths beginning with `/mnt`.
+        // This means we won't correctly highlight executables on the Windows host. We're
+        // assuming WSL users will mostly be calling the executables inside the WSL guest.
+        if shell_type == ShellType::Bash && command.contains("compgen") {
+            path_var = path_var
+                .split(':')
+                .filter(|path| !path.starts_with("/mnt"))
+                .join(":");
+        }
+
+        // Furthermore, we must pass the PATH by serializing it and adding a literal
+        // assignment to the command itself. This is b/c Windows attempts to do a
+        // conversion when propagating PATH from Windows to WSL, which cannot be disabled.
+        // This conversion fails in this case b/c we collected the value of PATH from a
+        // bootstrapped WSL session and it's _already_ converted. Conversion failures
+        // result in truncation.
+        let env_vars_str = serialize_variables_for_shell([("PATH", path_var.as_str())], shell_type);
+        command = Cow::Owned(format!(r#"{env_vars_str}; {command}"#));
+    }
+
+    // The rest of the env vars can be passed more "normally", though they need to be
+    // allowlisted by assigning WSLENV.
+    let wslenv = variables.keys().map(|k| format!("{k}/u")).join(":");
+    GuestEnvironment {
+        command: command.into_owned(),
+        variables,
+        wslenv,
+    }
+}
+
 /// `CommandExecutor` implementation that executes the given `command` in a WSL instance via the
 /// `wsl.exe` executable.
 #[derive(Debug)]
@@ -51,48 +103,16 @@ impl WslCommandExecutor {
             command_process.arg(dir);
         }
 
-        let mut command_with_env = Cow::Borrowed(command);
-        let environment_variables = offline_environment::harden_isolated(environment_variables);
-        if let Some(mut env_vars) = environment_variables {
-            if let Some(mut path_var) = env_vars.remove("PATH") {
-                // Unfortunately, bash's `compgen` is extremely slow with PATH contains a bunch of
-                // entries pointing to the Windows host. On my system, it takes around 2 minutes to
-                // complete! We special-case this to filter out all paths beginning with `/mnt`.
-                // This means we won't correctly highlight executables on the Windows host. We're
-                // assuming WSL users will mostly be calling the executables inside the WSL guest.
-                if self.shell_type == ShellType::Bash && command.contains("compgen") {
-                    path_var = path_var
-                        .split(':')
-                        .filter(|path| !path.starts_with("/mnt"))
-                        .join(":");
-                }
-
-                // Furthermore, we must pass the PATH by serializing it and adding a literal
-                // assignment to the command itself. This is b/c Windows attempts to do a
-                // conversion when propagating PATH from Windows to WSL, which cannot be disabled.
-                // This conversion fails in this case b/c we collected the value of PATH from a
-                // bootstrapped WSL session and it's _already_ converted. Conversion failures
-                // result in truncation.
-                let env_vars_str =
-                    serialize_variables_for_shell([("PATH", path_var.as_str())], self.shell_type);
-                command_with_env = Cow::Owned(format!(r#"{env_vars_str}; {command}"#));
-            }
-
-            // The rest of the env vars can be passed more "normally", though they need to be
-            // allowlisted by assigning WSLENV.
-            command_process.envs(&env_vars);
-            command_process.env(
-                "WSLENV",
-                env_vars.keys().map(|k| format!("{k}/u")).join(":"),
-            );
-        }
+        let guest = guest_environment(self.shell_type, command, environment_variables);
+        command_process.envs(&guest.variables);
+        command_process.env("WSLENV", &guest.wslenv);
 
         command_process
             .arg("--exec")
             .arg(self.shell_type.name())
             .arg(shell_config_flag)
             .arg("-c")
-            .arg(&*command_with_env)
+            .arg(&guest.command)
             // The purpose of the executor is to produce output. If the child
             // has been dropped, there's no way to get the output anymore,
             // so there's no need for the process itself to stick around.
@@ -131,4 +151,12 @@ impl CommandExecutor for WslCommandExecutor {
     fn supports_parallel_command_execution(&self) -> bool {
         true
     }
+
+    fn offline_environment_applied(&self) -> bool {
+        true
+    }
 }
+
+#[cfg(test)]
+#[path = "wsl_command_executor_tests.rs"]
+mod tests;

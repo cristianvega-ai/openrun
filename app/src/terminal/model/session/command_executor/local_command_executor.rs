@@ -434,6 +434,10 @@ impl CommandExecutor for LocalCommandExecutor {
         self.network_sandbox.isolates_network()
     }
 
+    fn offline_environment_applied(&self) -> bool {
+        self.apply_offline_environment
+    }
+
     fn cancel_active_commands(&self) {
         self.active_process_groups.cancel_all();
     }

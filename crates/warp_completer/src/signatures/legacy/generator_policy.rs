@@ -28,9 +28,14 @@
 //! network to the command and the offline environment table is applied. They run only when the
 //! `GeneratorContext` reports `network_isolated()` (macOS and Linux local sessions).
 //!
-//! On Windows only the subset in `ALLOWED_ON_WINDOWS` runs: file reads and PowerShell cmdlets that
-//! take no tokens. There is no network sandbox there, so a generator that starts another program
-//! stays off.
+//! On Windows two lists run. `ALLOWED_ON_WINDOWS` is the subset of file reads and PowerShell
+//! cmdlets that take no tokens. `ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT` is the local git
+//! generators (one `git` read of the local repository each, the `ALLOWED_WHEN_ISOLATED` git trio
+//! included); they run only when the `GeneratorContext` reports `offline_environment_applied()`,
+//! which the local PowerShell/cmd, Git Bash/MSYS2 and WSL executors do and the in-band executor
+//! does not. There is no network sandbox on Windows, so the environment table (no lazy fetch
+//! from a promisor remote, no `core.fsmonitor`, no `log.showSignature`, local transports only)
+//! is the only layer; any other generator that starts a program stays off.
 //!
 //! An entry in `allowed.rs` records that someone read the command and the tool's behaviour. It
 //! is not a proof: only some tools were run against a canary (see `denied.rs` for which), and
@@ -61,22 +66,31 @@ mod denied;
 mod token_gate;
 
 use allowed::{
-    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS, ALLOWED_WHEN_ISOLATED,
+    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS,
+    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, ALLOWED_WHEN_ISOLATED,
 };
 pub(super) use token_gate::{TokenPolicy, sanitize_env_vars, token_policy};
 
+use crate::completer::Containment;
+
 /// Whether the generator named `generator` of the spec registered as `spec` (lowercase) may run
-/// a command on this platform. `isolated` says whether the context keeps the command from
-/// reaching a network (see [`ALLOWED_WHEN_ISOLATED`]).
-pub(super) fn is_generator_allowed(spec: &str, generator: &str, isolated: bool) -> bool {
-    is_generator_allowed_on(cfg!(windows), isolated, spec, generator)
+/// a command on this platform. `containment` says what the context guarantees about the command
+/// (see [`ALLOWED_WHEN_ISOLATED`] and [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`]).
+pub(super) fn is_generator_allowed(spec: &str, generator: &str, containment: Containment) -> bool {
+    is_generator_allowed_on(cfg!(windows), containment, spec, generator)
 }
 
 /// [`is_generator_allowed`] for an explicit platform, so that the Windows tier is testable on
-/// every host. No generator of the isolated tier runs on Windows, whatever the context says.
+/// every host.
+///
+/// * macOS and Linux: [`ALLOWED_GENERATORS`] always, [`ALLOWED_WHEN_ISOLATED`] only in a
+///   network-isolated context.
+/// * Windows: the [`ALLOWED_ON_WINDOWS`] subset always, and the [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`]
+///   git generators only when the executor applies the offline environment table. The isolated
+///   tier never runs on Windows as such: there is no network sandbox.
 pub(super) fn is_generator_allowed_on(
     windows: bool,
-    isolated: bool,
+    containment: Containment,
     spec: &str,
     generator: &str,
 ) -> bool {
@@ -86,10 +100,22 @@ pub(super) fn is_generator_allowed_on(
         })
         .is_ok()
     };
-    if listed(ALLOWED_GENERATORS) {
-        return !windows || listed(ALLOWED_ON_WINDOWS);
+    if windows {
+        return listed(ALLOWED_ON_WINDOWS)
+            || (containment >= Containment::OfflineEnvironment
+                && listed(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT));
     }
-    isolated && !windows && listed(ALLOWED_WHEN_ISOLATED)
+    if listed(ALLOWED_GENERATORS) {
+        return true;
+    }
+    containment == Containment::NetworkIsolated && listed(ALLOWED_WHEN_ISOLATED)
+}
+
+/// The generators that run on Windows only when the executor applies the offline environment
+/// table.
+pub(super) fn generators_allowed_on_windows_with_environment()
+-> &'static [(&'static str, &'static str)] {
+    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT
 }
 
 /// The generators that run only in an isolated context.

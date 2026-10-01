@@ -1,3 +1,5 @@
+#[cfg(all(test, feature = "local_tty"))]
+mod git_completion_tests;
 mod in_band_command_executor;
 #[cfg(feature = "local_tty")]
 mod local_command_executor;
@@ -101,6 +103,13 @@ pub trait CommandExecutor: Send + Sync + Debug {
     /// commands that run in the user's own shell, on another host, or on a platform without an
     /// unprivileged sandbox are not isolated.
     fn network_isolated(&self) -> bool {
+        false
+    }
+
+    /// Whether every command this executor runs gets the offline environment table of
+    /// [`offline_environment`]. False unless an executor says otherwise: commands that run in the
+    /// user's own shell (the in-band executor) or on another host do not.
+    fn offline_environment_applied(&self) -> bool {
         false
     }
 }

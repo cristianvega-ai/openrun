@@ -1475,6 +1475,11 @@ impl Session {
         self.command_executor.network_isolated()
     }
 
+    /// Whether commands run for this session get the offline environment table.
+    pub fn offline_environment_applied(&self) -> bool {
+        self.command_executor.offline_environment_applied()
+    }
+
     pub async fn git_branches_for_command_corrections(&self, working_dir: &str) -> Vec<String> {
         let env_vars = self
             .info

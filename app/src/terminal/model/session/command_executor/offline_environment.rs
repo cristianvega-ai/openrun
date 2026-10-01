@@ -39,6 +39,12 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
     // object from a partial clone's promisor remote while reading history or diffs.
     // `GIT_NO_LAZY_FETCH` needs git 2.44; older gits ignore it.
     ("GIT_NO_LAZY_FETCH", "1"),
+    // Verified (git 2.54, `git_cannot_lazy_fetch_over_a_network_transport`): `GIT_NO_LAZY_FETCH`
+    // is ignored by git older than 2.44, and Windows has no network sandbox behind it. With only
+    // local transports allowed, a lazy fetch from a promisor remote that is not a local path
+    // fails before it connects ("transport 'http' not allowed"). The variable overrides any
+    // `protocol.<name>.allow` setting of the repository.
+    ("GIT_ALLOW_PROTOCOL", "file"),
     // The remaining entries are documented, unverified: the tool is not installed on the machine
     // this was written on, so no test runs it. Each is the tool's own documented switch.
     //
@@ -82,12 +88,18 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
 
 /// Variables of the form `KEY_<n>` / `VALUE_<n>` appended to git's `GIT_CONFIG_COUNT` list.
 ///
-/// Verified (git 2.54, `git_fsmonitor_hook_does_not_run`): a repository whose config sets `core.fsmonitor` to a
-/// program has git run that program on `status`, `diff`, `ls-files` and other index-reading
-/// commands. Command-line configuration (`GIT_CONFIG_COUNT`) outranks repository config, so this
-/// turns the hook off. The pair is appended after any pairs the session already defines, never
-/// written over them.
-const GIT_CONFIG_OVERRIDES: &[(&str, &str)] = &[("core.fsmonitor", "false")];
+/// Each pair is appended after any pairs the session already defines, never written over them.
+/// Command-line configuration (`GIT_CONFIG_COUNT`) outranks repository config.
+///
+/// * `core.fsmonitor`: verified (git 2.54, `git_fsmonitor_hook_does_not_run`). A repository whose
+///   config sets it to a program has git run that program on `status`, `diff`, `ls-files` and
+///   other index-reading commands.
+/// * `log.showSignature`: verified (git 2.54, `git_log_does_not_run_the_repositorys_gpg_program`).
+///   With it set, `git log` and `git stash list` verify the signature of each signed commit by
+///   running the repository's `gpg.program` (or `gpg.ssh.program`), and a commit object with a
+///   `gpgsig` header is enough to make git try.
+const GIT_CONFIG_OVERRIDES: &[(&str, &str)] =
+    &[("core.fsmonitor", "false"), ("log.showSignature", "false")];
 
 /// Hosts docker may talk to without leaving the machine.
 const LOCAL_DOCKER_HOST_PREFIXES: &[&str] = &["unix://", "npipe://", "fd://"];

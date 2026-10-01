@@ -116,6 +116,72 @@ jobs:
       - name: Run cargo clippy
         run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
 
+  # Windows has no network sandbox, so the offline environment table is the only layer between a
+  # repository and the network or a program it names, and the local git completion generators run
+  # there only when an executor applies it. This job runs the generator policy tests (the
+  # Windows allow-list, the token gate for PowerShell) and the command executor tests, among them
+  # the real-git fixtures: a repository that names programs for `core.fsmonitor`, a clean filter
+  # and `gpg.program`, and a partial clone whose promisor remote is a loopback listener, with each
+  # generator command run through the production executor in Windows PowerShell and PowerShell 7.
+  # `CI=true`, which GitHub Actions sets, makes a missing git or pwsh fail those tests instead of
+  # skipping them, so the tools are checked first.
+  windows-security-tests:
+    name: Security tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      # openh264-sys2 assembles with NASM unless told not to; the tests need no codec.
+      OPENH264_NO_ASM: "1"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Dependencies unpack to deep paths under the checkout and the cargo registry.
+      - name: Allow long paths in git
+        run: git config --system core.longpaths true
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: nextest
+
+      - name: Check the tools the real-tool tests use
+        run: |
+          missing=0
+          for tool in git pwsh powershell; do
+            if path=$(command -v "$tool"); then
+              echo "$tool: $path"
+            else
+              echo "::error::$tool is not installed on this runner"
+              missing=1
+            fi
+          done
+          git --version
+          pwsh -NoProfile -c '$PSVersionTable.PSVersion.ToString()'
+          powershell -NoProfile -c '$PSVersionTable.PSVersion.ToString()'
+          exit "$missing"
+
+      # No retries: a test that fails once and passes on a retry (nextest reports it as FLAKY) is
+      # not a pass.
+      - name: Run the generator policy tests
+        run: |
+          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
+            -E 'package(warp_completer)'
+
+      - name: Run the command executor tests
+        run: |
+          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
+            -E 'package(warp) and test(~terminal::model::session::command_executor::)'
+
   clippy-macos:
     name: Clippy (macOS)
     runs-on: macos-latest

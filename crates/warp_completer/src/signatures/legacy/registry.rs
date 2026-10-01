@@ -9,7 +9,9 @@ use warp_command_signatures::{
 use warp_util::path::ShellFamily;
 
 use super::miss_cache::MissCache;
-use crate::completer::{CommandExitStatus, CompletionContext, TopLevelCommandCaseSensitivity};
+use crate::completer::{
+    CommandExitStatus, CompletionContext, Containment, TopLevelCommandCaseSensitivity,
+};
 use crate::parsers::SignatureAtTokenIndex;
 
 pub enum SignatureResult<'a> {
@@ -210,12 +212,17 @@ impl CommandRegistry {
 
     /// Whether the generator `generator` of spec `spec` may run a command. Generators are
     /// allowed by identity, never by inspecting their command line: see
-    /// [`super::generator_policy`]. `isolated` says whether the context keeps the command from
-    /// reaching a network (`GeneratorContext::network_isolated`).
-    pub fn allows_generator(&self, spec: &str, generator: &GeneratorName, isolated: bool) -> bool {
+    /// [`super::generator_policy`]. `containment` is what the context guarantees about the command
+    /// (`GeneratorContext::containment`).
+    pub fn allows_generator(
+        &self,
+        spec: &str,
+        generator: &GeneratorName,
+        containment: Containment,
+    ) -> bool {
         match self.generator_policy {
             GeneratorPolicy::AllowListed => {
-                super::generator_policy::is_generator_allowed(spec, &generator.0, isolated)
+                super::generator_policy::is_generator_allowed(spec, &generator.0, containment)
             }
             #[cfg(any(test, feature = "test-util"))]
             GeneratorPolicy::AllowAll => true,

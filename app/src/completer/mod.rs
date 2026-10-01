@@ -235,6 +235,10 @@ impl GeneratorContext for SessionContext {
     fn network_isolated(&self) -> bool {
         self.session.network_isolated()
     }
+
+    fn offline_environment_applied(&self) -> bool {
+        self.session.offline_environment_applied()
+    }
 }
 
 impl CompletionContext for SessionContext {

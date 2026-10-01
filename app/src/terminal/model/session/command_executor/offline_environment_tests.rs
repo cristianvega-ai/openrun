@@ -25,6 +25,7 @@ fn table_sets_every_documented_variable() {
         ("npm_config_update_notifier", "false"),
         ("GIT_TERMINAL_PROMPT", "0"),
         ("GIT_NO_LAZY_FETCH", "1"),
+        ("GIT_ALLOW_PROTOCOL", "file"),
         ("GOTOOLCHAIN", "local"),
         ("GOPROXY", "off"),
         ("HOMEBREW_NO_AUTO_UPDATE", "1"),
@@ -60,20 +61,30 @@ fn table_overrides_session_values() {
 }
 
 #[test]
-fn git_override_is_appended_to_existing_pairs() {
+fn git_overrides_are_appended_to_existing_pairs() {
     let none = OfflineEnvironment::compute(|_| None);
-    assert_eq!(value_of(&none, "GIT_CONFIG_COUNT"), Some("1"));
+    assert_eq!(value_of(&none, "GIT_CONFIG_COUNT"), Some("2"));
     assert_eq!(value_of(&none, "GIT_CONFIG_KEY_0"), Some("core.fsmonitor"));
     assert_eq!(value_of(&none, "GIT_CONFIG_VALUE_0"), Some("false"));
+    assert_eq!(
+        value_of(&none, "GIT_CONFIG_KEY_1"),
+        Some("log.showSignature")
+    );
+    assert_eq!(value_of(&none, "GIT_CONFIG_VALUE_1"), Some("false"));
 
     let existing = HashMap::from([("GIT_CONFIG_COUNT", "2")]);
     let appended = OfflineEnvironment::compute(lookup_in(&existing));
-    assert_eq!(value_of(&appended, "GIT_CONFIG_COUNT"), Some("3"));
+    assert_eq!(value_of(&appended, "GIT_CONFIG_COUNT"), Some("4"));
     assert_eq!(
         value_of(&appended, "GIT_CONFIG_KEY_2"),
         Some("core.fsmonitor")
     );
     assert_eq!(value_of(&appended, "GIT_CONFIG_VALUE_2"), Some("false"));
+    assert_eq!(
+        value_of(&appended, "GIT_CONFIG_KEY_3"),
+        Some("log.showSignature")
+    );
+    assert_eq!(value_of(&appended, "GIT_CONFIG_VALUE_3"), Some("false"));
     assert_eq!(
         value_of(&appended, "GIT_CONFIG_KEY_0"),
         None,
@@ -83,7 +94,7 @@ fn git_override_is_appended_to_existing_pairs() {
 
     let bogus = HashMap::from([("GIT_CONFIG_COUNT", "many")]);
     let reset = OfflineEnvironment::compute(lookup_in(&bogus));
-    assert_eq!(value_of(&reset, "GIT_CONFIG_COUNT"), Some("1"));
+    assert_eq!(value_of(&reset, "GIT_CONFIG_COUNT"), Some("2"));
     assert_eq!(value_of(&reset, "GIT_CONFIG_KEY_0"), Some("core.fsmonitor"));
 }
 
@@ -316,7 +327,8 @@ mod real_shells {
             !after
                 .lines()
                 .any(|line| line.starts_with("RUSTUP_AUTO_INSTALL=")
-                    || line.starts_with("GIT_CONFIG_KEY_2=")),
+                    || line.starts_with("GIT_CONFIG_KEY_2=")
+                    || line.starts_with("GIT_CONFIG_KEY_3=")),
             "{shell}: the table leaked into the surrounding shell:\n{after}"
         );
         assert!(
@@ -341,9 +353,11 @@ mod real_shells {
             return;
         };
         for expected in [
-            "GIT_CONFIG_COUNT=1",
+            "GIT_CONFIG_COUNT=2",
             "GIT_CONFIG_KEY_0=core.fsmonitor",
             "GIT_CONFIG_VALUE_0=false",
+            "GIT_CONFIG_KEY_1=log.showSignature",
+            "GIT_CONFIG_VALUE_1=false",
         ] {
             assert!(
                 inside.lines().any(|line| line == expected),

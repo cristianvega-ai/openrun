@@ -17,6 +17,13 @@ pub fn generators_allowed_when_isolated() -> &'static [(&'static str, &'static s
     generator_policy::generators_allowed_when_isolated()
 }
 
+/// The `(spec, generator)` pairs that run on Windows only when the context applies the offline
+/// environment table (`GeneratorContext::offline_environment_applied`). For tests that run each
+/// against the real tool.
+pub fn generators_allowed_on_windows_with_environment() -> &'static [(&'static str, &'static str)] {
+    generator_policy::generators_allowed_on_windows_with_environment()
+}
+
 impl CommandRegistry {
     /// Returns a reference to a single global instance of the command registry.
     ///
