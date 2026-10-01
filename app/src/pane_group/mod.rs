@@ -89,7 +89,7 @@ pub mod focus_state;
 pub mod pane;
 pub mod tree;
 pub mod working_directories;
-use focus_state::PaneGroupFocusState;
+use focus_state::{PaneGroupFocusState, PrBadgeScope};
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]
@@ -1475,12 +1475,17 @@ impl PaneGroup {
         self.focus_state.clone()
     }
 
-    /// Tells the terminals in this group whether something on screen shows their GitHub pull
-    /// request info. A terminal that stops being shown releases its `gh` polling after a grace
-    /// period.
-    pub fn set_pr_info_visible(&mut self, visible: bool, ctx: &mut ViewContext<Self>) {
+    /// Tells the terminals in this group whether it is the selected tab and which of them show a
+    /// pull request badge in the vertical tabs panel. A terminal whose pull request info is no
+    /// longer on screen releases its `gh` polling after a grace period.
+    pub fn set_pr_info_visibility(
+        &mut self,
+        is_selected_tab: bool,
+        pr_badge_scope: PrBadgeScope,
+        ctx: &mut ViewContext<Self>,
+    ) {
         self.focus_state.update(ctx, |focus_state, ctx| {
-            focus_state.set_pr_info_visible(visible, ctx);
+            focus_state.set_pr_info_visibility(is_selected_tab, pr_badge_scope, ctx);
         });
     }
 

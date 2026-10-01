@@ -50,6 +50,8 @@ impl TerminalView {
         }
 
         if focus_handle.is_affected(event) {
+            // Focus and maximizing decide which panes are shown and whose badge is on screen.
+            self.update_git_status_subscription(ctx);
             self.on_pane_state_change(ctx);
         }
     }

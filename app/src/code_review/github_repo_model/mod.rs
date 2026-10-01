@@ -18,6 +18,14 @@ use crate::util::git::{PrInfo, RepositoryInfo};
 /// finds the model still alive, so quick tab flips do not restart `gh` each time.
 pub(crate) const HIDDEN_CONSUMER_GRACE_PERIOD: Duration = Duration::from_secs(30);
 
+/// How long a terminal in the selected tab keeps its handle while a running command hides the
+/// prompt (a full-screen program such as `vim`, or any command that has not finished). It is
+/// longer than [`HIDDEN_CONSUMER_GRACE_PERIOD`] because building or testing often takes minutes,
+/// and a command that finishes within it neither stops `gh` nor starts it again, while one that
+/// runs longer costs a single `gh repo view` and `gh pr view` when it finishes instead of the
+/// two calls a minute that polling would make.
+pub(crate) const RUNNING_COMMAND_GRACE_PERIOD: Duration = Duration::from_secs(180);
+
 #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 #[derive(Debug)]
 pub enum GitHubRepoEvent {

@@ -139,7 +139,9 @@ use crate::code::editor_management::CodeSource;
 use crate::code_review::comments::AgentReviewCommentBatch;
 use crate::code_review::diff_state::GitDeltaPreference;
 use crate::code_review::git_repo_model::{GitRepoModels, GitRepoStatusModel, GitStatusMetadata};
-use crate::code_review::github_repo_model::{GitHubRepoModel, HIDDEN_CONSUMER_GRACE_PERIOD};
+use crate::code_review::github_repo_model::{
+    GitHubRepoModel, HIDDEN_CONSUMER_GRACE_PERIOD, RUNNING_COMMAND_GRACE_PERIOD,
+};
 use crate::context_chips::ContextChipKind;
 use crate::context_chips::prompt::Prompt;
 use crate::context_chips::prompt_type::PromptType;
@@ -688,6 +690,14 @@ pub enum NotificationsDiscoveryBanner {
         request_outcome: Option<RequestPermissionsOutcome>,
         state: NotificationsDiscoveryBannerState,
     },
+}
+
+/// A scheduled release of a terminal's GitHub-info handle, kept with what it was scheduled for so
+/// that it can be rescheduled when the reason the PR info is off screen changes.
+struct PendingPrInfoRelease {
+    handle: SpawnedFutureHandle,
+    hidden_since: Instant,
+    grace: Duration,
 }
 
 struct ShellProcessTerminatedBanner {
@@ -1661,11 +1671,16 @@ pub struct TerminalView {
 
     /// Pending release of [`Self::github_repo_model`] after this terminal's pull request info
     /// stopped being on screen. Cancelled if it is shown again first.
-    pending_pr_info_release: Option<SpawnedFutureHandle>,
+    pending_pr_info_release: Option<PendingPrInfoRelease>,
 
     /// How long [`Self::github_repo_model`] is kept after this terminal's pull request info stops
-    /// being on screen, so that switching tabs back and forth does not restart `gh` each time.
+    /// being on screen because its tab is not shown, so that switching tabs back and forth does
+    /// not restart `gh` each time.
     hidden_pr_info_grace: Duration,
+
+    /// Like [`Self::hidden_pr_info_grace`] while the terminal is shown but a running command
+    /// hides the prompt.
+    hidden_pr_info_command_grace: Duration,
 
     /// Deferred code review open request, stashed when [`GitDeltaPreference::OnlyDirty`] is
     /// requested but git status metadata has not loaded yet. Consumed in
@@ -2402,6 +2417,7 @@ impl TerminalView {
             github_repo_model: None,
             pending_pr_info_release: None,
             hidden_pr_info_grace: HIDDEN_CONSUMER_GRACE_PERIOD,
+            hidden_pr_info_command_grace: RUNNING_COMMAND_GRACE_PERIOD,
             deferred_code_review_open: None,
             block_completed_callbacks: Default::default(),
             current_repo_path: None,
@@ -2453,7 +2469,7 @@ impl TerminalView {
 
     fn clear_github_repo_model(&mut self, ctx: &mut ViewContext<Self>) {
         if let Some(pending_release) = self.pending_pr_info_release.take() {
-            pending_release.abort();
+            pending_release.handle.abort();
         }
         let Some(handle) = self.github_repo_model.take() else {
             return;
@@ -2529,23 +2545,30 @@ impl TerminalView {
         self.current_repo_path.is_some() && self.needs_git_status_for_chip_ui(ctx)
     }
 
-    /// Whether the terminal's prompt/footer chips need PR info.
-    fn needs_pr_info_for_chip_ui(&self, ctx: &AppContext) -> bool {
-        if self.has_active_cli_agent_session(ctx)
+    /// Whether the CLI-agent footer is configured to show the pull request chip. The footer is
+    /// shown for as long as a CLI-agent session runs, in the alternate screen too.
+    fn cli_agent_footer_has_pr_chip(&self, ctx: &AppContext) -> bool {
+        self.has_active_cli_agent_session(ctx)
+            && *CLIAgentSettings::as_ref(ctx).should_render_cli_agent_footer
             && SessionSettings::as_ref(ctx)
                 .cli_agent_footer_chip_selection
                 .all_chips()
                 .contains(&ContextChipKind::GithubPullRequest)
-        {
-            return true;
-        }
+    }
 
+    /// Whether the terminal's prompt is configured to show the pull request chip.
+    fn prompt_has_pr_chip(&self, ctx: &AppContext) -> bool {
         let is_using_warp_prompt = !*SessionSettings::as_ref(ctx).honor_ps1
             || InputSettings::as_ref(ctx).is_warp_prompt_enabled(ctx);
         is_using_warp_prompt
             && Prompt::as_ref(ctx)
                 .chip_kinds()
                 .contains(&ContextChipKind::GithubPullRequest)
+    }
+
+    /// Whether the terminal's prompt/footer chips need PR info.
+    fn needs_pr_info_for_chip_ui(&self, ctx: &AppContext) -> bool {
+        self.cli_agent_footer_has_pr_chip(ctx) || self.prompt_has_pr_chip(ctx)
     }
 
     /// Whether this terminal's layout needs PR info. PR info is fetched with `gh`, which
@@ -2555,17 +2578,48 @@ impl TerminalView {
         self.current_repo_path.is_some() && self.needs_pr_info_for_chip_ui(ctx)
     }
 
-    /// Whether anything on screen shows this terminal's PR info: its tab is selected, or the
-    /// vertical tabs panel shows PR badges. A terminal outside a pane group always counts.
-    fn pr_info_on_screen(&self, app: &AppContext) -> bool {
+    /// Whether this terminal's pane is shown: its tab is selected and no maximized sibling pane
+    /// covers it. A terminal outside a pane group counts as shown.
+    fn pane_is_shown(&self, app: &AppContext) -> bool {
         self.focus_handle
             .as_ref()
-            .is_none_or(|handle| handle.is_pr_info_visible(app))
+            .is_none_or(|handle| handle.is_shown_in_selected_tab(app))
+    }
+
+    /// Whether the vertical tabs panel shows this terminal's pull request badge.
+    fn pr_badge_on_screen(&self, app: &AppContext) -> bool {
+        self.focus_handle
+            .as_ref()
+            .is_some_and(|handle| handle.pr_badge_on_screen(app))
+    }
+
+    /// Whether a pull request chip is on screen inside this terminal: the CLI-agent footer's, or
+    /// the prompt's while the prompt is shown. A full-screen program or a running command hides
+    /// the prompt.
+    fn pr_chip_on_screen(&self, app: &AppContext) -> bool {
+        self.cli_agent_footer_has_pr_chip(app)
+            || (self.prompt_has_pr_chip(app) && self.is_input_box_visible(&self.model.lock(), app))
+    }
+
+    /// Whether anything on screen shows this terminal's PR info: a pull request chip of its shown
+    /// pane, or its badge in the vertical tabs panel.
+    fn pr_info_on_screen(&self, app: &AppContext) -> bool {
+        self.pr_badge_on_screen(app) || (self.pane_is_shown(app) && self.pr_chip_on_screen(app))
+    }
+
+    /// How long to keep the PR-info handle once nothing shows it: longer while the pane is shown
+    /// and only a running command hides the prompt.
+    fn pr_info_release_grace(&self, app: &AppContext) -> Duration {
+        if self.pane_is_shown(app) {
+            self.hidden_pr_info_command_grace
+        } else {
+            self.hidden_pr_info_grace
+        }
     }
 
     /// Re-evaluate whether the terminal needs a PR-info subscription, and
     /// acquire or drop the handle accordingly. While the PR info is not on
-    /// screen the handle is released after [`Self::hidden_pr_info_grace`].
+    /// screen the handle is released after [`Self::pr_info_release_grace`].
     fn sync_pr_info_subscription(&mut self, ctx: &mut ViewContext<Self>) {
         if !self.needs_pr_info(ctx) {
             self.clear_github_repo_model(ctx);
@@ -2573,25 +2627,38 @@ impl TerminalView {
         }
 
         if !self.pr_info_on_screen(ctx) {
-            if self.github_repo_model.is_some() && self.pending_pr_info_release.is_none() {
-                let grace = self.hidden_pr_info_grace;
-                self.pending_pr_info_release = Some(ctx.spawn(
-                    async move {
-                        Timer::after(grace).await;
-                    },
-                    |me, _, ctx| {
-                        me.pending_pr_info_release = None;
-                        if !me.pr_info_on_screen(ctx) {
-                            me.clear_github_repo_model(ctx);
-                        }
-                    },
-                ));
+            if self.github_repo_model.is_some() {
+                let grace = self.pr_info_release_grace(ctx);
+                let hidden_since = match &self.pending_pr_info_release {
+                    Some(pending) if pending.grace == grace => return,
+                    Some(pending) => {
+                        pending.handle.abort();
+                        pending.hidden_since
+                    }
+                    None => Instant::now(),
+                };
+                let remaining = grace.saturating_sub(hidden_since.elapsed());
+                self.pending_pr_info_release = Some(PendingPrInfoRelease {
+                    handle: ctx.spawn(
+                        async move {
+                            Timer::after(remaining).await;
+                        },
+                        |me, _, ctx| {
+                            me.pending_pr_info_release = None;
+                            if !me.pr_info_on_screen(ctx) {
+                                me.clear_github_repo_model(ctx);
+                            }
+                        },
+                    ),
+                    hidden_since,
+                    grace,
+                });
             }
             return;
         }
 
         if let Some(pending_release) = self.pending_pr_info_release.take() {
-            pending_release.abort();
+            pending_release.handle.abort();
         }
         if self.github_repo_model.is_some() {
             return;
@@ -4776,6 +4843,13 @@ impl TerminalView {
                 }
                 self.did_notify_long_running = false;
 
+                // A command that runs for a moment hides the prompt, and nothing else announces
+                // that, so look again once it counts as long running.
+                ctx.spawn(
+                    Timer::after(Duration::from_millis(LONG_RUNNING_COMMAND_DURATION_MS + 20)),
+                    |me, _, ctx| me.update_git_status_subscription(ctx),
+                );
+
                 // Snapshot the prompt state as of when the command began executing.
                 // Commands may themselves affect the prompt (if running `git checkout`), for
                 // example, so we want the saved prompt state to match what the user saw when
@@ -4923,6 +4997,9 @@ impl TerminalView {
                 // future already resolved, abort has no effect. We handle this as early as possible
                 // because the abort is time sensitive.
                 self.warpify_state.abort_auto_warpify();
+
+                // The finished command shows the prompt again.
+                self.update_git_status_subscription(ctx);
 
                 let active_session = self
                     .active_block_session_id()
@@ -5294,6 +5371,9 @@ impl TerminalView {
                     self.close_find_bar(ctx);
                     self.redetermine_global_focus(ctx);
                 }
+
+                // The alternate screen hides the prompt and its pull request chip.
+                self.update_git_status_subscription(ctx);
             }
             ModelEvent::DetectedEndOfSshLogin(check_type) => {
                 self.handle_detected_end_of_ssh_login(check_type, ctx);

@@ -5386,12 +5386,7 @@ fn vertical_tabs_pr_badges_keep_background_tabs_polling() {
 
     App::test((), |mut app| async move {
         let (_repo, workspace, terminal, _gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
-        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
-            settings
-                .use_vertical_tabs
-                .set_value(true, ctx)
-                .expect("enable vertical tabs");
-        });
+        enable_vertical_tabs_with_expanded_rows(&mut app);
         workspace.update(&mut app, |workspace, ctx| {
             workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
         });
@@ -5452,6 +5447,600 @@ fn hidden_tab_does_not_stop_a_visible_tab_in_the_same_repo() {
         let lookups = gh.repository_lookups();
         assert!(lookups >= 1);
         second.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+    });
+}
+
+fn enable_vertical_tabs_with_expanded_rows(app: &mut App) {
+    use crate::workspace::tab_settings::{TabSettings, VerticalTabsViewMode};
+
+    TabSettings::handle(app).update(app, |settings, ctx| {
+        settings
+            .use_vertical_tabs
+            .set_value(true, ctx)
+            .expect("enable vertical tabs");
+        settings
+            .vertical_tabs_view_mode
+            .set_value(VerticalTabsViewMode::Expanded, ctx)
+            .expect("show expanded rows");
+    });
+}
+
+fn enter_alt_screen(app: &mut App, terminal: &ViewHandle<TerminalView>) {
+    terminal.update(app, |view, ctx| {
+        view.model.lock().process_bytes("\u{1b}[?1049h");
+        view.handle_terminal_event(
+            &ModelEvent::TerminalModeSwapped(TerminalMode::AltScreen),
+            ctx,
+        );
+    });
+}
+
+fn leave_alt_screen(app: &mut App, terminal: &ViewHandle<TerminalView>) {
+    terminal.update(app, |view, ctx| {
+        view.model.lock().process_bytes("\u{1b}[?1049l");
+        view.handle_terminal_event(
+            &ModelEvent::TerminalModeSwapped(TerminalMode::BlockList),
+            ctx,
+        );
+    });
+}
+
+fn start_long_running_command(app: &mut App, terminal: &ViewHandle<TerminalView>) {
+    terminal.update(app, |view, ctx| {
+        {
+            let mut model = view.model.lock();
+            model.block_list_mut().set_bootstrapped();
+            model.simulate_long_running_block("sleep 600", "");
+        }
+        view.handle_terminal_event(
+            &ModelEvent::AfterBlockStarted {
+                block_id: crate::terminal::model::block::BlockId::new(),
+                command: "sleep 600".to_owned(),
+                is_for_in_band_command: false,
+            },
+            ctx,
+        );
+    });
+}
+
+fn finish_command(app: &mut App, terminal: &ViewHandle<TerminalView>) {
+    terminal.update(app, |view, ctx| {
+        view.model.lock().finish_block();
+        view.handle_terminal_event(
+            &ModelEvent::AfterBlockCompleted(AfterBlockCompletedEvent {
+                block_type: BlockType::Static,
+            }),
+            ctx,
+        );
+    });
+}
+
+/// A terminal without a workspace (so no real shell is started and nothing resets its model) in
+/// a watched repo with a PR chip in the prompt, with `gh` counted instead of run and a short grace
+/// period before a hidden terminal releases its model.
+fn repo_terminal_with_pr_chip(
+    app: &mut App,
+) -> (
+    tempfile::TempDir,
+    ViewHandle<TerminalView>,
+    Arc<CountingGitHubCli>,
+) {
+    let (repo, terminal, gh) = terminal_in_repo_with_counting_gh(
+        app,
+        vec![
+            ContextChipKind::WorkingDirectory,
+            ContextChipKind::GithubPullRequest,
+        ],
+    );
+    terminal.update(app, |view, _| {
+        view.hidden_pr_info_grace = std::time::Duration::from_millis(60);
+    });
+    terminal.read(app, |view, ctx| {
+        assert!(view.needs_pr_info(ctx));
+        assert!(view.github_repo_model.is_some());
+    });
+    (repo, terminal, gh)
+}
+
+#[test]
+fn prompt_in_the_selected_tab_keeps_polling_past_the_grace_period() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the selected tab looks up the repository"
+        );
+        let model_id = terminal.read(&app, |view, _| {
+            view.github_repo_model.as_ref().map(|m| m.id())
+        });
+
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(250)).await;
+
+        terminal.read(&app, |view, ctx| {
+            assert!(view.pr_info_on_screen(ctx));
+            assert!(view.pending_pr_info_release.is_none());
+        });
+        assert_eq!(
+            terminal.read(&app, |view, _| view
+                .github_repo_model
+                .as_ref()
+                .map(|m| m.id())),
+            model_id,
+            "a shown prompt keeps its model for as long as it is shown"
+        );
+    });
+}
+
+#[test]
+fn alt_screen_releases_the_pr_model_and_leaving_it_looks_up_at_once() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
+        terminal.update(&mut app, |view, _| {
+            view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the prompt looks up the repository"
+        );
+
+        enter_alt_screen(&mut app, &terminal);
+        terminal.read(&app, |view, ctx| {
+            assert!(view.model.lock().is_alt_screen_active());
+            assert!(view.pane_is_shown(ctx), "the tab is still selected");
+            assert!(
+                !view.pr_info_on_screen(ctx),
+                "the alt screen hides the prompt"
+            );
+        });
+        assert_eventually!(
+            400 => !holds_github_model(&app, &terminal),
+            "an alt-screen program must not keep `gh` polling"
+        );
+        let lookups_when_released = gh.total_lookups();
+        let repository_lookups = gh.repository_lookups();
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(150)).await;
+        assert_eq!(gh.total_lookups(), lookups_when_released);
+
+        leave_alt_screen(&mut app, &terminal);
+        terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+        assert!(holds_github_model(&app, &terminal));
+        assert_eventually!(
+            200 => gh.repository_lookups() > repository_lookups,
+            "leaving the alt screen looks up GitHub at once"
+        );
+    });
+}
+
+#[test]
+fn running_command_releases_the_pr_model_after_the_grace_period() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
+        terminal.update(&mut app, |view, _| {
+            view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the prompt looks up the repository"
+        );
+
+        start_long_running_command(&mut app, &terminal);
+        terminal.read(&app, |view, ctx| {
+            let model = view.model.lock();
+            assert!(!model.is_alt_screen_active());
+            assert!(
+                !view.is_input_box_visible(&model, ctx),
+                "a running command hides the prompt"
+            );
+        });
+        assert_eventually!(
+            600 => !holds_github_model(&app, &terminal),
+            "a running command must not keep `gh` polling"
+        );
+        let lookups_when_released = gh.total_lookups();
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(150)).await;
+        assert_eq!(gh.total_lookups(), lookups_when_released);
+    });
+}
+
+#[test]
+fn command_that_finishes_within_the_grace_period_starts_no_gh() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the prompt looks up the repository"
+        );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
+        let model_id = terminal.read(&app, |view, _| {
+            view.github_repo_model.as_ref().map(|m| m.id())
+        });
+        let lookups = gh.total_lookups();
+
+        start_long_running_command(&mut app, &terminal);
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.pr_info_on_screen(ctx));
+            assert!(view.pending_pr_info_release.is_some());
+        });
+        finish_command(&mut app, &terminal);
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(200)).await;
+
+        terminal.read(&app, |view, ctx| {
+            assert!(view.pr_info_on_screen(ctx));
+            assert!(view.pending_pr_info_release.is_none());
+        });
+        assert_eq!(
+            terminal.read(&app, |view, _| view
+                .github_repo_model
+                .as_ref()
+                .map(|m| m.id())),
+            model_id
+        );
+        assert_eq!(
+            gh.total_lookups(),
+            lookups,
+            "a short command must not restart `gh`"
+        );
+    });
+}
+
+#[test]
+fn command_that_outlasts_the_grace_period_costs_one_lookup_pair_when_it_finishes() {
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
+        terminal.update(&mut app, |view, _| {
+            view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the prompt looks up the repository"
+        );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
+        let (repository_at_start, pr_at_start) = (gh.repository_lookups(), gh.pr_lookups());
+
+        start_long_running_command(&mut app, &terminal);
+        assert_eventually!(
+            600 => !holds_github_model(&app, &terminal),
+            "the model is released while the command runs"
+        );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(150)).await;
+        assert_eq!(gh.repository_lookups(), repository_at_start);
+        assert_eq!(gh.pr_lookups(), pr_at_start);
+
+        finish_command(&mut app, &terminal);
+        assert!(holds_github_model(&app, &terminal));
+        assert_eventually!(
+            400 => gh.repository_lookups() == repository_at_start * 2
+                && gh.pr_lookups() == pr_at_start * 2,
+            "finishing the command looks up GitHub once, as a fresh start does"
+        );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(150)).await;
+        assert_eq!(gh.repository_lookups(), repository_at_start * 2);
+        assert_eq!(gh.pr_lookups(), pr_at_start * 2);
+    });
+}
+
+#[test]
+fn cli_agent_footer_with_a_pr_chip_keeps_polling_in_the_alt_screen() {
+    use crate::terminal::session_settings::CLIAgentToolbarChipSelection;
+    use crate::terminal::view::cli_agent_footer::toolbar_item::CLIAgentToolbarItemKind;
+
+    App::test((), |mut app| async move {
+        let (_repo, terminal, gh) = repo_terminal_with_pr_chip(&mut app);
+        Prompt::handle(&app).update(&mut app, |prompt, ctx| {
+            prompt
+                .update(
+                    [ContextChipKind::WorkingDirectory],
+                    false,
+                    WarpPromptSeparator::None,
+                    ctx,
+                )
+                .expect("remove the PR chip from the prompt");
+        });
+        app.update(|ctx| {
+            CLIAgentSettings::handle(ctx).update(ctx, |settings, ctx| {
+                let _ = settings.should_render_cli_agent_footer.set_value(true, ctx);
+            });
+            SessionSettings::handle(ctx).update(ctx, |settings, ctx| {
+                settings
+                    .cli_agent_footer_chip_selection
+                    .set_value(
+                        CLIAgentToolbarChipSelection::Custom {
+                            left: vec![CLIAgentToolbarItemKind::ContextChip(
+                                ContextChipKind::GithubPullRequest,
+                            )]
+                            .into(),
+                            right: vec![].into(),
+                        },
+                        ctx,
+                    )
+                    .expect("put the PR chip in the footer");
+            });
+        });
+        terminal.update(&mut app, |view, _| {
+            view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
+        });
+        start_cli_agent_session(&mut app, &terminal);
+        terminal.update(&mut app, |view, ctx| {
+            view.update_git_status_subscription(ctx);
+        });
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.prompt_has_pr_chip(ctx));
+            assert!(view.cli_agent_footer_has_pr_chip(ctx));
+            assert!(view.github_repo_model.is_some());
+        });
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the footer chip looks up the repository"
+        );
+
+        enter_alt_screen(&mut app, &terminal);
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(250)).await;
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.is_input_box_visible(&view.model.lock(), ctx));
+            assert!(
+                view.pr_info_on_screen(ctx),
+                "the footer stays on screen in the alt screen"
+            );
+        });
+        assert!(holds_github_model(&app, &terminal));
+    });
+}
+
+#[test]
+fn vertical_tabs_badges_keep_an_alt_screen_background_tab_polling() {
+    App::test((), |mut app| async move {
+        let (_repo, workspace, terminal, _gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        terminal.update(&mut app, |view, _| {
+            view.hidden_pr_info_command_grace = std::time::Duration::from_millis(60);
+        });
+        enable_vertical_tabs_with_expanded_rows(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+
+        enter_alt_screen(&mut app, &terminal);
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(250)).await;
+        terminal.read(&app, |view, ctx| {
+            assert!(view.pr_badge_on_screen(ctx));
+            assert!(
+                view.pr_info_on_screen(ctx),
+                "the badge shows the PR whatever the prompt does"
+            );
+        });
+        assert!(holds_github_model(&app, &terminal));
+    });
+}
+
+#[test]
+fn vertical_tabs_rows_without_a_pr_badge_do_not_keep_background_tabs_polling() {
+    use crate::workspace::tab_settings::{
+        TabSettings, VerticalTabsDisplayGranularity, VerticalTabsTabItemMode, VerticalTabsViewMode,
+    };
+
+    App::test((), |mut app| async move {
+        let (_repo, workspace, terminal, _gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        enable_vertical_tabs_with_expanded_rows(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+        let on_screen = |app: &App| terminal.read(app, |view, ctx| view.pr_info_on_screen(ctx));
+        assert!(on_screen(&app), "expanded rows show the badge");
+
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .vertical_tabs_view_mode
+                .set_value(VerticalTabsViewMode::Compact, ctx)
+                .expect("compact rows");
+        });
+        assert!(!on_screen(&app), "compact rows show no PR badge");
+        assert_eventually!(
+            400 => !holds_github_model(&app, &terminal),
+            "so a background tab polls no longer"
+        );
+
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .vertical_tabs_display_granularity
+                .set_value(VerticalTabsDisplayGranularity::Tabs, ctx)
+                .expect("tab rows");
+            settings
+                .vertical_tabs_tab_item_mode
+                .set_value(VerticalTabsTabItemMode::Summary, ctx)
+                .expect("summary rows");
+        });
+        assert!(
+            on_screen(&app),
+            "summary rows list the PR whatever the row mode"
+        );
+        assert!(
+            holds_github_model(&app, &terminal),
+            "and the tab is re-acquired at once"
+        );
+
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .vertical_tabs_tab_item_mode
+                .set_value(VerticalTabsTabItemMode::FocusedSession, ctx)
+                .expect("focused session rows");
+        });
+        assert!(!on_screen(&app), "compact focused-session rows show none");
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .vertical_tabs_view_mode
+                .set_value(VerticalTabsViewMode::Expanded, ctx)
+                .expect("expanded rows");
+            settings
+                .vertical_tabs_show_pr_link
+                .set_value(false, ctx)
+                .expect("hide the PR link");
+        });
+        assert!(
+            !on_screen(&app),
+            "expanded rows hide the badge when PR link is off"
+        );
+    });
+}
+
+#[test]
+fn focused_session_rows_show_only_the_focused_panes_pr_badge() {
+    use crate::workspace::tab_settings::{
+        TabSettings, VerticalTabsDisplayGranularity, VerticalTabsTabItemMode,
+    };
+
+    App::test((), |mut app| async move {
+        let (_repo, workspace, first, _gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        let repo = first.read(&app, |view, _| view.current_repo_path.clone());
+        let pane_group = workspace.read(&app, |w, _| w.active_tab_pane_group().clone());
+        pane_group.update(&mut app, |group, ctx| {
+            group.add_terminal_pane(crate::pane_group::Direction::Right, None, ctx);
+        });
+        let second = pane_group.read(&app, |group, ctx| {
+            group
+                .terminal_view_at_pane_index(1, ctx)
+                .expect("a second terminal")
+        });
+        second.update(&mut app, |view, ctx| {
+            view.current_repo_path = repo;
+            view.update_git_status_subscription(ctx);
+        });
+        enable_vertical_tabs_with_expanded_rows(&mut app);
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+        let badge = |app: &App, terminal: &ViewHandle<TerminalView>| {
+            terminal.read(app, |view, ctx| view.pr_badge_on_screen(ctx))
+        };
+        assert!(
+            badge(&app, &first) && badge(&app, &second),
+            "pane rows show every badge"
+        );
+
+        TabSettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .vertical_tabs_display_granularity
+                .set_value(VerticalTabsDisplayGranularity::Tabs, ctx)
+                .expect("tab rows");
+            settings
+                .vertical_tabs_tab_item_mode
+                .set_value(VerticalTabsTabItemMode::FocusedSession, ctx)
+                .expect("focused session rows");
+        });
+        let focused_is_second = second.read(&app, |view, ctx| {
+            view.focus_handle
+                .as_ref()
+                .is_some_and(|handle| handle.is_focused(ctx))
+        });
+        assert_eq!(badge(&app, &second), focused_is_second);
+        assert_eq!(badge(&app, &first), !focused_is_second);
+    });
+}
+
+#[test]
+fn maximized_pane_releases_the_pr_model_of_its_hidden_sibling() {
+    use crate::pane_group::PaneGroupAction;
+
+    App::test((), |mut app| async move {
+        let (_repo, workspace, first, gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        let repo = first.read(&app, |view, _| view.current_repo_path.clone());
+        let pane_group = workspace.read(&app, |w, _| w.active_tab_pane_group().clone());
+        pane_group.update(&mut app, |group, ctx| {
+            group.add_terminal_pane(crate::pane_group::Direction::Right, None, ctx);
+        });
+        let second = pane_group.read(&app, |group, ctx| {
+            group
+                .terminal_view_at_pane_index(1, ctx)
+                .expect("a second terminal")
+        });
+        second.update(&mut app, |view, ctx| {
+            view.current_repo_path = repo;
+            view.update_git_status_subscription(ctx);
+        });
+        for terminal in [&first, &second] {
+            terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+        }
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the split panes look up the repository"
+        );
+
+        pane_group.update(&mut app, |group, ctx| {
+            group.handle_action(&PaneGroupAction::ToggleMaximizePane, ctx);
+        });
+        let hidden = if first.read(&app, |view, ctx| view.pane_is_shown(ctx)) {
+            &second
+        } else {
+            &first
+        };
+        let shown = if std::ptr::eq(hidden, &first) {
+            &second
+        } else {
+            &first
+        };
+        hidden.read(&app, |view, ctx| assert!(!view.pr_info_on_screen(ctx)));
+        shown.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+        assert_eventually!(
+            400 => !holds_github_model(&app, hidden),
+            "the pane a maximized sibling covers releases its model"
+        );
+        assert!(
+            holds_github_model(&app, shown),
+            "the shown pane keeps its model"
+        );
+
+        pane_group.update(&mut app, |group, ctx| {
+            group.handle_action(&PaneGroupAction::ToggleMaximizePane, ctx);
+        });
+        hidden.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+        assert!(
+            holds_github_model(&app, hidden),
+            "un-maximizing re-acquires it"
+        );
+    });
+}
+
+#[test]
+fn two_shown_terminals_in_the_same_repo_share_one_model() {
+    App::test((), |mut app| async move {
+        let (_repo, workspace, first, gh) = workspace_with_pr_chip_terminal_in_repo(&mut app);
+        let repo = first.read(&app, |view, _| view.current_repo_path.clone());
+        enable_vertical_tabs_with_expanded_rows(&mut app);
+        assert_eventually!(
+            200 => gh.repository_lookups() >= 1,
+            "the first tab looks up the repository"
+        );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
+        let repository_lookups = gh.repository_lookups();
+
+        workspace.update(&mut app, |workspace, ctx| {
+            workspace.handle_action(&WorkspaceAction::AddDefaultTab, ctx);
+        });
+        let second = active_tab_terminal(&app, &workspace);
+        second.update(&mut app, |view, ctx| {
+            view.current_repo_path = repo;
+            view.update_git_status_subscription(ctx);
+        });
+
+        for terminal in [&first, &second] {
+            terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
+        }
+        let model_of = |terminal: &ViewHandle<TerminalView>| {
+            terminal.read(&app, |view, _| {
+                view.github_repo_model.as_ref().map(|m| m.id())
+            })
+        };
+        assert!(model_of(&first).is_some());
+        assert_eq!(
+            model_of(&first),
+            model_of(&second),
+            "both tabs hold one model"
+        );
+        warpui::r#async::Timer::after(std::time::Duration::from_millis(100)).await;
+        assert_eq!(
+            gh.repository_lookups(),
+            repository_lookups,
+            "the second consumer does not look the repository up again"
+        );
     });
 }
 

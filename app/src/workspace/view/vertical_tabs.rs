@@ -40,6 +40,7 @@ use crate::code::icon_from_file_path;
 use crate::context_chips::display_chip::GitLineChanges;
 use crate::context_chips::github_pr_display_text_from_url;
 use crate::editor::EditorView;
+use crate::pane_group::focus_state::PrBadgeScope;
 use crate::pane_group::pane::IPaneType;
 use crate::pane_group::{CodePane, PaneGroup, PaneId, TabBarHoverIndex, TerminalPane};
 use crate::safe_triangle::SafeTriangle;
@@ -966,6 +967,23 @@ fn resolve_vertical_tabs_mode(app: &AppContext) -> VerticalTabsResolvedMode {
             VerticalTabsTabItemMode::FocusedSession => VerticalTabsResolvedMode::FocusedSession,
             VerticalTabsTabItemMode::Summary => VerticalTabsResolvedMode::Summary,
         },
+    }
+}
+
+/// Which terminals of a tab the open vertical tabs panel shows a pull request badge for in the
+/// current display mode. Keep it in step with the rows: the expanded pane and focused-session rows
+/// show the badge when "PR link" is on (the focused-session row only for the focused pane), the
+/// summary rows list the pull request of every terminal, and the compact rows show none.
+pub(super) fn pr_badge_scope(app: &AppContext) -> PrBadgeScope {
+    let settings = TabSettings::as_ref(app);
+    let expanded_rows_show_badge = *settings.vertical_tabs_view_mode.value()
+        == VerticalTabsViewMode::Expanded
+        && *settings.vertical_tabs_show_pr_link.value();
+    match resolve_vertical_tabs_mode(app) {
+        VerticalTabsResolvedMode::Summary => PrBadgeScope::AllPanes,
+        _ if !expanded_rows_show_badge => PrBadgeScope::None,
+        VerticalTabsResolvedMode::Panes => PrBadgeScope::AllPanes,
+        VerticalTabsResolvedMode::FocusedSession => PrBadgeScope::FocusedPaneOnly,
     }
 }
 

@@ -12,7 +12,20 @@ pub struct PaneGroupFocusState {
     active_session_id: Option<TerminalPaneId>,
     in_split_pane: bool,
     is_focused_pane_maximized: bool,
-    is_pr_info_visible: bool,
+    is_selected_tab: bool,
+    pr_badge_scope: PrBadgeScope,
+}
+
+/// Which terminals of a pane group have their pull request badge on screen in the vertical tabs
+/// panel. It depends on the panel being open and on the display mode: the compact rows show no
+/// badge, the expanded rows show one per pane when "PR link" is on, the focused-session rows show
+/// the focused pane's, and the summary rows list every terminal's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PrBadgeScope {
+    #[default]
+    None,
+    FocusedPaneOnly,
+    AllPanes,
 }
 
 #[derive(Debug, Clone)]
@@ -45,7 +58,8 @@ impl PaneGroupFocusState {
             active_session_id,
             in_split_pane,
             is_focused_pane_maximized: false,
-            is_pr_info_visible: true,
+            is_selected_tab: true,
+            pr_badge_scope: PrBadgeScope::None,
         }
     }
 
@@ -74,10 +88,19 @@ impl PaneGroupFocusState {
         self.is_focused_pane_maximized
     }
 
-    /// Returns true if something on screen shows this pane group's GitHub pull request info: the
-    /// group is the selected tab, or the vertical tabs panel shows pull request badges.
-    pub fn is_pr_info_visible(&self) -> bool {
-        self.is_pr_info_visible
+    /// Returns true if this pane group is the selected tab of its window.
+    pub fn is_selected_tab(&self) -> bool {
+        self.is_selected_tab
+    }
+
+    /// Which terminals of this group show a pull request badge in the vertical tabs panel.
+    pub fn pr_badge_scope(&self) -> PrBadgeScope {
+        self.pr_badge_scope
+    }
+
+    /// True if the focused pane is maximized, which hides every other pane of the group.
+    pub fn hides_pane_for_maximized_sibling(&self, pane_id: PaneId) -> bool {
+        self.in_split_pane && self.is_focused_pane_maximized && self.focused_pane_id != pane_id
     }
 
     /// Computes the split pane state for a given pane based on current focus state.
@@ -148,10 +171,17 @@ impl PaneGroupFocusState {
         }
     }
 
-    /// Sets whether something on screen shows this pane group's pull request info.
-    pub(super) fn set_pr_info_visible(&mut self, visible: bool, ctx: &mut ModelContext<Self>) {
-        if self.is_pr_info_visible != visible {
-            self.is_pr_info_visible = visible;
+    /// Sets whether this group is the selected tab and which of its terminals show a pull request
+    /// badge in the vertical tabs panel.
+    pub(super) fn set_pr_info_visibility(
+        &mut self,
+        is_selected_tab: bool,
+        pr_badge_scope: PrBadgeScope,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.is_selected_tab != is_selected_tab || self.pr_badge_scope != pr_badge_scope {
+            self.is_selected_tab = is_selected_tab;
+            self.pr_badge_scope = pr_badge_scope;
             ctx.emit(PaneGroupFocusEvent::PrInfoVisibilityChanged);
         }
     }
@@ -209,9 +239,20 @@ impl PaneFocusHandle {
         self.split_pane_state(app).is_focused()
     }
 
-    /// True if something on screen shows this pane group's pull request info.
-    pub fn is_pr_info_visible(&self, app: &AppContext) -> bool {
-        self.focus_state.as_ref(app).is_pr_info_visible()
+    /// True if this pane's pull request badge is on screen in the vertical tabs panel.
+    pub fn pr_badge_on_screen(&self, app: &AppContext) -> bool {
+        let focus_state = self.focus_state.as_ref(app);
+        match focus_state.pr_badge_scope() {
+            PrBadgeScope::None => false,
+            PrBadgeScope::FocusedPaneOnly => focus_state.is_pane_focused(self.pane_id),
+            PrBadgeScope::AllPanes => true,
+        }
+    }
+
+    /// True if this pane's group is the selected tab and no maximized sibling hides the pane.
+    pub fn is_shown_in_selected_tab(&self, app: &AppContext) -> bool {
+        let focus_state = self.focus_state.as_ref(app);
+        focus_state.is_selected_tab() && !focus_state.hides_pane_for_maximized_sibling(self.pane_id)
     }
 
     /// True if this pane is the active terminal session.

@@ -141,6 +141,7 @@ use crate::notification::NotificationContext;
 use crate::palette::{PaletteMode, PaletteSource};
 #[cfg(feature = "local_fs")]
 use crate::pane_group::FilePane;
+use crate::pane_group::focus_state::PrBadgeScope;
 use crate::pane_group::pane::ActionOrigin;
 use crate::pane_group::{
     self, AnyPaneContent, CodePane, CodeReviewPanelArg, Direction as PaneGroupDirection, Direction,
@@ -2186,8 +2187,11 @@ impl Workspace {
                 ctx.notify();
             }
             TabSettingsChangedEvent::VerticalTabsViewMode { .. }
-            | TabSettingsChangedEvent::VerticalTabsTabItemMode { .. }
-            | TabSettingsChangedEvent::VerticalTabsPrimaryInfo { .. }
+            | TabSettingsChangedEvent::VerticalTabsTabItemMode { .. } => {
+                self.sync_tab_pr_info_visibility(ctx);
+                ctx.notify();
+            }
+            TabSettingsChangedEvent::VerticalTabsPrimaryInfo { .. }
             | TabSettingsChangedEvent::VerticalTabsCompactSubtitle { .. }
             | TabSettingsChangedEvent::UseLatestUserPromptAsConversationTitleInTabNames {
                 ..
@@ -2212,6 +2216,7 @@ impl Workspace {
                 self.tab_rename_editor.update(ctx, |editor, ctx| {
                     editor.set_font_size(font_size, ctx);
                 });
+                self.sync_tab_pr_info_visibility(ctx);
                 ctx.notify();
             }
             TabSettingsChangedEvent::HeaderToolbarChipSelection { .. } => {
@@ -3088,25 +3093,26 @@ impl Workspace {
         }
     }
 
-    /// Whether the vertical tabs panel is on screen with pull request badges, which show the PR
-    /// info of every tab and not just the selected one.
-    fn vertical_tabs_show_pr_badges(&self, ctx: &AppContext) -> bool {
-        let tab_settings = TabSettings::as_ref(ctx);
-        self.vertical_tabs_panel_open
-            && *tab_settings.use_vertical_tabs
-            && *tab_settings.vertical_tabs_show_pr_link.value()
+    /// Which terminals the vertical tabs panel shows a pull request badge for: none unless the
+    /// panel is open and the current display mode renders badges.
+    fn vertical_tabs_pr_badge_scope(&self, ctx: &AppContext) -> PrBadgeScope {
+        if self.vertical_tabs_panel_open && *TabSettings::as_ref(ctx).use_vertical_tabs {
+            vertical_tabs::pr_badge_scope(ctx)
+        } else {
+            PrBadgeScope::None
+        }
     }
 
-    /// Tells each tab whether something on screen shows its GitHub pull request info, so a
-    /// terminal in a background tab stops polling `gh` unless the vertical tabs panel shows PR
-    /// badges. Call it whenever the selected tab, the vertical tabs panel or the PR badge setting
-    /// changes.
+    /// Tells each tab whether it is the selected one and which of its terminals the vertical tabs
+    /// panel shows a pull request badge for, so a terminal stops polling `gh` once nothing on
+    /// screen shows its pull request info. Call it whenever the selected tab, the vertical tabs
+    /// panel or a setting that decides whether its rows show badges changes.
     fn sync_tab_pr_info_visibility(&self, ctx: &mut ViewContext<Self>) {
-        let show_all = self.vertical_tabs_show_pr_badges(ctx);
+        let badge_scope = self.vertical_tabs_pr_badge_scope(ctx);
         for (index, tab) in self.tabs.iter().enumerate() {
-            let visible = show_all || index == self.active_tab_index;
+            let is_selected = index == self.active_tab_index;
             tab.pane_group.update(ctx, |pane_group, ctx| {
-                pane_group.set_pr_info_visible(visible, ctx);
+                pane_group.set_pr_info_visibility(is_selected, badge_scope, ctx);
             });
         }
     }
