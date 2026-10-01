@@ -488,6 +488,15 @@ pub(super) struct EventLoop {
     window_class: Option<String>,
     state: State,
     proxy: EventLoopProxy<CustomEvent>,
+    /// Whether to drop the pointer events (moves, buttons, wheel, touch) that the windowing system
+    /// sends. Integration tests inject every event they need; the pointer of the display they
+    /// run on is not part of the test. On an X server without a window manager (Xvfb) that
+    /// pointer rests in the middle of the screen, and the server reports its position to a window
+    /// at times that depend on the load of the machine (for instance when the window gains
+    /// focus). Such a report is a mouse move over whichever pane lies in the middle of the
+    /// window, and with focus-follows-mouse on it takes the focus from the pane the test is
+    /// working in.
+    ignore_pointer_input: bool,
     ime_enabled: bool,
     /// Last IME cursor area sent to winit, keyed by the target window. On Wayland, used to skip
     /// redundant `set_ime_cursor_area` calls (which can re-trigger IME events on some compositors,
@@ -515,6 +524,7 @@ impl EventLoop {
         init_fn: impl FnOnce(&mut AppContext, LocalBoxFuture<'static, crate::App>) + 'static,
         window_class: Option<String>,
         proxy: EventLoopProxy<CustomEvent>,
+        ignore_pointer_input: bool,
     ) -> Self {
         Self {
             ui_app: ui_app.clone(),
@@ -523,6 +533,7 @@ impl EventLoop {
             window_class,
             state: Default::default(),
             proxy,
+            ignore_pointer_input,
             ime_enabled: false,
             last_ime_cursor_area: None,
             downrank_non_nvidia_vulkan_adapters: false,
@@ -1105,6 +1116,17 @@ impl EventLoop {
         window_id: winit::window::WindowId,
         evt: winit::event::WindowEvent,
     ) -> Option<ConvertedEvent> {
+        if self.ignore_pointer_input
+            && matches!(
+                evt,
+                WindowEvent::CursorMoved { .. }
+                    | WindowEvent::MouseInput { .. }
+                    | WindowEvent::MouseWheel { .. }
+                    | WindowEvent::Touch(_)
+            )
+        {
+            return None;
+        }
         let window_state = self.state.windows.get_mut(&window_id)?;
         let scale_factor = self.ui_app.update(|ctx| {
             ctx.windows()

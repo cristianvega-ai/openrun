@@ -197,6 +197,7 @@ impl App {
             init_fn,
             window_class,
             event_loop.create_proxy(),
+            is_integration_test,
         );
 
         // Prevent dropping of our internal event loop state structure during
