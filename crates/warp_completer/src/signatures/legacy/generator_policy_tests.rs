@@ -768,6 +768,30 @@ mod real_shells {
         }
     }
 
+    impl RealShell {
+        /// Whether the shell accepts `command` as a script without running it. Only fish is
+        /// asked (`fish -n`): its syntax differs from the POSIX shells the dependency's
+        /// commands are written for (`${VAR:-x}` is a syntax error in fish, so such a command
+        /// can never run there), and a command that cannot parse is not worth 2,000 runs.
+        pub fn parses(&self, command: &str, empty: &Path) -> bool {
+            if self.kind != ShellKind::Fish {
+                return true;
+            }
+            command::blocking::Command::new(&self.program)
+                .args(self.args.iter())
+                .arg("-n")
+                .arg("-c")
+                .arg(command)
+                .env_clear()
+                .env("PATH", empty)
+                .env("HOME", empty)
+                .current_dir(empty)
+                .stdin(std::process::Stdio::null())
+                .output()
+                .is_ok_and(|output| output.status.success())
+        }
+    }
+
     fn running_in_ci() -> bool {
         std::env::var_os("CI").is_some_and(|value| !value.is_empty() && value != "false")
     }
@@ -1268,6 +1292,11 @@ mod injection_corpus {
         }
     }
 
+    /// The payloads run in PowerShell where the point is only that it executes a payload at all
+    /// (every command that does not inject costs a PowerShell start, a fraction of a second on a
+    /// fast machine and several seconds on a CI runner).
+    const POWERSHELL_PROBE: &[&str] = &["sc", "sq", "cs"];
+
     fn payloads(kind: ShellKind) -> Vec<(&'static str, &'static str)> {
         COMMON_PAYLOADS
             .iter()
@@ -1313,6 +1342,7 @@ mod injection_corpus {
         ) -> warp_command_signatures::CommandBuilder,
         marker_dir: &Path,
         gate: Option<&Gate<'_>>,
+        only_payloads: Option<&[&str]>,
     ) -> BTreeSet<String> {
         let marker_dir = marker_dir.to_str().unwrap();
         let mut commands = BTreeSet::new();
@@ -1335,6 +1365,9 @@ mod injection_corpus {
             );
         };
         for (name, payload) in payloads(kind) {
+            if only_payloads.is_some_and(|only| !only.contains(&name)) {
+                continue;
+            }
             let payload = payload
                 .replace("{CMD}", &kind.create_file(marker_dir, name))
                 .replace("{M}", marker_dir);
@@ -1453,25 +1486,49 @@ mod injection_corpus {
         report
     }
 
+    /// Whether `shell` can parse a command of the generator at all, judged from commands built
+    /// with plain words.
+    fn generator_parses_in(shell: &RealShell, spec: &str, f: TokenGenerator, empty: &Path) -> bool {
+        let shapes: [(&[&str], bool); 3] = [
+            (&[spec, "x"], true),
+            (&[spec, "x"], false),
+            (&[spec, "x", "y"], true),
+        ];
+        shapes.iter().any(|(tokens, trailing)| {
+            let command = f(tokens, *trailing, &[])
+                .build(shell.kind.command_syntax())
+                .to_string();
+            shell.parses(&command, empty)
+        })
+    }
+
     /// The commands every generator builds from the hostile tokens, for each kind of shell that
-    /// is installed.
+    /// is installed (none for a kind whose shell cannot parse the generator's command).
     fn commands_for_installed_kinds(
         spec: &str,
         f: TokenGenerator,
         dir: &Path,
         gate: Option<TokenPolicy>,
     ) -> BTreeMap<ShellKind, BTreeSet<String>> {
-        installed_shells()
-            .iter()
-            .map(|shell| shell.kind)
-            .collect::<BTreeSet<_>>()
+        let empty = dir.join("empty-path");
+        std::fs::create_dir_all(&empty).unwrap();
+        let shells = installed_shells();
+        let first_of_each_kind: BTreeMap<ShellKind, &RealShell> =
+            shells.iter().map(|shell| (shell.kind, shell)).collect();
+        first_of_each_kind
             .into_iter()
-            .map(|kind| {
+            .map(|(kind, shell)| {
+                if !generator_parses_in(shell, spec, f, &empty) {
+                    eprintln!("{spec}: its command is a syntax error in {}", shell.label);
+                    return (kind, BTreeSet::new());
+                }
                 let permits = |tokens: &[&str]| {
                     gate.is_none_or(|policy| policy.permits(kind.family(), tokens))
                 };
                 let gate = gate.map(|_| &permits as &Gate<'_>);
-                (kind, hostile_commands(kind, spec, f, dir, gate))
+                let only =
+                    (gate.is_none() && kind == ShellKind::PowerShell).then_some(POWERSHELL_PROBE);
+                (kind, hostile_commands(kind, spec, f, dir, gate, only))
             })
             .collect()
     }
@@ -1589,6 +1646,7 @@ mod injection_corpus {
             )
             .collect();
         let mut not_raw = Vec::new();
+        let mut missed = Vec::new();
         let mut caught_by_shell: BTreeMap<&str, usize> = BTreeMap::new();
         for (spec, name) in known {
             let generators =
@@ -1603,13 +1661,14 @@ mod injection_corpus {
             for (label, _) in &raw_report.injected {
                 *caught_by_shell.entry(label).or_default() += 1;
             }
-            let missed: Vec<_> = installed_shells()
-                .iter()
-                .filter(|shell| raw_report.injected_in(shell.label) == 0)
-                .map(|shell| shell.label)
-                .collect();
-            if !missed.is_empty() {
-                eprintln!("{spec}/{name}: not executed without the gate in {missed:?}");
+            // Every shell that can parse the generator's command runs the injected code.
+            for shell in installed_shells() {
+                let has_commands = raw
+                    .get(&shell.kind)
+                    .is_some_and(|commands| commands.iter().any(|c| c.contains("XINJ")));
+                if has_commands && raw_report.injected_in(shell.label) == 0 {
+                    missed.push(format!("{spec}/{name} in {}", shell.label));
+                }
             }
             // Fail closed: listing one of the raw generators as `Escaped` would be a false claim,
             // and the corpus shows it.
@@ -1670,6 +1729,12 @@ mod injection_corpus {
         let (mut with_backslash, mut without) = (0, 0);
         for (spec, name, f) in escaped_generators {
             let dir = marker_dir(&format!("fish-backslash-{spec}-{name}"));
+            let empty = dir.join("empty-path");
+            std::fs::create_dir_all(&empty).unwrap();
+            if !generator_parses_in(&fish, &spec, f, &empty) {
+                let _ = std::fs::remove_dir_all(&dir);
+                continue;
+            }
             let mut all = BTreeMap::new();
             all.insert(
                 ShellKind::Fish,
@@ -1685,6 +1750,7 @@ mod injection_corpus {
                             .iter()
                             .all(|token| !token.chars().any(char::is_control))
                     }),
+                    None,
                 ),
             );
             let report = executed_injections(&all, &dir, false);
@@ -1737,18 +1803,24 @@ mod injection_corpus {
                     Some(&|tokens: &[&str]| {
                         TokenPolicy::Escaped.permits(ShellFamily::Posix, tokens)
                     }),
+                    Some(POWERSHELL_PROBE),
                 ),
             );
             let report = executed_injections(&all, &dir, true);
             executed += report.injected_in(pwsh.label);
             let _ = std::fs::remove_dir_all(&dir);
+            // One generator is enough, and each command that does not inject costs a PowerShell
+            // start.
+            if executed > 0 {
+                eprintln!("PowerShell ran the injected code of {spec}/{name} under the POSIX tier");
+                break;
+            }
         }
         assert!(
             executed > 0,
             "PowerShell executed none of the words that POSIX quoting lets through, so the \
              PowerShell tier would not need to be stricter"
         );
-        eprintln!("generators injectable in PowerShell under the POSIX tier: {executed}");
     }
 
     /// A generator that is not listed in the token policy table is `Strict`: it never sees a

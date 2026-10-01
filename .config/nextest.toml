@@ -9,6 +9,12 @@ filter = 'test(~test_idle_session)'
 slow-timeout = { period = "150s", terminate-after = 2 }
 
 [[profile.default.overrides]]
+# The injection corpus starts thousands of real shells (bash, zsh, sh, fish, and PowerShell 7 at
+# a fraction of a second each) and shares the runner with the rest of the suite.
+filter = 'test(~generator_policy::tests::injection_corpus)'
+slow-timeout = { period = "60s", terminate-after = 10 }
+
+[[profile.default.overrides]]
 filter = 'package(integration)'
 # Integration tests are heavier-weight than unit tests, so have each one
 # count twice against the parallelism limit.  This improves overall runtime
