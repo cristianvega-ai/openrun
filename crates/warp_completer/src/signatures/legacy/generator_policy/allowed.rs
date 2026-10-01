@@ -17,6 +17,7 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("aptitude", "list_all_packages"),
     ("aptitude", "list_available_packages"),
     ("asdf", "installed_plugins"),
+    ("asdf", "installed_versions"),
     ("asdf", "shims"),
     ("assimp", "listexport"),
     ("assimp", "listext"),
@@ -29,6 +30,7 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("bat", "unknow_dev_null_possible_italic"),
     ("bat", "unknow_dev_null_possible_wrap"),
     ("bazel", "build_file"),
+    ("brew", "gist_logs_actions"),
     ("bun", "dependencies_generator"),
     ("bun", "get_scripts_generator"),
     ("checkov", "git_branch"),
@@ -39,6 +41,7 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("conda", "get_installed_packages"),
     ("copilot", "cat_copilot_workspace"),
     ("cordova", "cat_package_json"),
+    ("dd", "conv_remaining"),
     ("debug-process", "get_process_names"),
     ("defaults", "domain_generator"),
     ("deno", "deno_binaries"),
@@ -48,12 +51,15 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("dtm", "list_plugins"),
     ("elm-review", "echo"),
     ("enter-pshostprocess", "get_process_names"),
+    ("esbuild", "loader"),
+    ("eslint", "env_remaining"),
     ("expo", "sysctl_hw_ncpu"),
     ("expo", "xcrun_xctrace_list_devices"),
     ("expo-cli", "sysctl_hw_ncpu"),
     ("expo-cli", "xcrun_xctrace_list_devices"),
     ("ffmpeg", "completions"),
     ("ffmpeg", "completions_devices"),
+    ("file", "param_keys"),
     ("fisher", "fish_fisher_list"),
     ("fnm", "ls"),
     ("get-help", "get_command_names"),
@@ -107,6 +113,12 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("kill", "signal_name"),
     ("killall", "process_name"),
     ("killall", "user_name"),
+    ("kubecolor", "cluster"),
+    ("kubecolor", "context"),
+    ("kubecolor", "user"),
+    ("kubectl", "cluster"),
+    ("kubectl", "context"),
+    ("kubectl", "user"),
     ("kubectx", "context"),
     ("kubectx", "delete_context"),
     ("kubectx", "kubectx_context"),
@@ -120,6 +132,7 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("mackup", "list"),
     ("make", "list_targets"),
     ("man", "list_man_pages"),
+    ("man", "sections_remaining"),
     ("mdfind", "ls_library_saved_searches_savedsearch"),
     ("mosh", "cat_ssh_config"),
     ("mosh", "cat_ssh_known_hosts"),
@@ -131,6 +144,9 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("nr", "until_package_json_do_cd"),
     ("nx", "local_generators"),
     ("nx", "local_schematics"),
+    ("oc", "cluster"),
+    ("oc", "context"),
+    ("oc", "user"),
     ("open", "mdfind"),
     ("open", "mdfind_while_read_line"),
     ("pacman", "list_all_packages"),
@@ -173,15 +189,18 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("robot", "for_i_in_robot"),
     ("robot", "test_cases"),
     ("robot", "variables"),
+    ("ros2", "executables"),
     ("ros2", "interfaces"),
     ("ros2", "packages"),
     ("rush", "until_rush_json_do_cd"),
     ("rushx", "until_package_json_do_cd"),
     ("scc", "completions"),
+    ("scc", "format_multi"),
     ("scp", "hosts"),
     ("screen", "detached_sessions"),
     ("screen", "sessions"),
     ("sdk", "candidates"),
+    ("sdk", "installed_versions"),
     ("set-variable", "get_variable_names"),
     ("sftp", "cat_ssh_config"),
     ("sftp", "cat_ssh_known_hosts"),
@@ -213,6 +232,9 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("tokei", "completions"),
     ("trex", "cat_import_map_json"),
     ("trex", "cat_run_json"),
+    ("trivy", "pkg_types_remaining"),
+    ("trivy", "scanners_remaining"),
+    ("trivy", "severity_remaining"),
     ("turbo", "git_branch"),
     ("turbo", "until_turbo_json_do_cd"),
     ("uv", "installed_pythons"),
@@ -282,9 +304,10 @@ pub(super) const ALLOWED_WHEN_ISOLATED: &[(&str, &str)] = &[
     ("rustup", "rustup_docs"),
 ];
 
-/// Alias generators that may run. Empty: the bundled ones interpolate the typed word unquoted
-/// (`git`) or run `npm prefix` (`npm`, `yarn`).
-pub(super) const ALLOWED_ALIAS_GENERATORS: &[(&str, &str)] = &[];
+/// Alias generators that may run, always behind the strict token gate: `git config --get
+/// alias.{word}` is only built from inert words. `npm` and `yarn` run `npm prefix`, which is
+/// denied.
+pub(super) const ALLOWED_ALIAS_GENERATORS: &[(&str, &str)] = &[("git", "alias")];
 
 /// The subset of [`ALLOWED_GENERATORS`] that also runs on Windows: commands built only from file
 /// reads (`cat`, `ls`, `find`, `grep`, ...) and PowerShell process and variable cmdlets, none of

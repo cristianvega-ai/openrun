@@ -4,12 +4,17 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use regex::Regex;
 use warp_command_signatures::{GeneratorProcess, Shell};
+use warp_util::path::ShellFamily;
 
 use super::allowed::{
     ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS, ALLOWED_WHEN_ISOLATED,
 };
 use super::denied::{DENIED_ALIAS_GENERATORS, DENIED_GENERATORS};
-use super::{is_alias_generator_allowed, is_generator_allowed_on};
+use super::token_gate::{is_inert_word, is_quotable_word, listed_token_policies};
+use super::{
+    TokenPolicy, is_alias_generator_allowed, is_generator_allowed_on, sanitize_env_vars,
+    token_policy,
+};
 use crate::completer::{
     CommandExitStatus, CommandOutput, CompleterOptions, CompletionContext,
     CompletionsFallbackStrategy, GeneratorContext, MatchStrategy, PathCompletionContext,
@@ -29,10 +34,11 @@ struct RecordingContext {
     /// directory, so they can only ever reach the stub `curl` placed in it.
     #[cfg(unix)]
     stub_curl_dir: Option<std::path::PathBuf>,
-    /// When set, every command is run in `/bin/sh` with an empty `PATH` (shell builtins only)
+    /// When set, every command is run in this shell (program and arguments before `-c`) with an
+    /// empty `PATH` (shell builtins only)
     /// and its standard output and error are collected in `stdout`.
     #[cfg(unix)]
-    run_in_shell: bool,
+    run_in_shell: Option<(&'static str, &'static [&'static str])>,
     #[cfg(unix)]
     stdout: Mutex<String>,
 }
@@ -46,7 +52,7 @@ impl RecordingContext {
             #[cfg(unix)]
             stub_curl_dir: None,
             #[cfg(unix)]
-            run_in_shell: false,
+            run_in_shell: None,
             #[cfg(unix)]
             stdout: Mutex::new(String::new()),
         }
@@ -93,11 +99,12 @@ impl GeneratorContext for RecordingContext {
     ) -> anyhow::Result<CommandOutput> {
         self.commands.lock().unwrap().push(shell_command.to_owned());
         #[cfg(unix)]
-        if self.run_in_shell {
+        if let Some((shell, shell_args)) = self.run_in_shell {
             let empty =
                 std::env::temp_dir().join(format!("openrun-empty-path-{}", std::process::id()));
             std::fs::create_dir_all(&empty)?;
-            let output = command::blocking::Command::new("/bin/sh")
+            let output = command::blocking::Command::new(shell)
+                .args(shell_args.iter())
                 .arg("-c")
                 .arg(shell_command)
                 .env_clear()
@@ -492,34 +499,38 @@ fn allowed_generators_do_not_run_network_tools() {
     );
 }
 
-/// The generators of the RV-01 report: they put the user's unsubmitted words into the shell
-/// command unquoted (or, for the `kubectl` family, the `KEY=value` words typed before the
-/// command). Each is denied; the class says what else is wrong with it.
-const INJECTABLE_GENERATORS: &[(&str, &str, &str)] = &[
-    ("asdf", "installed_versions", "injectable"),
-    ("brew", "gist_logs_actions", "injectable"),
-    ("dd", "conv_remaining", "injectable"),
+/// The generators of the RV-01 report that stay denied for another reason as well.
+const STILL_DENIED_INJECTABLE_GENERATORS: &[(&str, &str, &str)] = &[
     ("docker", "image_with_tags", "env-network-verified"),
     ("docker-compose", "compose_services", "env-network-likely"),
-    ("esbuild", "loader", "injectable"),
-    ("eslint", "env_remaining", "injectable"),
-    ("file", "param_keys", "injectable"),
-    ("kubecolor", "cluster", "injectable"),
-    ("kubecolor", "context", "injectable"),
-    ("kubecolor", "user", "injectable"),
-    ("kubectl", "cluster", "injectable"),
-    ("kubectl", "context", "injectable"),
-    ("kubectl", "user", "injectable"),
-    ("man", "sections_remaining", "injectable"),
-    ("oc", "cluster", "injectable"),
-    ("oc", "context", "injectable"),
-    ("oc", "user", "injectable"),
-    ("ros2", "executables", "injectable"),
-    ("scc", "format_multi", "injectable"),
-    ("sdk", "installed_versions", "injectable"),
-    ("trivy", "pkg_types_remaining", "injectable"),
-    ("trivy", "scanners_remaining", "injectable"),
-    ("trivy", "severity_remaining", "injectable"),
+];
+
+/// The generators of the RV-01 report that put the user's unsubmitted words into the shell
+/// command unquoted (or, for the `kubectl` family, the `KEY=value` words typed before the
+/// command). They run again, but only behind the token gate.
+const GATED_INJECTABLE_GENERATORS: &[(&str, &str)] = &[
+    ("asdf", "installed_versions"),
+    ("brew", "gist_logs_actions"),
+    ("dd", "conv_remaining"),
+    ("esbuild", "loader"),
+    ("eslint", "env_remaining"),
+    ("file", "param_keys"),
+    ("kubecolor", "cluster"),
+    ("kubecolor", "context"),
+    ("kubecolor", "user"),
+    ("kubectl", "cluster"),
+    ("kubectl", "context"),
+    ("kubectl", "user"),
+    ("man", "sections_remaining"),
+    ("oc", "cluster"),
+    ("oc", "context"),
+    ("oc", "user"),
+    ("ros2", "executables"),
+    ("scc", "format_multi"),
+    ("sdk", "installed_versions"),
+    ("trivy", "pkg_types_remaining"),
+    ("trivy", "scanners_remaining"),
+    ("trivy", "severity_remaining"),
 ];
 
 /// The generators of the RV-02 report, by name: a rustup proxy that installs the toolchain a
@@ -554,7 +565,10 @@ const ENVIRONMENT_GENERATORS: &[(&str, &str, &str)] = &[
 
 #[test]
 fn the_injectable_and_environment_dependent_generators_are_denied_with_their_class() {
-    for (spec, name, class) in INJECTABLE_GENERATORS.iter().chain(ENVIRONMENT_GENERATORS) {
+    for (spec, name, class) in STILL_DENIED_INJECTABLE_GENERATORS
+        .iter()
+        .chain(ENVIRONMENT_GENERATORS)
+    {
         assert!(
             !is_generator_allowed_on(false, false, spec, name),
             "{spec}/{name} must not be allowed"
@@ -568,11 +582,14 @@ fn the_injectable_and_environment_dependent_generators_are_denied_with_their_cla
             "{spec}/{name} must be denied as {class}"
         );
     }
-    assert_eq!(INJECTABLE_GENERATORS.len(), 24);
+    assert_eq!(
+        STILL_DENIED_INJECTABLE_GENERATORS.len() + GATED_INJECTABLE_GENERATORS.len(),
+        24
+    );
     for (spec, alias, _) in DENIED_ALIAS_GENERATORS {
         assert!(!is_alias_generator_allowed(spec, alias), "{spec}/{alias}");
     }
-    assert!(ALLOWED_ALIAS_GENERATORS.is_empty());
+    assert_eq!(ALLOWED_ALIAS_GENERATORS, &[("git", "alias")]);
 }
 
 /// The restored tier: generators that look local but reached a network, or ran repository code,
@@ -634,8 +651,25 @@ fn an_isolated_context_runs_the_restored_generators_and_a_plain_one_does_not() {
     }
 }
 
-/// The exact input of the RV-01 report, through the production suggestions engine and a real
-/// shell: the command that used to be generated for `docker run` printed a marker.
+/// The POSIX shells installed here, as `(program, arguments before -c)`.
+#[cfg(unix)]
+fn installed_shells() -> Vec<(&'static str, &'static [&'static str])> {
+    let shells: Vec<_> = [
+        ("/bin/bash", &["--norc"][..]),
+        ("/bin/zsh", &["-f"][..]),
+        ("/usr/bin/zsh", &["-f"][..]),
+        ("/bin/sh", &[][..]),
+    ]
+    .into_iter()
+    .filter(|(path, _)| std::path::Path::new(path).exists())
+    .collect();
+    assert!(!shells.is_empty());
+    shells
+}
+
+/// The exact input of the RV-01 report, through the production suggestions engine and real
+/// shells: the command that used to be generated for `docker run` printed a marker. Without the
+/// policy it still does (the reproduction); with it, nothing runs.
 #[cfg(unix)]
 #[test]
 fn typing_a_quoted_command_in_an_image_name_executes_nothing() {
@@ -644,31 +678,39 @@ fn typing_a_quoted_command_in_an_image_name_executes_nothing() {
         r#"docker run "astra'; printf ASTRA_GENERATOR_INJECTION; #":tag"#,
         r#"docker image rm "astra'; printf ASTRA_GENERATOR_INJECTION; #":tag"#,
     ];
+    for shell in installed_shells() {
+        let mut control = unrestricted();
+        control.run_in_shell = Some(shell);
+        for input in inputs {
+            control.commands_for(input);
+            assert!(
+                control.stdout.lock().unwrap().contains(MARKER),
+                "without the policy {input:?} should print {MARKER} in {shell:?} (the \
+                 reproduction), ran {:?}",
+                control.commands.lock().unwrap()
+            );
+            control.stdout.lock().unwrap().clear();
+        }
 
-    let mut control = unrestricted();
-    control.run_in_shell = true;
-    for input in inputs {
-        control.commands_for(input);
-        assert!(
-            control.stdout.lock().unwrap().contains(MARKER),
-            "without the policy {input:?} should print {MARKER} (the reproduction), ran {:?}",
-            control.commands.lock().unwrap()
-        );
-        control.stdout.lock().unwrap().clear();
-    }
-
-    let mut guarded = guarded();
-    guarded.run_in_shell = true;
-    for input in inputs {
-        let commands = guarded.commands_for(input);
-        assert!(
-            !guarded.stdout.lock().unwrap().contains(MARKER),
-            "{input:?} executed injected shell code, commands: {commands:?}"
-        );
-        assert!(
-            !commands.iter().any(|command| command.contains("image ls")),
-            "{input:?} ran {commands:?}"
-        );
+        for isolated in [false, true] {
+            let mut guarded = if isolated {
+                guarded_isolated()
+            } else {
+                guarded()
+            };
+            guarded.run_in_shell = Some(shell);
+            for input in inputs {
+                let commands = guarded.commands_for(input);
+                assert!(
+                    !guarded.stdout.lock().unwrap().contains(MARKER),
+                    "{input:?} executed injected shell code in {shell:?}, commands: {commands:?}"
+                );
+                assert!(
+                    !commands.iter().any(|command| command.contains("image ls")),
+                    "{input:?} ran {commands:?}"
+                );
+            }
+        }
     }
 }
 
@@ -837,25 +879,54 @@ fn every_bundled_alias_generator_is_classified() {
 }
 
 #[test]
-fn alias_generators_never_run_with_the_bundled_registry() {
+fn only_the_git_alias_generator_runs_and_only_for_inert_words() {
     let guarded = guarded();
     let unrestricted = unrestricted();
-    for (input, marker) in [
-        ("git co ", "alias.co"),
-        ("npm run build ", "npm prefix"),
-        ("yarn run build ", "npm prefix"),
-    ] {
+    // `npm` and `yarn` run `npm prefix`, which is denied.
+    for input in ["npm run build ", "yarn run build "] {
         let reachable = unrestricted.commands_for(input);
         assert!(
-            reachable.iter().any(|command| command.contains(marker)),
-            "{input:?} should reach an alias generator containing {marker:?} without the \
-             policy, got {reachable:?}"
+            reachable
+                .iter()
+                .any(|command| command.contains("npm prefix")),
+            "{input:?} should reach the npm alias generator without the policy, got {reachable:?}"
         );
         let executed = guarded.commands_for(input);
         assert!(
-            !executed.iter().any(|command| command.contains(marker)),
-            "{input:?} must not run the {marker:?} alias generator, but ran {executed:?}"
+            !executed
+                .iter()
+                .any(|command| command.contains("npm prefix")),
+            "{input:?} ran {executed:?}"
         );
+    }
+    // The git alias generator builds `git config --get alias.{word}`.
+    assert!(
+        guarded
+            .commands_for("git co ")
+            .contains(&"git config --get alias.co".to_owned())
+    );
+    for hostile in [
+        "co;touch${IFS}x",
+        "co$(touch x)",
+        "co`touch x`",
+        "co'x",
+        "co|x",
+        "co&x",
+        "co>x",
+        "co\\x",
+        "=co",
+        "~co",
+    ] {
+        for input in [format!("git '{hostile}' "), format!("git \"{hostile}\" ")] {
+            let reachable = unrestricted.commands_for(&input);
+            let executed = guarded.commands_for(&input);
+            assert!(
+                !executed
+                    .iter()
+                    .any(|command| command.contains("--get alias.")),
+                "{input:?} ran {executed:?} (without the policy: {reachable:?})"
+            );
+        }
     }
 }
 
@@ -943,8 +1014,13 @@ mod injection_corpus {
     use std::path::{Path, PathBuf};
 
     use warp_command_signatures::{GeneratorProcess, Shell};
+    use warp_util::path::ShellFamily;
 
-    use super::{ALLOWED_GENERATORS, DENIED_GENERATORS, bundled_generators};
+    use super::{
+        ALLOWED_GENERATORS, ALLOWED_WHEN_ISOLATED, GATED_INJECTABLE_GENERATORS,
+        STILL_DENIED_INJECTABLE_GENERATORS, TokenPolicy, bundled_generators, sanitize_env_vars,
+        token_policy,
+    };
 
     /// `{M}` is replaced with the marker directory. The commands use the `true` builtin and a
     /// redirection, so they work with an empty `PATH`. None contains `,` `:` or `=`, which some
@@ -999,12 +1075,24 @@ mod injection_corpus {
             &[String],
         ) -> warp_command_signatures::CommandBuilder,
         marker_dir: &Path,
+        gate: Option<TokenPolicy>,
     ) -> BTreeSet<String> {
         let marker_dir = marker_dir.to_str().unwrap();
         let mut commands = BTreeSet::new();
+        // With `gate`, the tokens and environment words go through the engine's token gate
+        // first, as they do in production; without it the closure sees every hostile word.
         let mut build = |tokens: &[&str], trailing_whitespace: bool, env: &[String]| {
+            let env = match gate {
+                Some(policy) => {
+                    if !policy.permits(ShellFamily::Posix, tokens) {
+                        return;
+                    }
+                    sanitize_env_vars(env)
+                }
+                None => env.to_vec(),
+            };
             commands.insert(
-                command_from_tokens(tokens, trailing_whitespace, env)
+                command_from_tokens(tokens, trailing_whitespace, &env)
                     .build(Shell::Posix)
                     .to_string(),
             );
@@ -1146,6 +1234,7 @@ mod injection_corpus {
         let generators = generators_taking_tokens(
             ALLOWED_GENERATORS
                 .iter()
+                .chain(ALLOWED_WHEN_ISOLATED)
                 .map(|(s, g)| (s.to_string(), g.to_string())),
         );
         assert!(
@@ -1155,7 +1244,7 @@ mod injection_corpus {
         let mut failures = Vec::new();
         for (spec, name, f) in generators {
             let dir = marker_dir(&format!("{spec}-{name}"));
-            let commands = hostile_commands(&spec, f, &dir);
+            let commands = hostile_commands(&spec, f, &dir, Some(token_policy(&spec, &name)));
             for injected in executed_injections(&commands, &dir, false) {
                 failures.push(format!("{spec}/{name}: {injected}"));
             }
@@ -1168,36 +1257,475 @@ mod injection_corpus {
         );
     }
 
-    /// The corpus is only worth something if it catches a real injection: generators known to
-    /// interpolate the typed word raw must be reported by the same code.
+    /// The corpus is only worth something if it catches a real injection: the generators that
+    /// are known to interpolate the typed word raw must be reported when the closure sees every
+    /// hostile word, and must run nothing behind the gate.
     #[test]
-    fn the_corpus_catches_known_injectable_generators() {
-        let known = [
-            ("docker", "image_with_tags"),
-            ("asdf", "installed_versions"),
-            ("man", "sections_remaining"),
-            ("kubectl", "context"),
-            ("docker-compose", "compose_services"),
-            ("sdk", "installed_versions"),
-        ];
-        for (spec, name) in known {
-            assert!(
-                DENIED_GENERATORS
+    fn the_corpus_catches_known_injectable_generators_and_the_gate_stops_them() {
+        let known: Vec<(&str, &str)> = GATED_INJECTABLE_GENERATORS
+            .iter()
+            .copied()
+            .chain(
+                STILL_DENIED_INJECTABLE_GENERATORS
                     .iter()
-                    .any(|(s, g, _)| *s == spec && *g == name),
-                "{spec}/{name} must stay denied while it is injectable"
-            );
+                    .map(|(spec, name, _)| (*spec, *name)),
+            )
+            .collect();
+        let mut not_raw = Vec::new();
+        for (spec, name) in known {
             let generators =
                 generators_taking_tokens(std::iter::once((spec.to_string(), name.to_string())));
             let (spec, name, f) = generators.into_iter().next().unwrap();
             let dir = marker_dir(&format!("control-{spec}-{name}"));
-            let commands = hostile_commands(&spec, f, &dir);
-            let injected = executed_injections(&commands, &dir, true);
+            let raw = hostile_commands(&spec, f, &dir, None);
+            if executed_injections(&raw, &dir, true).is_empty() {
+                not_raw.push(format!("{spec}/{name}"));
+            }
+            // Fail closed: listing one of the raw generators as `Escaped` would be a false claim,
+            // and the corpus shows it.
+            if token_policy(&spec, &name) == TokenPolicy::Strict {
+                let mislabelled = hostile_commands(&spec, f, &dir, Some(TokenPolicy::Escaped));
+                assert!(
+                    !executed_injections(&mislabelled, &dir, true).is_empty(),
+                    "{spec}/{name} is raw but the corpus does not catch it under Escaped"
+                );
+            }
+            let gated = hostile_commands(&spec, f, &dir, Some(token_policy(&spec, &name)));
+            let injected = executed_injections(&gated, &dir, false);
             let _ = std::fs::remove_dir_all(&dir);
             assert!(
-                !injected.is_empty(),
-                "{spec}/{name} is known to interpolate tokens raw but the corpus did not catch it"
+                injected.is_empty(),
+                "{spec}/{name} ran injected code behind the gate: {injected:?}"
+            );
+        }
+        // The `kubectl` family validates its flag words itself and takes the injection through
+        // the `KEY=value` words; the others interpolate the word raw. Every one of them must be
+        // caught by the corpus without the gate.
+        assert!(
+            not_raw.is_empty(),
+            "the corpus did not catch these known-injectable generators without the gate: {not_raw:?}"
+        );
+    }
+
+    /// A generator that is not listed in the token policy table is `Strict`: it never sees a
+    /// word that is not inert, whatever its closure does with it.
+    #[test]
+    fn a_generator_missing_from_the_policy_table_is_strict() {
+        assert_eq!(
+            token_policy("no-such-spec", "no_such_generator"),
+            TokenPolicy::Strict
+        );
+        assert_eq!(
+            token_policy("docker", "image_with_tags"),
+            TokenPolicy::Strict
+        );
+        assert!(TokenPolicy::Strict.permits(ShellFamily::Posix, &["docker", "run", "alpine:3.20"]));
+        assert!(!TokenPolicy::Strict.permits(ShellFamily::Posix, &["docker", "run", "a b"]));
+    }
+}
+
+/// Words a shell reads as syntax or as something other than a plain word, for bash, zsh, fish,
+/// PowerShell and cmd.exe.
+const HOSTILE_WORDS: &[&str] = &[
+    "a b",
+    "a\tb",
+    "a\nb",
+    "a\rb",
+    "a\0b",
+    "a'b",
+    "a\"b",
+    "a`b",
+    "a$b",
+    "$HOME",
+    "${HOME}",
+    "$(id)",
+    "%PATH%",
+    "!x",
+    "a;b",
+    "a&b",
+    "a&&b",
+    "a|b",
+    "a||b",
+    "a<b",
+    "a>b",
+    "a>>b",
+    "a(b)",
+    "a{b,c}",
+    "a[b]",
+    "a*",
+    "a?",
+    "~",
+    "~root",
+    "a#b",
+    "a^b",
+    "a\\b",
+    "a\\'b",
+    "=ls",
+    "-",
+    "--",
+    "---x",
+    "-$(id)",
+    "-f x",
+    "\u{2018}a",
+    "a\u{2019}",
+    "\u{201a}a",
+    "\u{201b}a",
+    "\u{201c}a",
+    "\u{201d}a",
+    "\u{201e}a",
+    "a\u{a0}b",
+    "a\u{2028}b",
+    "\u{ff1b}",
+    "a\u{ff07}b",
+    "a\u{1b}[31m",
+    "é",
+];
+
+/// Words a user really types, which must keep working.
+const PLAIN_WORDS: &[&str] = &[
+    "alpine",
+    "alpine:3.20",
+    "my-image",
+    "feature/x.y",
+    "release_1.2+build",
+    "user@host:22",
+    "node@20.1.0",
+    "1,2,3",
+    "conv=ascii,",
+    "-f",
+    "--file",
+    "--file=Dockerfile",
+    "-n",
+    "/usr/local/bin",
+    "../relative/path",
+    "",
+];
+
+#[test]
+fn the_strict_gate_refuses_every_hostile_word_in_every_shell_family() {
+    for word in HOSTILE_WORDS {
+        assert!(!is_inert_word(word), "{word:?} must not be inert");
+        for policy in [TokenPolicy::Strict, TokenPolicy::Escaped] {
+            assert!(
+                !policy.permits(ShellFamily::PowerShell, &["git", word]),
+                "{policy:?} must refuse {word:?} on PowerShell and cmd.exe"
+            );
+        }
+        assert!(
+            !TokenPolicy::Strict.permits(ShellFamily::Posix, &["git", "ok", word]),
+            "Strict must refuse {word:?} on bash, zsh and fish"
+        );
+    }
+    for word in PLAIN_WORDS {
+        assert!(is_inert_word(word), "{word:?} must be inert");
+        for policy in [
+            TokenPolicy::Strict,
+            TokenPolicy::Escaped,
+            TokenPolicy::Inert,
+        ] {
+            for family in [ShellFamily::Posix, ShellFamily::PowerShell] {
+                assert!(
+                    policy.permits(family, &["docker", word]),
+                    "{policy:?} must allow {word:?} in {family:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_escaped_gate_allows_what_posix_quoting_handles_and_nothing_else() {
+    // Quotes, spaces and shell syntax are fine inside `'...'` with `'` escaped as `'\''`.
+    for word in [
+        "my dir/Dockerfile",
+        "a'b",
+        "a\"b",
+        "$(id)",
+        "a;b",
+        "é",
+        "a\nb",
+    ] {
+        if word.contains('\n') {
+            assert!(
+                !TokenPolicy::Escaped.permits(ShellFamily::Posix, &[word]),
+                "{word:?}"
+            );
+        } else {
+            assert!(
+                TokenPolicy::Escaped.permits(ShellFamily::Posix, &[word]),
+                "{word:?}"
             );
         }
     }
+    // A backslash is refused: fish reads `\'` inside single quotes as an escaped quote, so the
+    // POSIX quoting of `\'; cmd` closes the string early in fish. See `fish_breaks_out_...`.
+    for word in ["a\\b", "\\'; true #", "a\\", "\0", "\u{1b}"] {
+        assert!(
+            !TokenPolicy::Escaped.permits(ShellFamily::Posix, &[word]),
+            "{word:?}"
+        );
+        assert!(!is_quotable_word(word), "{word:?}");
+    }
+    assert!(TokenPolicy::Inert.permits(ShellFamily::PowerShell, &["a b", "$(id)"]));
+}
+
+/// What fish reads outside of any quote and outside of any escape in `command`. Inside single
+/// quotes fish knows two escapes, `\\` and `\'`; outside quotes a backslash escapes the next
+/// character.
+fn fish_unquoted_text(command: &str) -> String {
+    let chars: Vec<char> = command.chars().collect();
+    let (mut index, mut in_quote, mut unquoted) = (0, false, String::new());
+    while index < chars.len() {
+        match (in_quote, chars[index]) {
+            (false, '\'') => in_quote = true,
+            (false, '\\') => index += 1,
+            (false, c) => unquoted.push(c),
+            (true, '\\') if matches!(chars.get(index + 1), Some('\\' | '\'')) => index += 1,
+            (true, '\'') => in_quote = false,
+            (true, _) => {}
+        }
+        index += 1;
+    }
+    unquoted
+}
+
+/// The POSIX quoting the dependency uses (`'` becomes `'\''`), applied to a word with a
+/// backslash, is a command injection in fish. The gate must therefore never let a backslash
+/// through to a generator that quotes this way.
+#[test]
+fn fish_breaks_out_of_posix_single_quoting_when_the_word_has_a_backslash() {
+    let posix_quote = |word: &str| format!("'{}'", word.replace('\'', r"'\''"));
+    let breakout = r"\'; touch pwned #";
+    let quoted = posix_quote(breakout);
+    assert_eq!(quoted, r#"'\'\''; touch pwned #'"#);
+    assert!(
+        fish_unquoted_text(&quoted).contains("; touch pwned"),
+        "fish ends the quote early: {quoted}"
+    );
+    assert!(!TokenPolicy::Escaped.permits(ShellFamily::Posix, &[breakout]));
+    // Without a backslash the same quoting holds in fish.
+    let quoted = posix_quote("a'; touch pwned #");
+    assert_eq!(fish_unquoted_text(&quoted), "");
+    assert!(TokenPolicy::Escaped.permits(ShellFamily::Posix, &["a'; touch pwned #"]));
+}
+
+/// PowerShell quotes a single-quoted string by doubling `'`, and also treats `‘ ’ ‚ ‛` as
+/// quotes. The dependency's `'\''` is not that, so no generator that takes tokens may rely on its
+/// own quoting there: `Escaped` is `Strict` on PowerShell, which refuses every one of them.
+#[test]
+fn powershell_never_sees_a_quote_character_of_any_kind() {
+    for quote in [
+        '\'', '"', '`', '\u{2018}', '\u{2019}', '\u{201a}', '\u{201b}', '\u{201c}',
+    ] {
+        let word = format!("a{quote}; calc #");
+        assert!(!TokenPolicy::Escaped.permits(ShellFamily::PowerShell, &[word.as_str()]));
+        assert!(!TokenPolicy::Strict.permits(ShellFamily::PowerShell, &[word.as_str()]));
+    }
+}
+
+#[test]
+fn environment_assignments_are_filtered_for_every_generator() {
+    let env = |words: &[&str]| words.iter().map(|w| w.to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        sanitize_env_vars(&env(&[
+            "KUBECONFIG=/home/me/.kube/config",
+            "A_1=x,y",
+            "KUBECONFIG=a;touch x",
+            "KUBECONFIG=$(id)",
+            "KUBECONFIG=a b",
+            "KUBECONFIG='a'",
+            "1BAD=x",
+            "NOEQUALS",
+            "=x",
+            "K=a`id`",
+            "K==x",
+        ])),
+        env(&["KUBECONFIG=/home/me/.kube/config", "A_1=x,y"])
+    );
+}
+
+#[test]
+fn the_token_policy_table_is_sorted_allowed_and_holds_up() {
+    let table = listed_token_policies();
+    assert!(
+        table
+            .windows(2)
+            .all(|pair| (pair[0].0, pair[0].1) < (pair[1].0, pair[1].1)),
+        "the token policy table must be sorted by (spec, generator) without duplicates"
+    );
+    let bundled: HashMap<(String, String), warp_command_signatures::Generator> =
+        bundled_generators()
+            .into_iter()
+            .map(|(spec, name, generator)| ((spec, name), generator))
+            .collect();
+    for (spec, name, policy) in table {
+        assert!(
+            ALLOWED_GENERATORS.contains(&(*spec, *name)),
+            "{spec}/{name} is in the token policy table but not on the allow-list"
+        );
+        let generator = &bundled[&(spec.to_string(), name.to_string())];
+        let GeneratorProcess::CommandFromTokens(f) = generator.process else {
+            panic!("{spec}/{name} takes no tokens, so it needs no token policy");
+        };
+        if *policy == TokenPolicy::Inert {
+            let neutral = f(&[spec, "x"], true, &[]).build(Shell::Posix).to_string();
+            for word in HOSTILE_WORDS.iter().chain(PLAIN_WORDS) {
+                for tokens in [
+                    vec![*spec, word],
+                    vec![*spec, "x", word],
+                    vec![*spec, word, "x"],
+                ] {
+                    for trailing in [false, true] {
+                        let command = f(&tokens, trailing, &[]).build(Shell::Posix).to_string();
+                        assert!(
+                            !command.contains(word) || word.is_empty() || neutral.contains(word),
+                            "{spec}/{name} is Inert but put {word:?} into {command:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    // Every allowed generator that takes tokens either is in the table or is Strict.
+    for (spec, name, generator) in bundled_generators() {
+        if matches!(generator.process, GeneratorProcess::CommandFromTokens(_))
+            && ALLOWED_GENERATORS.contains(&(spec.as_str(), name.as_str()))
+        {
+            let policy = token_policy(&spec, &name);
+            let listed = table.iter().any(|(s, g, _)| *s == spec && *g == name);
+            assert_eq!(listed, policy != TokenPolicy::Strict, "{spec}/{name}");
+        }
+    }
+}
+
+/// Plain input keeps completing: the engine passes inert words and, for a generator that
+/// quotes, a path with a space.
+#[test]
+fn valid_inputs_still_reach_their_generators() {
+    let guarded = guarded();
+    let ran = |input: &str, marker: &str| {
+        let commands = guarded.commands_for(input);
+        assert!(
+            commands.iter().any(|command| command.contains(marker)),
+            "{input:?} should run a generator containing {marker:?}, got {commands:?}"
+        );
+    };
+    ran("kubectl --context ", "get-contexts");
+    ran(
+        "kubectl --context prod.example/x get pods --cluster ",
+        "get-clusters",
+    );
+    ran("oc --context ", "get-contexts");
+    ran(
+        "KUBECONFIG=/home/me/.kube/config kubectl --context ",
+        "--kubeconfig=/home/me/.kube/config",
+    );
+    ran("asdf uninstall nodejs ", "asdf list nodejs");
+    ran("trivy image --severity LOW,", "LOW,UNKNOWN");
+    ran("scc --format ", "tabular");
+    ran("eslint --env node,", "node,browser");
+    ran("man -S 1:", "1:2");
+    ran(
+        "ros2 run demo_nodes_cpp ",
+        "ros2 pkg executables demo_nodes_cpp",
+    );
+    ran("sdk use java ", "candidates/java/");
+    ran("git checkout feature/x.y", "branch");
+    ran(
+        r#"docker build -f "it's; touch pwned" --target "#,
+        r#"'it'\''s; touch pwned'"#,
+    );
+    ran(
+        "docker build -f 'my dir/Dockerfile' --target ",
+        "'my dir/Dockerfile'",
+    );
+}
+
+#[test]
+fn hostile_input_reaches_no_generator_through_the_engine() {
+    let guarded = guarded();
+    let unrestricted = unrestricted();
+    let mut reached_without_the_gate = 0;
+    for (input, marker) in [
+        (r#"asdf uninstall "nodejs; touch pwned" "#, "touch"),
+        (r#"asdf global 'nodejs$IFS' "#, "IFS"),
+        (r#"trivy image --severity "LOW,x y,""#, "x y"),
+        (r#"man -S "1;touch pwned:""#, "touch"),
+        (r#"ros2 run "demo;touch pwned" "#, "touch"),
+        (r#"sdk use "java;touch pwned" "#, "touch"),
+        (r#"KUBECONFIG="a;touch pwned" kubectl --context "#, "touch"),
+        (r#"KUBECONFIG=a$IFS kubectl --context "#, "IFS"),
+        (r#"docker build -f 'a\;touch pwned' --target "#, "touch"),
+    ] {
+        let reachable = unrestricted.commands_for(input);
+        if reachable.iter().any(|command| command.contains(marker)) {
+            reached_without_the_gate += 1;
+        }
+        let executed = guarded.commands_for(input);
+        assert!(
+            !executed.iter().any(|command| command.contains(marker)),
+            "{input:?} ran {executed:?}"
+        );
+    }
+    assert!(
+        reached_without_the_gate >= 6,
+        "the inputs should reach their generators when the gate is off ({reached_without_the_gate})"
+    );
+}
+
+/// Typed lines that reach the generators of the RV-01 report and the alias path, with a word
+/// that would print the marker if it were executed. Each must print it without the gate (the
+/// reproduction) and must run nothing with it, in bash and zsh.
+#[cfg(unix)]
+const ENGINE_INJECTION_INPUTS: &[&str] = &[
+    r#"asdf uninstall "nodejs; printf ASTRA_MARK; #" "#,
+    r#"asdf global "nodejs' ; printf ASTRA_MARK; #" "#,
+    r#"trivy image --severity "LOW,x;printf ASTRA_MARK;," "#,
+    r#"ros2 run "demo;printf ASTRA_MARK;#" "#,
+    r#"sdk use "java;printf ASTRA_MARK;#" "#,
+    r#"eslint --env "node,x;printf ASTRA_MARK;," "#,
+    r#"KUBECONFIG="a;printf ASTRA_MARK;#" kubectl --context "#,
+    r#"KUBECONFIG="a;printf ASTRA_MARK;#" oc --cluster "#,
+    r#"git "co;printf ASTRA_MARK;#" "#,
+    r#"docker build -f "it's; printf ASTRA_MARK; #" --target "#,
+];
+
+#[cfg(unix)]
+#[test]
+fn typed_words_are_never_executed_by_a_real_shell_through_the_engine() {
+    let mut reproduced = BTreeSet::new();
+    for shell in installed_shells() {
+        let mut control = unrestricted();
+        control.run_in_shell = Some(shell);
+        let mut guarded = guarded();
+        guarded.run_in_shell = Some(shell);
+        let mut guarded_isolated = guarded_isolated();
+        guarded_isolated.run_in_shell = Some(shell);
+        for input in ENGINE_INJECTION_INPUTS {
+            control.stdout.lock().unwrap().clear();
+            control.commands_for(input);
+            if control.stdout.lock().unwrap().contains("ASTRA_MARK") {
+                reproduced.insert(*input);
+            }
+            guarded.stdout.lock().unwrap().clear();
+            let commands = guarded.commands_for(input);
+            let output = guarded.stdout.lock().unwrap().clone();
+            assert!(
+                !output.contains("ASTRA_MARK"),
+                "{input:?} executed typed words in {shell:?}: {commands:?}"
+            );
+            guarded_isolated.stdout.lock().unwrap().clear();
+            let commands = guarded_isolated.commands_for(input);
+            let output = guarded_isolated.stdout.lock().unwrap().clone();
+            assert!(
+                !output.contains("ASTRA_MARK"),
+                "{input:?} executed typed words in an isolated context in {shell:?}: {commands:?}"
+            );
+        }
+    }
+    // The gate is only shown to matter by the inputs that do execute without it.
+    assert!(
+        reproduced.len() >= 5,
+        "too few engine inputs reproduce the injection without the gate: {reproduced:?}"
+    );
 }

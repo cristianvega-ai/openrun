@@ -55,10 +55,12 @@
 mod allowed;
 #[cfg(test)]
 mod denied;
+mod token_gate;
 
 use allowed::{
     ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS, ALLOWED_WHEN_ISOLATED,
 };
+pub(super) use token_gate::{TokenPolicy, sanitize_env_vars, token_policy};
 
 /// Whether the generator named `generator` of the spec registered as `spec` (lowercase) may run
 /// a command on this platform. `isolated` says whether the context keeps the command from

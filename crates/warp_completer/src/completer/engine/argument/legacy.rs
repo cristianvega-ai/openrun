@@ -746,12 +746,28 @@ async fn generate_suggestions_for_argument_type(
                 return vec![];
             }
 
+            let shell_family = ctx.shell_family().unwrap_or(ShellFamily::Posix);
+            if let GeneratorProcess::CommandFromTokens(_) = &generator.process
+                && !dynamic_completion_data.is_some_and(|data| {
+                    ctx.command_registry().generator_tokens_permitted(
+                        data.spec(),
+                        generator_name,
+                        shell_family,
+                        tokens_from_command,
+                    )
+                })
+            {
+                log::debug!("Generator {generator_name:?} is not given tokens that are not inert");
+                return vec![];
+            }
+            let permitted_env_vars = ctx.command_registry().permitted_env_vars(command_env_vars);
+
             let shell_command = shell_command(
                 generator,
                 tokens_from_command,
                 has_trailing_whitespace,
-                ctx.shell_family().unwrap_or(ShellFamily::Posix),
-                command_env_vars,
+                shell_family,
+                &permitted_env_vars,
             );
 
             let Some(generator_context) = ctx.generator_context() else {

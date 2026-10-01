@@ -6,6 +6,7 @@ use warp_command_signatures::{
     AliasGeneratorName, Aliases, Argument, DynamicCompletionData, Filters, GeneratorName,
     Generators, IsArgumentOptional, Signature,
 };
+use warp_util::path::ShellFamily;
 
 use super::miss_cache::MissCache;
 use crate::completer::{CommandExitStatus, CompletionContext, TopLevelCommandCaseSensitivity};
@@ -233,6 +234,45 @@ impl CommandRegistry {
         }
     }
 
+    /// Whether the typed `tokens` may reach the shell command of generator `generator` of spec
+    /// `spec` in a shell of `family`: the token gate, see [`super::generator_policy`].
+    pub fn generator_tokens_permitted(
+        &self,
+        spec: &str,
+        generator: &GeneratorName,
+        family: ShellFamily,
+        tokens: &[&str],
+    ) -> bool {
+        match self.generator_policy {
+            GeneratorPolicy::AllowListed => {
+                super::generator_policy::token_policy(spec, &generator.0).permits(family, tokens)
+            }
+            #[cfg(any(test, feature = "test-util"))]
+            GeneratorPolicy::AllowAll => true,
+        }
+    }
+
+    /// Whether the typed `tokens` up to the one being expanded may reach an alias generator's
+    /// shell command. Alias generators are `Strict` (see [`Self::generator_tokens_permitted`]).
+    fn alias_tokens_permitted(&self, family: ShellFamily, tokens: &[&str]) -> bool {
+        match self.generator_policy {
+            GeneratorPolicy::AllowListed => {
+                super::generator_policy::TokenPolicy::Strict.permits(family, tokens)
+            }
+            #[cfg(any(test, feature = "test-util"))]
+            GeneratorPolicy::AllowAll => true,
+        }
+    }
+
+    /// The `KEY=value` words typed before a command that may reach a generator's shell command.
+    pub fn permitted_env_vars(&self, env_vars: &[String]) -> Vec<String> {
+        match self.generator_policy {
+            GeneratorPolicy::AllowListed => super::generator_policy::sanitize_env_vars(env_vars),
+            #[cfg(any(test, feature = "test-util"))]
+            GeneratorPolicy::AllowAll => env_vars.to_vec(),
+        }
+    }
+
     pub fn registered_commands(&self) -> impl Iterator<Item = &str> {
         // Note we need to collect the keys because MemoMap uses a mutex under the hood to control
         // access to the underlying signature data. This means the mutex is locked as long as the
@@ -353,6 +393,10 @@ impl CommandRegistry {
             ) {
                 (Some(alias_name), Some(data)) => {
                     self.allows_alias_generator(data.spec(), alias_name)
+                        && self.alias_tokens_permitted(
+                            context.shell_family().unwrap_or(ShellFamily::Posix),
+                            &tokens[..=token_idx],
+                        )
                 }
                 _ => false,
             };
