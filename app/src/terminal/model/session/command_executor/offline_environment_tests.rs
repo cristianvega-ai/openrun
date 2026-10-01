@@ -28,7 +28,6 @@ fn table_sets_every_documented_variable() {
         ("GIT_ALLOW_PROTOCOL", "file"),
         ("GOTOOLCHAIN", "local"),
         ("GOPROXY", "off"),
-        ("DOTNET_CLI_TELEMETRY_OPTOUT", "1"),
         ("POWERSHELL_UPDATECHECK", "Off"),
         ("CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK", "1"),
     ] {
@@ -274,10 +273,6 @@ fn every_table_row_names_a_verification_test_that_exists() {
         ),
         ("GOTOOLCHAIN", "go_does_not_download_a_toolchain"),
         ("GOPROXY", "go_does_not_fetch_modules"),
-        (
-            "DOTNET_CLI_TELEMETRY_OPTOUT",
-            "dotnet_does_not_show_the_telemetry_notice",
-        ),
         (
             "POWERSHELL_UPDATECHECK",
             "powershell_does_not_check_for_updates",
@@ -640,56 +635,6 @@ print("PROMPTED" if re.search(rb"(^|\n)Username for", out) else "NO-PROMPT")
         assert!(
             !git_prompts_on_the_terminal(&python, &url, Some("0")),
             "git prompted despite GIT_TERMINAL_PROMPT=0"
-        );
-    }
-
-    #[test]
-    fn dotnet_does_not_show_the_telemetry_notice() {
-        let Some(dotnet) = require_tool("dotnet") else {
-            return;
-        };
-        let canary = Canary::start();
-        let run = |optout: Option<&str>| -> String {
-            let temp = tempfile::tempdir().unwrap();
-            let mut variables = base_environment(&temp.path().join("home"));
-            // Telemetry is sent when the command ends; with the notice shown it would go to
-            // Microsoft. The proxy variables send it to the canary instead.
-            route_traffic_to_canary(&mut variables, &canary);
-            variables.insert(
-                "DOTNET_CLI_HOME".to_owned(),
-                temp.path()
-                    .join("dotnet-home")
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-            // CI images set these to hide exactly what is being observed.
-            for name in [
-                "DOTNET_NOLOGO",
-                "DOTNET_SKIP_FIRST_TIME_EXPERIENCE",
-                "DOTNET_CLI_TELEMETRY_OPTOUT",
-            ] {
-                variables.insert(name.to_owned(), "0".to_owned());
-            }
-            let path = format!("{}:{}", dotnet.parent().unwrap().display(), system_path());
-            let command = "dotnet new console --no-restore -o app";
-            match optout {
-                // The control: the CLI exactly as the user's session would run it.
-                None => run_unprotected(command, temp.path(), &path, &variables).output,
-                Some(value) => {
-                    variables.insert("DOTNET_CLI_TELEMETRY_OPTOUT".to_owned(), value.to_owned());
-                    run_unprotected(command, temp.path(), &path, &variables).output
-                }
-            }
-        };
-        let control = run(None);
-        assert!(
-            control.contains("Telemetry"),
-            "fixture is insensitive: no telemetry notice without the opt-out:\n{control}"
-        );
-        let opted_out = run(Some("1"));
-        assert!(
-            !opted_out.contains("Telemetry"),
-            "the telemetry notice appeared with DOTNET_CLI_TELEMETRY_OPTOUT=1:\n{opted_out}"
         );
     }
 

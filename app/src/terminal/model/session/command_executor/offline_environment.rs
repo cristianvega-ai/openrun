@@ -54,11 +54,6 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
     // toolchain through GOPROXY, and a `require` of an uncached module is fetched from GOPROXY.
     ("GOTOOLCHAIN", "local"),
     ("GOPROXY", "off"),
-    // Effect demonstrated, not the network call (.NET SDK on the Linux CI runner,
-    // `dotnet_does_not_show_the_telemetry_notice`): the first run of the CLI prints the
-    // telemetry notice and starts collecting unless this is set. The upload goes to a fixed
-    // Microsoft endpoint that a test cannot redirect to a canary.
-    ("DOTNET_CLI_TELEMETRY_OPTOUT", "1"),
     // Verified (pwsh 7.6.6, `powershell_does_not_check_for_updates`): an interactive `pwsh`
     // sends `CONNECT aka.ms:443` about three seconds after it starts, and with this it sends
     // nothing. `POWERSHELL_TELEMETRY_OPTOUT` is not in the table: the `pwsh -NoProfile -c` that
