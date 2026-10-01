@@ -3396,7 +3396,10 @@ pub fn test_executable_completions() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Wait until executables are loaded")
-                .set_timeout(Duration::from_secs(30))
+                // Listing the commands scans every PATH directory, which takes seconds when
+                // several tests share a CI runner with hundreds of commands on its PATH. Stay
+                // below the 60 s after which nextest terminates a test.
+                .set_timeout(Duration::from_secs(45))
                 .add_named_assertion("Assert executables are loaded", move |app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
                     terminal_view.read(app, |view, ctx| {

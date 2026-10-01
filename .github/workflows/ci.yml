@@ -77,7 +77,70 @@ jobs:
         run: cargo metadata --locked --format-version=1 > /dev/null
 
       - name: Run cargo clippy
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
+
+  # Platform-specific code (`cfg(windows)`, `cfg(target_os = "macos")`) is not compiled by the
+  # Linux job, so it needs its own strict lint on a native runner. Same command as the Linux job.
+  # The cross-target check that script/cross_clippy runs locally covers the same ground without a
+  # runner.
+  clippy-windows:
+    name: Clippy (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      # openh264-sys2 assembles with NASM unless told not to; a lint run needs no object code.
+      OPENH264_NO_ASM: "1"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Dependencies unpack to deep paths under the checkout and the cargo registry.
+      - name: Allow long paths in git
+        run: git config --system core.longpaths true
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: Check that Cargo.lock is up to date
+        run: cargo metadata --locked --format-version=1 > /dev/null
+
+      - name: Run cargo clippy
+        run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
+
+  clippy-macos:
+    name: Clippy (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
+      # crates/warpui/build.rs compiles the Metal shaders with `xcrun metal`. Recent Xcode
+      # versions ship the Metal compiler as a separate component.
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Check that Cargo.lock is up to date
+        run: cargo metadata --locked --format-version=1 > /dev/null
+
+      - name: Run cargo clippy
+        run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
 
   test:
     name: Unit tests
@@ -112,8 +175,10 @@ jobs:
       - name: Use zsh for tests that spawn a shell
         run: echo "WARP_SHELL_PATH=$(command -v zsh)" >> "$GITHUB_ENV"
 
+      # No retries: a test that fails once and passes on a retry (nextest reports it as FLAKY) is
+      # not a pass.
       - name: Run unit tests
-        run: cargo nextest run --locked --workspace -E 'not package(integration)'
+        run: cargo nextest run --locked --workspace --retries 0 -E 'not package(integration)'
 
   # Fails when the tree, the dependency graph or a sandboxed test run reaches for Warp-owned
   # hosts or any non-loopback address. It blocks merges.
@@ -232,7 +297,7 @@ jobs:
           WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
           ./script/offline_sandbox net-unit.log \
-            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
               -E "not package(integration)"
 
       # Tools that the app or the shell start, not the app itself, can look up a host. The runner
@@ -253,12 +318,14 @@ jobs:
           echo "$stubs" >> "$GITHUB_PATH"
           sudo chmod -x /usr/lib/command-not-found
 
-      # The `integration` package with bash, the shell these steps use everywhere else. One retry
-      # instead of the ci profile's two: a test that fails because of the sandbox fails every
-      # time, so more retries only burn the time budget. Seven tests are left out and run with zsh
-      # in the next step: their expectations (tab title `~`, the git branch chip, scroll layout)
-      # do not hold with bash on the runner, with or without the sandbox (a control run outside
-      # it failed the same seven; CHANGES.md, "CI: the network-sandbox steps finish").
+      # The `integration` package with bash, the shell these steps use everywhere else. No retries
+      # in this step or the other blocking ones (the ci profile's own retries are off too, see
+      # .config/nextest.toml): a test that fails once and passes on a retry is reported as FLAKY by
+      # nextest and is not a pass, and a retry would hide it behind a green job. Seven tests are
+      # left out and run with zsh in the next step: their expectations (tab title `~`, the git
+      # branch chip, scroll layout) do not hold with bash on the runner, with or without the
+      # sandbox (a control run outside it failed the same seven; CHANGES.md, "CI: the network-sandbox
+      # steps finish").
       - name: Run the integration tests in a network sandbox
         if: ${{ !cancelled() }}
         timeout-minutes: 40
@@ -266,7 +333,7 @@ jobs:
           WARP_SHELL_PATH=$(command -v bash)
           export WARP_SHELL_PATH
           ./script/offline_sandbox net-integration.log xvfb-run -a \
-            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
               -E "package(integration) and not ($ZSH_ONLY_INTEGRATION_TESTS | test(=ui_tests::test_waterfall_input_scrolling))"
 
       - name: Run the zsh integration tests in a network sandbox
@@ -276,7 +343,7 @@ jobs:
           WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
           ./script/offline_sandbox net-integration-zsh.log xvfb-run -a \
-            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 1 --status-level all \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 --status-level all \
               -E "package(integration) and ($ZSH_ONLY_INTEGRATION_TESTS)"
 
       # `test_waterfall_input_scrolling` asserts the pixel layout of the input and fails on the

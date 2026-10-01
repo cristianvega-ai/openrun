@@ -39,6 +39,8 @@ Your shell and the programs you run in it, including SSH sessions and CLI agents
 
 `script/offline_audit` checks the repository for reintroduced Warp hosts, network-capable code and banned dependencies, and CI runs it.
 
+CI lints (clippy with `-D warnings`) on Linux, Windows and macOS, runs the unit tests, and runs the whole test suite in a network sandbox. A test that passes only on a retry fails the run. See [CONTRIBUTING.md](CONTRIBUTING.md#continuous-integration); `script/cross_clippy` reproduces the Windows and Linux lint from a Mac.
+
 ## Data stored on your computer
 
 The app keeps some of what you do in a local SQLite database in its per-user state directory (the file ends in `.sqlite`, with a `-wal` file beside it while the app runs). Nothing in it is sent anywhere; it is a second copy of your terminal activity on disk, in the same way your shell's own history file (`~/.zsh_history`, `~/.bash_history`) is a copy.

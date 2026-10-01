@@ -24,9 +24,9 @@ fail-fast = false
 
 [[profile.ci.overrides]]
 filter = 'package(integration)'
-# On CI, try integration tests up to 3 times (in total) to reduce the impact of
-# flaky tests.
-retries = 2
+# No retries on CI. A test that fails and then passes on a retry is flaky, which is not a pass;
+# retrying it would hide that behind a green run.
+retries = 0
 
 [profile.ci.junit]
 # Output nextest results in junit format (for uploading to buildpulse).

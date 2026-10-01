@@ -397,3 +397,144 @@ fn command_injection_via_embedded_quotes_is_neutralized() {
     let ps = shell_escape_single_quotes(malicious, ShellType::PowerShell);
     assert_eq!(ps.matches("''").count(), 2);
 }
+
+#[cfg(unix)]
+mod bash_executables {
+    use std::collections::BTreeMap;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    use super::*;
+
+    /// The command that listed bash's executables before it stopped asking `type -t` for the type
+    /// of every name. Kept to show that the current one prints the same names.
+    const TYPE_T_COMMAND: &str = r#"COMMANDS=($(compgen -c)); TYPES=($(type -t ${COMMANDS[@]})); for i in "${!COMMANDS[@]}"; do if [[ ${TYPES[$i]} == "file" ]]; then echo ${COMMANDS[$i]}; fi; done"#;
+
+    fn write_file(dir: &Path, name: &str, mode: u32) {
+        let path = dir.join(name);
+        std::fs::write(&path, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+    }
+
+    /// Runs `script` in `bash --norc -c` the way `LocalCommandExecutor` does, with `path_dirs` as
+    /// the whole `PATH` (plus the system directories that hold `bash`'s own helpers). Returns None
+    /// if there is no bash.
+    fn run_in_bash(script: &str, path_dirs: &[&Path]) -> Option<Vec<String>> {
+        let bash = ["/bin/bash", "/usr/bin/bash", "/opt/homebrew/bin/bash"]
+            .into_iter()
+            .find(|candidate| Path::new(candidate).exists())?;
+        let path = path_dirs
+            .iter()
+            .map(|dir| dir.to_str().unwrap())
+            .collect::<Vec<_>>()
+            .join(":");
+        let output = command::blocking::Command::new(bash)
+            .args(["--norc", "-c", script])
+            .env_clear()
+            .env("PATH", path)
+            .output()
+            .expect("bash should run");
+        assert!(
+            output.status.success(),
+            "bash failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Some(
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .map(str::to_owned)
+                .collect(),
+        )
+    }
+
+    fn counts(names: &[String]) -> BTreeMap<&str, usize> {
+        let mut counts = BTreeMap::new();
+        for name in names {
+            *counts.entry(name.as_str()).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    /// Two PATH directories with executables, a name that exists in both, names that are also
+    /// builtins, a keyword-named file, a file that is not executable, a directory and a
+    /// pattern-like name.
+    fn populate_path_dirs(first: &Path, second: &Path) {
+        for name in ["my_exec", "shared_exec", "echo", "if", "weird[ab]", "star*"] {
+            write_file(first, name, 0o755);
+        }
+        for name in ["other_exec", "shared_exec", "test"] {
+            write_file(second, name, 0o755);
+        }
+        write_file(first, "not_executable", 0o644);
+        std::fs::create_dir(first.join("a_directory")).unwrap();
+    }
+
+    #[test]
+    fn lists_only_files_on_the_path() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        populate_path_dirs(first.path(), second.path());
+        let script = ShellType::Bash.shell_command_to_get_executables();
+
+        let Some(names) = run_in_bash(script, &[first.path(), second.path()]) else {
+            return;
+        };
+        let counts = counts(&names);
+
+        assert_eq!(counts.get("my_exec"), Some(&1));
+        assert_eq!(counts.get("other_exec"), Some(&1));
+        // A command found in two directories is reported once per directory, as before.
+        assert_eq!(counts.get("shared_exec"), Some(&2));
+        assert_eq!(counts.get("weird[ab]"), Some(&1));
+        assert_eq!(counts.get("star*"), Some(&1));
+        // Builtins and keywords win over a file of the same name.
+        for name in ["echo", "test", "if", "cd"] {
+            assert_eq!(counts.get(name), None, "{name} is not a file");
+        }
+        assert_eq!(counts.get("not_executable"), None);
+        assert_eq!(counts.get("a_directory"), None);
+    }
+
+    #[test]
+    fn functions_hide_files_of_the_same_name() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        populate_path_dirs(first.path(), second.path());
+        let script = format!(
+            "my_exec() {{ :; }}; fresh_function() {{ :; }}; {}",
+            ShellType::Bash.shell_command_to_get_executables()
+        );
+
+        let Some(names) = run_in_bash(&script, &[first.path(), second.path()]) else {
+            return;
+        };
+        let counts = counts(&names);
+
+        assert_eq!(counts.get("my_exec"), None);
+        assert_eq!(counts.get("fresh_function"), None);
+        assert_eq!(counts.get("other_exec"), Some(&1));
+    }
+
+    #[test]
+    fn prints_what_the_type_t_command_printed() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        populate_path_dirs(first.path(), second.path());
+        // `type -t` and the unquoted `echo` of the old command expand `star*` and mis-handle
+        // names it cannot find, so leave the pattern-like names out of this comparison.
+        std::fs::remove_file(first.path().join("star*")).unwrap();
+        std::fs::remove_file(first.path().join("weird[ab]")).unwrap();
+        let dirs = [first.path(), second.path()];
+
+        let (Some(before), Some(after)) = (
+            run_in_bash(TYPE_T_COMMAND, &dirs),
+            run_in_bash(ShellType::Bash.shell_command_to_get_executables(), &dirs),
+        ) else {
+            return;
+        };
+
+        assert_eq!(after, before);
+        assert!(after.iter().any(|name| name == "my_exec"));
+    }
+}

@@ -614,14 +614,18 @@ impl ShellType {
     pub fn shell_command_to_get_executables(&self) -> &'static str {
         match self {
             ShellType::Bash => {
-                // Since `compgen -c` returns more than just executables (and the output itself
-                // doesn't include any info about what the type of the word is), we filter down to
-                // executable "file"s. Note that we do this at the shell level since if we did this
-                // as a post-process step, it would require N filesystem calls, which would not scale
-                // well for remote sessions. Additionally, we invoke `type` once, passing it the full
-                // list of commands, to avoid a lot of overhead invoking it thousands of times for
-                // systems with a lot of installed commands.
-                r#"COMMANDS=($(compgen -c)); TYPES=($(type -t ${COMMANDS[@]})); for i in "${!COMMANDS[@]}"; do if [[ ${TYPES[$i]} == "file" ]]; then echo ${COMMANDS[$i]}; fi; done"#
+                // `compgen -c` returns more than just executables: aliases, keywords, builtins and
+                // functions too, and the output itself doesn't include any info about what the
+                // type of the word is. We drop every name that is also an alias, keyword, enabled
+                // builtin or function. We do this at the shell level since doing it as a
+                // post-process step would require N filesystem calls, which would not scale well
+                // for remote sessions. The four lists come from the shell's own tables, so the
+                // filter needs no further PATH lookup (asking `type -t` for every name walks the
+                // whole PATH once more and costs more than `compgen -c` itself). Globbing is
+                // switched off because a command can be named like a pattern, and the work runs in
+                // a subshell so the shell it is typed into is left unchanged. Only `case` is used
+                // for the matching, no arrays, so it works with the bash 3.2 that macOS ships.
+                r#"(set -f; NONFILE=$'\n'"$(compgen -a -k -A enabled -A function)"$'\n'; for c in $(compgen -c); do case "$NONFILE" in *$'\n'"$c"$'\n'*) ;; *) echo "$c" ;; esac; done)"#
             }
             ShellType::Fish => {
                 // Although `complete -C` returns more than just executables, we don't check the type here

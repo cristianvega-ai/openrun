@@ -1069,6 +1069,7 @@ impl Session {
                 .as_deref()
                 .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
 
+            let started_at = instant::Instant::now();
             let result = self
                 .execute_command(
                     shell_command_to_get_executables,
@@ -1077,6 +1078,19 @@ impl Session {
                     ExecuteCommandOptions::default(),
                 )
                 .await;
+            match &result {
+                Ok(output) => log::info!(
+                    "Executable listing for {} finished with status {:?} in {:?}",
+                    shell.shell_type().name(),
+                    output.status,
+                    started_at.elapsed()
+                ),
+                Err(error) => log::info!(
+                    "Executable listing for {} failed after {:?}: {error:#}",
+                    shell.shell_type().name(),
+                    started_at.elapsed()
+                ),
+            }
 
             let is_msys2 =
                 self.info.launch_data.as_ref().is_some_and(|launch_data| {
@@ -1117,6 +1131,12 @@ impl Session {
                     .shell_type()
                     .executables_from_shell_command_output(result, is_msys2)
                     .into_iter(),
+            );
+            log::info!(
+                "Loaded {} external commands for {} in {:?}",
+                new_commands.len(),
+                shell.shell_type().name(),
+                started_at.elapsed()
             );
             if self.external_commands.set(new_commands).is_err() {
                 log::warn!("External commands should only be loaded once per session.");

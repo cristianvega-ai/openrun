@@ -57,7 +57,7 @@ The app must make no network calls of its own beyond the four that remain: opt-i
 
 - Don't add code that contacts a server, a telemetry or crash-reporting service, or an update channel.
 - Don't add dependencies on HTTP, WebSocket or telemetry crates. `deny.toml` bans most of them.
-- Run `script/offline_audit` before pushing. CI also runs it (non-blocking for now). It fails on Warp hosts, on network-capable code outside the allowed consumers, and on banned dependencies. Exceptions live in `script/offline_audit.allowlist`, one reasoned entry per line.
+- Run `script/offline_audit` before pushing. CI also runs it, and a failure blocks the merge. It fails on Warp hosts, on network-capable code outside the allowed consumers, and on banned dependencies. Exceptions live in `script/offline_audit.allowlist`, one reasoned entry per line.
 
 ## Using a Coding Agent
 
@@ -96,6 +96,16 @@ Run unit tests with `cargo nextest run`.
 - `./script/format --check` and `cargo clippy --workspace --all-targets --tests -- -D warnings` must pass.
 - Prefer imports over path qualifiers, inline format args (`println!("{x}")`), and exhaustive `match` over `_` wildcards.
 - See [AGENTS.md](AGENTS.md) for the full style guide, including WarpUI patterns and terminal model locking rules.
+
+## Continuous Integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request:
+
+- **Formatting** and **Clippy** (`cargo clippy --workspace --all-targets --tests -- -D warnings`) on Linux, on native Windows (`windows-latest`) and on macOS (`macos-latest`). Code behind `cfg(windows)` or `cfg(target_os = ...)` is only linted on its own platform, so a warning there fails that platform's job.
+- **Unit tests** on Linux, and the **Offline audit** job, which also runs the whole test suite (including `crates/integration`) in a network sandbox and fails on any connection to a non-loopback address.
+- **No retries.** A test that fails once and passes on a retry is flaky, which is not a pass: nextest retries are off in CI, so it fails the job. Fix the test, or file an issue and move it to a non-blocking step with the reason written next to it, as `ui_tests::test_waterfall_input_scrolling` is.
+
+To get the Windows and Linux lint results without waiting for CI, run `script/cross_clippy` (needs [zig](https://ziglang.org/download/) and the two Rust targets; the prerequisites are listed at the top of the script).
 
 ## Commit and Branch Conventions
 
