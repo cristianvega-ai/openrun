@@ -28,17 +28,8 @@ fn table_sets_every_documented_variable() {
         ("GIT_ALLOW_PROTOCOL", "file"),
         ("GOTOOLCHAIN", "local"),
         ("GOPROXY", "off"),
-        ("HOMEBREW_NO_AUTO_UPDATE", "1"),
-        ("UV_OFFLINE", "1"),
-        ("DENO_NO_UPDATE_CHECK", "1"),
-        ("NG_CLI_ANALYTICS", "false"),
-        ("NX_DAEMON", "false"),
-        ("NX_NO_CLOUD", "true"),
-        ("NXF_OFFLINE", "true"),
         ("DOTNET_CLI_TELEMETRY_OPTOUT", "1"),
-        ("POWERSHELL_TELEMETRY_OPTOUT", "1"),
         ("POWERSHELL_UPDATECHECK", "Off"),
-        ("AZURE_CORE_COLLECT_TELEMETRY", "false"),
         ("CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK", "1"),
     ] {
         assert_eq!(value_of(&environment, name), Some(value), "{name}");
@@ -62,29 +53,38 @@ fn table_overrides_session_values() {
 
 #[test]
 fn git_overrides_are_appended_to_existing_pairs() {
+    const PAIRS: [(&str, &str); 3] = [
+        ("core.fsmonitor", "false"),
+        ("log.showSignature", "false"),
+        ("core.hooksPath", "/dev/null"),
+    ];
     let none = OfflineEnvironment::compute(|_| None);
-    assert_eq!(value_of(&none, "GIT_CONFIG_COUNT"), Some("2"));
-    assert_eq!(value_of(&none, "GIT_CONFIG_KEY_0"), Some("core.fsmonitor"));
-    assert_eq!(value_of(&none, "GIT_CONFIG_VALUE_0"), Some("false"));
-    assert_eq!(
-        value_of(&none, "GIT_CONFIG_KEY_1"),
-        Some("log.showSignature")
-    );
-    assert_eq!(value_of(&none, "GIT_CONFIG_VALUE_1"), Some("false"));
+    assert_eq!(value_of(&none, "GIT_CONFIG_COUNT"), Some("3"));
+    for (index, (key, value)) in PAIRS.iter().enumerate() {
+        assert_eq!(
+            value_of(&none, &format!("GIT_CONFIG_KEY_{index}")),
+            Some(*key)
+        );
+        assert_eq!(
+            value_of(&none, &format!("GIT_CONFIG_VALUE_{index}")),
+            Some(*value)
+        );
+    }
 
     let existing = HashMap::from([("GIT_CONFIG_COUNT", "2")]);
     let appended = OfflineEnvironment::compute(lookup_in(&existing));
-    assert_eq!(value_of(&appended, "GIT_CONFIG_COUNT"), Some("4"));
-    assert_eq!(
-        value_of(&appended, "GIT_CONFIG_KEY_2"),
-        Some("core.fsmonitor")
-    );
-    assert_eq!(value_of(&appended, "GIT_CONFIG_VALUE_2"), Some("false"));
-    assert_eq!(
-        value_of(&appended, "GIT_CONFIG_KEY_3"),
-        Some("log.showSignature")
-    );
-    assert_eq!(value_of(&appended, "GIT_CONFIG_VALUE_3"), Some("false"));
+    assert_eq!(value_of(&appended, "GIT_CONFIG_COUNT"), Some("5"));
+    for (offset, (key, value)) in PAIRS.iter().enumerate() {
+        let index = 2 + offset;
+        assert_eq!(
+            value_of(&appended, &format!("GIT_CONFIG_KEY_{index}")),
+            Some(*key)
+        );
+        assert_eq!(
+            value_of(&appended, &format!("GIT_CONFIG_VALUE_{index}")),
+            Some(*value)
+        );
+    }
     assert_eq!(
         value_of(&appended, "GIT_CONFIG_KEY_0"),
         None,
@@ -94,7 +94,7 @@ fn git_overrides_are_appended_to_existing_pairs() {
 
     let bogus = HashMap::from([("GIT_CONFIG_COUNT", "many")]);
     let reset = OfflineEnvironment::compute(lookup_in(&bogus));
-    assert_eq!(value_of(&reset, "GIT_CONFIG_COUNT"), Some("2"));
+    assert_eq!(value_of(&reset, "GIT_CONFIG_COUNT"), Some("3"));
     assert_eq!(value_of(&reset, "GIT_CONFIG_KEY_0"), Some("core.fsmonitor"));
 }
 
@@ -242,6 +242,72 @@ fn prologue_exists_for_bash_and_zsh_only() {
     assert!(posix_prologue(ShellType::PowerShell).is_none());
 }
 
+/// Every row of the table names the test that exercised it with the real tool, and that test
+/// exists in this file. A row that is added without one, or whose test is renamed, fails here.
+#[test]
+fn every_table_row_names_a_verification_test_that_exists() {
+    const VERIFIED_BY: &[(&str, &str)] = &[
+        (
+            "RUSTUP_AUTO_INSTALL",
+            "rustup_proxies_do_not_install_a_toolchain",
+        ),
+        (
+            "COREPACK_ENABLE_NETWORK",
+            "corepack_does_not_download_the_pinned_package_manager",
+        ),
+        (
+            "npm_config_update_notifier",
+            "npm_does_not_check_for_updates",
+        ),
+        (
+            "GIT_NO_LAZY_FETCH",
+            "git_does_not_lazy_fetch_from_a_promisor_remote",
+        ),
+        ("GIT_TERMINAL_PROMPT", "git_terminal_prompt_is_off"),
+        (
+            "GIT_ALLOW_PROTOCOL",
+            "git_cannot_lazy_fetch_over_a_network_transport",
+        ),
+        (
+            "log.showSignature",
+            "git_log_does_not_run_the_repositorys_gpg_program",
+        ),
+        ("GOTOOLCHAIN", "go_does_not_download_a_toolchain"),
+        ("GOPROXY", "go_does_not_fetch_modules"),
+        (
+            "DOTNET_CLI_TELEMETRY_OPTOUT",
+            "dotnet_does_not_show_the_telemetry_notice",
+        ),
+        (
+            "POWERSHELL_UPDATECHECK",
+            "powershell_does_not_check_for_updates",
+        ),
+        (
+            "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK",
+            "gcloud_reads_the_update_check_switch_from_the_environment",
+        ),
+        ("core.fsmonitor", "git_fsmonitor_hook_does_not_run"),
+        ("core.hooksPath", "git_repository_hooks_do_not_run"),
+    ];
+    let source = [
+        include_str!("offline_environment_tests.rs"),
+        include_str!("git_completion_tests.rs"),
+    ]
+    .concat();
+    let mut rows: Vec<&str> = FIXED_VARIABLES.iter().map(|(name, _)| *name).collect();
+    rows.extend(GIT_CONFIG_OVERRIDES.iter().map(|(key, _)| *key));
+    rows.sort_unstable();
+    let mut verified: Vec<&str> = VERIFIED_BY.iter().map(|(name, _)| *name).collect();
+    verified.sort_unstable();
+    assert_eq!(rows, verified, "the table and its verification list differ");
+    for (name, test) in VERIFIED_BY {
+        assert!(
+            source.contains(&format!("fn {test}()")),
+            "{name} is verified by `{test}`, which does not exist"
+        );
+    }
+}
+
 #[cfg(unix)]
 mod real_shells {
     use command::blocking::Command;
@@ -353,11 +419,13 @@ mod real_shells {
             return;
         };
         for expected in [
-            "GIT_CONFIG_COUNT=2",
+            "GIT_CONFIG_COUNT=3",
             "GIT_CONFIG_KEY_0=core.fsmonitor",
             "GIT_CONFIG_VALUE_0=false",
             "GIT_CONFIG_KEY_1=log.showSignature",
             "GIT_CONFIG_VALUE_1=false",
+            "GIT_CONFIG_KEY_2=core.hooksPath",
+            "GIT_CONFIG_VALUE_2=/dev/null",
         ] {
             assert!(
                 inside.lines().any(|line| line == expected),
@@ -394,6 +462,7 @@ mod real_tools {
         let Some(scenario) = rustup_scenario(&canary) else {
             return;
         };
+        scenario.assert_silent_with_variable(&canary, "RUSTUP_AUTO_INSTALL", "0");
         assert_environment_keeps_silent(scenario, &canary);
     }
 
@@ -403,6 +472,7 @@ mod real_tools {
         let Some(scenario) = npm_scenario(&canary) else {
             return;
         };
+        scenario.assert_silent_with_variable(&canary, "npm_config_update_notifier", "false");
         assert_environment_keeps_silent(scenario, &canary);
     }
 
@@ -412,6 +482,7 @@ mod real_tools {
         let Some(scenario) = corepack_scenario(&canary) else {
             return;
         };
+        scenario.assert_silent_with_variable(&canary, "COREPACK_ENABLE_NETWORK", "0");
         assert_environment_keeps_silent(scenario, &canary);
     }
 
@@ -430,6 +501,7 @@ mod real_tools {
         let Some(scenario) = git_fsmonitor_scenario() else {
             return;
         };
+        scenario.assert_silent_with_git_config(&canary, "core.fsmonitor", "false");
         assert_environment_keeps_silent(scenario, &canary);
     }
 
@@ -439,7 +511,238 @@ mod real_tools {
         let Some(scenario) = git_lazy_fetch_scenario(&canary) else {
             return;
         };
+        scenario.assert_silent_with_variable(&canary, "GIT_NO_LAZY_FETCH", "1");
         assert_environment_keeps_silent(scenario, &canary);
+    }
+
+    #[test]
+    fn git_repository_hooks_do_not_run() {
+        let canary = Canary::start();
+        let Some(scenario) = git_hooks_scenario() else {
+            return;
+        };
+        scenario.assert_silent_with_git_config(&canary, "core.hooksPath", "/dev/null");
+        assert_environment_keeps_silent(scenario, &canary);
+    }
+
+    /// Every bundled `git` and `hub` generator that is a plain script, allowed or not, run
+    /// through the production executor against a repository full of hooks: none runs a hook.
+    #[test]
+    fn no_bundled_git_generator_runs_a_repository_hook() {
+        let canary = Canary::start();
+        let Some(mut scenario) = git_hooks_scenario() else {
+            return;
+        };
+        let mut generator_commands = Vec::new();
+        for spec in ["git", "hub"] {
+            for (_, command) in bundled_script_commands(spec) {
+                if command.trim_start().starts_with("git") {
+                    generator_commands.push(command);
+                }
+            }
+        }
+        assert!(
+            generator_commands.len() >= 10,
+            "expected the bundled git generators, found {generator_commands:?}"
+        );
+        scenario.commands = generator_commands;
+        scenario.assert_silent_through(&canary, production_executor);
+    }
+
+    #[test]
+    fn go_does_not_fetch_modules() {
+        let canary = Canary::start();
+        let Some(scenario) = go_modules_scenario(&canary) else {
+            return;
+        };
+        scenario.assert_silent_with_variable(&canary, "GOPROXY", "off");
+        assert_environment_keeps_silent(scenario, &canary);
+    }
+
+    #[test]
+    fn go_does_not_download_a_toolchain() {
+        let canary = Canary::start();
+        let Some(scenario) = go_toolchain_scenario(&canary) else {
+            return;
+        };
+        scenario.assert_silent_with_variable(&canary, "GOTOOLCHAIN", "local");
+        assert_environment_keeps_silent(scenario, &canary);
+    }
+
+    /// Runs `git ls-remote` against a server that asks for a login, with a controlling terminal
+    /// (a pty), and reports whether git printed its `Username for` prompt.
+    fn git_prompts_on_the_terminal(
+        python: &std::path::Path,
+        url: &str,
+        prompt_variable: Option<&str>,
+    ) -> bool {
+        const SCRIPT: &str = r#"
+import os, pty, re, select, sys, time
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("git", ["git", "ls-remote", sys.argv[1]])
+out = b""
+deadline = time.time() + 10
+while time.time() < deadline:
+    ready, _, _ = select.select([fd], [], [], 0.5)
+    if ready:
+        try:
+            data = os.read(fd, 4096)
+        except OSError:
+            break
+        if not data:
+            break
+        out += data
+        if re.search(rb"(^|\n)Username for", out):
+            break
+try:
+    os.kill(pid, 9)
+except OSError:
+    pass
+print("PROMPTED" if re.search(rb"(^|\n)Username for", out) else "NO-PROMPT")
+"#;
+        let temp = tempfile::tempdir().unwrap();
+        let mut command = command::blocking::Command::new(python);
+        command
+            .args(["-c", SCRIPT, url])
+            .current_dir(temp.path())
+            .env("HOME", temp.path())
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env_remove("GIT_ASKPASS")
+            .env_remove("SSH_ASKPASS")
+            .env_remove("GIT_TERMINAL_PROMPT");
+        if let Some(value) = prompt_variable {
+            command.env("GIT_TERMINAL_PROMPT", value);
+        }
+        let output = command.output().unwrap();
+        let text = String::from_utf8_lossy(&output.stdout).into_owned();
+        assert!(
+            text.contains("PROMPTED") || text.contains("NO-PROMPT"),
+            "the pty probe did not run: {text} {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        text.contains("PROMPTED")
+    }
+
+    #[test]
+    fn git_terminal_prompt_is_off() {
+        let (Some(python), Some(_)) = (require_tool("python3"), require_tool("git")) else {
+            return;
+        };
+        let canary = Canary::start_requiring_login();
+        let url = format!("{}/repo.git", canary.url());
+        assert!(
+            git_prompts_on_the_terminal(&python, &url, None),
+            "fixture is insensitive: git did not prompt for a username"
+        );
+        assert!(
+            !git_prompts_on_the_terminal(&python, &url, Some("0")),
+            "git prompted despite GIT_TERMINAL_PROMPT=0"
+        );
+    }
+
+    #[test]
+    fn dotnet_does_not_show_the_telemetry_notice() {
+        let Some(dotnet) = require_tool("dotnet") else {
+            return;
+        };
+        let canary = Canary::start();
+        let run = |optout: Option<&str>| -> String {
+            let temp = tempfile::tempdir().unwrap();
+            let mut variables = base_environment(&temp.path().join("home"));
+            // Telemetry is sent when the command ends; with the notice shown it would go to
+            // Microsoft. The proxy variables send it to the canary instead.
+            route_traffic_to_canary(&mut variables, &canary);
+            variables.insert(
+                "DOTNET_CLI_HOME".to_owned(),
+                temp.path()
+                    .join("dotnet-home")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            // CI images set these to hide exactly what is being observed.
+            for name in [
+                "DOTNET_NOLOGO",
+                "DOTNET_SKIP_FIRST_TIME_EXPERIENCE",
+                "DOTNET_CLI_TELEMETRY_OPTOUT",
+            ] {
+                variables.insert(name.to_owned(), "0".to_owned());
+            }
+            let path = format!("{}:{}", dotnet.parent().unwrap().display(), system_path());
+            let command = "dotnet new console --no-restore -o app";
+            match optout {
+                // The control: the CLI exactly as the user's session would run it.
+                None => run_unprotected(command, temp.path(), &path, &variables).output,
+                Some(value) => {
+                    variables.insert("DOTNET_CLI_TELEMETRY_OPTOUT".to_owned(), value.to_owned());
+                    run_unprotected(command, temp.path(), &path, &variables).output
+                }
+            }
+        };
+        let control = run(None);
+        assert!(
+            control.contains("Telemetry"),
+            "fixture is insensitive: no telemetry notice without the opt-out:\n{control}"
+        );
+        let opted_out = run(Some("1"));
+        assert!(
+            !opted_out.contains("Telemetry"),
+            "the telemetry notice appeared with DOTNET_CLI_TELEMETRY_OPTOUT=1:\n{opted_out}"
+        );
+    }
+
+    #[test]
+    fn gcloud_reads_the_update_check_switch_from_the_environment() {
+        let Some(gcloud) = require_tool("gcloud") else {
+            return;
+        };
+        let temp = tempfile::tempdir().unwrap();
+        let canary = Canary::start();
+        let mut variables = base_environment(&temp.path().join("home"));
+        // Nothing may reach Google: the update check, if it runs, asks the canary.
+        route_traffic_to_canary(&mut variables, &canary);
+        variables.insert(
+            "CLOUDSDK_COMPONENT_MANAGER_SNAPSHOT_URL".to_owned(),
+            canary.url(),
+        );
+        variables.insert(
+            "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING".to_owned(),
+            "true".to_owned(),
+        );
+        variables.insert("CLOUDSDK_CORE_DISABLE_PROMPTS".to_owned(), "1".to_owned());
+        variables.insert(
+            "CLOUDSDK_CONFIG".to_owned(),
+            temp.path().join("gcloud").to_string_lossy().into_owned(),
+        );
+        let path = format!("{}:{}", gcloud.parent().unwrap().display(), system_path());
+        let command = "gcloud config get component_manager/disable_update_check";
+        // The property is printed on a line of its own: `True`, `true` or `1` when set.
+        let switch_is_on = |output: &str| {
+            output.lines().any(|line| {
+                let line = line.trim().to_lowercase();
+                line == "true" || line == "1"
+            })
+        };
+        let control = run_unprotected(command, temp.path(), &path, &variables);
+        assert!(
+            !switch_is_on(&control.output),
+            "fixture is insensitive: the switch is already on without the variable: {}",
+            control.output
+        );
+        let through_executor = run_as_generator(
+            environment_only_executor(),
+            command,
+            temp.path(),
+            &path,
+            &variables,
+        );
+        assert!(
+            switch_is_on(&through_executor.output),
+            "gcloud did not resolve disable_update_check from the table: {}",
+            through_executor.output
+        );
     }
 
     #[test]
@@ -501,17 +804,17 @@ mod real_tools {
 ///
 /// Two things are checked, with different strength:
 ///
-/// * `powershell_commands_run_with_the_telemetry_and_update_check_switched_off`: the command a
+/// * `powershell_commands_run_with_the_update_check_switched_off`: the command a
 ///   PowerShell session's generators use (`pwsh -NoProfile -c`, through the production executor)
-///   has both variables set and makes no request. A control shows that the proxy sees `pwsh`'s
+///   has the variable set and makes no request. A control shows that the proxy sees `pwsh`'s
 ///   own .NET HTTP traffic. But that command sends nothing without the variables either (the
 ///   telemetry and the update check are not part of a `-c` run), so this does not show what the
 ///   variables change.
 /// * `powershell_does_not_check_for_updates`: an interactive `pwsh` in a pseudo-terminal does
 ///   ask `aka.ms` for the latest release about three seconds after it starts. With the
 ///   variable, the same run sends nothing. That is the evidence for `POWERSHELL_UPDATECHECK`.
-///   Telemetry has no such test: no request was observed with or without
-///   `POWERSHELL_TELEMETRY_OPTOUT`, so that entry is documented, not verified.
+///   `POWERSHELL_TELEMETRY_OPTOUT` is not in the table: no request was observed with or without
+///   it, so no test shows what it changes.
 #[cfg(unix)]
 mod real_pwsh {
     use std::path::{Path, PathBuf};
@@ -580,7 +883,7 @@ os.waitpid(pid, 0)
     }
 
     #[test]
-    fn powershell_commands_run_with_the_telemetry_and_update_check_switched_off() {
+    fn powershell_commands_run_with_the_update_check_switched_off() {
         let Some(pwsh) = session_shell("pwsh", "OPENRUN_TEST_PWSH") else {
             return;
         };
@@ -616,10 +919,9 @@ os.waitpid(pid, 0)
         canary.reset();
 
         // The command a generator of a PowerShell session runs, through the production executor.
-        let ran =
-            run("Write-Output \"$env:POWERSHELL_TELEMETRY_OPTOUT/$env:POWERSHELL_UPDATECHECK\"");
+        let ran = run("Write-Output \"$env:POWERSHELL_UPDATECHECK\"");
         assert!(ran.success, "{}", ran.output);
-        assert_eq!(ran.output.trim(), "1/Off");
+        assert_eq!(ran.output.trim(), "Off");
         std::thread::sleep(Duration::from_secs(5));
         assert_eq!(
             canary.requests(),

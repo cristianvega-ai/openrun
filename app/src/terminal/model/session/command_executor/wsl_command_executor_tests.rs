@@ -15,12 +15,14 @@ fn the_wsl_guest_gets_the_offline_environment_and_wslenv_lists_it() {
     for (name, value) in [
         ("GIT_NO_LAZY_FETCH", "1"),
         ("GIT_ALLOW_PROTOCOL", "file"),
-        ("GIT_CONFIG_COUNT", "3"),
+        ("GIT_CONFIG_COUNT", "4"),
         ("GIT_CONFIG_KEY_0", "user.name"),
         ("GIT_CONFIG_KEY_1", "core.fsmonitor"),
         ("GIT_CONFIG_VALUE_1", "false"),
         ("GIT_CONFIG_KEY_2", "log.showSignature"),
         ("GIT_CONFIG_VALUE_2", "false"),
+        ("GIT_CONFIG_KEY_3", "core.hooksPath"),
+        ("GIT_CONFIG_VALUE_3", "/dev/null"),
     ] {
         assert_eq!(
             guest.variables.get(name).map(String::as_str),
@@ -51,7 +53,7 @@ fn the_wsl_guest_gets_the_offline_environment_and_wslenv_lists_it() {
 fn the_wsl_guest_gets_the_offline_environment_without_session_variables() {
     let guest = guest_environment(ShellType::Zsh, "git branch --no-color", None);
     assert_eq!(guest.variables["GIT_NO_LAZY_FETCH"], "1");
-    assert_eq!(guest.variables["GIT_CONFIG_COUNT"], "2");
+    assert_eq!(guest.variables["GIT_CONFIG_COUNT"], "3");
     assert_eq!(guest.command, "git branch --no-color");
 }
 

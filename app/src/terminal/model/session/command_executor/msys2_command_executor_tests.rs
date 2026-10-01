@@ -17,13 +17,15 @@ fn assert_table_applied(variables: &HashMap<String, String>) {
         ("GIT_NO_LAZY_FETCH", "1"),
         ("GIT_ALLOW_PROTOCOL", "file"),
         ("GIT_TERMINAL_PROMPT", "0"),
-        ("GIT_CONFIG_COUNT", "3"),
+        ("GIT_CONFIG_COUNT", "4"),
         ("GIT_CONFIG_KEY_0", "user.name"),
         ("GIT_CONFIG_VALUE_0", "session-user"),
         ("GIT_CONFIG_KEY_1", "core.fsmonitor"),
         ("GIT_CONFIG_VALUE_1", "false"),
         ("GIT_CONFIG_KEY_2", "log.showSignature"),
         ("GIT_CONFIG_VALUE_2", "false"),
+        ("GIT_CONFIG_KEY_3", "core.hooksPath"),
+        ("GIT_CONFIG_VALUE_3", "/dev/null"),
     ] {
         assert_eq!(
             variables.get(name).map(String::as_str),

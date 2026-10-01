@@ -28,8 +28,21 @@ pub struct Canary {
     stop: Arc<AtomicBool>,
 }
 
+const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
 impl Canary {
     pub fn start() -> Self {
+        Self::start_with_response(NOT_FOUND)
+    }
+
+    /// A canary that asks every client for basic-auth credentials.
+    pub fn start_requiring_login() -> Self {
+        Self::start_with_response(
+            "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"canary\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        )
+    }
+
+    fn start_with_response(response: &'static str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
@@ -43,7 +56,7 @@ impl Canary {
                     match listener.accept() {
                         Ok((stream, _)) => {
                             let requests = requests.clone();
-                            std::thread::spawn(move || serve(stream, &requests));
+                            std::thread::spawn(move || serve(stream, &requests, response));
                         }
                         Err(_) => std::thread::sleep(Duration::from_millis(5)),
                     }
@@ -80,7 +93,7 @@ impl Drop for Canary {
     }
 }
 
-fn serve(mut stream: TcpStream, requests: &Mutex<Vec<String>>) {
+fn serve(mut stream: TcpStream, requests: &Mutex<Vec<String>>, response: &str) {
     stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
@@ -96,8 +109,7 @@ fn serve(mut stream: TcpStream, requests: &Mutex<Vec<String>>) {
     if let Some(line) = String::from_utf8_lossy(&received).lines().next() {
         requests.lock().unwrap().push(line.to_owned());
     }
-    let _ = stream
-        .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    let _ = stream.write_all(response.as_bytes());
 }
 
 pub fn find_tool(name: &str) -> Option<PathBuf> {
@@ -144,7 +156,9 @@ pub fn session_shell(name: &str, override_variable: &str) -> Option<PathBuf> {
 
 /// Tools whose absence on a CI runner is a failure, not a skip: the tests that use them are the
 /// evidence for the generator policy, and a skipped test is no evidence.
-const REQUIRED_ON_CI: &[&str] = &["git", "npm", "corepack", "rustup", "docker", "python3"];
+const REQUIRED_ON_CI: &[&str] = &[
+    "git", "npm", "corepack", "rustup", "docker", "python3", "go", "dotnet", "gcloud",
+];
 
 /// The tool's path, or `None` after saying why the test is skipped. On CI (`CI=true`), a tool in
 /// [`REQUIRED_ON_CI`] that is missing fails the test instead.
@@ -337,6 +351,45 @@ impl Scenario {
             );
         }
         assert!(any, "fixture is insensitive: {}", self.name);
+    }
+
+    /// Runs every command without the offline table or the sandbox but with the one variable
+    /// `name=value` set, and asserts nothing reached the canary or ran the marker program: the
+    /// variable on its own is enough.
+    pub fn assert_silent_with_variable(&self, canary: &Canary, name: &str, value: &str) {
+        let mut variables = self.variables.clone();
+        variables.insert(name.to_owned(), value.to_owned());
+        self.assert_silent_with_variables(canary, &variables, name);
+    }
+
+    /// Like [`Self::assert_silent_with_variable`], for git's `GIT_CONFIG_*` pair form of a
+    /// config override.
+    pub fn assert_silent_with_git_config(&self, canary: &Canary, key: &str, value: &str) {
+        let mut variables = self.variables.clone();
+        variables.insert("GIT_CONFIG_COUNT".to_owned(), "1".to_owned());
+        variables.insert("GIT_CONFIG_KEY_0".to_owned(), key.to_owned());
+        variables.insert("GIT_CONFIG_VALUE_0".to_owned(), value.to_owned());
+        self.assert_silent_with_variables(canary, &variables, key);
+    }
+
+    fn assert_silent_with_variables(
+        &self,
+        canary: &Canary,
+        variables: &HashMap<String, String>,
+        what: &str,
+    ) {
+        for command in &self.commands {
+            self.reset(canary);
+            run_unprotected(command, &self.cwd, &self.path, variables);
+            assert!(
+                !self.reached(canary),
+                "`{command}` ({}) still reached the canary or ran a repository program with only \
+                 {what} set; requests: {:?}, hooks: {:?}",
+                self.name,
+                canary.requests(),
+                self.ran_hooks()
+            );
+        }
     }
 
     /// Runs every command through `executor()` and asserts nothing reached the canary or ran the
@@ -733,4 +786,163 @@ pub fn docker_scenarios(canary: &Canary) -> Vec<Scenario> {
         });
     }
     scenarios
+}
+
+/// The shell commands of the bundled spec `spec`'s generators that are plain scripts (no typed
+/// tokens), as `(generator, command)`.
+pub fn bundled_script_commands(spec: &str) -> Vec<(String, String)> {
+    let data = warp_command_signatures::dynamic_command_signature_data();
+    let Some(spec_data) = data.get(spec) else {
+        return Vec::new();
+    };
+    spec_data
+        .generators()
+        .iter()
+        .filter_map(|(name, generator)| match &generator.process {
+            warp_command_signatures::GeneratorProcess::ShellCommand(command) => Some((
+                name.0.clone(),
+                command
+                    .build(warp_command_signatures::Shell::Posix)
+                    .to_string(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+fn go_project(
+    temp: &tempfile::TempDir,
+    go_mod: &str,
+) -> (PathBuf, PathBuf, PathBuf, HashMap<String, String>) {
+    let project = temp.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join("go.mod"), go_mod).unwrap();
+    std::fs::write(project.join("main.go"), "package main\n\nfunc main() {}\n").unwrap();
+    let gopath = temp.path().join("gopath");
+    let gocache = temp.path().join("gocache");
+    let mut variables = base_environment(&temp.path().join("home"));
+    variables.insert("GOPATH".to_owned(), gopath.to_string_lossy().into_owned());
+    variables.insert(
+        "GOMODCACHE".to_owned(),
+        gopath.join("mod").to_string_lossy().into_owned(),
+    );
+    variables.insert("GOCACHE".to_owned(), gocache.to_string_lossy().into_owned());
+    variables.insert("GOFLAGS".to_owned(), "-mod=mod".to_owned());
+    variables.insert("GOSUMDB".to_owned(), "off".to_owned());
+    (project, gopath, gocache, variables)
+}
+
+/// A module that requires a dependency nobody has cached, with the canary as GOPROXY.
+pub fn go_modules_scenario(canary: &Canary) -> Option<Scenario> {
+    let go = require_tool("go")?;
+    let temp = tempfile::tempdir().unwrap();
+    let (project, gopath, gocache, mut variables) = go_project(
+        &temp,
+        "module fixture\n\ngo 1.21\n\nrequire example.com/dependency v1.0.0\n",
+    );
+    variables.insert("GOPROXY".to_owned(), canary.url());
+    variables.insert("GOTOOLCHAIN".to_owned(), "local".to_owned());
+    Some(Scenario {
+        name: "go fetching an uncached module through GOPROXY",
+        cwd: project,
+        path: format!("{}:{}", go.parent().unwrap().display(), system_path()),
+        variables,
+        commands: commands(&["go list -m all"]),
+        control: Control::EveryCommand,
+        state_dirs: vec![gopath, gocache],
+        marker: None,
+        settle: Duration::ZERO,
+        _temp: temp,
+    })
+}
+
+/// A module whose `go` line asks for a Go far newer than any installed, with `GOTOOLCHAIN=auto`
+/// and the canary as GOPROXY: `go` downloads the toolchain through the proxy.
+pub fn go_toolchain_scenario(canary: &Canary) -> Option<Scenario> {
+    let go = require_tool("go")?;
+    let temp = tempfile::tempdir().unwrap();
+    let (project, gopath, gocache, mut variables) =
+        go_project(&temp, "module fixture\n\ngo 1.99.0\n");
+    variables.insert("GOPROXY".to_owned(), canary.url());
+    variables.insert("GOTOOLCHAIN".to_owned(), "auto".to_owned());
+    Some(Scenario {
+        name: "go downloading the toolchain a go.mod asks for",
+        cwd: project,
+        path: format!("{}:{}", go.parent().unwrap().display(), system_path()),
+        variables,
+        commands: commands(&["go list -m"]),
+        control: Control::EveryCommand,
+        state_dirs: vec![gopath, gocache],
+        marker: None,
+        settle: Duration::ZERO,
+        _temp: temp,
+    })
+}
+
+/// A repository whose `.git/hooks` write a marker, and the commands that make git run them.
+pub fn git_hooks_scenario() -> Option<Scenario> {
+    require_tool("git")?;
+    let temp = tempfile::tempdir().unwrap();
+    let markers = temp.path().join("markers");
+    std::fs::create_dir_all(&markers).unwrap();
+    let repo = temp.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-q"]);
+    std::fs::write(repo.join("tracked"), "one\n").unwrap();
+    git(&repo, &["add", "tracked"]);
+    git(&repo, &["commit", "-qm", "one"]);
+    let hooks = repo.join(".git/hooks");
+    std::fs::create_dir_all(&hooks).unwrap();
+    for name in [
+        "post-index-change",
+        "reference-transaction",
+        "pre-commit",
+        "post-checkout",
+        "post-merge",
+        "pre-auto-gc",
+    ] {
+        let path = hooks.join(name);
+        std::fs::write(
+            &path,
+            format!("#!/bin/sh\necho x >> '{}/{name}'\n", markers.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let _ = std::fs::remove_dir_all(&markers);
+    std::fs::create_dir_all(&markers).unwrap();
+    Some(Scenario {
+        name: "git repository with hooks",
+        cwd: repo,
+        path: system_path(),
+        variables: base_environment(&temp.path().join("home")),
+        // A ref update runs `reference-transaction`; adding a file writes the index and runs
+        // `post-index-change`. Neither is a generator command: they show the hooks are live.
+        commands: commands(&[
+            "git branch hook-check-$$",
+            "touch hook-file-$$ && git add hook-file-$$",
+        ]),
+        control: Control::EveryCommand,
+        state_dirs: vec![],
+        marker: Some(markers),
+        settle: Duration::ZERO,
+        _temp: temp,
+    })
+}
+
+/// Points every proxy variable at the canary, so that a tool which reports home from a fixed
+/// host (telemetry, an update check) sends that request to the canary instead.
+pub fn route_traffic_to_canary(variables: &mut HashMap<String, String>, canary: &Canary) {
+    for name in [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ] {
+        variables.insert(name.to_owned(), canary.url());
+    }
+    variables.insert("NO_PROXY".to_owned(), String::new());
+    variables.insert("no_proxy".to_owned(), String::new());
 }

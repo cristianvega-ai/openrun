@@ -12,9 +12,10 @@
 //! network use of the tools below. The OS sandbox (SEC-SBX) is what denies the network to
 //! whatever is left, and the generator policy decides which generators run at all.
 //!
-//! Every entry says whether its effect was verified against the real tool. Entries marked
-//! "documented, unverified" come from the tool's documentation; the tool was not installed where
-//! this was written, so no test exercises them.
+//! Every entry names the test that exercised it against the real tool, and says whether that test
+//! observed the network call (a loopback canary), the program that was run (a marker file), or
+//! only the tool's own switch (the telemetry notice, a resolved property). An entry that could not
+//! be exercised with the real tool is not in the table: the OS sandbox covers it.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -45,44 +46,27 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
     // fails before it connects ("transport 'http' not allowed"). The variable overrides any
     // `protocol.<name>.allow` setting of the repository.
     ("GIT_ALLOW_PROTOCOL", "file"),
-    // The remaining entries are documented, unverified: the tool is not installed on the machine
-    // this was written on, so no test runs it. Each is the tool's own documented switch.
-    //
-    // Git: never prompt for credentials on the terminal. Documented, unverified: a prompt needs a
-    // terminal, which no test environment provides.
+    // Verified (git 2.54, `git_terminal_prompt_is_off`): with a controlling terminal, git asks
+    // for a username on /dev/tty when a server answers 401; with this it fails at once.
     ("GIT_TERMINAL_PROMPT", "0"),
-    // Go 1.21+: never download a newer toolchain (`go.mod` `toolchain` line); never use a module
-    // proxy.
+    // Verified (Go on the Linux CI runner, `go_does_not_download_a_toolchain` and
+    // `go_does_not_fetch_modules`): a `go.mod` that asks for a newer Go makes `go` download that
+    // toolchain through GOPROXY, and a `require` of an uncached module is fetched from GOPROXY.
     ("GOTOOLCHAIN", "local"),
     ("GOPROXY", "off"),
-    // Homebrew: do not run `brew update` implicitly before install/upgrade/tap-style commands.
-    // Homebrew is installed here but its auto-update rewrites the user's real Homebrew checkout,
-    // so it was not run against a canary.
-    ("HOMEBREW_NO_AUTO_UPDATE", "1"),
-    // uv: never touch the network.
-    ("UV_OFFLINE", "1"),
-    // Deno: no version check.
-    ("DENO_NO_UPDATE_CHECK", "1"),
-    // Angular CLI: no analytics prompt or upload.
-    ("NG_CLI_ANALYTICS", "false"),
-    // Nx: no background daemon, no Nx Cloud.
-    ("NX_DAEMON", "false"),
-    ("NX_NO_CLOUD", "true"),
-    // Nextflow: offline mode.
-    ("NXF_OFFLINE", "true"),
-    // .NET CLI: no telemetry.
+    // Effect demonstrated, not the network call (.NET SDK on the Linux CI runner,
+    // `dotnet_does_not_show_the_telemetry_notice`): the first run of the CLI prints the
+    // telemetry notice and starts collecting unless this is set. The upload goes to a fixed
+    // Microsoft endpoint that a test cannot redirect to a canary.
     ("DOTNET_CLI_TELEMETRY_OPTOUT", "1"),
-    // PowerShell 7 (`pwsh`): no usage telemetry and no check for a newer release. Update check
-    // verified (pwsh 7.6.6, `powershell_does_not_check_for_updates`): an interactive `pwsh`
-    // sends `CONNECT aka.ms:443` about three seconds after it starts, and with the variable it
-    // sends nothing. Telemetry is documented, not observed: the `pwsh -NoProfile -c` that
-    // generators run sent no request with or without either variable, so the loopback canary
-    // cannot tell the two apart.
-    ("POWERSHELL_TELEMETRY_OPTOUT", "1"),
+    // Verified (pwsh 7.6.6, `powershell_does_not_check_for_updates`): an interactive `pwsh`
+    // sends `CONNECT aka.ms:443` about three seconds after it starts, and with this it sends
+    // nothing. `POWERSHELL_TELEMETRY_OPTOUT` is not in the table: the `pwsh -NoProfile -c` that
+    // generators run sent no request with or without it, so no test shows what it changes.
     ("POWERSHELL_UPDATECHECK", "Off"),
-    // Azure CLI: no telemetry.
-    ("AZURE_CORE_COLLECT_TELEMETRY", "false"),
-    // Google Cloud CLI: no component-manager update check.
+    // Effect demonstrated, not the network call (Google Cloud CLI on the Linux CI runner,
+    // `gcloud_reads_the_update_check_switch_from_the_environment`): gcloud resolves the
+    // `component_manager/disable_update_check` property from this variable.
     ("CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK", "1"),
 ];
 
@@ -98,8 +82,14 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
 ///   With it set, `git log` and `git stash list` verify the signature of each signed commit by
 ///   running the repository's `gpg.program` (or `gpg.ssh.program`), and a commit object with a
 ///   `gpgsig` header is enough to make git try.
-const GIT_CONFIG_OVERRIDES: &[(&str, &str)] =
-    &[("core.fsmonitor", "false"), ("log.showSignature", "false")];
+/// * `core.hooksPath`: verified (git 2.54, `git_repository_hooks_do_not_run`). A repository's
+///   `.git/hooks` run when a command writes the index (`post-index-change`) or updates a ref
+///   (`reference-transaction`). `/dev/null` is a hooks directory with no hooks.
+const GIT_CONFIG_OVERRIDES: &[(&str, &str)] = &[
+    ("core.fsmonitor", "false"),
+    ("log.showSignature", "false"),
+    ("core.hooksPath", "/dev/null"),
+];
 
 /// Hosts docker may talk to without leaving the machine.
 const LOCAL_DOCKER_HOST_PREFIXES: &[&str] = &["unix://", "npipe://", "fd://"];
