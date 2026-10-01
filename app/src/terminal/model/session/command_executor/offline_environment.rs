@@ -127,10 +127,11 @@ impl OfflineEnvironment {
             (count + GIT_CONFIG_OVERRIDES.len()).to_string(),
         ));
 
-        // Documented, unverified (docker is not installed where this was written): `DOCKER_HOST`
-        // beats the current context, and a `tcp://` or `ssh://` host or context endpoint makes the
-        // docker CLI contact a remote daemon. Only local sockets are kept; a remote context is
-        // replaced by the always-local `default` one.
+        // Verified with the real docker CLI on the Linux CI runner (`docker_does_not_use_a_remote_host_or_context`;
+        // docker is not installed on the development machine, where the test skips): `DOCKER_HOST`
+        // beats the current context, and a `tcp://` or `ssh://` host or context endpoint makes
+        // the docker CLI contact a remote daemon. Only local sockets are kept; a remote context
+        // is replaced by the always-local `default` one.
         if lookup("DOCKER_HOST").is_some_and(|host| !is_local_docker_host(&host)) {
             environment.remove.push("DOCKER_HOST");
         }
