@@ -48,7 +48,10 @@
 //!   `command-signatures` pin therefore forces a review. Put each new pair in exactly one of the
 //!   files, keeping both sorted.
 //! * The injection corpus in the same test file runs every allowed token-taking generator with
-//!   hostile tokens in a shell and fails if anything but the generator's own command ran.
+//!   hostile tokens in real bash, zsh, sh, fish and PowerShell 7 (started as a local session
+//!   starts them: `fish --no-config -c`, `pwsh -NoProfile -c`) and fails if anything but the
+//!   generator's own command ran. fish and `pwsh` must be installed when `CI` is set; elsewhere
+//!   a missing one is skipped with a message.
 //! * Stripping the network generators from our future `command-signatures` fork (DEP-05) is the
 //!   follow-up; this allow-list stays as the guard in this repository.
 

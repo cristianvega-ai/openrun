@@ -211,4 +211,124 @@ mod unix {
             );
         });
     }
+
+    /// The executable of a shell that a local session of that type is launched with, or `None`
+    /// outside CI with a message saying the test is skipped. With `CI` set a missing shell fails
+    /// the test: a run that skips fish and PowerShell proves nothing about them.
+    /// `OPENRUN_TEST_FISH` and `OPENRUN_TEST_PWSH` name an executable that is not on `PATH`.
+    fn session_shell(name: &str, override_variable: &str) -> Option<std::path::PathBuf> {
+        let found = match std::env::var_os(override_variable) {
+            Some(path) => Some(std::path::PathBuf::from(path)).filter(|path| path.is_file()),
+            None => {
+                let path_dirs = std::env::var_os("PATH").unwrap_or_default();
+                std::env::split_paths(&path_dirs)
+                    .chain(
+                        ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+                            .into_iter()
+                            .map(std::path::PathBuf::from),
+                    )
+                    .map(|dir| dir.join(name))
+                    .find(|candidate| candidate.is_file())
+            }
+        };
+        let in_ci =
+            std::env::var_os("CI").is_some_and(|value| !value.is_empty() && value != "false");
+        if found.is_none() {
+            assert!(
+                !in_ci,
+                "{name} is not installed and CI is set: the session shell tests must run in {name} \
+                 (install it on the runner or set {override_variable})"
+            );
+            eprintln!(
+                "SKIPPED: {name} is not installed, so its session shell test does not run here (CI \
+                 installs it and fails without it; set {override_variable} to run it)"
+            );
+        }
+        found
+    }
+
+    /// Runs `command` the way a completion generator of a session of `shell_type` is run: through
+    /// the production executor, which starts the session's own shell with `-c` and an empty
+    /// `PATH`, not `sh`. Returns the standard output.
+    fn run_generator_command(
+        shell_path: std::path::PathBuf,
+        shell_type: ShellType,
+        directory: &Path,
+        command: &str,
+    ) -> String {
+        let executor = LocalCommandExecutor::new(Some(shell_path), shell_type);
+        let environment = HashMap::from([
+            ("PATH".to_owned(), directory.to_string_lossy().into_owned()),
+            ("HOME".to_owned(), directory.to_string_lossy().into_owned()),
+        ]);
+        let output = futures_lite::future::block_on(executor.execute_local_command(
+            command,
+            directory.to_str(),
+            Some(environment),
+            ExecuteCommandOptions::default(),
+        ))
+        .expect("run the command");
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    }
+
+    #[test]
+    fn a_fish_session_runs_its_generator_commands_in_fish() {
+        let Some(fish) = session_shell("fish", "OPENRUN_TEST_FISH") else {
+            return;
+        };
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let dir = temp_dir.path();
+        let run =
+            |command: &str| run_generator_command(fish.clone(), ShellType::Fish, dir, command);
+
+        // The command string is read by fish: `$FISH_VERSION` exists only there, and `sh` would
+        // print an empty line.
+        let version = run("echo $FISH_VERSION");
+        assert!(
+            version.trim().starts_with(|c: char| c.is_ascii_digit()),
+            "not run by fish: {version:?}"
+        );
+
+        // A word quoted the way the completion engine's generators quote it (`'` becomes `'\''`)
+        // stays one word in fish, so the rest of it is not run.
+        let quoted = format!("it'\\''s; true > {}/safe #", dir.display());
+        let output = run(&format!("printf %s '{quoted}'"));
+        assert_eq!(output, format!("it's; true > {}/safe #", dir.display()));
+        assert!(!dir.join("safe").exists());
+
+        // With a backslash before the quote the same quoting ends early in fish, and what follows
+        // runs. This is why the token gate refuses a backslash for a generator that quotes.
+        let breakout = format!("x\\'; true > {}/breakout #", dir.display());
+        run(&format!("printf %s '{}'", breakout.replace('\'', "'\\''")));
+        assert!(
+            dir.join("breakout").exists(),
+            "fish was expected to run the text after a backslash-quote"
+        );
+    }
+
+    #[test]
+    fn a_powershell_session_runs_its_generator_commands_in_pwsh() {
+        let Some(pwsh) = session_shell("pwsh", "OPENRUN_TEST_PWSH") else {
+            return;
+        };
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let dir = temp_dir.path();
+        let run = |command: &str| {
+            run_generator_command(pwsh.clone(), ShellType::PowerShell, dir, command)
+        };
+
+        // The command string is read by PowerShell: `$PSVersionTable` exists only there.
+        let version = run("Write-Output $PSVersionTable.PSVersion.Major");
+        assert_eq!(version.trim(), "7", "not run by PowerShell 7: {version:?}");
+
+        // The POSIX quoting of the generators (`'` becomes `'\''`) does not keep a word inside
+        // the quotes in PowerShell, so the text after the quote runs. This is why a generator is
+        // given only inert words in a PowerShell session.
+        let quoted = format!("x'; Set-Content {}/breakout 1 #", dir.display());
+        run(&format!("Write-Output '{}'", quoted.replace('\'', "'\\''")));
+        assert!(
+            dir.join("breakout").exists(),
+            "PowerShell was expected to run the text after a POSIX-quoted quote"
+        );
+    }
 }

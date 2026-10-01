@@ -183,10 +183,22 @@ jobs:
             HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install docker
           fi
 
+      # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`). fish
+      # comes from Homebrew (a bottle, seconds). The macOS image ships pwsh; if a runner image
+      # does not, it is installed from the Homebrew cask, which is slower.
+      - name: Install fish and PowerShell
+        run: |
+          if ! command -v fish > /dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install fish
+          fi
+          if ! command -v pwsh > /dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask powershell
+          fi
+
       - name: Check the tools the real-tool tests use
         run: |
           missing=0
-          for tool in git npm corepack rustup python3 docker sandbox-exec; do
+          for tool in git npm corepack rustup python3 docker sandbox-exec fish pwsh; do
             if path=$(command -v "$tool"); then
               echo "$tool: $path"
             else
@@ -200,6 +212,13 @@ jobs:
         run: |
           cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
             -E 'package(warp) and (test(~command_executor::network_sandbox) | test(~command_executor::offline_environment) | test(~command_executor::restored_generators))'
+
+      # The generator policy tests, with the injection corpus: every hostile word is run in bash,
+      # zsh, sh, fish and PowerShell 7, and a missing fish or pwsh fails them (`CI=true`).
+      - name: Run the generator policy and injection tests in every shell
+        run: |
+          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
+            -E '(package(warp_completer) and test(~generator_policy)) | (package(warp) and test(~local_command_executor) and test(~session_runs_its_generator_commands))'
 
   test:
     name: Unit tests
@@ -216,6 +235,23 @@ jobs:
           sudo apt-get update -y
           # shellcheck disable=SC2086 # The package lists are meant to be word-split.
           sudo apt-get install -y --no-install-recommends $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES
+
+      # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`) as well
+      # as bash and zsh, and fail when either is missing (`CI=true`). fish is in
+      # LINUX_TEST_PACKAGES; the runner image ships pwsh.
+      - name: Check that fish and PowerShell are installed
+        run: |
+          missing=0
+          for tool in fish pwsh; do
+            if path=$(command -v "$tool"); then
+              echo "$tool: $path"
+              "$tool" --version
+            else
+              echo "::error::$tool is not installed on this runner"
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Install the Rust toolchain from rust-toolchain.toml
         run: rustup toolchain install
@@ -262,6 +298,23 @@ jobs:
           # shellcheck disable=SC2086 # The package lists are meant to be word-split.
           sudo apt-get install -y --no-install-recommends $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES \
             ripgrep strace xvfb iproute2
+
+      # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`) as well
+      # as bash and zsh, and fail when either is missing (`CI=true`). fish is in
+      # LINUX_TEST_PACKAGES; the runner image ships pwsh.
+      - name: Check that fish and PowerShell are installed
+        run: |
+          missing=0
+          for tool in fish pwsh; do
+            if path=$(command -v "$tool"); then
+              echo "$tool: $path"
+              "$tool" --version
+            else
+              echo "::error::$tool is not installed on this runner"
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Install the Rust toolchain from rust-toolchain.toml
         run: rustup toolchain install
