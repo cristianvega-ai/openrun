@@ -23,6 +23,7 @@ struct RecordingContext {
     commands: Mutex<Vec<String>>,
     /// When set, `curl ...` commands are run through `sh` with a `PATH` that contains only this
     /// directory, so they can only ever reach the stub `curl` placed in it.
+    #[cfg(unix)]
     stub_curl_dir: Option<std::path::PathBuf>,
 }
 
@@ -31,6 +32,7 @@ impl RecordingContext {
         Self {
             registry,
             commands: Mutex::new(Vec::new()),
+            #[cfg(unix)]
             stub_curl_dir: None,
         }
     }
