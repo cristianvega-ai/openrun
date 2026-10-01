@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use command::r#async::Command;
 use parking_lot::Mutex;
 
+use super::network_sandbox::{self, NetworkSandbox};
 use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions, offline_environment};
 use crate::safe_warn;
 use crate::terminal::shell::{Shell, ShellType};
@@ -132,6 +133,13 @@ impl Drop for SpawnedChildCleanup {
     }
 }
 
+/// How a command's subprocess is kept offline besides the variables it is given.
+struct Hardening<'a> {
+    /// Variables to strip from the environment inherited from the app process.
+    environment_removals: &'a [&'static str],
+    network_sandbox: &'a NetworkSandbox,
+}
+
 enum CommandBuilder<'a> {
     #[cfg(windows)]
     CmdExe,
@@ -142,8 +150,13 @@ enum CommandBuilder<'a> {
 }
 
 impl CommandBuilder<'_> {
-    fn build(self, command_string: &str, shell_config_flag: Option<&str>) -> Command {
-        match self {
+    fn build(
+        self,
+        command_string: &str,
+        shell_config_flag: Option<&str>,
+        sandbox: &NetworkSandbox,
+    ) -> Result<Command> {
+        Ok(match self {
             #[cfg(windows)]
             CommandBuilder::CmdExe => {
                 use command::windows::CommandExt as _;
@@ -163,7 +176,7 @@ impl CommandBuilder<'_> {
                         log::warn!("local_shell_path was None for a local session");
                         shell_type.name()
                     });
-                let mut command = Command::new_with_process_group(program_to_execute);
+                let mut command = network_sandbox::command_for(sandbox, program_to_execute)?;
                 if let Some(shell_config_flag) = shell_config_flag {
                     command.arg(shell_config_flag);
                 }
@@ -171,7 +184,7 @@ impl CommandBuilder<'_> {
                 command.arg(command_string);
                 command
             }
-        }
+        })
     }
 }
 
@@ -184,11 +197,18 @@ mod tests;
 /// according to environment_variables. This is typically used to run generator commands for local sessions.
 ///
 /// Commands run through [`Self::execute_local_command`] (every `CommandExecutor` call) get the
-/// offline environment table from [`offline_environment`] applied on top of the given variables.
+/// offline environment table from [`offline_environment`] applied on top of the given variables
+/// and run inside the OS network sandbox of [`network_sandbox`] where the platform has one. If the
+/// sandbox cannot be applied the command is not run and the call returns an error.
 #[derive(Debug)]
 pub struct LocalCommandExecutor {
     local_shell_path: Option<PathBuf>,
     shell_type: ShellType,
+
+    network_sandbox: NetworkSandbox,
+    /// Whether commands get the offline environment table. Always true outside tests that
+    /// exercise the network sandbox on its own.
+    apply_offline_environment: bool,
 
     active_process_groups: Arc<ActiveProcessGroups>,
 }
@@ -198,8 +218,22 @@ impl LocalCommandExecutor {
         Self {
             local_shell_path,
             shell_type,
+            network_sandbox: NetworkSandbox::platform_default(),
+            apply_offline_environment: true,
             active_process_groups: Arc::default(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn with_network_sandbox(mut self, network_sandbox: NetworkSandbox) -> Self {
+        self.network_sandbox = network_sandbox;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn without_offline_environment(mut self) -> Self {
+        self.apply_offline_environment = false;
+        self
     }
 
     pub async fn execute_local_command(
@@ -216,14 +250,20 @@ impl LocalCommandExecutor {
             ShellType::PowerShell => Some("-NoProfile"),
         };
 
-        let (environment_variables, environment_removals) =
-            offline_environment::harden(environment_variables);
+        let (environment_variables, environment_removals) = if self.apply_offline_environment {
+            offline_environment::harden(environment_variables)
+        } else {
+            (environment_variables, Vec::new())
+        };
 
         self.execute_local_command_internal(
             command,
             current_directory_path,
             environment_variables,
-            &environment_removals,
+            Hardening {
+                environment_removals: &environment_removals,
+                network_sandbox: &self.network_sandbox,
+            },
             shell_config_flag,
             execute_command_options,
         )
@@ -231,8 +271,8 @@ impl LocalCommandExecutor {
     }
 
     /// Runs `command` in the user's login shell so their rc files are evaluated. This is for
-    /// capturing the interactive environment, not for generators, so it does not get the offline
-    /// environment table (the table would show up in the captured environment).
+    /// capturing the interactive environment, not for generators, so it gets neither the offline
+    /// environment table (it would show up in the captured environment) nor the network sandbox.
     pub async fn execute_local_command_in_login_shell(
         &self,
         command: &str,
@@ -252,7 +292,10 @@ impl LocalCommandExecutor {
             command,
             current_directory_path,
             environment_variables,
-            &[],
+            Hardening {
+                environment_removals: &[],
+                network_sandbox: &NetworkSandbox::Unavailable,
+            },
             shell_config_flag,
             ExecuteCommandOptions {
                 // We have to run the command in the same shell as the session
@@ -296,8 +339,7 @@ impl LocalCommandExecutor {
         command: &str,
         current_directory_path: Option<&str>,
         environment_variables: Option<HashMap<String, String>>,
-        // Variables to strip from the environment inherited from the app process.
-        environment_removals: &[&str],
+        hardening: Hardening<'_>,
         // The value of shell_config_flag is appended as an argument
         // indicating the supplied command should be run under some configuration,
         // i.e. in a login shell or without sourcing .rc files
@@ -306,7 +348,9 @@ impl LocalCommandExecutor {
     ) -> Result<CommandOutput> {
         let command_builder = self.command_builder(execute_command_options);
 
-        let mut command_process = command_builder.build(command, shell_config_flag);
+        let mut command_process = command_builder
+            .build(command, shell_config_flag, hardening.network_sandbox)
+            .inspect_err(|error| log::warn!("not running a completion command: {error:#}"))?;
 
         // This sets then environment variables, including the PATH var.
         // We need to run the command with the PATH var set because if the
@@ -319,7 +363,7 @@ impl LocalCommandExecutor {
         if let Some(environment_variables) = environment_variables {
             command_process.envs(&environment_variables);
         }
-        for name in environment_removals {
+        for name in hardening.environment_removals {
             command_process.env_remove(name);
         }
 
@@ -384,6 +428,10 @@ impl CommandExecutor for LocalCommandExecutor {
 
     fn supports_parallel_command_execution(&self) -> bool {
         true
+    }
+
+    fn network_isolated(&self) -> bool {
+        self.network_sandbox.isolates_network()
     }
 
     fn cancel_active_commands(&self) {

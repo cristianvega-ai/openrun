@@ -21,3 +21,14 @@ OpenRun does not send your data anywhere, but it does keep a local copy of your 
 - **Deleting it.** Settings > Privacy > Delete saved history removes every saved command and every saved block's text and output, overwrites the freed pages and compacts the database. It does not reach copies the app does not own: your shell's history file, backups and snapshots of the state directory, and data left on a solid-state drive or in a file system journal. For those, use full-disk encryption and your backup tool's own deletion.
 - **Not the same as the repository scan.** Scanning this repository's Git history for secrets is a release check on the source. It says nothing about what the app stores on your computer, and nothing here promises that saved history is free of secrets.
 - **Logs.** The application log is not meant to hold the commands you run or their output. A debug message that listed every saved command at startup now logs only a count. If you find command text or output in a log file, please report it.
+
+## How completion generators are kept offline
+
+Completion specs ship generators: shell commands the app runs automatically while you type or press Tab. Three layers keep them from reaching a network, and they differ by platform:
+
+1. **Allow-list (all platforms).** Only generators reviewed as local-only run; the list is in `crates/warp_completer/src/signatures/legacy/generator_policy/`. On Windows a smaller subset runs.
+2. **Offline environment (all local executors).** Every generator subprocess gets variables that switch off the implicit network use of known tools (rustup installing a pinned toolchain, npm's update check, corepack downloads, git's `core.fsmonitor` program and lazy fetches, and others). Each is marked in `app/src/terminal/model/session/command_executor/offline_environment.rs` as verified against the real tool or "documented, unverified". Sessions that run commands inside your own shell (sub-shells, SSH sessions without a control socket) get it for bash and zsh only; the SSH control-socket executor runs on the remote host and does not.
+3. **OS network sandbox (macOS and Linux).** The subprocess runs under a `sandbox-exec` profile (macOS) or a seccomp filter (Linux) that denies IP networking, loopback included, to it and its children. It fails closed. Unix sockets stay allowed.
+
+What this does not do: it is not a boundary against hostile code (a local daemon reached over a Unix socket can still make network requests for its client; file access is unchanged), it does not cover commands you type yourself, and Windows has no sandbox, so there the allow-list and the environment table are the only layers. The macOS profile is a deny list for the delegation paths that were found by testing (DNS through `mDNSResponder`, background URL sessions through `nsurlsessiond`), not for every system service.
+

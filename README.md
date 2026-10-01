@@ -35,6 +35,8 @@ Command completions never start a network tool. The bundled completion specs shi
 
 Every completion generator also runs with an offline environment: variables that stop the tools it starts from going online by themselves (rustup installing the toolchain a project pins, npm's update check, corepack downloading a package manager, git running a repository's `core.fsmonitor` program or fetching from a partial clone's remote, and others listed in `CHANGES.md`). This lowers the risk; it is one layer of a defence, not a guarantee that every allowed generator is offline.
 
+On macOS and Linux every completion command also runs inside an operating-system network sandbox: a `sandbox-exec` profile on macOS and a seccomp filter on Linux deny IP networking (loopback included) to the command and everything it starts, while Unix sockets and files keep working. If the sandbox cannot be applied, the command does not run. Windows has no unprivileged sandbox, so completion generators that start another program stay off there. The sandbox stops tools that go online by themselves; it is not a boundary against hostile code, and a local daemon that makes network requests for its client (a container engine, an SSH control master) is not stopped by it. Details are in `SECURITY.md`.
+
 Your shell and the programs you run in it, including SSH sessions and CLI agents, use the network as they normally would.
 
 `script/offline_audit` checks the repository for reintroduced Warp hosts, network-capable code and banned dependencies, and CI runs it.

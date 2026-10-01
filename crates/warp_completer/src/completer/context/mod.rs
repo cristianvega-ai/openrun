@@ -176,6 +176,12 @@ pub trait GeneratorContext: Send + Sync {
 
     /// Whether the implementation allows execution of generators in parallel.
     fn supports_parallel_execution(&self) -> bool;
+
+    /// Whether commands run through `execute_command_at_pwd` are kept from reaching an IP network
+    /// by the operating system, whatever they run. Defaults to false.
+    fn network_isolated(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug)]

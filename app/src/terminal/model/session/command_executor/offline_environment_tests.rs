@@ -353,504 +353,89 @@ mod real_shells {
 
 /// The tests that matter most: real tools, a loopback canary standing in for the internet, and
 /// the real generator execution path (`SessionContext::execute_command_at_pwd` into
-/// `LocalCommandExecutor`). Each test first runs the tool without the offline environment to show
-/// the fixture does reach the canary, then with it and asserts silence.
+/// `LocalCommandExecutor`). Each test first runs the tool without the offline environment to
+/// show the fixture does reach the canary, then with it and asserts silence. The network sandbox
+/// is switched off here so that only the environment table is under test.
 #[cfg(unix)]
 mod real_tools {
-    use std::io::{Read, Write};
-    use std::net::{TcpListener, TcpStream};
-    use std::os::unix::fs::PermissionsExt as _;
-    use std::path::Path;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex};
-    use std::time::Duration;
-
-    use command::blocking::Command;
-    use typed_path::TypedPathBuf;
-    use warp_completer::completer::{CommandExitStatus, GeneratorContext as _};
-    use warp_completer::signatures::CommandRegistry;
-
     use super::*;
-    use crate::completer::SessionContext;
-    use crate::terminal::model::session::{LocalCommandExecutor, Session, SessionInfo};
+    use crate::terminal::model::session::LocalCommandExecutor;
+    use crate::terminal::model::session::command_executor::network_sandbox::NetworkSandbox;
+    use crate::terminal::model::session::command_executor::test_support::*;
 
-    /// A loopback HTTP server that answers 404 to everything and remembers each request line.
-    struct Canary {
-        address: std::net::SocketAddr,
-        requests: Arc<Mutex<Vec<String>>>,
-        stop: Arc<AtomicBool>,
+    fn environment_only_executor() -> LocalCommandExecutor {
+        production_executor().with_network_sandbox(NetworkSandbox::Off)
     }
 
-    impl Canary {
-        fn start() -> Self {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            listener.set_nonblocking(true).unwrap();
-            let address = listener.local_addr().unwrap();
-            let requests = Arc::new(Mutex::new(Vec::new()));
-            let stop = Arc::new(AtomicBool::new(false));
-            {
-                let requests = requests.clone();
-                let stop = stop.clone();
-                std::thread::spawn(move || {
-                    while !stop.load(Ordering::Relaxed) {
-                        match listener.accept() {
-                            Ok((stream, _)) => {
-                                let requests = requests.clone();
-                                std::thread::spawn(move || serve(stream, &requests));
-                            }
-                            Err(_) => std::thread::sleep(Duration::from_millis(5)),
-                        }
-                    }
-                });
-            }
-            Self {
-                address,
-                requests,
-                stop,
-            }
-        }
-
-        fn url(&self) -> String {
-            format!("http://{}", self.address)
-        }
-
-        fn requests(&self) -> Vec<String> {
-            self.requests.lock().unwrap().clone()
-        }
-
-        fn reset(&self) {
-            self.requests.lock().unwrap().clear();
-        }
-    }
-
-    impl Drop for Canary {
-        fn drop(&mut self) {
-            self.stop.store(true, Ordering::Relaxed);
-        }
-    }
-
-    fn serve(mut stream: TcpStream, requests: &Mutex<Vec<String>>) {
-        stream.set_nonblocking(false).unwrap();
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .unwrap();
-        let mut received = Vec::new();
-        let mut buffer = [0u8; 1024];
-        while !received.windows(4).any(|window| window == b"\r\n\r\n") {
-            match stream.read(&mut buffer) {
-                Ok(0) | Err(_) => break,
-                Ok(read) => received.extend_from_slice(&buffer[..read]),
-            }
-        }
-        if let Some(line) = String::from_utf8_lossy(&received).lines().next() {
-            requests.lock().unwrap().push(line.to_owned());
-        }
-        let _ = stream
-            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-    }
-
-    fn find_tool(name: &str) -> Option<PathBuf> {
-        std::env::var_os("PATH").and_then(|paths| {
-            std::env::split_paths(&paths)
-                .map(|dir| dir.join(name))
-                .find(|candidate| candidate.is_file())
-        })
-    }
-
-    fn require_tool(name: &str) -> Option<PathBuf> {
-        let tool = find_tool(name);
-        if tool.is_none() {
-            eprintln!("SKIPPED: {name} is not installed on this machine");
-        }
-        tool
-    }
-
-    /// Variables that make the tools under test hermetic and sensitive; applied identically to the
-    /// control and the protected run so the only difference between them is the offline table.
-    fn base_environment(home: &Path) -> HashMap<String, String> {
-        HashMap::from([
-            ("HOME".to_owned(), home.to_string_lossy().into_owned()),
-            // CI systems set CI=true, which silences npm's update notifier and the like.
-            ("CI".to_owned(), "false".to_owned()),
-            ("RUSTUP_TOOLCHAIN".to_owned(), String::new()),
-        ])
-    }
-
-    fn system_path() -> String {
-        std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".to_owned())
-    }
-
-    /// The result of one run.
-    struct Ran {
-        success: bool,
-        output: String,
-    }
-
-    /// Runs `command` through the real generator path: a `Session` backed by the production
-    /// `LocalCommandExecutor`, reached through `SessionContext::execute_command_at_pwd`.
-    fn run_as_generator(
-        command: &str,
-        cwd: &Path,
-        path: &str,
-        variables: &HashMap<String, String>,
-    ) -> Ran {
-        let session = Session::new(
-            SessionInfo::new_for_test().with_path(Some(path.to_owned())),
-            Arc::new(LocalCommandExecutor::new(
-                Some("/bin/bash".into()),
-                ShellType::Bash,
-            )),
-        );
-        let context = SessionContext::new(
-            session,
-            CommandRegistry::default().into(),
-            TypedPathBuf::from(cwd.to_str().unwrap()),
-        );
-        let output = futures_lite::future::block_on(
-            context.execute_command_at_pwd(command, Some(variables.clone())),
-        )
-        .expect("the generator command could not be started");
-        let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-        text.push_str(&String::from_utf8_lossy(&output.stderr));
-        Ran {
-            success: output.status == CommandExitStatus::Success,
-            output: text,
-        }
-    }
-
-    /// Runs `command` the way a generator ran before this layer existed: same shell, same
-    /// variables, no offline table.
-    fn run_unprotected(
-        command: &str,
-        cwd: &Path,
-        path: &str,
-        variables: &HashMap<String, String>,
-    ) -> Ran {
-        let output = Command::new("/bin/bash")
-            .arg("--norc")
-            .arg("-c")
-            .arg(command)
-            .current_dir(cwd)
-            .envs(variables)
-            .env("PATH", path)
-            .output()
-            .unwrap();
-        let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
-        text.push_str(&String::from_utf8_lossy(&output.stderr));
-        Ran {
-            success: output.status.success(),
-            output: text,
-        }
-    }
-
-    fn wait_for_quiet() {
-        // Tools such as npm report their update check after the command's own output.
-        std::thread::sleep(Duration::from_millis(1500));
-    }
-
-    fn git(dir: &Path, args: &[&str]) {
-        let status = Command::new("git")
-            .args(args)
-            .current_dir(dir)
-            .env("GIT_CONFIG_GLOBAL", "/dev/null")
-            .env("GIT_CONFIG_SYSTEM", "/dev/null")
-            .env("GIT_AUTHOR_NAME", "n")
-            .env("GIT_AUTHOR_EMAIL", "n@example.com")
-            .env("GIT_COMMITTER_NAME", "n")
-            .env("GIT_COMMITTER_EMAIL", "n@example.com")
-            .status()
-            .unwrap();
-        assert!(status.success(), "git {args:?} failed");
+    fn assert_environment_keeps_silent(scenario: Scenario, canary: &Canary) {
+        scenario.assert_control_reaches(canary);
+        scenario.assert_silent_through(canary, environment_only_executor);
     }
 
     #[test]
     fn rustup_proxies_do_not_install_a_toolchain() {
-        let Some(rustup) = require_tool("rustup") else {
+        let canary = Canary::start();
+        let Some(scenario) = rustup_scenario(&canary) else {
             return;
         };
-        let canary = Canary::start();
-        let temp = tempfile::tempdir().unwrap();
-        let project = temp.path().join("project");
-        std::fs::create_dir_all(project.join("src")).unwrap();
-        std::fs::write(
-            project.join("rust-toolchain.toml"),
-            "[toolchain]\nchannel = \"1.70.0\"\n",
-        )
-        .unwrap();
-        std::fs::write(
-            project.join("Cargo.toml"),
-            "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
-        )
-        .unwrap();
-        std::fs::write(project.join("src/main.rs"), "fn main() {}\n").unwrap();
-
-        let proxies = temp.path().join("proxies");
-        std::fs::create_dir_all(&proxies).unwrap();
-        for name in ["cargo", "rustc", "rustup"] {
-            std::os::unix::fs::symlink(&rustup, proxies.join(name)).unwrap();
-        }
-        let path = format!("{}:/usr/bin:/bin", proxies.display());
-
-        let mut variables = base_environment(&temp.path().join("home"));
-        for (name, value) in [
-            ("RUSTUP_HOME", temp.path().join("rustup-home")),
-            ("CARGO_HOME", temp.path().join("cargo-home")),
-        ] {
-            variables.insert(name.to_owned(), value.to_string_lossy().into_owned());
-        }
-        variables.insert("RUSTUP_DIST_SERVER".to_owned(), canary.url());
-        variables.insert("RUSTUP_UPDATE_ROOT".to_owned(), canary.url());
-        // The setting the issue says does not help.
-        variables.insert("CARGO_NET_OFFLINE".to_owned(), "true".to_owned());
-
-        for command in [
-            "cargo metadata --format-version 1 --no-deps",
-            "rustc --print target-list",
-            "cargo read-manifest",
-            "cargo install --list",
-            "rustup docs --path",
-        ] {
-            canary.reset();
-            run_unprotected(command, &project, &path, &variables);
-            assert!(
-                !canary.requests().is_empty(),
-                "fixture is insensitive: `{command}` without the offline table never reached the \
-                 canary"
-            );
-
-            canary.reset();
-            let ran = run_as_generator(command, &project, &path, &variables);
-            assert_eq!(
-                canary.requests(),
-                Vec::<String>::new(),
-                "`{command}` reached the network through the generator path:\n{}",
-                ran.output
-            );
-        }
+        assert_environment_keeps_silent(scenario, &canary);
     }
 
     #[test]
     fn npm_does_not_check_for_updates() {
-        let Some(npm) = require_tool("npm") else {
+        let canary = Canary::start();
+        let Some(scenario) = npm_scenario(&canary) else {
             return;
         };
-        let canary = Canary::start();
-        let temp = tempfile::tempdir().unwrap();
-        let project = temp.path().join("project");
-        std::fs::create_dir_all(&project).unwrap();
-        std::fs::write(
-            project.join("package.json"),
-            r#"{"name":"fixture","version":"1.0.0"}"#,
-        )
-        .unwrap();
-        let path = format!("{}:{}", npm.parent().unwrap().display(), system_path());
-
-        let mut variables = base_environment(&temp.path().join("home"));
-        variables.insert("npm_config_registry".to_owned(), canary.url());
-        variables.insert(
-            "npm_config_cache".to_owned(),
-            temp.path().join("cache").to_string_lossy().into_owned(),
-        );
-        // The setting the issue says does not help.
-        variables.insert("NO_UPDATE_NOTIFIER".to_owned(), "1".to_owned());
-
-        run_unprotected("npm prefix", &project, &path, &variables);
-        wait_for_quiet();
-        assert!(
-            !canary.requests().is_empty(),
-            "fixture is insensitive: `npm prefix` without the offline table never reached the canary"
-        );
-
-        // A fresh cache, so the "checked recently" marker from the control run is gone.
-        std::fs::remove_dir_all(temp.path().join("cache")).unwrap();
-        std::fs::remove_dir_all(temp.path().join("home")).ok();
-        canary.reset();
-        let ran = run_as_generator("npm prefix", &project, &path, &variables);
-        wait_for_quiet();
-        assert!(ran.success, "npm prefix failed:\n{}", ran.output);
-        assert_eq!(canary.requests(), Vec::<String>::new());
+        assert_environment_keeps_silent(scenario, &canary);
     }
 
     #[test]
     fn corepack_does_not_download_the_pinned_package_manager() {
-        let Some(corepack) = require_tool("corepack") else {
+        let canary = Canary::start();
+        let Some(scenario) = corepack_scenario(&canary) else {
             return;
         };
-        let canary = Canary::start();
-        let temp = tempfile::tempdir().unwrap();
-        let project = temp.path().join("project");
-        std::fs::create_dir_all(&project).unwrap();
-        std::fs::write(
-            project.join("package.json"),
-            r#"{"name":"fixture","packageManager":"yarn@4.5.0"}"#,
-        )
-        .unwrap();
-        let path = format!("{}:{}", corepack.parent().unwrap().display(), system_path());
-
-        let mut variables = base_environment(&temp.path().join("home"));
-        variables.insert("COREPACK_NPM_REGISTRY".to_owned(), canary.url());
-        variables.insert(
-            "COREPACK_HOME".to_owned(),
-            temp.path().join("corepack").to_string_lossy().into_owned(),
-        );
-
-        run_unprotected("corepack yarn --version", &project, &path, &variables);
-        assert!(
-            !canary.requests().is_empty(),
-            "fixture is insensitive: corepack without the offline table never reached the canary"
-        );
-
-        canary.reset();
-        let ran = run_as_generator("corepack yarn --version", &project, &path, &variables);
-        assert!(!ran.success, "corepack should refuse to download");
-        assert_eq!(canary.requests(), Vec::<String>::new());
-    }
-
-    fn fsmonitor_repository(temp: &Path) -> (PathBuf, PathBuf) {
-        let repo = temp.join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        git(&repo, &["init", "-q"]);
-        let marker = temp.join("fsmonitor-ran");
-        let hook = temp.join("fsmonitor-hook.sh");
-        std::fs::write(
-            &hook,
-            format!(
-                "#!/bin/sh\necho \"$@\" >> '{}'\nprintf '\\0'\n",
-                marker.display()
-            ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
-        git(&repo, &["config", "core.fsmonitor", hook.to_str().unwrap()]);
-        std::fs::write(repo.join("tracked"), "one\n").unwrap();
-        git(&repo, &["add", "tracked"]);
-        (repo, marker)
+        assert_environment_keeps_silent(scenario, &canary);
     }
 
     #[test]
     fn git_fsmonitor_hook_does_not_run() {
-        if require_tool("git").is_none() {
+        let canary = Canary::start();
+        let Some(scenario) = git_fsmonitor_scenario() else {
             return;
-        }
-        let temp = tempfile::tempdir().unwrap();
-        let (repo, marker) = fsmonitor_repository(temp.path());
-        let path = system_path();
-        let variables = base_environment(&temp.path().join("home"));
-
-        for command in [
-            "git status --porcelain",
-            "git --no-optional-locks branch --no-color",
-            "git diff",
-            "git ls-files",
-        ] {
-            let _ = std::fs::remove_file(&marker);
-            run_unprotected(command, &repo, &path, &variables);
-            let control_ran = marker.exists();
-            let _ = std::fs::remove_file(&marker);
-            let ran = run_as_generator(command, &repo, &path, &variables);
-            assert!(ran.success, "`{command}` failed:\n{}", ran.output);
-            assert!(
-                !marker.exists(),
-                "`{command}` ran the repository's core.fsmonitor program"
-            );
-            if command == "git status --porcelain" {
-                assert!(
-                    control_ran,
-                    "fixture is insensitive: `{command}` without the offline table never ran the \
-                     fsmonitor program"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn git_fsmonitor_override_keeps_the_sessions_own_git_config() {
-        if require_tool("git").is_none() {
-            return;
-        }
-        let temp = tempfile::tempdir().unwrap();
-        let (repo, marker) = fsmonitor_repository(temp.path());
-        let path = system_path();
-        let mut variables = base_environment(&temp.path().join("home"));
-        variables.extend([
-            ("GIT_CONFIG_COUNT".to_owned(), "1".to_owned()),
-            ("GIT_CONFIG_KEY_0".to_owned(), "user.name".to_owned()),
-            ("GIT_CONFIG_VALUE_0".to_owned(), "session-user".to_owned()),
-        ]);
-
-        // Setting the repository up already ran the hook.
-        let _ = std::fs::remove_file(&marker);
-        let ran = run_as_generator(
-            "git config --get user.name; git status --porcelain",
-            &repo,
-            &path,
-            &variables,
-        );
-        assert!(ran.success, "{}", ran.output);
-        assert!(
-            ran.output.starts_with("session-user\n"),
-            "the session's own GIT_CONFIG pair was lost:\n{}",
-            ran.output
-        );
-        assert!(!marker.exists(), "fsmonitor ran");
+        };
+        assert_environment_keeps_silent(scenario, &canary);
     }
 
     #[test]
     fn git_does_not_lazy_fetch_from_a_promisor_remote() {
-        if require_tool("git").is_none() {
-            return;
-        }
         let canary = Canary::start();
-        let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("source");
-        std::fs::create_dir_all(&source).unwrap();
-        git(&source, &["init", "-q"]);
-        git(&source, &["config", "uploadpack.allowFilter", "true"]);
-        git(
-            &source,
-            &["config", "uploadpack.allowAnySHA1InWant", "true"],
-        );
-        std::fs::write(source.join("file"), "contents\n").unwrap();
-        git(&source, &["add", "file"]);
-        git(&source, &["commit", "-qm", "one"]);
+        let Some(scenario) = git_lazy_fetch_scenario(&canary) else {
+            return;
+        };
+        assert_environment_keeps_silent(scenario, &canary);
+    }
 
-        let clone = temp.path().join("clone");
-        git(
-            temp.path(),
-            &[
-                "clone",
-                "-q",
-                "--no-local",
-                "--no-checkout",
-                "--filter=blob:none",
-                &format!("file://{}", source.display()),
-                clone.to_str().unwrap(),
-            ],
-        );
-        git(
-            &clone,
-            &[
-                "remote",
-                "set-url",
-                "origin",
-                &format!("{}/repo.git", canary.url()),
-            ],
-        );
-        let path = system_path();
-        let variables = base_environment(&temp.path().join("home"));
-        let command = "git cat-file -p HEAD:file";
-
-        run_unprotected(command, &clone, &path, &variables);
+    #[test]
+    fn git_fsmonitor_override_keeps_the_sessions_own_git_config() {
+        let canary = Canary::start();
+        let Some(mut scenario) = git_fsmonitor_scenario() else {
+            return;
+        };
+        scenario.variables.extend([
+            ("GIT_CONFIG_COUNT".to_owned(), "1".to_owned()),
+            ("GIT_CONFIG_KEY_0".to_owned(), "user.name".to_owned()),
+            ("GIT_CONFIG_VALUE_0".to_owned(), "session-user".to_owned()),
+        ]);
+        scenario.commands = vec!["git config --get user.name; git status --porcelain"];
+        let ran = scenario.assert_silent_through(&canary, environment_only_executor);
+        assert!(ran[0].success, "{}", ran[0].output);
         assert!(
-            !canary.requests().is_empty(),
-            "fixture is insensitive: reading a missing blob without GIT_NO_LAZY_FETCH never \
-             contacted the promisor remote"
+            ran[0].output.starts_with("session-user\n"),
+            "the session's own GIT_CONFIG pair was lost:\n{}",
+            ran[0].output
         );
-
-        canary.reset();
-        let ran = run_as_generator(command, &clone, &path, &variables);
-        assert!(!ran.success, "the blob is not local, the read must fail");
-        assert_eq!(canary.requests(), Vec::<String>::new());
     }
 
     #[test]
@@ -859,7 +444,13 @@ mod real_tools {
         let mut variables = base_environment(&temp.path().join("home"));
         variables.insert("DOCKER_HOST".to_owned(), "tcp://127.0.0.1:1".to_owned());
         variables.insert("GOPROXY".to_owned(), "https://proxy.example".to_owned());
-        let ran = run_as_generator("env", temp.path(), "/usr/bin:/bin", &variables);
+        let ran = run_as_generator(
+            environment_only_executor(),
+            "env",
+            temp.path(),
+            "/usr/bin:/bin",
+            &variables,
+        );
         assert!(ran.success);
         let expected = OfflineEnvironment::compute(|name| variables.get(name).cloned());
         for (name, value) in &expected.set {

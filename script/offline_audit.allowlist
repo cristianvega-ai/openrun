@@ -60,10 +60,9 @@ net-rust | app/src/local_control/mod_tests.rs | ^\s*use axum::(body::Bytes|extra
 net-rust | app/src/local_control/mod_tests.rs | tokio::net::UnixStream::pair\(\)|axum::http::StatusCode | in-process socket pair and status codes in the warpctrl server tests
 net-rust | crates/warp_completer/src/signatures/legacy/generator_policy/allowed.rs | "hyper" | the allowed `hyper list` completion generator (the Hyper terminal's plugin lister), not the hyper crate
 net-rust | * | ^\s*(pub )?use std::net::\{?((IpAddr|Ipv4Addr|Ipv6Addr|SocketAddr)(, )?)+\}?; | address types only, no sockets
-net-rust | app/src/terminal/model/session/command_executor/offline_environment_tests.rs | ^\s*use std::net::\{TcpListener, TcpStream\};$ | loopback canary HTTP server of the offline-environment tests (stands in for the internet; binds 127.0.0.1 only)
-net-rust | app/src/terminal/model/session/command_executor/offline_environment_tests.rs | address: std::net::SocketAddr, | address of that canary
-net-rust | app/src/terminal/model/session/command_executor/offline_environment_tests.rs | TcpListener::bind\("127\.0\.0\.1:0"\) | the canary listener, loopback only
-net-rust | app/src/terminal/model/session/command_executor/offline_environment_tests.rs | fn serve\(mut stream: TcpStream | the canary's per-connection handler
+net-rust | app/src/terminal/model/session/command_executor/test_support.rs | ^\s*use std::net::\{SocketAddr, TcpListener, TcpStream\};$ | loopback canary HTTP server of the offline-environment and network-sandbox tests (stands in for the internet; binds 127.0.0.1 only)
+net-rust | app/src/terminal/model/session/command_executor/test_support.rs | TcpListener::bind\("127\.0\.0\.1:0"\) | the canary listener, loopback only
+net-rust | app/src/terminal/model/session/command_executor/test_support.rs | fn serve\(mut stream: TcpStream | the canary's per-connection handler
 
 # --- subprocesses that can reach a network (9.2) ---
 net-cmd | app/src/util/git.rs | Command::new\("git"\) | local git for the code-review panel and the commit dialog (MASTER decision 20)
@@ -71,7 +70,7 @@ net-cmd | app/src/util/git.rs | Command::new\("gh"\) | the only `gh` in the app:
 net-cmd | app/src/search/files/model.rs | Command::new\("git"\) | `git status --porcelain` for changed files
 net-cmd | crates/warp_util/src/git.rs | Command::new\("git"\) | `run_git_command`: local git; remote verbs are rejected by the net-git check
 net-cmd | app/src/util/git_tests.rs | Command::new\("git"\) | test repository setup
-net-cmd | app/src/terminal/model/session/command_executor/offline_environment_tests.rs | Command::new\("git"\) | test repository setup for the offline-environment tests
+net-cmd | app/src/terminal/model/session/command_executor/test_support.rs | Command::new\("git"\) | test repository setup for the offline-environment tests
 net-cmd | crates/integration/src/test/code_review.rs | Command::new\("git"\) | integration test repository setup
 net-cmd | app/src/terminal/model/session/command_executor/remote_command_executor.rs | Command::new\("ssh"\) | the user's own SSH session (ControlMaster command executor)
 

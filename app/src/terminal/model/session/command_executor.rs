@@ -3,7 +3,10 @@ mod in_band_command_executor;
 mod local_command_executor;
 #[cfg(feature = "local_tty")]
 mod msys2_command_executor;
+mod network_sandbox;
 mod offline_environment;
+#[cfg(all(test, unix))]
+mod test_support;
 #[cfg(feature = "local_tty")]
 mod wsl_command_executor;
 use std::collections::HashMap;
@@ -89,6 +92,15 @@ pub trait CommandExecutor: Send + Sync + Debug {
 
     /// Whether the backing executor for the session supports execution of commands in parallel.
     fn supports_parallel_command_execution(&self) -> bool;
+
+    /// Whether every command this executor runs is kept from reaching an IP network by the
+    /// operating system (macOS sandbox profile, Linux seccomp filter), so that a command that
+    /// starts a networking tool still cannot connect. False unless an executor says otherwise:
+    /// commands that run in the user's own shell, on another host, or on a platform without an
+    /// unprivileged sandbox are not isolated.
+    fn network_isolated(&self) -> bool {
+        false
+    }
 }
 
 #[allow(unused_variables)]

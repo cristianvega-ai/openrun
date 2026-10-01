@@ -95,6 +95,32 @@ impl Command {
         Self::new_internal(inner)
     }
 
+    /// Same as [`Self::new_with_process_group`], and runs `pre_exec` in the child between `fork`
+    /// and `exec`. If it returns an error the program is not executed and spawning fails.
+    ///
+    /// # Safety
+    ///
+    /// `pre_exec` runs in a forked child of a possibly multi-threaded process, so it must only
+    /// call async-signal-safe functions: no allocation, no locks. See
+    /// [`std::os::unix::process::CommandExt::pre_exec`].
+    #[cfg(unix)]
+    pub unsafe fn new_with_process_group_and_pre_exec<S, F>(program: S, pre_exec: F) -> Command
+    where
+        S: AsRef<OsStr>,
+        F: FnMut() -> io::Result<()> + Send + Sync + 'static,
+    {
+        use std::os::unix::process::CommandExt as _;
+
+        let program = crate::wsl::translate_program_for_spawn(program.as_ref());
+        let mut command = std::process::Command::new(program);
+        command.process_group(0);
+        // SAFETY: the caller guarantees that `pre_exec` is async-signal-safe.
+        unsafe { command.pre_exec(pre_exec) };
+
+        let inner: async_process::Command = command.into();
+        Self::new_internal(inner)
+    }
+
     #[allow(unused_mut)]
     fn new_internal(mut inner: async_process::Command) -> Command {
         #[cfg(all(windows, not(feature = "test-util")))]

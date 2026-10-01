@@ -231,6 +231,10 @@ impl GeneratorContext for SessionContext {
     fn supports_parallel_execution(&self) -> bool {
         self.session.supports_parallel_command_execution()
     }
+
+    fn network_isolated(&self) -> bool {
+        self.session.network_isolated()
+    }
 }
 
 impl CompletionContext for SessionContext {

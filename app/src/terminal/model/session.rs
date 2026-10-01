@@ -1419,6 +1419,11 @@ impl Session {
         self.command_executor.cancel_active_commands();
     }
 
+    /// Whether commands run for this session are kept from the network by the operating system.
+    pub fn network_isolated(&self) -> bool {
+        self.command_executor.network_isolated()
+    }
+
     pub async fn git_branches_for_command_corrections(&self, working_dir: &str) -> Vec<String> {
         let env_vars = self
             .info
