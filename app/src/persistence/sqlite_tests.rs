@@ -18,7 +18,9 @@ use crate::app_state::{
     TabGroupSnapshot, TabSnapshot, TerminalPaneSnapshot, WindowSnapshot,
 };
 use crate::code::editor_management::CodeSource;
-use crate::persistence::{BlockCompleted, ModelEvent, PersistedDataScope, PersistenceScope};
+use crate::persistence::{
+    BlockCompleted, HistoryPersistence, ModelEvent, PersistedDataScope, PersistenceScope,
+};
 use crate::settings_view::SettingsSection;
 use crate::tab::SelectedTabColor;
 use crate::terminal::ShellLaunchData;
@@ -88,7 +90,8 @@ fn sqlite_writer_upserts_workspace_metadata_events() {
     let database_path = tempdir.path().join("warp.sqlite");
     let conn = setup_database(&database_path).expect("database should initialize");
 
-    let writer = start_writer(conn, database_path.clone()).expect("writer should start");
+    let writer = start_writer(conn, database_path.clone(), HistoryPersistence::new(true))
+        .expect("writer should start");
     let metadata = test_workspace_metadata("/tmp/writer-repo");
     let updated_metadata = WorkspaceMetadata {
         modified_ts: Some(Utc::now()),
@@ -1359,4 +1362,468 @@ fn test_sqlite_restores_a_session_saved_before_the_dead_tables_were_dropped() {
         without_group_ids(&restored.windows[0].tabs)
     );
     assert_eq!(resaved.windows[0].active_tab_index, 1);
+}
+
+/// Tests for the "Save command history" setting and the "Delete saved history" action.
+mod history_tests {
+    use diesel::prelude::*;
+    use diesel::sql_types::Text;
+    use warp_core::command::ExitCode;
+
+    use super::*;
+    use crate::persistence::sqlite::handle_model_event;
+    use crate::persistence::{
+        FinishedCommandMetadata, SavedHistoryDeleted, StartedCommandMetadata,
+    };
+    use crate::terminal::model::session::SessionId;
+
+    const SECRET_COMMAND: &str = "export OPENRUN_TEST_TOKEN=ghp_synthetic123";
+    const SECRET_TOKEN: &[u8] = b"ghp_synthetic123";
+    const SECRET_OUTPUT: &[u8] = b"OPENRUN_TEST_OUTPUT_ghp_synthetic456";
+    const PANE_UUID: u8 = 1;
+
+    #[derive(QueryableByName)]
+    struct IntegrityRow {
+        #[diesel(sql_type = Text)]
+        integrity_check: String,
+    }
+
+    #[derive(QueryableByName)]
+    struct ForeignKeyViolation {
+        #[diesel(sql_type = Text)]
+        #[allow(dead_code)]
+        table: String,
+    }
+
+    fn started_command(command: &str) -> StartedCommandMetadata {
+        StartedCommandMetadata {
+            command: command.to_owned(),
+            start_ts: Some(chrono::Local::now()),
+            pwd: Some("/tmp".to_owned()),
+            shell: Some("zsh".to_owned()),
+            username: Some("tester".to_owned()),
+            hostname: Some("host".to_owned()),
+            session_id: Some(SessionId::from(7)),
+            workflow_command: None,
+            git_branch: None,
+        }
+    }
+
+    fn finished_command() -> FinishedCommandMetadata {
+        FinishedCommandMetadata {
+            exit_code: ExitCode::from(0),
+            start_ts: chrono::Local::now(),
+            completed_ts: chrono::Local::now(),
+            session_id: SessionId::from(7),
+        }
+    }
+
+    fn secret_block(excluded_from_saved_history: bool) -> BlockCompleted {
+        let mut block = SerializedBlock::new_for_test(
+            SECRET_COMMAND.as_bytes().to_vec(),
+            SECRET_OUTPUT.to_vec(),
+        );
+        block.excluded_from_saved_history = excluded_from_saved_history;
+        BlockCompleted {
+            pane_id: vec![PANE_UUID],
+            block: Arc::new(block),
+            is_local: true,
+        }
+    }
+
+    fn layout_snapshot() -> AppState {
+        AppState {
+            windows: vec![test_terminal_window_snapshot(false)],
+            active_window_index: Some(0),
+            block_lists: Default::default(),
+        }
+    }
+
+    fn count_commands(conn: &mut SqliteConnection) -> i64 {
+        persistence::schema::commands::dsl::commands
+            .count()
+            .get_result(conn)
+            .expect("commands should count")
+    }
+
+    fn count_blocks(conn: &mut SqliteConnection) -> i64 {
+        persistence::schema::blocks::dsl::blocks
+            .count()
+            .get_result(conn)
+            .expect("blocks should count")
+    }
+
+    fn assert_database_is_intact(conn: &mut SqliteConnection) {
+        let integrity: Vec<IntegrityRow> = diesel::sql_query("PRAGMA integrity_check")
+            .load(conn)
+            .expect("integrity_check should run");
+        assert_eq!(integrity.len(), 1);
+        assert_eq!(integrity[0].integrity_check, "ok");
+        let violations: Vec<ForeignKeyViolation> = diesel::sql_query("PRAGMA foreign_key_check")
+            .load(conn)
+            .expect("foreign_key_check should run");
+        assert!(violations.is_empty(), "no foreign key may be violated");
+    }
+
+    /// The bytes of the database file and of its write-ahead log and shared-memory file.
+    fn database_bytes(database_path: &std::path::Path) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for suffix in ["", "-wal", "-shm"] {
+            let path = format!("{}{suffix}", database_path.display());
+            if let Ok(contents) = std::fs::read(path) {
+                bytes.extend(contents);
+            }
+        }
+        bytes
+    }
+
+    fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+    }
+
+    fn send_secret_session(writer: &super::super::WriterHandles) {
+        for event in [
+            ModelEvent::Snapshot(layout_snapshot()),
+            ModelEvent::InsertCommand {
+                metadata: started_command(SECRET_COMMAND),
+            },
+            ModelEvent::SaveBlock(secret_block(false)),
+            ModelEvent::UpdateFinishedCommand {
+                metadata: finished_command(),
+            },
+        ] {
+            writer.sender.send(event).expect("event should send");
+        }
+        writer
+            .sender
+            .send(ModelEvent::Terminate)
+            .expect("terminate should send");
+    }
+
+    #[test]
+    fn history_off_writes_no_command_or_block_text_to_the_database() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let conn = setup_database(&database_path).expect("database should initialize");
+
+        let writer = start_writer(conn, database_path.clone(), HistoryPersistence::new(false))
+            .expect("writer should start");
+        send_secret_session(&writer);
+        writer.handle.join().expect("writer should terminate");
+
+        let mut conn = setup_database(&database_path).expect("database should reopen");
+        assert_eq!(count_commands(&mut conn), 0);
+        assert_eq!(count_blocks(&mut conn), 0);
+        assert_database_is_intact(&mut conn);
+        drop(conn);
+
+        let bytes = database_bytes(&database_path);
+        assert!(
+            !contains(&bytes, SECRET_TOKEN),
+            "the command must not be on disk"
+        );
+        assert!(
+            !contains(&bytes, SECRET_OUTPUT),
+            "the output must not be on disk"
+        );
+        assert!(
+            !contains(&bytes, b"OPENRUN_TEST_TOKEN"),
+            "no part of the command may be on disk"
+        );
+
+        // Session layout is still saved and restored.
+        let mut conn = setup_database(&database_path).expect("database should reopen");
+        let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+            .expect("persisted data should load")
+            .app_state
+            .expect("app state should be present");
+        assert_eq!(restored.windows.len(), 1);
+    }
+
+    #[test]
+    fn history_on_writes_commands_and_blocks_and_the_byte_check_sees_them() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let conn = setup_database(&database_path).expect("database should initialize");
+
+        let writer = start_writer(conn, database_path.clone(), HistoryPersistence::new(true))
+            .expect("writer should start");
+        send_secret_session(&writer);
+        writer.handle.join().expect("writer should terminate");
+
+        let mut conn = setup_database(&database_path).expect("database should reopen");
+        assert_eq!(count_commands(&mut conn), 1);
+        assert_eq!(count_blocks(&mut conn), 1);
+        assert_database_is_intact(&mut conn);
+        drop(conn);
+
+        let bytes = database_bytes(&database_path);
+        assert!(
+            contains(&bytes, SECRET_TOKEN),
+            "control: the byte check finds the command"
+        );
+        assert!(
+            contains(&bytes, SECRET_OUTPUT),
+            "control: the byte check finds the output"
+        );
+
+        let mut conn = setup_database(&database_path).expect("database should reopen");
+        let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+            .expect("persisted data should load");
+        assert_eq!(restored.command_history.len(), 1);
+        let restored_blocks = restored.app_state.expect("app state").block_lists;
+        assert_eq!(restored_blocks.values().map(Vec::len).sum::<usize>(), 1);
+    }
+
+    #[test]
+    fn toggling_history_applies_to_the_next_event() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        save_app_state(&mut conn, &layout_snapshot()).expect("layout should save");
+        let history = HistoryPersistence::new(true);
+
+        let save = |conn: &mut SqliteConnection, history: &HistoryPersistence| {
+            handle_model_event(
+                ModelEvent::InsertCommand {
+                    metadata: started_command("echo first"),
+                },
+                conn,
+                history,
+            )
+            .expect("insert should be handled");
+            handle_model_event(ModelEvent::SaveBlock(secret_block(false)), conn, history)
+                .expect("block should be handled");
+        };
+
+        save(&mut conn, &history);
+        assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (1, 1));
+
+        history.set_enabled(false);
+        save(&mut conn, &history);
+        handle_model_event(
+            ModelEvent::UpdateFinishedCommand {
+                metadata: finished_command(),
+            },
+            &mut conn,
+            &history,
+        )
+        .expect("update should be handled");
+        assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (1, 1));
+
+        history.set_enabled(true);
+        save(&mut conn, &history);
+        assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (2, 2));
+    }
+
+    #[test]
+    fn blocks_for_commands_the_shell_keeps_out_of_history_are_not_saved() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        save_app_state(&mut conn, &layout_snapshot()).expect("layout should save");
+
+        handle_model_event(
+            ModelEvent::SaveBlock(secret_block(true)),
+            &mut conn,
+            &HistoryPersistence::new(true),
+        )
+        .expect("block should be handled");
+        assert_eq!(count_blocks(&mut conn), 0);
+        drop(conn);
+        assert!(!contains(&database_bytes(&database_path), SECRET_TOKEN));
+    }
+
+    #[test]
+    fn without_history_scope_restores_layout_but_not_commands_or_blocks() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        save_app_state(&mut conn, &layout_snapshot()).expect("layout should save");
+        let history = HistoryPersistence::new(true);
+        handle_model_event(
+            ModelEvent::InsertCommand {
+                metadata: started_command(SECRET_COMMAND),
+            },
+            &mut conn,
+            &history,
+        )
+        .expect("insert should be handled");
+        handle_model_event(
+            ModelEvent::SaveBlock(secret_block(false)),
+            &mut conn,
+            &history,
+        )
+        .expect("block should be handled");
+
+        let restored = read_sqlite_data(&mut conn, PersistedDataScope::for_gui(false))
+            .expect("persisted data should load");
+        assert!(restored.command_history.is_empty());
+        let app_state = restored.app_state.expect("layout should still restore");
+        assert_eq!(app_state.windows.len(), 1);
+        assert!(app_state.block_lists.is_empty());
+
+        let restored = read_sqlite_data(&mut conn, PersistedDataScope::for_gui(true))
+            .expect("persisted data should load");
+        assert_eq!(restored.command_history.len(), 1);
+        assert_eq!(restored.app_state.expect("app state").block_lists.len(), 1);
+    }
+
+    fn delete_saved_history_through_the_writer(
+        conn: &mut SqliteConnection,
+        history: &HistoryPersistence,
+    ) -> Result<SavedHistoryDeleted, String> {
+        let (done, outcome) = futures::channel::oneshot::channel();
+        handle_model_event(
+            ModelEvent::DeleteSavedHistory { done: Some(done) },
+            conn,
+            history,
+        )
+        .expect("delete should be handled");
+        futures::executor::block_on(outcome).expect("delete should report an outcome")
+    }
+
+    #[test]
+    fn deleting_saved_history_removes_rows_and_text_and_keeps_the_database_intact() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        save_app_state(&mut conn, &layout_snapshot()).expect("layout should save");
+        save_workspace_metadata(&mut conn, test_workspace_metadata("/tmp/repo"))
+            .expect("workspace metadata should save");
+        let history = HistoryPersistence::new(true);
+        for _ in 0..3 {
+            handle_model_event(
+                ModelEvent::InsertCommand {
+                    metadata: started_command(SECRET_COMMAND),
+                },
+                &mut conn,
+                &history,
+            )
+            .expect("insert should be handled");
+        }
+        for _ in 0..2 {
+            handle_model_event(
+                ModelEvent::SaveBlock(secret_block(false)),
+                &mut conn,
+                &history,
+            )
+            .expect("block should be handled");
+        }
+        assert!(contains(&database_bytes(&database_path), SECRET_TOKEN));
+
+        let deleted = delete_saved_history_through_the_writer(&mut conn, &history)
+            .expect("delete should succeed");
+        assert_eq!(
+            deleted,
+            SavedHistoryDeleted {
+                commands: 3,
+                blocks: 2
+            }
+        );
+        assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (0, 0));
+        assert_database_is_intact(&mut conn);
+
+        // The connection is still open, so this also covers the write-ahead log.
+        let bytes = database_bytes(&database_path);
+        assert!(
+            !contains(&bytes, SECRET_TOKEN),
+            "deleted commands must not stay on disk"
+        );
+        assert!(
+            !contains(&bytes, SECRET_OUTPUT),
+            "deleted output must not stay on disk"
+        );
+
+        // Layout and unrelated tables are untouched, and saving still works afterwards.
+        let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+            .expect("persisted data should load");
+        assert_eq!(restored.app_state.expect("app state").windows.len(), 1);
+        assert_eq!(restored.workspace_metadata.len(), 1);
+        handle_model_event(
+            ModelEvent::InsertCommand {
+                metadata: started_command("echo after"),
+            },
+            &mut conn,
+            &history,
+        )
+        .expect("insert should be handled");
+        assert_eq!(count_commands(&mut conn), 1);
+        assert_database_is_intact(&mut conn);
+    }
+
+    #[test]
+    fn deleting_saved_history_works_while_saving_is_off_and_on_an_empty_database() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        handle_model_event(
+            ModelEvent::InsertCommand {
+                metadata: started_command(SECRET_COMMAND),
+            },
+            &mut conn,
+            &HistoryPersistence::new(true),
+        )
+        .expect("insert should be handled");
+
+        let off = HistoryPersistence::new(false);
+        let deleted = delete_saved_history_through_the_writer(&mut conn, &off)
+            .expect("delete should succeed while saving is off");
+        assert_eq!(
+            deleted,
+            SavedHistoryDeleted {
+                commands: 1,
+                blocks: 0
+            }
+        );
+        let deleted = delete_saved_history_through_the_writer(&mut conn, &off)
+            .expect("deleting nothing should succeed");
+        assert_eq!(deleted, SavedHistoryDeleted::default());
+        assert_database_is_intact(&mut conn);
+        assert!(!contains(&database_bytes(&database_path), SECRET_TOKEN));
+    }
+
+    #[test]
+    fn deleting_saved_history_through_the_writer_thread_reports_the_outcome() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let conn = setup_database(&database_path).expect("database should initialize");
+        let writer = start_writer(conn, database_path.clone(), HistoryPersistence::new(true))
+            .expect("writer should start");
+        for event in [
+            ModelEvent::Snapshot(layout_snapshot()),
+            ModelEvent::InsertCommand {
+                metadata: started_command(SECRET_COMMAND),
+            },
+            ModelEvent::SaveBlock(secret_block(false)),
+        ] {
+            writer.sender.send(event).expect("event should send");
+        }
+        let (done, outcome) = futures::channel::oneshot::channel();
+        writer
+            .sender
+            .send(ModelEvent::DeleteSavedHistory { done: Some(done) })
+            .expect("delete should send");
+        let deleted = futures::executor::block_on(outcome)
+            .expect("writer should answer")
+            .expect("delete should succeed");
+        assert_eq!(
+            deleted,
+            SavedHistoryDeleted {
+                commands: 1,
+                blocks: 1
+            }
+        );
+        writer
+            .sender
+            .send(ModelEvent::Terminate)
+            .expect("terminate should send");
+        writer.handle.join().expect("writer should terminate");
+
+        let bytes = database_bytes(&database_path);
+        assert!(!contains(&bytes, SECRET_TOKEN));
+        assert!(!contains(&bytes, SECRET_OUTPUT));
+    }
 }

@@ -1,3 +1,4 @@
+use settings::Setting as _;
 use warp::integration_testing::step::{
     new_step_with_default_assertions, new_step_with_default_assertions_for_pane,
 };
@@ -5,6 +6,7 @@ use warp::integration_testing::tab::assert_pane_title;
 use warp::integration_testing::terminal::wait_until_bootstrapped_single_pane_for_tab;
 use warp::integration_testing::view_getters::single_terminal_view_for_tab;
 use warp::integration_testing::{self};
+use warp::settings::SaveCommandHistory;
 use warp::settings_view::{SettingsSection, SettingsView};
 use warp::sqlite_testing::set_user_and_hostname_for_blocks;
 use warp::terminal::model::session::get_local_hostname;
@@ -457,5 +459,83 @@ pub fn test_restore_snapshot_with_settings_page() -> Builder {
                         )
                     })
                 }),
+        )
+}
+
+fn history_saving_off() -> std::collections::HashMap<String, String> {
+    std::collections::HashMap::from([(
+        SaveCommandHistory::storage_key().to_owned(),
+        "false".to_owned(),
+    )])
+}
+
+/// With "Save command history" off, the window, tab and pane layout is still restored.
+pub fn test_session_restoration_with_history_saving_off() -> Builder {
+    new_builder()
+        .with_user_defaults(history_saving_off())
+        .with_setup(|_utils| {
+            integration_testing::create_file_from_assets(
+                TEST_ONLY_ASSETS,
+                "three_tabs.sqlite",
+                &integration_testing::persistence::database_file_path_for_scope(
+                    &integration_testing::persistence::PersistenceScope::App,
+                ),
+            );
+        })
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(2))
+        .with_step(
+            new_step_with_default_assertions("Assert the layout was restored").add_assertion(
+                move |app, window_id| {
+                    let workspace_views: Vec<ViewHandle<Workspace>> =
+                        app.views_of_type(window_id).expect("Workspace must exist");
+                    let workspace = workspace_views.first().expect("Workspace must exist");
+                    workspace.read(app, |workspace, _| assert_eq!(workspace.tab_count(), 3));
+                    let terminal_views: Vec<ViewHandle<TerminalView>> =
+                        app.views_of_type(window_id).expect("Terminals must exist");
+                    assert_eq!(terminal_views.len(), 3);
+                    AssertionOutcome::Success
+                },
+            ),
+        )
+}
+
+/// With "Save command history" off, blocks saved by an earlier session are not loaded: the
+/// session is restored but its commands do not enter history.
+pub fn test_saved_blocks_are_not_restored_with_history_saving_off() -> Builder {
+    new_builder()
+        .with_user_defaults(history_saving_off())
+        .with_setup(|_utils| {
+            integration_testing::create_file_from_assets(
+                TEST_ONLY_ASSETS,
+                "restored_blocks.sqlite",
+                &integration_testing::persistence::database_file_path_for_scope(
+                    &integration_testing::persistence::PersistenceScope::App,
+                ),
+            );
+            let local_user = get_local_user();
+            let local_hostname = get_local_hostname().expect("Failed to retrieve system hostname.");
+            set_user_and_hostname_for_blocks(local_user, local_hostname);
+        })
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(
+            new_step_with_default_assertions("Assert no saved block was restored").add_assertion(
+                move |app, window_id| {
+                    let terminal_views: Vec<ViewHandle<TerminalView>> = app
+                        .views_of_type(window_id)
+                        .expect("Should have views of type TerminalView after bootstrapping");
+                    assert_eq!(terminal_views.len(), 1);
+                    History::handle(app).read(app, |history, _| {
+                        let restored = history
+                            .session_commands()
+                            .values()
+                            .flatten()
+                            .any(|entry| entry.command == "mkdir secrets");
+                        assert!(!restored, "saved block commands must not be restored");
+                    });
+                    AssertionOutcome::Success
+                },
+            ),
         )
 }

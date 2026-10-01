@@ -39,6 +39,24 @@ Your shell and the programs you run in it, including SSH sessions and CLI agents
 
 `script/offline_audit` checks the repository for reintroduced Warp hosts, network-capable code and banned dependencies, and CI runs it.
 
+## Data stored on your computer
+
+The app keeps some of what you do in a local SQLite database in its per-user state directory (the file ends in `.sqlite`, with a `-wal` file beside it while the app runs). Nothing in it is sent anywhere; it is a second copy of your terminal activity on disk, in the same way your shell's own history file (`~/.zsh_history`, `~/.bash_history`) is a copy.
+
+- **Command history.** Every command you run in a session is added to a `commands` table with its working directory, shell, user name, host name, git branch, start and end time and exit code. The table keeps the newest 10,000 commands, and it feeds up-arrow history and history search in later sessions.
+- **Block text and output for session restore.** For each pane the app saves the command text, the output (up to 5,000 lines per block, with its colors) and the prompt of up to the last 100 blocks, so that the next launch can restore the scrollback. This is the `blocks` table. The window, tab and pane layout is saved too (working directories, shell, split sizes); it holds no command text or output.
+- **Not covered by redaction.** Secret redaction (Settings > Privacy) only changes what is drawn on screen. The original text is what is saved, so a token that was printed in a command or in its output is in the database as typed.
+- **Commands you start with a space.** A command that starts with a space is not saved, in the database or in up-arrow history, when your shell is set to ignore it: zsh with `histignorespace`, or bash with `HISTCONTROL` containing `ignorespace` or `ignoreboth`. The block of such a command is not saved for session restore either. With any other shell setting, such a command is saved like any other, and fish and PowerShell commands are always saved (the app does not apply a leading-space rule to them).
+
+You control this in Settings > Privacy:
+
+- **Save command history and block output** (default on; settings file key `privacy.save_command_history`). When it is off, nothing new is written to the `commands` or `blocks` tables, and what is already saved is not loaded at startup, so blocks from your previous session are not restored (your windows, tabs and panes still are). Up-arrow history keeps working in the running app, from your shell's history file and the commands you run in that session, and the commands of that session are forgotten when you quit. Turning it off does not delete anything already saved; the app offers to do that at once.
+- **Delete saved history.** Asks for confirmation, then deletes every row of the `commands` and `blocks` tables, overwrites the freed space and compacts the database (`VACUUM`, then truncates the write-ahead log). Your layout, projects and other settings stay. It cannot reach copies outside the database file: your shell's own history file, backups, snapshots, and data a solid-state drive or file system journal may still hold. A command or output already shown in an open window stays on screen until you close it.
+
+The secret scan of this repository's Git history is a different guarantee: it concerns the source tree, not what the app stores on your machine, and nothing here promises that your saved history is free of secrets.
+
+To remove everything the app saved, quit it and delete the state directory's `.sqlite` and `.sqlite-wal` files. Setting `privacy.save_command_history = false` in the settings file before the first launch keeps the database free of commands from the start.
+
 ## Building and running
 
 ```bash

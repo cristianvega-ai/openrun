@@ -326,6 +326,28 @@ pub async fn add_window_with_bootstrapped_terminal_and_window_id(
     history_file_commands: Option<Vec<String>>,
     session_info: Option<SessionInfo>,
 ) -> (WindowId, ViewHandle<TerminalView>) {
+    add_window_with_bootstrapped_terminal_inner(app, history_file_commands, session_info, true)
+        .await
+}
+
+/// Like [`add_window_with_bootstrapped_terminal`], but the session keeps the shell type and
+/// options of `session_info` instead of taking the shell type of the shell installed on this
+/// machine.
+async fn add_window_with_bootstrapped_terminal_keeping_session_shell(
+    app: &mut App,
+    session_info: SessionInfo,
+) -> ViewHandle<TerminalView> {
+    add_window_with_bootstrapped_terminal_inner(app, None, Some(session_info), false)
+        .await
+        .1
+}
+
+async fn add_window_with_bootstrapped_terminal_inner(
+    app: &mut App,
+    history_file_commands: Option<Vec<String>>,
+    session_info: Option<SessionInfo>,
+    use_local_shell_type: bool,
+) -> (WindowId, ViewHandle<TerminalView>) {
     let tips_model = app.add_model(|_| TipsCompleted::default());
 
     let shell_starter_source =
@@ -338,8 +360,12 @@ pub async fn add_window_with_bootstrapped_terminal_and_window_id(
 
     let session_info = session_info
         .unwrap_or_else(SessionInfo::new_for_test)
-        .with_session_type(BootstrapSessionType::Local)
-        .with_shell_type(shell_type);
+        .with_session_type(BootstrapSessionType::Local);
+    let session_info = if use_local_shell_type {
+        session_info.with_shell_type(shell_type)
+    } else {
+        session_info
+    };
     let history_file_commands = history_file_commands.unwrap_or_default();
 
     let (window_id, terminal) = app.add_window(WindowStyle::NotStealFocus, move |ctx| {
@@ -1153,6 +1179,194 @@ fn test_histignorespace_support_in_zsh() {
             );
         });
     });
+}
+
+const SYNTHETIC_SECRET_COMMAND: &str = "export OPENRUN_TEST_TOKEN=ghp_synthetic123";
+
+/// Runs `command` in a session of the given shell through the same history and block-saving path
+/// the app uses, applies the resulting persistence events to a temporary database, and returns
+/// the number of commands and blocks saved along with the database bytes.
+fn persist_command_in_session(
+    shell_type: ShellType,
+    shell_options: Option<HashSet<String>>,
+    command: &'static str,
+    history: &crate::persistence::HistoryPersistence,
+) -> (i64, i64, Vec<u8>) {
+    let session_id: SessionId = 1.into();
+    let mut session_info = SessionInfo::new_for_test()
+        .with_id(session_id)
+        .with_shell_type(shell_type);
+    if let Some(shell_options) = shell_options {
+        session_info = session_info.with_shell_options(shell_options);
+    }
+    let history = history.clone();
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        let terminal =
+            add_window_with_bootstrapped_terminal_keeping_session_shell(&mut app, session_info)
+                .await;
+
+        let input = terminal.read(&app, |view, _| view.input().clone());
+        input.update(&mut app, |input, ctx| {
+            input.try_execute_command(command, ctx);
+        });
+
+        let (model, sessions) = terminal.read(&app, |terminal, _| {
+            (terminal.model.clone(), terminal.sessions_model().clone())
+        });
+        let (sender, receiver) = std::sync::mpsc::sync_channel(16);
+        app.update(|ctx| {
+            update_command_history(
+                &ExecuteCommandEvent {
+                    command: command.into(),
+                    session_id,
+                    workflow_command: None,
+                    should_add_command_to_history: true,
+                },
+                &model,
+                Some(&sender),
+                &sessions,
+                ctx,
+            );
+        });
+
+        // The insert event is sent from a background task, so give it time to arrive.
+        let mut events = Vec::new();
+        while let Ok(event) = receiver.recv_timeout(Duration::from_millis(300)) {
+            events.push(event);
+        }
+        let block = SerializedBlock::from(model.lock().block_list().active_block());
+        let mut block = block;
+        block.stylized_command = command.as_bytes().to_vec();
+        block.stylized_output = b"OPENRUN_TEST_OUTPUT".to_vec();
+        events.push(crate::persistence::ModelEvent::SaveBlock(
+            crate::persistence::BlockCompleted {
+                pane_id: vec![1],
+                block: Arc::new(block),
+                is_local: true,
+            },
+        ));
+
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("test.sqlite");
+        let (commands, blocks) =
+            crate::persistence::persist_events_for_test(&database_path, &history, events);
+        let mut bytes = std::fs::read(&database_path).expect("database should exist");
+        if let Ok(wal) = std::fs::read(tempdir.path().join("test.sqlite-wal")) {
+            bytes.extend(wal);
+        }
+        (commands, blocks, bytes)
+    })
+}
+
+fn zsh_options(ignore_space: bool) -> Option<HashSet<String>> {
+    ignore_space.then(|| HashSet::from(["histignorespace".to_string()]))
+}
+
+fn bash_options(histcontrol: &str) -> Option<HashSet<String>> {
+    Some(HashSet::from([format!("!histcontrol_{histcontrol}")]))
+}
+
+fn assert_leading_space_command_persistence(
+    shell_type: ShellType,
+    shell_options: Option<HashSet<String>>,
+    expect_persisted: bool,
+) {
+    let secret = format!(" {SYNTHETIC_SECRET_COMMAND}");
+    let secret: &'static str = Box::leak(secret.into_boxed_str());
+    let history = crate::persistence::HistoryPersistence::new(true);
+    let (commands, blocks, bytes) =
+        persist_command_in_session(shell_type, shell_options, secret, &history);
+    let found = bytes
+        .windows(b"ghp_synthetic123".len())
+        .any(|window| window == b"ghp_synthetic123");
+    if expect_persisted {
+        assert_eq!((commands, blocks), (1, 1));
+        assert!(found, "control: the byte check sees a persisted command");
+    } else {
+        assert_eq!((commands, blocks), (0, 0), "nothing may be saved");
+        assert!(!found, "the command must not be on disk");
+    }
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn zsh_histignorespace_keeps_a_leading_space_command_and_its_block_out_of_the_database() {
+    assert_leading_space_command_persistence(ShellType::Zsh, zsh_options(true), false);
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn zsh_without_histignorespace_persists_a_leading_space_command() {
+    assert_leading_space_command_persistence(ShellType::Zsh, zsh_options(false), true);
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn bash_histcontrol_ignorespace_keeps_a_leading_space_command_out_of_the_database() {
+    assert_leading_space_command_persistence(ShellType::Bash, bash_options("ignorespace"), false);
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn bash_histcontrol_ignoreboth_keeps_a_leading_space_command_out_of_the_database() {
+    assert_leading_space_command_persistence(ShellType::Bash, bash_options("ignoreboth"), false);
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn bash_histcontrol_ignoredups_persists_a_leading_space_command() {
+    assert_leading_space_command_persistence(ShellType::Bash, bash_options("ignoredups"), true);
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn bash_without_histcontrol_persists_a_leading_space_command() {
+    assert_leading_space_command_persistence(ShellType::Bash, None, true);
+}
+
+/// The shell options only cover zsh and bash; fish and PowerShell commands are always saved.
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn fish_persists_a_leading_space_command() {
+    assert_leading_space_command_persistence(ShellType::Fish, None, true);
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn history_off_persists_nothing_even_when_the_shell_would_keep_the_command() {
+    let history = crate::persistence::HistoryPersistence::new(false);
+    let (commands, blocks, bytes) = persist_command_in_session(
+        ShellType::Zsh,
+        zsh_options(false),
+        SYNTHETIC_SECRET_COMMAND,
+        &history,
+    );
+    assert_eq!((commands, blocks), (0, 0));
+    assert!(
+        !bytes
+            .windows(b"ghp_synthetic123".len())
+            .any(|window| window == b"ghp_synthetic123")
+    );
+}
+
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn history_on_persists_an_ordinary_command_and_its_block() {
+    let history = crate::persistence::HistoryPersistence::new(true);
+    let (commands, blocks, bytes) = persist_command_in_session(
+        ShellType::Zsh,
+        zsh_options(true),
+        SYNTHETIC_SECRET_COMMAND,
+        &history,
+    );
+    assert_eq!((commands, blocks), (1, 1));
+    assert!(
+        bytes
+            .windows(b"ghp_synthetic123".len())
+            .any(|window| window == b"ghp_synthetic123")
+    );
 }
 
 fn build_suggestion_results<S: Into<Span>>(

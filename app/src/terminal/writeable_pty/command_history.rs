@@ -21,17 +21,24 @@ pub fn update_command_history(
         return;
     }
 
-    let model = model.lock();
-    let active_block = model.block_list().active_block();
+    let mut model = model.lock();
     let session_id = event.session_id;
     let Some(session) = sessions.as_ref(ctx).get(session_id) else {
         return;
     };
 
     let shell = session.shell();
-    if !shell.should_add_command_to_history(&event.command) {
+    if !event.should_add_command_to_history || !shell.should_add_command_to_history(&event.command)
+    {
+        // A command the shell keeps out of history (for example one that starts with a space under
+        // zsh `histignorespace`) also keeps its block out of the session-restore data.
+        model
+            .block_list_mut()
+            .active_block_mut()
+            .exclude_from_saved_history();
         return;
     }
+    let active_block = model.block_list().active_block();
 
     let session_ref = &*session;
     History::handle(ctx).update(ctx, move |history, _| {

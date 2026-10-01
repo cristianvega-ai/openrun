@@ -43,6 +43,7 @@ fn create_default_serialized_block() -> SerializedBlock {
         is_background: false,
         prompt_snapshot: None,
         is_local: None,
+        excluded_from_saved_history: false,
     }
 }
 
@@ -380,6 +381,7 @@ fn test_restored_blocks_on_different_host() {
             is_background: false,
             prompt_snapshot: None,
             is_local: Some(true),
+            excluded_from_saved_history: false,
         },
         SerializedBlock {
             id: BlockId::new(),
@@ -415,6 +417,7 @@ fn test_restored_blocks_on_different_host() {
             is_background: false,
             prompt_snapshot: None,
             is_local: Some(true),
+            excluded_from_saved_history: false,
         },
         SerializedBlock {
             id: BlockId::new(),
@@ -450,6 +453,7 @@ fn test_restored_blocks_on_different_host() {
             is_background: false,
             prompt_snapshot: None,
             is_local: Some(false),
+            excluded_from_saved_history: false,
         },
         SerializedBlock {
             id: BlockId::new(),
@@ -481,6 +485,7 @@ fn test_restored_blocks_on_different_host() {
             is_background: false,
             prompt_snapshot: None,
             is_local: Some(true),
+            excluded_from_saved_history: false,
         },
     ];
     let model = TerminalModel::mock(Some(&restored_blocks), None);

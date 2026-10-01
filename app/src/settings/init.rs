@@ -13,9 +13,9 @@ use super::initializer::SettingsInitializer;
 use super::{
     AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
     CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings, FontSettingsChangedEvent,
-    GPUSettings, InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
-    SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings, ThemeSettings,
-    VimBannerSettings,
+    GPUSettings, HistorySettings, InputModeSettings, InputSettings, LocalControlSettings,
+    PaneSettings, SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings,
+    ThemeSettings, VimBannerSettings,
 };
 use crate::appearance;
 use crate::banner::BannerState;
@@ -64,6 +64,7 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     LigatureSettings::register(ctx);
     GPUSettings::register(ctx);
     GeneralSettings::register(ctx);
+    HistorySettings::register(ctx);
     CLIAgentSettings::register_and_subscribe_to_events(ctx);
     ScrollSettings::register(ctx);
     SelectionSettings::register(ctx);

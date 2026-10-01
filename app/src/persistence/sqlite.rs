@@ -31,8 +31,9 @@ use super::model::{
     WorkspaceMetadata as WorkspaceMetadataModel,
 };
 use super::{
-    BlockCompleted, FinishedCommandMetadata, ModelEvent, PersistedData, PersistedDataScope,
-    PersistenceScope, StartedCommandMetadata, WriterHandles, schema,
+    BlockCompleted, FinishedCommandMetadata, HistoryPersistence, ModelEvent, PersistedData,
+    PersistedDataScope, PersistenceScope, SavedHistoryDeleted, StartedCommandMetadata,
+    WriterHandles, schema,
 };
 use crate::app_state::{
     AppState, BranchSnapshot, CodePaneSnapShot, CodePaneTabSnapshot, CodeReviewPaneSnapshot,
@@ -71,6 +72,7 @@ const WARP_SQLITE_FILE_NAME: &str = "warp.sqlite";
 pub fn initialize(
     scope: PersistenceScope,
     data_scope: PersistedDataScope,
+    history: HistoryPersistence,
 ) -> (Option<Box<PersistedData>>, Option<WriterHandles>) {
     unsafe {
         // Set up logging before any SQLite calls.
@@ -81,7 +83,7 @@ pub fn initialize(
         Ok(mut conn) => {
             let persisted_data = read_persisted_data(&mut conn, data_scope);
 
-            let writer_handles = match start_writer(conn, database_path.clone()) {
+            let writer_handles = match start_writer(conn, database_path.clone(), history) {
                 Ok(writer_handles) => Some(writer_handles),
                 Err(err) => {
                     report_db_error("starting writer", err, &database_path);
@@ -330,7 +332,11 @@ fn app_database_file_path() -> PathBuf {
         .join(WARP_SQLITE_FILE_NAME)
 }
 
-fn start_writer(conn: SqliteConnection, database_path: PathBuf) -> Result<WriterHandles> {
+fn start_writer(
+    conn: SqliteConnection,
+    database_path: PathBuf,
+    history: HistoryPersistence,
+) -> Result<WriterHandles> {
     let (tx, rx) = std::sync::mpsc::sync_channel(CHANNEL_SIZE);
     let mut current_conn = conn;
     let handle = thread::Builder::new()
@@ -361,7 +367,8 @@ fn start_writer(conn: SqliteConnection, database_path: PathBuf) -> Result<Writer
                             return;
                         }
                         event => {
-                            if let Err(err) = handle_model_event(event, &mut current_conn) {
+                            if let Err(err) = handle_model_event(event, &mut current_conn, &history)
+                            {
                                 report_db_error("Model", err, &database_path);
                             }
                         }
@@ -375,10 +382,40 @@ fn start_writer(conn: SqliteConnection, database_path: PathBuf) -> Result<Writer
 /// Handles a single [`ModelEvent`] by dispatching to an event-specific function.
 /// [`ModelEvent::Terminate`] affects the SQLite writer event loop and _must_ instead be handled by
 /// the event loop itself.
-fn handle_model_event(event: ModelEvent, connection: &mut SqliteConnection) -> anyhow::Result<()> {
+fn handle_model_event(
+    event: ModelEvent,
+    connection: &mut SqliteConnection,
+    history: &HistoryPersistence,
+) -> anyhow::Result<()> {
     match event {
         ModelEvent::Terminate => {
             panic!("Unhandled control-flow event {event:?}");
+        }
+        // With history saving off, nothing that carries command text or output reaches the
+        // database, whichever part of the app sent it.
+        ModelEvent::SaveBlock(_)
+        | ModelEvent::InsertCommand { .. }
+        | ModelEvent::UpdateFinishedCommand { .. }
+            if !history.is_enabled() =>
+        {
+            Ok(())
+        }
+        // A command the shell keeps out of history is also kept out of the saved blocks.
+        ModelEvent::SaveBlock(BlockCompleted { block, .. })
+            if block.excluded_from_saved_history =>
+        {
+            Ok(())
+        }
+        ModelEvent::DeleteSavedHistory { done } => {
+            let result = delete_saved_history(connection);
+            let outcome = match &result {
+                Ok(deleted) => Ok(*deleted),
+                Err(err) => Err(format!("{err:#}")),
+            };
+            if let Some(done) = done {
+                let _ = done.send(outcome);
+            }
+            result.map(|_| ()).context("error deleting saved history")
         }
         ModelEvent::SaveBlock(BlockCompleted {
             pane_id,
@@ -1491,7 +1528,11 @@ fn read_sqlite_data(
             )
             .collect();
 
-        let restored_blocks = get_all_restored_blocks(conn)?;
+        let restored_blocks = if data_scope.restored_blocks() {
+            get_all_restored_blocks(conn)?
+        } else {
+            Default::default()
+        };
 
         Some(AppState {
             windows: saved_windows,
@@ -1559,6 +1600,27 @@ impl From<StartedCommandMetadata> for model::NewCommand {
     }
 }
 
+/// Deletes every saved command and every saved block, then compacts the database so the deleted
+/// text is not left behind in free pages or the write-ahead log.
+///
+/// Neither table is referenced by a foreign key, so the rows can be removed directly; the pane
+/// layout tables that session restoration uses are not touched.
+fn delete_saved_history(conn: &mut SqliteConnection) -> Result<SavedHistoryDeleted, Error> {
+    // Overwrite deleted content with zeroes instead of leaving it in free pages.
+    conn.batch_execute("PRAGMA secure_delete = ON;")?;
+    let deleted = conn.transaction::<SavedHistoryDeleted, Error, _>(|conn| {
+        let commands = diesel::delete(schema::commands::dsl::commands).execute(conn)?;
+        let blocks = diesel::delete(schema::blocks::dsl::blocks).execute(conn)?;
+        Ok(SavedHistoryDeleted { commands, blocks })
+    })?;
+    // Rewrite the database file without the free pages, then drop the write-ahead log, which can
+    // still hold the old page images.
+    conn.batch_execute("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    conn.batch_execute("VACUUM;")?;
+    conn.batch_execute("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    Ok(deleted)
+}
+
 fn insert_command(
     conn: &mut SqliteConnection,
     command_metadata: StartedCommandMetadata,
@@ -1601,6 +1663,29 @@ fn update_finished_command(
             .execute(conn)?;
         Ok(())
     })
+}
+
+/// Runs `events` through the writer thread's event handler against a database at `database_path`
+/// and returns how many commands and blocks the database holds afterwards.
+#[cfg(test)]
+pub(crate) fn persist_events_for_test(
+    database_path: &Path,
+    history: &HistoryPersistence,
+    events: Vec<ModelEvent>,
+) -> (i64, i64) {
+    let mut conn = setup_database(database_path).expect("database should initialize");
+    for event in events {
+        handle_model_event(event, &mut conn, history).expect("event should be handled");
+    }
+    let commands = schema::commands::dsl::commands
+        .count()
+        .get_result(&mut conn)
+        .expect("commands should count");
+    let blocks = schema::blocks::dsl::blocks
+        .count()
+        .get_result(&mut conn)
+        .expect("blocks should count");
+    (commands, blocks)
 }
 
 #[cfg(test)]

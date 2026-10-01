@@ -87,15 +87,13 @@ pub fn wire_up_pty_controller_with_surface<T: EventLoopSender, S: TerminalSurfac
                 if !outcome.is_accepted() {
                     return;
                 }
-                if event.should_add_command_to_history {
-                    update_command_history(
-                        &event,
-                        &model_clone,
-                        model_event_sender.as_ref(),
-                        &sessions,
-                        ctx,
-                    );
-                }
+                update_command_history(
+                    &event,
+                    &model_clone,
+                    model_event_sender.as_ref(),
+                    &sessions,
+                    ctx,
+                );
             }
             PtyIntent::RunNativeShellCompletions {
                 buffer_text,

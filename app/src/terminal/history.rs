@@ -375,7 +375,10 @@ impl SingletonEntity for History {}
 
 impl History {
     pub fn new(persisted_commands: Vec<PersistedCommand>) -> Self {
-        log::debug!("Creating new History model with persisted commands {persisted_commands:?}");
+        log::debug!(
+            "Creating new History model with {} persisted commands",
+            persisted_commands.len()
+        );
         let mut persisted_commands_summary =
             HashMap::<ShellHost, HashMap<String, HistoryEntry>>::new();
 
@@ -395,6 +398,12 @@ impl History {
             persisted_commands_summary,
             ..Default::default()
         }
+    }
+
+    /// Forgets the commands that were loaded from the local database at startup. Commands the
+    /// running sessions have already added to their own history are kept.
+    pub fn clear_persisted_commands(&mut self) {
+        self.persisted_commands_summary.clear();
     }
 
     pub fn all_live_session_ids(&self) -> HashSet<SessionId> {

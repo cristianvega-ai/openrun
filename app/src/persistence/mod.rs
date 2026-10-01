@@ -17,6 +17,7 @@ pub mod testing;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
@@ -33,6 +34,8 @@ pub use sqlite::database_file_path_for_current_scope;
 pub use sqlite::database_file_path_for_scope;
 #[cfg(any(feature = "local_fs", feature = "integration_tests"))]
 pub use sqlite::establish_ro_connection;
+#[cfg(all(test, feature = "local_fs"))]
+pub(crate) use sqlite::persist_events_for_test;
 use warp_core::command::ExitCode;
 use warp_errors::report_error;
 use warpui::{Entity, SingletonEntity};
@@ -79,17 +82,60 @@ pub enum PersistedDataScope {
     /// The GUI app: everything, including window/tab/block session
     /// restoration and command history.
     Full,
+    /// The GUI app with the "Save command history" setting off: window, tab
+    /// and pane layout is restored, but neither the saved command history nor
+    /// the saved block command text and output is read.
+    WithoutHistory,
 }
 
 impl PersistedDataScope {
-    /// Window/tab/pane snapshots and restored blocks.
+    /// The scope for the GUI app given the "Save command history" setting.
+    pub fn for_gui(save_command_history: bool) -> Self {
+        if save_command_history {
+            PersistedDataScope::Full
+        } else {
+            PersistedDataScope::WithoutHistory
+        }
+    }
+
+    /// Window/tab/pane snapshots.
     fn session_restoration(self) -> bool {
+        matches!(
+            self,
+            PersistedDataScope::Full | PersistedDataScope::WithoutHistory
+        )
+    }
+
+    /// Blocks (command text and output) saved for session restoration.
+    fn restored_blocks(self) -> bool {
         matches!(self, PersistedDataScope::Full)
     }
 
     /// Shell-command history.
     fn command_history(self) -> bool {
         matches!(self, PersistedDataScope::Full)
+    }
+}
+
+/// Whether the writer thread may persist command history and block text.
+///
+/// The writer thread checks this for every event that carries command text or
+/// output, so a disabled history is enforced in one place no matter which part
+/// of the app sends the event. Clones share the same flag.
+#[derive(Clone, Debug)]
+pub struct HistoryPersistence(Arc<AtomicBool>);
+
+impl HistoryPersistence {
+    pub fn new(enabled: bool) -> Self {
+        Self(Arc::new(AtomicBool::new(enabled)))
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+
+    pub fn set_enabled(&self, enabled: bool) {
+        self.0.store(enabled, Ordering::SeqCst);
     }
 }
 
@@ -102,13 +148,14 @@ impl PersistedDataScope {
 pub fn initialize(
     scope: PersistenceScope,
     data_scope: PersistedDataScope,
+    history: HistoryPersistence,
 ) -> (Option<Box<PersistedData>>, Option<WriterHandles>) {
     // Record the scope for ad-hoc read-only connections; keep the first value
     // if this is ever called more than once in a process (e.g. tests).
     let _ = CURRENT_SCOPE.set(scope.clone());
     cfg_if::cfg_if! {
         if #[cfg(feature = "local_fs")] {
-            sqlite::initialize(scope, data_scope)
+            sqlite::initialize(scope, data_scope, history)
         } else {
             (None, None)
         }
@@ -198,6 +245,13 @@ pub struct BlockCompleted {
     pub block: Arc<SerializedBlock>,
 }
 
+/// How much saved history [`ModelEvent::DeleteSavedHistory`] removed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SavedHistoryDeleted {
+    pub commands: usize,
+    pub blocks: usize,
+}
+
 #[derive(Debug)]
 pub struct StartedCommandMetadata {
     pub command: String,
@@ -223,6 +277,11 @@ pub struct FinishedCommandMetadata {
 pub enum ModelEvent {
     SaveBlock(BlockCompleted),
     DeleteBlocks(Vec<u8>),
+    /// Deletes every saved command and every saved block's command text and output, whether or not
+    /// history saving is enabled. `done` receives the outcome once the database has been compacted.
+    DeleteSavedHistory {
+        done: Option<futures::channel::oneshot::Sender<Result<SavedHistoryDeleted, String>>>,
+    },
     Snapshot(AppState),
     InsertCommand {
         metadata: StartedCommandMetadata,

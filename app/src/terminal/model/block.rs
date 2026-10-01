@@ -214,6 +214,10 @@ pub struct Block {
     /// Only set on restored blocks. Indicates whether the block was local or from a remote session.
     restored_block_was_local: Option<bool>,
 
+    /// `true` if the shell's history options (e.g. zsh `histignorespace`) keep this block's command
+    /// out of history. Such a block's command and output are not saved for session restore either.
+    excluded_from_saved_history: bool,
+
     visible_bootstrap_block_event_sent: bool,
 }
 
@@ -781,6 +785,7 @@ impl Block {
             should_hide_command_grid: false,
             leading_linefeeds_ignored: 0,
             restored_block_was_local: None,
+            excluded_from_saved_history: false,
             visible_bootstrap_block_event_sent: false,
         }
     }
@@ -799,6 +804,14 @@ impl Block {
 
     pub(in crate::terminal) fn enable_full_grid_clear_behavior(&mut self) {
         self.output_grid.enable_full_grid_clear_behavior();
+    }
+
+    pub fn exclude_from_saved_history(&mut self) {
+        self.excluded_from_saved_history = true;
+    }
+
+    pub fn is_excluded_from_saved_history(&self) -> bool {
+        self.excluded_from_saved_history
     }
 
     pub fn set_restored_block_was_local(&mut self, was_local: bool) {

@@ -1317,6 +1317,10 @@ impl SettingsView {
                 // Modal rendering is handled in get_modal_content_for_page
                 ctx.notify();
             }
+            PrivacyPageViewEvent::DeleteHistoryModalChanged => {
+                // Modal rendering is handled in get_modal_content_for_page
+                ctx.notify();
+            }
         }
     }
 

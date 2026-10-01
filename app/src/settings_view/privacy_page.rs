@@ -26,31 +26,46 @@ use warpui::{
     UpdateModel, View, ViewContext, ViewHandle,
 };
 
-use super::privacy::{AddRegexModal, AddRegexModalEvent};
+use super::privacy::{
+    AddRegexModal, AddRegexModalEvent, DeleteHistoryModal, DeleteHistoryModalEvent,
+};
 use super::settings_page::{
     HEADER_PADDING, MatchData, PageTitle, PageType, SettingsPageMeta, SettingsPageViewHandle,
     SettingsWidget, TOGGLE_BUTTON_RIGHT_PADDING, render_sub_header,
 };
 use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, flags};
+use crate::GlobalResourceHandlesProvider;
 use crate::appearance::Appearance;
 use crate::modal::{Modal, ModalEvent, ModalViewState};
-use crate::settings::{CustomSecretRegex, PrivacySettings, RegexDisplayInfo};
+use crate::persistence::{ModelEvent, SavedHistoryDeleted};
+use crate::settings::{CustomSecretRegex, HistorySettings, PrivacySettings, RegexDisplayInfo};
 use crate::settings_view::privacy::AddRegexModalViewState;
+use crate::terminal::History;
 use crate::terminal::safe_mode_settings::{
     SafeModeSettings, SecretDisplayMode, get_effective_secret_display_mode,
 };
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons::Icon;
-use crate::view_components::{Dropdown, DropdownItem};
+use crate::view_components::{DismissibleToast, Dropdown, DropdownItem};
+use crate::workspace::{ToastStack, WorkspaceAction};
 
 const FONT_SIZE: f32 = 12.;
 
 const SAFE_MODE_TITLE: &str = "Secret redaction";
 static SAFE_MODE_DESCRIPTION: LazyLock<&'static str> = LazyLock::new(|| {
-    "When this setting is enabled, Warp will scan blocks for potential \
-        sensitive information and prevent saving or sending this data to any \
-        servers. You can customize this list via regexes."
+    "When this setting is enabled, OpenRun scans blocks for potential \
+        sensitive information and hides it on screen. This only changes what is \
+        displayed: the original text is still kept in the block and, unless you turn \
+        off Save command history below, in the saved history and session restore data. \
+        You can customize this list via regexes."
 });
+const SAVE_HISTORY_TITLE: &str = "Save command history and block output";
+const SAVE_HISTORY_DESCRIPTION: &str = "Save the commands you run, and the command text and output of the blocks used to restore your previous session, in OpenRun's local database on this computer. \
+    When this is off, nothing new is written there, nothing saved earlier is loaded at startup, and blocks from your previous session are not restored (your windows, tabs and panes still are). \
+    Up-arrow history keeps working in the running app, but it is forgotten when OpenRun quits. \
+    Commands that start with a space are never saved when your shell ignores them (zsh with histignorespace, or bash with HISTCONTROL set to ignorespace or ignoreboth). \
+    Your shell's own history file is not affected, and secret redaction only changes what is shown on screen, not what is saved.";
+const DELETE_HISTORY_DESCRIPTION: &str = "Permanently delete every command and every block saved for session restore from OpenRun's local database.";
 const USER_SECRET_REGEX_TITLE: &str = "Custom secret redaction";
 const USER_SECRET_REGEX_DESCRIPTION: &str = "Use regex to define additional secrets or data you'd like to redact. This will take effect \
     when the next command runs. You can use the inline (?i) flag as a prefix to your regex \
@@ -68,12 +83,16 @@ pub struct PrivacyPageView {
     add_regex_modal_state: AddRegexModalViewState,
     /// Dropdown for selecting secret redaction display mode
     secret_redaction_display_dropdown: ViewHandle<Dropdown<PrivacyPageAction>>,
+    /// Confirmation for deleting the saved command history
+    delete_history_modal: ModalViewState<Modal<DeleteHistoryModal>>,
+    delete_history_in_progress: bool,
 }
 
 #[derive(Clone, Copy)]
 pub enum PrivacyPageViewEvent {
     ShowAddRegexModal,
     HideAddRegexModal,
+    DeleteHistoryModalChanged,
 }
 
 impl PrivacyPageView {
@@ -95,6 +114,51 @@ impl PrivacyPageView {
         ctx.subscribe_to_model(&SafeModeSettings::handle(ctx), |me, _, _, ctx| {
             me.update_secret_display_dropdown(ctx);
             ctx.notify();
+        });
+
+        ctx.observe(&HistorySettings::handle(ctx), |_, _, ctx| ctx.notify());
+
+        let delete_history_body = ctx.add_typed_action_view(DeleteHistoryModal::new);
+        ctx.subscribe_to_view(&delete_history_body, |me, _, event, ctx| {
+            me.handle_delete_history_modal_event(event, ctx);
+        });
+        let delete_history_modal_view = ctx.add_typed_action_view(|ctx| {
+            Modal::new(
+                Some("Delete saved history?".to_string()),
+                delete_history_body,
+                ctx,
+            )
+            .with_modal_style(UiComponentStyles {
+                width: Some(520.),
+                height: Some(300.),
+                ..Default::default()
+            })
+            .with_header_style(UiComponentStyles {
+                padding: Some(Coords {
+                    top: 24.,
+                    bottom: 0.,
+                    left: 24.,
+                    right: 24.,
+                }),
+                font_size: Some(16.),
+                font_weight: Some(Weight::Bold),
+                ..Default::default()
+            })
+            .with_body_style(UiComponentStyles {
+                padding: Some(Coords {
+                    top: 0.,
+                    bottom: 24.,
+                    left: 24.,
+                    right: 24.,
+                }),
+                height: Some(200.),
+                ..Default::default()
+            })
+            .with_background_opacity(100)
+            .with_dismiss_on_click()
+        });
+        ctx.subscribe_to_view(&delete_history_modal_view, |me, _, event, ctx| {
+            me.handle_delete_history_modal_close(event, ctx);
         });
 
         let add_regex_body = ctx.add_typed_action_view(AddRegexModal::new);
@@ -162,6 +226,8 @@ impl PrivacyPageView {
                 add_regex_modal_view,
             )),
             secret_redaction_display_dropdown: secret_display_dropdown,
+            delete_history_modal: ModalViewState::new(delete_history_modal_view),
+            delete_history_in_progress: false,
         };
 
         privacy_page_view.update_button_states(privacy_settings_handle, ctx);
@@ -170,8 +236,10 @@ impl PrivacyPageView {
     }
 
     fn build_page() -> PageType<Self> {
-        let widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
-            vec![Box::new(SecretRedactionWidget::default())];
+        let widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(SecretRedactionWidget::default()),
+            Box::new(CommandHistoryWidget::default()),
+        ];
         PageType::new_uncategorized(widgets, Some(PageTitle::new("Privacy")))
     }
 
@@ -200,6 +268,133 @@ impl PrivacyPageView {
             );
         });
         ctx.notify();
+    }
+
+    fn toggle_save_command_history(&mut self, ctx: &mut ViewContext<Self>) {
+        let history_settings = HistorySettings::handle(ctx);
+        let new_value = !*history_settings.as_ref(ctx).save_command_history.value();
+
+        ctx.update_model(&history_settings, move |history_settings, ctx| {
+            report_if_error!(
+                history_settings
+                    .save_command_history
+                    .set_value(new_value, ctx)
+            );
+        });
+        if !new_value {
+            self.show_delete_history_modal(true, ctx);
+        }
+        ctx.notify();
+    }
+
+    fn show_delete_history_modal(
+        &mut self,
+        offered_after_turning_off: bool,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        self.delete_history_modal.view.update(ctx, |modal, ctx| {
+            modal.body().update(ctx, |body, ctx| {
+                body.set_offered_after_turning_off(offered_after_turning_off, ctx);
+            });
+        });
+        self.delete_history_modal.open();
+        ctx.emit(PrivacyPageViewEvent::DeleteHistoryModalChanged);
+    }
+
+    fn hide_delete_history_modal(&mut self, ctx: &mut ViewContext<Self>) {
+        self.delete_history_modal.close();
+        ctx.emit(PrivacyPageViewEvent::DeleteHistoryModalChanged);
+    }
+
+    fn handle_delete_history_modal_close(
+        &mut self,
+        event: &ModalEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        match event {
+            ModalEvent::Close => self.hide_delete_history_modal(ctx),
+        }
+    }
+
+    fn handle_delete_history_modal_event(
+        &mut self,
+        event: &DeleteHistoryModalEvent,
+        ctx: &mut ViewContext<Self>,
+    ) {
+        match event {
+            DeleteHistoryModalEvent::Close => self.hide_delete_history_modal(ctx),
+            DeleteHistoryModalEvent::Confirm => {
+                self.hide_delete_history_modal(ctx);
+                self.delete_saved_history(ctx);
+            }
+        }
+    }
+
+    fn delete_saved_history(&mut self, ctx: &mut ViewContext<Self>) {
+        if self.delete_history_in_progress {
+            return;
+        }
+        let window_id = ctx.window_id();
+        let show_toast = move |toast: DismissibleToast<WorkspaceAction>, ctx: &mut AppContext| {
+            ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
+                toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+            });
+        };
+
+        let Some(sender) = GlobalResourceHandlesProvider::as_ref(ctx)
+            .get()
+            .model_event_sender
+            .clone()
+        else {
+            show_toast(
+                DismissibleToast::error(
+                    "OpenRun has no local history database to delete from.".to_string(),
+                ),
+                ctx,
+            );
+            return;
+        };
+
+        self.delete_history_in_progress = true;
+        ctx.notify();
+        let (done, outcome) = futures::channel::oneshot::channel();
+        ctx.spawn(
+            async move {
+                sender
+                    .send(ModelEvent::DeleteSavedHistory { done: Some(done) })
+                    .map_err(|err| format!("could not reach the database writer: {err}"))?;
+                outcome
+                    .await
+                    .map_err(|_| "the database writer stopped before finishing".to_string())?
+            },
+            move |view, result: Result<SavedHistoryDeleted, String>, ctx| {
+                view.delete_history_in_progress = false;
+                match result {
+                    Ok(deleted) => {
+                        History::handle(ctx).update(ctx, |history, _| {
+                            history.clear_persisted_commands();
+                        });
+                        show_toast(
+                            DismissibleToast::success(format!(
+                                "Deleted {} saved commands and {} saved blocks.",
+                                deleted.commands, deleted.blocks
+                            )),
+                            ctx,
+                        );
+                    }
+                    Err(error) => {
+                        log::warn!("Failed to delete saved history: {error}");
+                        show_toast(
+                            DismissibleToast::error(format!(
+                                "Could not delete saved history: {error}"
+                            )),
+                            ctx,
+                        );
+                    }
+                }
+                ctx.notify();
+            },
+        );
     }
 
     fn toggle_hide_secrets_in_block_list(&mut self, ctx: &mut ViewContext<Self>) {
@@ -371,6 +566,8 @@ impl PrivacyPageView {
     pub fn get_modal_content(&self) -> Option<Box<dyn Element>> {
         if self.add_regex_modal_state.is_open() {
             Some(self.add_regex_modal_state.render())
+        } else if self.delete_history_modal.is_open() {
+            Some(self.delete_history_modal.render())
         } else {
             None
         }
@@ -394,6 +591,8 @@ impl Entity for PrivacyPageView {
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrivacyPageAction {
     ToggleSafeMode,
+    ToggleSaveCommandHistory,
+    ShowDeleteHistoryModal,
     ToggleHideSecretsInBlockList,
     SetSecretDisplayMode(SecretDisplayMode),
     RemoveCustomRegex(usize),
@@ -451,6 +650,10 @@ impl TypedActionView for PrivacyPageView {
                 });
             }
             PrivacyPageAction::ToggleSafeMode => self.toggle_safe_mode(ctx),
+            PrivacyPageAction::ToggleSaveCommandHistory => self.toggle_save_command_history(ctx),
+            PrivacyPageAction::ShowDeleteHistoryModal => {
+                self.show_delete_history_modal(false, ctx);
+            }
             PrivacyPageAction::ToggleHideSecretsInBlockList => {
                 self.toggle_hide_secrets_in_block_list(ctx)
             }
@@ -952,6 +1155,131 @@ impl SettingsWidget for SecretRedactionWidget {
     }
 }
 
+#[derive(Default)]
+struct CommandHistoryWidget {
+    switch_state: SwitchStateHandle,
+    delete_button_mouse_state: MouseStateHandle,
+}
+
+impl SettingsWidget for CommandHistoryWidget {
+    type View = PrivacyPageView;
+
+    fn search_terms(&self) -> &str {
+        "save command history block output privacy delete clear saved history commands session restore up arrow"
+    }
+
+    fn render(
+        &self,
+        view: &Self::View,
+        appearance: &Appearance,
+        app: &AppContext,
+    ) -> Box<dyn Element> {
+        let history_settings = HistorySettings::as_ref(app);
+        let description_text_color = description_text_color(appearance.theme()).into_solid();
+        let ui_builder = appearance.ui_builder();
+
+        let title_row = Container::new(
+            Flex::row()
+                .with_child(
+                    Shrinkable::new(1.0, render_sub_header(appearance, SAVE_HISTORY_TITLE))
+                        .finish(),
+                )
+                .with_child(
+                    Container::new(
+                        ui_builder
+                            .switch(self.switch_state.clone())
+                            .check(*history_settings.save_command_history.value())
+                            .build()
+                            .on_click(move |ctx, _, _| {
+                                ctx.dispatch_typed_action(
+                                    PrivacyPageAction::ToggleSaveCommandHistory,
+                                )
+                            })
+                            .finish(),
+                    )
+                    .with_padding_right(TOGGLE_BUTTON_RIGHT_PADDING)
+                    .finish(),
+                )
+                .with_cross_axis_alignment(CrossAxisAlignment::Start)
+                .finish(),
+        )
+        .with_padding_bottom(HEADER_PADDING)
+        .finish();
+
+        let description = ui_builder
+            .paragraph(SAVE_HISTORY_DESCRIPTION.to_owned())
+            .with_style(UiComponentStyles {
+                font_color: Some(description_text_color),
+                font_size: Some(FONT_SIZE + 1.),
+                margin: Some(
+                    Coords::default()
+                        .top(-24.)
+                        .bottom(styles::DESCRIPTION_LINE_MARGIN_BOTTOM),
+                ),
+                ..Default::default()
+            })
+            .build()
+            .finish();
+
+        let mut delete_button = ui_builder
+            .button(
+                ButtonVariant::Secondary,
+                self.delete_button_mouse_state.clone(),
+            )
+            .with_text_label("Delete saved history".to_string())
+            .with_style(UiComponentStyles {
+                padding: Some(Coords {
+                    left: 12.,
+                    right: 12.,
+                    top: 6.,
+                    bottom: 6.,
+                }),
+                margin: Some(Coords::default().left(16.)),
+                ..Default::default()
+            });
+        if view.delete_history_in_progress {
+            delete_button = delete_button.disabled();
+        }
+
+        let delete_row = Flex::row()
+            .with_cross_axis_alignment(CrossAxisAlignment::Center)
+            .with_child(
+                Expanded::new(
+                    1.,
+                    ui_builder
+                        .paragraph(DELETE_HISTORY_DESCRIPTION.to_owned())
+                        .with_style(UiComponentStyles {
+                            font_color: Some(description_text_color),
+                            font_size: Some(FONT_SIZE + 1.),
+                            ..Default::default()
+                        })
+                        .build()
+                        .finish(),
+                )
+                .finish(),
+            )
+            .with_child(
+                delete_button
+                    .build()
+                    .on_click(move |ctx, _, _| {
+                        ctx.dispatch_typed_action(PrivacyPageAction::ShowDeleteHistoryModal);
+                    })
+                    .finish(),
+            )
+            .finish();
+
+        Container::new(
+            Flex::column()
+                .with_child(title_row)
+                .with_child(description)
+                .with_child(delete_row)
+                .finish(),
+        )
+        .with_margin_top(styles::DESCRIPTION_MARGIN_BOTTOM * 2.)
+        .finish()
+    }
+}
+
 pub fn init_actions_from_parent_view<T: Action + Clone>(
     app: &mut AppContext,
     context: &ContextPredicate,
@@ -980,3 +1308,7 @@ mod styles {
 fn description_text_color(theme: &WarpTheme) -> warp_core::ui::theme::Fill {
     theme.sub_text_color(theme.surface_2())
 }
+
+#[cfg(test)]
+#[path = "privacy_page_tests.rs"]
+mod tests;

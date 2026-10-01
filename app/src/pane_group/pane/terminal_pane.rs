@@ -359,6 +359,7 @@ fn handle_terminal_view_event(
                 match group.terminal_session_by_id(pane_id) {
                     Some(pane) => {
                         if *GeneralSettings::as_ref(ctx).restore_session
+                            && !block.excluded_from_saved_history
                             && AppExecutionMode::as_ref(ctx).can_save_session()
                             && let Some(sender) = &group.model_event_sender
                         {

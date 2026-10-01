@@ -6,16 +6,21 @@ use warp::integration_testing::command_search::{
     assert_history_filter_is_active,
 };
 use warp::integration_testing::input::assert_workflow_info_box_is_open;
+use warp::integration_testing::persistence::written_data;
 use warp::integration_testing::step::new_step_with_default_assertions;
+use warp::integration_testing::terminal::util::ExpectedExitStatus;
 use warp::integration_testing::terminal::{
-    assert_input_editor_contents, wait_until_bootstrapped_single_pane_for_tab,
+    assert_input_editor_contents, execute_command_for_single_terminal_in_tab,
+    wait_until_bootstrapped_single_pane_for_tab,
 };
 use warp::integration_testing::{self};
 use warp::search::command_search::settings::ShowGlobalWorkflowsInUniversalSearch;
+use warp::settings::SaveCommandHistory;
 use warp::sqlite_testing::set_user_and_hostname_for_commands;
 use warp::terminal::input::Input;
 use warp::terminal::model::session::get_local_hostname;
 use warp::terminal::shell::ShellType;
+use warpui_core::integration::AssertionOutcome;
 use warpui_core::{ViewHandle, async_assert};
 
 use super::{TEST_ONLY_ASSETS, new_builder};
@@ -363,4 +368,60 @@ pub fn test_history_command_is_linked_to_local_workflow() -> Builder {
                     assert_workflow_info_box_is_open(0, 0),
                 ),
         )
+}
+
+const SYNTHETIC_SECRET: &str = "ASTRA_HIST_SECRET_123";
+
+/// Types a command that contains a synthetic secret and prints it, waits until the writer thread
+/// has handled everything sent so far, then checks the database.
+fn typed_secret_test(save_command_history: bool) -> Builder {
+    let check_name = if save_command_history {
+        "The secret is saved when saving is on"
+    } else {
+        "The secret is absent from the database when saving is off"
+    };
+    new_builder()
+        .with_user_defaults(HashMap::from([(
+            SaveCommandHistory::storage_key().to_owned(),
+            save_command_history.to_string(),
+        )]))
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(execute_command_for_single_terminal_in_tab(
+            0,
+            format!("echo {SYNTHETIC_SECRET}"),
+            ExpectedExitStatus::Success,
+            SYNTHETIC_SECRET.to_owned(),
+        ))
+        .with_step(
+            new_step_with_default_assertions("Queue a marker behind the saved events")
+                .with_action(|app, _, _| written_data::queue_write_marker(app)),
+        )
+        .with_step(
+            new_step_with_default_assertions("Wait for the writer thread to catch up")
+                .add_assertion(|_, _| async_assert!(written_data::write_marker_is_visible())),
+        )
+        .with_step(
+            new_step_with_default_assertions(check_name).add_assertion(move |_, _| {
+                let found = written_data::database_bytes_contain(SYNTHETIC_SECRET);
+                let (commands, blocks) = written_data::saved_history_row_counts();
+                if save_command_history {
+                    assert!(found, "control: the secret should be in the database");
+                    assert!(commands >= 1, "control: the command should be saved");
+                } else {
+                    assert!(!found, "the secret must not be in the database or its log");
+                    assert_eq!((commands, blocks), (0, 0), "no history rows may exist");
+                }
+                AssertionOutcome::Success
+            }),
+        )
+}
+
+/// With "Save command history" off, a typed secret and its output never reach the SQLite file.
+pub fn test_history_saving_off_keeps_a_typed_secret_out_of_the_database() -> Builder {
+    typed_secret_test(false)
+}
+
+/// The positive control for the test above: with the setting on, the same secret is saved.
+pub fn test_history_saving_on_saves_a_typed_secret() -> Builder {
+    typed_secret_test(true)
 }

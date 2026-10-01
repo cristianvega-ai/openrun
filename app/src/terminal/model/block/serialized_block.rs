@@ -68,6 +68,11 @@ pub struct SerializedBlock {
     /// Whether this block was created locally (true) or remotely (false)
     #[serde(default)]
     pub is_local: Option<bool>,
+
+    /// Whether the shell's history options keep this block's command out of history. Such a block
+    /// is never saved for session restore.
+    #[serde(default)]
+    pub excluded_from_saved_history: bool,
 }
 
 impl SerializedBlock {
@@ -192,6 +197,7 @@ impl From<&Block> for SerializedBlock {
             shell_host: block.shell_host.clone(),
             prompt_snapshot: prompt_info.prompt_snapshot,
             is_local: None,
+            excluded_from_saved_history: block.is_excluded_from_saved_history(),
         }
     }
 }
@@ -225,6 +231,7 @@ impl From<crate::persistence::model::Block> for SerializedBlock {
             is_background: block.is_background,
             prompt_snapshot: block.prompt_snapshot,
             is_local: block.is_local,
+            excluded_from_saved_history: false,
         }
     }
 }

@@ -173,7 +173,7 @@ use crate::root_view::{
 };
 use crate::session_management::{RunningSessionSummary, SessionNavigationData};
 use crate::settings::manager::SettingsManager;
-use crate::settings::{AccessibilitySettings, ScrollSettings, SelectionSettings};
+use crate::settings::{AccessibilitySettings, HistorySettings, ScrollSettings, SelectionSettings};
 use crate::settings_view::DisplayCount;
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::suggestions::ignored_suggestions_model::IgnoredSuggestionsModel;
@@ -638,9 +638,14 @@ pub(crate) fn initialize_app(
     let persistence_scope = persistence::PersistenceScope::App;
     // Only read the subsets of persisted data this launch mode actually
     // consumes; loading everything is expensive on large databases.
-    let persisted_data_scope = persistence::PersistedDataScope::Full;
-    let (sqlite_data, writer_handles) =
-        persistence::initialize(persistence_scope, persisted_data_scope);
+    let save_command_history = *HistorySettings::as_ref(ctx).save_command_history;
+    let persisted_data_scope = persistence::PersistedDataScope::for_gui(save_command_history);
+    let history_persistence = persistence::HistoryPersistence::new(save_command_history);
+    let (sqlite_data, writer_handles) = persistence::initialize(
+        persistence_scope,
+        persisted_data_scope,
+        history_persistence.clone(),
+    );
     timer.mark_interval_end("SQLITE_INITIALIZED");
 
     let persistence_writer = PersistenceWriter::new(writer_handles);
@@ -888,6 +893,10 @@ pub(crate) fn initialize_app(
         )
     });
     ctx.add_singleton_model(move |_| persistence_writer);
+
+    ctx.subscribe_to_model(&HistorySettings::handle(ctx), move |_, _, ctx| {
+        history_persistence.set_enabled(*HistorySettings::as_ref(ctx).save_command_history);
+    });
 
     ctx.add_singleton_model(move |_| IgnoredSuggestionsModel::new(persisted_ignored_suggestions));
 

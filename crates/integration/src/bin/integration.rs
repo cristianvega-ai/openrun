@@ -167,6 +167,10 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_disabling_action_dispatching);
     register_test!(test_session_restoration);
     register_test!(test_restored_blocks_on_different_hosts);
+    register_test!(test_session_restoration_with_history_saving_off);
+    register_test!(test_saved_blocks_are_not_restored_with_history_saving_off);
+    register_test!(test_history_saving_off_keeps_a_typed_secret_out_of_the_database);
+    register_test!(test_history_saving_on_saves_a_typed_secret);
     register_test!(test_restore_snapshot_with_deleted_cwd);
     register_test!(test_session_restoration_with_multiple_shells);
     register_test!(test_restore_snapshot_with_background_output);
