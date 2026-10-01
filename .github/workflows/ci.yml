@@ -142,6 +142,65 @@ jobs:
       - name: Run cargo clippy
         run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
 
+  # The command executor tests for the macOS sandbox (`sandbox-exec` profile, the DNS daemon and
+  # background URL session canaries), the offline environment and the restored completion
+  # generators. The Linux `Unit tests` job runs the Linux half of the same files; this job runs
+  # the half behind `cfg(target_os = "macos")` and runs the shared half against the macOS tools.
+  # The tests that use real tools (git, npm, corepack, rustup, docker, python3) fail instead of
+  # skipping when a tool is missing and `CI=true`, which GitHub Actions sets, so the tools are
+  # installed or checked before the run.
+  macos-security-tests:
+    name: Security tests (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: nextest
+
+      # Only the command-line client is needed: the tests check what `docker` does with a remote
+      # host or context, not containers.
+      - name: Install the docker command-line client
+        run: |
+          if ! command -v docker > /dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install docker
+          fi
+
+      - name: Check the tools the real-tool tests use
+        run: |
+          missing=0
+          for tool in git npm corepack rustup python3 docker sandbox-exec; do
+            if path=$(command -v "$tool"); then
+              echo "$tool: $path"
+            else
+              echo "::error::$tool is not installed on this runner"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Run the command executor security tests
+        run: |
+          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
+            -E 'package(warp) and (test(~command_executor::network_sandbox) | test(~command_executor::offline_environment) | test(~command_executor::restored_generators))'
+
   test:
     name: Unit tests
     runs-on: ubuntu-latest

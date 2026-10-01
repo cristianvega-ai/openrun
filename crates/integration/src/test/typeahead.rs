@@ -235,6 +235,7 @@ pub fn test_background_output() -> Builder {
                 .expect("could not create script")
                 .write_all(
                     br#"#!/usr/bin/env python3
+import os
 import signal
 import time
 
@@ -246,6 +247,11 @@ def handler(signo, cur_frame):
   print("Output 3")
 signal.signal(signal.SIGUSR1, handler)
 
+# Print the first line only once the test has seen the command that started this script finish,
+# so that the line is background output at the prompt and not part of that command's output.
+go = os.path.join(os.path.dirname(os.path.abspath(__file__)), "go")
+while not os.path.exists(go):
+  time.sleep(0.02)
 print("Output 1")
 time.sleep(100)
 "#,
@@ -261,6 +267,9 @@ time.sleep(100)
         ))
         .with_step(
             TestStep::new("First line of background output appears")
+                .with_setup(|utils| {
+                    std::fs::write(utils.test_dir().join("go"), "").expect("could not write file");
+                })
                 .add_assertion(assert_background_output(0, "Output 1\n")),
         )
         .with_step(execute_command_for_single_terminal_in_tab(

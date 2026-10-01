@@ -66,6 +66,57 @@ impl ErrorExt for ReadHistoryContentsError {
 }
 register_error!(ReadHistoryContentsError);
 
+/// How often the listing of a session's executables is tried before the session goes without it.
+const EXECUTABLE_LISTING_ATTEMPTS: usize = 3;
+
+/// Pause between two attempts to list the executables. Commands of a session are cancelled
+/// together (when the user runs a command or an autosuggestion is dropped); the pause lets such a
+/// burst pass before the next attempt.
+const EXECUTABLE_LISTING_RETRY_DELAY: instant::Duration = instant::Duration::from_millis(250);
+
+/// Runs a command that lists the executables of a session until it succeeds, at most
+/// [`EXECUTABLE_LISTING_ATTEMPTS`] times. The listing is not a command of the user: it can be
+/// cancelled with the session's other commands, and a cancelled one exits with a failure status.
+/// Returns the output of the first successful attempt, or the error of the last failed one.
+async fn run_executable_listing<F, Fut>(shell_name: &str, mut run: F) -> Result<CommandOutput>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<CommandOutput>>,
+{
+    let mut last_error = anyhow::anyhow!("the executables were not listed");
+    for attempt in 1..=EXECUTABLE_LISTING_ATTEMPTS {
+        let started_at = instant::Instant::now();
+        match run().await {
+            Ok(output) if output.status == CommandExitStatus::Success => {
+                log::info!(
+                    "Executable listing for {shell_name} succeeded in {:?} (attempt {attempt})",
+                    started_at.elapsed()
+                );
+                return Ok(output);
+            }
+            Ok(output) => {
+                log::warn!(
+                    "Executable listing for {shell_name} failed after {:?} (attempt {attempt}, exit code {:?})",
+                    started_at.elapsed(),
+                    output.exit_code
+                );
+                last_error = anyhow::anyhow!("exit code {:?}", output.exit_code);
+            }
+            Err(error) => {
+                log::warn!(
+                    "Executable listing for {shell_name} could not run after {:?} (attempt {attempt}): {error:#}",
+                    started_at.elapsed()
+                );
+                last_error = error;
+            }
+        }
+        if attempt < EXECUTABLE_LISTING_ATTEMPTS {
+            warpui::r#async::Timer::after(EXECUTABLE_LISTING_RETRY_DELAY).await;
+        }
+    }
+    Err(last_error)
+}
+
 #[cfg(windows)]
 fn powershell_read_all_text_command(path: &OsStr) -> OsString {
     let mut command = OsString::from("[System.IO.File]::ReadAllText('");
@@ -1059,90 +1110,90 @@ impl Session {
     /// to get them (unlike aliases, functions and env-vars). All we need is the user's $PATH var,
     /// which we have access to at this point.
     pub async fn load_external_commands(&self) {
-        let (load_future, receiver) = (async {
-            let shell = self.info.shell.clone();
-            let shell_command_to_get_executables =
-                shell.shell_type().shell_command_to_get_executables();
-            let env_vars = self
-                .info
-                .path
-                .as_deref()
-                .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
-
-            let started_at = instant::Instant::now();
-            let result = self
-                .execute_command(
-                    shell_command_to_get_executables,
-                    None,
-                    env_vars,
-                    ExecuteCommandOptions::default(),
-                )
-                .await;
-            match &result {
-                Ok(output) => log::info!(
-                    "Executable listing for {} finished with status {:?} in {:?}",
-                    shell.shell_type().name(),
-                    output.status,
-                    started_at.elapsed()
-                ),
-                Err(error) => log::info!(
-                    "Executable listing for {} failed after {:?}: {error:#}",
-                    shell.shell_type().name(),
-                    started_at.elapsed()
-                ),
-            }
-
-            let is_msys2 =
-                self.info.launch_data.as_ref().is_some_and(|launch_data| {
-                    matches!(launch_data, ShellLaunchData::MSYS2 { .. })
-                });
-            // We gather the external Windows-specific commands by using PowerShell because
-            // Git Bash's `compgen` is slow at gathering these. The Git Bash-specific commands
-            // like ls.exe are retrieved above.
-            let mut new_commands = if is_msys2 {
+        let (load_future, receiver) =
+            (async {
+                let shell = self.info.shell.clone();
+                let shell_command_to_get_executables =
+                    shell.shell_type().shell_command_to_get_executables();
                 let env_vars = self
                     .info
                     .path
                     .as_deref()
                     .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
-                let executor = self.command_executor.clone();
-                let windows_results = executor
-                    .execute_command(
-                        ShellType::PowerShell.shell_command_to_get_executables(),
-                        &Shell::new(ShellType::PowerShell, None, None, Default::default(), None),
+
+                let started_at = instant::Instant::now();
+                let result = run_executable_listing(shell.shell_type().name(), || {
+                    self.execute_command(
+                        shell_command_to_get_executables,
                         None,
-                        env_vars,
+                        env_vars.clone(),
                         ExecuteCommandOptions::default(),
                     )
-                    .await;
-                HashSet::from_iter(
-                    ShellType::PowerShell
-                        .executables_from_shell_command_output(
-                            windows_results,
-                            false, /* is_msys2 */
+                })
+                .await;
+
+                let is_msys2 = self.info.launch_data.as_ref().is_some_and(|launch_data| {
+                    matches!(launch_data, ShellLaunchData::MSYS2 { .. })
+                });
+                // We gather the external Windows-specific commands by using PowerShell because
+                // Git Bash's `compgen` is slow at gathering these. The Git Bash-specific commands
+                // like ls.exe are retrieved above.
+                let mut new_commands = if is_msys2 {
+                    let env_vars =
+                        self.info.path.as_deref().map(|path| {
+                            HashMap::from_iter([("PATH".to_string(), path.to_string())])
+                        });
+                    let executor = self.command_executor.clone();
+                    let powershell =
+                        Shell::new(ShellType::PowerShell, None, None, Default::default(), None);
+                    let windows_results = run_executable_listing("powershell", || {
+                        executor.execute_command(
+                            ShellType::PowerShell.shell_command_to_get_executables(),
+                            &powershell,
+                            None,
+                            env_vars.clone(),
+                            ExecuteCommandOptions::default(),
                         )
+                    })
+                    .await;
+                    HashSet::from_iter(
+                        ShellType::PowerShell
+                            .executables_from_shell_command_output(
+                                windows_results,
+                                false, /* is_msys2 */
+                            )
+                            .into_iter(),
+                    )
+                } else {
+                    HashSet::new()
+                };
+                let listing_succeeded = result.is_ok();
+                new_commands.extend(
+                    shell
+                        .shell_type()
+                        .executables_from_shell_command_output(result, is_msys2)
                         .into_iter(),
-                )
-            } else {
-                HashSet::new()
-            };
-            new_commands.extend(
-                shell
-                    .shell_type()
-                    .executables_from_shell_command_output(result, is_msys2)
-                    .into_iter(),
-            );
-            log::info!(
-                "Loaded {} external commands for {} in {:?}",
-                new_commands.len(),
-                shell.shell_type().name(),
-                started_at.elapsed()
-            );
-            if self.external_commands.set(new_commands).is_err() {
-                log::warn!("External commands should only be loaded once per session.");
-            }
-        })
-        .remote_handle();
+                );
+                if !listing_succeeded && new_commands.is_empty() {
+                    // Storing the empty set would make the session look as if it had no executables
+                    // for the rest of its life, and the listing is only ever attempted once.
+                    log::warn!(
+                        "Could not list the executables for {}; leaving them unloaded",
+                        shell.shell_type().name()
+                    );
+                    return;
+                }
+                log::info!(
+                    "Loaded {} external commands for {} in {:?}",
+                    new_commands.len(),
+                    shell.shell_type().name(),
+                    started_at.elapsed()
+                );
+                if self.external_commands.set(new_commands).is_err() {
+                    log::warn!("External commands should only be loaded once per session.");
+                }
+            })
+            .remote_handle();
 
         match self
             .load_external_commands_future

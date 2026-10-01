@@ -2058,18 +2058,41 @@ pub fn test_shell_reinitializing() -> Builder {
 }
 
 /// Verifies that ctrl-c correctly terminates long-running commands.
+///
+/// The command prints a line and then replaces itself with `sleep`, so when the line is on screen
+/// the foreground process is the one that ctrl-c has to end. Sending ctrl-c as soon as the shell
+/// reports that the command started (the pre-exec hook) can reach the shell before it has
+/// started `sleep`, in which case the interrupt is lost and `sleep` runs for 999 s.
 pub fn test_ctrl_c() -> Builder {
     new_builder()
         // TODO: Unknown failure for Powershell
         .set_should_run_test(skip_if_powershell)
+        .with_setup(|utils| {
+            std::fs::write(
+                utils.test_dir().join("print_then_sleep.sh"),
+                "echo started\nexec sleep 999\n",
+            )
+            .expect("could not write script");
+        })
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
-            TestStep::new("Run read")
+            TestStep::new("Run the script")
                 .add_named_assertion("no pending model events", assert_no_pending_model_events())
-                .with_input_string("sleep 999", Some(&["enter"]))
+                .with_input_string("sh print_then_sleep.sh", Some(&["enter"]))
                 .add_assertion(
                     assert_long_running_block_executing_for_single_terminal_in_tab(true, 0),
-                ),
+                )
+                .add_assertion(|app, window_id| {
+                    let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
+                    terminal_view.read(app, |view, _ctx| {
+                        let model = view.model.lock();
+                        let output = model.block_list().active_block().output_to_string();
+                        async_assert!(
+                            output.contains("started"),
+                            "The script has not printed yet: {output:?}"
+                        )
+                    })
+                }),
         )
         .with_step(
             new_step_with_default_assertions("Check ctrl-c terminates the command")
