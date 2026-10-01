@@ -178,39 +178,42 @@ impl Shell {
 
     /// Returns `true` if the given command should be written to history based on the shell's
     /// options.
+    ///
+    /// A command that starts with a space is left out when the shell leaves it out of its own
+    /// history: zsh with `histignorespace`, bash with `HISTCONTROL` containing `ignorespace` or
+    /// `ignoreboth`, and fish always (fish does not record such commands and has no option to
+    /// change that). PowerShell has no such default, so its commands are always added.
     pub fn should_add_command_to_history(&self, command: &str) -> bool {
         if command.trim().is_empty() {
             return false;
         }
-        match &self.options {
-            Some(options) => {
-                if !command.starts_with(' ') {
-                    return true;
-                }
-
-                // If the command starts with a space, check the shell's options to determine if it
-                // should be added to history.
-                match self.shell_type {
-                    ShellType::Zsh => !options.contains("histignorespace"),
-                    ShellType::Bash => {
-                        // Look for our fake option that contains the value of the HISTCONTROL
-                        // environment variable.
-                        if let Some(histcontrol) =
-                            options.iter().find(|opt| opt.starts_with("!histcontrol"))
-                        {
-                            // HISTCONTROL can contain a single value or a list of values separated
-                            // by colons.  In either case, we want to know whether the "ignorespace"
-                            // or "ignoreboth" (ignorespace+ignoredups) values are present.
-                            !histcontrol.contains("ignorespace")
-                                && !histcontrol.contains("ignoreboth")
-                        } else {
-                            true
-                        }
+        if !command.starts_with(' ') {
+            return true;
+        }
+        match self.shell_type {
+            ShellType::Zsh => self
+                .options
+                .as_ref()
+                .is_none_or(|options| !options.contains("histignorespace")),
+            ShellType::Bash => {
+                // Look for our fake option that contains the value of the HISTCONTROL
+                // environment variable.
+                let histcontrol = self
+                    .options
+                    .as_ref()
+                    .and_then(|options| options.iter().find(|opt| opt.starts_with("!histcontrol")));
+                match histcontrol {
+                    // HISTCONTROL can contain a single value or a list of values separated by
+                    // colons. In either case, we want to know whether the "ignorespace" or
+                    // "ignoreboth" (ignorespace+ignoredups) values are present.
+                    Some(histcontrol) => {
+                        !histcontrol.contains("ignorespace") && !histcontrol.contains("ignoreboth")
                     }
-                    _ => true,
+                    None => true,
                 }
             }
-            None => true,
+            ShellType::Fish => false,
+            ShellType::PowerShell => true,
         }
     }
 }

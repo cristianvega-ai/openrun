@@ -1326,11 +1326,18 @@ fn bash_without_histcontrol_persists_a_leading_space_command() {
     assert_leading_space_command_persistence(ShellType::Bash, None, true);
 }
 
-/// The shell options only cover zsh and bash; fish and PowerShell commands are always saved.
+/// Fish does not record commands that start with a space, so neither does the app.
 #[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
-fn fish_persists_a_leading_space_command() {
-    assert_leading_space_command_persistence(ShellType::Fish, None, true);
+fn fish_keeps_a_leading_space_command_out_of_the_database() {
+    assert_leading_space_command_persistence(ShellType::Fish, None, false);
+}
+
+/// PowerShell has no leading-space rule, so such a command is saved.
+#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
+#[test]
+fn powershell_persists_a_leading_space_command() {
+    assert_leading_space_command_persistence(ShellType::PowerShell, None, true);
 }
 
 #[cfg_attr(windows, ignore = "TODO: fix on Windows")]

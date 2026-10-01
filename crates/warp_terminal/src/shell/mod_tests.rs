@@ -263,11 +263,21 @@ fn test_should_add_command_to_history() {
         }
     }
 
-    // Fish has no shell options that prevent a command from being written to history.
+    // Fish never records a command that starts with a space, whatever its options.
     {
-        let fish_shell = Shell::new(ShellType::Fish, None, None, Default::default(), None);
-        assert!(fish_shell.should_add_command_to_history("asdf"));
-        assert!(fish_shell.should_add_command_to_history(" asdf"));
+        for options in [None, Some(HashSet::from(["histignorespace".to_string()]))] {
+            let fish_shell = Shell::new(ShellType::Fish, None, options, Default::default(), None);
+            assert!(fish_shell.should_add_command_to_history("asdf"));
+            assert!(!fish_shell.should_add_command_to_history(" asdf"));
+            assert!(!fish_shell.should_add_command_to_history("  "));
+        }
+    }
+
+    // PowerShell has no such default, so a leading space does not keep a command out.
+    {
+        let pwsh = Shell::new(ShellType::PowerShell, None, None, Default::default(), None);
+        assert!(pwsh.should_add_command_to_history("asdf"));
+        assert!(pwsh.should_add_command_to_history(" asdf"));
     }
 }
 

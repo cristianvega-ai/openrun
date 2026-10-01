@@ -158,6 +158,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Completion generators: OS network sandbox](#completion-generators-os-network-sandbox) — local command executors run every generator, alias and helper subprocess inside a sandbox-exec profile (macOS) or a seccomp filter (Linux) that denies IP networking and fails closed; DNS and background URL-session escapes found and closed on macOS; none on Windows
 - [Completion generators: tokens as data, no environment network, no project code](#completion-generators-tokens-as-data-no-environment-network-no-project-code) — 104 more generators are denied (24 injectable, 24 environment-network verified, 33 likely, 25 project code), alias generators are denied by default, the allow-list shrinks from 333 to 229, and an injection corpus runs hostile tokens through every allowed token-taking generator
 - [Completion generators: restore the isolated tier](#completion-generators-restore-the-isolated-tier) — 21 generators whose tools reached a network or ran repository code in the environment alone run again on macOS and Linux local sessions, where the sandbox and the offline table were shown to stop it; the rest stay denied with measured reasons
+- [Fish leading-space commands stay out of history](#fish-leading-space-commands-stay-out-of-history) — `Shell::should_add_command_to_history` now leaves out a leading-space command for fish, as fish does, so it and its block are not saved; PowerShell is unchanged (HIST-2)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3864,3 +3865,15 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 **User-visible impact:** on macOS and Linux local sessions `cargo run --bin <Tab>`, `cargo run --target <Tab>`, `rustup doc <Tab>`, `npm install -w <Tab>`, `docker start <Tab>` (container names) and git's tracked-file and staged-file completions work again; nothing changes on Windows or in sessions that are not isolated.
 
 **Notes:** the tier is not a proof for arbitrary projects. `cargo metadata --no-deps` was checked not to run a `rustc-wrapper` from a project's `.cargo/config.toml` (by hand), but other project configuration was not exercised.
+
+## Fish leading-space commands stay out of history
+**Why:** HIST-1 left fish saving a command that starts with a space, because `Shell::should_add_command_to_history` only had zsh and bash rules. Fish itself does not record such a command, so the app kept a copy the user's shell had deliberately not kept.
+
+**Modified:**
+- `crates/warp_terminal/src/shell/mod.rs`: `should_add_command_to_history` is a match on the shell type for commands that start with a space: zsh (`histignorespace`) and bash (`HISTCONTROL` `ignorespace`/`ignoreboth`) as before, fish always leaves the command out, PowerShell always adds it. Fish needs no shell option, so the check no longer depends on the shell options being known.
+- `mod_tests.rs` and `terminal/input_tests.rs`: the fish expectation is reversed (`fish_keeps_a_leading_space_command_out_of_the_database`; the command and its block are absent from the database bytes) and a PowerShell test pins that its leading-space command is saved.
+- `README.md`, `SECURITY.md`: fish is listed with zsh and bash; PowerShell is stated as having no leading-space default.
+
+**User-visible impact:** in a fish session, a command typed with a leading space no longer enters up-arrow history or the database, and its block is not saved for session restore. The in-band commands the app runs in fish already used this convention.
+
+**Notes:** the fish behaviour is taken from the app's own code, which relies on it (`in_band_command_executor.rs`: leading space omits a command from fish history, "default, non-configurable"), and from fish's documented behaviour. It could not be checked against a fish binary: none is installed on the development machine, and no fish docs are in the installed share directories. The HIST-1 section's statement that fish and PowerShell are always saved is superseded for fish.
