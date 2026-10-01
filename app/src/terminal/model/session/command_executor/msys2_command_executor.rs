@@ -11,7 +11,7 @@ use typed_path::{TypedPath, WindowsPath};
 use warp_completer::completer::CommandOutput;
 use warp_util::path::{convert_msys2_to_windows_native_path, msys2_exe_to_root};
 
-use super::{CommandExecutor, ExecuteCommandOptions};
+use super::{CommandExecutor, ExecuteCommandOptions, offline_environment};
 use crate::safe_warn;
 use crate::terminal::shell::{Shell, ShellType};
 
@@ -44,6 +44,11 @@ impl MSYS2CommandExecutor {
         let mut command_process = Command::new(windows_native_shell_path);
         command_process.arg(POWERSHELL_CONFIG_FLAG);
 
+        let (environment_variables, environment_removals) =
+            offline_environment::harden(environment_variables);
+        for name in &environment_removals {
+            command_process.env_remove(name);
+        }
         if let Some(mut environment_variables) = environment_variables {
             // We need to convert the unix-style paths to Windows paths so that PowerShell can
             // parse it.
@@ -95,6 +100,11 @@ impl MSYS2CommandExecutor {
         let mut command_process = Command::new(&self.msys2_shell_path);
         command_process.arg(BASH_CONFIG_FLAG);
 
+        let (environment_variables, environment_removals) =
+            offline_environment::harden(environment_variables);
+        for name in &environment_removals {
+            command_process.env_remove(name);
+        }
         if let Some(mut environment_variables) = environment_variables {
             // We exclude anything from the Windows filesystem here because it is very slow.
             // Compgen can take over a minute to run locally otherwise. We retrieve the

@@ -14,7 +14,7 @@ use warp_terminal::model::Point;
 use warp_util::on_cancel::OnCancelFutureExt;
 use warpui::r#async::block_on;
 
-use super::ExecuteCommandOptions;
+use super::{ExecuteCommandOptions, offline_environment};
 use crate::safe_info;
 use crate::terminal::SizeInfo;
 use crate::terminal::event::ExecutedExecutorCommandEvent;
@@ -397,6 +397,17 @@ impl CommandExecutor for InBandCommandExecutor {
         _execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
         let command_id = chrono::Local::now().timestamp_micros().to_string();
+
+        // The command runs in the user's own shell, so the offline environment cannot be set from
+        // outside. For bash and zsh it is set by statements in front of the command, inside the
+        // generator's command substitution so nothing reaches the interactive session. Fish and
+        // PowerShell sessions that use this executor (remote or sub-shell sessions only; local
+        // sessions use the local executor) do not get it.
+        let command = match offline_environment::posix_prologue(shell.shell_type()) {
+            Some(prologue) => format!("{prologue} {command}"),
+            None => command.to_owned(),
+        };
+        let command = command.as_str();
 
         // If the future is aborted (via a call to `AbortHandle#abort`) we need to make sure to
         // remove the command from the in-band generator pending command queue to ensure that

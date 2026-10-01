@@ -8,7 +8,7 @@ use command::r#async::Command;
 use itertools::Itertools as _;
 
 use super::shared::serialize_variables_for_shell;
-use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions};
+use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions, offline_environment};
 use crate::safe_warn;
 use crate::terminal::shell::{Shell, ShellType};
 
@@ -52,6 +52,7 @@ impl WslCommandExecutor {
         }
 
         let mut command_with_env = Cow::Borrowed(command);
+        let environment_variables = offline_environment::harden_isolated(environment_variables);
         if let Some(mut env_vars) = environment_variables {
             if let Some(mut path_var) = env_vars.remove("PATH") {
                 // Unfortunately, bash's `compgen` is extremely slow with PATH contains a bunch of

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use command::r#async::Command;
 use parking_lot::Mutex;
 
-use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions};
+use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions, offline_environment};
 use crate::safe_warn;
 use crate::terminal::shell::{Shell, ShellType};
 
@@ -182,6 +182,9 @@ mod tests;
 /// `CommandExecutor` implementation that executes the given `command` in a forked subshell process
 /// where the current working directory is set to `current_dir_path` and $PATH is set
 /// according to environment_variables. This is typically used to run generator commands for local sessions.
+///
+/// Commands run through [`Self::execute_local_command`] (every `CommandExecutor` call) get the
+/// offline environment table from [`offline_environment`] applied on top of the given variables.
 #[derive(Debug)]
 pub struct LocalCommandExecutor {
     local_shell_path: Option<PathBuf>,
@@ -213,16 +216,23 @@ impl LocalCommandExecutor {
             ShellType::PowerShell => Some("-NoProfile"),
         };
 
+        let (environment_variables, environment_removals) =
+            offline_environment::harden(environment_variables);
+
         self.execute_local_command_internal(
             command,
             current_directory_path,
             environment_variables,
+            &environment_removals,
             shell_config_flag,
             execute_command_options,
         )
         .await
     }
 
+    /// Runs `command` in the user's login shell so their rc files are evaluated. This is for
+    /// capturing the interactive environment, not for generators, so it does not get the offline
+    /// environment table (the table would show up in the captured environment).
     pub async fn execute_local_command_in_login_shell(
         &self,
         command: &str,
@@ -242,6 +252,7 @@ impl LocalCommandExecutor {
             command,
             current_directory_path,
             environment_variables,
+            &[],
             shell_config_flag,
             ExecuteCommandOptions {
                 // We have to run the command in the same shell as the session
@@ -285,6 +296,8 @@ impl LocalCommandExecutor {
         command: &str,
         current_directory_path: Option<&str>,
         environment_variables: Option<HashMap<String, String>>,
+        // Variables to strip from the environment inherited from the app process.
+        environment_removals: &[&str],
         // The value of shell_config_flag is appended as an argument
         // indicating the supplied command should be run under some configuration,
         // i.e. in a login shell or without sourcing .rc files
@@ -305,6 +318,9 @@ impl LocalCommandExecutor {
         // they're treated as single words.
         if let Some(environment_variables) = environment_variables {
             command_process.envs(&environment_variables);
+        }
+        for name in environment_removals {
+            command_process.env_remove(name);
         }
 
         // Set the current dir, if any.

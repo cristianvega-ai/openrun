@@ -3,6 +3,7 @@ mod in_band_command_executor;
 mod local_command_executor;
 #[cfg(feature = "local_tty")]
 mod msys2_command_executor;
+mod offline_environment;
 #[cfg(feature = "local_tty")]
 mod wsl_command_executor;
 use std::collections::HashMap;
