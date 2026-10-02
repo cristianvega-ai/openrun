@@ -119,10 +119,10 @@ jobs:
   # Compiles every test of the workspace once. The jobs below run the tests from the archive, so
   # the build, which is most of the time of a run, is not repeated in each of them.
   #
-  # The build cache holds the whole `target/` directory, workspace crates and incremental
-  # compilation state included. Cargo decides by modification times whether a workspace crate is
-  # up to date, and a fresh checkout gives every file a new one, so script/ci_restore_mtimes first
-  # puts the recorded times back on the files that did not change.
+  # The build cache holds the whole `target/` directory, workspace crates included. Cargo decides
+  # by modification times whether a workspace crate is up to date, and a fresh checkout gives
+  # every file a new one, so script/ci_restore_mtimes first puts the recorded times back on the
+  # files that did not change.
   build:
     name: Build tests (macOS)
     runs-on: macos-latest
@@ -169,13 +169,13 @@ jobs:
         run: |
           python3 script/ci_restore_mtimes write target/ci-source-manifest.txt
           rm -rf target/nextest target/debug/examples
-          du -sh target target/debug/incremental target/debug/deps target/debug/build 2>/dev/null || true
+          du -sh target target/debug/deps target/debug/build 2>/dev/null || true
 
-      # Saving takes about a minute for 3 GB. A build that took less than that did little work, so
-      # the next one can start from the same cache just as well; the changes pile up until a build
-      # is long enough to be worth saving.
+      # Saving takes about half a minute. A build that took about as long did little work, so the
+      # next one can start from the same cache just as well; the changes pile up until a build is
+      # long enough to be worth saving.
       - name: Save the build cache
-        if: ${{ inputs.cache && github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true' && (steps.cache.outputs.cache-hit == '' || fromJSON(steps.build.outputs.seconds) > 120) }}
+        if: ${{ inputs.cache && github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true' && (steps.cache.outputs.cache-hit == '' || fromJSON(steps.build.outputs.seconds) > 90) }}
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
@@ -383,10 +383,14 @@ jobs:
   # (crates/integration/shell_matrix.txt, each with its reason), checks that those skip themselves,
   # and runs the rest with `CI=true`, so a test that skips or fails fails the job.
   shells:
-    name: Shell matrix (macOS)
+    name: Shell matrix ${{ matrix.shell }} (macOS)
     needs: build
     runs-on: macos-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [bash3, bash5, fish, pwsh]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/rust-macos
@@ -396,31 +400,20 @@ jobs:
       - uses: ./.github/actions/test-archive
 
       - name: Install Homebrew's bash
+        if: ${{ matrix.shell == 'bash5' }}
         run: |
           if [ ! -x "$(brew --prefix)/bin/bash" ]; then
             HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install bash
           fi
           "$(brew --prefix)/bin/bash" --version | head -1
 
-      - name: bash 3.2 (the bash of macOS)
-        run: script/ci_shell_matrix bash3
-
-      - name: bash 5 (Homebrew)
-        if: ${{ !cancelled() }}
-        run: script/ci_shell_matrix bash5
-
-      - name: fish
-        if: ${{ !cancelled() }}
-        run: script/ci_shell_matrix fish
-
-      - name: PowerShell 7
-        if: ${{ !cancelled() }}
-        run: script/ci_shell_matrix pwsh
+      - name: Run the integration suite with ${{ matrix.shell }}
+        run: script/ci_shell_matrix ${{ matrix.shell }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ always() }}
         with:
-          name: junit-shells
+          name: junit-shells-${{ matrix.shell }}
           path: junit
           if-no-files-found: error
 

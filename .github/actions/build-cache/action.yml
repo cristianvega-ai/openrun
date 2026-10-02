@@ -1,7 +1,6 @@
 name: Build cache
 description: >-
-  Restores the build directory of the last build of `main` (workspace crates and incremental
-  compilation state included) and puts the recorded modification times back on the files that did
+  Restores the build directory of the last build of `main` (workspace crates included) and puts the recorded modification times back on the files that did
   not change, so cargo rebuilds only what changed. The Build tests job saves the cache.
 
 inputs:
@@ -20,17 +19,19 @@ outputs:
 runs:
   using: composite
   steps:
-    # Artifacts of another operating system or architecture are of no use. Bump the version to
-    # start a new cache.
+    # Artifacts of another operating system or architecture are of no use, and neither are those
+    # of an older runner image: build scripts probe the SDK and the compilers of the machine, and
+    # cargo does not notice when those change. Bump the version to start a new cache.
     - name: Name the build cache
       id: name
       shell: bash
       run: |
-        echo "prefix=build-v1-$RUNNER_OS-$RUNNER_ARCH" >> "$GITHUB_OUTPUT"
-        echo "CACHE_PREFIX=build-v1-$RUNNER_OS-$RUNNER_ARCH" >> "$GITHUB_ENV"
-        # Incremental compilation is part of the cache: a change to one crate rebuilds only what
-        # the change reaches. It has to be on for every build that uses the cache.
-        echo "CARGO_INCREMENTAL=1" >> "$GITHUB_ENV"
+        echo "prefix=build-v2-$RUNNER_OS-$RUNNER_ARCH-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+        # No incremental compilation: it would put 3 GB more in the cache (restoring and saving
+        # take a minute each) and was no faster on the changes measured in CI (CHANGES.md). The
+        # build that saves the cache and the builds that use it must agree, as the setting is part
+        # of cargo's fingerprint.
+        echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
 
     - name: Restore the build cache
       id: restore
