@@ -80,7 +80,12 @@ jobs:
             fi
             echo "::group::build $sha (offset $offset, previous: ${previous:-none})"
             start=$(date +%s)
-            cargo nextest archive --locked --workspace --archive-file "$RUNNER_TEMP/tests.tar.zst" 2>&1 | grep -E "^ +(Compiling|Finished|Archived)" | awk '/Compiling/ {n++; next} {print} END {print n " crates compiled"}'
+            if ! cargo nextest archive --locked --workspace --archive-file "$RUNNER_TEMP/tests.tar.zst" > "$RUNNER_TEMP/build.log" 2>&1; then
+              tail -40 "$RUNNER_TEMP/build.log"
+              exit 1
+            fi
+            grep -E "^ +(Finished|Archived)" "$RUNNER_TEMP/build.log" || true
+            echo "$(grep -c '^ *Compiling' "$RUNNER_TEMP/build.log") crates compiled"
             end=$(date +%s)
             echo "::endgroup::"
             echo "RESULT ${{ matrix.name }} offset=$offset sha=${sha:0:9} build_seconds=$((end - start)) archive=$(du -k "$RUNNER_TEMP/tests.tar.zst" | cut -f1)KB"
