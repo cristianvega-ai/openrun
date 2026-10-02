@@ -41,7 +41,7 @@ Your shell and the programs you run in it, including SSH sessions and CLI agents
 
 `script/offline_audit` checks the repository for reintroduced Warp hosts, network-capable code and banned dependencies, and CI runs it.
 
-CI lints (clippy with `-D warnings`) on Linux, Windows and macOS, runs the unit tests, and runs the whole test suite in a network sandbox. A test that passes only on a retry fails the run. See [CONTRIBUTING.md](CONTRIBUTING.md#continuous-integration); `script/cross_clippy` reproduces the Windows and Linux lint from a Mac.
+CI (macOS runners only) lints with clippy `-D warnings`, runs the unit and integration tests, and runs the whole test suite plus an idle session in a network sandbox that refuses every address that is not on the machine and logs each attempt. A test that passes only on a retry fails the run. See [CONTRIBUTING.md](CONTRIBUTING.md#continuous-integration).
 
 ## Data stored on your computer
 

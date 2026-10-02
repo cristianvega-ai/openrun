@@ -1,5 +1,6 @@
 name: CI
 
+# OpenRun runs on macOS only, so every job runs on a hosted macOS runner (Apple silicon).
 on:
   push:
   pull_request:
@@ -16,30 +17,11 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   NEXTEST_PROFILE: ci
-  # Development headers and tools needed to compile the workspace on Ubuntu. Mirrors
-  # script/linux/install_build_deps, minus the packaging-only tools.
-  LINUX_BUILD_PACKAGES: >-
-    build-essential cmake pkg-config protobuf-compiler libclang-dev
-    libssl-dev libfreetype-dev libexpat1-dev libgit2-dev libfontconfig1-dev
-  # Integration tests that only pass with zsh as the shell. They run in their own step.
-  ZSH_ONLY_INTEGRATION_TESTS: >-
-    test(=shell_integration_tests::test_git_prompt_chips)
-    | test(=ui_tests::test_open_and_close_settings)
-    | test(=ui_tests::test_restore_snapshot_with_markdown_file)
-    | test(=ui_tests::test_tab_context_menu_copies_metadata)
-    | test(=ui_tests::test_vertical_pane_context_menu_copies_metadata)
-    | test(=ui_tests::test_vertical_tab_context_menu_copies_metadata)
-  # Shells and runtime libraries that unit tests load. Mirrors script/linux/install_runtime_deps
-  # and script/linux/install_test_deps.
-  LINUX_TEST_PACKAGES: >-
-    zsh fish fontconfig
-    libx11-6 libxcb1 libxi6 libxcursor1 libxkbcommon-x11-0
-    libwayland-client0 libwayland-egl1 libegl1 mesa-vulkan-drivers
 
 jobs:
   fmt:
     name: Formatting
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -51,139 +33,6 @@ jobs:
         run: ./script/format --check
 
   clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Free disk space
-        timeout-minutes: 10
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-
-      # script/linux/ci_apt_install limits each apt-get call and retries it; the step limit is the
-      # backstop, so a stuck mirror or dpkg lock fails the step in minutes, not after an hour.
-      - name: Install system packages
-        timeout-minutes: 25
-        run: |
-          # shellcheck disable=SC2086 # The package list is meant to be word-split.
-          script/linux/ci_apt_install $LINUX_BUILD_PACKAGES
-
-      - name: Install the Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          save-if: ${{ github.event_name == 'push' }}
-
-      - name: Check that Cargo.lock is up to date
-        run: cargo metadata --locked --format-version=1 > /dev/null
-
-      - name: Run cargo clippy
-        run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
-
-  # Platform-specific code (`cfg(windows)`, `cfg(target_os = "macos")`) is not compiled by the
-  # Linux job, so it needs its own strict lint on a native runner. Same command as the Linux job.
-  # The cross-target check that script/cross_clippy runs locally covers the same ground without a
-  # runner.
-  clippy-windows:
-    name: Clippy (Windows)
-    runs-on: windows-latest
-    timeout-minutes: 120
-    defaults:
-      run:
-        shell: bash
-    env:
-      # openh264-sys2 assembles with NASM unless told not to; a lint run needs no object code.
-      OPENH264_NO_ASM: "1"
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      # Dependencies unpack to deep paths under the checkout and the cargo registry.
-      - name: Allow long paths in git
-        run: git config --system core.longpaths true
-
-      - name: Install the Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          save-if: ${{ github.event_name == 'push' }}
-
-      - name: Check that Cargo.lock is up to date
-        run: cargo metadata --locked --format-version=1 > /dev/null
-
-      - name: Run cargo clippy
-        run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
-
-  # Windows has no network sandbox, so the offline environment table is the only layer between a
-  # repository and the network or a program it names, and the local git completion generators run
-  # there only when an executor applies it. This job runs the generator policy tests (the
-  # Windows allow-list, the token gate for PowerShell) and the command executor tests, among them
-  # the real-git fixtures: a repository that names programs for `core.fsmonitor`, a clean filter
-  # and `gpg.program`, and a partial clone whose promisor remote is a loopback listener, with each
-  # generator command run through the production executor in Windows PowerShell and PowerShell 7.
-  # `CI=true`, which GitHub Actions sets, makes a missing git or pwsh fail those tests instead of
-  # skipping them, so the tools are checked first.
-  windows-security-tests:
-    name: Security tests (Windows)
-    runs-on: windows-latest
-    timeout-minutes: 120
-    defaults:
-      run:
-        shell: bash
-    env:
-      # openh264-sys2 assembles with NASM unless told not to; the tests need no codec.
-      OPENH264_NO_ASM: "1"
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      # Dependencies unpack to deep paths under the checkout and the cargo registry.
-      - name: Allow long paths in git
-        run: git config --system core.longpaths true
-
-      - name: Install the Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          save-if: ${{ github.event_name == 'push' }}
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
-        with:
-          tool: nextest
-
-      - name: Check the tools the real-tool tests use
-        run: |
-          missing=0
-          for tool in git pwsh powershell; do
-            if path=$(command -v "$tool"); then
-              echo "$tool: $path"
-            else
-              echo "::error::$tool is not installed on this runner"
-              missing=1
-            fi
-          done
-          git --version
-          pwsh -NoProfile -c '$PSVersionTable.PSVersion.ToString()'
-          powershell -NoProfile -c '$PSVersionTable.PSVersion.ToString()'
-          exit "$missing"
-
-      # No retries: a test that fails once and passes on a retry (nextest reports it as FLAKY) is
-      # not a pass.
-      - name: Run the generator policy tests
-        run: |
-          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
-            -E 'package(warp_completer)'
-
-      - name: Run the command executor tests
-        if: ${{ !cancelled() }}
-        run: |
-          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
-            -E 'package(warp) and test(~terminal::model::session::command_executor::)'
-
-  clippy-macos:
     name: Clippy (macOS)
     runs-on: macos-latest
     timeout-minutes: 120
@@ -212,13 +61,89 @@ jobs:
       - name: Run cargo clippy
         run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
 
+  # Every test except the `integration` package, which boots the full app and has its own job.
+  # No retries: a test that fails once and passes on a retry (nextest reports it as FLAKY) is not
+  # a pass.
+  test:
+    name: Unit tests (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: nextest
+
+      - uses: ./.github/actions/macos-test-tools
+
+      # Unit tests may spawn a shell but don't depend on which one. The runner's login shell is
+      # bash 3.2; some tests assume the shell of a developer's Mac, zsh.
+      - name: Run unit tests
+        run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
+          cargo nextest run --locked --workspace --retries 0 -E 'not package(integration)'
+
+  # The `integration` package starts the full app (real AppKit windows and Metal) and a shell in
+  # a pty for each test. A hosted macOS runner has a logged-in GUI session, so no virtual display
+  # is needed.
+  integration:
+    name: Integration tests (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: nextest
+
+      - uses: ./.github/actions/macos-test-tools
+
+      - name: Run the integration tests with zsh
+        run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
+          cargo nextest run --locked --workspace --retries 0 --no-fail-fast -E 'package(integration)'
+
   # The command executor tests for the macOS sandbox (`sandbox-exec` profile, the DNS daemon and
-  # background URL session canaries), the offline environment and the restored completion
-  # generators. The Linux `Unit tests` job runs the Linux half of the same files; this job runs
-  # the half behind `cfg(target_os = "macos")` and runs the shared half against the macOS tools.
-  # The tests that use real tools (git, npm, corepack, rustup, docker, python3) fail instead of
-  # skipping when a tool is missing and `CI=true`, which GitHub Actions sets, so the tools are
-  # installed or checked before the run.
+  # background URL session canaries), the offline environment, the restored completion
+  # generators and the generator policy with its injection corpus. The tests that use real tools
+  # (git, npm, corepack, rustup, docker, python3, fish, pwsh) fail instead of skipping when a tool
+  # is missing and `CI=true`, which GitHub Actions sets, so the tools are installed or checked
+  # first. The offline audit job leaves the modules that test the sandbox itself out of its
+  # sandboxed run (a sandbox cannot be applied twice); they run here.
   macos-security-tests:
     name: Security tests (macOS)
     runs-on: macos-latest
@@ -245,38 +170,7 @@ jobs:
         with:
           tool: nextest
 
-      # Only the command-line client is needed: the tests check what `docker` does with a remote
-      # host or context, not containers.
-      - name: Install the docker command-line client
-        run: |
-          if ! command -v docker > /dev/null; then
-            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install docker
-          fi
-
-      # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`). fish
-      # comes from Homebrew (a bottle, seconds). The macOS image ships pwsh; if a runner image
-      # does not, it is installed from the Homebrew cask, which is slower.
-      - name: Install fish and PowerShell
-        run: |
-          if ! command -v fish > /dev/null; then
-            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install fish
-          fi
-          if ! command -v pwsh > /dev/null; then
-            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask powershell
-          fi
-
-      - name: Check the tools the real-tool tests use
-        run: |
-          missing=0
-          for tool in git npm corepack rustup python3 docker sandbox-exec fish pwsh; do
-            if path=$(command -v "$tool"); then
-              echo "$tool: $path"
-            else
-              echo "::error::$tool is not installed on this runner"
-              missing=1
-            fi
-          done
-          exit "$missing"
+      - uses: ./.github/actions/macos-test-tools
 
       - name: Run the command executor security tests
         run: |
@@ -290,103 +184,35 @@ jobs:
           cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
             -E '(package(warp_completer) and test(~generator_policy)) | (package(warp) and test(~local_command_executor) and test(~session_runs_its_generator_commands))'
 
-  test:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Free disk space
-        timeout-minutes: 10
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-
-      - name: Install system packages
-        timeout-minutes: 25
-        run: |
-          # shellcheck disable=SC2086 # The package lists are meant to be word-split.
-          script/linux/ci_apt_install $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES
-
-      # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`) as well
-      # as bash and zsh, and fail when either is missing (`CI=true`). fish is in
-      # LINUX_TEST_PACKAGES; the runner image ships pwsh.
-      - name: Check that fish and PowerShell are installed
-        run: |
-          missing=0
-          for tool in fish pwsh; do
-            if path=$(command -v "$tool"); then
-              echo "$tool: $path"
-              "$tool" --version
-            else
-              echo "::error::$tool is not installed on this runner"
-              missing=1
-            fi
-          done
-          exit "$missing"
-
-      - name: Install the Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          save-if: ${{ github.event_name == 'push' }}
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
-        with:
-          tool: nextest
-
-      # Unit tests may spawn a shell but don't depend on which one. zsh has the shortest
-      # bootstrap time.
-      - name: Use zsh for tests that spawn a shell
-        run: echo "WARP_SHELL_PATH=$(command -v zsh)" >> "$GITHUB_ENV"
-
-      # No retries: a test that fails once and passes on a retry (nextest reports it as FLAKY) is
-      # not a pass.
-      - name: Run unit tests
-        run: cargo nextest run --locked --workspace --retries 0 -E 'not package(integration)'
-
   # Fails when the tree, the dependency graph or a sandboxed test run reaches for Warp-owned
-  # hosts or any non-loopback address. It blocks merges.
+  # hosts or any non-local address. It blocks merges.
+  #
+  # The unit tests, the integration tests and a two-minute idle session run in a network sandbox
+  # (script/offline_sandbox_macos): `sandbox-exec` refuses every address that is not on the
+  # machine, and the unified log is read for the refusals, which `offline_audit --net-log` turns
+  # into a pass or fail.
   #
   # Known RUSTSEC advisories in Cargo.lock (unmaintained crates and a few vulnerabilities in
   # transitive dependencies, all older than this fork) are deliberately not part of this job:
   # `cargo deny check advisories` fails on them and the dependency versions are not ours to bump
   # here. Only `bans licenses sources` run below. CHANGES.md ("Offline guardrails") lists them.
   offline-audit:
-    name: Offline audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    name: Offline audit (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      # The whole test process tree runs in one sandbox profile, and a second one cannot be
+      # applied, so the app runs the commands of its completion generators directly (see
+      # network_sandbox.rs; only test and integration-test builds read this).
+      WARP_NETWORK_SANDBOX_BY_PARENT: "1"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Free disk space
-        timeout-minutes: 10
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-
-      - name: Install system packages
-        timeout-minutes: 25
+      - name: Install ripgrep
         run: |
-          # shellcheck disable=SC2086 # The package lists are meant to be word-split.
-          script/linux/ci_apt_install $LINUX_BUILD_PACKAGES $LINUX_TEST_PACKAGES \
-            ripgrep strace xvfb iproute2
-
-      # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`) as well
-      # as bash and zsh, and fail when either is missing (`CI=true`). fish is in
-      # LINUX_TEST_PACKAGES; the runner image ships pwsh.
-      - name: Check that fish and PowerShell are installed
-        run: |
-          missing=0
-          for tool in fish pwsh; do
-            if path=$(command -v "$tool"); then
-              echo "$tool: $path"
-              "$tool" --version
-            else
-              echo "::error::$tool is not installed on this runner"
-              missing=1
-            fi
-          done
-          exit "$missing"
+          if ! command -v rg > /dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ripgrep
+          fi
 
       - name: Install the Rust toolchain from rust-toolchain.toml
         run: rustup toolchain install
@@ -395,10 +221,19 @@ jobs:
         with:
           save-if: ${{ github.event_name == 'push' }}
 
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
       - name: Install cargo-nextest and cargo-deny
         uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
         with:
           tool: nextest,cargo-deny
+
+      - uses: ./.github/actions/macos-test-tools
 
       # The static audit reads the sources of git dependencies (found with `cargo metadata`). Fetch
       # them first so it does not depend on a cached build; it skips build-generated directories.
@@ -421,117 +256,70 @@ jobs:
         if: ${{ !cancelled() }}
         run: cargo nextest run --locked --workspace --no-run
 
-      # Ubuntu 24.04 blocks unprivileged user namespaces by default.
-      - name: Allow unprivileged user namespaces
-        if: ${{ !cancelled() }}
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
-      # script/offline_sandbox runs a command in a network namespace with only a loopback
-      # interface while strace records each connect and send (see the script for the details).
-      #
-      # The canaries prove that the sandbox and the log check can fail: the sandbox makes one real
-      # outside connect and sends one datagram to a DNS port, and `offline_audit --net-log` must
-      # flag both. If strace stops recording (an unsupported option, a changed log format), this
-      # step fails instead of letting an empty log pass as "no connections".
+      # The canaries prove that the sandbox and the log check can fail: each sandboxed command makes
+      # one access that must be refused (a TCP connection to a documentation address, a datagram to
+      # a DNS port, a name lookup), and `offline_audit --net-log` must flag every one. A connection
+      # to the loopback address must not be flagged. If the log stops recording (a changed format, a
+      # runner image without the reports), this step fails instead of letting an empty log pass as
+      # "no connections".
       - name: Check the sandbox catches a connection
         if: ${{ !cancelled() }}
         run: |
-          ./script/offline_sandbox net-canary-connect.log python3 -c '
-          import socket
-          s = socket.socket()
-          s.settimeout(2)
-          try:
-              s.connect(("203.0.113.7", 443))
-          except OSError as error:
-              print("connect failed as expected:", error)
-          '
-          ./script/offline_sandbox net-canary-dns.log python3 -c '
+          cat > canary_udp.py << 'EOF'
           import socket
           s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-          s.sendto(b"canary", ("127.0.0.1", 53))
-          print("sent a datagram to a DNS port")
-          '
-          for log in net-canary-connect.log net-canary-dns.log; do
+          try:
+              s.sendto(b"canary", ("203.0.113.7", 53))
+          except OSError as error:
+              print("datagram refused as expected:", error)
+          EOF
+          cat > canary_dns.py << 'EOF'
+          import socket
+          try:
+              socket.getaddrinfo("example.com", 80)
+              print("the name was resolved")
+          except OSError as error:
+              print("lookup refused as expected:", error)
+          EOF
+          ./script/offline_sandbox_macos net-canary-tcp.log /usr/bin/curl -s -m 3 -o /dev/null https://203.0.113.7/ || true
+          ./script/offline_sandbox_macos net-canary-udp.log /usr/bin/python3 canary_udp.py
+          ./script/offline_sandbox_macos net-canary-dns.log /usr/bin/python3 canary_dns.py
+          ./script/offline_sandbox_macos net-canary-loopback.log /usr/bin/curl -s -m 3 -o /dev/null http://127.0.0.1:9/ || true
+          failed=0
+          for log in net-canary-tcp.log net-canary-udp.log net-canary-dns.log; do
             if ./script/offline_audit --net-log "$log"; then
               echo "::error::the recorded-connections check did not flag the canary in $log"
-              cat "$log"
-              exit 1
+              failed=1
             fi
           done
+          if ! ./script/offline_audit --net-log net-canary-loopback.log; then
+            echo "::error::a connection to the loopback address was flagged"
+            failed=1
+          fi
+          exit "$failed"
 
-      # One test that boots the app and bootstraps bash, so a slow or broken sandbox shows up in
-      # minutes and not after the whole suite. No retries: it must pass the first time.
-      - name: Smoke test the sandbox
-        if: ${{ !cancelled() }}
-        timeout-minutes: 10
-        run: |
-          WARP_SHELL_PATH=$(command -v bash)
-          export WARP_SHELL_PATH
-          ./script/offline_sandbox net-smoke.log xvfb-run -a \
-            cargo nextest run --locked --workspace --offline --retries 0 \
-              -E "test(~test_bash_bootstraps_with_prompt_command_array)"
-
-      # Every test except the `integration` package, which boots the full app and gets its own
-      # steps. Set up like the `Unit tests` job: zsh for tests that spawn a shell and no X server
-      # (the Linux clipboard tests skip themselves without a display and fail under xvfb).
+      # Every test except the `integration` package, with zsh as the shell. The modules that test
+      # the sandbox itself (`network_sandbox`) and the offline environment of real tools run in the
+      # Security tests job: a second sandbox cannot be applied inside this one.
       - name: Run the unit tests in a network sandbox
         if: ${{ !cancelled() }}
         timeout-minutes: 30
         run: |
           WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
-          ./script/offline_sandbox net-unit.log \
+          ./script/offline_sandbox_macos net-unit.log \
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-              -E "not package(integration)"
+              -E 'not package(integration) and not test(~command_executor::network_sandbox) and not test(~command_executor::offline_environment)'
 
-      # Tools that the app or the shell start, not the app itself, can look up a host. The runner
-      # image has real ones: `gh` (the app runs it for the pull request of the current branch),
-      # other cloud CLIs, and Ubuntu's command-not-found helper, which the shell runs for a
-      # mistyped command and which starts `snap advise-snap` to ask the snap store. One sandboxed
-      # run recorded DNS requests from such a Go program. Stubs first in the PATH make the CLIs
-      # fail at once and the helper is made non-executable (the shell then just prints "command
-      # not found"), as on a machine where they are not set up.
-      - name: Disable the GitHub and cloud CLIs and command-not-found
-        run: |
-          stubs="$RUNNER_TEMP/offline-stubs"
-          mkdir -p "$stubs"
-          for tool in gh kubectl docker podman aws az gcloud gsutil terraform helm doctl snap; do
-            printf '#!/bin/sh\necho "%s: disabled in the offline sandbox" >&2\nexit 1\n' "$tool" > "$stubs/$tool"
-            chmod +x "$stubs/$tool"
-          done
-          echo "$stubs" >> "$GITHUB_PATH"
-          sudo chmod -x /usr/lib/command-not-found
-
-      # The `integration` package with bash, the shell these steps use everywhere else. No retries
-      # in this step or the other blocking ones (the ci profile's own retries are off too, see
-      # .config/nextest.toml): a test that fails once and passes on a retry is reported as FLAKY by
-      # nextest and is not a pass, and a retry would hide it behind a green job. Six tests are
-      # left out and run with zsh in the next step: their expectations (tab title `~`, the git
-      # branch chip) do not hold with bash on the runner, with or without the sandbox (a control
-      # run outside it failed the same ones; CHANGES.md, "CI: the network-sandbox steps finish").
       - name: Run the integration tests in a network sandbox
         if: ${{ !cancelled() }}
         timeout-minutes: 40
         run: |
-          WARP_SHELL_PATH=$(command -v bash)
-          export WARP_SHELL_PATH
-          ./script/offline_sandbox net-integration.log xvfb-run -a \
-            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-              -E "package(integration) and not ($ZSH_ONLY_INTEGRATION_TESTS)"
-
-      - name: Run the zsh integration tests in a network sandbox
-        if: ${{ !cancelled() }}
-        timeout-minutes: 15
-        run: |
           WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
-          ./script/offline_sandbox net-integration-zsh.log xvfb-run -a \
-            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 --status-level all \
-              -E "package(integration) and ($ZSH_ONLY_INTEGRATION_TESTS)"
-
-      - name: Check the recorded connections
-        if: ${{ !cancelled() }}
-        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-zsh.log
+          ./script/offline_sandbox_macos net-integration.log \
+            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
+              -E 'package(integration)'
 
       # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
       # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in
@@ -540,20 +328,16 @@ jobs:
         if: ${{ !cancelled() }}
         timeout-minutes: 15
         run: |
-          ./script/offline_sandbox net-idle.log xvfb-run -a \
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
+          ./script/offline_sandbox_macos net-idle.log \
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-              --run-ignored only -E "test(~test_idle_session)"
+              --run-ignored only -E 'test(~test_idle_session)'
 
-      - name: Check the connections of the idle session
+      # A missing log fails the check: every log below is written by a step above.
+      - name: Check the recorded connections
         if: ${{ !cancelled() }}
-        run: ./script/offline_audit --net-log net-idle.log
-
-      # A failing connection check names an address; this names the programs that ran, to tell
-      # the app from a tool it started.
-      - name: List the programs started in the sandbox
-        if: ${{ always() }}
-        run: |
-          cat net-*.log 2>/dev/null | sed -n 's/^[0-9]* execve("\([^"]*\)".*/\1/p' | sort | uniq -c | sort -rn | head -80
+        run: ./script/offline_audit --net-log net-unit.log net-integration.log net-idle.log
 
       # The logs show what was (not) contacted and are the evidence if a check fails.
       - name: Upload the connection logs
@@ -561,6 +345,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: net-logs
-          path: net-*.log*
+          path: net-*.log
           retention-days: 14
           if-no-files-found: ignore

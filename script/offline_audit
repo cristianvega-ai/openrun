@@ -13,10 +13,11 @@ Modes:
   script/offline_audit            Strict: exit 1 if any check has findings.
   script/offline_audit --report   List every finding and exit 0.
   script/offline_audit --net-log net.log [more.log ...]
-                                  Check the strace logs of sandboxed runs (made by
-                                  script/offline_sandbox, see the `offline-audit` job in
-                                  .github/workflows/ci.yml): fail on any connect or send to a
-                                  non-loopback address or to port 53.
+                                  Check the logs of sandboxed runs (made by
+                                  script/offline_sandbox_macos, see the `offline-audit` job in
+                                  .github/workflows/ci.yml): fail on any refused network access of
+                                  the run's processes, on a missing, incomplete or unreadable log,
+                                  and on a log whose canary is missing.
   script/offline_audit --self-test
                                   Run the checks against small fixture trees: each prohibited
                                   construct must produce a finding and each reviewed one must pass.
@@ -36,7 +37,6 @@ import argparse
 import collections
 import fnmatch
 import hashlib
-import ipaddress
 import json
 import os
 import re
@@ -701,21 +701,6 @@ def check_deny(_allow):
 
 # --- 9.4a: strace log ----------------------------------------------------------------------
 
-SOCKADDR_V4 = re.compile(r'sa_family=AF_INET,\s*sin_port=htons\((\d+)\),\s*sin_addr=inet_addr\("([^"]+)"\)')
-SOCKADDR_V6 = re.compile(r'sa_family=AF_INET6,.*?sin6_port=htons\((\d+)\),.*?inet_pton\(AF_INET6,\s*"([^"]+)"')
-
-
-def net_log_violation(address, port):
-    if port == 53:
-        return "DNS (port 53)"
-    parsed = ipaddress.ip_address(address)
-    if getattr(parsed, "ipv4_mapped", None) is not None:
-        parsed = parsed.ipv4_mapped
-    if not parsed.is_loopback:
-        return "non-loopback address"
-    return None
-
-
 MACOS_SANDBOX_HEADER = "# openrun-offline-sandbox-macos 1"
 
 # A line of `log stream --predicate 'eventMessage CONTAINS "Sandbox"'`: the kernel reporting that a
@@ -786,31 +771,22 @@ def check_net_log_macos(path, lines, result):
 
 
 def check_net_log(path):
-    result = Result("netlog", "Sandboxed run: connect/send targets in %s (9.4a)" % path)
-    if os.path.isfile(path):
-        with open(path, encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-        if lines and lines[0].startswith("# openrun-offline-sandbox-macos"):
-            if lines[0].rstrip("\n") != MACOS_SANDBOX_HEADER:
-                result.add(path, 1, "unknown log format version: " + lines[0].strip())
-                return result
-            check_net_log_macos(path, lines, result)
-            return result
+    result = Result("netlog", "Sandboxed run: refused network accesses in %s (9.4a)" % path)
     if not os.path.isfile(path):
-        # `script/offline_sandbox` writes the log when its command has ended. No file means the
-        # step did not get that far (it hung, was cancelled or never started), so nothing is known
-        # about the connections it made: that is a failure, not "no connections".
+        # `script/offline_sandbox_macos` writes the log when its command has ended. No file means
+        # the step did not get that far (it hung, was cancelled or never started), so nothing is
+        # known about the network accesses it made: that is a failure, not "no connections".
         result.add(path, None, "log missing: the sandboxed step that writes it did not run to completion")
         return result
     with open(path, encoding="utf-8", errors="replace") as f:
-        for number, raw in enumerate(f, 1):
-            if not re.search(r"\b(connect|sendto|sendmsg|sendmmsg)\(", raw):
-                continue
-            for regex in (SOCKADDR_V4, SOCKADDR_V6):
-                for match in regex.finditer(raw):
-                    reason = net_log_violation(match.group(2), int(match.group(1)))
-                    if reason:
-                        result.add(path, number, "%s: %s:%s" % (reason, match.group(2), match.group(1)))
+        lines = f.readlines()
+    if not lines or not lines[0].startswith("# openrun-offline-sandbox-macos"):
+        result.add(path, 1, "not a log of script/offline_sandbox_macos (the header line is missing)")
+        return result
+    if lines[0].rstrip("\n") != MACOS_SANDBOX_HEADER:
+        result.add(path, 1, "unknown log format version: " + lines[0].strip())
+        return result
+    check_net_log_macos(path, lines, result)
     return result
 
 
@@ -962,13 +938,12 @@ def mac_denial(name, pid, rest):
 
 
 def self_test_net_log_cases():
-    """(name, strace log text, expectation): what `check_net_log` must flag or accept."""
-    v4 = '1234 connect(%d, {sa_family=AF_INET, sin_port=htons(%d), sin_addr=inet_addr("%s")}, 16) = %s\n'
-    v6 = ('1234 connect(%d, {sa_family=AF_INET6, sin6_port=htons(%d), sin6_flowinfo=htonl(0), '
-          'inet_pton(AF_INET6, "%s", &sin6_addr), sin6_scope_id=0}, 28) = %s\n')
+    """(name, log text or None for a missing file, expectation): what `check_net_log` must flag or
+    accept."""
     return [
-        ("net log: empty", "", "pass"),
         ("net log: missing file", None, "fail"),
+        ("net log: empty file", "", "fail"),
+        ("net log: not a log of the sandbox script", "1234 connect(3, {sa_family=AF_INET}, 16) = 0\n", "fail"),
         ("net log (macOS): only the canary", MAC_HEADER + MAC_CANARY + MAC_END, "pass"),
         ("net log (macOS): connection to a non-local address", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "network-outbound remote:*:443") + MAC_END, "fail"),
         ("net log (macOS): datagram to port 53", MAC_HEADER + MAC_CANARY + mac_denial("integration", 501, "network-outbound remote:*:53") + MAC_END, "fail"),
@@ -986,17 +961,6 @@ def self_test_net_log_cases():
         ("net log (macOS): denial of an earlier canary attempt", MAC_HEADER + "# canary-pid: 76\n" + MAC_CANARY + mac_denial("curl", 76, "network-outbound remote:*:9") + MAC_END, "pass"),
         ("net log (macOS): run did not finish", MAC_HEADER + MAC_CANARY, "fail"),
         ("net log (macOS): unknown format version", "# openrun-offline-sandbox-macos 2\n" + MAC_CANARY + MAC_END, "fail"),
-        ("net log: loopback connect", v4 % (3, 8080, "127.0.0.1", "0"), "pass"),
-        ("net log: loopback IPv6 connect", v6 % (3, 8080, "::1", "0"), "pass"),
-        ("net log: local socket", '1234 connect(3, {sa_family=AF_UNIX, sun_path="/run/x"}, 110) = 0\n', "pass"),
-        ("net log: outside connect", v4 % (3, 443, "203.0.113.7", "-1 ENETUNREACH (Network is unreachable)"), "fail"),
-        ("net log: outside IPv6 connect", v6 % (3, 443, "2001:db8::1", "-1 ENETUNREACH (Network is unreachable)"), "fail"),
-        ("net log: IPv4-mapped outside address", v6 % (3, 443, "::ffff:203.0.113.7", "-1 ENETUNREACH"), "fail"),
-        ("net log: DNS to the loopback stub", v4 % (3, 53, "127.0.0.53", "0"), "fail"),
-        ("net log: sendto outside", '1234 sendto(3, "x", 1, MSG_NOSIGNAL, {sa_family=AF_INET, sin_port=htons(9), '
-         'sin_addr=inet_addr("198.51.100.2")}, 16) = -1 ENETUNREACH\n', "fail"),
-        ("net log: sendmsg to outside", '1234 sendmsg(3, {msg_name={sa_family=AF_INET, sin_port=htons(9), '
-         'sin_addr=inet_addr("198.51.100.2")}, msg_namelen=16}, 0) = -1 ENETUNREACH\n', "fail"),
     ]
 
 

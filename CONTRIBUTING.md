@@ -99,13 +99,12 @@ Run unit tests with `cargo nextest run`.
 
 ## Continuous Integration
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request, on hosted macOS runners only (OpenRun supports macOS only):
 
-- **Formatting** and **Clippy** (`cargo clippy --workspace --all-targets --tests -- -D warnings`) on Linux, on native Windows (`windows-latest`) and on macOS (`macos-latest`). Code behind `cfg(windows)` or `cfg(target_os = ...)` is only linted on its own platform, so a warning there fails that platform's job.
-- **Unit tests** on Linux, and the **Offline audit** job, which also runs the whole test suite (including `crates/integration`) in a network sandbox and fails on any connection to a non-loopback address.
+- **Formatting**, **Clippy (macOS)** (`cargo clippy --workspace --all-targets --tests -- -D warnings`), **Unit tests (macOS)** and **Integration tests (macOS)** (the `crates/integration` suite starts the real app, with a logged-in GUI session on the runner).
+- **Security tests (macOS)**: the command-executor sandbox, the offline environment and the generator policy tests, with the real tools they check (git, npm, corepack, rustup, docker, fish, PowerShell 7). With `CI=true` a missing tool fails these tests instead of skipping them.
+- **Offline audit (macOS)**: the static audit and its self-test, then the unit tests, the integration tests and a two-minute idle session run in a network sandbox (`script/offline_sandbox_macos`: `sandbox-exec` refuses every address that is not on the machine, and the unified log is read for the refusals). A refused access by the app or a tool it started, a missing or incomplete log, or a canary that goes unnoticed fails the job. Run a command the same way with `script/offline_sandbox_macos net.log COMMAND...`, then `script/offline_audit --net-log net.log`.
 - **No retries.** A test that fails once and passes on a retry is flaky, which is not a pass: nextest retries are off in CI, so it fails the job. Fix the test, or file an issue and move it to a non-blocking step with the reason written next to it.
-
-To get the Windows and Linux lint results without waiting for CI, run `script/cross_clippy` (needs [zig](https://ziglang.org/download/) and the two Rust targets; the prerequisites are listed at the top of the script).
 
 ## Commit and Branch Conventions
 
