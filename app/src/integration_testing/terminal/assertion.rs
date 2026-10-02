@@ -189,6 +189,10 @@ pub fn assert_input_position(input_position: InputPosition) -> AssertionCallback
             let input_rect = ctx
                 .element_position_by_id_at_last_frame(window_id, input_id)
                 .expect("input position should be set");
+            log::debug!(
+                "Input position {input_position:?}: terminal {terminal_rect:?}, input {input_rect:?}, scroll {:?}",
+                view.scroll_position()
+            );
             async_assert!(
                 input_position.assert_position(terminal_rect, input_rect),
                 "Input should be {:?} but it isn't.  Terminal rect {:?} and input rect {:?}",

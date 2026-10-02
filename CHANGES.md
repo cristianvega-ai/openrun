@@ -167,6 +167,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [Completion generators: local git on Windows](#completion-generators-local-git-on-windows) — 39 local git generators (branches, tags, remotes, stashes, revisions, aliases, `ls-files`, `diff --cached --name-only`, for `git` and the `hub`, `gt`, `gh`, `lerna`, `pnpm`, `pre-commit`, `turbo`, `vsce`, `checkov` specs) now run on Windows when the executor applies the offline environment table; the table also switches off `log.showSignature` (a repository `gpg.program` ran on `git log`) and non-local git transports; new Windows CI job
 - [Completion generators: every table row has a real-tool test](#completion-generators-every-table-row-has-a-real-tool-test) — Go, git hooks, git prompt and gcloud fixtures; ten variables that no test could exercise removed from the offline environment table; `core.hooksPath` added
 - [Completion generators: git version gate, Windows variable-name case, codex git generators](#completion-generators-git-version-gate-windows-variable-name-case-codex-git-generators) — git generators (and the git alias and command-correction branch list) run only with git 2.31 or newer, probed once per session; the offline table follows Windows' case-insensitive variable names; `codex/commits` and `codex/local_branches` are allowed like their `gt` twins (41 local git generators on Windows)
+- [CI: waterfall sandbox step cannot hang the audit; test_waterfall_input_scrolling on Linux](#ci-waterfall-sandbox-step-cannot-hang-the-audit-test_waterfall_input_scrolling-on-linux) — debug logs for the investigation (ENG-225, ENG-194, CI-4)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -4090,3 +4091,8 @@ No bundled git-family generator runs `fetch`, `pull`, `push`, `clone`, `ls-remot
 - Supersedes three notes of [Completion generators: local git on Windows](#completion-generators-local-git-on-windows): the case-sensitive lookup of `GIT_CONFIG_COUNT`, the old-git caveat (old git now gets no git generators) and the cmd.exe path (still unreachable, now pinned by a test).
 - The version probe runs in the app's working directory, not a repository's; `git --version` reads no repository.
 - CI: run 36964054921 on `6b3a5b241`, attempt 1, all 8 jobs green (Clippy, Clippy (macOS), Clippy (Windows), Formatting, Unit tests, Offline audit, Security tests (macOS), Security tests (Windows)); no `FLAKY` and no `TRY 1 FAIL` in any job log. The Windows job ran `harden_ignores_case_on_windows`, `the_environment_block_of_a_spawned_process_holds_one_git_config_count` and `a_session_pair_in_any_spelling_is_counted_and_the_table_still_applies` with the lower-case and mixed-case spellings.
+
+## CI: waterfall sandbox step cannot hang the audit; test_waterfall_input_scrolling on Linux
+**Why:** run 36966258710 (ENG-225): the non-blocking waterfall step hung to its 10-minute limit after the test failed, so `net-waterfall.log` was never written and "Check the recorded connections" crashed; `test_waterfall_input_scrolling` (ENG-194) has failed on the Linux runner since it was first run there.
+
+**Added so far:** `log::debug!` lines for the input position assertion (terminal and input rectangles, scroll position) and for `SelectPriorBlock` (selected block and scroll position before and after).

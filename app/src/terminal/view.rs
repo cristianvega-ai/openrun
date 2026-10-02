@@ -12620,7 +12620,11 @@ impl TypedActionView for TerminalView {
             FocusInputAndClearSelection => self.focus_input_and_clear_selections(ctx),
             ShowFindBar => self.show_find_bar(ctx),
             SelectPriorBlock => {
-                let is_first_selection = self.selected_blocks.is_empty();
+                log::debug!(
+                    "Select prior block: selected {:?}, scroll {:?}",
+                    self.selected_blocks.tail(),
+                    self.scroll_position()
+                );
                 match input_mode {
                     InputMode::PinnedToBottom | InputMode::Waterfall => {
                         self.select_less_recent_block(false /* is_shift_down */, ctx)
@@ -12634,9 +12638,11 @@ impl TypedActionView for TerminalView {
                     }
                 }
 
-                if is_first_selection && self.input_mode_model.as_ref(ctx).is_prompt_input_enabled()
-                {
-                }
+                log::debug!(
+                    "Selected prior block: selected {:?}, scroll {:?}",
+                    self.selected_blocks.tail(),
+                    self.scroll_position()
+                );
             }
             SelectNextBlock => {
                 match input_mode {
