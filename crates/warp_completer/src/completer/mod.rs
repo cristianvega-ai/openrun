@@ -10,8 +10,8 @@ pub use suggest::alias::*;
 pub mod testing;
 
 pub use context::{
-    CommandExitStatus, CommandOutput, CompletionContext, Containment, GeneratorContext,
-    PathCompletionContext, PathSeparators,
+    CommandExitStatus, CommandOutput, CompletionContext, Containment, GIT_VERSION_COMMAND,
+    GeneratorContext, GitVersion, MINIMUM_GIT_VERSION, PathCompletionContext, PathSeparators,
 };
 pub use describe::{Description, TopLevelCommandCaseSensitivity, describe, describe_given_token};
 pub use engine::{EngineDirEntry, EngineFileType, LocationType};

@@ -141,6 +141,16 @@ struct Hardening<'a> {
 }
 
 enum CommandBuilder<'a> {
+    /// Runs the command through `cmd.exe /Q /C`.
+    ///
+    /// Unreachable today: it is chosen only for `run_command_in_same_shell_as_session: false`,
+    /// and no code constructs that (`ExecuteCommandOptions::default()` and the login-shell path
+    /// both say `true`; `commands_never_ask_for_cmd_exe` fails if one starts to). Keep it that
+    /// way, or fix this first: `cmd.exe` looks for a bare `git` in the current directory before
+    /// `PATH` unless `NoDefaultCurrentDirectoryInExePath` is set, and the current directory of a
+    /// generator is the repository being completed, so a repository holding `git.exe` or
+    /// `git.bat` would be run by every git generator. The PowerShell, `pwsh`, Git Bash and WSL
+    /// shells this executor otherwise starts resolve a bare `git` from `PATH` only.
     #[cfg(windows)]
     CmdExe,
     ShellType {
@@ -322,6 +332,7 @@ impl LocalCommandExecutor {
         &self,
         execute_command_options: ExecuteCommandOptions,
     ) -> CommandBuilder<'_> {
+        // See `CommandBuilder::CmdExe`: nothing passes `false` here.
         let use_cmd_exe = !execute_command_options.run_command_in_same_shell_as_session
             && self.shell_type == ShellType::PowerShell;
         if use_cmd_exe {

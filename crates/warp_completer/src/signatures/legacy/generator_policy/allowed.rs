@@ -36,6 +36,8 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
     ("checkov", "git_branch"),
     ("chown", "users_or_groups"),
     ("clear-variable", "get_variable_names"),
+    ("codex", "commits"),
+    ("codex", "local_branches"),
     ("conda", "get_conda_configs"),
     ("conda", "get_conda_environments"),
     ("conda", "get_installed_packages"),
@@ -307,6 +309,15 @@ pub(super) const ALLOWED_WHEN_ISOLATED: &[(&str, &str)] = &[
     ("rustup", "rustup_docs"),
 ];
 
+/// Allowed generators whose command runs `git` but that are not on
+/// [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`] because they are POSIX pipelines. Together with that
+/// list this is every allowed generator that runs git; `generator_policy_tests.rs` checks it
+/// against the commands of the bundled specs. Sorted.
+pub(super) const GIT_GENERATORS_ON_POSIX_ONLY: &[(&str, &str)] = &[("git-flow", "type_branches")];
+
+/// The alias generators that run `git`: all of [`ALLOWED_ALIAS_GENERATORS`].
+pub(super) const GIT_ALIAS_GENERATORS: &[(&str, &str)] = ALLOWED_ALIAS_GENERATORS;
+
 /// Alias generators that may run, always behind the strict token gate: `git config --get
 /// alias.{word}` is only built from inert words. `npm` and `yarn` run `npm prefix`, which is
 /// denied.
@@ -387,7 +398,9 @@ pub(super) const ALLOWED_ON_WINDOWS: &[(&str, &str)] = &[
 ///
 /// Every command is one `git` invocation that reads the local repository: `branch`, `tag`,
 /// `for-each-ref`, `rev-list`, `log`, `stash list`, `worktree list`, `remote -v` and
-/// `config --get-regexp` read refs, objects and configuration; `ls-files` and
+/// `config --get-regexp` read refs, objects and configuration (`codex/commits` and
+/// `codex/local_branches` are the very same `git log --oneline` and `git branch` commands as
+/// `gt`'s and `git`'s: the `codex` spec reuses their generator functions); `ls-files` and
 /// `diff --cached --name-only` read the index and, for the second, the `HEAD` tree. None of them
 /// is a status-like command: the `clean` filter of `git status`, `git diff` and
 /// `git ls-files --modified` (the four generators in `denied.rs` with class `project-code`)
@@ -400,6 +413,8 @@ pub(super) const ALLOWED_ON_WINDOWS: &[(&str, &str)] = &[
 /// [`ALLOWED_ON_WINDOWS`]. Sorted.
 pub(super) const ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT: &[(&str, &str)] = &[
     ("checkov", "git_branch"),
+    ("codex", "commits"),
+    ("codex", "local_branches"),
     ("gh", "git_branch"),
     ("git", "aliases"),
     ("git", "commits"),

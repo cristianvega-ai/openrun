@@ -614,6 +614,80 @@ fn the_engine_completes_git_words_through_the_production_executor_and_runs_no_re
     }
 }
 
+/// Environment variable names are case-insensitive on Windows, and so is git's reading of
+/// `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>` there. A session that
+/// defines them in another spelling must still have its pair counted by the table, which appends
+/// after it, and must not end up with two spellings of the count. On other hosts only the exact
+/// spelling is a git variable, so only that one is run.
+#[test]
+fn a_session_pair_in_any_spelling_is_counted_and_the_table_still_applies() {
+    let Some(fixture) = Fixture::new() else {
+        return;
+    };
+    let spellings: &[[&str; 3]] = if cfg!(windows) {
+        &[
+            ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"],
+            ["git_config_count", "git_config_key_0", "git_config_value_0"],
+            ["Git_Config_Count", "Git_Config_Key_0", "Git_Config_Value_0"],
+        ]
+    } else {
+        &[["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]]
+    };
+    let reads_the_index = "git --no-optional-locks ls-files";
+    let reads_the_sessions_pair = "git config --get alias.zz";
+    for shell in session_shells() {
+        for [count, key, value] in spellings {
+            let mut environment = fixture.environment.clone();
+            environment.insert((*count).to_owned(), "1".to_owned());
+            environment.insert((*key).to_owned(), "alias.zz".to_owned());
+            environment.insert((*value).to_owned(), "status".to_owned());
+
+            fixture.reset();
+            let control = run_as_generator(
+                executor(&shell, false),
+                reads_the_index,
+                &fixture.hostile,
+                &environment,
+            );
+            assert!(
+                fixture.effects().contains("fsmonitor"),
+                "{}: fixture is insensitive with {count}: without the table the repository's \
+                 fsmonitor did not run:\n{}",
+                shell.label,
+                control.output
+            );
+
+            fixture.reset();
+            let ran = run_as_generator(
+                executor(&shell, true),
+                reads_the_index,
+                &fixture.hostile,
+                &environment,
+            );
+            assert!(ran.success, "{}: {count}: {}", shell.label, ran.output);
+            assert_eq!(
+                fixture.effects(),
+                BTreeSet::new(),
+                "{}: with the session defining {count}, the table did not stop fsmonitor",
+                shell.label
+            );
+
+            let pair = run_as_generator(
+                executor(&shell, true),
+                reads_the_sessions_pair,
+                &fixture.hostile,
+                &environment,
+            );
+            assert_eq!(
+                pair.output.trim(),
+                "status",
+                "{}: the session's own pair was overwritten with {count}",
+                shell.label
+            );
+        }
+    }
+}
+
 /// The table, as the executor applies it, laid over the base environment, for running git
 /// without a shell.
 fn table_environment(base: &HashMap<String, String>) -> HashMap<String, String> {

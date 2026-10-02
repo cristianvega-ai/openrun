@@ -42,6 +42,7 @@ use crate::terminal::session_settings::{
     SessionSettings, SessionSettingsChangedEvent, ToolbarChipSelection,
 };
 use crate::terminal::view::{ContextMenuAction, PromptPart, PromptPosition, TerminalAction};
+use crate::util::environment_variables::{NameCase, set_variable};
 
 #[cfg(test)]
 #[path = "current_prompt_tests.rs"]
@@ -610,7 +611,7 @@ impl CurrentPrompt {
 
         let path_env_var = session.path().as_deref().map(str::to_owned);
         if let (Some(path_var), Some(env_vars)) = (path_env_var, environment_variables.as_mut()) {
-            env_vars.insert("PATH".to_string(), path_var);
+            set_variable(env_vars, "PATH", path_var, NameCase::of_host());
         }
 
         Some(ShellCommandExecutionContext {

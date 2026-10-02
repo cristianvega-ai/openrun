@@ -8,7 +8,8 @@ use warp_util::path::{EscapeChar, ShellFamily};
 
 use super::allowed::{
     ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS,
-    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, ALLOWED_WHEN_ISOLATED,
+    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, ALLOWED_WHEN_ISOLATED, GIT_ALIAS_GENERATORS,
+    GIT_GENERATORS_ON_POSIX_ONLY,
 };
 use super::denied::{DENIED_ALIAS_GENERATORS, DENIED_GENERATORS};
 use super::token_gate::{is_inert_word, is_quotable_word, listed_token_policies};
@@ -18,7 +19,7 @@ use super::{
 };
 use crate::completer::{
     CommandExitStatus, CommandOutput, CompleterOptions, CompletionContext,
-    CompletionsFallbackStrategy, Containment, GeneratorContext, MatchStrategy,
+    CompletionsFallbackStrategy, Containment, GeneratorContext, GitVersion, MatchStrategy,
     PathCompletionContext, suggestions,
 };
 use crate::signatures::CommandRegistry;
@@ -33,6 +34,11 @@ struct RecordingContext {
     isolated: bool,
     /// What `offline_environment_applied` reports.
     environment: bool,
+    /// What `git_version` reports: a git new enough for the offline environment table unless a
+    /// test says otherwise.
+    git_version: Option<GitVersion>,
+    /// How many times the engine asked for the git version.
+    git_version_requests: std::sync::atomic::AtomicUsize,
     /// When set, `curl ...` commands are run through `sh` with a `PATH` that contains only this
     /// directory, so they can only ever reach the stub `curl` placed in it.
     #[cfg(unix)]
@@ -55,6 +61,8 @@ impl RecordingContext {
             commands: Mutex::new(Vec::new()),
             isolated: false,
             environment: false,
+            git_version: Some(GitVersion::new(2, 54, 0)),
+            git_version_requests: std::sync::atomic::AtomicUsize::new(0),
             family: None,
             #[cfg(unix)]
             stub_curl_dir: None,
@@ -180,6 +188,12 @@ impl GeneratorContext for RecordingContext {
 
     fn offline_environment_applied(&self) -> bool {
         self.environment
+    }
+
+    async fn git_version(&self) -> Option<GitVersion> {
+        self.git_version_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.git_version
     }
 }
 
@@ -1119,6 +1133,8 @@ fn windows_runs_only_generators_that_read_files_and_take_no_tokens() {
 /// this test.
 const WINDOWS_GIT_GENERATORS: &[(&str, &str)] = &[
     ("checkov", "git_branch"),
+    ("codex", "commits"),
+    ("codex", "local_branches"),
     ("gh", "git_branch"),
     ("git", "aliases"),
     ("git", "commits"),
@@ -1178,14 +1194,12 @@ const GIT_GENERATORS_OFF_ON_WINDOWS: &[(&str, &str, &str)] = &[
         "type_branches",
         "POSIX pipeline that takes a word",
     ),
-    ("codex", "commits", "denied spec"),
-    ("codex", "local_branches", "denied spec"),
 ];
 
 #[test]
 fn the_windows_git_list_is_pinned() {
     assert_eq!(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, WINDOWS_GIT_GENERATORS);
-    assert_eq!(WINDOWS_GIT_GENERATORS.len(), 39);
+    assert_eq!(WINDOWS_GIT_GENERATORS.len(), 41);
     assert!(
         WINDOWS_GIT_GENERATORS
             .windows(2)
@@ -1389,6 +1403,322 @@ fn git_completions_run_on_windows_only_with_the_offline_environment() {
             "{input:?} should run git {marker:?} with the offline environment: {with_environment:?}"
         );
     }
+}
+
+/// The commands of `spec`/`generator` in every shell family, with hostile words for the ones that
+/// take tokens.
+fn commands_in_every_family(spec: &str, generator: &str) -> BTreeSet<String> {
+    let (_, _, generator) = bundled_generators()
+        .into_iter()
+        .find(|(s, g, _)| s == spec && g == generator)
+        .unwrap_or_else(|| panic!("no bundled generator {spec}/{generator}"));
+    let mut commands = BTreeSet::new();
+    for shell in [Shell::Posix, Shell::Powershell, Shell::CmdExe] {
+        match &generator.process {
+            GeneratorProcess::ShellCommand(command) => {
+                commands.insert(command.build(shell).to_string());
+            }
+            GeneratorProcess::CommandFromTokens(command_from_tokens) => {
+                for tokens in [
+                    &["git", "checkout", "ab"][..],
+                    &["git", "push", "origin", "", "x"][..],
+                ] {
+                    commands.insert(
+                        command_from_tokens(tokens, false, &[])
+                            .build(shell)
+                            .to_string(),
+                    );
+                }
+            }
+        }
+    }
+    commands
+}
+
+const GIT_LOG_ONELINE: &str = "git --no-optional-locks log --oneline";
+const GIT_BRANCH_BY_DATE: &str = "git --no-optional-locks branch --no-color --sort=-committerdate";
+
+#[test]
+fn the_codex_git_generators_are_the_same_local_git_reads_as_the_git_and_gt_ones() {
+    // Evidence for the reclassification: the exact command each of the four pairs runs, in every
+    // shell family. `codex` reuses the generator functions of the `git` and `gt` specs.
+    for (spec, name, expected) in [
+        ("codex", "commits", GIT_LOG_ONELINE),
+        ("gt", "commits", GIT_LOG_ONELINE),
+        ("git", "commits", GIT_LOG_ONELINE),
+        ("codex", "local_branches", GIT_BRANCH_BY_DATE),
+        ("gt", "local_branches", GIT_BRANCH_BY_DATE),
+        ("git", "local_branches", GIT_BRANCH_BY_DATE),
+    ] {
+        assert_eq!(
+            commands_in_every_family(spec, name),
+            BTreeSet::from([expected.to_owned()]),
+            "{spec}/{name}"
+        );
+    }
+
+    // They are classified like the siblings: allowed everywhere the other git generators are,
+    // and on Windows only where the offline environment table is applied.
+    for name in ["commits", "local_branches"] {
+        assert!(
+            !DENIED_GENERATORS
+                .iter()
+                .any(|(s, g, _)| (*s, *g) == ("codex", name))
+        );
+        assert!(ALLOWED_GENERATORS.contains(&("codex", name)));
+        assert!(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT.contains(&("codex", name)));
+        assert!(!ALLOWED_WHEN_ISOLATED.contains(&("codex", name)));
+        for containment in [
+            Containment::Unrestricted,
+            Containment::OfflineEnvironment,
+            Containment::NetworkIsolated,
+        ] {
+            for windows in [false, true] {
+                assert_eq!(
+                    is_generator_allowed_on(windows, containment, "codex", name),
+                    is_generator_allowed_on(windows, containment, "gt", name),
+                    "codex/{name} must be classified like gt/{name} (windows: {windows}, {containment:?})"
+                );
+            }
+        }
+        assert!(is_generator_allowed_on(
+            true,
+            Containment::OfflineEnvironment,
+            "codex",
+            name
+        ));
+        assert!(!is_generator_allowed_on(
+            true,
+            Containment::Unrestricted,
+            "codex",
+            name
+        ));
+        assert!(is_generator_allowed_on(
+            false,
+            Containment::Unrestricted,
+            "codex",
+            name
+        ));
+    }
+
+    // The other codex generators run other programs and stay denied everywhere.
+    for name in ["cloud_tasks", "feature_flags", "mcp_servers"] {
+        assert!(
+            DENIED_GENERATORS
+                .iter()
+                .any(|(s, g, _)| (*s, *g) == ("codex", name))
+        );
+        for windows in [false, true] {
+            assert!(!is_generator_allowed_on(
+                windows,
+                Containment::NetworkIsolated,
+                "codex",
+                name
+            ));
+        }
+    }
+}
+
+/// Whether `command` starts the program `git` (at the start of a command, a pipeline or a list,
+/// after environment assignments).
+fn runs_git(command: &str) -> bool {
+    Regex::new(r"(?:^|[;&|(`]|\$\(|\bdo\b|\bthen\b)\s*(?:\w+=\S+\s+)*git(?:\s|$)")
+        .unwrap()
+        .is_match(command)
+}
+
+#[test]
+fn every_allowed_generator_that_runs_git_is_in_the_git_family_and_nothing_else_is() {
+    let family: BTreeSet<(&str, &str)> = ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT
+        .iter()
+        .chain(GIT_GENERATORS_ON_POSIX_ONLY)
+        .copied()
+        .collect();
+    assert_eq!(
+        GIT_GENERATORS_ON_POSIX_ONLY,
+        [("git-flow", "type_branches")],
+        "the POSIX-only git generators are pinned"
+    );
+    for pair in GIT_GENERATORS_ON_POSIX_ONLY {
+        assert!(ALLOWED_GENERATORS.contains(pair), "{pair:?}");
+        assert!(
+            !ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT.contains(pair),
+            "{pair:?}"
+        );
+    }
+
+    let allowed: BTreeSet<(&str, &str)> = ALLOWED_GENERATORS
+        .iter()
+        .chain(ALLOWED_WHEN_ISOLATED)
+        .copied()
+        .collect();
+    let mut running_git = BTreeSet::new();
+    let mut checked = 0;
+    for (spec, name, generator) in bundled_generators() {
+        if !allowed.contains(&(spec.as_str(), name.as_str())) {
+            continue;
+        }
+        checked += 1;
+        let commands = match &generator.process {
+            GeneratorProcess::ShellCommand(command) => [Shell::Posix, Shell::Powershell]
+                .map(|shell| command.build(shell).to_string())
+                .to_vec(),
+            GeneratorProcess::CommandFromTokens(_) => sample_commands(&spec, &generator),
+        };
+        if commands.iter().any(|command| runs_git(command)) {
+            running_git.insert((spec.clone(), name.clone()));
+        }
+    }
+    assert!(checked > 200, "{checked}");
+
+    let family_owned: BTreeSet<(String, String)> = family
+        .iter()
+        .map(|(spec, name)| ((*spec).to_owned(), (*name).to_owned()))
+        .collect();
+    let missing: Vec<_> = running_git.difference(&family_owned).collect();
+    assert!(
+        missing.is_empty(),
+        "these allowed generators run git but are not in the git family, so they would run with a \
+         git older than 2.31 (add them to ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, or to \
+         GIT_GENERATORS_ON_POSIX_ONLY if they are not simple git reads): {missing:?}"
+    );
+    let extra: Vec<_> = family_owned.difference(&running_git).collect();
+    assert!(
+        extra.is_empty(),
+        "these generators are in the git family but their commands do not run git: {extra:?}"
+    );
+
+    for (spec, name) in &family {
+        assert!(super::generator_runs_git(spec, name), "{spec}/{name}");
+    }
+    assert!(!super::generator_runs_git("npm", "get_scripts_generator"));
+    assert!(!super::generator_runs_git("git", "no_such_generator"));
+    // The status-like git generators are denied, so the gate never has to decide about them.
+    assert!(!super::generator_runs_git("git", "files_for_staging"));
+}
+
+#[test]
+fn the_git_alias_generator_is_in_the_git_family() {
+    assert_eq!(GIT_ALIAS_GENERATORS, ALLOWED_ALIAS_GENERATORS);
+    assert_eq!(GIT_ALIAS_GENERATORS, [("git", "alias")]);
+    assert!(super::alias_generator_runs_git("git", "alias"));
+    assert!(!super::alias_generator_runs_git("npm", "script_alias"));
+    for (spec, alias, generator) in bundled_alias_generators_with_commands() {
+        if ALLOWED_ALIAS_GENERATORS.contains(&(spec.as_str(), alias.as_str())) {
+            assert!(
+                runs_git(&generator),
+                "{spec}/{alias} is an allowed alias generator that does not run git: {generator}"
+            );
+        }
+    }
+}
+
+fn bundled_alias_generators_with_commands() -> Vec<(String, String, String)> {
+    let mut all = Vec::new();
+    for (spec, data) in warp_command_signatures::dynamic_command_signature_data() {
+        for (name, alias) in data.aliases() {
+            let command = alias.command(&[spec.as_str(), "ab"]).to_string();
+            all.push((spec.clone(), name.0.clone(), command));
+        }
+    }
+    all
+}
+
+/// The first line of a completion that ran git, in the order the engine ran them.
+fn git_commands(commands: &[String]) -> Vec<&String> {
+    commands
+        .iter()
+        .filter(|command| runs_git(command))
+        .collect()
+}
+
+#[test]
+fn git_generators_run_only_when_the_sessions_git_is_at_least_2_31() {
+    // `git checkout ` reaches several git generators and the `git config --get alias.<word>`
+    // alias generator; `git co ` reaches the alias generator alone. `npm run ` reaches a
+    // generator that does not run git.
+    let inputs = ["git checkout ", "git stash apply ", "git co "];
+    for (version, runs) in [
+        (None, false),
+        (Some(GitVersion::new(1, 8, 3)), false),
+        (Some(GitVersion::new(2, 30, 9)), false),
+        (Some(GitVersion::new(2, 31, 0)), true),
+        (Some(GitVersion::new(2, 39, 3)), true),
+        (Some(GitVersion::new(2, 45, 1)), true),
+    ] {
+        for make in [guarded, guarded_with_environment] {
+            let mut context = make();
+            context.git_version = version;
+            for input in inputs {
+                let executed = context.commands_for(input);
+                let git = git_commands(&executed);
+                assert_eq!(
+                    !git.is_empty(),
+                    runs,
+                    "{input:?} with git {version:?} ran {executed:?}"
+                );
+            }
+        }
+    }
+
+    // On the platforms where the policy lets them run, the same holds in an isolated context.
+    #[cfg(not(windows))]
+    for version in [None, Some(GitVersion::new(2, 30, 0))] {
+        let mut context = guarded_isolated();
+        context.git_version = version;
+        for input in ["git checkout ", "git add ", "git diff --cached "] {
+            let executed = context.commands_for(input);
+            assert!(
+                git_commands(&executed).is_empty(),
+                "{input:?} with git {version:?} ran {executed:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_git_that_is_too_old_does_not_stop_the_generators_that_do_not_run_git() {
+    let mut context = guarded_with_environment();
+    context.git_version = Some(GitVersion::new(2, 30, 0));
+    let executed = context.commands_for("npm run ");
+    assert!(
+        executed
+            .iter()
+            .any(|command| command.contains("package.json")),
+        "{executed:?}"
+    );
+    assert_eq!(
+        context
+            .git_version_requests
+            .load(std::sync::atomic::Ordering::Relaxed),
+        0,
+        "the git version is only asked for when a git generator is about to run"
+    );
+
+    context.commands_for("git checkout ");
+    assert!(
+        context
+            .git_version_requests
+            .load(std::sync::atomic::Ordering::Relaxed)
+            > 0
+    );
+}
+
+#[test]
+fn the_git_version_gate_is_part_of_the_policy_not_of_the_test_registry() {
+    // With every generator enabled (the test-only policy) the gate is off, which is what lets the
+    // tests above prove that their inputs reach a git generator at all.
+    let mut context = unrestricted();
+    context.git_version = None;
+    let executed = context.commands_for("git checkout ");
+    assert!(!git_commands(&executed).is_empty(), "{executed:?}");
+
+    let registry = CommandRegistry::global_instance();
+    let name = warp_command_signatures::GeneratorName::new;
+    assert!(registry.generator_requires_supported_git("git", &name("local_branches")));
+    assert!(registry.generator_requires_supported_git("codex", &name("commits")));
+    assert!(!registry.generator_requires_supported_git("npm", &name("get_scripts_generator")));
+    assert!(!registry.generator_requires_supported_git("git", &name("no_such_generator")));
 }
 
 fn bundled_alias_generators() -> BTreeSet<(String, String)> {

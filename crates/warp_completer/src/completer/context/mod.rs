@@ -13,6 +13,9 @@ use super::engine::EngineDirEntry;
 use crate::completer::TopLevelCommandCaseSensitivity;
 use crate::signatures::CommandRegistry;
 
+mod git_version;
+pub use git_version::{GIT_VERSION_COMMAND, GitVersion, MINIMUM_GIT_VERSION};
+
 /// This trait may be implemented to configure behavior of the completions engine.
 pub trait CompletionContext: Send + Sync {
     /// If path completions are supported, should return an instance of a `PathCompletionContext`
@@ -199,6 +202,21 @@ pub trait GeneratorContext: Send + Sync {
         } else {
             Containment::Unrestricted
         }
+    }
+
+    /// The version of the `git` that commands run through `execute_command_at_pwd` start, or
+    /// `None` when it is not known: git is not installed, its output could not be read, or the
+    /// context has no way to ask. Completion generators that run git are skipped unless this is
+    /// at least [`MINIMUM_GIT_VERSION`] (see [`GitVersion`] for why). Defaults to `None`.
+    async fn git_version(&self) -> Option<GitVersion> {
+        None
+    }
+
+    /// Whether the git of this context is known to honor the offline environment table.
+    async fn git_honors_environment_overrides(&self) -> bool {
+        self.git_version()
+            .await
+            .is_some_and(GitVersion::honors_environment_overrides)
     }
 }
 

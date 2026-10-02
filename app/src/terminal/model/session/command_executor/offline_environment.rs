@@ -8,6 +8,15 @@
 //! table switches those behaviours off. It is applied last, after PATH, so it overrides whatever
 //! the session environment says.
 //!
+//! The git entries need git 2.31 or newer (`GIT_CONFIG_COUNT`). An older git ignores them, so the
+//! completion engine runs no generator that starts `git` unless the session's git is known to be
+//! 2.31 or newer (`Session::git_version`, probed with `git --version`).
+//!
+//! Variable names follow the host: Windows compares them ignoring case, so a session that defines
+//! `git_config_count` or `Path` is read and rewritten as the one variable it is (see
+//! `crate::util::environment_variables`). The table never leaves two spellings of a name in the
+//! environment it hands to a subprocess.
+//!
 //! This is one layer of three. It does not make a command offline, only stops the *implicit*
 //! network use of the tools below. The OS sandbox (SEC-SBX) is what denies the network to
 //! whatever is left, and the generator policy decides which generators run at all.
@@ -21,6 +30,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::terminal::shell::ShellType;
+use crate::util::environment_variables::{NameCase, get_variable, remove_variable, set_variable};
 
 /// Variables that are simply set. See the comment on each for the evidence.
 const FIXED_VARIABLES: &[(&str, &str)] = &[
@@ -100,18 +110,22 @@ pub struct OfflineEnvironment {
 }
 
 impl OfflineEnvironment {
-    /// Computes the changes for a subprocess whose environment is `session_vars` layered over the
-    /// app's own process environment.
-    pub fn for_session(session_vars: &HashMap<String, String>) -> Self {
+    /// Computes the changes for a subprocess whose environment is `session_vars` layered over
+    /// `process_environment`, the app's own, with names compared by `case`.
+    pub fn for_session_with(
+        case: NameCase,
+        session_vars: &HashMap<String, String>,
+        process_environment: impl Fn(&str) -> Option<String>,
+    ) -> Self {
         Self::compute(|name| {
-            session_vars
-                .get(name)
+            get_variable(session_vars, name, case)
                 .cloned()
-                .or_else(|| std::env::var(name).ok())
+                .or_else(|| process_environment(name))
         })
     }
 
-    /// Computes the changes given a lookup of the subprocess's effective environment.
+    /// Computes the changes given a lookup of the subprocess's effective environment. The lookup
+    /// must follow the name rule of the host (see [`NameCase`]).
     pub fn compute(lookup: impl Fn(&str) -> Option<String>) -> Self {
         let mut environment = Self::default();
         for &(name, value) in FIXED_VARIABLES {
@@ -151,13 +165,14 @@ impl OfflineEnvironment {
         environment
     }
 
-    /// Applies the changes to an environment map (removals first, then values).
-    pub fn apply_to(&self, variables: &mut HashMap<String, String>) {
+    /// Applies the changes to an environment map (removals first, then values). Every spelling of
+    /// a name that `case` treats as the same variable is replaced, so the map never holds two.
+    pub fn apply_to(&self, variables: &mut HashMap<String, String>, case: NameCase) {
         for name in &self.remove {
-            variables.remove(*name);
+            remove_variable(variables, name, case);
         }
         for (name, value) in &self.set {
-            variables.insert(name.clone(), value.clone());
+            set_variable(variables, name, value.clone(), case);
         }
     }
 }
@@ -167,22 +182,46 @@ impl OfflineEnvironment {
 pub fn harden(
     session_vars: Option<HashMap<String, String>>,
 ) -> (Option<HashMap<String, String>>, Vec<&'static str>) {
+    harden_with(NameCase::of_host(), session_vars, |name| {
+        std::env::var(name).ok()
+    })
+}
+
+/// [`harden`] with the name rule and the process environment given.
+pub fn harden_with(
+    case: NameCase,
+    session_vars: Option<HashMap<String, String>>,
+    process_environment: impl Fn(&str) -> Option<String>,
+) -> (Option<HashMap<String, String>>, Vec<&'static str>) {
     let mut variables = session_vars.unwrap_or_default();
-    let environment = OfflineEnvironment::for_session(&variables);
-    environment.apply_to(&mut variables);
+    let environment = OfflineEnvironment::for_session_with(case, &variables, process_environment);
+    environment.apply_to(&mut variables, case);
     (Some(variables), environment.remove)
 }
 
 /// Like [`harden`], for a subprocess that does not inherit the app's environment (WSL: only the
 /// variables listed in `WSLENV` cross into the guest), so only `session_vars` is consulted and
 /// nothing needs stripping.
+///
+/// Names are looked up exactly, because the guest is Linux and `git_config_count` is not
+/// `GIT_CONFIG_COUNT` there. They are written by the host's rule, because the variables travel
+/// through the Windows environment of `wsl.exe`, which keeps one of two names that differ only in
+/// case.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn harden_isolated(
     session_vars: Option<HashMap<String, String>>,
 ) -> Option<HashMap<String, String>> {
+    harden_isolated_with(NameCase::of_host(), session_vars)
+}
+
+/// [`harden_isolated`] with the host's name rule given.
+pub fn harden_isolated_with(
+    host_case: NameCase,
+    session_vars: Option<HashMap<String, String>>,
+) -> Option<HashMap<String, String>> {
     let mut variables = session_vars.unwrap_or_default();
     let environment = OfflineEnvironment::compute(|name| variables.get(name).cloned());
-    environment.apply_to(&mut variables);
+    environment.apply_to(&mut variables, host_case);
     Some(variables)
 }
 

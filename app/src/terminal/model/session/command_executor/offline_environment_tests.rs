@@ -98,6 +98,228 @@ fn git_overrides_are_appended_to_existing_pairs() {
     assert_eq!(value_of(&reset, "GIT_CONFIG_KEY_0"), Some("core.fsmonitor"));
 }
 
+fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+    pairs
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+        .collect()
+}
+
+/// Asserts that no two keys of `variables` are the same name under `case`.
+fn assert_no_duplicate_names(variables: &HashMap<String, String>, case: NameCase) {
+    let mut keys: Vec<&String> = variables.keys().collect();
+    keys.sort();
+    for (index, first) in keys.iter().enumerate() {
+        for second in &keys[index + 1..] {
+            assert!(
+                !case.same(first, second),
+                "{first:?} and {second:?} name the same variable: {variables:?}"
+            );
+        }
+    }
+}
+
+fn harden_ignoring_case(
+    session: HashMap<String, String>,
+) -> (HashMap<String, String>, Vec<&'static str>) {
+    let (hardened, removals) = harden_with(NameCase::Insensitive, Some(session), |_| None);
+    (hardened.unwrap(), removals)
+}
+
+#[test]
+fn a_lower_case_git_config_count_is_counted_and_not_duplicated_when_names_ignore_case() {
+    for spelling in ["git_config_count", "Git_Config_Count", "GIT_CONFIG_COUNT"] {
+        let (hardened, _) = harden_ignoring_case(map(&[
+            (spelling, "2"),
+            ("GIT_CONFIG_KEY_0", "alias.a"),
+            ("GIT_CONFIG_VALUE_0", "status"),
+            ("git_config_key_1", "alias.b"),
+            ("git_config_value_1", "log"),
+            ("HOME", "/h"),
+        ]));
+        assert_no_duplicate_names(&hardened, NameCase::Insensitive);
+        assert_eq!(hardened["GIT_CONFIG_COUNT"], "5", "{spelling}");
+        assert_eq!(
+            hardened
+                .keys()
+                .filter(|key| key.eq_ignore_ascii_case("GIT_CONFIG_COUNT"))
+                .count(),
+            1,
+            "{spelling}: {hardened:?}"
+        );
+        for (offset, (key, value)) in [
+            ("core.fsmonitor", "false"),
+            ("log.showSignature", "false"),
+            ("core.hooksPath", "/dev/null"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            assert_eq!(hardened[&format!("GIT_CONFIG_KEY_{}", 2 + offset)], *key);
+            assert_eq!(
+                hardened[&format!("GIT_CONFIG_VALUE_{}", 2 + offset)],
+                *value
+            );
+        }
+        // The session's own pairs survive, in the spelling it gave them.
+        assert_eq!(hardened["GIT_CONFIG_KEY_0"], "alias.a");
+        assert_eq!(hardened["git_config_value_1"], "log");
+        assert_eq!(hardened["HOME"], "/h");
+    }
+}
+
+#[test]
+fn a_lower_case_git_config_count_is_another_variable_when_names_are_exact() {
+    let (hardened, _) = harden_with(
+        NameCase::Sensitive,
+        Some(map(&[("git_config_count", "2")])),
+        |_| None,
+    );
+    let hardened = hardened.unwrap();
+    assert_eq!(hardened["GIT_CONFIG_COUNT"], "3");
+    assert_eq!(hardened["git_config_count"], "2");
+}
+
+#[test]
+fn table_entries_replace_differently_cased_session_values_when_names_ignore_case() {
+    let session = map(&[
+        ("rustup_auto_install", "1"),
+        ("Npm_Config_Update_Notifier", "true"),
+        ("Git_Terminal_Prompt", "1"),
+        ("goproxy", "https://proxy.golang.org"),
+        ("Path", "C:\\bin"),
+        ("docker_host", "tcp://10.0.0.5:2375"),
+        ("Docker_Host", "ssh://user@host"),
+        ("pOWERSHELL_UPDATECHECK", "Default"),
+    ]);
+    let (hardened, removals) = harden_ignoring_case(session);
+    assert_no_duplicate_names(&hardened, NameCase::Insensitive);
+    assert_eq!(removals, ["DOCKER_HOST"]);
+    assert!(
+        !hardened
+            .keys()
+            .any(|key| key.eq_ignore_ascii_case("DOCKER_HOST")),
+        "{hardened:?}"
+    );
+    for (name, value) in [
+        ("RUSTUP_AUTO_INSTALL", "0"),
+        ("npm_config_update_notifier", "false"),
+        ("GIT_TERMINAL_PROMPT", "0"),
+        ("GOPROXY", "off"),
+        ("POWERSHELL_UPDATECHECK", "Off"),
+    ] {
+        assert_eq!(hardened[name], value, "{name}");
+    }
+    assert_eq!(
+        hardened["Path"], "C:\\bin",
+        "unrelated names keep their spelling"
+    );
+}
+
+#[test]
+fn a_hostile_mix_of_spellings_never_leaves_two_names_that_differ_only_in_case() {
+    let mut session = HashMap::new();
+    for (name, _) in FIXED_VARIABLES {
+        session.insert(name.to_lowercase(), "x".to_owned());
+        session.insert(name.to_uppercase(), "y".to_owned());
+    }
+    session.insert("git_config_count".to_owned(), "1".to_owned());
+    session.insert("GIT_CONFIG_COUNT".to_owned(), "1".to_owned());
+    session.insert("git_config_key_1".to_owned(), "a".to_owned());
+    session.insert("GIT_CONFIG_KEY_1".to_owned(), "b".to_owned());
+    session.insert("docker_host".to_owned(), "tcp://h".to_owned());
+    let (hardened, _) = harden_ignoring_case(session);
+    assert_no_duplicate_names(&hardened, NameCase::Insensitive);
+    assert_eq!(hardened["GIT_CONFIG_COUNT"], "4");
+}
+
+#[test]
+fn the_wsl_environment_reads_names_exactly_and_writes_them_by_the_host_rule() {
+    // The guest is Linux: a lower-case `git_config_count` is not the count.
+    let hardened = harden_isolated_with(
+        NameCase::Insensitive,
+        Some(map(&[("git_config_count", "2"), ("GIT_CONFIG_COUNT", "1")])),
+    )
+    .unwrap();
+    assert_eq!(
+        hardened["GIT_CONFIG_COUNT"], "4",
+        "counted from the exact name"
+    );
+    assert_no_duplicate_names(&hardened, NameCase::Insensitive);
+
+    let hardened = harden_isolated_with(
+        NameCase::Insensitive,
+        Some(map(&[("git_config_count", "2")])),
+    )
+    .unwrap();
+    assert_eq!(hardened["GIT_CONFIG_COUNT"], "3");
+    assert!(!hardened.contains_key("git_config_count"));
+
+    let hardened =
+        harden_isolated_with(NameCase::Sensitive, Some(map(&[("git_config_count", "2")]))).unwrap();
+    assert_eq!(hardened["GIT_CONFIG_COUNT"], "3");
+    assert_eq!(hardened["git_config_count"], "2");
+}
+
+#[test]
+fn the_process_environment_counts_when_the_session_has_no_count() {
+    let process = |name: &str| (name == "GIT_CONFIG_COUNT").then(|| "1".to_owned());
+    let (hardened, _) = harden_with(NameCase::Insensitive, Some(HashMap::new()), process);
+    assert_eq!(hardened.unwrap()["GIT_CONFIG_COUNT"], "4");
+    let (hardened, _) = harden_with(
+        NameCase::Insensitive,
+        Some(map(&[("git_config_count", "5")])),
+        process,
+    );
+    assert_eq!(
+        hardened.unwrap()["GIT_CONFIG_COUNT"],
+        "8",
+        "the session wins"
+    );
+}
+
+/// The production entry point on Windows: `harden` uses the host's rule. This test runs in the
+/// `Security tests (Windows)` CI job.
+#[cfg(windows)]
+#[test]
+fn harden_ignores_case_on_windows() {
+    let (hardened, removals) = harden(Some(map(&[
+        ("git_config_count", "1"),
+        ("Path", "C:\\bin"),
+        ("docker_host", "tcp://10.0.0.5:2375"),
+        ("rustup_auto_install", "1"),
+    ])));
+    let hardened = hardened.unwrap();
+    assert_no_duplicate_names(&hardened, NameCase::of_host());
+    assert_eq!(NameCase::of_host(), NameCase::Insensitive);
+    assert_eq!(hardened["GIT_CONFIG_COUNT"], "4");
+    assert_eq!(hardened["RUSTUP_AUTO_INSTALL"], "0");
+    assert_eq!(removals, ["DOCKER_HOST"]);
+    assert!(!hardened.contains_key("docker_host"));
+}
+
+/// The same spawn-level rule the standard library applies on Windows: a `Command` given two
+/// names that differ in case keeps one, so the map must not hold two.
+#[cfg(windows)]
+#[test]
+fn the_environment_block_of_a_spawned_process_holds_one_git_config_count() {
+    let (hardened, _) = harden(Some(map(&[
+        ("git_config_count", "2"),
+        ("git_config_key_0", "alias.a"),
+        ("git_config_value_0", "status"),
+        ("git_config_key_1", "alias.b"),
+        ("git_config_value_1", "log"),
+    ])));
+    let output = command::blocking::Command::new("cmd.exe")
+        .args(["/Q", "/C", "set GIT_CONFIG_COUNT"])
+        .envs(hardened.unwrap())
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&output.stdout).to_ascii_uppercase();
+    assert_eq!(text.matches("GIT_CONFIG_COUNT=").count(), 1, "{text}");
+    assert!(text.contains("GIT_CONFIG_COUNT=5"), "{text}");
+}
+
 #[test]
 fn remote_docker_host_is_dropped_and_local_ones_are_kept() {
     for remote in [

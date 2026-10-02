@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use parking_lot::Mutex;
-use warp_completer::completer::{CommandExitStatus, CommandOutput};
+use warp_completer::completer::{CommandExitStatus, CommandOutput, GitVersion};
 use warpui::elements::Empty;
 use warpui::platform::WindowStyle;
 use warpui::{App, AppContext, Element, Entity, ModelHandle, TypedActionView, View, ViewContext};
@@ -200,6 +200,7 @@ enum Scripted {
 struct ScriptedExecutor {
     script: Mutex<VecDeque<Scripted>>,
     calls: AtomicUsize,
+    commands: Mutex<Vec<String>>,
     started: (async_channel::Sender<()>, async_channel::Receiver<()>),
     cancelled: (async_channel::Sender<()>, async_channel::Receiver<()>),
 }
@@ -215,6 +216,7 @@ impl ScriptedExecutor {
         Arc::new(Self {
             script: Mutex::new(script.into_iter().collect()),
             calls: AtomicUsize::new(0),
+            commands: Mutex::new(Vec::new()),
             started: async_channel::unbounded(),
             cancelled: async_channel::unbounded(),
         })
@@ -238,13 +240,14 @@ fn killed_output() -> CommandOutput {
 impl CommandExecutor for ScriptedExecutor {
     async fn execute_command(
         &self,
-        _command: &str,
+        command: &str,
         _shell: &Shell,
         _current_directory_path: Option<&str>,
         _environment_variables: Option<HashMap<String, String>>,
         _execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        self.commands.lock().push(command.to_owned());
         let next = self.script.lock().pop_front();
         match next.expect("the script ran out of answers") {
             Scripted::Killed => Ok(killed_output()),
@@ -347,5 +350,139 @@ fn listing_that_succeeds_with_no_output_is_stored_as_empty() {
         assert_eq!(executor.calls(), 1);
         assert!(session.has_loaded_external_commands());
         assert!(names(&session).is_empty());
+    });
+}
+
+fn git_version_output(version: &'static str) -> Scripted {
+    Scripted::Output(version)
+}
+
+#[test]
+fn git_is_probed_once_per_session_and_the_answer_is_remembered() {
+    App::test((), |_app| async move {
+        let executor =
+            ScriptedExecutor::new([git_version_output("git version 2.39.3 (Apple Git-146)\n")]);
+        let session = Session::new(SessionInfo::new_for_test(), executor.clone());
+
+        for _ in 0..3 {
+            assert_eq!(session.git_version().await, Some(GitVersion::new(2, 39, 3)));
+            assert!(session.git_honors_environment_overrides().await);
+        }
+
+        assert_eq!(executor.calls(), 1);
+        assert_eq!(*executor.commands.lock(), ["git --version"]);
+    });
+}
+
+#[test]
+fn concurrent_callers_share_one_probe() {
+    App::test((), |_app| async move {
+        let executor =
+            ScriptedExecutor::new([git_version_output("git version 2.45.1.windows.1\n")]);
+        let session = Session::new(SessionInfo::new_for_test(), executor.clone());
+
+        let (first, second, third) = futures::join!(
+            session.git_version(),
+            session.git_version(),
+            session.git_honors_environment_overrides()
+        );
+
+        assert_eq!(first, Some(GitVersion::new(2, 45, 1)));
+        assert_eq!(second, first);
+        assert!(third);
+        assert_eq!(executor.calls(), 1);
+    });
+}
+
+#[test]
+fn a_git_older_than_2_31_is_remembered_as_too_old() {
+    App::test((), |_app| async move {
+        let executor = ScriptedExecutor::new([git_version_output("git version 2.30.2\n")]);
+        let session = Session::new(SessionInfo::new_for_test(), executor.clone());
+
+        assert_eq!(session.git_version().await, Some(GitVersion::new(2, 30, 2)));
+        assert!(!session.git_honors_environment_overrides().await);
+        assert_eq!(executor.calls(), 1);
+    });
+}
+
+#[test]
+fn output_that_is_not_a_version_is_remembered_as_unknown_and_fails_closed() {
+    App::test((), |_app| async move {
+        let executor = ScriptedExecutor::new([git_version_output("git: command not found\n")]);
+        let session = Session::new(SessionInfo::new_for_test(), executor.clone());
+
+        assert_eq!(session.git_version().await, None);
+        assert!(!session.git_honors_environment_overrides().await);
+        assert_eq!(executor.calls(), 1);
+    });
+}
+
+#[test]
+fn a_probe_that_could_not_run_or_was_killed_is_not_remembered() {
+    App::test((), |_app| async move {
+        let executor = ScriptedExecutor::new([
+            Scripted::CannotRun,
+            Scripted::Killed,
+            git_version_output("git version 2.40.0\n"),
+        ]);
+        let session = Session::new(SessionInfo::new_for_test(), executor.clone());
+
+        assert_eq!(session.git_version().await, None, "could not run");
+        assert!(!session.git_honors_environment_overrides().await, "killed");
+        assert_eq!(executor.calls(), 2);
+        assert_eq!(session.git_version().await, Some(GitVersion::new(2, 40, 0)));
+        assert_eq!(session.git_version().await, Some(GitVersion::new(2, 40, 0)));
+        assert_eq!(executor.calls(), 3);
+    });
+}
+
+#[test]
+fn a_probe_cancelled_with_the_sessions_commands_is_run_again() {
+    App::test((), |_app| async move {
+        let executor = ScriptedExecutor::new([
+            Scripted::HangUntilCancelled,
+            git_version_output("git version 2.31.0\n"),
+        ]);
+        let session = Session::new(SessionInfo::new_for_test(), executor.clone());
+
+        let cancel = async {
+            executor.started.1.recv().await.unwrap();
+            session.cancel_active_commands();
+        };
+        let (first, ()) = futures::join!(session.git_version(), cancel);
+
+        assert_eq!(first, None);
+        assert_eq!(session.git_version().await, Some(GitVersion::new(2, 31, 0)));
+        assert_eq!(executor.calls(), 2);
+    });
+}
+
+#[test]
+fn command_corrections_list_branches_only_with_a_git_that_honors_the_table() {
+    App::test((), |_app| async move {
+        // Too old: the version is asked for and `git branch` is not run (the script has no
+        // answer for it, so running it would fail the test).
+        let old = ScriptedExecutor::new([git_version_output("git version 2.30.0\n")]);
+        let session = Session::new(SessionInfo::new_for_test(), old.clone());
+        assert!(
+            session
+                .git_branches_for_command_corrections("/repo")
+                .await
+                .is_empty()
+        );
+        assert_eq!(*old.commands.lock(), ["git --version"]);
+
+        let new = ScriptedExecutor::new([
+            git_version_output("git version 2.31.0\n"),
+            git_version_output("* main\n  feature\n"),
+        ]);
+        let session = Session::new(SessionInfo::new_for_test(), new.clone());
+        assert_eq!(
+            session.git_branches_for_command_corrections("/repo").await,
+            ["* main", "feature"]
+        );
+        assert_eq!(new.commands.lock().len(), 2);
+        assert_eq!(new.commands.lock()[0], "git --version");
     });
 }

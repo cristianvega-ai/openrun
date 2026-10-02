@@ -37,6 +37,14 @@
 //! from a promisor remote, no `core.fsmonitor`, no `log.showSignature`, local transports only)
 //! is the only layer; any other generator that starts a program stays off.
 //!
+//! Generators that run `git` (every pair on `ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`, `git-flow`'s
+//! `type_branches`, and the `git/alias` alias generator) have a second condition on every
+//! platform: the session's git must be known to be at least `MINIMUM_GIT_VERSION` (2.31). The
+//! environment table protects them with `GIT_CONFIG_COUNT` overrides, which older git ignores.
+//! The engine asks `GeneratorContext::git_version` (the app probes `git --version` once per
+//! session) after the allow-list says yes; an unknown version counts as too old. See
+//! `CommandRegistry::generator_requires_supported_git`.
+//!
 //! An entry in `allowed.rs` records that someone read the command and the tool's behaviour. It
 //! is not a proof: only some tools were run against a canary (see `denied.rs` for which), and
 //! the rest of the allowed external CLIs are reviewed from their commands and documentation.
@@ -67,7 +75,8 @@ mod token_gate;
 
 use allowed::{
     ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS,
-    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, ALLOWED_WHEN_ISOLATED,
+    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, ALLOWED_WHEN_ISOLATED, GIT_ALIAS_GENERATORS,
+    GIT_GENERATORS_ON_POSIX_ONLY,
 };
 pub(super) use token_gate::{TokenPolicy, sanitize_env_vars, token_policy};
 
@@ -109,6 +118,26 @@ pub(super) fn is_generator_allowed_on(
         return true;
     }
     containment == Containment::NetworkIsolated && listed(ALLOWED_WHEN_ISOLATED)
+}
+
+/// Whether the generator named `generator` of the spec registered as `spec` (lowercase) runs
+/// `git`. These run only when the session's git is at least `MINIMUM_GIT_VERSION`: the offline
+/// environment table protects against a repository's `core.fsmonitor`, `core.hooksPath` and
+/// `log.showSignature` through `GIT_CONFIG_COUNT` overrides, which older git ignores.
+pub(super) fn generator_runs_git(spec: &str, generator: &str) -> bool {
+    let listed = |list: &[(&str, &str)]| {
+        list.binary_search_by(|(listed_spec, listed_generator)| {
+            (*listed_spec, *listed_generator).cmp(&(spec, generator))
+        })
+        .is_ok()
+    };
+    listed(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT) || listed(GIT_GENERATORS_ON_POSIX_ONLY)
+}
+
+/// Whether the alias generator named `alias` of the spec registered as `spec` (lowercase) runs
+/// `git`; see [`generator_runs_git`].
+pub(super) fn alias_generator_runs_git(spec: &str, alias: &str) -> bool {
+    GIT_ALIAS_GENERATORS.contains(&(spec, alias))
 }
 
 /// The generators that run on Windows only when the executor applies the offline environment

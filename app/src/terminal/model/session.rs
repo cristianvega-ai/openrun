@@ -20,7 +20,8 @@ use smol_str::SmolStr;
 use typed_path::{TypedPath, TypedPathBuf, WindowsPath};
 use version_compare::Version;
 use warp_completer::completer::{
-    CommandExitStatus, CommandOutput, PathSeparators, TopLevelCommandCaseSensitivity,
+    CommandExitStatus, CommandOutput, GIT_VERSION_COMMAND, GitVersion, PathSeparators,
+    TopLevelCommandCaseSensitivity,
 };
 use warp_errors::{ErrorExt, register_error};
 use warp_util::path::{
@@ -810,6 +811,11 @@ pub struct Session {
     load_external_commands_future: OnceCell<Shared<BoxFuture<'static, ()>>>,
     load_all_function_names_future: OnceCell<Shared<BoxFuture<'static, ()>>>,
     load_all_builtins_future: OnceCell<Shared<BoxFuture<'static, ()>>>,
+    /// What `git --version` printed in this session: `None` until a probe has run to completion,
+    /// then `Some(None)` if the output was not a version and `Some(Some(version))` otherwise. A
+    /// probe that could not run, or was killed, is not stored. The lock is held across the probe
+    /// so concurrent generators share one.
+    git_version: futures::lock::Mutex<Option<Option<GitVersion>>>,
     command_case_sensitivity: TopLevelCommandCaseSensitivity,
 }
 
@@ -834,6 +840,7 @@ impl Session {
             load_external_commands_future: Default::default(),
             load_all_function_names_future: Default::default(),
             load_all_builtins_future: Default::default(),
+            git_version: Default::default(),
             command_case_sensitivity,
         }
     }
@@ -1480,7 +1487,68 @@ impl Session {
         self.command_executor.offline_environment_applied()
     }
 
+    /// The version of the `git` this session's commands start, probed once with `git --version`
+    /// through the session's own executor (so with the offline environment table and the network
+    /// sandbox of every other generator command) and remembered. `None` means unknown: git is not
+    /// installed, the output was not a version, or the probe could not run. Callers treat unknown
+    /// as too old. A probe that failed to run or was cancelled is not remembered and is tried
+    /// again by the next caller; one that ran and printed something else is.
+    pub async fn git_version(&self) -> Option<GitVersion> {
+        let mut remembered = self.git_version.lock().await;
+        if let Some(version) = *remembered {
+            return version;
+        }
+        let env_vars = self
+            .info
+            .path
+            .as_deref()
+            .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
+        let output = self
+            .execute_command(
+                GIT_VERSION_COMMAND,
+                None,
+                env_vars,
+                ExecuteCommandOptions::default(),
+            )
+            .await;
+        match output {
+            Ok(output) if output.status == CommandExitStatus::Success => {
+                let version = GitVersion::parse(&String::from_utf8_lossy(&output.stdout));
+                match version {
+                    Some(version) => log::info!("git version of the session: {version}"),
+                    None => log::warn!("`git --version` did not print a version"),
+                }
+                *remembered = Some(version);
+                version
+            }
+            Ok(_) => {
+                log::info!("`git --version` did not succeed in this session");
+                None
+            }
+            Err(error) => {
+                log::warn!("could not run `git --version`: {error:#}");
+                None
+            }
+        }
+    }
+
+    /// Whether this session's git is known to honor the offline environment table, which
+    /// `git_branches_for_command_corrections` and the git completion generators rely on.
+    pub async fn git_honors_environment_overrides(&self) -> bool {
+        self.git_version()
+            .await
+            .is_some_and(GitVersion::honors_environment_overrides)
+    }
+
     pub async fn git_branches_for_command_corrections(&self, working_dir: &str) -> Vec<String> {
+        if !self.git_honors_environment_overrides().await {
+            log::info!(
+                "not listing git branches for command corrections: the session's git is not \
+                 known to be at least {}",
+                warp_completer::completer::MINIMUM_GIT_VERSION
+            );
+            return Vec::new();
+        }
         let env_vars = self
             .info
             .path
@@ -1740,6 +1808,7 @@ pub mod testing {
                 load_all_function_names_future: Default::default(),
                 additional_builtin_names: Default::default(),
                 load_all_builtins_future: Default::default(),
+                git_version: Default::default(),
             }
         }
 
@@ -1757,6 +1826,7 @@ pub mod testing {
                 load_all_function_names_future: Default::default(),
                 additional_builtin_names: Default::default(),
                 load_all_builtins_future: Default::default(),
+                git_version: Default::default(),
             }
         }
 

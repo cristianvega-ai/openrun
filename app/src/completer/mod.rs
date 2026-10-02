@@ -12,7 +12,8 @@ use smol_str::SmolStr;
 use typed_path::{TypedPath, TypedPathBuf};
 use warp_completer::completer::{
     CommandExitStatus, CommandOutput, CompletionContext, EngineDirEntry, EngineFileType,
-    GeneratorContext, PathCompletionContext, PathSeparators, TopLevelCommandCaseSensitivity,
+    GeneratorContext, GitVersion, PathCompletionContext, PathSeparators,
+    TopLevelCommandCaseSensitivity,
 };
 use warp_completer::signatures::CommandRegistry;
 use warp_util::path::{EscapeChar, ShellFamily};
@@ -20,6 +21,7 @@ use warp_util::path::{EscapeChar, ShellFamily};
 use crate::safe_warn;
 use crate::terminal::model::session::{ExecuteCommandOptions, Session, SessionType};
 use crate::util::AsciiDebug;
+use crate::util::environment_variables::{NameCase, set_variable};
 
 lazy_static! {
     pub static ref CURR_DIRECTORY_ENTRY: EngineDirEntry = EngineDirEntry {
@@ -209,7 +211,7 @@ impl GeneratorContext for SessionContext {
         // the subshell won't inherit the PATH var, but we need the PATH var
         // to reference executables we might run as part of generators.
         if let Some(path) = self.session.path().as_deref() {
-            env_vars.insert("PATH".to_string(), path.to_string());
+            set_variable(&mut env_vars, "PATH", path.to_string(), NameCase::of_host());
         }
 
         let env_vars_option = if env_vars.is_empty() {
@@ -238,6 +240,10 @@ impl GeneratorContext for SessionContext {
 
     fn offline_environment_applied(&self) -> bool {
         self.session.offline_environment_applied()
+    }
+
+    async fn git_version(&self) -> Option<GitVersion> {
+        self.session.git_version().await
     }
 }
 

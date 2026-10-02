@@ -1,5 +1,7 @@
 #[cfg(all(test, feature = "local_tty"))]
 mod git_completion_tests;
+#[cfg(all(test, unix, feature = "local_tty"))]
+mod git_version_gate_tests;
 mod in_band_command_executor;
 #[cfg(feature = "local_tty")]
 mod local_command_executor;

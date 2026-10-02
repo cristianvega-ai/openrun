@@ -21,7 +21,7 @@ use crate::completer::matchers::MatchStrategy;
 use crate::completer::suggest::{
     CompleterOptions, CompletionsFallbackStrategy, MatchedSuggestion, Suggestion, SuggestionType,
 };
-use crate::completer::{CommandExitStatus, GeneratorContext, LocationType};
+use crate::completer::{CommandExitStatus, GeneratorContext, LocationType, MINIMUM_GIT_VERSION};
 use crate::meta::{Span, Spanned};
 use crate::parsers::ArgumentError::{
     MissingMandatoryPositional, MissingValueForName, UnexpectedArgument,
@@ -744,6 +744,22 @@ async fn generate_suggestions_for_argument_type(
             });
             if !generator_allowed {
                 log::debug!("Generator {generator_name:?} is not on the local-only allow-list");
+                return vec![];
+            }
+
+            if dynamic_completion_data.is_some_and(|data| {
+                ctx.command_registry()
+                    .generator_requires_supported_git(data.spec(), generator_name)
+            }) && !match ctx.generator_context() {
+                Some(generator_context) => {
+                    generator_context.git_honors_environment_overrides().await
+                }
+                None => false,
+            } {
+                log::debug!(
+                    "Generator {generator_name:?} is skipped: the session's git is not known to \
+                     be at least {MINIMUM_GIT_VERSION}"
+                );
                 return vec![];
             }
 

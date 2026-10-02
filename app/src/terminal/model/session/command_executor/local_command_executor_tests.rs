@@ -298,3 +298,66 @@ mod unix {
         );
     }
 }
+
+/// `CommandBuilder::CmdExe` runs a bare `git` found in the current directory first, so it must
+/// stay unreachable: it is chosen only when a caller builds `ExecuteCommandOptions` with
+/// `run_command_in_same_shell_as_session: false`. This reads every Rust source file of the
+/// workspace and fails if one does that, or if the type is built some way this check cannot see.
+#[test]
+fn commands_never_ask_for_cmd_exe() {
+    let app = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let workspace = app.parent().unwrap();
+    let field =
+        regex::Regex::new(r"run_command_in_same_shell_as_session\s*:\s*([^,}\s]+)").unwrap();
+    let literal = regex::Regex::new(r"\bExecuteCommandOptions\s*\{").unwrap();
+    let mut assignments = Vec::new();
+    let mut literals = 0;
+    for root in [app.join("src"), workspace.join("crates")] {
+        for entry in walkdir::WalkDir::new(root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rs"))
+        {
+            let Ok(source) = std::fs::read_to_string(entry.path()) else {
+                continue;
+            };
+            if entry
+                .path()
+                .ends_with("command_executor/local_command_executor_tests.rs")
+            {
+                continue;
+            }
+            let source = source
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            literals += literal.find_iter(&source).count();
+            for captures in field.captures_iter(&source) {
+                assignments.push((
+                    entry
+                        .path()
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                    captures[1].to_owned(),
+                ));
+            }
+        }
+    }
+    // The definition (`pub struct ExecuteCommandOptions {`), the `Default` impl and the
+    // login-shell call. A new struct literal or a field set to anything but `true` fails here.
+    assert_eq!(
+        literals, 3,
+        "a new ExecuteCommandOptions literal: {assignments:?}"
+    );
+    assert!(
+        assignments
+            .iter()
+            .all(|(_, value)| value == "true" || value == "bool"),
+        "something asks for run_command_in_same_shell_as_session: false, which makes a Windows \
+         local executor run the command in cmd.exe (see CommandBuilder::CmdExe): {assignments:?}"
+    );
+    assert_eq!(assignments.len(), 3, "{assignments:?}");
+}

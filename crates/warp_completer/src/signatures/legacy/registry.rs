@@ -10,7 +10,8 @@ use warp_util::path::ShellFamily;
 
 use super::miss_cache::MissCache;
 use crate::completer::{
-    CommandExitStatus, CompletionContext, Containment, TopLevelCommandCaseSensitivity,
+    CommandExitStatus, CompletionContext, Containment, MINIMUM_GIT_VERSION,
+    TopLevelCommandCaseSensitivity,
 };
 use crate::parsers::SignatureAtTokenIndex;
 
@@ -229,6 +230,34 @@ impl CommandRegistry {
         }
     }
 
+    /// Whether the generator `generator` of spec `spec` runs `git`, and so must not run unless
+    /// the session's git honors the offline environment table
+    /// (`GeneratorContext::git_honors_environment_overrides`). Decided by identity.
+    pub fn generator_requires_supported_git(&self, spec: &str, generator: &GeneratorName) -> bool {
+        match self.generator_policy {
+            GeneratorPolicy::AllowListed => {
+                super::generator_policy::generator_runs_git(spec, &generator.0)
+            }
+            #[cfg(any(test, feature = "test-util"))]
+            GeneratorPolicy::AllowAll => false,
+        }
+    }
+
+    /// [`Self::generator_requires_supported_git`] for an alias generator.
+    pub fn alias_generator_requires_supported_git(
+        &self,
+        spec: &str,
+        alias: &AliasGeneratorName,
+    ) -> bool {
+        match self.generator_policy {
+            GeneratorPolicy::AllowListed => {
+                super::generator_policy::alias_generator_runs_git(spec, &alias.0)
+            }
+            #[cfg(any(test, feature = "test-util"))]
+            GeneratorPolicy::AllowAll => false,
+        }
+    }
+
     /// Whether the alias generator `alias` of spec `spec` may run a command, decided by
     /// identity like [`Self::allows_generator`].
     pub fn allows_alias_generator(&self, spec: &str, alias: &AliasGeneratorName) -> bool {
@@ -394,7 +423,7 @@ impl CommandRegistry {
             // Check if there is any alias at the current signature. An alias generator is a
             // command that runs while the user is typing, so it needs the same review as a
             // completion generator.
-            let alias_generator_allowed = match (
+            let mut alias_generator_allowed = match (
                 curr_signature.alias_generator.as_ref(),
                 dynamic_completion_data,
             ) {
@@ -407,6 +436,26 @@ impl CommandRegistry {
                 }
                 _ => false,
             };
+            if alias_generator_allowed
+                && let (Some(alias_name), Some(data)) = (
+                    curr_signature.alias_generator.as_ref(),
+                    dynamic_completion_data,
+                )
+                && self.alias_generator_requires_supported_git(data.spec(), alias_name)
+            {
+                alias_generator_allowed = match context.generator_context() {
+                    Some(generator_context) => {
+                        generator_context.git_honors_environment_overrides().await
+                    }
+                    None => false,
+                };
+                if !alias_generator_allowed {
+                    log::debug!(
+                        "Alias generator {alias_name:?} is skipped: the session's git is not \
+                         known to be at least {MINIMUM_GIT_VERSION}"
+                    );
+                }
+            }
             if alias_generator_allowed
                 && let Some(alias) =
                     curr_signature.alias(dynamic_completion_data.map(SpecDynamicData::aliases))

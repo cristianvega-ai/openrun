@@ -1,6 +1,7 @@
 pub mod bindings;
 pub mod clipboard;
 pub mod color;
+pub mod environment_variables;
 pub mod extensions;
 #[cfg(feature = "local_fs")]
 pub mod file;
