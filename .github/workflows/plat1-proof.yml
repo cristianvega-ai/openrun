@@ -24,6 +24,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   NEXTEST_PROFILE: ci
+  # The whole test process tree runs in one sandbox profile; a second one cannot be applied, so
+  # the app runs its commands directly (see network_sandbox.rs).
+  WARP_NETWORK_SANDBOX_BY_PARENT: "1"
 
 jobs:
   # Same job id as the Security tests job in ci.yml, so rust-cache restores its build.
@@ -39,7 +42,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
-          save-if: "false"
+          save-if: "true"
 
       - name: Make sure the Metal toolchain is installed
         run: |
@@ -120,11 +123,13 @@ jobs:
         run: |
           ./script/offline_sandbox_macos net-unit.log \
             cargo nextest run --locked --workspace --offline --retries 0 --no-fail-fast \
-              -E 'not package(integration)'
+              -E 'not package(integration) and not test(~command_executor::network_sandbox)'
 
       - name: Integration tests in the sandbox
         if: ${{ !cancelled() && inputs.integration }}
         run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
           ./script/offline_sandbox_macos net-integration.log \
             cargo nextest run --locked --workspace --offline --retries 0 --no-fail-fast \
               -E 'package(integration)'
@@ -132,6 +137,8 @@ jobs:
       - name: Idle session in the sandbox
         if: ${{ !cancelled() && inputs.idle }}
         run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
           ./script/offline_sandbox_macos net-idle.log \
             cargo nextest run --locked --workspace --offline --retries 0 --no-fail-fast \
               --run-ignored only -E 'test(~test_idle_session)'
