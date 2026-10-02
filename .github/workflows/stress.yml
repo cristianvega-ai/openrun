@@ -1,0 +1,85 @@
+name: Stress tests
+
+# Runs a nextest filter many times on a hosted macOS runner (3 cores, the machine the CI jobs
+# use), to reproduce and measure timing-dependent tests that do not fail on a development machine.
+# Started by hand:
+#
+#   gh workflow run stress.yml -f filter='test(=terminal::view::tests::some_test)' -f count=50
+#
+# A failing iteration fails the run. The workflow does not run on push, so it never blocks a merge.
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: nextest filterset expression, e.g. test(=ui_tests::test_ctrl_c)
+        required: true
+        type: string
+      count:
+        description: Number of times to run the selection (nextest --stress-count)
+        default: "20"
+        type: string
+      shell:
+        description: Shell the tests start
+        default: zsh
+        type: choice
+        options: [zsh, bash]
+      rust_log:
+        description: RUST_LOG for the tests (empty keeps the default)
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  NEXTEST_PROFILE: ci
+
+jobs:
+  # The job id is the one `ci.yml` uses for the unit test job: rust-cache keys on it, so this run
+  # restores the dependency build of the last push to `main`.
+  test:
+    name: Stress
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: "false"
+
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: nextest
+
+      - uses: ./.github/actions/macos-test-tools
+
+      - name: Build the tests
+        run: cargo nextest run --locked --workspace --no-run
+
+      - name: Run the selection ${{ inputs.count }} times
+        env:
+          FILTER: ${{ inputs.filter }}
+          COUNT: ${{ inputs.count }}
+          SHELL_NAME: ${{ inputs.shell }}
+          STRESS_RUST_LOG: ${{ inputs.rust_log }}
+        run: |
+          WARP_SHELL_PATH=$(command -v "$SHELL_NAME")
+          export WARP_SHELL_PATH
+          if [ -n "$STRESS_RUST_LOG" ]; then
+            export RUST_LOG="$STRESS_RUST_LOG"
+          fi
+          cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
+            --stress-count "$COUNT" -E "$FILTER"

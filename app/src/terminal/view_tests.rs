@@ -5452,7 +5452,11 @@ fn vertical_tabs_pr_badges_keep_background_tabs_polling() {
                 .expect("show PR badges");
         });
         terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
-        assert!(holds_github_model(&app, &terminal));
+        assert!(
+            holds_github_model(&app, &terminal),
+            "showing the badges again acquires the model: {}",
+            pr_info_state(&app, &terminal)
+        );
     });
 }
 

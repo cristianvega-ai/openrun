@@ -4133,4 +4133,6 @@ No bundled git-family generator runs `fetch`, `pull`, `push`, `clone`, `ls-remot
 
 **CI runs:** 36989066700 (head `72634ecde`, attempt 1): Formatting 31 s, Clippy (macOS) 7 min, Unit tests 19 min (5043 passed), Integration tests 26 min (251 passed), Security tests 13 min (58 + 43 passed), Offline audit 32 min (unit 4987 passed in 145 s, integration 251 passed in 464 s, idle 123 s, connection check clean); no FLAKY and no `TRY 1 FAIL`. Most of the wall time of that run was waiting for a macOS runner: the jobs sat queued for 40 minutes behind the runs of Dependabot branches, which build both on `push` and `pull_request`. `ci.yml` now builds a branch once (`push` only for `main`).
 
+**Stress workflow:** `.github/workflows/stress.yml` is back as a macOS workflow (`gh workflow run stress.yml -f filter=... -f count=100 [-f rust_log=...]`): builds the tests and runs a nextest filter many times on a hosted runner, to measure tests that only misbehave there.
+
 **Notes:** the bash integration run of the old job (the system bash 3.2 as the shell) is not repeated; macOS tests run with zsh, the default shell. Rust platform code, `script/linux`, `script/windows` and the other non-Rust Linux/Windows files are removed by PLAT-4.
