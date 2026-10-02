@@ -88,4 +88,13 @@ jobs:
             export RUST_LOG="$STRESS_RUST_LOG"
           fi
           cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-            --run-ignored "$RUN_IGNORED" --stress-count "$COUNT" -E "$FILTER"
+            --run-ignored "$RUN_IGNORED" --stress-count "$COUNT" -E "$FILTER" 2>&1 | tee "$RUNNER_TEMP/stress.log"
+          status=${PIPESTATUS[0]}
+          # nextest (checked with 0.9.146) exits with the status of the LAST iteration only: a run
+          # in which an earlier iteration failed and the last one passed exits 0. The summary line
+          # counts them all, so a failed iteration anywhere fails the workflow.
+          if sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/stress.log" | grep -Eq 'stress run iterations: .*[1-9][0-9]* failed'; then
+            echo "::error::at least one iteration failed (see the summary line); nextest's exit status is that of the last iteration only"
+            exit 1
+          fi
+          exit "$status"
