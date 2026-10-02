@@ -1,0 +1,33 @@
+name: Offline check
+description: >-
+  Checks the log of a sandboxed run with `offline_audit --net-log` and keeps the logs as evidence.
+  A missing, incomplete or unreadable log fails the check.
+
+inputs:
+  name:
+    description: Name of the job's logs (artifact `net-logs-NAME`).
+    required: true
+  logs:
+    description: The logs of this job, space separated.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Check the recorded connections
+      shell: bash
+      env:
+        LOGS: ${{ inputs.logs }}
+      run: |
+        # shellcheck disable=SC2086 # the names are separated by spaces on purpose
+        ./script/offline_audit --net-log $LOGS
+
+    # The logs show what was (not) contacted and are the evidence if a check fails.
+    - name: Upload the connection logs
+      if: ${{ always() }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: net-logs-${{ inputs.name }}
+        path: net-*.log
+        retention-days: 14
+        if-no-files-found: ignore

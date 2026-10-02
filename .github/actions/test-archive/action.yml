@@ -1,0 +1,29 @@
+name: Test archive
+description: >-
+  Downloads the nextest archive that the Build job made and checks that this job's checkout is
+  where the archive was built. `script/ci_nextest` runs the tests from it.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+      with:
+        name: test-archive
+        path: ${{ runner.temp }}/test-archive
+
+    # The tests read the sources they were built from (`env!("CARGO_MANIFEST_DIR")`, the app's
+    # embedded assets in a debug build) by the absolute path of the build, and the integration
+    # binary keeps its scratch directories under the target directory of the build. The archive is
+    # extracted into the checkout (`script/ci_nextest`), so all of that holds as long as the
+    # checkout is where it was for the build. Hosted runners always use the same directory; if that
+    # ever changes, this step says so instead of a test failing for a puzzling reason.
+    - name: Check that the checkout is where the archive was built
+      shell: bash
+      run: |
+        built=$(cat "$RUNNER_TEMP/test-archive/workspace-path.txt")
+        here=$(cd "$GITHUB_WORKSPACE" && pwd -P)
+        if [ "$built" != "$here" ]; then
+          echo "::error::the archive was built in $built but this job's checkout is $here"
+          exit 1
+        fi
+        echo "NEXTEST_ARCHIVE=$RUNNER_TEMP/test-archive/tests.tar.zst" >> "$GITHUB_ENV"

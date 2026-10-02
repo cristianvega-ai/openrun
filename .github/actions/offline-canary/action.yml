@@ -1,0 +1,50 @@
+name: Offline sandbox canaries
+description: >-
+  Proves that the network sandbox and the log check can fail on this runner: each sandboxed command
+  makes one access that must be refused (a TCP connection to a documentation address, a datagram to
+  a DNS port, a name lookup), and `offline_audit --net-log` must flag every one. A connection to
+  the loopback address must not be flagged. If the log stops recording (a changed format, a runner
+  image without the reports), this fails instead of letting an empty log pass as "no connections".
+
+runs:
+  using: composite
+  steps:
+    - name: Check that the sandbox catches a connection
+      shell: bash
+      run: |
+        cat > canary_udp.py << 'PY'
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.sendto(b"canary", ("203.0.113.7", 53))
+        except OSError as error:
+            print("datagram refused as expected:", error)
+        PY
+        cat > canary_dns.py << 'PY'
+        import socket
+        try:
+            socket.getaddrinfo("example.com", 80)
+            print("the name was resolved")
+        except OSError as error:
+            print("lookup refused as expected:", error)
+        PY
+        # The three refused accesses run at the same time (each waits for its denial to show up
+        # in the log, which takes seconds). The loopback run goes last, alone: a log reads the
+        # reports of its whole time window, so it must not overlap a run that is refused.
+        ./script/offline_sandbox_macos net-canary-tcp.log /usr/bin/curl -s -m 3 -o /dev/null https://203.0.113.7/ || true &
+        ./script/offline_sandbox_macos net-canary-udp.log /usr/bin/python3 canary_udp.py &
+        ./script/offline_sandbox_macos net-canary-dns.log /usr/bin/python3 canary_dns.py &
+        wait
+        ./script/offline_sandbox_macos net-canary-loopback.log /usr/bin/curl -s -m 3 -o /dev/null http://127.0.0.1:9/ || true
+        failed=0
+        for log in net-canary-tcp.log net-canary-udp.log net-canary-dns.log; do
+          if ./script/offline_audit --net-log "$log"; then
+            echo "::error::the recorded-connections check did not flag the canary in $log"
+            failed=1
+          fi
+        done
+        if ! ./script/offline_audit --net-log net-canary-loopback.log; then
+          echo "::error::a connection to the loopback address was flagged"
+          failed=1
+        fi
+        exit "$failed"

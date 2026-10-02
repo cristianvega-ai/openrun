@@ -6,6 +6,19 @@ use warpui_core::integration::RERUN_EXIT_CODE;
 
 const MAX_TEST_RUNS: usize = 10;
 
+/// The `integration` binary that runs one test.
+///
+/// nextest sets `CARGO_BIN_EXE_integration` when it runs the test, to the binary of the build it
+/// runs. That is not the path cargo baked in at compile time when the tests were built on another
+/// machine or in another directory and run from a nextest archive (`--archive-file`,
+/// `--workspace-remap`): the compile-time path is only the fallback for the runners that do not set
+/// the variable, such as `cargo test`.
+fn integration_binary() -> std::path::PathBuf {
+    env::var_os("CARGO_BIN_EXE_integration")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_BIN_EXE_integration")))
+}
+
 /// Runs a single integration test.
 ///
 /// This runs the `integration` binary from the `warp` crate, passing it the
@@ -40,7 +53,7 @@ pub fn run_integration_test(name: &str) -> Result<(), String> {
                 // Propagate XAUTHORITY so we can run headless tests using xvfb.
                 || k == "XAUTHORITY"
         });
-        keep_going = match Command::new(env!("CARGO_BIN_EXE_integration"))
+        keep_going = match Command::new(integration_binary())
             .arg(name)
             .env_clear()
             .envs(inherited_envs)

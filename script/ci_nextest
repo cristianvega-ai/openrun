@@ -1,0 +1,36 @@
+#!/bin/bash
+# Runs nextest from the test archive that the CI "Build tests" job made, and keeps the JUnit report.
+#
+#   NEXTEST_ARCHIVE=tests.tar.zst script/ci_nextest REPORT [cargo nextest run arguments...]
+#
+# The archive is extracted into this checkout, so `target/` is where the build had it and the
+# paths that were compiled into the test binaries (sources, assets, scratch directories) hold.
+# `--workspace-remap` makes nextest set CARGO_MANIFEST_DIR and CARGO_BIN_EXE_* for the tests from
+# this checkout. The JUnit report of the run is copied to `junit/REPORT.xml`: the final job of the
+# workflow reads the reports to check that every test ran somewhere (script/ci_check_coverage).
+#
+# Works with the bash 3.2 that macOS ships. Exit status: that of nextest.
+set -u
+
+if [ "$#" -lt 1 ] || [ -z "${NEXTEST_ARCHIVE:-}" ]; then
+  echo "usage: NEXTEST_ARCHIVE=FILE $0 REPORT [cargo nextest run arguments...]" >&2
+  exit 2
+fi
+report=$1
+shift
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+cd "$root" || exit 2
+
+# --retries 0: a test that passes only on a retry (nextest reports it as FLAKY) is not a pass.
+cargo nextest run --archive-file "$NEXTEST_ARCHIVE" --workspace-remap "$root" \
+  --extract-to "$root" --extract-overwrite --retries 0 "$@"
+status=$?
+
+mkdir -p junit
+if [ -f "target/nextest/${NEXTEST_PROFILE:-ci}/junit.xml" ]; then
+  cp "target/nextest/${NEXTEST_PROFILE:-ci}/junit.xml" "junit/$report.xml"
+else
+  echo "ci_nextest: no JUnit report was written for $report" >&2
+  [ "$status" -eq 0 ] && status=1
+fi
+exit "$status"

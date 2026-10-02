@@ -1,0 +1,112 @@
+name: CI lab
+
+# Measurements for the CI speed work (CI-SPEED). Started by hand, never on push, so it cannot block a
+# merge. Removed when the measurements are recorded.
+on:
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: Commits to build in turn, as offsets below the dispatched commit
+        default: "20 3 0"
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    name: Bench ${{ matrix.name }}
+    runs-on: macos-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ws-nofix
+            incremental: "0"
+            fix: "no"
+            debug: ""
+          - name: ws
+            incremental: "0"
+            fix: "yes"
+            debug: ""
+          - name: inc
+            incremental: "1"
+            fix: "yes"
+            debug: ""
+          - name: inc-nodebug
+            incremental: "1"
+            fix: "yes"
+            debug: "0"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: nextest
+
+      - name: Build the chain of commits
+        env:
+          CHAIN: ${{ inputs.chain }}
+          INCREMENTAL: ${{ matrix.incremental }}
+          FIX: ${{ matrix.fix }}
+          DEBUG_LEVEL: ${{ matrix.debug }}
+        run: |
+          set -euo pipefail
+          cp script/ci_restore_mtimes "$RUNNER_TEMP/ci_restore_mtimes"
+          export CARGO_INCREMENTAL=$INCREMENTAL
+          if [ -n "$DEBUG_LEVEL" ]; then export CARGO_PROFILE_DEV_DEBUG=$DEBUG_LEVEL; fi
+          tip=$(git rev-parse HEAD)
+          previous=
+          for offset in $CHAIN; do
+            sha=$(git rev-parse "$tip~$offset")
+            git checkout -q --detach "$sha"
+            # A fresh checkout gives every file the time of the checkout.
+            git ls-files -z | xargs -0 touch
+            if [ "$FIX" = yes ] && [ -n "$previous" ]; then
+              python3 "$RUNNER_TEMP/ci_restore_mtimes" apply target/ci-source-manifest.txt | head -8
+            fi
+            echo "::group::build $sha (offset $offset, previous: ${previous:-none})"
+            start=$(date +%s)
+            cargo nextest archive --locked --workspace --archive-file "$RUNNER_TEMP/tests.tar.zst" 2>&1 | grep -E "^ +(Compiling|Finished|Archived)" | awk '/Compiling/ {n++; next} {print} END {print n " crates compiled"}'
+            end=$(date +%s)
+            echo "::endgroup::"
+            echo "RESULT ${{ matrix.name }} offset=$offset sha=${sha:0:9} build_seconds=$((end - start)) archive=$(du -k "$RUNNER_TEMP/tests.tar.zst" | cut -f1)KB"
+            python3 "$RUNNER_TEMP/ci_restore_mtimes" write target/ci-source-manifest.txt
+            previous=$sha
+            if [ -z "${first_done:-}" ]; then
+              first_done=1
+              du -sk target/debug/* 2>/dev/null | sort -rn | head -8 | sed 's/^/SIZE /'
+            fi
+          done
+          echo "SIZE total $(du -sk target | cut -f1)KB"
+          du -sk target/debug/incremental target/debug/deps target/debug/build target/debug/.fingerprint 2>/dev/null | sed 's/^/SIZE /'
+
+      - name: Size and speed of a cache of the build directory
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          tar -C . -cf - target ~/.cargo/registry/index ~/.cargo/registry/cache ~/.cargo/git/db 2>/dev/null | zstd -T0 -3 -o "$RUNNER_TEMP/cache.tar.zst"
+          end=$(date +%s)
+          echo "RESULT ${{ matrix.name }} cache_blob=$(du -k "$RUNNER_TEMP/cache.tar.zst" | cut -f1)KB compress_seconds=$((end - start))"
+          mkdir "$RUNNER_TEMP/restore"
+          start=$(date +%s)
+          zstd -dc "$RUNNER_TEMP/cache.tar.zst" | tar -C "$RUNNER_TEMP/restore" -xf -
+          end=$(date +%s)
+          echo "RESULT ${{ matrix.name }} restore_seconds=$((end - start))"

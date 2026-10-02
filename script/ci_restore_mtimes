@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Makes a fresh checkout reuse the build artifacts of an earlier commit.
+
+Cargo decides that a workspace crate is up to date by comparing modification times: the time of
+every source file with the time of the artifact, and, for a crate with a build script that does not
+say which files it watches, the newest time among all files of the package with the one it
+recorded. A checkout gives every file the time of the checkout, so every workspace crate looks
+changed and is rebuilt, even when the cache holds its artifacts.
+
+The build job stores, next to the artifacts, the list of the tracked files with their blob hashes
+(`git ls-files -s`) and their modification times. This script puts the recorded time back on every
+file whose content is the same as at that build, and leaves the files that differ (and the
+directories that hold them) with the time of the checkout, so cargo rebuilds exactly those. The
+comparison is by content, not by history, so it needs no clone depth.
+
+  script/ci_restore_mtimes write MANIFEST    store the list for the current tree (after the build)
+  script/ci_restore_mtimes apply MANIFEST    put the recorded times back (before the build)
+
+`apply` with a missing MANIFEST changes nothing (a cold cache: everything is built anyway).
+`apply` refuses to run when the working tree differs from the index, because a modified file would
+then be judged by the wrong hash.
+"""
+
+import os
+import subprocess
+import sys
+
+
+def git(*args):
+    return subprocess.run(["git", *args], check=True, stdout=subprocess.PIPE).stdout
+
+
+def tracked_files():
+    """{path: "mode sha"} for every tracked file, from the index."""
+    entries = {}
+    for record in git("ls-files", "-s", "-z").split(b"\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition(b"\t")
+        mode, sha, _stage = meta.split(b" ")
+        entries[os.fsdecode(path)] = f"{mode.decode()} {sha.decode()}"
+    return entries
+
+
+def parents(name):
+    parent = os.path.dirname(name)
+    while parent:
+        yield parent
+        parent = os.path.dirname(parent)
+
+
+def mtime_ns(path):
+    return os.lstat(path).st_mtime_ns
+
+
+def write_manifest(path):
+    entries = tracked_files()
+    directories = set()
+    for name in entries:
+        directories.update(parents(name))
+    with open(path, "w", encoding="utf-8", errors="surrogateescape") as handle:
+        for name in sorted(entries):
+            handle.write(f"f {entries[name]} {mtime_ns(name)}\t{name}\n")
+        for name in sorted(directories):
+            handle.write(f"d - {mtime_ns(name)}\t{name}\n")
+    print(f"ci_restore_mtimes: wrote {len(entries)} files and {len(directories)} directories to {path}")
+
+
+def read_manifest(path):
+    """({file: ("mode sha", mtime_ns)}, {directory: mtime_ns})"""
+    files = {}
+    directories = {}
+    with open(path, encoding="utf-8", errors="surrogateescape") as handle:
+        for line in handle:
+            line = line.rstrip("\n")
+            if not line:
+                continue
+            meta, _, name = line.partition("\t")
+            kind, rest = meta.split(" ", 1)
+            body, _, mtime = rest.rpartition(" ")
+            if kind == "f":
+                files[name] = (body, int(mtime))
+            else:
+                directories[name] = int(mtime)
+    return files, directories
+
+
+def apply(path):
+    if not os.path.isfile(path):
+        print(f"ci_restore_mtimes: no manifest at {path}; the file times are left as they are")
+        return
+    if git("status", "--porcelain", "--untracked-files=no").strip():
+        sys.exit("ci_restore_mtimes: the working tree differs from the index; refusing to run")
+    old_files, old_directories = read_manifest(path)
+    new = tracked_files()
+    changed = {name for name, meta in new.items() if name not in old_files or old_files[name][0] != meta}
+    removed = {name for name in old_files if name not in new}
+
+    # A directory that holds a changed, added or removed file keeps its new time: a build script
+    # that watches a whole directory looks at the time of the directory too.
+    dirty_directories = set()
+    for name in changed | removed:
+        dirty_directories.update(parents(name))
+
+    restored = 0
+    for name in new:
+        if name in changed:
+            continue
+        stamp = old_files[name][1]
+        try:
+            os.utime(name, ns=(stamp, stamp), follow_symlinks=False)
+            restored += 1
+        except OSError as error:
+            print(f"ci_restore_mtimes: cannot set the time of {name}: {error}")
+    for directory, stamp in sorted(old_directories.items()):
+        if directory in dirty_directories or not os.path.isdir(directory):
+            continue
+        try:
+            os.utime(directory, ns=(stamp, stamp), follow_symlinks=False)
+        except OSError as error:
+            print(f"ci_restore_mtimes: cannot set the time of {directory}: {error}")
+    print(
+        f"ci_restore_mtimes: {restored} unchanged files got their recorded time back; "
+        f"{len(changed)} changed or added and {len(removed)} removed since the cached build"
+    )
+    listing = sorted(changed | removed)
+    for name in listing[:40]:
+        print(f"  changed: {name}")
+    if len(listing) > 40:
+        print(f"  ... and {len(listing) - 40} more")
+
+
+def main():
+    if len(sys.argv) != 3 or sys.argv[1] not in ("write", "apply"):
+        sys.exit(__doc__)
+    manifest = os.path.abspath(sys.argv[2])
+    # The manifest lists paths relative to the repository root.
+    os.chdir(git("rev-parse", "--show-toplevel").decode().strip())
+    if sys.argv[1] == "write":
+        write_manifest(manifest)
+    else:
+        apply(manifest)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,36 @@
+name: Rust on macOS
+description: >-
+  Installs the toolchain of rust-toolchain.toml, makes sure the Metal compiler is available (the
+  build compiles the shaders) and installs cargo-nextest.
+
+inputs:
+  metal:
+    description: Check for (and install) the Metal toolchain. Only a job that compiles needs it.
+    default: "true"
+  tools:
+    description: Tools for taiki-e/install-action, comma separated.
+    default: nextest
+
+runs:
+  using: composite
+  steps:
+    - name: Install the Rust toolchain from rust-toolchain.toml
+      shell: bash
+      run: rustup toolchain install
+
+    # crates/warpui/build.rs compiles the Metal shaders with `xcrun metal`. Recent Xcode versions
+    # ship the Metal compiler as a separate component.
+    - name: Make sure the Metal toolchain is installed
+      if: ${{ inputs.metal == 'true' }}
+      shell: bash
+      run: |
+        if ! xcrun -sdk macosx metal --version; then
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun -sdk macosx metal --version
+        fi
+
+    - name: Install ${{ inputs.tools }}
+      if: ${{ inputs.tools != '' }}
+      uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+      with:
+        tool: ${{ inputs.tools }}

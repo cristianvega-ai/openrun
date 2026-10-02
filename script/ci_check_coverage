@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Checks that the test jobs of the CI workflow, taken together, ran every test.
+
+  script/ci_check_coverage --list tests-list.json --reports DIR [--plain-only REGEX]
+                           [--must-run-ignored NAME ...]
+
+LIST is `cargo nextest list --message-format json` of the build (every test of the workspace).
+DIR holds the JUnit reports the jobs kept (`script/ci_nextest`), named KIND-whatever.xml where KIND
+is `sandboxed` (the run was inside the network sandbox, `script/offline_sandbox_macos`) or `plain`.
+
+It fails when
+  - a test that is not marked `#[ignore]` has no report in which it ran, so a filter or a shard
+    that drops a test cannot go unnoticed;
+  - a test ran only in a `plain` report although its name does not match --plain-only (the
+    modules that test the sandbox itself cannot run inside a sandbox; every other test must run
+    in the network sandbox at least once);
+  - a report records a failure or an error (the job already failed; this keeps the summary honest);
+  - an ignored test named by --must-run-ignored (the idle session) has no report;
+  - a report names a test that the build does not have.
+
+The summary lists what ran where, so a reviewer can read the coverage from the job log.
+"""
+
+import argparse
+import collections
+import glob
+import json
+import os
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--list", required=True)
+    parser.add_argument("--reports", required=True)
+    parser.add_argument("--plain-only", default=r"(?!)", help="regex for the tests allowed to run only outside the sandbox")
+    parser.add_argument("--must-run-ignored", nargs="*", default=[])
+    args = parser.parse_args()
+    plain_only = re.compile(args.plain_only)
+
+    with open(args.list, encoding="utf-8") as handle:
+        suites = json.load(handle)["rust-suites"]
+    expected = {}
+    ignored = set()
+    for binary_id, suite in suites.items():
+        for name, case in suite["testcases"].items():
+            if case["ignored"]:
+                ignored.add((binary_id, name))
+            expected[(binary_id, name)] = case["ignored"]
+
+    ran = collections.defaultdict(set)  # test -> {report}
+    kind_of = {}
+    problems = []
+    reports = sorted(glob.glob(os.path.join(args.reports, "**", "*.xml"), recursive=True))
+    if not reports:
+        problems.append("no JUnit report was found: no test job kept one")
+    per_report = collections.OrderedDict()
+    for path in reports:
+        report = os.path.splitext(os.path.basename(path))[0]
+        kind = report.split("-", 1)[0]
+        if kind not in ("sandboxed", "plain"):
+            problems.append(f"{report}: the name must start with sandboxed- or plain-")
+            continue
+        kind_of[report] = kind
+        count = 0
+        for suite in ET.parse(path).getroot().iter("testsuite"):
+            binary_id = suite.get("name")
+            for case in suite.iter("testcase"):
+                key = (binary_id, case.get("name"))
+                if key not in expected:
+                    problems.append(f"{report}: ran {binary_id} {case.get('name')}, which the build does not list")
+                    continue
+                if case.find("failure") is not None or case.find("error") is not None:
+                    problems.append(f"{report}: FAILED {binary_id} {case.get('name')}")
+                if case.find("skipped") is not None:
+                    continue
+                ran[key].add(report)
+                count += 1
+        per_report[report] = count
+
+    missing = sorted(key for key, is_ignored in expected.items() if not is_ignored and key not in ran)
+    for binary_id, name in missing[:50]:
+        problems.append(f"never ran: {binary_id} {name}")
+    if len(missing) > 50:
+        problems.append(f"... and {len(missing) - 50} more tests never ran")
+
+    for key, reports_of_key in ran.items():
+        kinds = {kind_of[r] for r in reports_of_key}
+        if kinds == {"plain"} and not plain_only.search(key[1]):
+            problems.append(f"ran only outside the network sandbox: {key[0]} {key[1]}")
+    for name in args.must_run_ignored:
+        hits = [key for key in expected if key[1].endswith(name) and expected[key]]
+        if not hits:
+            problems.append(f"ignored test {name} is not in the build")
+        for key in hits:
+            if key not in ran:
+                problems.append(f"ignored test that must run did not: {key[0]} {key[1]}")
+
+    total = sum(1 for is_ignored in expected.values() if not is_ignored)
+    sandboxed = sum(1 for key, rs in ran.items() if any(kind_of[r] == "sandboxed" for r in rs))
+    both = sum(1 for key, rs in ran.items() if {kind_of[r] for r in rs} == {"sandboxed", "plain"})
+    plain_only_count = sum(1 for key, rs in ran.items() if {kind_of[r] for r in rs} == {"plain"})
+    print("Tests per report:")
+    for report, count in per_report.items():
+        print(f"  {report:32} {count:5}")
+    print(f"Tests in the build: {total} (+ {len(ignored)} marked #[ignore])")
+    print(f"  ran in the network sandbox: {sandboxed} ({both} of them also outside it)")
+    print(f"  ran only outside it (allowed by --plain-only): {plain_only_count}")
+    print(f"  never ran: {len(missing)}")
+    print(f"  ignored, not run by any job: {len(ignored - {k for k in ran})} of {len(ignored)}")
+    if problems:
+        print("\nCoverage problems:")
+        for problem in problems:
+            print(f"  {problem}")
+            if os.environ.get("GITHUB_ACTIONS"):
+                print(f"::error::{problem}")
+        sys.exit(1)
+    print("Every test ran, and every test but the sandbox's own ran inside the network sandbox.")
+
+
+if __name__ == "__main__":
+    main()
