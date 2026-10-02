@@ -17,6 +17,10 @@ on:
         description: weight job - weight of one integration test (nextest threads-required)
         default: "1"
         type: string
+      test_threads:
+        description: weight job - nextest --test-threads (empty keeps the number of cores, 3)
+        default: ""
+        type: string
       shards:
         description: weight job - shards to run, as a JSON list
         default: "[1, 2, 3]"
@@ -166,12 +170,16 @@ jobs:
           THREADS_REQUIRED: ${{ inputs.threads_required }}
         run: sed -i '' "s/^threads-required = 2$/threads-required = $THREADS_REQUIRED/" .config/nextest.toml
       - name: Run the shard ${{ inputs.repeats }} times
+        env:
+          TEST_THREADS: ${{ inputs.test_threads }}
         run: |
           WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
+          threads=()
+          if [ -n "$TEST_THREADS" ]; then threads=(--test-threads "$TEST_THREADS"); fi
           ./script/offline_sandbox_macos net-weight-${{ matrix.shard }}.log \
             ./script/ci_nextest weight-${{ matrix.shard }} --no-fail-fast --stress-count ${{ inputs.repeats }} \
-              --partition hash:${{ matrix.shard }}/3 -E 'package(integration)'
+              "${threads[@]}" --partition hash:${{ matrix.shard }}/3 -E 'package(integration)'
       - uses: ./.github/actions/offline-check
         if: ${{ !cancelled() }}
         with:
