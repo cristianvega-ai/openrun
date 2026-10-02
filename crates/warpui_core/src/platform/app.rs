@@ -116,15 +116,6 @@ impl AppCallbackDispatcher {
     // This is not called on Linux or wasm, as there isn't any generic way to
     // click on/interact with a notification.
     // TODO: implement desktop notifications on Windows
-    #[cfg_attr(
-        any(
-            target_os = "linux",
-            target_os = "freebsd",
-            target_os = "windows",
-            target_family = "wasm"
-        ),
-        allow(dead_code)
-    )]
     pub fn notification_clicked(&mut self, response: notification::NotificationResponse) {
         if let Some(callback) = &mut self.callbacks.on_notification_clicked {
             self.ui_app.update(|ctx| callback(response, ctx));
@@ -187,7 +178,6 @@ impl AppCallbackDispatcher {
         }
     }
 
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn open_new_window(&mut self) {
         if let Some(callback) = &mut self.callbacks.on_new_window_requested {
             self.ui_app.update(|ctx| callback(ctx));
@@ -217,7 +207,6 @@ impl AppCallbackDispatcher {
         }
     }
 
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn screen_changed(&mut self) {
         if let Some(callback) = &mut self.callbacks.on_screen_changed {
             self.ui_app.update(|ctx| callback(ctx));
@@ -231,14 +220,12 @@ impl AppCallbackDispatcher {
         });
     }
 
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn open_files(&mut self, file_paths: Vec<PathBuf>) {
         if let Some(callback) = &mut self.callbacks.on_open_files {
             self.ui_app.update(|ctx| callback(file_paths, ctx));
         }
     }
 
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn open_urls(&mut self, urls: Vec<String>) {
         if let Some(callback) = &mut self.callbacks.on_open_urls {
             self.ui_app.update(|ctx| callback(urls, ctx));
@@ -268,7 +255,6 @@ impl AppCallbackDispatcher {
             .update(|ctx| ctx.on_global_shortcut_triggered(shortcut))
     }
 
-    #[cfg_attr(not(target_os = "macos"), allow(unused))]
     pub fn can_borrow_mut(&self) -> bool {
         self.ui_app.can_borrow_mut()
     }
@@ -293,15 +279,6 @@ impl AppCallbackDispatcher {
 // This is marked as `allow(dead_code)` on Linux, as it doesn't support
 // application menus, so these never get called.
 // TODO: implement native Windows OS app menus
-#[cfg_attr(
-    any(
-        target_os = "linux",
-        target_os = "freebsd",
-        target_os = "windows",
-        target_family = "wasm"
-    ),
-    allow(dead_code)
-)]
 impl AppCallbackDispatcher {
     pub fn menu_item_triggered(&mut self, callback: impl FnOnce(&mut AppContext)) {
         self.ui_app.update(callback);
@@ -320,15 +297,6 @@ impl AppCallbackDispatcher {
 // This is marked as `allow(dead_code)` on Linux and WASM, as we do not support
 // native platform modals on these platforms, so these never get called.
 // TODO: implement native Windows OS modal
-#[cfg_attr(
-    any(
-        target_os = "linux",
-        target_os = "freebsd",
-        target_os = "windows",
-        target_family = "wasm"
-    ),
-    allow(dead_code)
-)]
 impl AppCallbackDispatcher {
     pub fn process_platform_modal_response(
         &mut self,

@@ -10,9 +10,6 @@ fn main() {
         macos::services_main_dispatch_queue().map_err(|error| format!("{error:#}").into())
     })];
 
-    #[cfg(not(target_os = "macos"))]
-    let tests = Vec::<Trial>::new();
-
     libtest_mimic::run(&args, tests).exit();
 }
 

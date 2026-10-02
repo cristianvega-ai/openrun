@@ -70,11 +70,6 @@ pub(super) fn channel() -> (EventSender, EventReceiver) {
             },
         )
     }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        (EventSender { sender }, EventReceiver { receiver })
-    }
 }
 
 #[cfg(target_os = "macos")]
@@ -168,15 +163,6 @@ pub(super) fn run(
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        for event in receiver.receiver.iter() {
-            if process_event(event, &mut ui_app, callbacks).is_break() {
-                break;
-            }
-        }
-    }
-
     // Drop the receiver so the Ctrl+C signal handler's channel send will fail,
     // causing it to fall through to `process::exit(130)`. Without this, the
     // send succeeds (since the receiver is still in scope) but nobody is reading
@@ -230,7 +216,6 @@ fn process_event(
 ///
 /// When Ctrl-C is received, this will send a Terminate event to the event loop,
 /// allowing the app to shut down gracefully via the existing termination logic.
-#[cfg(not(target_family = "wasm"))]
 fn setup_signal_handler(sender: EventSender) {
     let result = ctrlc::set_handler(move || {
         log::info!("Received Ctrl-C signal in headless mode, terminating application");
@@ -250,9 +235,4 @@ fn setup_signal_handler(sender: EventSender) {
     if let Err(e) = result {
         log::warn!("Failed to set up Ctrl-C handler: {e}");
     }
-}
-
-#[cfg(target_family = "wasm")]
-fn setup_signal_handler(_sender: EventSender) {
-    // Signal handling is unavailable on WASM.
 }

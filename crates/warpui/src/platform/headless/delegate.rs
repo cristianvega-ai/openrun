@@ -69,11 +69,6 @@ impl platform::Delegate for AppDelegate {
             // Use macOS platform implementation
             crate::platform::mac::Window::open_url(url)
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            // Reuse the winit implementation for non-mac platforms
-            crate::windowing::winit::delegate::open_url_in_system(url)
-        }
     }
 
     fn open_file_path(&self, _path: &std::path::Path) {

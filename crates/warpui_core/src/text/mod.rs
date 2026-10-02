@@ -34,11 +34,7 @@ impl SelectionType {
     }
 
     pub fn from_mouse_event(modifiers: ModifiersState, click_count: u32) -> Self {
-        let is_rect = if cfg!(target_os = "macos") {
-            modifiers.cmd && modifiers.alt
-        } else {
-            modifiers.ctrl && modifiers.alt
-        };
+        let is_rect = modifiers.cmd && modifiers.alt;
 
         if is_rect {
             return SelectionType::Rect;

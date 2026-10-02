@@ -29,8 +29,6 @@ pub trait Renderer {
 pub enum Device {
     #[allow(dead_code)]
     Metal(MetalDevice),
-    #[cfg(wgpu)]
-    WGPU(Box<crate::rendering::wgpu::Resources>),
 }
 impl Device {
     pub fn new(
@@ -40,22 +38,15 @@ impl Device {
         _gpu_power_preference: GPUPowerPreference,
         on_gpu_device_info: Box<OnGPUDeviceSelected>,
     ) -> Self {
-        #[cfg(not(wgpu))]
+        #[cfg(target_os = "macos")]
         {
             let gpu_device_info = get_gpu_device_info(&_metal_device);
             on_gpu_device_info(gpu_device_info);
             Device::Metal(_metal_device)
         }
-
-        #[cfg(wgpu)]
-        {
-            Device::new_wgpu(_native_view, _gpu_power_preference, on_gpu_device_info)
-                .expect("unable to create wgpu device")
-        }
     }
 }
 
-#[cfg_attr(wgpu, allow(dead_code))]
 fn get_gpu_device_info(device: &ProtocolObject<dyn MTLDevice>) -> GPUDeviceInfo {
     let device_type = if is_integrated_gpu(device) {
         GPUDeviceType::IntegratedGpu

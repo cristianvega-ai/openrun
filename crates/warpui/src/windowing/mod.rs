@@ -1,9 +1,4 @@
-#[cfg(winit)]
-pub mod winit;
-
 pub use warpui_core::windowing::*;
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-pub use winit::WindowingSystem;
 
 /// The minimum width a window can be resized to.
 /// TODO: Instead of being hard-coded, this should be configurable by the user via

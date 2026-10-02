@@ -81,7 +81,6 @@ fn main() -> Result<()> {
             ..Default::default()
         };
         let config = capture_config.clone();
-        #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
         let (window_id, _root) = ctx.add_window(window_options, move |view_ctx| {
             root_view::RootView::new(view_ctx, config)
         });
