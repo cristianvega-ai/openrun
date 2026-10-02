@@ -6107,9 +6107,32 @@ fn maximized_pane_releases_the_pr_model_of_its_hidden_sibling() {
                 .expect("a second terminal")
         });
         second.update(&mut app, |view, ctx| {
-            view.current_repo_path = repo;
+            view.current_repo_path = repo.clone();
             view.update_git_status_subscription(ctx);
         });
+        // The panes run real shells. When one has bootstrapped, repo detection replaces the
+        // terminal's `current_repo_path` with the repository of the shell's own directory, which
+        // is none here, and the PR model is dropped. On the Linux runner with zsh that happened in
+        // the middle of the checks below in 85 of 100 runs (stress run 36954466501). Let it happen
+        // first, up to 10 s, then put the repository back.
+        let mut waited_ticks = 0;
+        while waited_ticks < 2000
+            && ![&first, &second].iter().all(|terminal| {
+                terminal.read(&app, |view, _| {
+                    view.model.lock().block_list().is_bootstrapped()
+                        && view.current_repo_path != repo
+                })
+            })
+        {
+            warpui::r#async::Timer::after(std::time::Duration::from_millis(5)).await;
+            waited_ticks += 1;
+        }
+        for terminal in [&first, &second] {
+            terminal.update(&mut app, |view, ctx| {
+                view.current_repo_path = repo.clone();
+                view.update_git_status_subscription(ctx);
+            });
+        }
         for terminal in [&first, &second] {
             terminal.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
         }
