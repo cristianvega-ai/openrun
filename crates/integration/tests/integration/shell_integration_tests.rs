@@ -29,7 +29,6 @@ integration_tests! {
     test_typeahead,
     // Test input reporting behavior.
     test_input_reporting_posix_shells,
-    test_input_reporting_powershell,
     // Test background output behavior.
     test_background_output,
     // Must run against zsh.
@@ -38,15 +37,10 @@ integration_tests! {
     test_alias_guards_on_ps1_set,
     // Tests prompt information from shell.
     test_ps1_value_not_null_or_exit,
-    // Tests bash-specific behavior.
-    test_custom_ps1_expansion_bash,
-    test_bash_honor_ps1_expands_dynamic_prompt_once,
     // Tests zsh-specific behavior.
     test_auto_title,
     // Tests zsh-specific behavior.
     test_warp_auto_title_disabled,
-    // Tests bash-specific behavior.
-    test_warp_honors_user_title_bash,
     // Tests zsh-specific behavior.
     test_warp_honors_user_title_zsh,
     // Tests OSC 7 updates the block's working directory on bash and zsh.
@@ -67,9 +61,6 @@ integration_tests! {
     test_native_shell_completions_used_when_no_bundled_spec,
     test_native_shell_completions_skipped_when_a_bundled_spec_answers,
     test_native_shell_completions_reach_a_spec_command_native_only,
-    test_native_shell_completions_powershell_member_access,
-    // Tests bash-specific behavior.
-    test_histcontrol_env_var,
     // Tests initial working directory behavior.
     test_create_session_with_new_tab_while_bootstrapping,
     // Tests initial working directory behavior.
@@ -78,16 +69,11 @@ integration_tests! {
     test_git_prompt,
     // Tests shell initialization.
     test_terminal_announces_capabilities_to_shell,
-    // Tests bash-specific behavior.
-    test_bash_bootstraps_with_prompt_command_array,
-    test_bash_bootstraps_with_prompt_command_array_that_sets_ps1,
     // Test runs only on zsh.
     test_color_overrides_in_prompt_dont_crash,
     // Tests zsh-specific behavior with nounset option.
     test_zsh_bootstraps_with_nounset_option,
     test_zsh_cursor_mode_vi_bindings_do_not_corrupt_commands,
-    // Tests PowerShell-specific behavior with PSReadLine's vi edit mode.
-    test_pwsh_vi_edit_mode_does_not_corrupt_commands,
 
     // Tests of custom prompt behavior.
     test_copy_prompt_from_block_honor_ps1_enabled,
@@ -122,4 +108,57 @@ integration_tests! {
     test_ctrl_d_during_bootstrapping_exits_shell_upon_completion,
 
     test_git_prompt_chips,
+}
+
+/// Tests of behavior that exists in one shell only. They can't run in the zsh job, and a test that
+/// is skipped because the shell is wrong is not a pass, so each one lives in a module named after
+/// its shell, is ignored by default, and runs in the CI job for that shell:
+///
+/// ```text
+/// WARP_SHELL_PATH=<bash 5.1 or newer> cargo nextest run -p integration \
+///     --run-ignored only -E 'test(~shell_integration_tests::bash_only::)'
+/// ```
+mod bash_only {
+    use crate::integration_tests;
+
+    integration_tests! {
+        // Test bash handling of a custom PS1 (needs the bash the job installs).
+        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        test_custom_ps1_expansion_bash,
+        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        test_bash_honor_ps1_expands_dynamic_prompt_once,
+        // Tests bash-specific behavior of the tab title.
+        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        test_warp_honors_user_title_bash,
+        // Tests bash-specific history behavior.
+        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        test_histcontrol_env_var,
+        // Tests PROMPT_COMMAND arrays, which need bash 5.1 or newer.
+        #[ignore = "bash 5.1 or newer only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        test_bash_bootstraps_with_prompt_command_array,
+        #[ignore = "bash 5.1 or newer only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        test_bash_bootstraps_with_prompt_command_array_that_sets_ps1,
+    }
+}
+
+/// PowerShell 7 (`pwsh`) tests; see [`bash_only`] for how they run.
+///
+/// ```text
+/// WARP_SHELL_PATH=$(command -v pwsh) cargo nextest run -p integration \
+///     --run-ignored only -E 'test(~shell_integration_tests::pwsh_only::)'
+/// ```
+mod pwsh_only {
+    use crate::integration_tests;
+
+    integration_tests! {
+        // PowerShell ignores newlines in typeahead.
+        #[ignore = "PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
+        test_input_reporting_powershell,
+        // PSReadLine's vi edit mode.
+        #[ignore = "PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
+        test_pwsh_vi_edit_mode_does_not_corrupt_commands,
+        // Completions of member access are PowerShell's own.
+        #[ignore = "PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
+        test_native_shell_completions_powershell_member_access,
+    }
 }

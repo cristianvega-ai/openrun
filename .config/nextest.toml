@@ -28,6 +28,9 @@ filter = 'package(integration)'
 threads-required = 2
 
 [profile.ci]
+# No retries in CI for any test. A test that fails and then passes on a retry is flaky, which is not
+# a pass; retrying it would hide that behind a green run.
+retries = 0
 # Print out output for failing tests as soon as they fail, and also at the end
 # of the run (for easy scrollability).
 failure-output = "immediate-final"

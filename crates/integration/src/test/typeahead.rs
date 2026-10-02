@@ -1,3 +1,7 @@
+use std::fs::OpenOptions;
+use std::io::Write as _;
+use std::os::unix::fs::OpenOptionsExt as _;
+
 use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::terminal::util::current_shell_starter_and_version;
 use warp::integration_testing::terminal::{
@@ -8,35 +12,66 @@ use warp::integration_testing::terminal::{
 use warp::integration_testing::view_getters::single_terminal_view_for_tab;
 use warp::terminal::model::terminal_model::BlockIndex;
 use warp::terminal::shell::{Shell, ShellType};
-use warpui_core::integration::{AssertionCallback, AssertionOutcome, TestStep};
+use warpui_core::integration::{TestSetupUtils, TestStep};
 use warpui_core::{async_assert, async_assert_eq};
 
 use super::{Builder, new_builder};
 use crate::util::skip_if_powershell;
 
+/// The script that stands in for a long-running command. It runs until [`release_hold`] creates
+/// its release file, so a test decides when the command ends instead of racing a `sleep`.
+const HOLD_COMMAND: &str = "./hold.sh";
+const HOLD_RELEASE_FILE: &str = "hold.release";
+
+/// Writes [`HOLD_COMMAND`] into the test directory.
+fn write_hold_script(utils: &mut TestSetupUtils) {
+    let dir = utils.test_dir();
+    let script = format!(
+        "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.05; done\n",
+        dir.join(HOLD_RELEASE_FILE).display()
+    );
+    OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o755)
+        .open(dir.join("hold.sh"))
+        .expect("could not create the hold script")
+        .write_all(script.as_bytes())
+        .expect("could not write the hold script");
+}
+
+/// Ends the command started with [`HOLD_COMMAND`].
+fn release_hold(utils: &mut TestSetupUtils) {
+    std::fs::write(utils.test_dir().join(HOLD_RELEASE_FILE), "").expect("could not release hold");
+}
+
+fn start_hold_command() -> TestStep {
+    TestStep::new("Start the long-running command")
+        .with_typed_characters(&[HOLD_COMMAND])
+        .with_keystrokes(&["enter"])
+        .add_assertion(assert_long_running_block_executing_for_single_terminal_in_tab(true, 0))
+}
+
 pub fn test_typeahead() -> Builder {
     new_builder()
         // TODO: Flakey on Powershell (Linux)
         .set_should_run_test(skip_if_powershell)
+        .with_setup(write_hold_script)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        .with_step(
-            TestStep::new("Execute sleep 4")
-                .with_typed_characters(&["sleep 4"])
-                .with_keystrokes(&["enter"])
-                .add_assertion(
-                    assert_long_running_block_executing_for_single_terminal_in_tab(true, 0),
-                ),
-        )
+        .with_step(start_hold_command())
         .with_step(
             TestStep::new("Enter text to long running command")
                 .with_input_string("foo", None)
-                .add_assertion(require_long_running_block_executing(0))
+                .add_assertion(
+                    assert_long_running_block_executing_for_single_terminal_in_tab(true, 0),
+                )
                 .add_assertion(assert_active_block_output_for_single_terminal_in_tab(
                     "foo", 0,
                 )),
         )
         .with_step(
             new_step_with_default_assertions("Input box should have typeahead text")
+                .with_setup(release_hold)
                 .add_assertion(assert_input_editor_contents(0, "foo"))
                 .add_named_assertion(
                     "No typeahead duplicated in background block",
@@ -62,8 +97,7 @@ const ECHOED_INPUT_REPORTING_KEYBINDING: &str = "^[i";
 /// `sleep 1`, `pwd` and `ls -l` on later lines). Neither changes which command runs, so the
 /// first line, without the echoed `^[i`, must be the expected command and the block must have
 /// succeeded (an ESC-i that reached the command line as text would turn `sleep 1` into a failing
-/// command). Any other text that contains `^[i` is still reported as a failed precondition,
-/// which reruns the test, as before.
+/// command). Any other command text fails the test.
 macro_rules! check_command {
     ($block:expr, $expected:expr) => {
         let block = $block;
@@ -76,10 +110,6 @@ macro_rules! check_command {
                 "typeahead command `{first_line}` failed: exit code {:?}",
                 block.exit_code()
             );
-        } else if command.contains(ECHOED_INPUT_REPORTING_KEYBINDING) {
-            return AssertionOutcome::PreconditionFailed(format!(
-                "Flake: input reporting keybinding echoed into `{command}`"
-            ));
         } else {
             assert_eq!(command, $expected);
         }
@@ -106,7 +136,7 @@ pub fn test_input_reporting_posix_shells() -> Builder {
         .with_input_string("true", Some(&["enter"]))
         // Test behavior when one of the typeahead commands is itself long-running.
         .with_input_string("sleep 1", Some(&["enter"]))
-        .add_assertion(require_long_running_block_executing(0));
+        .add_assertion(assert_long_running_block_executing_for_single_terminal_in_tab(true, 0));
 
     if supports_line_editing {
         // Test that we correctly handle line edits on both submitted lines and typeahead.
@@ -122,18 +152,13 @@ pub fn test_input_reporting_posix_shells() -> Builder {
 
     new_builder()
         .set_should_run_test(move || starter.shell_type() != ShellType::PowerShell)
+        .with_setup(write_hold_script)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        .with_step(
-            TestStep::new("Execute sleep")
-                .with_typed_characters(&["sleep 3"])
-                .with_keystrokes(&["enter"])
-                .add_assertion(
-                    assert_long_running_block_executing_for_single_terminal_in_tab(true, 0),
-                ),
-        )
+        .with_step(start_hold_command())
         .with_step(input_step)
         .with_step(
             new_step_with_default_assertions("Input should be reported to the terminal")
+                .with_setup(release_hold)
                 .add_named_assertion(
                     "Typeahead is in input editor",
                     assert_input_editor_contents(0, "ls -l"),
@@ -148,9 +173,8 @@ pub fn test_input_reporting_posix_shells() -> Builder {
                             .first_non_hidden_block_by_index()
                             .expect("Block should exist");
 
-                        let sleep_3_block =
-                            blocks.block_at(start_index).expect("Block should exist");
-                        check_command!(sleep_3_block, "sleep 3");
+                        let hold_block = blocks.block_at(start_index).expect("Block should exist");
+                        check_command!(hold_block, HOLD_COMMAND);
 
                         let true_block = blocks
                             .block_at(start_index + BlockIndex::from(1))
@@ -194,24 +218,21 @@ pub fn test_input_reporting_powershell() -> Builder {
             let (starter, _) = current_shell_starter_and_version();
             starter.shell_type() == ShellType::PowerShell
         })
+        .with_setup(write_hold_script)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        .with_step(
-            TestStep::new("Execute sleep")
-                .with_typed_characters(&["sleep 3"])
-                .with_keystrokes(&["enter"])
-                .add_assertion(
-                    assert_long_running_block_executing_for_single_terminal_in_tab(true, 0),
-                ),
-        )
+        .with_step(start_hold_command())
         .with_step(
             TestStep::new("Enter text to long-running command")
                 .with_keystrokes(&["enter"])
                 .with_input_string("true", Some(&["enter"]))
                 .with_input_string("sleep 1", Some(&["enter"]))
-                .add_assertion(require_long_running_block_executing(0)),
+                .add_assertion(
+                    assert_long_running_block_executing_for_single_terminal_in_tab(true, 0),
+                ),
         )
         .with_step(
             new_step_with_default_assertions("Input should be reported to the terminal")
+                .with_setup(release_hold)
                 .add_named_assertion(
                     "Typeahead is in input editor",
                     assert_input_editor_contents(0, "truesleep 1"),
@@ -319,31 +340,4 @@ time.sleep(100)
 // TODO: enable this test for windows
 pub fn test_background_output() -> Builder {
     new_builder()
-}
-
-/// Require (as a test precondition) that a long-running block is executing.
-/// Use this instead of [`assert_long_running_block_executing`] with `sleep` commands
-/// to turn the race condition of the sleep ending too soon into a flake.
-fn require_long_running_block_executing(tab_index: usize) -> AssertionCallback {
-    Box::new(move |app, window_id| {
-        let terminal_view = single_terminal_view_for_tab(app, window_id, tab_index);
-        terminal_view.read(app, |view, _ctx| {
-            // The running block should have received the text.
-            let model = view.model.lock();
-            if !model
-                .block_list()
-                .active_block()
-                .is_active_and_long_running()
-            {
-                // There's an implicit race condition where the sleep call
-                // can finish before we get here.
-                // The most robust way of handling this is to just treat it as a flake.
-                AssertionOutcome::PreconditionFailed(
-                    "long-running block no longer executing".to_owned(),
-                )
-            } else {
-                AssertionOutcome::Success
-            }
-        })
-    })
 }

@@ -5,14 +5,16 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use warp::cmd_or_ctrl_shift;
-use warp::integration_testing::pane_group::assert_focused_pane_index;
+use warp::integration_testing::pane_group::{assert_focused_pane_index, assert_num_panes_in_tab};
 use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::terminal::util::ExpectedExitStatus;
 use warp::integration_testing::terminal::{
     execute_command, validate_block_output_on_finished_block, wait_until_bootstrapped_pane,
     wait_until_bootstrapped_single_pane_for_tab,
 };
-use warp::integration_testing::workspace::{assert_tab_count, trigger_undo_close};
+use warp::integration_testing::workspace::{
+    assert_tab_count, assert_undo_close_stack_is_empty, trigger_undo_close,
+};
 
 use super::{Builder, new_builder};
 
@@ -188,22 +190,22 @@ pub fn test_undo_close_grace_period_cleanup() -> Builder {
         .with_step(
             new_step_with_default_assertions("Close the pane")
                 .with_keystrokes(&[cmd_or_ctrl_shift("w")])
-                .add_assertion(assert_focused_pane_index(0, 0)),
+                .add_assertion(assert_focused_pane_index(0, 0))
+                // The closed pane is hidden, not removed, while the grace period runs: it is
+                // still in the pane group and on the undo close stack. Without this the test
+                // would also pass if the pane were discarded the moment it was closed.
+                .add_assertion(assert_num_panes_in_tab(0, 2))
+                .add_assertion(assert_undo_close_stack_is_empty(false)),
         )
         .with_step(
-            new_step_with_default_assertions("Wait for grace period to expire")
-                .set_timeout(Duration::from_secs(7)), // Wait 7 seconds for 5 second grace period
-        )
-        .with_step(
-            new_step_with_default_assertions("Check pane count before undo close")
-                .add_assertion(move |app, window_id| {
-                    let workspace_view = warp::integration_testing::view_getters::workspace_view(app, window_id);
-                    let initial_pane_count = workspace_view.read(app, |workspace, ctx| {
-                        let pane_group_view = workspace.get_pane_group_view(0).expect("should have tab 0");
-                        pane_group_view.read(ctx, |pane_group, _| pane_group.pane_count())
-                    });
-                    warpui_core::async_assert_eq!(initial_pane_count, 1, "Should have exactly one pane after grace period expires - closed pane should be cleaned up")
-                }),
+            // The grace period has no clock the test can advance, so wait for what its expiry
+            // does: the undo close stack discards the pane, and the pane group drops it. The step
+            // ends when both have happened; the timeout is only the longest it may take (the
+            // grace period is 5 seconds), not a delay.
+            new_step_with_default_assertions("Wait for the grace period to expire and the pane to be cleaned up")
+                .set_timeout(Duration::from_secs(30))
+                .add_assertion(assert_undo_close_stack_is_empty(true))
+                .add_assertion(assert_num_panes_in_tab(0, 1)),
         )
         .with_step(trigger_undo_close()
             .add_assertion(assert_focused_pane_index(0, 0)) // Should still be focused on original pane

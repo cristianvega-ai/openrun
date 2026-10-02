@@ -5,7 +5,7 @@ use std::time::Duration;
 use warpui::integration::{AssertionOutcome, TestStep};
 use warpui::{Event, SingletonEntity, async_assert};
 
-use super::util::{ExpectedExitStatus, ExpectedOutput, current_shell_starter_and_version, nonce};
+use super::util::{ExpectedExitStatus, ExpectedOutput, nonce};
 use super::{
     PYTHON_PROMPT_READY, assert_active_block_output_for_single_terminal_in_tab,
     assert_active_block_received_precmd, assert_alt_grid_active, assert_command_executed,
@@ -29,7 +29,6 @@ use crate::integration_testing::view_getters::{
 use crate::settings::PrivacySettings;
 use crate::terminal::input::InputSuggestionsMode;
 use crate::terminal::model::terminal_model::BlockIndex;
-use crate::terminal::shell::ShellType;
 
 pub fn wait_until_bootstrapped_single_pane_for_tab(tab_index: usize) -> TestStep {
     wait_until_bootstrapped_pane(tab_index, 0)
@@ -53,16 +52,6 @@ pub fn wait_until_bootstrapped_pane(tab_index: usize, pane_index: usize) -> Test
             assert_terminal_bootstrapped(tab_index, pane_index),
         )
         .set_timeout(Duration::from_secs(20))
-        .set_on_failure_handler("bootstrapping failed, bail on the test", move |_, _| {
-            let (starter, version) = current_shell_starter_and_version();
-            if matches!(&starter.shell_type(), &ShellType::Bash) && version.starts_with('3') {
-                // There's a bug in older versions of bash that causes bootstrapping
-                // to occasionally fail.
-                AssertionOutcome::PreconditionFailed("bash flaked on startup".to_owned())
-            } else {
-                AssertionOutcome::failure("failed to bootstrap".to_owned())
-            }
-        })
 }
 
 pub fn open_context_menu_for_selected_block() -> Vec<TestStep> {

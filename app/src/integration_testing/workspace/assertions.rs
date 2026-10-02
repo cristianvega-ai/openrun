@@ -1,10 +1,26 @@
 use warpui::integration::AssertionCallback;
-use warpui::{async_assert, async_assert_eq};
+use warpui::{SingletonEntity, async_assert, async_assert_eq};
 
 use crate::integration_testing::view_getters::workspace_view;
 use crate::tab::SelectedTabColor;
 use crate::themes::theme::AnsiColorIdentifier;
+use crate::undo_close::UndoCloseStack;
 use crate::workspace::tab_group::TabGroupId;
+
+/// Asserts whether the undo close stack is empty. An item (a closed window, tab or pane) stays on
+/// the stack until it is restored or its grace period expires, and leaves it when the expiry
+/// discards the item's resources, so an empty stack means that every expiry has been handled.
+pub fn assert_undo_close_stack_is_empty(expected_empty: bool) -> AssertionCallback {
+    Box::new(move |app, _window_id| {
+        let is_empty = app.read(|ctx| UndoCloseStack::as_ref(ctx).is_empty());
+        async_assert_eq!(
+            is_empty,
+            expected_empty,
+            "expected the undo close stack to be {}",
+            if expected_empty { "empty" } else { "non-empty" }
+        )
+    })
+}
 
 pub fn assert_focused_tab_index(tab_index: usize) -> AssertionCallback {
     Box::new(move |app, window_id| {

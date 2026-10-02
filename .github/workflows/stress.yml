@@ -22,7 +22,12 @@ on:
         description: Shell the tests start
         default: zsh
         type: choice
-        options: [zsh, bash]
+        options: [zsh, bash, pwsh]
+      run_ignored:
+        description: Which ignored tests to run (nextest --run-ignored)
+        default: default
+        type: choice
+        options: [default, all, only]
       rust_log:
         description: RUST_LOG for the tests (empty keeps the default)
         default: ""
@@ -74,6 +79,7 @@ jobs:
           FILTER: ${{ inputs.filter }}
           COUNT: ${{ inputs.count }}
           SHELL_NAME: ${{ inputs.shell }}
+          RUN_IGNORED: ${{ inputs.run_ignored }}
           STRESS_RUST_LOG: ${{ inputs.rust_log }}
         run: |
           WARP_SHELL_PATH=$(command -v "$SHELL_NAME")
@@ -82,4 +88,4 @@ jobs:
             export RUST_LOG="$STRESS_RUST_LOG"
           fi
           cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-            --stress-count "$COUNT" -E "$FILTER"
+            --run-ignored "$RUN_IGNORED" --stress-count "$COUNT" -E "$FILTER"

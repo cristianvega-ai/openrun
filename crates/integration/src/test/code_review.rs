@@ -101,17 +101,11 @@ fn assert_repo_detected() -> AssertionCallback {
 }
 
 fn scroll_code_review_to_target_line() -> TestStep {
-    scroll_code_review_to_line(TEST_FILE_NAME, TARGET_LINE_NUMBER)
-        .set_timeout(Duration::from_secs(10))
-        .set_retries(2)
-        .add_assertion(assert_code_review_anchor(
-            TEST_FILE_NAME,
-            modified_line_text(TARGET_LINE_NUMBER),
-            Some(TARGET_LINE_NUMBER),
-        ))
-        // Allow the scroll debounce (150ms) to fire so that the stored
-        // scroll context is captured before the next step mutates the file.
-        .set_post_step_pause(Duration::from_millis(250))
+    scroll_code_review_to_line(
+        TEST_FILE_NAME,
+        TARGET_LINE_NUMBER,
+        modified_line_text(TARGET_LINE_NUMBER),
+    )
 }
 
 fn mutate_test_file(before_line_number: usize, prefix: &'static str) -> TestStep {
@@ -127,7 +121,6 @@ fn mutate_test_file(before_line_number: usize, prefix: &'static str) -> TestStep
         let new_lines = inserted_lines(prefix);
         insert_lines(&file_path, before_line_number, &new_lines);
     })
-    .set_post_step_pause(Duration::from_millis(250))
 }
 
 fn code_review_scroll_anchor_builder(
@@ -260,7 +253,6 @@ fn mutate_named_file(
         let new_lines = inserted_lines(prefix);
         insert_lines(&file_path, before_line_number, &new_lines);
     })
-    .set_post_step_pause(Duration::from_millis(250))
 }
 
 // --- Deleted range test ---
@@ -332,13 +324,10 @@ pub fn test_code_review_scroll_preserved_deleted_range() -> Builder {
                 .set_timeout(Duration::from_secs(20))
                 .add_assertion(assert_code_review_loaded()),
         )
-        .with_step(
-            scroll_code_review_to_deleted_range(TEST_FILE_NAME, DELETED_RANGE_NEAR_LINE)
-                .set_timeout(Duration::from_secs(10))
-                .set_retries(2)
-                .add_assertion(assert_code_review_scroll_region(ScrollRegion::RemovedLine))
-                .set_post_step_pause(Duration::from_millis(250)),
-        )
+        .with_step(scroll_code_review_to_deleted_range(
+            TEST_FILE_NAME,
+            DELETED_RANGE_NEAR_LINE,
+        ))
         .with_step(mutate_test_file(INSERT_ABOVE_LINE_NUMBER, "above"))
         .with_step(
             TestStep::new("Wait for code review to reflect the inserted lines")
@@ -408,13 +397,7 @@ pub fn test_code_review_scroll_preserved_header_range() -> Builder {
                 .set_timeout(Duration::from_secs(20))
                 .add_assertion(assert_code_review_loaded()),
         )
-        .with_step(
-            scroll_code_review_to_header(TEST_FILE_NAME)
-                .set_timeout(Duration::from_secs(10))
-                .set_retries(2)
-                .add_assertion(assert_code_review_scroll_region(ScrollRegion::Header))
-                .set_post_step_pause(Duration::from_millis(250)),
-        )
+        .with_step(scroll_code_review_to_header(TEST_FILE_NAME))
         .with_step(mutate_test_file(INSERT_ABOVE_LINE_NUMBER, "above"))
         .with_step(
             TestStep::new("Wait for code review to reflect the inserted lines")
@@ -506,13 +489,7 @@ pub fn test_code_review_scroll_preserved_footer_range() -> Builder {
                 .set_timeout(Duration::from_secs(20))
                 .add_assertion(assert_code_review_loaded()),
         )
-        .with_step(
-            scroll_code_review_to_footer(FIRST_FILE_NAME)
-                .set_timeout(Duration::from_secs(10))
-                .set_retries(2)
-                .add_assertion(assert_code_review_scroll_region(ScrollRegion::Footer))
-                .set_post_step_pause(Duration::from_millis(250)),
-        )
+        .with_step(scroll_code_review_to_footer(FIRST_FILE_NAME))
         .with_step(mutate_named_file(
             FIRST_FILE_NAME,
             MULTI_FILE_INSERT_LINE,
@@ -599,17 +576,11 @@ pub fn test_code_review_scroll_preserved_second_file() -> Builder {
                 .add_assertion(assert_code_review_loaded()),
         )
         // Scroll to a target line in the SECOND file (index 1)
-        .with_step(
-            scroll_code_review_to_line(SECOND_FILE_NAME, MULTI_FILE_TARGET_LINE)
-                .set_timeout(Duration::from_secs(10))
-                .set_retries(2)
-                .add_assertion(assert_code_review_anchor(
-                    SECOND_FILE_NAME,
-                    multi_file_modified_line("second", MULTI_FILE_TARGET_LINE),
-                    Some(MULTI_FILE_TARGET_LINE),
-                ))
-                .set_post_step_pause(Duration::from_millis(250)),
-        )
+        .with_step(scroll_code_review_to_line(
+            SECOND_FILE_NAME,
+            MULTI_FILE_TARGET_LINE,
+            multi_file_modified_line("second", MULTI_FILE_TARGET_LINE),
+        ))
         // Insert lines above the target in the second file
         .with_step(mutate_named_file(
             SECOND_FILE_NAME,

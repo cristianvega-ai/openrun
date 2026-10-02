@@ -35,6 +35,15 @@ jobs:
       - name: Check formatting
         run: ./script/format --check
 
+      # The integration tests have no retry of any kind: a step that fails once fails the test.
+      # A retry would turn a race into a green run, so nothing that retries or reruns may return.
+      - name: Check that the integration framework has no retries
+        run: |
+          if grep -rnE 'set_retries|RERUN_EXIT_CODE|PreconditionFailed|set_on_failure_handler' crates app/src --include='*.rs'; then
+            echo "::error::the integration framework must not retry or rerun a step or a test"
+            exit 1
+          fi
+
   clippy:
     name: Clippy (macOS)
     runs-on: macos-latest
@@ -134,11 +143,82 @@ jobs:
 
       - uses: ./.github/actions/macos-test-tools
 
+      # A scenario that doesn't apply to the shell of the run exits with its own code and is a
+      # skip, not a pass. In CI a skip fails the test unless it is in ALLOWED_CI_SKIPS in
+      # crates/integration/tests/common/mod.rs; the tests of one shell (bash_only, pwsh_only) are
+      # ignored here and run in the job for their shell below.
       - name: Run the integration tests with zsh
+        env:
+          OPENRUN_SKIP_REPORT: ${{ runner.temp }}/integration-skips.txt
         run: |
           WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
           cargo nextest run --locked --workspace --retries 0 --no-fail-fast -E 'package(integration)'
+
+      - name: List the skipped integration scenarios
+        if: ${{ always() }}
+        env:
+          OPENRUN_SKIP_REPORT: ${{ runner.temp }}/integration-skips.txt
+        run: |
+          {
+            echo "### Skipped integration scenarios (zsh)"
+            if [ -s "$OPENRUN_SKIP_REPORT" ]; then
+              sed 's/^/- /' "$OPENRUN_SKIP_REPORT"
+            else
+              echo "None."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The scenarios that only exist in one shell (bash, PowerShell 7). They are ignored in the zsh
+  # run above, so this job is where they run: every test here must run, and a skip fails it
+  # (`CI=true`). The runner ships bash 3.2 and PowerShell 7; bash 5.1 or newer comes from Homebrew.
+  integration-shells:
+    name: Integration tests, bash and PowerShell (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install the Rust toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
+      - name: Make sure the Metal toolchain is installed
+        run: |
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
+        with:
+          tool: nextest
+
+      - uses: ./.github/actions/macos-test-tools
+
+      - name: Install bash 5
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install bash
+          "$(brew --prefix)/bin/bash" --version
+
+      - name: Run the bash scenarios
+        run: |
+          WARP_SHELL_PATH="$(brew --prefix)/bin/bash"
+          export WARP_SHELL_PATH
+          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
+            --run-ignored only -E 'package(integration) and test(~shell_integration_tests::bash_only::)'
+
+      - name: Run the PowerShell scenarios
+        if: ${{ !cancelled() }}
+        run: |
+          WARP_SHELL_PATH=$(command -v pwsh)
+          export WARP_SHELL_PATH
+          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
+            --run-ignored only -E 'package(integration) and test(~shell_integration_tests::pwsh_only::)'
 
   # The command executor tests for the macOS sandbox (`sandbox-exec` profile, the DNS daemon and
   # background URL session canaries), the offline environment, the restored completion

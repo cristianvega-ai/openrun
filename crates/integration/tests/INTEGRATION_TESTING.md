@@ -114,6 +114,11 @@ To run a specific integration test you can use:
 
 The `WARPUI_USE_REAL_DISPLAY_IN_INTEGRATION_TESTS="1"` will force the new terminal window to open, which helps a lot when iterating on your integration test implementation!
 
+### Waiting, retries and skips
+* A step runs once and a failed step fails the test. There are no retries or reruns, neither of a step nor of a test, and CI runs nextest with `--retries 0`: a pass on a second attempt would hide a race. If a result arrives later, make the step's assertions poll for the state it needs (an assertion returns a failure until it holds, and the step fails at its timeout).
+* A step's timeout is the longest the step may take, not a delay: the step ends as soon as its assertions hold. To wait for something the app does on a timer (a grace period, an expiry), assert what it does; do not sleep (`std::thread::sleep` blocks the event loop that runs the timer).
+* A scenario that doesn't apply to the shell of the run (`set_should_run_test` is false) ends with its own exit code and is a skip, never a pass. The skip is printed (`OPENRUN_TEST_SKIPPED`), and it fails the test unless it is allowed: in CI by an entry in `ALLOWED_CI_SKIPS` in `tests/common/mod.rs` (with the reason), elsewhere by setting `OPENRUN_ALLOW_SKIPS=1`. Tests that need one particular shell go in the `bash_only` or `pwsh_only` module of `shell_integration_tests.rs`, are ignored by default and run in their own CI job (`WARP_SHELL_PATH=<shell> cargo nextest run -p integration --run-ignored only -E 'test(~shell_integration_tests::pwsh_only::)'`).
+
 ### Known issues / limitations
 * To determine (from the `TestStep`) which shell is used for the test, you can try checking `WARP_SHELL_PATH` environment variable (that works within the CI on github) or check the passwd for the user (for local runs).
 * Similarly you can run the test with a specific shell by setting the `WARP_SHELL_PATH` and then running the test. For example: `WARP_SHELL_PATH=/usr/local/bin/fish`, then `cargo run --bin integration -- test_simple_example`

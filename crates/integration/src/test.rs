@@ -131,7 +131,9 @@ use warp::integration_testing::window::{
     add_and_save_window, add_window, add_window_and_check_bounds, close_window,
     save_active_window_id,
 };
-use warp::integration_testing::workspace::{assert_is_left_panel_open, assert_tab_count};
+use warp::integration_testing::workspace::{
+    assert_is_left_panel_open, assert_tab_count, assert_undo_close_stack_is_empty,
+};
 use warp::integration_testing::{self, view_of_type};
 use warp::settings::{
     CompletionsOpenWhileTyping, CtrlTabBehavior, INPUT_MODE, MonospaceFontSize,
@@ -140,7 +142,6 @@ use warp::settings::{
 use warp::settings_view::keybindings::KeybindingsView;
 use warp::settings_view::{FeaturesPageAction, SettingsAction, SettingsSection, SettingsView};
 use warp::terminal::alt_screen_reporting::MouseReportingEnabled;
-use warp::terminal::available_shells::AvailableShells;
 use warp::terminal::block_list_viewport::{InputMode, ScrollLines, ScrollPosition};
 use warp::terminal::find::TerminalFindModel;
 use warp::terminal::input::{Input, InputSuggestionsMode};
@@ -158,7 +159,7 @@ use warp::terminal::view::{
 use warp::terminal::{TerminalView, shell};
 use warp::util::bindings::CustomAction;
 use warp::workflows::categories::CategoriesView;
-use warp::workspace::{NEW_SESSION_MENU_BUTTON_POSITION_ID, NEW_TAB_BUTTON_POSITION_ID, Workspace};
+use warp::workspace::{NEW_TAB_BUTTON_POSITION_ID, Workspace};
 use warpui_core::event::KeyState;
 use warpui_core::integration::{AssertionOutcome, StepData, TestStep};
 use warpui_core::keymap::{Keystroke, PerPlatformKeystroke, Trigger};
@@ -3610,53 +3611,6 @@ pub fn test_add_windows_correct_position_and_cascade() -> Builder {
         .with_step(add_window_and_check_bounds(2, "first_window_bounds"))
 }
 
-pub fn test_open_new_tab_with_specific_shell_from_new_session_menu() -> Builder {
-    // Consults the AvailableShells model to find a shell based on the shell type,
-    // gets the display name, and then clicks on that entry in the new session menu.
-    fn new_tab_with_click_on_shell(shell: ShellType) -> TestStep {
-        let shell_name = shell.name();
-        new_step_with_default_assertions(format!("Open New tab with {shell_name} shell").as_str())
-            .with_click_on_saved_position_fn(move |app, _| {
-                AvailableShells::handle(app).read(app, |shells, _| {
-                    let shell = shells.find_known_shell_by_type(shell).unwrap_or_else(|| {
-                        panic!("Shell {shell_name} should be loaded into AvailableShells")
-                    });
-                    shells.display_name_for_shell(&shell).to_string()
-                })
-            })
-    }
-
-    let test_cases = vec![(ShellType::PowerShell, "(Get-Process -Id $PID).Path")];
-
-    let mut builder = new_builder()
-        .set_should_run_test(|| cfg!(windows))
-        .with_step(wait_until_bootstrapped_single_pane_for_tab(0));
-    let mut tab_index = 1;
-
-    for (shell, test_command) in test_cases {
-        let expected =
-            regex::Regex::new(format!("{}$", shell.name()).as_str()).expect("regex should compile");
-        builder = builder
-            .with_step(
-                new_step_with_default_assertions("Click on new tab menu button")
-                    .with_click_on_saved_position(NEW_SESSION_MENU_BUTTON_POSITION_ID),
-            )
-            .with_step(new_tab_with_click_on_shell(shell))
-            .with_step(
-                wait_until_bootstrapped_single_pane_for_tab(tab_index)
-                    .set_timeout(Duration::from_secs(20)),
-            )
-            .with_step(execute_command_for_single_terminal_in_tab(
-                tab_index,
-                test_command.to_string(),
-                ExpectedExitStatus::Success,
-                expected,
-            ));
-        tab_index += 1;
-    }
-    builder
-}
-
 pub fn test_command_xray_hover() -> Builder {
     new_builder()
         // TODO: Flakey on Powershell (Linux)
@@ -6522,19 +6476,25 @@ pub fn test_undo_close_stack_timeout_cleanup() -> Builder {
                 .add_assertion(|app, _| {
                     // Verify we now have only 1 window remaining
                     async_assert_eq!(app.window_ids().len(), 1)
-                }),
+                })
+                // The closed tab is still waiting out its grace period, so the expiry the next
+                // step waits for has not happened yet.
+                .add_assertion(assert_undo_close_stack_is_empty(false)),
         )
         .with_step(
-            TestStep::new("Wait for undo close grace period to expire and trigger cleanup")
-                .set_timeout(Duration::from_secs(8))
-                .with_action(|_app, _, _data| {
-                    // Wait longer than the grace period to ensure cleanup is triggered
-                    std::thread::sleep(Duration::from_secs(6));
-                })
-                // After waiting, verify the application is still stable
-                .add_assertion(|app, _| {
-                    // Simple stability check - ensure we still have 1 window
-                    async_assert_eq!(app.window_ids().len(), 1)
-                }),
+            // The grace period has no clock the test can advance, and sleeping on the foreground
+            // executor would stop the very timer being waited for. Let the event loop run and wait
+            // for what the expiry does: it takes the closed tab (whose window is gone) off the
+            // undo close stack and discards it. The timeout is the longest the wait may take (the
+            // grace period is 5 seconds), not a delay: the step ends as soon as the stack is empty.
+            TestStep::new(
+                "Wait for the undo close grace period to expire and the closed tab to be discarded",
+            )
+            .set_timeout(Duration::from_secs(30))
+            .add_assertion(assert_undo_close_stack_is_empty(true))
+            .add_assertion(|app, _| {
+                // The cleanup of the closed tab must not have taken the remaining window.
+                async_assert_eq!(app.window_ids().len(), 1)
+            }),
         )
 }

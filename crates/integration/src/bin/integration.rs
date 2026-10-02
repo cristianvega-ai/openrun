@@ -229,7 +229,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_preferred_shell);
     register_test!(test_git_prompt);
     register_test!(test_terminal_announces_capabilities_to_shell);
-    register_test!(test_open_new_tab_with_specific_shell_from_new_session_menu);
     register_test!(test_open_launch_config_with_custom_size);
     register_test!(test_launch_config_single_child_branch);
     register_test!(test_open_launch_config_in_active_window);
@@ -327,7 +326,6 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
 
     register_test!(test_focus_panes_on_hover);
 
-    register_test!(test_close_tab_with_long_running_process);
     register_test!(test_reorder_tabs_with_drag);
     register_test!(test_detach_tab_to_new_window_with_drag);
     register_test!(test_attach_tab_to_other_window_and_continue_drag);

@@ -224,14 +224,18 @@ pub struct TestDriver {
     persisted_data: PersistedDataMap,
 }
 
-pub const RERUN_EXIT_CODE: i32 = 127;
+/// The exit code of a test process whose `should_run_test` check was false in this environment (for
+/// example a test that needs a shell other than the one the run uses). The harness that runs the
+/// process reports it as a skip; it is never the exit code of a test that ran and passed.
+pub const SKIP_EXIT_CODE: i32 = 86;
 
-/// The result of running a single integration test step. This does not include results that panic
-/// or exit the driver process (failures and cancellations).
-enum StepResult {
-    Success,
-    PreconditionFailed,
-}
+/// The exit code of a test process that was interrupted (Ctrl+C) before it finished. An
+/// interrupted test did not pass.
+pub const CANCELED_EXIT_CODE: i32 = 130;
+
+/// The word a skipped test starts its line on stderr with, followed by the test name and the reason,
+/// so that a skip is easy to find in the output of a run.
+pub const SKIP_MARKER: &str = "OPENRUN_TEST_SKIPPED";
 
 impl TestDriver {
     /// Executes the test steps, performing assertions against application state,
@@ -241,22 +245,23 @@ impl TestDriver {
     /// executor after initializing the application.
     pub async fn run_test_and_cleanup(mut self, mut app: App) {
         if !(self.should_run_test)() {
-            log::info!("Skipping test ...");
-            app.as_mut()
-                .terminate_app(TerminationMode::ForceTerminate, None);
-            return;
+            // An ineligible test did not run, so it must not look like one that passed: the
+            // process ends with its own exit code, which the harness reports as a skip.
+            eprintln!(
+                "\n{SKIP_MARKER} {}: not eligible in this environment (its should_run_test check is false)\n",
+                self.test_name
+            );
+            self.cleanup();
+            std::process::exit(SKIP_EXIT_CODE);
         }
 
         // Safety: We can use `AssertUnwindSafe` here because we aren't accessing any captured data
         // and are immediately terminating the app after a panic
-        let test_result = AssertUnwindSafe(self.run_steps_and_determine_rerun(&mut app))
+        let test_result = AssertUnwindSafe(self.run_steps(&mut app))
             .catch_unwind()
             .await;
 
-        if test_result
-            .as_ref()
-            .is_ok_and(|attempt_rerun| !attempt_rerun)
-        {
+        if test_result.is_ok() {
             let window_id = app.read(|ctx| {
                 let windowing_state = ctx.windows();
                 windowing_state.active_window()
@@ -272,13 +277,9 @@ impl TestDriver {
         self.cleanup();
 
         match test_result {
-            Ok(should_rerun) => {
-                if should_rerun {
-                    std::process::exit(RERUN_EXIT_CODE);
-                } else {
-                    app.as_mut()
-                        .terminate_app(TerminationMode::ForceTerminate, None);
-                }
+            Ok(()) => {
+                app.as_mut()
+                    .terminate_app(TerminationMode::ForceTerminate, None);
             }
             Err(panic_data) => {
                 match get_panic_message(&panic_data) {
@@ -291,7 +292,7 @@ impl TestDriver {
         }
     }
 
-    async fn run_steps_and_determine_rerun(&mut self, app: &mut App) -> bool {
+    async fn run_steps(&mut self, app: &mut App) {
         let steps: Vec<TestStep> = self.steps.drain(..).collect();
         log::info!("Spawning integration test with {} steps", steps.len());
 
@@ -329,22 +330,12 @@ impl TestDriver {
         self.configure_capture_recording(app, &mut step_data_map);
 
         for mut step in steps {
-            match self
-                .run_single_step_with_retries(&mut step, app, &mut step_data_map, &sigint_received)
-                .await
-            {
-                StepResult::Success => {
-                    self.handle_post_step_capture(app, &mut step_data_map).await;
-                }
-                StepResult::PreconditionFailed => {
-                    self.finalize_recording(&mut step_data_map).await;
-                    return true;
-                }
-            }
+            self.run_single_step(&mut step, app, &mut step_data_map, &sigint_received)
+                .await;
+            self.handle_post_step_capture(app, &mut step_data_map).await;
         }
 
         self.finalize_recording(&mut step_data_map).await;
-        false
     }
     fn configure_capture_recording(&self, app: &mut App, step_data_map: &mut StepDataMap) {
         #[cfg(not(feature = "integration_tests"))]
@@ -531,24 +522,21 @@ impl TestDriver {
         self.export_runtime_tags();
     }
 
-    /// Run a single step of an integration test.
+    /// Runs a single step of an integration test, exactly once.
     ///
-    /// If the step has retries configured, it will be attempted up to `retries + 1` times:
-    /// * [`AssertionOutcome::Success`], [`AssertionOutcome::SuccessWithData`] succeed immediately
-    /// * [`AssertionOutcome::PreconditionFailed`] ends the entire test
-    /// * [`AssertionOutcome::Failure`] and [`AssertionOutcome::ImmediateFailure`] may be retried
+    /// A step that fails is a failed test: there is no retry, because a step that passes on its
+    /// second attempt hides a race in the test or in the app. If a step depends on something
+    /// that happens later, its assertions poll for it until the step's timeout.
     ///
-    /// If the step succeeds or fails preconditions, this returns a [`StepResult`]. If it fails,
-    /// this panics with a failure message.
-    ///
-    /// If the test is canceled, this exits the process immediately.
-    async fn run_single_step_with_retries(
+    /// If the step fails, this panics with a failure message. If the test is canceled, this exits
+    /// the process immediately with [`CANCELED_EXIT_CODE`].
+    async fn run_single_step(
         &mut self,
         step: &mut TestStep,
         app: &mut App,
         step_data_map: &mut StepDataMap,
         sigint_received: &AtomicBool,
-    ) -> StepResult {
+    ) {
         let (window_id, window) = app.read(|ctx| {
             let windowing_state = ctx.windows();
             let window_id = windowing_state
@@ -560,159 +548,71 @@ impl TestDriver {
             (window_id, window)
         });
 
-        // Retry logic for the step
-        let mut retry_attempt = 0;
-        let max_attempts = step.retries() + 1; // +1 for the original attempt
+        log::info!(
+            "Running test step '{}' on window id {:?}",
+            step.name(),
+            window_id
+        );
 
-        'retries: loop {
-            retry_attempt += 1;
+        if let Some(log) = action_log::get_action_log_mut(step_data_map) {
+            log.record(format!("Step started: {}", step.name()));
+        }
 
-            if step.retries() > 0 {
-                log::info!(
-                    "Running test step '{}' on window id {:?} (attempt {}/{})",
-                    step.name(),
-                    window_id,
-                    retry_attempt,
-                    max_attempts
+        match run_step(
+            step,
+            app,
+            window_id,
+            window.as_ref(),
+            step_data_map,
+            &mut self.test_setup,
+            sigint_received,
+        )
+        .await
+        {
+            AssertionOutcome::Success | AssertionOutcome::SuccessWithData(_) => {
+                log::info!("Test step '{}' succeeded.", step.name());
+                if let Some(log) = action_log::get_action_log_mut(step_data_map) {
+                    log.record(format!("Step succeeded: {}", step.name()));
+                }
+            }
+            AssertionOutcome::Failure {
+                message,
+                backtrace,
+                failed_assertion_name,
+            }
+            | AssertionOutcome::ImmediateFailure {
+                message,
+                backtrace,
+                failed_assertion_name,
+            } => {
+                let backtrace_message = match backtrace.status() {
+                    BacktraceStatus::Captured => format!("{backtrace}"),
+                    _ => "(Backtrace disabled; run with `RUST_BACKTRACE=1` environment variable to display a backtrace)".into(),
+                };
+                let step_group_name = step.step_group_name.as_deref().unwrap_or("Unspecified");
+                self.persisted_data.insert(
+                    RUNTIME_TAG_FAILED_STEP_GROUP_NAME.to_owned(),
+                    step_group_name.to_owned(),
                 );
-            } else {
-                log::info!(
-                    "Running test step '{}' on window id {:?}",
+                let failed_assertion_name =
+                    failed_assertion_name.unwrap_or("Unspecified".to_owned());
+                self.persisted_data.insert(
+                    RUNTIME_TAG_FAILED_ASSERTION_NAME.to_owned(),
+                    failed_assertion_name,
+                );
+                self.persisted_data
+                    .insert(RUNTIME_TAG_FAILURE_REASON.to_owned(), message.clone());
+                self.run_on_finish_and_export_tags(app, window_id).await;
+                panic!(
+                    "Test step '{}' failed: {message}\nFailed in step group: {step_group_name}\n{backtrace_message}",
                     step.name(),
-                    window_id
                 );
             }
-
-            if let Some(log) = action_log::get_action_log_mut(step_data_map) {
-                log.record(format!("Step started: {}", step.name()));
-            }
-
-            match run_step(
-                step,
-                app,
-                window_id,
-                window.as_ref(),
-                step_data_map,
-                &mut self.test_setup,
-                sigint_received,
-            )
-            .await
-            {
-                AssertionOutcome::Success | AssertionOutcome::SuccessWithData(_) => {
-                    if retry_attempt > 1 {
-                        log::info!(
-                            "Test step '{}' succeeded after {} attempts.",
-                            step.name(),
-                            retry_attempt
-                        );
-                    } else {
-                        log::info!("Test step '{}' succeeded.", step.name());
-                    }
-                    if let Some(log) = action_log::get_action_log_mut(step_data_map) {
-                        log.record(format!("Step succeeded: {}", step.name()));
-                    }
-                    return StepResult::Success;
-                }
-                AssertionOutcome::Failure {
-                    message,
-                    backtrace,
-                    failed_assertion_name,
-                } => {
-                    if retry_attempt < max_attempts {
-                        log::warn!(
-                            "Test step '{}' failed (attempt {}/{}): {}. Retrying...",
-                            step.name(),
-                            retry_attempt,
-                            max_attempts,
-                            message
-                        );
-                        continue 'retries; // Retry the step
-                    } else {
-                        // All retries exhausted, fail the test
-                        let backtrace_message = match backtrace.status() {
-                            BacktraceStatus::Captured => format!("{backtrace}"),
-                            _ => "(Backtrace disabled; run with `RUST_BACKTRACE=1` environment variable to display a backtrace)".into(),
-                        };
-                        let step_group_name =
-                            step.step_group_name.as_deref().unwrap_or("Unspecified");
-                        self.persisted_data.insert(
-                            RUNTIME_TAG_FAILED_STEP_GROUP_NAME.to_owned(),
-                            step_group_name.to_owned(),
-                        );
-                        let failed_assertion_name =
-                            failed_assertion_name.unwrap_or("Unspecified".to_owned());
-                        self.persisted_data.insert(
-                            RUNTIME_TAG_FAILED_ASSERTION_NAME.to_owned(),
-                            failed_assertion_name,
-                        );
-                        self.persisted_data
-                            .insert(RUNTIME_TAG_FAILURE_REASON.to_owned(), message.clone());
-                        self.run_on_finish_and_export_tags(app, window_id).await;
-                        panic!(
-                            "Test step '{}' failed after {} attempts: {message}\nFailed in step group: {step_group_name}\n{backtrace_message}",
-                            step.name(),
-                            max_attempts,
-                        );
-                    }
-                }
-                AssertionOutcome::ImmediateFailure {
-                    message,
-                    backtrace,
-                    failed_assertion_name,
-                } => {
-                    if retry_attempt < max_attempts {
-                        log::warn!(
-                            "Test step '{}' failed (attempt {}/{}): {}. Retrying...",
-                            step.name(),
-                            retry_attempt,
-                            max_attempts,
-                            message
-                        );
-                        continue 'retries; // Retry the step
-                    } else {
-                        // All retries exhausted, fail the test
-                        let backtrace_message = match backtrace.status() {
-                            BacktraceStatus::Captured => format!("{backtrace}"),
-                            _ => "(Backtrace disabled; run with `RUST_BACKTRACE=1` environment variable to display a backtrace)".into(),
-                        };
-                        let step_group_name =
-                            step.step_group_name.as_deref().unwrap_or("Unspecified");
-                        self.persisted_data.insert(
-                            RUNTIME_TAG_FAILED_STEP_GROUP_NAME.to_owned(),
-                            step_group_name.to_owned(),
-                        );
-                        let failed_assertion_name =
-                            failed_assertion_name.unwrap_or("Unspecified".to_owned());
-                        self.persisted_data.insert(
-                            RUNTIME_TAG_FAILED_ASSERTION_NAME.to_owned(),
-                            failed_assertion_name,
-                        );
-                        self.persisted_data
-                            .insert(RUNTIME_TAG_FAILURE_REASON.to_owned(), message.clone());
-                        self.run_on_finish_and_export_tags(app, window_id).await;
-                        panic!(
-                            "Test step '{}' failed after {} attempts: {message}\nFailed in step group: {step_group_name}\n{backtrace_message}",
-                            step.name(),
-                            max_attempts,
-                        );
-                    }
-                }
-                AssertionOutcome::Canceled => {
-                    // Early exit on cancellation.
-                    log::info!("Test step '{}' canceled, running on_finish...", step.name());
-                    self.run_on_finish_and_export_tags(app, window_id).await;
-                    log::info!("on_finish complete, exiting");
-                    std::process::exit(0);
-                }
-                AssertionOutcome::PreconditionFailed(msg) => {
-                    // End the test, but don't fail it.
-                    log::warn!(
-                        "Test step '{}' precondition failed because of '{}' - attempting a re-run.",
-                        step.name(),
-                        msg
-                    );
-                    return StepResult::PreconditionFailed;
-                }
+            AssertionOutcome::Canceled => {
+                log::info!("Test step '{}' canceled, running on_finish...", step.name());
+                self.run_on_finish_and_export_tags(app, window_id).await;
+                log::info!("on_finish complete, exiting");
+                std::process::exit(CANCELED_EXIT_CODE);
             }
         }
     }

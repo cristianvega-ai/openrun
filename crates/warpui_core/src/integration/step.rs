@@ -102,7 +102,7 @@ pub type PersistedDataMap = HashMap<String, String>;
 
 /// The result of an assertion.  Use this rather than a normal assertion
 /// when the thing you are testing may take up to a timeout to be true.
-#[must_use = "AssertionOutcome must be returned to the test runner to allow retrying"]
+#[must_use = "AssertionOutcome must be returned to the test runner, which fails the test on a failure"]
 pub enum AssertionOutcome {
     /// The step succeeded.
     Success,
@@ -127,11 +127,6 @@ pub enum AssertionOutcome {
         backtrace: Backtrace,
         failed_assertion_name: Option<String>,
     },
-
-    /// Return this when there is a timing condition that prevents us from
-    /// running the rest of the test - we don't treat this as a failure
-    /// but instead skip the rest of the steps and log the flake.
-    PreconditionFailed(String),
 
     /// The test was canceled by user (e.g. Ctrl+C)
     Canceled,
@@ -161,7 +156,6 @@ impl AssertionOutcome {
             | AssertionOutcome::ImmediateFailure { message, .. } => Some(message.as_str()),
             AssertionOutcome::Success
             | AssertionOutcome::SuccessWithData(_)
-            | AssertionOutcome::PreconditionFailed(_)
             | AssertionOutcome::Canceled => None,
         }
     }
@@ -240,15 +234,8 @@ pub struct TestStep {
     /// to observe the state that the app is in when failure happens.
     pause_on_failure: Option<Duration>,
 
-    /// An optional final assertion that is run when the timeout has hit.
-    /// If omitted the test fails.
-    on_failure_handler: Option<Assertion>,
-
     /// The name of the group this step belongs to, used for failure reporting.
     pub(super) step_group_name: Option<String>,
-
-    /// Number of times to retry this step if it fails (defaults to 0, meaning no retries)
-    retries: u32,
 }
 
 const DEFAULT_STEP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -281,9 +268,7 @@ impl TestStep {
             timeout: DEFAULT_STEP_TIMEOUT,
             post_step_pause,
             pause_on_failure,
-            on_failure_handler: None,
             step_group_name: None,
-            retries: 0,
         }
     }
 
@@ -336,18 +321,6 @@ impl TestStep {
         self
     }
 
-    pub fn set_on_failure_handler<N, F>(mut self, name: N, callback: F) -> Self
-    where
-        N: Into<String>,
-        F: FnMut(&mut App, WindowId) -> AssertionOutcome + 'static,
-    {
-        self.on_failure_handler = Some(Assertion {
-            name: Some(name.into()),
-            callback: CallbackType::Assertion(Box::new(callback)),
-        });
-        self
-    }
-
     pub fn set_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
@@ -361,15 +334,6 @@ impl TestStep {
     pub fn set_pause_on_failure(mut self, pause: Duration) -> Self {
         self.pause_on_failure = Some(pause);
         self
-    }
-
-    pub fn set_retries(mut self, retries: u32) -> Self {
-        self.retries = retries;
-        self
-    }
-
-    pub(super) fn retries(&self) -> u32 {
-        self.retries
     }
 
     pub fn with_input_string(self, input: &str, extra_keystrokes: Option<&[&str]>) -> Self {
@@ -858,10 +822,6 @@ pub(super) async fn run_step(
                     step_data_map.insert_step_data(step_data);
                     continue 'outer;
                 }
-                AssertionOutcome::PreconditionFailed(s) => {
-                    // Early exit if we've flaked.
-                    return AssertionOutcome::PreconditionFailed(s);
-                }
                 AssertionOutcome::Failure {
                     message,
                     backtrace,
@@ -882,65 +842,6 @@ pub(super) async fn run_step(
                         message,
                         backtrace,
                         failed_assertion_name: failed_assertion_name.or(assertion.name.clone()),
-                    };
-                }
-                AssertionOutcome::Canceled => {
-                    return AssertionOutcome::Canceled;
-                }
-            }
-        }
-
-        // If we are here, the timer for the current assertion has elapsed without hitting success.
-        // Check if there is a final assertion to run, and if so run it.
-        if let Some(mut final_assertion) = step.on_failure_handler.take() {
-            // Log the timed-out assertion's failure message before running the final assertion
-            if let Some(AssertionOutcome::Failure { message, .. }) = &last_failure {
-                report_error!(
-                    "Assertion timed out",
-                    extra: {
-                        "assertion" => %last_assertion_name.unwrap_or("unknown"),
-                        "message" => %message
-                    }
-                );
-            }
-            let res = match &mut final_assertion.callback {
-                CallbackType::Assertion(cb) => cb(app, window_id),
-                CallbackType::AssertionWithData(cb) => cb(app, window_id, step_data_map),
-            };
-            match res {
-                AssertionOutcome::Success => {
-                    continue 'outer;
-                }
-                AssertionOutcome::SuccessWithData(step_data) => {
-                    step_data_map.insert_step_data(step_data);
-                    continue 'outer;
-                }
-                AssertionOutcome::PreconditionFailed(s) => {
-                    // Early exit if we've flaked.
-                    return AssertionOutcome::PreconditionFailed(s);
-                }
-                AssertionOutcome::Failure {
-                    message,
-                    backtrace,
-                    failed_assertion_name,
-                } => {
-                    last_failure = Some(AssertionOutcome::Failure {
-                        message,
-                        backtrace,
-                        failed_assertion_name: failed_assertion_name
-                            .or(final_assertion.name.clone()),
-                    });
-                }
-                AssertionOutcome::ImmediateFailure {
-                    message,
-                    backtrace,
-                    failed_assertion_name,
-                } => {
-                    return AssertionOutcome::ImmediateFailure {
-                        message,
-                        backtrace,
-                        failed_assertion_name: failed_assertion_name
-                            .or(final_assertion.name.clone()),
                     };
                 }
                 AssertionOutcome::Canceled => {

@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use warpui::integration::{AssertionCallback, AssertionOutcome, TestStep};
-use warpui::{App, ViewHandle, WindowId, async_assert};
+use warpui::{App, ViewContext, ViewHandle, WindowId, async_assert};
 
 use crate::code_review::code_review_view::{CodeReviewView, CodeReviewVisibleAnchorForTest};
 
@@ -77,17 +79,6 @@ pub fn assert_code_review_anchor(
     })
 }
 
-pub fn scroll_code_review_to_line(file_path: impl Into<String>, line_number: usize) -> TestStep {
-    let file_path = file_path.into();
-
-    TestStep::new("Scroll code review to a file line").with_action(move |app, window_id, _| {
-        let code_review_view = single_code_review_view(app, window_id);
-        code_review_view.update(app, |code_review_view, ctx| {
-            let _ = code_review_view.scroll_to_line_for_test(&file_path, line_number, ctx);
-        });
-    })
-}
-
 pub fn assert_code_review_line_text(
     expected_file_path: impl Into<String>,
     line_number: usize,
@@ -152,40 +143,91 @@ fn assert_anchor(
     AssertionOutcome::Success
 }
 
+/// Builds a step that scrolls the code review to a target and waits until it is there.
+///
+/// Where the target is depends on the layout of the file's diff editor, and an editor is laid out
+/// lazily, when its list item is first rendered. A scroll made before that lands in the wrong
+/// place, but the attempt itself brings the item into view and lays it out. So the step's
+/// assertion scrolls and then checks the result on every poll: it ends as soon as a scroll lands
+/// where `expected` says, and fails with the last mismatch at the step's timeout. The scroll is
+/// idempotent; it is not a retry of a failed step, because nothing but the scroll position is
+/// repeated and the result is checked by `expected` each time.
+fn scroll_code_review_until(
+    step_name: &str,
+    scroll: impl Fn(&mut CodeReviewView, &mut ViewContext<CodeReviewView>) + 'static,
+    mut expected: AssertionCallback,
+) -> TestStep {
+    TestStep::new(step_name)
+        .set_timeout(Duration::from_secs(20))
+        .add_named_assertion(
+            "scroll until the target is laid out and in place",
+            move |app, window_id| {
+                let Some(code_review_view) = try_single_code_review_view(app, window_id) else {
+                    return AssertionOutcome::failure(
+                        "code review view not yet available in the window".to_string(),
+                    );
+                };
+                code_review_view.update(app, |code_review_view, ctx| scroll(code_review_view, ctx));
+                expected(app, window_id)
+            },
+        )
+}
+
+/// Scrolls the code review to a line of a file and waits until that line is the anchor at the top
+/// of the visible region (see [`scroll_code_review_until`]).
+pub fn scroll_code_review_to_line(
+    file_path: impl Into<String>,
+    line_number: usize,
+    expected_text: impl Into<String>,
+) -> TestStep {
+    let file_path = file_path.into();
+    let expected = assert_code_review_anchor(file_path.clone(), expected_text, Some(line_number));
+    scroll_code_review_until(
+        "Scroll code review to a file line",
+        move |code_review_view, ctx| {
+            code_review_view.scroll_to_line_for_test(&file_path, line_number, ctx);
+        },
+        expected,
+    )
+}
+
+/// Scrolls the code review into the header region of a file and waits until it is there.
 pub fn scroll_code_review_to_header(file_path: impl Into<String>) -> TestStep {
     let file_path = file_path.into();
-
-    TestStep::new("Scroll code review to header region").with_action(move |app, window_id, _| {
-        let code_review_view = single_code_review_view(app, window_id);
-        code_review_view.update(app, |code_review_view, ctx| {
+    scroll_code_review_until(
+        "Scroll code review to header region",
+        move |code_review_view, ctx| {
             code_review_view.scroll_to_header_for_test(&file_path, ctx);
-        });
-    })
+        },
+        assert_code_review_scroll_region(ScrollRegion::Header),
+    )
 }
 
+/// Scrolls the code review into the footer region of a file and waits until it is there.
 pub fn scroll_code_review_to_footer(file_path: impl Into<String>) -> TestStep {
     let file_path = file_path.into();
-
-    TestStep::new("Scroll code review to footer region").with_action(move |app, window_id, _| {
-        let code_review_view = single_code_review_view(app, window_id);
-        code_review_view.update(app, |code_review_view, ctx| {
+    scroll_code_review_until(
+        "Scroll code review to footer region",
+        move |code_review_view, ctx| {
             code_review_view.scroll_to_footer_for_test(&file_path, ctx);
-        });
-    })
+        },
+        assert_code_review_scroll_region(ScrollRegion::Footer),
+    )
 }
 
+/// Scrolls the code review to a deleted range near a line of a file and waits until it is there.
 pub fn scroll_code_review_to_deleted_range(
     file_path: impl Into<String>,
     near_line: usize,
 ) -> TestStep {
     let file_path = file_path.into();
-
-    TestStep::new("Scroll code review to deleted range").with_action(move |app, window_id, _| {
-        let code_review_view = single_code_review_view(app, window_id);
-        code_review_view.update(app, |code_review_view, ctx| {
+    scroll_code_review_until(
+        "Scroll code review to deleted range",
+        move |code_review_view, ctx| {
             code_review_view.scroll_to_deleted_range_for_test(&file_path, near_line, ctx);
-        });
-    })
+        },
+        assert_code_review_scroll_region(ScrollRegion::RemovedLine),
+    )
 }
 
 pub fn assert_code_review_scroll_region(expected_region: ScrollRegion) -> AssertionCallback {

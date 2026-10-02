@@ -14,7 +14,10 @@ pub mod video_recorder;
 pub use action_log::ActionLog;
 use anyhow::Context;
 pub use artifacts::ARTIFACTS_DIR_ENV_VAR;
-pub use driver::{Builder, RERUN_EXIT_CODE, RUNTIME_TAG_FAILURE_REASON, SetupFn, TestDriver};
+pub use driver::{
+    Builder, CANCELED_EXIT_CODE, RUNTIME_TAG_FAILURE_REASON, SKIP_EXIT_CODE, SKIP_MARKER, SetupFn,
+    TestDriver,
+};
 pub use overlay::OverlayLog;
 pub use step::{
     AssertionCallback, AssertionOutcome, AssertionWithDataCallback, IntegrationTestEvent,
