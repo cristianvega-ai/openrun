@@ -6139,8 +6139,12 @@ fn maximized_pane_releases_the_pr_model_of_its_hidden_sibling() {
             group.handle_action(&PaneGroupAction::ToggleMaximizePane, ctx);
         });
         hidden.read(&app, |view, ctx| assert!(view.pr_info_on_screen(ctx)));
-        assert!(
-            holds_github_model(&app, hidden),
+        // The view re-acquires the model when it handles the pane group's
+        // `PrInfoVisibilityChanged` event, not inside the action that un-maximizes. Asserting it
+        // at once failed in CI (run 36949795721, `Unit tests`), so wait for it as the release
+        // above is waited for.
+        assert_eventually!(
+            400 => holds_github_model(&app, hidden),
             "un-maximizing re-acquires it"
         );
         // The shown pane kept the shared model alive, so re-acquiring it is a single `gh pr view`
