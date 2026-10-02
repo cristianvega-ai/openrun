@@ -126,41 +126,23 @@ jobs:
     name: Build tests (macOS)
     runs-on: macos-latest
     timeout-minutes: 60
-    env:
-      CARGO_INCREMENTAL: "1"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - uses: ./.github/actions/rust-macos
 
-      # Artifacts of another operating system or architecture are of no use. Bump the version to
-      # start a new cache.
-      - name: Name the build cache
-        run: echo "CACHE_PREFIX=build-v1-$RUNNER_OS-$RUNNER_ARCH" >> "$GITHUB_ENV"
-
-      - name: Restore the build cache
+      - uses: ./.github/actions/build-cache
         id: cache
-        if: ${{ inputs.cache }}
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: ${{ env.CACHE_PREFIX }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ env.CACHE_PREFIX }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
-            ${{ env.CACHE_PREFIX }}-
-
-      - name: Put the recorded times back on the files that did not change
-        if: ${{ steps.cache.outputs.cache-hit != '' }}
-        run: python3 script/ci_restore_mtimes apply target/ci-source-manifest.txt
+          restore: ${{ inputs.cache }}
 
       - name: Build the tests
+        id: build
         run: |
           mkdir -p "$RUNNER_TEMP/test-archive"
+          start=$(date +%s)
           cargo nextest archive --locked --workspace --archive-file "$RUNNER_TEMP/test-archive/tests.tar.zst"
+          echo "seconds=$(($(date +%s) - start))" >> "$GITHUB_OUTPUT"
 
       # Every test of the build, for the coverage check of the `result` job.
       - name: List the tests
@@ -188,8 +170,11 @@ jobs:
           rm -rf target/nextest target/debug/examples
           du -sh target target/debug/incremental target/debug/deps target/debug/build 2>/dev/null || true
 
+      # Saving takes about a minute for 3 GB. A build that took less than that did little work, so
+      # the next one can start from the same cache just as well; the changes pile up until a build
+      # is long enough to be worth saving.
       - name: Save the build cache
-        if: ${{ inputs.cache && github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.cache && github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true' && (steps.cache.outputs.cache-hit == '' || fromJSON(steps.build.outputs.seconds) > 120) }}
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
@@ -197,7 +182,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: ${{ env.CACHE_PREFIX }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+          key: ${{ steps.cache.outputs.prefix }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
 
   # Every test except the `integration` package, in the network sandbox, then the two-minute idle
   # session in the same kind of sandbox. The modules that test the sandbox itself

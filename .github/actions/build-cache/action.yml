@@ -1,0 +1,53 @@
+name: Build cache
+description: >-
+  Restores the build directory of the last build of `main` (workspace crates and incremental
+  compilation state included) and puts the recorded modification times back on the files that did
+  not change, so cargo rebuilds only what changed. The Build tests job saves the cache.
+
+inputs:
+  restore:
+    description: Restore the cache (false builds from scratch).
+    default: "true"
+
+outputs:
+  cache-hit:
+    description: "'true' for an exact match, 'false' for the cache of an earlier commit, empty for none."
+    value: ${{ steps.restore.outputs.cache-hit }}
+  prefix:
+    description: The prefix of the cache keys.
+    value: ${{ steps.name.outputs.prefix }}
+
+runs:
+  using: composite
+  steps:
+    # Artifacts of another operating system or architecture are of no use. Bump the version to
+    # start a new cache.
+    - name: Name the build cache
+      id: name
+      shell: bash
+      run: |
+        echo "prefix=build-v1-$RUNNER_OS-$RUNNER_ARCH" >> "$GITHUB_OUTPUT"
+        echo "CACHE_PREFIX=build-v1-$RUNNER_OS-$RUNNER_ARCH" >> "$GITHUB_ENV"
+        # Incremental compilation is part of the cache: a change to one crate rebuilds only what
+        # the change reaches. It has to be on for every build that uses the cache.
+        echo "CARGO_INCREMENTAL=1" >> "$GITHUB_ENV"
+
+    - name: Restore the build cache
+      id: restore
+      if: ${{ inputs.restore == 'true' }}
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          target
+        key: ${{ steps.name.outputs.prefix }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+        restore-keys: |
+          ${{ steps.name.outputs.prefix }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
+          ${{ steps.name.outputs.prefix }}-
+
+    - name: Put the recorded times back on the files that did not change
+      if: ${{ steps.restore.outputs.cache-hit != '' }}
+      shell: bash
+      run: python3 script/ci_restore_mtimes apply target/ci-source-manifest.txt
