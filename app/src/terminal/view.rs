@@ -10253,6 +10253,12 @@ impl TerminalView {
         );
     }
 
+    /// Deselects every block, the state of a terminal in which no block was ever selected.
+    #[cfg(feature = "integration_tests")]
+    pub fn clear_selected_blocks_for_test(&mut self, ctx: &mut ViewContext<Self>) {
+        self.clear_selected_blocks(ctx);
+    }
+
     #[cfg(any(test, feature = "integration_tests"))]
     pub fn selected_blocks_tail_index(&self) -> Option<BlockIndex> {
         self.selected_blocks.tail()

@@ -718,6 +718,12 @@ def net_log_violation(address, port):
 
 def check_net_log(path):
     result = Result("netlog", "Sandboxed run: connect/send targets in %s (9.4a)" % path)
+    if not os.path.isfile(path):
+        # `script/offline_sandbox` writes the log when its command has ended. No file means the
+        # step did not get that far (it hung, was cancelled or never started), so nothing is known
+        # about the connections it made: that is a failure, not "no connections".
+        result.add(path, None, "log missing: the sandboxed step that writes it did not run to completion")
+        return result
     with open(path, encoding="utf-8", errors="replace") as f:
         for number, raw in enumerate(f, 1):
             if not re.search(r"\b(connect|sendto|sendmsg|sendmmsg)\(", raw):
@@ -875,6 +881,7 @@ def self_test_net_log_cases():
           'inet_pton(AF_INET6, "%s", &sin6_addr), sin6_scope_id=0}, 28) = %s\n')
     return [
         ("net log: empty", "", "pass"),
+        ("net log: missing file", None, "fail"),
         ("net log: loopback connect", v4 % (3, 8080, "127.0.0.1", "0"), "pass"),
         ("net log: loopback IPv6 connect", v6 % (3, 8080, "::1", "0"), "pass"),
         ("net log: local socket", '1234 connect(3, {sa_family=AF_UNIX, sun_path="/run/x"}, 110) = 0\n', "pass"),
@@ -955,8 +962,9 @@ def run_self_test(allowlist_path):
         for name, log, expectation in self_test_net_log_cases():
             with tempfile.TemporaryDirectory() as tree:
                 path = os.path.join(tree, "net.log")
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(log)
+                if log is not None:
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(log)
                 report(name, expectation, check_net_log(path).findings)
 
         for name, package, files, policy, expectation in self_test_dependency_cases(None):
