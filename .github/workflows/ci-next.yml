@@ -343,8 +343,7 @@ jobs:
         test(=shell_integration_tests::test_osc7_updates_current_working_directory) |
         test(=shell_integration_tests::test_rc_files_only_sourced_once_during_bootstrapping) |
         test(=shell_integration_tests::test_input_reporting_posix_shells) |
-        test(=shell_integration_tests::test_start_shell_in_deleted_directory) |
-        test(=shell_integration_tests::test_auto_title)
+        test(=shell_integration_tests::test_start_shell_in_deleted_directory)
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/rust-macos
@@ -372,13 +371,16 @@ jobs:
           fi
           "$(brew --prefix)/bin/bash" --version | head -1
 
+      # test_auto_title only runs with zsh: with another shell it is a skip, which fails in CI.
       - name: Run the core sessions with zsh
+        if: ${{ !cancelled() }}
         run: |
           WARP_SHELL_PATH=$(command -v zsh)
           export WARP_SHELL_PATH
-          ./script/ci_nextest plain-shells-zsh --no-fail-fast -E "package(integration) and ($CORE_TESTS | test(=shell_integration_tests::test_can_bootstrap_local_zsh_subshell))"
+          ./script/ci_nextest plain-shells-zsh --no-fail-fast -E "package(integration) and ($CORE_TESTS | test(=shell_integration_tests::test_auto_title) | test(=shell_integration_tests::test_can_bootstrap_local_zsh_subshell))"
 
       - name: Run the bash sessions with the bash of macOS (3.2)
+        if: ${{ !cancelled() }}
         run: |
           WARP_SHELL_PATH=/bin/bash
           export WARP_SHELL_PATH
@@ -389,12 +391,14 @@ jobs:
           ./script/ci_nextest plain-shells-bash32 --no-fail-fast --run-ignored all -E "package(integration) and ($CORE_TESTS | test(~shell_integration_tests::bash_only::) | test(=shell_integration_tests::test_can_bootstrap_local_bash_subshell)) and not test(~prompt_command_array)"
 
       - name: Run the bash sessions with Homebrew's bash
+        if: ${{ !cancelled() }}
         run: |
           WARP_SHELL_PATH="$(brew --prefix)/bin/bash"
           export WARP_SHELL_PATH
           ./script/ci_nextest plain-shells-bash5 --no-fail-fast --run-ignored all -E "package(integration) and ($CORE_TESTS | test(~shell_integration_tests::bash_only::) | test(=shell_integration_tests::test_can_bootstrap_local_bash_subshell))"
 
       - name: Run the PowerShell sessions
+        if: ${{ !cancelled() }}
         run: |
           WARP_SHELL_PATH=$(command -v pwsh)
           export WARP_SHELL_PATH
