@@ -70,7 +70,12 @@ fn the_windows_native_shell_of_an_msys2_session_gets_the_offline_environment() {
     assert_eq!(environment.removals, ["DOCKER_HOST"]);
     let path = environment.path.expect("PATH is converted");
     #[cfg(windows)]
-    assert!(path.to_string_lossy().contains(r"C:\Windows"), "{path:?}");
+    assert!(
+        path.to_string_lossy()
+            .to_lowercase()
+            .contains(r"c:\windows"),
+        "{path:?}"
+    );
     #[cfg(not(windows))]
     let _ = path;
     assert!(
