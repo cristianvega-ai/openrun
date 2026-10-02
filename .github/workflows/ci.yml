@@ -505,11 +505,10 @@ jobs:
       # The `integration` package with bash, the shell these steps use everywhere else. No retries
       # in this step or the other blocking ones (the ci profile's own retries are off too, see
       # .config/nextest.toml): a test that fails once and passes on a retry is reported as FLAKY by
-      # nextest and is not a pass, and a retry would hide it behind a green job. Seven tests are
+      # nextest and is not a pass, and a retry would hide it behind a green job. Six tests are
       # left out and run with zsh in the next step: their expectations (tab title `~`, the git
-      # branch chip, scroll layout) do not hold with bash on the runner, with or without the
-      # sandbox (a control run outside it failed the same seven; CHANGES.md, "CI: the network-sandbox
-      # steps finish").
+      # branch chip) do not hold with bash on the runner, with or without the sandbox (a control
+      # run outside it failed the same ones; CHANGES.md, "CI: the network-sandbox steps finish").
       - name: Run the integration tests in a network sandbox
         if: ${{ !cancelled() }}
         timeout-minutes: 40
@@ -518,7 +517,7 @@ jobs:
           export WARP_SHELL_PATH
           ./script/offline_sandbox net-integration.log xvfb-run -a \
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-              -E "package(integration) and not ($ZSH_ONLY_INTEGRATION_TESTS | test(=ui_tests::test_waterfall_input_scrolling))"
+              -E "package(integration) and not ($ZSH_ONLY_INTEGRATION_TESTS)"
 
       - name: Run the zsh integration tests in a network sandbox
         if: ${{ !cancelled() }}
@@ -530,23 +529,9 @@ jobs:
             cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 --status-level all \
               -E "package(integration) and ($ZSH_ONLY_INTEGRATION_TESTS)"
 
-      # `test_waterfall_input_scrolling` asserts the pixel layout of the input and fails on the
-      # runner's virtual screen in both shells, with or without the sandbox (ENG-192). It is not
-      # part of the blocking steps; this one tries it on a larger screen and only reports.
-      - name: Run the waterfall layout test in a network sandbox
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        timeout-minutes: 10
-        run: |
-          WARP_SHELL_PATH=$(command -v zsh)
-          export WARP_SHELL_PATH
-          ./script/offline_sandbox net-waterfall.log xvfb-run -a -s "-screen 0 2560x1600x24" \
-            cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
-              -E "test(=ui_tests::test_waterfall_input_scrolling)"
-
       - name: Check the recorded connections
         if: ${{ !cancelled() }}
-        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-zsh.log net-waterfall.log
+        run: ./script/offline_audit --net-log net-smoke.log net-unit.log net-integration.log net-integration-zsh.log
 
       # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
       # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in

@@ -103,7 +103,7 @@ Run unit tests with `cargo nextest run`.
 
 - **Formatting** and **Clippy** (`cargo clippy --workspace --all-targets --tests -- -D warnings`) on Linux, on native Windows (`windows-latest`) and on macOS (`macos-latest`). Code behind `cfg(windows)` or `cfg(target_os = ...)` is only linted on its own platform, so a warning there fails that platform's job.
 - **Unit tests** on Linux, and the **Offline audit** job, which also runs the whole test suite (including `crates/integration`) in a network sandbox and fails on any connection to a non-loopback address.
-- **No retries.** A test that fails once and passes on a retry is flaky, which is not a pass: nextest retries are off in CI, so it fails the job. Fix the test, or file an issue and move it to a non-blocking step with the reason written next to it, as `ui_tests::test_waterfall_input_scrolling` is.
+- **No retries.** A test that fails once and passes on a retry is flaky, which is not a pass: nextest retries are off in CI, so it fails the job. Fix the test, or file an issue and move it to a non-blocking step with the reason written next to it.
 
 To get the Windows and Linux lint results without waiting for CI, run `script/cross_clippy` (needs [zig](https://ziglang.org/download/) and the two Rust targets; the prerequisites are listed at the top of the script).
 
