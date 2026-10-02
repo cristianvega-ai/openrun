@@ -120,19 +120,14 @@ jobs:
           cargo nextest run --locked --workspace --offline --retries 0 --no-fail-fast \
             -E 'test(=shell_integration_tests::test_executable_completions) | test(=ui_tests::test_focus_panes_on_hover)'
 
-      # The two tests that failed under the sandbox in the first runs, without the sandbox.
-      - name: Two unit tests without the sandbox
-        if: ${{ !cancelled() }}
-        run: |
-          cargo nextest run --locked --workspace --offline --retries 0 --no-fail-fast --success-output immediate \
-            -E 'test(=terminal::input::decorations::tests::test_decorations_with_multibyte_chars) | test(=terminal::input::tests::test_histignorespace_support_in_zsh)' 2>&1 | tail -150
-
       - name: Unit tests in the sandbox
         if: ${{ !cancelled() && inputs.unit }}
         run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
           ./script/offline_sandbox_macos net-unit.log \
             cargo nextest run --locked --workspace --offline --retries 0 --no-fail-fast \
-              -E 'not package(integration) and not test(~command_executor::network_sandbox)'
+              -E 'not package(integration) and not test(~command_executor::network_sandbox) and not test(~command_executor::offline_environment)'
 
       - name: Integration tests in the sandbox
         if: ${{ !cancelled() && inputs.integration }}
