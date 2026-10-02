@@ -434,15 +434,9 @@ impl History {
 
     /// Determines whether Kaspersky is running on the system. We only care if
     /// Kaspersky is running on Windows, so we return false for other platforms.
-    #[cfg_attr(not(windows), allow(unused_variables))]
+    #[allow(unused_variables)]
     fn is_kaspersky_running(ctx: &mut ModelContext<Self>) -> bool {
-        cfg_if::cfg_if! {
-            if #[cfg(windows)] {
-                crate::util::windows::is_kaspersky_running(ctx)
-            } else {
-                false
-            }
-        }
+        false
     }
 
     /// Initializes the history model history model for the given session, where

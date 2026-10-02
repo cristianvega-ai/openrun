@@ -20,7 +20,6 @@ use serde_yaml::Mapping;
 use string_offset::{ByteOffset, CharOffset};
 use sum_tree::{SeekBias, SumTree};
 use vec1::{Vec1, vec1};
-use warp_core::platform::SessionPlatform;
 use warp_core::safe_error;
 use warp_util::content_version::ContentVersion;
 use warpui_core::elements::ListIndentLevel;
@@ -569,9 +568,6 @@ pub struct Buffer {
     /// The line ending mode for the buffer content. This is inferred from the content when the
     /// buffer is loaded or reset, and used when retrieving text with original line endings.
     line_ending_mode: LineEnding,
-    /// The session platform, used as a fallback when inferring line endings from content that
-    /// has no line endings (e.g. single-line text).
-    session_platform: Option<SessionPlatform>,
 }
 
 impl Default for Buffer {
@@ -594,7 +590,6 @@ impl Default for Buffer {
             content_version: version,
             version: BufferVersion::new(),
             line_ending_mode: LineEnding::LF,
-            session_platform: None,
         }
     }
 }
@@ -661,10 +656,6 @@ impl Buffer {
 
     pub fn set_line_ending_mode(&mut self, mode: LineEnding) {
         self.line_ending_mode = mode;
-    }
-
-    pub fn set_session_platform(&mut self, platform: Option<SessionPlatform>) {
-        self.session_platform = platform;
     }
 
     pub fn random_edit<R: Rng>(
@@ -773,7 +764,6 @@ impl Buffer {
             internal_anchors: Anchors::new(),
             version: BufferVersion::new(),
             line_ending_mode: LineEnding::LF,
-            session_platform: None,
         }
     }
 
@@ -920,9 +910,6 @@ impl Buffer {
             }]);
         });
 
-        // Preserve session_platform across the replacement since *self is reassigned.
-        let session_platform = self.session_platform.clone();
-
         // Compute pre-edit byte range before *self is reassigned.
         let old_byte_start = ByteOffset::from(1);
         let old_byte_end = self.max_byte_offset();
@@ -966,10 +953,8 @@ impl Buffer {
             },
         };
 
-        // Infer line ending from the new content and restore session_platform.
-        self.session_platform = session_platform;
-        self.line_ending_mode =
-            multiline::infer_line_ending(state.text, self.session_platform.as_ref());
+        // Infer line ending from the new content.
+        self.line_ending_mode = multiline::infer_line_ending(state.text);
 
         // Compute post-edit byte length and end point from the new buffer.
         let new_byte_length = self.max_byte_offset().as_usize().saturating_sub(1);
@@ -4621,8 +4606,7 @@ impl Buffer {
     /// code editor right now). But if you plan to use this for rich text editor, you will need to update the logic here.
     pub fn replace_all(&mut self, text: impl AsRef<str>, ctx: &mut ModelContext<Self>) {
         // Infer line ending from the new content.
-        self.line_ending_mode =
-            multiline::infer_line_ending(text.as_ref(), self.session_platform.as_ref());
+        self.line_ending_mode = multiline::infer_line_ending(text.as_ref());
 
         let range = CharOffset::from(1)..self.max_charoffset();
         let editor_action_set = vec![

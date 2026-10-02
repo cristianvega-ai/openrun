@@ -26,9 +26,7 @@ lazy_static! {
 /// - Lines starting with `#` are removed. This enables comments in scripts, but partial-line
 ///   comments are not supported because this logic only considers whole lines.
 pub fn load_and_escape_script(file_path: &str, assets: &dyn AssetProvider) -> String {
-    load_script(file_path, assets)
-        .replace('\'', r#"'"'"'"#)
-        .replace("@@USING_CON_PTY_BOOLEAN@@", &(cfg!(windows).to_string()))
+    load_script(file_path, assets).replace('\'', r#"'"'"'"#)
 }
 
 fn load_script(file_path: &str, assets: &dyn AssetProvider) -> String {
@@ -112,12 +110,7 @@ pub fn script_for_shell(shell_type: ShellType, assets: &dyn AssetProvider) -> Co
                                 let data = assets.get(path).unwrap_or_else(|_| {
                                     panic!("failed to retrieve {path} from assets")
                                 });
-                                let data_string =
-                                    unsafe { String::from_utf8_unchecked(data.to_vec()) };
-                                data_string.replace(
-                                    "@@USING_CON_PTY_BOOLEAN@@",
-                                    &(cfg!(windows).to_string()),
-                                )
+                                unsafe { String::from_utf8_unchecked(data.to_vec()) }
                             })
                             .split('\n')
                             .map(trim_and_borrow_line)

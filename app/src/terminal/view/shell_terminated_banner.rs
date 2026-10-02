@@ -124,7 +124,7 @@ pub enum TerminationType {
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     PtySpawnFailure { pty_spawn_error: anyhow::Error },
     /// The shell process terminated before we were able to bootstrap.
-    Premature { shell_detail: String },
+    Premature,
 }
 
 impl TerminationType {
@@ -133,7 +133,7 @@ impl TerminationType {
 
         let icon_type = match self {
             TerminationType::Normal => ui_components::icons::Icon::Info,
-            TerminationType::Premature { .. } | TerminationType::PtySpawnFailure { .. } => {
+            TerminationType::Premature | TerminationType::PtySpawnFailure { .. } => {
                 ui_components::icons::Icon::Warning
             }
         };
@@ -156,7 +156,7 @@ impl TerminationType {
         let text = match self {
             TerminationType::Normal => "Shell process exited",
             TerminationType::PtySpawnFailure { .. } => "Shell process could not start!",
-            TerminationType::Premature { .. } => "Shell process exited prematurely!",
+            TerminationType::Premature => "Shell process exited prematurely!",
         };
 
         Text::new(text, appearance.ui_font_family(), 14.)
@@ -171,12 +171,12 @@ impl TerminationType {
             TerminationType::PtySpawnFailure { pty_spawn_error } => {
                 format!("{pty_spawn_error:#}").into()
             }
-            TerminationType::Premature { shell_detail, .. } => format!(
-                "Something went wrong while starting {shell_detail} and Warpifying it, causing the \
+            TerminationType::Premature => {
+                "Something went wrong while starting shell and Warpifying it, causing the \
                 process to terminate. Warpify script output is displayed here, which may point at \
                 a cause."
-            )
-            .into(),
+                    .into()
+            }
         };
 
         let text = Text::new(text, appearance.ui_font_family(), 12.)
@@ -193,7 +193,7 @@ impl TerminationType {
         handles: &mut Vec<MouseStateHandle>,
     ) -> Vec<Box<dyn Element>> {
         match self {
-            TerminationType::Normal | TerminationType::Premature { .. } => vec![],
+            TerminationType::Normal | TerminationType::Premature => vec![],
             TerminationType::PtySpawnFailure { pty_spawn_error } => {
                 let ui_builder = inverted_color_ui_builder(appearance);
 

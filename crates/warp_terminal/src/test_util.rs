@@ -11,7 +11,6 @@ use crate::model::ansi::{self, Handler};
 use crate::model::blockgrid::BlockGrid;
 use crate::model::cell::Flags;
 use crate::model::grid::Dimensions as _;
-use crate::model::grid::grid_handler::PerformResetGridChecks;
 use crate::model::image_map::StoredImageMetadata;
 use crate::model::index::{VisiblePoint, VisibleRow};
 use crate::model::kitty::{
@@ -96,7 +95,6 @@ pub fn mock_blockgrid(content: &str) -> BlockGrid {
         MAX_SCROLL_LIMIT,
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     blockgrid.start();

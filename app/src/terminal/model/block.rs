@@ -30,7 +30,7 @@ use warpui::units::{IntoLines, Lines};
 pub use super::BlockId;
 use super::bootstrap::BootstrapStage;
 use super::find::RegexDFAs;
-use super::grid::grid_handler::{GridHandler, PerformResetGridChecks};
+use super::grid::grid_handler::GridHandler;
 use super::grid::{Cursor, RespectDisplayedOutput};
 use super::header_grid::{HeaderGrid, PromptEndPoint};
 use super::image_map::StoredImageMetadata;
@@ -205,11 +205,6 @@ pub struct Block {
 
     /// If `true`, the prompt+command grid should not be rendered.
     should_hide_command_grid: bool,
-
-    /// [`Self::linefeed`] may discard some linefeeds at the beginning of the prompt. Doing so will
-    /// alter the row numbers for [`Self::goto`] and [`Self::goto_line`] when ConPTY is involved. We
-    /// track the count of discarded newlines here in order to correct the row number.
-    leading_linefeeds_ignored: usize,
 
     /// Only set on restored blocks. Indicates whether the block was local or from a remote session.
     restored_block_was_local: Option<bool>,
@@ -713,17 +708,11 @@ impl Block {
         honor_ps1: bool,
         should_scan_for_secrets: ObfuscateSecrets,
     ) -> Self {
-        let perform_reset_grid_checks = if cfg!(windows) && bootstrap_stage.is_done() {
-            PerformResetGridChecks::Yes
-        } else {
-            PerformResetGridChecks::No
-        };
         let header_grid = HeaderGrid::new(
             sizes.clone(),
             event_proxy.clone(),
             should_scan_for_secrets,
             honor_ps1,
-            perform_reset_grid_checks,
         );
         let rprompt_grid = BlockGrid::new(
             sizes.size,
@@ -732,14 +721,12 @@ impl Block {
             sizes.max_block_scroll_limit,
             event_proxy.clone(),
             should_scan_for_secrets,
-            PerformResetGridChecks::No,
         );
         let output_grid = BlockGrid::new(
             sizes.size,
             sizes.max_block_scroll_limit,
             event_proxy.clone(),
             should_scan_for_secrets,
-            perform_reset_grid_checks,
         );
 
         Block {
@@ -783,7 +770,6 @@ impl Block {
             hidden: false,
             should_hide_output_grid: false,
             should_hide_command_grid: false,
-            leading_linefeeds_ignored: 0,
             restored_block_was_local: None,
             excluded_from_saved_history: false,
             visible_bootstrap_block_event_sent: false,
@@ -920,16 +906,9 @@ impl Block {
         self.header_grid.start_command_grid();
         self.header_grid.finish_command_grid();
 
-        // TODO: We disable reset grid checks for background blocks.
-        self.disable_reset_grid_checks();
         self.output_grid.start();
         self.state = BlockState::Background;
         self.wakeup_after_delay();
-    }
-
-    pub(super) fn disable_reset_grid_checks(&mut self) {
-        self.header_grid.disable_reset_grid_checks();
-        self.output_grid.disable_reset_grid_checks();
     }
 
     /// Method used in tests to finish the BlockGrid containing the command WITHOUT a linefeed in the empty command
@@ -2521,7 +2500,6 @@ impl Block {
             });
         }
 
-        self.leading_linefeeds_ignored = 0;
         self.output_grid.start();
         self.state = BlockState::Executing;
         self.is_for_in_band_command = is_for_in_band_command;
@@ -2537,7 +2515,6 @@ impl Block {
 
         self.ensure_started_for_preexec();
         self.header_grid.finish_command_grid();
-        self.leading_linefeeds_ignored = 0;
         self.output_grid.start();
         self.state = BlockState::Executing;
         self.is_for_in_band_command |=
@@ -2642,15 +2619,10 @@ impl ansi::Handler for Block {
     }
 
     fn goto(&mut self, row: VisibleRow, column: usize) {
-        // Only apply this correction for ConPTY.
-        #[cfg(windows)]
-        let row = row.saturating_sub(self.leading_linefeeds_ignored);
         delegate!(self.goto(row, column));
     }
 
     fn goto_line(&mut self, row: VisibleRow) {
-        #[cfg(windows)]
-        let row = row.saturating_sub(self.leading_linefeeds_ignored);
         delegate!(self.goto_line(row));
     }
 
@@ -2718,11 +2690,9 @@ impl ansi::Handler for Block {
         // blocks.
         match self.header_grid.receiving_chars_for_prompt {
             Some(ansi::PromptKind::Initial) if !self.header_grid.prompt_has_received_content() => {
-                self.leading_linefeeds_ignored += 1;
                 return ScrollDelta::zero();
             }
             Some(ansi::PromptKind::Right) if !self.rprompt_grid.has_received_content() => {
-                self.leading_linefeeds_ignored += 1;
                 return ScrollDelta::zero();
             }
             _ => {}
@@ -2980,10 +2950,6 @@ impl ansi::Handler for Block {
 
     fn on_finish_byte_processing(&mut self, input: &ansi::ProcessorInput<'_>) {
         delegate!(self.on_finish_byte_processing(input));
-    }
-
-    fn on_reset_grid(&mut self) {
-        delegate!(self.on_reset_grid());
     }
 
     fn handle_completed_iterm_image(&mut self, image: ITermImage) {

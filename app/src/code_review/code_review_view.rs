@@ -196,7 +196,6 @@ const COMMENT_EDITOR_SCROLL_BUFFER: f32 = 200.0;
 pub const CODE_REVIEW_TOOLTIP_TEXT: &str = "View changes";
 const REMOTE_TEXT: &str = "Diffs only work for local workspaces.";
 const DISABLED_TEXT: &str = "Diffs only work for git repositories.";
-const WSL_TEXT: &str = "Diffs don't currently work in WSL.";
 
 pub fn get_discard_button_disabled_tooltip(git_operation_blocked: bool) -> String {
     if git_operation_blocked {
@@ -2654,17 +2653,11 @@ impl CodeReviewView {
     fn session_env(&self, app: &AppContext) -> Option<GitSessionState> {
         let terminal_view = self.focused_terminal(app)?;
         terminal_view.read(app, |terminal, ctx| {
-            let session = terminal
-                .active_block_session_id()
-                .and_then(|id| terminal.sessions_model().as_ref(ctx).get(id));
             let is_local = terminal.active_session_is_local(ctx);
             let is_remote = matches!(is_local, Some(false));
-            let is_wsl = session.as_ref().map(|s| s.is_wsl()).unwrap_or(false);
 
             let enablement = if is_remote {
                 CodingPanelEnablementState::RemoteSession
-            } else if is_wsl {
-                CodingPanelEnablementState::UnsupportedSession
             } else {
                 CodingPanelEnablementState::Enabled
             };
@@ -2698,9 +2691,6 @@ impl CodeReviewView {
                 // in a remote session.
                 Self::render_remote_state(appearance, None)
             }
-            Some(GitSessionState {
-                enablement: CodingPanelEnablementState::UnsupportedSession,
-            }) => Self::render_wsl_state(appearance, open_repo_button()),
             None
             | Some(GitSessionState {
                 enablement:
@@ -2794,7 +2784,6 @@ impl CodeReviewView {
                     |buffer_state, ctx| {
                         ctx.add_typed_action_view(|ctx| {
                             let mut editor_view = CodeEditorView::new(
-                                None,
                                 Some(buffer_state.buffer),
                                 CodeEditorRenderOptions::new(
                                     VerticalExpansionBehavior::InfiniteHeight,
@@ -2883,7 +2872,6 @@ impl CodeReviewView {
             let self_handle = ctx.handle();
             let code_editor_view = ctx.add_typed_action_view(|ctx| {
                 let mut editor_view = CodeEditorView::new(
-                    None,
                     None,
                     CodeEditorRenderOptions::new(VerticalExpansionBehavior::InfiniteHeight)
                         .lazy_layout()
@@ -3668,13 +3656,6 @@ impl CodeReviewView {
         open_repo_button: Option<Box<dyn Element>>,
     ) -> Box<dyn Element> {
         Self::render_no_repo_found_state(appearance, REMOTE_TEXT, open_repo_button)
-    }
-
-    pub fn render_wsl_state(
-        appearance: &Appearance,
-        open_repo_button: Option<Box<dyn Element>>,
-    ) -> Box<dyn Element> {
-        Self::render_no_repo_found_state(appearance, WSL_TEXT, open_repo_button)
     }
 
     pub fn render_not_repo_state(
@@ -6821,11 +6802,7 @@ impl BackingView for CodeReviewView {
                 AppContext::show_native_platform_modal(ctx, dialog);
             } else if cfg!(all(
                 not(target_family = "wasm"),
-                any(
-                    target_os = "linux",
-                    target_os = "freebsd",
-                    target_os = "windows"
-                )
+                any(target_os = "linux", target_os = "freebsd")
             )) {
                 // Find the workspace to show the Warp-native modal
                 if let Some(workspace) = ctx

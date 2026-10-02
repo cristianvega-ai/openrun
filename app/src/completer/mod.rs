@@ -1,5 +1,3 @@
-mod wsl_guest_listing;
-
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use std::path::Path;
@@ -19,9 +17,8 @@ use warp_completer::signatures::CommandRegistry;
 use warp_util::path::{EscapeChar, ShellFamily};
 
 use crate::safe_warn;
-use crate::terminal::model::session::{ExecuteCommandOptions, Session, SessionType};
+use crate::terminal::model::session::{Session, SessionType};
 use crate::util::AsciiDebug;
-use crate::util::environment_variables::{NameCase, set_variable};
 
 lazy_static! {
     pub static ref CURR_DIRECTORY_ENTRY: EngineDirEntry = EngineDirEntry {
@@ -66,20 +63,6 @@ impl SessionContext {
     ) -> Vec<EngineDirEntry> {
         match self.session.session_type() {
             SessionType::Local => {
-                // The host cannot resolve an `IO_REPARSE_TAG_LX_SYMLINK` over `\\wsl$`:
-                // it can't classify a symlink-to-directory correctly, and it can't
-                // traverse *through* a symlinked directory to list its contents at all. So a WSL
-                // session asks the guest for the listing directly, following symlinks (`-L`) so
-                // both problems are avoided at the source, rather than patching up a host listing
-                // afterwards. A slow or failing guest falls back to the plain host listing below
-                // rather than emptying the completion list.
-                #[cfg(windows)]
-                if self.session.is_wsl()
-                    && let Some(entries) = wsl_guest_listing::list_entries(self, directory).await
-                {
-                    return entries;
-                }
-
                 let dir = match self.session.maybe_convert_to_native_path(directory) {
                     Ok(dir) => dir,
                     Err(err) => {
@@ -122,12 +105,7 @@ impl SessionContext {
                 // directory we want within the ls script.
                 let command_output_result = self
                     .session
-                    .execute_command(
-                        &ls_command,
-                        None,
-                        env_vars,
-                        ExecuteCommandOptions::default(),
-                    )
+                    .execute_command(&ls_command, None, env_vars)
                     .await;
 
                 match command_output_result {
@@ -211,7 +189,7 @@ impl GeneratorContext for SessionContext {
         // the subshell won't inherit the PATH var, but we need the PATH var
         // to reference executables we might run as part of generators.
         if let Some(path) = self.session.path().as_deref() {
-            set_variable(&mut env_vars, "PATH", path.to_string(), NameCase::of_host());
+            env_vars.insert("PATH".to_owned(), path.to_string());
         }
 
         let env_vars_option = if env_vars.is_empty() {
@@ -221,12 +199,7 @@ impl GeneratorContext for SessionContext {
         };
 
         self.session
-            .execute_command(
-                shell_command,
-                self.pwd().to_str(),
-                env_vars_option,
-                ExecuteCommandOptions::default(),
-            )
+            .execute_command(shell_command, self.pwd().to_str(), env_vars_option)
             .await
     }
 
@@ -236,10 +209,6 @@ impl GeneratorContext for SessionContext {
 
     fn network_isolated(&self) -> bool {
         self.session.network_isolated()
-    }
-
-    fn offline_environment_applied(&self) -> bool {
-        self.session.offline_environment_applied()
     }
 
     async fn git_version(&self) -> Option<GitVersion> {

@@ -84,7 +84,6 @@ fn create_editor_with_content(app: &mut App, content: &str) -> ViewHandle<LocalC
         let code_editor_view = ctx.add_typed_action_view(|ctx| {
             CodeEditorView::new(
                 None,
-                None,
                 CodeEditorRenderOptions::new(VerticalExpansionBehavior::GrowToMaxHeight),
                 ctx,
             )
@@ -112,7 +111,6 @@ fn create_editor_with_diff(
     let (_, local_editor) = app.add_window(WindowStyle::NotStealFocus, move |ctx| {
         let code_editor_view = ctx.add_typed_action_view(|ctx| {
             CodeEditorView::new(
-                None,
                 None,
                 CodeEditorRenderOptions::new(VerticalExpansionBehavior::GrowToMaxHeight),
                 ctx,

@@ -2,8 +2,6 @@
 #
 # Installs all cargo-managed dependencies required to build Warp.
 
-# This script should be platform-agnostic (eg. no unix-only references like /dev/null).
-
 "$PWD"/script/install_cargo_binstall
 
 # Use cargo-binstall to install the Diesel CLI.

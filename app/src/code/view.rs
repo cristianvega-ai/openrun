@@ -364,7 +364,6 @@ impl CodeView {
                 |buffer_state, ctx| {
                     ctx.add_typed_action_view(|ctx| {
                         CodeEditorView::new(
-                            None,
                             Some(buffer_state.buffer),
                             CodeEditorRenderOptions::new(VerticalExpansionBehavior::FillMaxHeight),
                             ctx,
@@ -400,7 +399,6 @@ impl CodeView {
     ) -> ViewHandle<LocalCodeEditorView> {
         let editor = ctx.add_typed_action_view(|ctx| {
             CodeEditorView::new(
-                None,
                 None,
                 CodeEditorRenderOptions::new(VerticalExpansionBehavior::FillMaxHeight),
                 ctx,
@@ -2017,8 +2015,6 @@ impl CodeView {
             if local_path.is_some() {
                 let reveal_label = if cfg!(target_os = "macos") {
                     "Reveal in Finder"
-                } else if cfg!(target_os = "windows") {
-                    "Reveal in Explorer"
                 } else {
                     "Reveal in file manager"
                 };

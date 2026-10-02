@@ -21,8 +21,6 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
 
     OSC_PARAM_SEPARATOR=";"
 
-    RESET_GRID_OSC="$(printf '\e]9279\a')"
-
     # OSC used to mark the start of in-band command output.
     #
     # Printable characters received this OSC and OSC_END_GENERATOR_OUTPUT are parsed and handled as
@@ -74,50 +72,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # unicode), we encode it as hexadecimal string to avoid prematurely calling unhook if
         # one of the bytes in JSON is 9c (ST) or other (CAN, SUB, ESC).
         encoded_message=$(warp_hex_encode_string "$1")
-        # We send the InitShell hook via OSCs when on WSL or MSYS2 or SSH from Windows and via DCSs otherwise.
-        # Note that $WARP_USING_WINDOWS_CON_PTY is set in the init shell script.
-        if [ "$WARP_USING_WINDOWS_CON_PTY" = true ]; then
-          printf $OSC_START$DCS_JSON_MARKER$OSC_PARAM_SEPARATOR$encoded_message$OSC_END
-        else
-          printf $DCS_START$DCS_JSON_MARKER$encoded_message$DCS_END
-        fi
-    }
-
-    warp_maybe_send_reset_grid_osc () {
-        if [ "$WARP_USING_WINDOWS_CON_PTY" = true ]; then
-            printf $RESET_GRID_OSC
-        fi
-    }
-
-    # Expects the first argument to be the shell hook.
-    warp_send_hook_via_kv_pairs_start () {
-      printf "${OSC_START}k;A;%s\a" $1
-    }
-
-    # Expects the first argument to be the key and the second argument to be the value.
-    warp_send_hook_kv_pair_escaped () {
-      # Note that we only escape the value.
-      if [[ -n "$2" ]]; then
-        printf "${OSC_START}k;B;%s;%q\a" "$1" "$2"
-      else
-        # Don't print anything for the empty value.
-        printf "${OSC_START}k;B;%s;\a" "$1"
-      fi
-    }
-
-    # Expects the first argument to be the key and the second argument to be the value.
-    warp_send_hook_kv_pair () {
-      # Note that we only escape the value.
-      if [[ -n "$2" ]]; then
-        printf "${OSC_START}k;B;%s;%s\a" "$1" "$2"
-      else
-        # Don't print anything for the empty value.
-        printf "${OSC_START}k;B;%s;\a" "$1"
-      fi
-    }
-
-    warp_send_hook_via_kv_pairs_end () {
-      printf "${OSC_START}k;C\a"
+        printf $DCS_START$DCS_JSON_MARKER$encoded_message$DCS_END
     }
 
     # Hex-encodes the given argument and writes it to the PTY, wrapped in the OSC
@@ -133,12 +88,9 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         warp_send_generator_output_osc_pre_hex_encoded "$hex_encoded_message"
     }
 
-    # Note: If we're on windows, we send a reset grid to erase any cursor mutations caused by
-    # the in-band command.
     warp_send_generator_output_osc_pre_hex_encoded () {
         local byte_count=$(LC_ALL="C"; printf "${#1}")
         printf "%b%i;%s%b" $OSC_START_GENERATOR_OUTPUT $byte_count $1 $OSC_END_GENERATOR_OUTPUT
-        warp_maybe_send_reset_grid_osc
     }
 
 
@@ -376,16 +328,8 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # history to do so. This means that $1 is not the correct command if the executed command is ignored
         # by history (e.g. via $HISTCONTROL or $HISTIGNORE); for example, all in-band generators are ignored
         # by history.
-        if [ "$WARP_IN_MSYS2" = true ]; then
-          warp_send_hook_via_kv_pairs_start "Preexec"
-          warp_send_hook_kv_pair "command" "$BASH_COMMAND"
-          warp_send_hook_kv_pair "session_id" "$WARP_SESSION_ID"
-          warp_send_hook_via_kv_pairs_end
-        else
-          local truncated_command=$(warp_escape_json "$BASH_COMMAND")
-          warp_send_json_message "{\"hook\": \"Preexec\", \"value\": {\"command\": \"$truncated_command\", \"session_id\": $WARP_SESSION_ID}}"
-        fi
-        warp_maybe_send_reset_grid_osc
+        local truncated_command=$(warp_escape_json "$BASH_COMMAND")
+        warp_send_json_message "{\"hook\": \"Preexec\", \"value\": {\"command\": \"$truncated_command\", \"session_id\": $WARP_SESSION_ID}}"
 
 
         # Since we did not early-return above, this hook is for a user-entered
@@ -541,17 +485,8 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # command that was run.
         local exit_code=$?
         local next_block_id="precmd-$WARP_SESSION_ID-$((block_id++))"
-        if [ "$WARP_IN_MSYS2" = true ]; then
-          warp_send_hook_via_kv_pairs_start "CommandFinished"
-          warp_send_hook_kv_pair "exit_code" "$exit_code"
-          warp_send_hook_kv_pair "next_block_id" "$next_block_id"
-          warp_send_hook_kv_pair "session_id" "$WARP_SESSION_ID"
-          warp_send_hook_via_kv_pairs_end
-        else
-          warp_send_json_message "{\"hook\": \"CommandFinished\", \"value\": {\"exit_code\": $exit_code, \"next_block_id\": \"$next_block_id\", \"session_id\": $WARP_SESSION_ID}}"
-        fi
+        warp_send_json_message "{\"hook\": \"CommandFinished\", \"value\": {\"exit_code\": $exit_code, \"next_block_id\": \"$next_block_id\", \"session_id\": $WARP_SESSION_ID}}"
 
-        warp_maybe_send_reset_grid_osc
 
         if [[ $PS1 == "" ]]; then
           # Use the saved PS1, if we've already unset it (due to active Warp prompt).
@@ -628,9 +563,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
             deref_ps1=$(echo -e "\n" | PS1="$WARP_PS1" BASH_SILENCE_DEPRECATION_WARNING=1 "$BASH" --norc -i 2>&1 | command -p head -2 | command -p tail -1)
           fi
 
-          if [ "$WARP_IN_MSYS2" = false ]; then
-            escaped_ps1=$(warp_escape_ps1 "$(echo "$deref_ps1")")
-          fi
+          escaped_ps1=$(warp_escape_ps1 "$(echo "$deref_ps1")")
         fi
 
         # Flush history
@@ -661,14 +594,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         bind -x '"\ew":"warp_change_prompt_modes_to_warp_prompt"'
 
         local escaped_pwd
-        if [ "$WARP_IN_MSYS2" = false ]; then
-          if [ -n "$WSL_DISTRO_NAME" ]; then
-            # In WSL, avoid symlinks b/c on Windows `std::fs` is unable to resolve symlink inside WSL containers.
-            escaped_pwd=$(warp_escape_json "$(pwd -P)")
-          else
-            escaped_pwd=$(warp_escape_json "$PWD")
-          fi
-        fi
+        escaped_pwd=$(warp_escape_json "$PWD")
 
         local escaped_virtual_env=""
         local escaped_conda_env=""
@@ -683,11 +609,11 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # prompts, and we don't want to invoke `git` before we've sourced the
         # user's rcfiles and have a fully-populated PATH.
         if [[ -n "$WARP_BOOTSTRAPPED" ]]; then
-          if [[ -n "$VIRTUAL_ENV" ]] && [ "$WARP_IN_MSYS2" = false ]; then
+          if [[ -n "$VIRTUAL_ENV" ]]; then
               escaped_virtual_env=$(warp_escape_json "$VIRTUAL_ENV")
           fi
 
-          if [[ -n "$CONDA_DEFAULT_ENV" ]] && [ "$WARP_IN_MSYS2" = false ]; then
+          if [[ -n "$CONDA_DEFAULT_ENV" ]]; then
               escaped_conda_env=$(warp_escape_json "$CONDA_DEFAULT_ENV")
           fi
 
@@ -695,7 +621,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
           # Warp sets WARP_PROMPT_NODE_VERSION_ENABLED to "0" when the chip is not in the
           # prompt (defaulting to enabled when unset), so we avoid spawning `node` on
           # every prompt when the chip is not shown.
-          if [[ "$WARP_PROMPT_NODE_VERSION_ENABLED" != "0" ]] && command -v node > /dev/null 2>&1 && [ "$WARP_IN_MSYS2" = false ]; then
+          if [[ "$WARP_PROMPT_NODE_VERSION_ENABLED" != "0" ]] && command -v node > /dev/null 2>&1; then
               # Check for package.json in current directory and parent directories
               local current_dir="$PWD"
               local found_package_json=false
@@ -756,10 +682,8 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
             # The git branch the user is on, or the git commit hash if they're not on a branch.
             git_head="${git_branch:-$(warp_git rev-parse --short HEAD 2> /dev/null)}"
           fi
-          if [ "$WARP_IN_MSYS2" = false ]; then
-            escaped_git_head=$(warp_escape_json "$git_head")
-            escaped_git_branch=$(warp_escape_json "$git_branch")
-          fi
+          escaped_git_head=$(warp_escape_json "$git_head")
+          escaped_git_branch=$(warp_escape_json "$git_branch")
         fi
 
         # At this point, escaped prompt looks something like
@@ -774,38 +698,21 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # We also pass the shell's notion of `honor_ps1` to ensure it's synced correctly on the Warp-side for prompt handling.
         # This is passed as a "real boolean" via the JSON payload (string interpolated into JSON string below).
         # We send the escaped PS1, if we are in active Warp prompt mode, for prompt preview rendering (note the shell's PS1 is unset in this case).
-        if [ "$WARP_IN_MSYS2" = true ]; then
-          warp_send_hook_via_kv_pairs_start "Precmd"
-          warp_send_hook_kv_pair "exit_code" "$exit_code"
-          warp_send_hook_kv_pair "next_block_id" "$next_block_id"
-          warp_send_hook_kv_pair "pwd" "$PWD"
-          warp_send_hook_kv_pair_escaped "ps1" "$deref_ps1"
-          warp_send_hook_kv_pair "ps1_is_encoded" "false"
-          warp_send_hook_kv_pair "honor_ps1" "$honor_ps1"
-          warp_send_hook_kv_pair "git_head" "$git_head"
-          warp_send_hook_kv_pair "git_branch" "$git_branch"
-          warp_send_hook_kv_pair "virtual_env" "$VIRTUAL_ENV"
-          warp_send_hook_kv_pair "conda_env" "$CONDA_DEFAULT_ENV"
-          warp_send_hook_kv_pair "node_version" "$node_version"
-          warp_send_hook_kv_pair "session_id" "$WARP_SESSION_ID"
-          warp_send_hook_via_kv_pairs_end
-        else
-          local escaped_json="{\"hook\": \"Precmd\", \"value\": {
-          \"exit_code\": $exit_code,
-          \"next_block_id\": \"$next_block_id\",
-          \"pwd\": \"$escaped_pwd\",
-          \"ps1\": \"$escaped_ps1\",
-          \"honor_ps1\": $honor_ps1,
-          \"ps1_is_encoded\": true,
-          \"git_head\": \"$escaped_git_head\",
-          \"git_branch\": \"$escaped_git_branch\",
-          \"virtual_env\": \"$escaped_virtual_env\",
-          \"conda_env\": \"$escaped_conda_env\",
-          \"node_version\": \"$escaped_node_version\",
-          \"session_id\": $WARP_SESSION_ID
-          }}"
-          warp_send_json_message "$escaped_json"
-        fi
+        local escaped_json="{\"hook\": \"Precmd\", \"value\": {
+        \"exit_code\": $exit_code,
+        \"next_block_id\": \"$next_block_id\",
+        \"pwd\": \"$escaped_pwd\",
+        \"ps1\": \"$escaped_ps1\",
+        \"honor_ps1\": $honor_ps1,
+        \"ps1_is_encoded\": true,
+        \"git_head\": \"$escaped_git_head\",
+        \"git_branch\": \"$escaped_git_branch\",
+        \"virtual_env\": \"$escaped_virtual_env\",
+        \"conda_env\": \"$escaped_conda_env\",
+        \"node_version\": \"$escaped_node_version\",
+        \"session_id\": $WARP_SESSION_ID
+        }}"
+        warp_send_json_message "$escaped_json"
     }
 
     warp_clear_on_next_block () {
@@ -925,15 +832,8 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
     # Report the current input buffer contents to Warp. This only works correctly
     # if `warp_input_reporting_supported` returns "1".
     warp_report_input () {
-        if [ "$WARP_IN_MSYS2" = true ]; then
-            warp_send_hook_via_kv_pairs_start "InputBuffer"
-            warp_send_hook_kv_pair "buffer" "$READLINE_LINE"
-            warp_send_hook_kv_pair "session_id" "$WARP_SESSION_ID"
-            warp_send_hook_via_kv_pairs_end
-        else
-            local escaped_input="$(warp_escape_json "$READLINE_LINE")"
-            warp_send_json_message "{ \"hook\": \"InputBuffer\", \"value\": { \"buffer\": \"$escaped_input\", \"session_id\": $WARP_SESSION_ID } }"
-        fi
+        local escaped_input="$(warp_escape_json "$READLINE_LINE")"
+        warp_send_json_message "{ \"hook\": \"InputBuffer\", \"value\": { \"buffer\": \"$escaped_input\", \"session_id\": $WARP_SESSION_ID } }"
         # This prevents bash from re-printing typeahead after we've removed it.
         READLINE_LINE=""
     }
@@ -981,11 +881,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
       # https://gitlab.freedesktop.org/terminal-wg/specifications/-/merge_requests/6/diffs for details.
       local prompt_prefix=$'\e]133;A\a'
       local prompt_suffix=$'\e]133;B\a'
-      if [[ "$WARP_HONOR_PS1" != "1" ]] && [ "$WARP_USING_WINDOWS_CON_PTY" = true ]; then
-        local suffix="$prompt_suffix$RESET_GRID_OSC"
-      else
-        local suffix="$prompt_suffix"
-      fi
+      local suffix="$prompt_suffix"
 
       # The "\[" and "\]" indicate to bash that the sequence between the markers are 
       # "non-printable", which effectively means they should not change the position
@@ -1088,13 +984,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
     }
 
     function clear() {
-        if [ "$WARP_IN_MSYS2" = true ]; then
-            warp_send_hook_via_kv_pairs_start "Clear"
-            warp_send_hook_kv_pair "session_id" "$WARP_SESSION_ID"
-            warp_send_hook_via_kv_pairs_end
-        else
-            warp_send_json_message "{\"hook\": \"Clear\", \"value\": {\"session_id\": $WARP_SESSION_ID}}"
-        fi
+        warp_send_json_message "{\"hook\": \"Clear\", \"value\": {\"session_id\": $WARP_SESSION_ID}}"
     }
 
     # The SSH logic only applies to local sessions, because we don't yet have support for bootstrapping
@@ -1163,7 +1053,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
             # Hex-encode the ZSH environment script we use to bootstrap remote zsh b/c it contains control characters
             # We decode on the SSH server using xxd if its available, otherwise fall back to a for-loop over each byte
             # and use printf to convert back to plaintext
-            local zsh_env_script=$(printf '%s' 'unsetopt ZLE RCS GLOBAL_RCS; WARP_SESSION_ID='$remote_session_id'; WARP_USING_WINDOWS_CON_PTY=@@USING_CON_PTY_BOOLEAN@@; WARP_HONOR_PS1='$WARP_HONOR_PS1'; _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n); _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER); _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d '"'"' \n'"'"'); printf '"'"'\e]9278;d;%s\x07'"'"' $_msg; unset _hostname _user _msg' | command -p od -An -v -tx1 | command -p tr -d ' \n')
+            local zsh_env_script=$(printf '%s' 'unsetopt ZLE RCS GLOBAL_RCS; WARP_SESSION_ID='$remote_session_id'; WARP_HONOR_PS1='$WARP_HONOR_PS1'; _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n); _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER); _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d '"'"' \n'"'"'); printf '"'"'\e]9278;d;%s\x07'"'"' $_msg; unset _hostname _user _msg' | command -p od -An -v -tx1 | command -p tr -d ' \n')
 
             # Optionally attach to an existing ControlMaster the user already
             # runs for this destination instead of creating our own. Resolve
@@ -1254,8 +1144,6 @@ case "'${SHELL##*/}'" in
       _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n)
       _user=$(command -v whoami >/dev/null 2>&1 && command whoami 2>/dev/null || echo $USER)
       _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"bash\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d " \n")'"
-      WARP_USING_WINDOWS_CON_PTY=@@USING_CON_PTY_BOOLEAN@@
-      if [[ "'$OS'" == Windows_NT ]]; then WARP_IN_MSYS2=true; else WARP_IN_MSYS2=false; fi
       printf '\''"'\e]9278;d;%s\x07'"'\'' \""'$_msg'"\"')
       unset _hostname _user _msg
       ;;
@@ -1496,35 +1384,33 @@ esac
 
     # Detect whether ctrl-r has been rebound to fzf's or atuin's bash history widget.
     _WARP_EXTERNAL_CTRL_R_WIDGET=""
-    if [ "$WARP_IN_MSYS2" = false ]; then
-      warp_ctrl_r_binding="$(bind -X 2>/dev/null | command -p sed -n 's/^"\\C-r"[ :] *"\(.*\)"$/\1/p')"
-      if [ -z "$warp_ctrl_r_binding" ] && declare -F __fzf_history__ >/dev/null; then
-        warp_ctrl_r_macro="$(bind -s 2>/dev/null | command -p sed -n 's/^"\\C-r"[ :] *"\(.*\)"$/\1/p')"
-        case "$warp_ctrl_r_macro" in
-          *'`__fzf_history__`'*)
-            warp_ctrl_r_binding="__fzf_history__"
-            ;;
-        esac
-      fi
-      case "$warp_ctrl_r_binding" in
-        __fzf_history__)
-          _WARP_EXTERNAL_CTRL_R_WIDGET="$warp_ctrl_r_binding"
-          shell_plugins+=(fzf)
-          ;;
-        __atuin_history)
-          _WARP_EXTERNAL_CTRL_R_WIDGET="$warp_ctrl_r_binding"
-          shell_plugins+=(atuin)
+    warp_ctrl_r_binding="$(bind -X 2>/dev/null | command -p sed -n 's/^"\\C-r"[ :] *"\(.*\)"$/\1/p')"
+    if [ -z "$warp_ctrl_r_binding" ] && declare -F __fzf_history__ >/dev/null; then
+      warp_ctrl_r_macro="$(bind -s 2>/dev/null | command -p sed -n 's/^"\\C-r"[ :] *"\(.*\)"$/\1/p')"
+      case "$warp_ctrl_r_macro" in
+        *'`__fzf_history__`'*)
+          warp_ctrl_r_binding="__fzf_history__"
           ;;
       esac
-      # atuin >= 18.10 binds ctrl-r through the indirect dispatcher above rather than a plain
-      # `bind -x`. Instead use atuin's own init-time flag ($__atuin_bind_ctrl_r) plus
-        # __atuin_history being defined.
-      # shellcheck disable=SC2154
-      if [ -z "$_WARP_EXTERNAL_CTRL_R_WIDGET" ] && [ "$__atuin_bind_ctrl_r" = true ] &&
-        declare -F __atuin_history >/dev/null; then
-        _WARP_EXTERNAL_CTRL_R_WIDGET="__atuin_history"
+    fi
+    case "$warp_ctrl_r_binding" in
+      __fzf_history__)
+        _WARP_EXTERNAL_CTRL_R_WIDGET="$warp_ctrl_r_binding"
+        shell_plugins+=(fzf)
+        ;;
+      __atuin_history)
+        _WARP_EXTERNAL_CTRL_R_WIDGET="$warp_ctrl_r_binding"
         shell_plugins+=(atuin)
-      fi
+        ;;
+    esac
+    # atuin >= 18.10 binds ctrl-r through the indirect dispatcher above rather than a plain
+    # `bind -x`. Instead use atuin's own init-time flag ($__atuin_bind_ctrl_r) plus
+      # __atuin_history being defined.
+    # shellcheck disable=SC2154
+    if [ -z "$_WARP_EXTERNAL_CTRL_R_WIDGET" ] && [ "$__atuin_bind_ctrl_r" = true ] &&
+      declare -F __atuin_history >/dev/null; then
+      _WARP_EXTERNAL_CTRL_R_WIDGET="__atuin_history"
+      shell_plugins+=(atuin)
     fi
 
     function warp_bootstrapped () {
@@ -1533,16 +1419,14 @@ esac
         local function_names="`compgen -A function`"
         local builtins="`compgen -b`"
         local keywords="`compgen -k`"
-        if [ "$WARP_IN_MSYS2" = false ]; then
-          # Note that for now we don't support dynamically changing HISTFILE within a session.
-          local escaped_histfile="$(warp_escape_json "$HISTFILE")"
-          local escaped_abbrs=""
-          local escaped_aliases="$(warp_escape_json "$aliases")"
-          local escaped_env_var_names="$(warp_escape_json "$env_var_names")"
-          local escaped_function_names="$(warp_escape_json "$function_names")"
-          local escaped_builtins="$(warp_escape_json "$builtins")"
-          local escaped_keywords="$(warp_escape_json "$keywords")"
-        fi
+        # Note that for now we don't support dynamically changing HISTFILE within a session.
+        local escaped_histfile="$(warp_escape_json "$HISTFILE")"
+        local escaped_abbrs=""
+        local escaped_aliases="$(warp_escape_json "$aliases")"
+        local escaped_env_var_names="$(warp_escape_json "$env_var_names")"
+        local escaped_function_names="$(warp_escape_json "$function_names")"
+        local escaped_builtins="$(warp_escape_json "$builtins")"
+        local escaped_keywords="$(warp_escape_json "$keywords")"
 
         local shell_options="`shopt -s | command -p cut -f 1`"
         # Provide terminal logic access to the value of HISTCONTROL via shell
@@ -1560,48 +1444,17 @@ esac
 
         local shell_plugins_list="$(printf '%s\n' "${shell_plugins[@]}")"
 
-        if [ "$WARP_IN_MSYS2" = false ]; then
-          local escaped_shell_plugins=$(warp_escape_json "$shell_plugins_list")
-          local escaped_path="$(warp_escape_json "$PATH")"
-          local escaped_shell_options=$(warp_escape_json "$shell_options")
-        fi
+        local escaped_shell_plugins=$(warp_escape_json "$shell_plugins_list")
+        local escaped_path="$(warp_escape_json "$PATH")"
+        local escaped_shell_options=$(warp_escape_json "$shell_options")
 
         local _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER)
         local _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n)
-        if [ "$WARP_IN_MSYS2" = true ]; then
-          warp_send_hook_via_kv_pairs_start "Bootstrapped"
-          warp_send_hook_kv_pair "histfile" "$HISTFILE"
-          warp_send_hook_kv_pair "session_id" "$WARP_SESSION_ID"
-          warp_send_hook_kv_pair "shell" "bash"
-          warp_send_hook_kv_pair "home_dir" "$HOME"
-          warp_send_hook_kv_pair "user" "$_user"
-          warp_send_hook_kv_pair "hostname" "$_hostname"
-          warp_send_hook_kv_pair "path" "$PATH"
-          warp_send_hook_kv_pair "cdpath" "$CDPATH"
-          warp_send_hook_kv_pair_escaped "env_var_names" "$env_var_names"
-          warp_send_hook_kv_pair "abbreviations" ""
-          warp_send_hook_kv_pair_escaped "aliases" "$aliases"
-          warp_send_hook_kv_pair_escaped "function_names" "$function_names"
-          warp_send_hook_kv_pair_escaped "builtins" "$builtins"
-          warp_send_hook_kv_pair_escaped "keywords" "$keywords"
-          warp_send_hook_kv_pair_escaped "shell_plugins" "$shell_plugins_list"
-          warp_send_hook_kv_pair "shell_version" "$BASH_VERSION"
-          warp_send_hook_kv_pair "shell_options" "$shell_options"
-          warp_send_hook_kv_pair "rcfiles_start_time" "$rcfiles_start_time"
-          warp_send_hook_kv_pair "rcfiles_end_time" "$rcfiles_end_time"
-          warp_send_hook_kv_pair "vi_mode_enabled" "$vi_mode_enabled"
-          warp_send_hook_kv_pair "os_category" "$os_category"
-          warp_send_hook_kv_pair "linux_distribution" "$linux_distribution"
-          warp_send_hook_kv_pair "wsl_name" "$WSL_DISTRO_NAME"
-          warp_send_hook_kv_pair "shell_path" "$BASH"
-          warp_send_hook_via_kv_pairs_end
-        else
-          local escaped_editor="$(warp_escape_json "$EDITOR")"
-          local escaped_shell_path="$(warp_escape_json "$BASH")"
-          local escaped_cdpath="$(warp_escape_json "$CDPATH")"
-          local escaped_json="{\"hook\": \"Bootstrapped\", \"value\": {\"histfile\": \"$escaped_histfile\", \"session_id\": $WARP_SESSION_ID, \"shell\": \"bash\",  \"home_dir\": \"$HOME\", \"user\":\"$_user\", \"host\":\"$_hostname\", \"path\": \"$escaped_path\", \"cdpath\": \"$escaped_cdpath\", \"editor\": \"$escaped_editor\", \"env_var_names\": \"$escaped_env_var_names\", \"abbreviations\": \"$escaped_abbrs\", \"aliases\": \"$escaped_aliases\", \"function_names\": \"$escaped_function_names\", \"builtins\": \"$escaped_builtins\", \"keywords\": \"$escaped_keywords\", \"shell_version\": \"$BASH_VERSION\", \"shell_options\": \"$escaped_shell_options\", \"rcfiles_start_time\": \"$rcfiles_start_time\", \"rcfiles_end_time\": \"$rcfiles_end_time\", \"shell_plugins\": \"$escaped_shell_plugins\", \"vi_mode_enabled\": \"$vi_mode_enabled\", \"os_category\": \"$os_category\", \"linux_distribution\": \"$linux_distribution\", \"wsl_name\": \"$WSL_DISTRO_NAME\", \"shell_path\": \"$escaped_shell_path\"}}"
-          warp_send_json_message "$escaped_json"
-        fi
+        local escaped_editor="$(warp_escape_json "$EDITOR")"
+        local escaped_shell_path="$(warp_escape_json "$BASH")"
+        local escaped_cdpath="$(warp_escape_json "$CDPATH")"
+        local escaped_json="{\"hook\": \"Bootstrapped\", \"value\": {\"histfile\": \"$escaped_histfile\", \"session_id\": $WARP_SESSION_ID, \"shell\": \"bash\",  \"home_dir\": \"$HOME\", \"user\":\"$_user\", \"host\":\"$_hostname\", \"path\": \"$escaped_path\", \"cdpath\": \"$escaped_cdpath\", \"editor\": \"$escaped_editor\", \"env_var_names\": \"$escaped_env_var_names\", \"abbreviations\": \"$escaped_abbrs\", \"aliases\": \"$escaped_aliases\", \"function_names\": \"$escaped_function_names\", \"builtins\": \"$escaped_builtins\", \"keywords\": \"$escaped_keywords\", \"shell_version\": \"$BASH_VERSION\", \"shell_options\": \"$escaped_shell_options\", \"rcfiles_start_time\": \"$rcfiles_start_time\", \"rcfiles_end_time\": \"$rcfiles_end_time\", \"shell_plugins\": \"$escaped_shell_plugins\", \"vi_mode_enabled\": \"$vi_mode_enabled\", \"os_category\": \"$os_category\", \"linux_distribution\": \"$linux_distribution\", \"shell_path\": \"$escaped_shell_path\"}}"
+        warp_send_json_message "$escaped_json"
     }
     warp_bootstrapped
 fi

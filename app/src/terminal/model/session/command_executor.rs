@@ -5,16 +5,12 @@ mod git_version_gate_tests;
 mod in_band_command_executor;
 #[cfg(feature = "local_tty")]
 mod local_command_executor;
-#[cfg(feature = "local_tty")]
-mod msys2_command_executor;
 mod network_sandbox;
 mod offline_environment;
 #[cfg(all(test, unix))]
 mod restored_generators_tests;
 #[cfg(all(test, unix))]
 mod test_support;
-#[cfg(feature = "local_tty")]
-mod wsl_command_executor;
 use std::collections::HashMap;
 mod noop_command_executor;
 #[cfg(feature = "local_tty")]
@@ -49,27 +45,6 @@ use crate::terminal::event::ExecutedExecutorCommandEvent;
 use crate::terminal::model::session::Sessions;
 use crate::terminal::shell::Shell;
 
-#[derive(Copy, Clone, Debug)]
-pub struct ExecuteCommandOptions {
-    /// Whether the command must be run in the same shell as the currently running [`Session`].
-    ///
-    /// If false, it's an implementation detail which shell the command is run within.
-    /// i.e. For unix shells, the command may be run in an `sh` shell instead of `bash` or `zsh`.
-    /// On Windows, commands may be run through `cmd.exe`.
-    ///
-    /// ## Platform Support
-    /// This field is currently only respected on Windows.
-    pub run_command_in_same_shell_as_session: bool,
-}
-
-impl Default for ExecuteCommandOptions {
-    fn default() -> Self {
-        Self {
-            run_command_in_same_shell_as_session: true,
-        }
-    }
-}
-
 /// Trait to be implemented by structs that execute command in context that emulates or actually is
 /// identical to the active terminal session's context. `CommandExecutor` is commonly used to
 /// execute generator commands to power completions, syntax highlighting, and autosuggestions.
@@ -83,7 +58,6 @@ pub trait CommandExecutor: Send + Sync + Debug {
         shell: &Shell,
         current_directory_path: Option<&str>,
         environment_variables: Option<HashMap<String, String>>,
-        execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput>;
 
     /// Cancels in-progress commands.
@@ -100,18 +74,10 @@ pub trait CommandExecutor: Send + Sync + Debug {
     fn supports_parallel_command_execution(&self) -> bool;
 
     /// Whether every command this executor runs is kept from reaching an IP network by the
-    /// operating system (macOS sandbox profile, Linux seccomp filter), so that a command that
+    /// operating system (macOS sandbox profile), so that a command that
     /// starts a networking tool still cannot connect. False unless an executor says otherwise:
-    /// commands that run in the user's own shell, on another host, or on a platform without an
-    /// unprivileged sandbox are not isolated.
+    /// commands that run in the user's own shell or on another host are not isolated.
     fn network_isolated(&self) -> bool {
-        false
-    }
-
-    /// Whether every command this executor runs gets the offline environment table of
-    /// [`offline_environment`]. False unless an executor says otherwise: commands that run in the
-    /// user's own shell (the in-band executor) or on another host do not.
-    fn offline_environment_applied(&self) -> bool {
         false
     }
 }
@@ -121,12 +87,11 @@ pub fn new_command_executor_for_session(
     session_info: &SessionInfo,
     executor_command_tx: &Sender<ExecutorCommandEvent>,
     in_band_command_output_rx: Receiver<ExecutedExecutorCommandEvent>,
-    parent_session_info: Option<&SessionInfo>,
     ctx: &mut ModelContext<Sessions>,
 ) -> Arc<dyn CommandExecutor> {
     cfg_if::cfg_if! {
         if #[cfg(feature = "local_tty")] {
-            new_command_executor_for_local_tty_session(session_info, executor_command_tx, in_band_command_output_rx, parent_session_info, ctx)
+            new_command_executor_for_local_tty_session(session_info, executor_command_tx, in_band_command_output_rx, ctx)
         } else {
             Arc::new(NoOpCommandExecutor::default())
         }
@@ -138,19 +103,14 @@ fn new_command_executor_for_local_tty_session(
     session_info: &SessionInfo,
     executor_command_tx: &Sender<ExecutorCommandEvent>,
     in_band_command_output_rx: Receiver<ExecutedExecutorCommandEvent>,
-    parent_session_info: Option<&SessionInfo>,
     ctx: &mut ModelContext<Sessions>,
 ) -> Arc<dyn CommandExecutor> {
-    use msys2_command_executor::MSYS2CommandExecutor;
     use settings::Setting as _;
     use warpui::SingletonEntity as _;
-    use wsl_command_executor::WslCommandExecutor;
 
     use super::IsSSHWrapperSession;
     use crate::settings::DebugSettings;
-    use crate::terminal::available_shells::AvailableShells;
     use crate::terminal::model::session::{BootstrapSessionType, ShellLaunchData};
-    use crate::terminal::shell::ShellType;
 
     let debug_settings = DebugSettings::as_ref(ctx);
     let are_in_band_generators_for_all_sessions_enabled_debug_setting = debug_settings
@@ -180,38 +140,7 @@ fn new_command_executor_for_local_tty_session(
                     Some(executable_path.to_owned()),
                     shell_type,
                 )),
-                Some(ShellLaunchData::MSYS2 {
-                    executable_path, ..
-                }) => {
-                    let windows_native_shell_path =
-                        AvailableShells::handle(ctx).read(ctx, |shells, _ctx| {
-                            shells
-                                .find_known_shell_by_type(ShellType::PowerShell)
-                                .and_then(|powershell| powershell.get_valid_shell_path_and_type())
-                                .and_then(|shell_launch_data| {
-                                    if let ShellLaunchData::Executable { executable_path, .. } = shell_launch_data {
-                                        Some(executable_path)
-                                    } else {
-                                        log::warn!("Found available shell for windows-native shell but could not get executable path");
-                                        None
-                                    }
-                                })
-                        });
-                    Arc::new(MSYS2CommandExecutor::new(
-                        windows_native_shell_path,
-                        executable_path.to_owned(),
-                    ))
-                }
-                Some(ShellLaunchData::WSL { distro }) => {
-                    Arc::new(WslCommandExecutor::new(distro.to_owned(), shell_type))
-                }
-                None => {
-                    if let Some(wsl_name) = session_info.wsl_name() {
-                        Arc::new(WslCommandExecutor::new(wsl_name.to_owned(), shell_type))
-                    } else {
-                        Arc::new(LocalCommandExecutor::new(None, shell_type))
-                    }
-                }
+                None => Arc::new(LocalCommandExecutor::new(None, shell_type)),
             }
         }
         BootstrapSessionType::WarpifiedRemote
@@ -220,11 +149,8 @@ fn new_command_executor_for_local_tty_session(
             if let IsSSHWrapperSession::Yes { socket_path, .. } =
                 &session_info.is_ssh_wrapper_session
             {
-                let wsl_distro = parent_session_info
-                    .and_then(|session| session.wsl_name())
-                    .map(ToOwned::to_owned);
                 log::info!("creating a ControlMaster-based ssh executor!");
-                Arc::new(RemoteCommandExecutor::new(socket_path.clone(), wsl_distro))
+                Arc::new(RemoteCommandExecutor::new(socket_path.clone()))
             } else {
                 unreachable!(
                     "Unreachable because of match! above. Unfortunately if let guards in rust are still experimental."
@@ -292,7 +218,6 @@ pub mod testing {
             shell: &Shell,
             current_directory_path: Option<&str>,
             environment_variables: Option<HashMap<String, String>>,
-            _execute_command_options: ExecuteCommandOptions,
         ) -> Result<CommandOutput> {
             let mut command_process = Command::new(match shell.shell_type() {
                 ShellType::PowerShell => "pwsh",

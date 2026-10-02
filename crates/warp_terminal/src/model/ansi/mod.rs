@@ -9,7 +9,6 @@
 //! the terminal, executing actions as a result of CSI or OSC sequences,
 //! executing one of Warp's DCS hooks, etc. [`Handler`] should be implemented by
 //! an app-level model that updates the terminal's state accordingly.
-mod ansi_c_decoder;
 pub mod control_sequence_parameters;
 mod dcs_hooks;
 mod handler;
@@ -18,14 +17,12 @@ use std::fmt::Write;
 use std::time::Duration;
 use std::{io, str};
 
-use ansi_c_decoder::*;
 use byte_unit::{Byte, Unit as ByteUnit};
 pub use control_sequence_parameters::*;
 pub use dcs_hooks::*;
 pub use handler::*;
 use hex;
 use instant::Instant;
-use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::debug;
 use vte::{Params, Parser as VteParser, Perform as VtePerform};
@@ -50,9 +47,6 @@ const WARP_IN_BAND_GENERATOR_END_BYTE: &[u8] = b"B";
 
 /// Marks an OSC that is used for messages containing shell hooks.
 const WARP_OSC_MARKER: &[u8] = b"9278";
-/// Marks an OSC that is used for resetting ConPTY's grid. This is useful for performing a series
-/// of checks ensuring that Warp's grids and ConPTY's grid are in sync.
-const WARP_RESET_GRID_OSC_MARKER: &[u8] = b"9279";
 
 /// The amount of time a single synchronized update can take from the time the corresponding
 /// 'Set Mode' escape sequence is processed before a redraw is forced.
@@ -75,10 +69,6 @@ const WARP_COMPLETIONS_END_BYTE: &[u8] = b"B";
 const WARP_COMPLETIONS_MATCH_RESULT_BYTE: &[u8] = b"C";
 const WARP_COMPLETIONS_REPLACEMENT_SPAN_BYTE: &[u8] = b"S";
 const WARP_COMPLETIONS_MATCH_UPDATE_METADATA: &[u8] = b"D?";
-
-const WARP_KV_START_BYTE: &[u8] = b"A";
-const WARP_KV_ENTRY_BYTE: &[u8] = b"B";
-const WARP_KV_END_BYTE: &[u8] = b"C";
 
 /// Parse colors in XParseColor format.
 #[allow(dead_code)]
@@ -158,9 +148,6 @@ fn parse_osc_7_cwd(payload: &[u8]) -> Option<String> {
     }
 
     let decoded = percent_decode_utf8(encoded_path)?;
-
-    #[cfg(windows)]
-    let decoded = warp_util::path::file_uri_drive_path_to_windows(&decoded).into_owned();
 
     Some(decoded)
 }
@@ -674,56 +661,6 @@ impl<'a, H: Handler + 'a, W: io::Write> Performer<'a, H, W> {
             ),
         }
     }
-
-    fn handle_kv_marker(&mut self, params: &[&[u8]]) {
-        match params.get(2) {
-            Some(&WARP_KV_START_BYTE) => {
-                let Some(hook) = params.get(3).map(|data| String::from_utf8_lossy(data)) else {
-                    log::warn!("Start pending hook OSC did not contain shell hook");
-                    return;
-                };
-                self.handler.start_receiving_hook(hook.into());
-            }
-            Some(&WARP_KV_END_BYTE) => {
-                let Some(pending_shell_hook) = self.handler.finish_receiving_hook() else {
-                    return;
-                };
-                let hook = match pending_shell_hook.finish() {
-                    Ok(hook) => hook,
-                    Err(error) => {
-                        log::warn!("Rejected malformed key-value hook: {error}");
-                        return;
-                    }
-                };
-                safe_debug!(
-                    safe: ("Decoded payload"),
-                    full: ("Decoded payload string: {:?}", serde_json::to_string(&hook))
-                );
-                self.handle_decoded_hook(Ok(hook));
-            }
-            Some(&WARP_KV_ENTRY_BYTE) => {
-                let Some(key) = params.get(3) else {
-                    log::warn!("Pending hook update OSC did not contain key");
-                    return;
-                };
-                let key = String::from_utf8_lossy(key);
-                // We reconstruct the value here because if it contains a semicolon, it will get
-                // separated by the parser. We are guaranteed that the value is intended to be the
-                // last parameter.
-                let value = params[4..]
-                    .iter()
-                    .map(|v| String::from_utf8_lossy(v))
-                    .join(";");
-                self.handler.update_hook(key.to_string(), value);
-            }
-            invalid_marker => {
-                safe_warn!(
-                    safe: ("Invalid marker received for pending shell hook OSC"),
-                    full: ("Invalid marker received for pending shell hook OSC: marker={:?}", invalid_marker)
-                );
-            }
-        }
-    }
 }
 
 impl<'a, H, W> VtePerform for Performer<'a, H, W>
@@ -1153,7 +1090,6 @@ where
                         let hook = serde_json::from_str::<DProtoHook>(&data_str);
                         self.handle_unencoded_hook(hook)
                     }
-                    UNENCODED_KV_MARKER => self.handle_kv_marker(params),
                     _ => {
                         safe_warn!(
                             safe: ("Invalid OSC JSON marker found"),
@@ -1161,11 +1097,6 @@ where
                         );
                     }
                 }
-            }
-
-            WARP_RESET_GRID_OSC_MARKER => {
-                log::debug!("Received Warp OSC string for reset grid");
-                self.handler.on_reset_grid();
             }
 
             // Received a Warp OSC used for completions.
@@ -1507,10 +1438,7 @@ where
             // - CSI > flags u         (push current flags and set new flags)
             // - CSI < count u         (pop keyboard modes)
             // - CSI ? u               (query current flags)
-            // Disabled on Windows because ConPTY cannot forward kitty-encoded key
-            // events or terminal query responses, causing applications (e.g. running
-            // in WSL) to hang.
-            ('u', Some(b'=')) if cfg!(not(windows)) => {
+            ('u', Some(b'=')) => {
                 let flags = KeyboardModes::from_bits_truncate(next_param_or(0) as u32);
                 let apply_mode = next_param_or(1);
                 let Some(apply) = KeyboardModesApplyBehavior::from_kitty_apply_mode(apply_mode)
@@ -1519,15 +1447,15 @@ where
                 };
                 handler.set_keyboard_enhancement_flags(flags, apply);
             }
-            ('u', Some(b'>')) if cfg!(not(windows)) => {
+            ('u', Some(b'>')) => {
                 let flags = KeyboardModes::from_bits_truncate(next_param_or(0) as u32);
                 handler.push_keyboard_enhancement_flags(flags);
             }
-            ('u', Some(b'<')) if cfg!(not(windows)) => {
+            ('u', Some(b'<')) => {
                 let count = next_param_or(1);
                 handler.pop_keyboard_enhancement_flags(count);
             }
-            ('u', Some(b'?')) if cfg!(not(windows)) => {
+            ('u', Some(b'?')) => {
                 handler.query_keyboard_enhancement_flags(writer);
             }
             ('X', None) => handler.erase_chars(next_param_or(1) as usize),

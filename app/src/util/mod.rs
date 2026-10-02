@@ -1,7 +1,6 @@
 pub mod bindings;
 pub mod clipboard;
 pub mod color;
-pub mod environment_variables;
 pub mod extensions;
 #[cfg(feature = "local_fs")]
 pub mod file;
@@ -18,8 +17,6 @@ pub mod tooltips;
 pub(crate) mod traffic_lights;
 pub(crate) mod truncation;
 pub mod vm_detection;
-#[cfg(windows)]
-pub mod windows;
 
 use std::cmp::Ordering;
 use std::ops::Range;

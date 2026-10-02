@@ -2072,8 +2072,6 @@ impl BlockList {
                 .flatten(),
             None,
         );
-
-        self.active_block_mut().disable_reset_grid_checks();
     }
 
     /// Splice a background block into the blocklist. This is called once the
@@ -2241,7 +2239,6 @@ impl BlockList {
             self.active_block_mut().start_background(None);
         } else {
             self.active_block_mut().start();
-            self.active_block_mut().disable_reset_grid_checks();
         }
 
         // Set the start_ts to the saved start_ts _after_ `start`ing the block (which would have set its own start_ts).
@@ -3087,12 +3084,6 @@ impl ansi::Handler for BlockList {
         // at the end of a chunk instead of incrementally to improve performance.
         self.update_active_block_height();
         self.update_background_block_height();
-    }
-
-    fn on_reset_grid(&mut self) {
-        if self.is_bootstrapping_precmd_done() {
-            delegate_to_block!(self.on_reset_grid());
-        }
     }
 
     fn handle_completed_iterm_image(&mut self, image: ITermImage) {

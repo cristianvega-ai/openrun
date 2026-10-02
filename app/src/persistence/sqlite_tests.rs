@@ -892,6 +892,46 @@ fn test_sqlite_restore_opens_default_settings_page_for_stored_teams_section() {
 }
 
 #[test]
+fn test_sqlite_restore_drops_launch_data_of_unsupported_shells_and_keeps_the_pane() {
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let database_path = tempdir.path().join("warp.sqlite");
+    let mut conn = setup_database(&database_path).expect("database should initialize");
+
+    let app_state = AppState {
+        windows: vec![test_terminal_window_snapshot(false)],
+        active_window_index: Some(0),
+        block_lists: Default::default(),
+    };
+    save_app_state(&mut conn, &app_state).expect("app state should save");
+
+    for stale in [
+        r#"{"WSL":{"distro":"Ubuntu"}}"#,
+        r#"{"MSYS2":{"executable_path":"C:\\Program Files\\Git\\usr\\bin\\bash.exe","shell_type":"Bash"}}"#,
+    ] {
+        conn.batch_execute(&format!(
+            "UPDATE terminal_panes SET shell_launch_data = '{}'",
+            stale.replace('\'', "''")
+        ))
+        .expect("stored launch data should be rewritten");
+
+        let restored = read_sqlite_data(&mut conn, PersistedDataScope::Full)
+            .expect("stale launch data must not fail the read")
+            .app_state
+            .expect("app state should be present for the full scope");
+
+        let PaneNodeSnapshot::Leaf(LeafSnapshot {
+            contents: LeafContents::Terminal(terminal),
+            ..
+        }) = &restored.windows[0].tabs[0].root
+        else {
+            panic!("expected a terminal leaf");
+        };
+        assert_eq!(terminal.shell_launch_data, None, "{stale}");
+        assert_eq!(terminal.cwd.as_deref(), Some("/tmp"), "{stale}");
+    }
+}
+
+#[test]
 fn test_sqlite_restore_skips_removed_pane_kinds_without_losing_the_tab() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let database_path = tempdir.path().join("warp.sqlite");

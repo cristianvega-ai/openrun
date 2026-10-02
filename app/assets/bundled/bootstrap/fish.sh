@@ -26,14 +26,6 @@ set -g DCS_JSON_MARKER 'd'
 
 set -g DCS_END \x1b\x5c
 
-set -g OSC_START (printf '\e]9278;')
-
-set -g OSC_END (printf '\a')
-
-set -g OSC_PARAM_SEPARATOR ';'
-
-set -g RESET_GRID_OSC (printf '\e]9279\a')
-
 if test -n "$WARP_INITIAL_WORKING_DIR"
     cd "$WARP_INITIAL_WORKING_DIR" >/dev/null 2>&1
     set -e WARP_INITIAL_WORKING_DIR
@@ -48,18 +40,7 @@ end
 function warp_send_json_message
     # Sends a message to the controlling terminal as a DSC control sequence.
     set -l escaped_json (warp_hex_encode_string "$argv")
-    if [ "$WARP_USING_WINDOWS_CON_PTY" = true ]
-        echo -n "$OSC_START$DCS_JSON_MARKER$OSC_PARAM_SEPARATOR$escaped_json$OSC_END"
-    else
-        echo -n "$DCS_START$DCS_JSON_MARKER$escaped_json$DCS_END"
-    end
-end
-
-function warp_maybe_send_reset_grid_osc
-    # Note that $WARP_USING_WINDOWS_CON_PTY is set in the init shell script.
-    if [ "$WARP_USING_WINDOWS_CON_PTY" = true ]
-        printf $RESET_GRID_OSC
-    end
+    echo -n "$DCS_START$DCS_JSON_MARKER$escaped_json$DCS_END"
 end
 
 
@@ -121,13 +102,6 @@ function  _warp_run_generator_command_internal
     # N.B. Fish shell variables cannot contain null characters, so the command output must be
     # immediately hex encoded before being stored in a variable.
     fish -c "
-        set -l warp_using_windows_con_pty $WARP_USING_WINDOWS_CON_PTY;
-        set -l reset_grid_osc $RESET_GRID_OSC;
-        function warp_maybe_send_reset_grid_osc
-            if [ \"\$warp_using_windows_con_pty\" = true ]
-                printf \$reset_grid_osc
-            end
-        end
         set -l OSC_START_GENERATOR_OUTPUT \$(printf '\e]9277;A\a')
         set -l OSC_END_GENERATOR_OUTPUT \$(printf '\e]9277;B\a')
         set -l command_id $command_id;
@@ -140,8 +114,7 @@ function  _warp_run_generator_command_internal
         end | od -An -v -tx1 | command tr -d ' \n' | read -lz hex_encoded_message
         set -l LC_ALL \"C\"
         set -l byte_count (string length \"\$hex_encoded_message\")
-        echo -n \"\$OSC_START_GENERATOR_OUTPUT\$byte_count;\$hex_encoded_message\$OSC_END_GENERATOR_OUTPUT\"
-        warp_maybe_send_reset_grid_osc" 2> /dev/null &
+        echo -n \"\$OSC_START_GENERATOR_OUTPUT\$byte_count;\$hex_encoded_message\$OSC_END_GENERATOR_OUTPUT\"" 2> /dev/null &
         
     set -l command_pid $last_pid
     set -a _warp_generator_pids $command_pid
@@ -154,10 +127,6 @@ function  _warp_run_generator_command_internal
         # functions that could pollute the user's context (nested functions are still existing in the global
         # scope).
         functions -e on_command_{$command_pid}_finish
-
-        # Note: If we're on windows, we send a reset grid to erase any cursor mutations caused by
-        # the in-band command.
-        warp_maybe_send_reset_grid_osc
     end
 end
 
@@ -207,7 +176,6 @@ end
 function warp_preexec --on-event fish_preexec
     set -l command (warp_escape_json "$argv")
     warp_send_json_message "{\"hook\": \"Preexec\", \"value\": {\"command\": \"$command\", \"session_id\": $WARP_SESSION_ID}}"
-    warp_maybe_send_reset_grid_osc
 
     # If this preexec is called for user command, kill ongoing generator command jobs.
     if not string match -q "warp_run_generator_command*" -- (string trim -- $argv[1])
@@ -254,11 +222,7 @@ function warp_update_prompt_vars
 
     function end_prompt        
       echo -n (printf '\x1b')
-      if test "$WARP_HONOR_PS1" != "1" && [ "$WARP_USING_WINDOWS_CON_PTY" = true ]
-        echo -n "]133;B$RESET_GRID_OSC"
-      else
-        echo -n ']133;B'
-      end
+      echo -n ']133;B'
       echo -n (printf '\x07')
     end
 
@@ -327,7 +291,6 @@ function warp_precmd --on-event fish_prompt --on-event fish_posterror
 
     set -l next_block_id "precmd-$WARP_SESSION_ID-$block_id"
     warp_send_json_message "{\"hook\": \"CommandFinished\", \"value\": {\"exit_code\": $exit_code, \"next_block_id\": \"$next_block_id\", \"session_id\": $WARP_SESSION_ID}}"
-    warp_maybe_send_reset_grid_osc
 
     set block_id (math $block_id + 1)
 
@@ -372,12 +335,7 @@ function warp_precmd --on-event fish_prompt --on-event fish_posterror
     set -l escaped_right_prompt
 
     set -l escaped_pwd
-    if set -q WSL_DISTRO_NAME
-        # In WSL, avoid symlinks b/c on Windows `std::fs` is unable to resolve symlink inside WSL containers.
-        set escaped_pwd (warp_escape_json (pwd -P))
-    else
-        set escaped_pwd (warp_escape_json $PWD)
-    end
+    set escaped_pwd (warp_escape_json $PWD)
 
     set -l escaped_virtual_env ""
     set -l escaped_conda_env ""
@@ -725,7 +683,7 @@ function warp_bootstrapped
   # part of its builtins (e.g. "for", "while", etc.).
   set -l escaped_editor (warp_escape_json "$EDITOR")
   set -l escaped_shell_path (warp_escape_json (status fish-path))
-  set -l escaped_json "{\"hook\": \"Bootstrapped\", \"value\": {\"histfile\": \"$escaped_histfile\", \"session_id\": $WARP_SESSION_ID, \"shell\": \"fish\", \"home_dir\": \"$HOME\", \"path\": \"$PATH\", \"editor\": \"$escaped_editor\", \"abbreviations\": \"$escaped_abbr\", \"aliases\": \"$escaped_aliases\", \"function_names\": \"$function_names\", \"env_var_names\": \"$env_var_names\", \"builtins\": \"$escaped_builtins\", \"keywords\": \"\", \"shell_version\": \"$FISH_VERSION\", \"shell_plugins\": \"$escaped_shell_plugins\", \"vi_mode_enabled\": \"$vi_mode_enabled\", \"os_category\": \"$os_category\", \"linux_distribution\": \"$linux_distribution\", \"wsl_name\": \"$WSL_DISTRO_NAME\", \"shell_path\": \"$escaped_shell_path\"}}"
+  set -l escaped_json "{\"hook\": \"Bootstrapped\", \"value\": {\"histfile\": \"$escaped_histfile\", \"session_id\": $WARP_SESSION_ID, \"shell\": \"fish\", \"home_dir\": \"$HOME\", \"path\": \"$PATH\", \"editor\": \"$escaped_editor\", \"abbreviations\": \"$escaped_abbr\", \"aliases\": \"$escaped_aliases\", \"function_names\": \"$function_names\", \"env_var_names\": \"$env_var_names\", \"builtins\": \"$escaped_builtins\", \"keywords\": \"\", \"shell_version\": \"$FISH_VERSION\", \"shell_plugins\": \"$escaped_shell_plugins\", \"vi_mode_enabled\": \"$vi_mode_enabled\", \"os_category\": \"$os_category\", \"linux_distribution\": \"$linux_distribution\", \"shell_path\": \"$escaped_shell_path\"}}"
   warp_send_json_message $escaped_json
 end
 
@@ -801,7 +759,7 @@ if test "$WARP_IS_LOCAL_SHELL_SESSION" = "1"
         # Hex-encode the ZSH environment script we use to bootstrap remote zsh b/c it contains control characters
         # We decode on the SSH server using xxd if its available, otherwise fall back to a for-loop over each byte
         # and use printf to convert back to plaintext
-        set -l zsh_env_script (printf '%s' 'unsetopt ZLE RCS GLOBAL_RCS; WARP_SESSION_ID='$remote_session_id'; WARP_USING_WINDOWS_CON_PTY=@@USING_CON_PTY_BOOLEAN@@; WARP_HONOR_PS1='$WARP_HONOR_PS1'; _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || uname -n); _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER); _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d " \n"); printf '"'"'\x1b\x50\x24\x64%s\x1b\x5c'"'"' $_msg; unset _hostname _user _msg' | command od -An -v -tx1 | command tr -d ' \n')
+        set -l zsh_env_script (printf '%s' 'unsetopt ZLE RCS GLOBAL_RCS; WARP_SESSION_ID='$remote_session_id'; WARP_HONOR_PS1='$WARP_HONOR_PS1'; _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || uname -n); _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER); _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d " \n"); printf '"'"'\x1b\x50\x24\x64%s\x1b\x5c'"'"' $_msg; unset _hostname _user _msg' | command od -An -v -tx1 | command tr -d ' \n')
 
         # Optionally attach to an existing ControlMaster the user already
         # runs for this destination instead of creating our own. Resolve
@@ -885,8 +843,6 @@ bash)
       _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || uname -n)
       _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER)
       _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"bash\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d " \n")'"
-      WARP_USING_WINDOWS_CON_PTY=@@USING_CON_PTY_BOOLEAN@@
-      if [[ "'$OS'" == Windows_NT ]]; then WARP_IN_MSYS2=true; else WARP_IN_MSYS2=false; fi
       printf '\''"'\x1b\x50\x24\x64%s\x1b\x5c'"'\'' \""'$_msg'"\"'
       unset _hostname _user _msg
     )

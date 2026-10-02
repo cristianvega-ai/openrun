@@ -28,7 +28,6 @@ fn bootstrapped_hook_parses_full_payload() {
             "vi_mode_enabled": "",
             "os_category": "MacOS",
             "linux_distribution": "",
-            "wsl_name": "",
             "shell_path": "/bin/zsh"
         }
     }"#;
@@ -61,7 +60,6 @@ fn bootstrapped_hook_parses_full_payload() {
         vi_mode_enabled: None,
         os_category: Some("MacOS".to_string()),
         linux_distribution: None,
-        wsl_name: None,
         shell_path: Some("/bin/zsh".to_string()),
     };
     assert_eq!(*value, expected);
@@ -275,9 +273,6 @@ fn ssh_hook_round_trips_through_serialization() {
 
 #[test]
 fn init_shell_hook_round_trips_through_serialization() {
-    // Note that `wsl_name` must be `Some` here: the field's deserializer
-    // requires a string, and `None` serializes to `null`. Real hook payloads
-    // always send a string, with the empty string standing in for `None`.
     let hook = DProtoHook::InitShell {
         value: InitShellValue {
             session_id: 9.into(),
@@ -285,7 +280,6 @@ fn init_shell_hook_round_trips_through_serialization() {
             is_subshell: false,
             user: "me".to_string(),
             hostname: "host".to_string(),
-            wsl_name: Some("Ubuntu".to_string()),
         },
     };
     let json = serde_json::to_string(&hook).unwrap();
@@ -296,5 +290,17 @@ fn init_shell_hook_round_trips_through_serialization() {
     assert_eq!(value.shell, "zsh");
     assert_eq!(value.user, "me");
     assert_eq!(value.hostname, "host");
-    assert_eq!(value.wsl_name.as_deref(), Some("Ubuntu"));
+}
+
+#[test]
+fn hooks_ignore_fields_that_are_no_longer_part_of_the_payload() {
+    let json = r#"{
+        "hook": "InitShell",
+        "value": {"session_id": 9, "shell": "zsh", "user": "me", "hostname": "host", "wsl_name": "Ubuntu"}
+    }"#;
+    let DProtoHook::InitShell { value } = serde_json::from_str::<DProtoHook>(json).unwrap() else {
+        panic!("expected an InitShell hook");
+    };
+    assert_eq!(value.shell, "zsh");
+    assert_eq!(value.hostname, "host");
 }

@@ -15,18 +15,16 @@ mod command_palette;
 mod completer;
 #[allow(dead_code)]
 mod context_chips;
-#[cfg(enable_crash_recovery)]
+#[cfg(target_os = "linux")]
 mod crash_recovery;
 mod debug_dump;
 mod default_terminal;
-#[cfg(windows)]
-mod dynamic_libraries;
 mod global_resource_handles;
 mod gpu_state;
 mod interval_timer;
 #[cfg(feature = "local_fs")]
 mod local_control;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 mod login_item;
 mod menu;
 mod modal;
@@ -45,7 +43,6 @@ mod resource_limits;
 mod safe_triangle;
 mod search_bar;
 mod session_management;
-mod shell_indicator;
 mod stored_credentials;
 mod suggestions;
 mod system;
@@ -232,7 +229,7 @@ impl LaunchMode {
     }
 
     /// Whether or not to start a crash recovery process (on platforms that support it).
-    #[cfg(enable_crash_recovery)]
+    #[cfg(target_os = "linux")]
     pub(crate) fn crash_recovery_enabled(&self) -> bool {
         match self {
             LaunchMode::App { .. } => true,
@@ -285,8 +282,6 @@ pub fn run() -> Result<()> {
     // Ensure feature flags are initialized before parsing command-line arguments.
     features::init_feature_flags();
     if let Some(args) = warp_cli::local_control::ControlArgs::from_control_mode_env() {
-        #[cfg(windows)]
-        warp_util::windows::attach_to_parent_console();
         warp_cli::local_control::run_and_exit(args);
     }
 
@@ -294,11 +289,6 @@ pub fn run() -> Result<()> {
     let args = warp_cli::Args::from_env();
 
     if let Some(command) = args.command() {
-        #[cfg(windows)]
-        if command.prints_to_stdout() {
-            // We attach a console to ensure that all standard output gets printed correctly.
-            warp_util::windows::attach_to_parent_console();
-        }
         match command {
             warp_cli::Command::Worker(worker) => return run_worker_command(worker),
             warp_cli::Command::Completions { shell } => {
@@ -372,9 +362,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // These steps run before the platform event loop is started.
     // They must not depend on AppContext.
 
-    #[cfg(windows)]
-    dynamic_libraries::configure_library_loading();
-
     profiling::init();
 
     // The `run` function already initializes feature flags, but ensure they're initialized here
@@ -386,7 +373,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::new())?;
 
     cfg_if::cfg_if! {
-        if #[cfg(enable_crash_recovery)] {
+        if #[cfg(target_os = "linux")] {
             if crash_recovery::is_crash_recovery_process(launch_mode.args().as_ref()) {
                 warp_logging::init_for_crash_recovery_process()?;
             } else {
@@ -398,9 +385,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     }
 
     timer.mark_interval_end("LOG_FILE_SETUP_COMPLETE");
-
-    #[cfg(windows)]
-    platform::windows::check_redirection_guard();
 
     // Adjust resource limits early, before doing other work, to ensure that
     // any children we spawn (like the terminal server) inherit our adjusted
@@ -429,30 +413,9 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         }
     }
 
-    #[cfg(all(feature = "release_bundle", windows))]
-    if let LaunchMode::App { .. } = launch_mode {
-        match app_services::windows::pass_startup_args_to_existing_instance(
-            launch_mode.args().as_ref(),
-        ) {
-            // If we were able to contact an existing application instance, quit -
-            // we only want to run a single instance of Warp at a time.
-            Ok(_) => std::process::exit(0),
-            // If Warp isn't already running, we're good to go.
-            Err(app_services::windows::StartupArgsForwardingError::NoExistingInstance) => {}
-            // If we were unable to perform the forwarding for an unknown reason,
-            // it's better to run a second instance than potentially end up in a
-            // state where Warp refuses to run even a first instance.
-            Err(err) => {
-                report_error!(anyhow::Error::from(err).context("Failed to forward startup args"));
-            }
-        }
-    }
-
     // Sets up a Job Object that we associate with the Warp process to handle
     // shared fate with its child processes. This should be called before we
     // start spawning any child processes.
-    #[cfg(windows)]
-    command::windows::init();
 
     let private_preferences = settings::init_private_user_preferences();
     let (public_preferences, startup_toml_parse_error) = settings::init_public_user_preferences();
@@ -460,7 +423,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // Public settings live in the TOML-backed store. Use it for pre-app reads.
     #[cfg_attr(
         not(any(
-            enable_crash_recovery,
+            target_os = "linux",
             target_os = "linux",
             target_os = "freebsd",
             target_os = "macos"
@@ -470,7 +433,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     let prefs_for_public_settings: &dyn warpui_extras::user_preferences::UserPreferences =
         public_preferences.as_ref();
 
-    #[cfg(enable_crash_recovery)]
+    #[cfg(target_os = "linux")]
     let crash_recovery =
         crash_recovery::CrashRecovery::new(&launch_mode, prefs_for_public_settings);
 
@@ -526,27 +489,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         app_builder.force_x11(!allow_wayland);
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        use warpui::platform::windows::AppBuilderExt;
-        app_builder.set_app_user_model_id(ChannelState::app_id().to_string());
-
-        // Only use DXC for DirectX shader compilation if we're not running in a Parallels VM
-        // Parallels VMs can have issues with DXC shader compilation
-        let is_parallels_vm = crate::util::vm_detection::is_running_in_windows_parallels_vm();
-        if !is_parallels_vm {
-            log::info!("Using DXC for DirectX shader compilation");
-            use warpui::platform::windows::DXCPath;
-
-            app_builder.use_dxc_for_directx_shader_compilation(DXCPath {
-                dxc_path: "dxcompiler.dll".to_string(),
-                dxil_path: "dxil.dll".to_string(),
-            });
-        } else {
-            log::info!("Skipping DXC for DirectX shader compilation; running in a Parallels VM");
-        }
-    }
-
     // Override any bindings that have a `Custom` trigger to a `Keystroke`-based trigger. In theory,
     // this should be a noop on Mac (since the keystrokes registered via the  Mac menus first
     // intercept the binding), but just to be safe we only enable this in cases where we don't
@@ -580,7 +522,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         ctx.add_singleton_model(move |_ctx| private_preferences);
         let startup_toml_parse_error = startup_toml_parse_error;
 
-        #[cfg(enable_crash_recovery)]
+        #[cfg(target_os = "linux")]
         ctx.add_singleton_model(move |_ctx| crash_recovery);
 
         let app_state = initialize_app(timer, startup_toml_parse_error, ctx);
@@ -606,8 +548,6 @@ pub(crate) fn initialize_app(
             warpui_extras::secure_storage::register_noop(&secure_storage_service_name, ctx);
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             warpui_extras::secure_storage::register_with_fallback(&secure_storage_service_name, warp_core::paths::state_dir(), ctx)
-        } else if #[cfg(target_os = "windows")] {
-            warpui_extras::secure_storage::register_with_dir(&secure_storage_service_name, warp_core::paths::state_dir(), ctx)
         } else {
             warpui_extras::secure_storage::register(&secure_storage_service_name, ctx);
         }
@@ -736,7 +676,7 @@ pub(crate) fn initialize_app(
 
     ctx.set_a11y_verbosity(*AccessibilitySettings::as_ref(ctx).a11y_verbosity);
 
-    #[cfg(enable_crash_recovery)]
+    #[cfg(target_os = "linux")]
     ctx.on_draw_frame_error(|ctx, window_id| {
         crash_recovery::CrashRecovery::handle(ctx).update(ctx, |crash_recovery, _ctx| {
             crash_recovery.on_draw_frame_error(window_id);
@@ -759,7 +699,7 @@ pub(crate) fn initialize_app(
         }
     });
 
-    #[cfg(enable_crash_recovery)]
+    #[cfg(target_os = "linux")]
     ctx.on_frame_drawn(|ctx, window_id| {
         crash_recovery::CrashRecovery::as_ref(ctx).on_frame_drawn(window_id);
     });
@@ -844,8 +784,6 @@ pub(crate) fn initialize_app(
     #[cfg(feature = "local_fs")]
     ctx.add_singleton_model(FileModel::new);
     ctx.add_singleton_model(GlobalBufferModel::new);
-    #[cfg(windows)]
-    ctx.add_singleton_model(util::traffic_lights::windows::RendererState::new);
     #[cfg(feature = "local_fs")]
     ctx.add_singleton_model(|_| LanguageServerShutdownManager::new());
 
@@ -961,16 +899,13 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
                 pty_spawner.prepare_for_app_termination();
             });
 
-            #[cfg(all(feature = "local_tty", windows))]
-            terminal::local_tty::shutdown_all_pty_event_loops(ctx);
-
             app_services::teardown(ctx);
 
             // Tear down any application profilers that are running, writing
             // results to disk.
             profiling::teardown();
 
-            #[cfg(enable_crash_recovery)]
+            #[cfg(target_os = "linux")]
             crash_recovery::CrashRecovery::handle(ctx).update(ctx, |crash_recovery, _ctx| {
                 crash_recovery.teardown();
             });
@@ -979,9 +914,8 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
             let general_settings = GeneralSettings::as_ref(ctx);
             // On Linux or Windows, if we're about to close the final window, we should quit the app instead.
             // On Mac, we do this conditionally based on a user setting.
-            let quit_on_last_window_closed =
-                cfg!(any(target_os = "linux", target_os = "freebsd", windows))
-                    || *general_settings.quit_on_last_window_closed;
+            let quit_on_last_window_closed = cfg!(any(target_os = "linux", target_os = "freebsd"))
+                || *general_settings.quit_on_last_window_closed;
             if ctx.window_ids().count() == 1 && quit_on_last_window_closed {
                 log::info!("No windows left, terminating app");
                 ctx.terminate_app(TerminationMode::Cancellable, None);
@@ -1249,7 +1183,7 @@ fn launch(ctx: &mut warpui::AppContext, app_state: Option<AppState>, launch_mode
     });
 
     // TODO(ben): We should skip this for LaunchMode::Test.
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
         use crate::login_item::maybe_register_app_as_login_item;
         use crate::terminal::general_settings::GeneralSettingsChangedEvent;

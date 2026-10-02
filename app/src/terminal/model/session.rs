@@ -2,8 +2,6 @@ pub mod active_session;
 pub mod command_executor;
 
 use std::collections::{HashMap, HashSet};
-#[cfg(windows)]
-use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
@@ -17,17 +15,14 @@ use futures::FutureExt;
 use futures::future::{BoxFuture, Shared};
 use once_cell::sync::OnceCell;
 use smol_str::SmolStr;
-use typed_path::{TypedPath, TypedPathBuf, WindowsPath};
+use typed_path::{TypedPath, TypedPathBuf};
 use version_compare::Version;
 use warp_completer::completer::{
     CommandExitStatus, CommandOutput, GIT_VERSION_COMMAND, GitVersion, PathSeparators,
     TopLevelCommandCaseSensitivity,
 };
 use warp_errors::{ErrorExt, register_error};
-use warp_util::path::{
-    ShellFamily, convert_msys2_to_windows_native_path, convert_wsl_to_windows_host_path,
-    msys2_exe_to_root,
-};
+use warp_util::path::ShellFamily;
 use warpui::platform::OperatingSystem;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
@@ -43,21 +38,8 @@ use crate::terminal::{History, ShellHost, ShellLaunchData};
     reason = "Each variant names a distinct read failure, so the shared `Error` suffix is intentional."
 )]
 enum ReadHistoryContentsError {
-    /// Intentionally omit this source anyhow error as it may contain stderr contents which can be
-    /// lengthy.
-    #[cfg(windows)]
-    #[error("Error running PowerShell commands to read history file")]
-    PowerShellError(anyhow::Error),
-
     #[error("Error reading history file from filesystem")]
     AsyncFsError(#[source] std::io::Error),
-
-    #[cfg(windows)]
-    #[error("Error running PowerShell commands and reading from filesystem to read history file.")]
-    PowerShellAndAsyncFsError {
-        powershell_error: anyhow::Error,
-        async_fs_error: std::io::Error,
-    },
 }
 
 impl ErrorExt for ReadHistoryContentsError {
@@ -116,30 +98,6 @@ where
         }
     }
     Err(last_error)
-}
-
-#[cfg(windows)]
-fn powershell_read_all_text_command(path: &OsStr) -> OsString {
-    let mut command = OsString::from("[System.IO.File]::ReadAllText('");
-    command.push(escape_powershell_single_quotes(path));
-    command.push("')");
-    command
-}
-
-/// Doubles every single quote in `path` so it is safe to embed inside a
-/// PowerShell single-quoted string literal.
-#[cfg(windows)]
-fn escape_powershell_single_quotes(path: &OsStr) -> OsString {
-    use std::os::windows::ffi::{OsStrExt, OsStringExt};
-    const SINGLE_QUOTE: u16 = b'\'' as u16;
-    let mut escaped = Vec::new();
-    for unit in path.encode_wide() {
-        escaped.push(unit);
-        if unit == SINGLE_QUOTE {
-            escaped.push(SINGLE_QUOTE);
-        }
-    }
-    OsString::from_wide(&escaped)
 }
 
 // SessionId is defined in warp_core and re-exported here for backward compatibility.
@@ -306,16 +264,10 @@ impl Sessions {
             let _ = in_band_command_output_rx;
             executor.clone()
         } else {
-            let parent_session_info = session_info
-                .spawning_session_id
-                .as_ref()
-                .and_then(|session_id| self.sessions.get(session_id))
-                .map(|session| &session.info);
             command_executor::new_command_executor_for_session(
                 &session_info,
                 &self.executor_command_tx,
                 in_band_command_output_rx,
-                parent_session_info,
                 ctx,
             )
         };
@@ -529,7 +481,6 @@ pub struct SessionInfo {
     pub editor: Option<String>,
     pub session_type: BootstrapSessionType,
     pub host_info: HostInfo,
-    pub wsl_name: Option<String>,
     /// If this is a subshell or remote session, e.g. ssh, store the parent session ID here.
     pub spawning_session_id: Option<SessionId>,
 }
@@ -597,7 +548,6 @@ impl SessionInfo {
             builtins: Default::default(),
             keywords: Default::default(),
             host_info: Default::default(),
-            wsl_name: init_shell_value.wsl_name,
             spawning_session_id,
         }
     }
@@ -721,42 +671,12 @@ impl SessionInfo {
                 os_category: bootstrapped_value.os_category,
                 linux_distribution: bootstrapped_value.linux_distribution,
             },
-            wsl_name: bootstrapped_value.wsl_name,
             spawning_session_id: self.spawning_session_id,
         }
     }
 
-    /// Returns the name of the WSL distribution, or `None` if this session is not a WSL session.
-    fn wsl_name(&self) -> Option<&str> {
-        self.wsl_name
-            .as_deref()
-            .or(self
-                .launch_data
-                .as_ref()
-                .and_then(|launch_data| match launch_data {
-                    ShellLaunchData::WSL { distro } => Some(distro.as_str()),
-                    _ => None,
-                }))
-    }
-
-    /// If the path is for a session inside some emulation layer, like a VM for WSL, convert a
-    /// paths from inside the session into something the native host can use. Otherwise, leave the
-    /// path as-is.
+    /// Converts a path from inside the session into something the native host can use.
     pub fn maybe_convert_to_native_path(&self, path: &TypedPath) -> anyhow::Result<PathBuf> {
-        if let Some(distro) = self.wsl_name() {
-            return Ok(convert_wsl_to_windows_host_path(path, distro)?);
-        }
-        if let Some(ShellLaunchData::MSYS2 {
-            executable_path, ..
-        }) = &self.launch_data
-        {
-            return Ok(convert_msys2_to_windows_native_path(
-                path,
-                &msys2_exe_to_root(WindowsPath::new(
-                    executable_path.as_os_str().as_encoded_bytes(),
-                )),
-            )?);
-        }
         PathBuf::try_from(path.to_path_buf())
             .map_err(|path| anyhow::anyhow!("Unable to convert path: {path:?}"))
     }
@@ -916,30 +836,6 @@ impl Session {
             || self.subshell_info().is_some()
     }
 
-    pub fn is_wsl(&self) -> bool {
-        self.info.wsl_name().is_some()
-    }
-
-    pub fn wsl_distro_name(&self) -> Option<&str> {
-        self.info.wsl_name()
-    }
-
-    pub fn is_msys2(&self) -> bool {
-        matches!(self.launch_data(), Some(ShellLaunchData::MSYS2 { .. }))
-    }
-
-    /// Returns the function that converts a Windows-native path into this session's native
-    /// representation, or `None` when no conversion is appropriate.
-    pub fn windows_path_converter(&self) -> Option<fn(&str) -> String> {
-        if self.is_wsl() {
-            Some(warp_util::path::convert_windows_path_to_wsl)
-        } else if self.is_msys2() {
-            Some(warp_util::path::convert_windows_path_to_msys2)
-        } else {
-            None
-        }
-    }
-
     pub fn alias_names(&self) -> impl Iterator<Item = &str> {
         self.info.aliases.keys().map(Deref::deref)
     }
@@ -1065,9 +961,7 @@ impl Session {
         label: &'static str,
     ) {
         let (load_future, receiver) = (async {
-            let result = self
-                .execute_command(command, None, None, ExecuteCommandOptions::default())
-                .await;
+            let result = self.execute_command(command, None, None).await;
 
             let new_names: HashSet<SmolStr> = match result {
                 Ok(output) if output.status == CommandExitStatus::Success => {
@@ -1117,90 +1011,48 @@ impl Session {
     /// to get them (unlike aliases, functions and env-vars). All we need is the user's $PATH var,
     /// which we have access to at this point.
     pub async fn load_external_commands(&self) {
-        let (load_future, receiver) =
-            (async {
-                let shell = self.info.shell.clone();
-                let shell_command_to_get_executables =
-                    shell.shell_type().shell_command_to_get_executables();
-                let env_vars = self
-                    .info
-                    .path
-                    .as_deref()
-                    .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
+        let (load_future, receiver) = (async {
+            let shell = self.info.shell.clone();
+            let shell_command_to_get_executables =
+                shell.shell_type().shell_command_to_get_executables();
+            let env_vars = self
+                .info
+                .path
+                .as_deref()
+                .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
 
-                let started_at = instant::Instant::now();
-                let result = run_executable_listing(shell.shell_type().name(), || {
-                    self.execute_command(
-                        shell_command_to_get_executables,
-                        None,
-                        env_vars.clone(),
-                        ExecuteCommandOptions::default(),
-                    )
-                })
-                .await;
-
-                let is_msys2 = self.info.launch_data.as_ref().is_some_and(|launch_data| {
-                    matches!(launch_data, ShellLaunchData::MSYS2 { .. })
-                });
-                // We gather the external Windows-specific commands by using PowerShell because
-                // Git Bash's `compgen` is slow at gathering these. The Git Bash-specific commands
-                // like ls.exe are retrieved above.
-                let mut new_commands = if is_msys2 {
-                    let env_vars =
-                        self.info.path.as_deref().map(|path| {
-                            HashMap::from_iter([("PATH".to_string(), path.to_string())])
-                        });
-                    let executor = self.command_executor.clone();
-                    let powershell =
-                        Shell::new(ShellType::PowerShell, None, None, Default::default(), None);
-                    let windows_results = run_executable_listing("powershell", || {
-                        executor.execute_command(
-                            ShellType::PowerShell.shell_command_to_get_executables(),
-                            &powershell,
-                            None,
-                            env_vars.clone(),
-                            ExecuteCommandOptions::default(),
-                        )
-                    })
-                    .await;
-                    HashSet::from_iter(
-                        ShellType::PowerShell
-                            .executables_from_shell_command_output(
-                                windows_results,
-                                false, /* is_msys2 */
-                            )
-                            .into_iter(),
-                    )
-                } else {
-                    HashSet::new()
-                };
-                let listing_succeeded = result.is_ok();
-                new_commands.extend(
-                    shell
-                        .shell_type()
-                        .executables_from_shell_command_output(result, is_msys2)
-                        .into_iter(),
-                );
-                if !listing_succeeded && new_commands.is_empty() {
-                    // Storing the empty set would make the session look as if it had no executables
-                    // for the rest of its life, and the listing is only ever attempted once.
-                    log::warn!(
-                        "Could not list the executables for {}; leaving them unloaded",
-                        shell.shell_type().name()
-                    );
-                    return;
-                }
-                log::info!(
-                    "Loaded {} external commands for {} in {:?}",
-                    new_commands.len(),
-                    shell.shell_type().name(),
-                    started_at.elapsed()
-                );
-                if self.external_commands.set(new_commands).is_err() {
-                    log::warn!("External commands should only be loaded once per session.");
-                }
+            let started_at = instant::Instant::now();
+            let result = run_executable_listing(shell.shell_type().name(), || {
+                self.execute_command(shell_command_to_get_executables, None, env_vars.clone())
             })
-            .remote_handle();
+            .await;
+
+            let listing_succeeded = result.is_ok();
+            let new_commands: HashSet<SmolStr> = shell
+                .shell_type()
+                .executables_from_shell_command_output(result)
+                .into_iter()
+                .collect();
+            if !listing_succeeded && new_commands.is_empty() {
+                // Storing the empty set would make the session look as if it had no executables
+                // for the rest of its life, and the listing is only ever attempted once.
+                log::warn!(
+                    "Could not list the executables for {}; leaving them unloaded",
+                    shell.shell_type().name()
+                );
+                return;
+            }
+            log::info!(
+                "Loaded {} external commands for {} in {:?}",
+                new_commands.len(),
+                shell.shell_type().name(),
+                started_at.elapsed()
+            );
+            if self.external_commands.set(new_commands).is_err() {
+                log::warn!("External commands should only be loaded once per session.");
+            }
+        })
+        .remote_handle();
 
         match self
             .load_external_commands_future
@@ -1289,84 +1141,15 @@ impl Session {
         Vec::new()
     }
 
-    #[cfg_attr(not(windows), allow(unused_variables))]
+    #[allow(unused_variables)]
     async fn read_history_contents(
         history_file: &Path,
         shell_type: ShellType,
         is_kaspersky_running: bool,
     ) -> Result<Vec<u8>, ReadHistoryContentsError> {
-        #[cfg(windows)]
-        if shell_type == ShellType::PowerShell {
-            return Self::read_powershell_history_contents(history_file, is_kaspersky_running)
-                .await;
-        }
-
         async_fs::read(history_file)
             .await
             .map_err(ReadHistoryContentsError::AsyncFsError)
-    }
-
-    /// Read the PowerShell history contents by running a PowerShell command and reading the output.
-    ///
-    /// This is a workaround as reading the history file using [`async_fs::read`] on Windows is a
-    /// trigger for certain antivirus software (Kaspersky).
-    #[cfg(windows)]
-    async fn read_powershell_history_contents(
-        history_file: &Path,
-        is_kaspersky_running: bool,
-    ) -> Result<Vec<u8>, ReadHistoryContentsError> {
-        // Try reading the history file using PowerShell commands first.
-        let powershell_error =
-            match Self::read_history_via_powershell(history_file.as_os_str()).await {
-                Ok(result) => return Ok(result),
-                Err(e) => e,
-            };
-        // Log the detailed error locally; the failure is reported once at the sink via the
-        // registered `ReadHistoryContentsError`, whose static message omits the (potentially
-        // sensitive/lengthy) PowerShell stderr.
-        log::error!("{powershell_error:?}");
-
-        // If Kaspersky is running, early return since we can't use [`async_fs`] to read the history
-        // file.
-        if is_kaspersky_running {
-            return Err(ReadHistoryContentsError::PowerShellError(powershell_error));
-        }
-
-        // Otherwise, fall back to using [`async_fs`] to read the history file.
-        async_fs::read(history_file).await.map_err(|e| {
-            ReadHistoryContentsError::PowerShellAndAsyncFsError {
-                powershell_error,
-                async_fs_error: e,
-            }
-        })
-    }
-
-    #[cfg(windows)]
-    async fn read_history_via_powershell(history_file_path: &OsStr) -> Result<Vec<u8>> {
-        let Some(powershell_command) = warp_util::path::windows::any_powershell_path() else {
-            return Err(anyhow::anyhow!(
-                "Failed to find powershell executable to read history"
-            ));
-        };
-
-        let read_result = command::r#async::Command::new(powershell_command)
-            .arg("-NoProfile")
-            .arg("-NoLogo")
-            .arg("-Command")
-            .arg(powershell_read_all_text_command(history_file_path))
-            .output()
-            .await;
-        match read_result {
-            Ok(output) if output.status.success() => Ok(output.stdout),
-            Ok(output) => Err(anyhow::anyhow!(
-                "Command to read history file failed with stderr: {:#}",
-                String::from_utf8_lossy(&output.stderr)
-            )),
-            Err(e) => Err(anyhow::anyhow!(
-                "Failed to execute command to read history file: {:#}",
-                e
-            )),
-        }
     }
 
     async fn read_history_for_remote_session(&self) -> Vec<String> {
@@ -1406,7 +1189,6 @@ impl Session {
                 format!("cat '{escaped_history_file}'").as_str(),
                 None,
                 env_vars,
-                ExecuteCommandOptions::default(),
             )
             .await
             .ok()?;
@@ -1452,7 +1234,6 @@ impl Session {
         command: &str,
         current_dir_path: Option<&str>,
         environment_variables: Option<HashMap<String, String>>,
-        execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
         // Clone the Arc out of the lock so we don't hold the read guard
         // across the await point.
@@ -1463,7 +1244,6 @@ impl Session {
                 &self.info.shell,
                 current_dir_path,
                 environment_variables,
-                execute_command_options,
             )
             .await
     }
@@ -1480,11 +1260,6 @@ impl Session {
     /// Whether commands run for this session are kept from the network by the operating system.
     pub fn network_isolated(&self) -> bool {
         self.command_executor.network_isolated()
-    }
-
-    /// Whether commands run for this session get the offline environment table.
-    pub fn offline_environment_applied(&self) -> bool {
-        self.command_executor.offline_environment_applied()
     }
 
     /// The version of the `git` this session's commands start, probed once with `git --version`
@@ -1504,12 +1279,7 @@ impl Session {
             .as_deref()
             .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
         let output = self
-            .execute_command(
-                GIT_VERSION_COMMAND,
-                None,
-                env_vars,
-                ExecuteCommandOptions::default(),
-            )
+            .execute_command(GIT_VERSION_COMMAND, None, env_vars)
             .await;
         match output {
             Ok(output) if output.status == CommandExitStatus::Success => {
@@ -1560,7 +1330,6 @@ impl Session {
                 "git --no-optional-locks branch --no-color",
                 Some(working_dir),
                 env_vars,
-                ExecuteCommandOptions::default(),
             )
             .await;
 
@@ -1591,27 +1360,7 @@ impl Session {
 
     /// Converts the given directory into a [`typed_path::TypedPathBuf`].
     pub fn convert_directory_to_typed_path_buf(&self, pwd: String) -> TypedPathBuf {
-        // We need to determine whether this session requires windows file paths
-        // or unix file paths. This needs to be resilient to warpified ssh. Some examples:
-        // - bash on mac ---> unix
-        // - powershell on linux ---> unix
-        // - powershell on windows ---> windows
-        // - wsl on windows ---> unix
-        // - warpified zsh --> unix
-
-        // If the host architecture is unix, we can infer unix file paths. This would break
-        // if we supported warpifying a powershell-on-windows SSH session.
-        if cfg!(unix) {
-            return TypedPathBuf::from_unix(pwd);
-        }
-
-        // We assume that we're on Windows.
-        match self.shell_family() {
-            // Cases: WSL, MSYS2, warpified bash
-            ShellFamily::Posix => TypedPathBuf::from_unix(pwd),
-            // Cases: powershell sessions
-            ShellFamily::PowerShell => TypedPathBuf::from_windows(pwd),
-        }
+        TypedPathBuf::from_unix(pwd)
     }
 
     /// Returns whether `cwd` (a working directory reported for this session)
@@ -1648,8 +1397,6 @@ pub mod testing {
 
             #[cfg(unix)]
             let shell_type = ShellType::Bash;
-            #[cfg(windows)]
-            let shell_type = ShellType::PowerShell;
 
             Self {
                 session_id: SessionId::from(0),
@@ -1672,7 +1419,6 @@ pub mod testing {
                 home_dir: None,
                 cdpath: None,
                 host_info: Default::default(),
-                wsl_name: None,
                 spawning_session_id: None,
             }
         }

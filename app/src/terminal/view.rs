@@ -170,7 +170,6 @@ use crate::settings::{
 };
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::settings_view::{SettingsSection, flags};
-use crate::shell_indicator::ShellIndicatorType;
 use crate::terminal::alias::{AliasedCommand, check_for_alias_async};
 use crate::terminal::alt_screen::alt_screen_element::AltScreenElement;
 use crate::terminal::alt_screen::should_intercept_scroll;
@@ -1642,14 +1641,6 @@ pub struct TerminalView {
     /// The file uploads initiated in this terminal pane.
     ssh_file_upload: ViewHandle<FileUpload>,
 
-    /// The type of the shell that this terminal pane is running, derived and
-    /// cached on the view from [`ShellLaunchdata`]. Used to render an indicator
-    /// in the tab bar.
-    shell_indicator_type: Option<ShellIndicatorType>,
-
-    /// Used to describe the active shell to the user.
-    shell_detail: Option<String>,
-
     /// Position ID for this view.
     position_id: String,
 
@@ -2406,8 +2397,6 @@ impl TerminalView {
             is_ssh_file_uploader: false,
             ssh_file_upload,
             most_recent_command_correction: None,
-            shell_indicator_type: None,
-            shell_detail: None,
             position_id: format!("terminal_view_{}", ctx.view_id()),
             cursor_position_id: format!("terminal_view:cursor_{}", ctx.view_id()),
             active_session,
@@ -2950,17 +2939,6 @@ impl TerminalView {
         })
     }
 
-    /// Returns the active session's WSL distribution information, if it exists.
-    /// Returns None if there is no active session or if the current session is
-    /// not a WSL session.
-    pub fn active_session_wsl_distro<C: ModelAsRef>(&self, ctx: &C) -> Option<String> {
-        self.active_block_session_id().and_then(|session_id| {
-            let current_session = self.sessions.as_ref(ctx).get(session_id)?;
-            let distro_name = current_session.wsl_distro_name();
-            distro_name.map(|name| name.to_string())
-        })
-    }
-
     pub fn active_block_session_id(&self) -> Option<SessionId> {
         self.active_block_metadata
             .as_ref()
@@ -3179,36 +3157,6 @@ impl TerminalView {
         ctx.notify();
     }
 
-    /// Copy if there is a selection. Otherwise, we defer to the normal ctrl-c
-    /// behaviour.
-    #[cfg(windows)]
-    fn ctrl_c_internal(
-        &mut self,
-        has_copiable_block_selection: bool,
-        has_block_list_selection: bool,
-        has_alt_screen_selection: bool,
-        active_block_state: CtrlCActiveBlockState,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if has_block_list_selection {
-            self.copy(ctx);
-            ctx.notify();
-            return;
-        } else if has_alt_screen_selection {
-            self.copy(ctx);
-            self.model.lock().alt_screen_mut().clear_selection();
-            return;
-        } else if has_copiable_block_selection {
-            // If there are blocks selected, we want to copy them but
-            // not prevent the normal ctrl-c behaviour.
-            self.copy(ctx);
-            ctx.notify();
-        }
-
-        self.ctrl_c_to_active_block(active_block_state, ctx);
-    }
-
-    #[cfg(not(windows))]
     fn ctrl_c_internal(
         &mut self,
         has_copiable_block_selection: bool,
@@ -4480,18 +4428,6 @@ impl TerminalView {
                 ctx.emit(Event::AppStateChanged);
             }
 
-            // Update the shell launch data for the active session.
-            if prev_block_metadata.session_id() != block_metadata.session_id()
-                && is_done_bootstrapping
-            {
-                let shell_launch_data = self.shell_launch_data_if_local(ctx);
-                <Self as TerminalSurface>::on_active_shell_launch_data_updated(
-                    self,
-                    shell_launch_data,
-                    ctx,
-                );
-            }
-
             // Check if the block is done bootstrapping and the directory is set.
             if let Some(active_directory) = block_metadata.current_working_directory() {
                 // See `BlockMetadataUpdateSource` for why OSC 7 needs the
@@ -4711,9 +4647,8 @@ impl TerminalView {
             ModelEvent::Exit { .. } => {
                 // If the pty spawn has failed, we've already inserted a banner.
                 if !self.pty_spawn_failed {
-                    let shell_detail = self.shell_detail.take().unwrap_or("shell".to_owned());
                     self.insert_shell_process_terminated_banner(
-                        shell_terminated_banner::TerminationType::Premature { shell_detail },
+                        shell_terminated_banner::TerminationType::Premature,
                         ctx,
                     );
                 }
@@ -6853,24 +6788,8 @@ impl TerminalView {
             let clipboard_content = ctx.clipboard().read();
 
             if is_cli_agent_paste && clipboard_content.has_image_data() {
-                if !cfg!(windows) {
-                    self.write_user_bytes_to_pty(vec![escape_sequences::C0::SYN], ctx);
-                    return;
-                }
-
-                // On Windows, Claude Code uses Alt+V for native image paste.
-                let is_claude = CLIAgentSessionsModel::as_ref(ctx)
-                    .session(self.view_id)
-                    .is_some_and(|s| s.agent == CLIAgent::Claude);
-                if is_claude {
-                    self.write_user_bytes_to_pty(vec![escape_sequences::C0::ESC, b'v'], ctx);
-                    return;
-                }
-
-                // For all other agents on Windows, fall through to the normal paste path. When
-                // bracketed paste is enabled (true for TUI-based CLI agents), the empty-text paste
-                // sends \x1b[200~\x1b[201~ to the PTY. The agent interprets this as a "paste
-                // happened" signal and reads the Windows clipboard directly for image data.
+                self.write_user_bytes_to_pty(vec![escape_sequences::C0::SYN], ctx);
+                return;
             }
 
             clipboard_content_with_escaped_paths(clipboard_content, shell_family, false)
@@ -11967,33 +11886,6 @@ impl TerminalView {
         if sshed && !paths.is_empty() {
             self.initiate_ssh_file_upload(paths, ctx);
         } else {
-            // For long-running commands in MSYS2/Git Bash on Windows, skip
-            // conversion and shell escaping. Executables in git bash
-            // aren't git bash _specific_, they still expect paths in
-            // the native windows format.
-            let is_msys2_long_running = cfg!(windows)
-                && !session.is_wsl()
-                && session.shell_family() == ShellFamily::Posix
-                && is_in_long_running_command;
-            if is_msys2_long_running {
-                let input = warpui::clipboard_utils::escaped_paths_str(paths, None);
-                self.typed_characters_on_terminal(&input, ctx);
-                return;
-            }
-
-            // For WSL sessions on Windows, convert paths to /mnt/<drive>/... format
-            // so the WSL session can read the file at the correct path.
-            let paths_converted;
-            let paths = if session.is_wsl() {
-                paths_converted = paths
-                    .iter()
-                    .map(|p| warp_util::path::convert_windows_path_to_wsl(p))
-                    .collect::<Vec<_>>();
-                paths_converted.as_slice()
-            } else {
-                paths
-            };
-
             let input =
                 warpui::clipboard_utils::escaped_paths_str(paths, Some(self.shell_family(ctx)));
             self.typed_characters_on_terminal(&input, ctx);
@@ -12082,9 +11974,6 @@ impl TerminalView {
         }
     }
 
-    pub fn shell_indicator_type(&self) -> Option<ShellIndicatorType> {
-        self.shell_indicator_type
-    }
     #[cfg(unix)]
     fn shell_family_for_password_prompt_polling(&self, ctx: &AppContext) -> ShellFamily {
         self.active_block_session_id()
@@ -12194,27 +12083,6 @@ impl TerminalSurface for TerminalView {
         // Start a timer for the initial session bootstrapping, so that we can log and show a
         // banner to the user if the bootstrapping takes too long
         self.start_bootstrap_timer(BOOTSTRAP_FAILED_DURATION, ctx);
-    }
-
-    fn on_active_shell_launch_data_updated(
-        &mut self,
-        shell_launch_data: Option<ShellLaunchData>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if !cfg!(windows) {
-            return;
-        }
-
-        let shell_indicator_type = shell_launch_data
-            .as_ref()
-            .and_then(|data| ShellIndicatorType::try_from(data).ok());
-        self.shell_indicator_type = shell_indicator_type;
-        self.shell_detail = shell_launch_data.map(|launch_data| launch_data.shell_detail());
-
-        // Notify pane header to re-render with updated shell indicator.
-        self.pane_configuration.update(ctx, |config, ctx| {
-            config.notify_header_content_changed(ctx);
-        });
     }
 
     #[cfg(feature = "local_tty")]

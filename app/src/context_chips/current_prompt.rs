@@ -35,14 +35,13 @@ use crate::settings::{
 };
 use crate::terminal::event::BlockType;
 use crate::terminal::model::block::{Block, BlockMetadata};
-use crate::terminal::model::session::{ExecuteCommandOptions, Session, Sessions, SessionsEvent};
+use crate::terminal::model::session::{Session, Sessions, SessionsEvent};
 use crate::terminal::model::terminal_model::TerminalModel;
 use crate::terminal::model_events::{ModelEvent, ModelEventDispatcher};
 use crate::terminal::session_settings::{
     SessionSettings, SessionSettingsChangedEvent, ToolbarChipSelection,
 };
 use crate::terminal::view::{ContextMenuAction, PromptPart, PromptPosition, TerminalAction};
-use crate::util::environment_variables::{NameCase, set_variable};
 
 #[cfg(test)]
 #[path = "current_prompt_tests.rs"]
@@ -611,7 +610,7 @@ impl CurrentPrompt {
 
         let path_env_var = session.path().as_deref().map(str::to_owned);
         if let (Some(path_var), Some(env_vars)) = (path_env_var, environment_variables.as_mut()) {
-            set_variable(env_vars, "PATH", path_var, NameCase::of_host());
+            env_vars.insert("PATH".to_owned(), path_var);
         }
 
         Some(ShellCommandExecutionContext {
@@ -638,12 +637,7 @@ impl CurrentPrompt {
         timeout: Option<Duration>,
     ) -> (Option<warp_completer::completer::CommandOutput>, bool) {
         let command_future = session
-            .execute_command(
-                &command,
-                current_dir_path.as_deref(),
-                environment_variables,
-                ExecuteCommandOptions::default(),
-            )
+            .execute_command(&command, current_dir_path.as_deref(), environment_variables)
             .fuse();
         let timeout_future = match timeout {
             Some(duration) => Timer::after(duration),

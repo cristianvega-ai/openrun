@@ -165,18 +165,6 @@ fn test_git_path_filtering_allowlist() {
     )));
 
     // Test Windows-style paths (only on Windows, as path parsing is platform-specific)
-    #[cfg(windows)]
-    {
-        assert!(!should_ignore_git_path(Path::new(
-            r"C:\Users\user\project\.git\HEAD"
-        )));
-        assert!(!should_ignore_git_path(Path::new(
-            r"C:\Users\user\project\.git\index.lock"
-        )));
-        assert!(should_ignore_git_path(Path::new(
-            r"C:\Users\user\project\.git\index"
-        )));
-    }
 }
 
 /// Writes a `.gitignore` with `content` at `root` and returns an

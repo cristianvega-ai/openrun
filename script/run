@@ -1,15 +1,12 @@
 #!/bin/bash
 #
-# Cross-platform entrypoint for running a local Warp build.
+# Entrypoint for running a local build.
 #
-# Always builds the `warp-oss` binary. On macOS this delegates to
-# `./script/macos/run`, which builds and runs Warp as a real `.app` bundle
-# (with code signing, plist updates, etc.). On Linux and Windows it invokes
-# `cargo run --bin warp-oss` directly.
+# Always builds the `warp-oss` binary. It delegates to `./script/macos/run`, which builds and
+# runs the app as a real `.app` bundle (with code signing, plist updates, etc.).
 #
-# This script owns the shared argument parsing and passes the resolved cargo
-# features to the platform-specific script via the FEATURES environment
-# variable.
+# This script owns the argument parsing and passes the resolved cargo features to the macOS
+# script via the FEATURES environment variable.
 
 set -e
 
@@ -19,13 +16,10 @@ cd "${REPO_ROOT}"
 OS_TYPE="$(uname -s)"
 
 FEATURES=""
-WARP_BIN_NAME="warp-oss"
 
-# Shared argument parsing. macOS-specific flags (--dont-open,
-# --open_with_launchd, --generate-schema) are forwarded through MAC_ARGS and
-# silently ignored on other platforms.
+# Argument parsing. macOS-specific flags (--dont-open, --open_with_launchd,
+# --generate-schema) are forwarded through MAC_ARGS.
 MAC_ARGS=()
-CARGO_PARAMS=()
 WARP_ARGS=()
 
 while (( "$#" )); do
@@ -45,13 +39,11 @@ while (( "$#" )); do
       fi
       ;;
     --release)
-      CARGO_PARAMS+=("$1")
       MAC_ARGS+=("$1")
       shift
       ;;
     --profile)
       if [ -n "$2" ] && [ "${2:0:1}" != "-" ]; then
-        CARGO_PARAMS+=("$1" "$2")
         MAC_ARGS+=("$1" "$2")
         shift 2
       else
@@ -60,8 +52,8 @@ while (( "$#" )); do
       fi
       ;;
     *)
-      # Unknown flags (including macOS-only flags like --dont-open) and any
-      # positional arguments are forwarded to the platform-specific script.
+      # Unknown flags (including --dont-open) and any positional arguments are forwarded to
+      # the macOS script.
       MAC_ARGS+=("$1")
       shift
       ;;
@@ -70,24 +62,13 @@ done
 
 export FEATURES
 
-if [[ "$OS_TYPE" = "Darwin" ]]; then
-  if [[ ${#WARP_ARGS[@]} -gt 0 ]]; then
-    exec ./script/macos/run "${MAC_ARGS[@]}" -- "${WARP_ARGS[@]}"
-  else
-    exec ./script/macos/run "${MAC_ARGS[@]}"
-  fi
-elif [[ "$OS_TYPE" = "Linux" ]] || [[ "$OS_TYPE" =~ ^(MINGW64_NT|MSYS_NT) ]]; then
-  FEATURE_PARAMS=()
-  if [[ -n "$FEATURES" ]]; then
-    FEATURE_PARAMS=(--features "$FEATURES")
-  fi
-  echo "Running cargo run --bin $WARP_BIN_NAME ${FEATURE_PARAMS[*]} ${CARGO_PARAMS[*]}"
-  if [[ ${#WARP_ARGS[@]} -gt 0 ]]; then
-    cargo run --bin "$WARP_BIN_NAME" ${FEATURE_PARAMS[@]+"${FEATURE_PARAMS[@]}"} "${CARGO_PARAMS[@]}" -- "${WARP_ARGS[@]}"
-  else
-    cargo run --bin "$WARP_BIN_NAME" ${FEATURE_PARAMS[@]+"${FEATURE_PARAMS[@]}"} "${CARGO_PARAMS[@]}"
-  fi
-else
-  echo "No run script defined for the current platform ($OS_TYPE)!" >&2
+if [[ "$OS_TYPE" != "Darwin" ]]; then
+  echo "Only macOS is supported ($OS_TYPE)." >&2
   exit 1
+fi
+
+if [[ ${#WARP_ARGS[@]} -gt 0 ]]; then
+  exec ./script/macos/run "${MAC_ARGS[@]}" -- "${WARP_ARGS[@]}"
+else
+  exec ./script/macos/run "${MAC_ARGS[@]}"
 fi

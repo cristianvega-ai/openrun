@@ -1,7 +1,6 @@
 use super::*;
 use crate::SizeInfo;
 use crate::event_listener::ChannelEventListener;
-use crate::model::grid::grid_handler::PerformResetGridChecks;
 use crate::model::secrets::ObfuscateSecrets;
 
 fn grid_handler(rows: usize, cols: usize) -> GridHandler {
@@ -11,7 +10,6 @@ fn grid_handler(rows: usize, cols: usize) -> GridHandler {
         ChannelEventListener::new_for_test(),
         false,
         ObfuscateSecrets::No,
-        PerformResetGridChecks::No,
     )
 }
 

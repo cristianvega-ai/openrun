@@ -14,7 +14,7 @@ use warp_terminal::model::Point;
 use warp_util::on_cancel::OnCancelFutureExt;
 use warpui::r#async::block_on;
 
-use super::{ExecuteCommandOptions, offline_environment};
+use super::offline_environment;
 use crate::safe_info;
 use crate::terminal::SizeInfo;
 use crate::terminal::event::ExecutedExecutorCommandEvent;
@@ -394,7 +394,6 @@ impl CommandExecutor for InBandCommandExecutor {
         shell: &Shell,
         _current_directory_path: Option<&str>,
         _environment_variables: Option<HashMap<String, String>>,
-        _execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
         let command_id = chrono::Local::now().timestamp_micros().to_string();
 

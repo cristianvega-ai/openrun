@@ -3881,11 +3881,7 @@ fn drag_drop_image_in_cli_agent_long_running_command_pastes_via_clipboard() {
         // single PTY write of the platform-appropriate paste byte: 0x16
         // (Ctrl+V) on macOS/Linux, or `ESC v` on Windows. Without the fix
         // a shell-escaped path string is written here instead.
-        let expected_paste_bytes: Vec<u8> = if cfg!(windows) {
-            vec![0x1b, b'v']
-        } else {
-            vec![0x16]
-        };
+        let expected_paste_bytes: Vec<u8> = vec![0x16];
         assert_eventually!(
             pty_writes.borrow().len() == 1 && pty_writes.borrow()[0] == expected_paste_bytes,
             "expected single paste-keystroke PTY write {:?}; got {:?}",
@@ -3960,16 +3956,7 @@ fn paste_raw_image_clipboard_in_cli_agent_sends_correct_bytes() {
                 writes.len()
             );
 
-            if cfg!(windows) {
-                if agent == CLIAgent::Claude {
-                    assert_eq!(writes[0], vec![C0::ESC, b'v']);
-                } else {
-                    let mut expected = Vec::new();
-                    expected.extend_from_slice(BRACKETED_PASTE_START);
-                    expected.extend_from_slice(BRACKETED_PASTE_END);
-                    assert_eq!(writes[0], expected);
-                }
-            } else {
+            {
                 assert_eq!(writes[0], vec![C0::SYN]);
             }
         })

@@ -321,9 +321,6 @@ pub trait Handler {
     /// input after it's been parsed.
     fn on_finish_byte_processing(&mut self, _input: &ProcessorInput<'_>) {}
 
-    /// Hook that gets called upon receiving a "Reset Grid" OSC from ConPTY.
-    fn on_reset_grid(&mut self) {}
-
     /// Callback to handle the OSC for starting completions.
     ///
     /// Subsequent completion results from the PTY will be considered as completions output.
@@ -359,21 +356,6 @@ pub trait Handler {
     /// Callback to handle the fully transmitted iTerm image on a grid handler level.
     /// Returns whether or not the image was saved to memory.
     fn handle_completed_iterm_image(&mut self, _image: ITermImage) {}
-
-    /// Callback that tells the terminal to prepare for receiving the a shell hook via
-    /// key-value pairs.
-    fn start_receiving_hook(&mut self, _hook_name: String) {}
-
-    /// Callback that tells the terminal that the pending shell hook is done receiving key-value
-    /// pairs.
-    ///
-    /// Returns the pending shell hook.
-    fn finish_receiving_hook(&mut self) -> Option<PendingHook> {
-        None
-    }
-
-    // Callback that tells the terminal to update the pending shell hook with a new key-value pair.
-    fn update_hook(&mut self, _key: String, _value: String) {}
 
     /// Callback to handle the APC to finish receiving a kitty action.
     fn end_kitty_action_receiving<W: io::Write>(&mut self, _writer: &mut W) {}

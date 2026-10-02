@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
@@ -10,7 +10,7 @@ use command::r#async::Command;
 use parking_lot::Mutex;
 
 use super::network_sandbox::{self, NetworkSandbox};
-use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions, offline_environment};
+use super::{CommandExecutor, CommandOutput, offline_environment};
 use crate::safe_warn;
 use crate::terminal::shell::{Shell, ShellType};
 
@@ -140,64 +140,6 @@ struct Hardening<'a> {
     network_sandbox: &'a NetworkSandbox,
 }
 
-enum CommandBuilder<'a> {
-    /// Runs the command through `cmd.exe /Q /C`.
-    ///
-    /// Unreachable today: it is chosen only for `run_command_in_same_shell_as_session: false`,
-    /// and no code constructs that (`ExecuteCommandOptions::default()` and the login-shell path
-    /// both say `true`; `commands_never_ask_for_cmd_exe` fails if one starts to). Keep it that
-    /// way, or fix this first: `cmd.exe` looks for a bare `git` in the current directory before
-    /// `PATH` unless `NoDefaultCurrentDirectoryInExePath` is set, and the current directory of a
-    /// generator is the repository being completed, so a repository holding `git.exe` or
-    /// `git.bat` would be run by every git generator. The PowerShell, `pwsh`, Git Bash and WSL
-    /// shells this executor otherwise starts resolve a bare `git` from `PATH` only.
-    #[cfg(windows)]
-    CmdExe,
-    ShellType {
-        shell_type: ShellType,
-        local_shell_path: Option<&'a Path>,
-    },
-}
-
-impl CommandBuilder<'_> {
-    fn build(
-        self,
-        command_string: &str,
-        shell_config_flag: Option<&str>,
-        sandbox: &NetworkSandbox,
-    ) -> Result<Command> {
-        Ok(match self {
-            #[cfg(windows)]
-            CommandBuilder::CmdExe => {
-                use command::windows::CommandExt as _;
-                let mut command = Command::new_with_process_group("cmd.exe");
-                command.args(["/Q", "/C"]);
-                command.raw_arg(command_string);
-                command
-            }
-            CommandBuilder::ShellType {
-                local_shell_path,
-                shell_type,
-            } => {
-                let program_to_execute = local_shell_path
-                    .as_ref()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or_else(|| {
-                        log::warn!("local_shell_path was None for a local session");
-                        shell_type.name()
-                    });
-                let mut command = network_sandbox::command_for(sandbox, program_to_execute)?;
-                if let Some(shell_config_flag) = shell_config_flag {
-                    command.arg(shell_config_flag);
-                }
-                command.arg("-c");
-                command.arg(command_string);
-                command
-            }
-        })
-    }
-}
-
 #[cfg(test)]
 #[path = "local_command_executor_tests.rs"]
 mod tests;
@@ -251,7 +193,6 @@ impl LocalCommandExecutor {
         command: &str,
         current_directory_path: Option<&str>,
         environment_variables: Option<HashMap<String, String>>,
-        execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
         let shell_config_flag = match self.shell_type {
             ShellType::Zsh => Some("-f"),
@@ -275,7 +216,6 @@ impl LocalCommandExecutor {
                 network_sandbox: &self.network_sandbox,
             },
             shell_config_flag,
-            execute_command_options,
         )
         .await
     }
@@ -291,11 +231,8 @@ impl LocalCommandExecutor {
     ) -> Result<CommandOutput> {
         let shell_config_flag = match self.shell_type {
             ShellType::Bash | ShellType::Zsh | ShellType::Fish => Some("-l"),
-            #[cfg(not(windows))]
             ShellType::PowerShell => Some("-Login"),
             // Windows PowerShell 5.1 does not support `-Login` and loads the user's profile by default.
-            #[cfg(windows)]
-            ShellType::PowerShell => None,
         };
 
         self.execute_local_command_internal(
@@ -307,42 +244,31 @@ impl LocalCommandExecutor {
                 network_sandbox: &NetworkSandbox::Unavailable,
             },
             shell_config_flag,
-            ExecuteCommandOptions {
-                // We have to run the command in the same shell as the session
-                // because we want to run it in a login shell.
-                run_command_in_same_shell_as_session: true,
-            },
         )
         .await
     }
 
-    #[cfg(unix)]
-    fn command_builder(
+    fn build_command(
         &self,
-        _execute_command_options: ExecuteCommandOptions,
-    ) -> CommandBuilder<'_> {
-        CommandBuilder::ShellType {
-            shell_type: self.shell_type,
-            local_shell_path: self.local_shell_path.as_deref(),
+        command_string: &str,
+        shell_config_flag: Option<&str>,
+        sandbox: &NetworkSandbox,
+    ) -> Result<Command> {
+        let program_to_execute = self
+            .local_shell_path
+            .as_deref()
+            .and_then(|p| p.to_str())
+            .unwrap_or_else(|| {
+                log::warn!("local_shell_path was None for a local session");
+                self.shell_type.name()
+            });
+        let mut command = network_sandbox::command_for(sandbox, program_to_execute)?;
+        if let Some(shell_config_flag) = shell_config_flag {
+            command.arg(shell_config_flag);
         }
-    }
-
-    #[cfg(windows)]
-    fn command_builder(
-        &self,
-        execute_command_options: ExecuteCommandOptions,
-    ) -> CommandBuilder<'_> {
-        // See `CommandBuilder::CmdExe`: nothing passes `false` here.
-        let use_cmd_exe = !execute_command_options.run_command_in_same_shell_as_session
-            && self.shell_type == ShellType::PowerShell;
-        if use_cmd_exe {
-            CommandBuilder::CmdExe
-        } else {
-            CommandBuilder::ShellType {
-                shell_type: self.shell_type,
-                local_shell_path: self.local_shell_path.as_deref(),
-            }
-        }
+        command.arg("-c");
+        command.arg(command_string);
+        Ok(command)
     }
 
     async fn execute_local_command_internal(
@@ -355,12 +281,9 @@ impl LocalCommandExecutor {
         // indicating the supplied command should be run under some configuration,
         // i.e. in a login shell or without sourcing .rc files
         shell_config_flag: Option<&str>,
-        execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
-        let command_builder = self.command_builder(execute_command_options);
-
-        let mut command_process = command_builder
-            .build(command, shell_config_flag, hardening.network_sandbox)
+        let mut command_process = self
+            .build_command(command, shell_config_flag, hardening.network_sandbox)
             .inspect_err(|error| log::warn!("not running a completion command: {error:#}"))?;
 
         // This sets then environment variables, including the PATH var.
@@ -422,15 +345,9 @@ impl CommandExecutor for LocalCommandExecutor {
         _shell: &Shell,
         current_directory_path: Option<&str>,
         environment_variables: Option<HashMap<String, String>>,
-        execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
-        self.execute_local_command(
-            command,
-            current_directory_path,
-            environment_variables,
-            execute_command_options,
-        )
-        .await
+        self.execute_local_command(command, current_directory_path, environment_variables)
+            .await
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -443,10 +360,6 @@ impl CommandExecutor for LocalCommandExecutor {
 
     fn network_isolated(&self) -> bool {
         self.network_sandbox.isolates_network()
-    }
-
-    fn offline_environment_applied(&self) -> bool {
-        self.apply_offline_environment
     }
 
     fn cancel_active_commands(&self) {

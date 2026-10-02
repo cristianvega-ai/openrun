@@ -28,12 +28,8 @@ const NODE_VERSION: &str = "v22.12.0";
 #[cfg(feature = "local_fs")]
 const MIN_NODE_VERSION: Version = Version::new(20, 0, 0);
 
-// Platform-specific paths for Node.js binaries
 cfg_if::cfg_if! {
-    if #[cfg(all(feature = "local_fs", windows))] {
-        const NODE_BINARY_PATH: &str = "node.exe";
-        const NPM_BINARY_PATH: &str = "node_modules/npm/bin/npm-cli.js";
-    } else if #[cfg(feature = "local_fs")] {
+    if #[cfg(feature = "local_fs")] {
         const NODE_BINARY_PATH: &str = "bin/node";
         const NPM_BINARY_PATH: &str = "bin/npm";
     }
@@ -492,15 +488,7 @@ pub async fn detect_system_node(path_env_var: impl AsRef<OsStr>) -> Result<()> {
     // `CreateProcessW` uses the parent process's PATH, not the child's
     // `lpEnvironment` PATH, so running `node` directly would find node.exe
     // via Warp's inherited env rather than the captured interactive PATH.
-    #[cfg(windows)]
-    let output = Command::new("cmd.exe")
-        .args(["/c", "node", "--version"])
-        .env("PATH", path_env_var)
-        .output()
-        .await
-        .context("Failed to run node --version. Is Node.js installed?")?;
 
-    #[cfg(not(windows))]
     let output = Command::new("node")
         .env("PATH", path_env_var)
         .arg("--version")

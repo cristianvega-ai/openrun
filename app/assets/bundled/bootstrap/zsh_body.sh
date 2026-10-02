@@ -42,8 +42,6 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
 
   OSC_PARAM_SEPARATOR=";"
 
-  OSC_RESET_GRID="$(printf '\e]9279\a')"
-
   # Attempt to cd to the desired initial working directory, swallowing any
   # errors.  If this fails, the user will end up in their home directory.
   if [[ ! -z "$WARP_INITIAL_WORKING_DIR" ]]; then
@@ -83,18 +81,7 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
       # unicode), we encode it as hexadecimal string to avoid prematurely calling unhook if
       # one of the bytes in JSON is 9c (ST) or other (CAN, SUB, ESC).
       local msg=$(warp_hex_encode_string "$1")
-      # We send the InitShell hook via OSCs when on WSL and via DCSs otherwise.
-      if [ "$WARP_USING_WINDOWS_CON_PTY" = true ]; then
-        printf $OSC_START$DCS_JSON_MARKER$OSC_PARAM_SEPARATOR$msg$OSC_END
-      else
-        printf "%b%b%s%b" $DCS_START $DCS_JSON_MARKER $msg $DCS_END
-      fi
-  }
-
-  warp_maybe_send_reset_grid_osc() {
-      if [ "$WARP_USING_WINDOWS_CON_PTY" = true ]; then
-          printf $OSC_RESET_GRID
-      fi
+      printf "%b%b%s%b" $DCS_START $DCS_JSON_MARKER $msg $DCS_END
   }
 
   # Hex-encodes the given argument and writes it to the PTY, wrapped in the OSC
@@ -104,14 +91,10 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
   #   warp_send_generator_output_osc $my_output
   #
   # The payload of the OSC is "<content_length>;<hex-encoded content>".
-  #
-  # Note: If we're on windows, we send a reset grid to erase any cursor mutations caused by
-  # the in-band command.
   warp_send_generator_output_osc() {
       local hex_encoded_message=$(warp_hex_encode_string "$1")
       local byte_count=$(LC_ALL="C"; printf "${#hex_encoded_message}")
       printf "%b%i;%s%b" $OSC_START_GENERATOR_OUTPUT $byte_count $hex_encoded_message $OSC_END_GENERATOR_OUTPUT
-      warp_maybe_send_reset_grid_osc
   }
 
   # Executes the given command and writes its output to the pty wrapped in a
@@ -215,7 +198,6 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
   warp_preexec () {
       local warp_escaped_command="$(warp_escape_json $1)"
       warp_send_json_message "{\"hook\": \"Preexec\", \"value\": {\"command\": \"$warp_escaped_command\", \"session_id\": $WARP_SESSION_ID}}"
-      warp_maybe_send_reset_grid_osc
 
       # If this preexec is called for user command, kill ongoing generator command jobs and clean
       # up the bookkeeping temp files used to bookkeep.
@@ -280,7 +262,6 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
       local next_block_id="precmd-$WARP_SESSION_ID-$((block_id++))"
 
       warp_send_json_message "{\"hook\": \"CommandFinished\", \"value\": {\"exit_code\": $exit_code, \"next_block_id\": \"$next_block_id\", \"session_id\": $WARP_SESSION_ID}}"
-      warp_maybe_send_reset_grid_osc
 
       # If this is being called for a generator command, short circuit and send an unpopulated
       # precmd payload (except for pwd), since we don't re-render the prompt after generator commands
@@ -351,12 +332,7 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
       bindkey '\ew' warp_change_prompt_modes_to_warp_prompt
 
       local escaped_pwd
-      if [ -n "${WSL_DISTRO_NAME:-}" ]; then
-        # In WSL, avoid symlinks b/c on Windows `std::fs` is unable to resolve symlink inside WSL containers.
-        escaped_pwd=$(warp_escape_json "$(pwd -P)")
-      else
-        escaped_pwd=$(warp_escape_json "$PWD")
-      fi
+      escaped_pwd=$(warp_escape_json "$PWD")
 
       local escaped_virtual_env=""
       local escaped_conda_env=""
@@ -776,11 +752,7 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
     local prompt_prefix=$'\e]133;A\a'
     local rprompt_prefix=$'\e]133;P;k=r\a'
     local prompt_suffix=$'\e]133;B\a'
-    if [[ "$WARP_HONOR_PS1" != "1" ]] && [ "$WARP_USING_WINDOWS_CON_PTY" = true ]; then
-        local suffix="$prompt_suffix$OSC_RESET_GRID"
-    else
-        local suffix="$prompt_suffix"
-    fi
+    local suffix="$prompt_suffix"
     local prompt_prefix_with_cursor_marker="%{$prompt_prefix"
     local suffix_with_cursor_marker="$suffix%}"
 
@@ -1028,7 +1000,7 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
           # Hex-encode the ZSH environment script we use to bootstrap remote zsh b/c it contains control characters
           # We decode on the SSH server using xxd if its available, otherwise fall back to a for-loop over each byte
           # and use printf to convert back to plaintext
-          local zsh_env_script=$(printf '%s' 'unsetopt ZLE RCS GLOBAL_RCS; WARP_SESSION_ID='$remote_session_id'; WARP_USING_WINDOWS_CON_PTY=@@USING_CON_PTY_BOOLEAN@@; _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n); _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER); _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d '"'"' \n'"'"'); printf '"'"'\e]9278;d;%s\x07'"'"' $_msg; unset _hostname _user _msg' | command -p od -An -v -tx1 | command -p tr -d ' \n')
+          local zsh_env_script=$(printf '%s' 'unsetopt ZLE RCS GLOBAL_RCS; WARP_SESSION_ID='$remote_session_id'; _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n); _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER); _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d '"'"' \n'"'"'); printf '"'"'\e]9278;d;%s\x07'"'"' $_msg; unset _hostname _user _msg' | command -p od -An -v -tx1 | command -p tr -d ' \n')
 
           # Optionally attach to an existing ControlMaster the user already
           # runs for this destination instead of creating our own. Resolve
@@ -1118,8 +1090,6 @@ case "'${SHELL##*/}'" in
       _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n)
       _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER)
       _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"bash\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d " \n")'"
-      WARP_USING_WINDOWS_CON_PTY=@@USING_CON_PTY_BOOLEAN@@
-      if [[ "'$OS'" == Windows_NT ]]; then WARP_IN_MSYS2=true; else WARP_IN_MSYS2=false; fi
       printf '\''"'\e]9278;d;%s\x07'"'\'' \""'$_msg'"\"'
       unset _hostname _user _msg
     )
@@ -1250,10 +1220,7 @@ esac
   # If the user is running powerlevel10k and they selected "sparse" for the "Prompt Spacing"
   # option, this var will be true. It tells p10k to output an extra newline in its precmd function
   # which visually separates commands. These are generally undesired in Warp, since blocks provide
-  # enough visual separation. Although generally benign, this causes an issue on Windows when
-  # ConPTY is involved. The extra newline is output by p10k's precmd which runs after Warp's
-  # precmd, i.e. after the "reset grid" sequence. It ends up causing Warp's grid content to be out
-  # of sync with ConPTY, causing cursor positioning problems.
+  # enough visual separation.
   if [[ ${POWERLEVEL9K_PROMPT_ADD_NEWLINE:-} == true ]]; then
     POWERLEVEL9K_PROMPT_ADD_NEWLINE=false
   fi
@@ -1705,7 +1672,7 @@ esac
     local escaped_editor="$(warp_escape_json "$EDITOR")"
     local escaped_shell_path="$(warp_escape_json "${commands[zsh]}")"
     local escaped_cdpath="$(warp_escape_json "$CDPATH")"
-    local escaped_json="{\"hook\": \"Bootstrapped\", \"value\": {\"histfile\": \"$escaped_histfile\", \"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"home_dir\": \"$HOME\", \"path\": \"$escaped_path\", \"cdpath\": \"$escaped_cdpath\", \"editor\": \"$escaped_editor\", \"env_var_names\":  \"$env_var_names\", \"abbreviations\": \"$escaped_abbrs\", \"aliases\": \"$escaped_aliases\", \"function_names\": \"$function_names\",  \"builtins\": \"$escaped_builtins\",  \"keywords\": \"$escaped_keywords\", \"shell_version\": \"$ZSH_VERSION\", \"shell_options\": \"$shell_options\", \"rcfiles_start_time\": \"$rcfiles_start_time\", \"rcfiles_end_time\": \"$rcfiles_end_time\", \"shell_plugins\": \"$escaped_shell_plugins\", \"os_category\": \"$os_category\", \"linux_distribution\": \"$linux_distribution\", \"wsl_name\": \"${WSL_DISTRO_NAME:-}\", \"shell_path\": \"$escaped_shell_path\"}}"
+    local escaped_json="{\"hook\": \"Bootstrapped\", \"value\": {\"histfile\": \"$escaped_histfile\", \"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"home_dir\": \"$HOME\", \"path\": \"$escaped_path\", \"cdpath\": \"$escaped_cdpath\", \"editor\": \"$escaped_editor\", \"env_var_names\":  \"$env_var_names\", \"abbreviations\": \"$escaped_abbrs\", \"aliases\": \"$escaped_aliases\", \"function_names\": \"$function_names\",  \"builtins\": \"$escaped_builtins\",  \"keywords\": \"$escaped_keywords\", \"shell_version\": \"$ZSH_VERSION\", \"shell_options\": \"$shell_options\", \"rcfiles_start_time\": \"$rcfiles_start_time\", \"rcfiles_end_time\": \"$rcfiles_end_time\", \"shell_plugins\": \"$escaped_shell_plugins\", \"os_category\": \"$os_category\", \"linux_distribution\": \"$linux_distribution\", \"shell_path\": \"$escaped_shell_path\"}}"
     warp_send_json_message "$escaped_json"
   }
   warp_bootstrapped

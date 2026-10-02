@@ -472,25 +472,12 @@ fn report_db_error(err_kind: &str, err: anyhow::Error, database_path: &Path) {
     fn log_access(prefix: &str, path: &Path) {
         match fs::metadata(path) {
             Ok(metadata) => {
-                cfg_if::cfg_if! {
-                    if #[cfg(windows)] {
-                        use async_fs::windows::MetadataExt;
-                        // Windows does not have the same notion of permissions as Unix-based file systems.
-                        // See more about what File Attributes contain [here](https://learn.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants).
-                        let attributes = metadata.file_attributes();
-                        safe_info!(
-                            safe: ("{prefix} attributes: {attributes}"),
-                            full: ("{prefix} {} attributes: {attributes}", path.display())
-                        );
-                    } else {
-                        use async_fs::unix::PermissionsExt;
-                        let mode = metadata.permissions().mode();
-                        safe_info!(
-                            safe: ("{prefix} permissions: {mode:o}"),
-                            full: ("{prefix} {} permissions: {mode:o}", path.display())
-                        );
-                    }
-                }
+                use async_fs::unix::PermissionsExt;
+                let mode = metadata.permissions().mode();
+                safe_info!(
+                    safe: ("{prefix} permissions: {mode:o}"),
+                    full: ("{prefix} {} permissions: {mode:o}", path.display())
+                );
             }
             Err(err) => {
                 safe_info!(
@@ -903,12 +890,6 @@ fn encode_path(path: PathBuf) -> Vec<u8> {
         if #[cfg(unix)] {
             use std::os::unix::ffi::OsStringExt;
             path.into_os_string().into_vec()
-        } else if #[cfg(windows)] {
-            use std::os::windows::ffi::OsStrExt;
-            let wide_char_sequence: Vec<u16> = path.into_os_string().encode_wide().collect();
-            // We need to deal with slices (not Vec) because otherwise we will get a PodCastError::AlignmentMismatch.
-            let slice: &[u8] = bytemuck::cast_slice(wide_char_sequence.as_slice());
-            slice.to_vec()
         }
     }
 }
@@ -925,11 +906,6 @@ fn decode_path(bytes: Vec<u8>) -> PathBuf {
         if #[cfg(unix)] {
             use std::os::unix::ffi::OsStringExt;
             OsString::from_vec(bytes).into()
-        } else if #[cfg(windows)] {
-            use std::os::windows::ffi::OsStringExt;
-            // We need to deal with slices (not Vec) because otherwise we will get a PodCastError::AlignmentMismatch.
-            let wide_char_sequence: &[u16] = bytemuck::cast_slice(bytes.as_slice());
-            OsString::from_wide(wide_char_sequence).into()
         }
     }
 }

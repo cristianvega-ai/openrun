@@ -199,7 +199,6 @@ fn create_static_diff_content_editor<V: View>(
     let editor = ctx.add_typed_action_view(|ctx| {
         CodeEditorView::new(
             None,
-            None,
             CodeEditorRenderOptions::new(VerticalExpansionBehavior::InfiniteHeight),
             ctx,
         )

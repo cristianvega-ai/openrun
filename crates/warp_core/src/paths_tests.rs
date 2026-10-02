@@ -11,8 +11,6 @@ fn test_data_dir_path() {
             assert_eq!(data_dir(), home_dir.join(".warp-oss"));
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             assert_eq!(data_dir(), home_dir.join(".local/share/warp-oss"));
-        } else if #[cfg(windows)] {
-            assert_eq!(data_dir(), home_dir.join("AppData\\Roaming\\warp\\WarpOss\\data"));
         } else {
             unimplemented!("Need to update tests for current platform!");
         }
@@ -28,8 +26,6 @@ fn test_config_local_dir_path() {
             assert_eq!(config_local_dir(), home_dir.join(".warp-oss"));
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             assert_eq!(config_local_dir(), home_dir.join(".config/warp-oss"));
-        } else if #[cfg(windows)] {
-            assert_eq!(config_local_dir(), home_dir.join("AppData\\Local\\warp\\WarpOss\\config"));
         } else {
             unimplemented!("Need to update tests for current platform!");
         }
@@ -76,8 +72,6 @@ fn test_cache_dir_path() {
             assert_eq!(cache_dir(), home_dir.join("Library/Application Support/dev.warp.WarpOss"));
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             assert_eq!(cache_dir(), home_dir.join(".cache/warp-oss"));
-        } else if #[cfg(windows)] {
-            assert_eq!(cache_dir(), home_dir.join("AppData\\Local\\warp\\WarpOss\\cache"));
         } else {
             unimplemented!("Need to update tests for current platform!");
         }
@@ -88,13 +82,10 @@ fn test_cache_dir_path() {
 fn test_state_dir_path() {
     let home_dir = home_dir().expect("Should be able to compute home directory");
     cfg_if::cfg_if! {
-        // ChannelState, by default, is configured for Channel::Oss.
         if #[cfg(target_os = "macos")] {
             assert_eq!(state_dir(), home_dir.join("Library/Application Support/dev.warp.WarpOss"));
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             assert_eq!(state_dir(), home_dir.join(".local/state/warp-oss"));
-        } else if #[cfg(windows)] {
-            assert_eq!(state_dir(), home_dir.join("AppData\\Local\\warp\\WarpOss\\data"));
         } else {
             unimplemented!("Need to update tests for current platform!");
         }
@@ -110,8 +101,6 @@ fn test_project_path_for_warp_app_id() {
             assert_eq!(project_dirs.project_path(), "dev.warp.Warp");
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             assert_eq!(project_dirs.project_path(), "warp-terminal");
-        } else if #[cfg(windows)] {
-            assert_eq!(project_dirs.project_path(), "warp\\Warp");
         } else {
             unimplemented!("Need to update tests for current platform!");
         }
@@ -127,8 +116,6 @@ fn test_project_path_for_warp_dev_app_id() {
             assert_eq!(project_dirs.project_path(), "dev.warp.WarpDev");
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             assert_eq!(project_dirs.project_path(), "warp-terminal-dev");
-        } else if #[cfg(windows)] {
-            assert_eq!(project_dirs.project_path(), "warp\\WarpDev");
         } else {
             unimplemented!("Need to update tests for current platform!");
         }
@@ -144,8 +131,6 @@ fn test_project_path_for_oss_app_id() {
             assert_eq!(project_dirs.project_path(), "dev.warp.WarpOss");
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             assert_eq!(project_dirs.project_path(), "warp-oss");
-        } else if #[cfg(windows)] {
-            assert_eq!(project_dirs.project_path(), "warp\\WarpOss");
         } else {
             unimplemented!("Need to update tests for current platform!");
         }

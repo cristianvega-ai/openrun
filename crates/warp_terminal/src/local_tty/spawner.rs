@@ -8,8 +8,6 @@ use {
     std::collections::HashMap, std::ffi::OsString, std::process::Child,
 };
 
-#[cfg(target_os = "windows")]
-use super::PseudoConsoleChild;
 use super::{PtyOptions, PtySpawnResult};
 use crate::local_tty::{self};
 
@@ -56,31 +54,10 @@ impl PtyHandle for DirectPtyHandle {
     }
 }
 
-#[cfg(target_os = "windows")]
-struct DirectPtyHandle {
-    child: PseudoConsoleChild,
-}
-
-#[cfg(target_os = "windows")]
-impl PtyHandle for DirectPtyHandle {
-    fn pid(&self) -> u32 {
-        self.child.id()
-    }
-
-    fn has_process_terminated(&mut self) -> Result<bool> {
-        Ok(self.child.is_terminated())
-    }
-
-    fn kill(&mut self) -> Result<()> {
-        self.child.kill()
-    }
-}
 pub(super) struct PtySpawnInfo {
     pub result: PtySpawnResult,
     #[cfg(unix)]
     pub child: Child,
-    #[cfg(windows)]
-    pub child: PseudoConsoleChild,
 }
 
 /// A global singleton that provides the ability to spawn ptys.
@@ -103,14 +80,12 @@ impl PtySpawner {
     pub fn new() -> Result<Self> {
         cfg_if::cfg_if! {
             if #[cfg(unix)] {
-                let server = super::server::TerminalServer::new()?;
-                Ok(Self {
-                    server: Some(server),
-                })
-            } else if #[cfg(target_os = "windows")] {
-                Ok(Self {})
+                        let server = super::server::TerminalServer::new()?;
+                        Ok(Self {
+                            server: Some(server),
+                        })
             } else {
-                unreachable!("Spawning a PTY is not supported on this platform.");
+                        unreachable!("Spawning a PTY is not supported on this platform.");
             }
         }
     }
@@ -119,11 +94,9 @@ impl PtySpawner {
     pub fn new_for_test() -> Self {
         cfg_if::cfg_if! {
             if #[cfg(unix)] {
-                Self{ server: None }
-            } else if #[cfg(target_os = "windows")] {
-                Self {}
+                        Self{ server: None }
             } else {
-                unreachable!("Spawning a PTY for tests is not supported on this platform.");
+                        unreachable!("Spawning a PTY for tests is not supported on this platform.");
             }
         }
     }
@@ -145,7 +118,6 @@ impl PtySpawner {
     pub(super) fn spawn_pty(
         &self,
         options: PtyOptions,
-        #[cfg(windows)] event_loop_tx: super::mio_channel::Sender<crate::writeable_pty::Message>,
     ) -> Result<(PtySpawnResult, Box<dyn PtyHandle>)> {
         #[cfg(unix)]
         if let Some(server) = &self.server {
@@ -172,22 +144,11 @@ impl PtySpawner {
             }
         }
 
-        Self::spawn_pty_directly(
-            options,
-            #[cfg(windows)]
-            event_loop_tx,
-        )
+        Self::spawn_pty_directly(options)
     }
 
-    fn spawn_pty_directly(
-        options: PtyOptions,
-        #[cfg(windows)] event_loop_tx: super::mio_channel::Sender<crate::writeable_pty::Message>,
-    ) -> Result<(PtySpawnResult, Box<dyn PtyHandle>)> {
-        let pty_spawn_info = local_tty::spawn(
-            options,
-            #[cfg(windows)]
-            event_loop_tx,
-        )?;
+    fn spawn_pty_directly(options: PtyOptions) -> Result<(PtySpawnResult, Box<dyn PtyHandle>)> {
+        let pty_spawn_info = local_tty::spawn(options)?;
         let direct_pty_handle = Box::new(DirectPtyHandle {
             child: pty_spawn_info.child,
         });

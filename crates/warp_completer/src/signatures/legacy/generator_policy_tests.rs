@@ -7,15 +7,13 @@ use warp_command_signatures::{GeneratorProcess, Shell};
 use warp_util::path::{EscapeChar, ShellFamily};
 
 use super::allowed::{
-    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS,
-    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, ALLOWED_WHEN_ISOLATED, GIT_ALIAS_GENERATORS,
-    GIT_GENERATORS_ON_POSIX_ONLY,
+    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_WHEN_ISOLATED, GIT_ALIAS_GENERATORS,
+    GIT_PIPELINE_GENERATORS, LOCAL_GIT_GENERATORS,
 };
 use super::denied::{DENIED_ALIAS_GENERATORS, DENIED_GENERATORS};
 use super::token_gate::{is_inert_word, is_quotable_word, listed_token_policies};
 use super::{
-    TokenPolicy, is_alias_generator_allowed, is_generator_allowed_on, sanitize_env_vars,
-    token_policy,
+    TokenPolicy, is_alias_generator_allowed, is_generator_allowed, sanitize_env_vars, token_policy,
 };
 use crate::completer::{
     CommandExitStatus, CommandOutput, CompleterOptions, CompletionContext,
@@ -32,8 +30,6 @@ struct RecordingContext {
     commands: Mutex<Vec<String>>,
     /// What `network_isolated` reports.
     isolated: bool,
-    /// What `offline_environment_applied` reports.
-    environment: bool,
     /// What `git_version` reports: a git new enough for the offline environment table unless a
     /// test says otherwise.
     git_version: Option<GitVersion>,
@@ -60,7 +56,6 @@ impl RecordingContext {
             registry,
             commands: Mutex::new(Vec::new()),
             isolated: false,
-            environment: false,
             git_version: Some(GitVersion::new(2, 54, 0)),
             git_version_requests: std::sync::atomic::AtomicUsize::new(0),
             family: None,
@@ -186,10 +181,6 @@ impl GeneratorContext for RecordingContext {
         self.isolated
     }
 
-    fn offline_environment_applied(&self) -> bool {
-        self.environment
-    }
-
     async fn git_version(&self) -> Option<GitVersion> {
         self.git_version_requests
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -197,25 +188,15 @@ impl GeneratorContext for RecordingContext {
     }
 }
 
-/// The bundled registry in a context whose executor applies the offline environment table and has
-/// no network sandbox (Windows local, Git Bash/MSYS2 and WSL sessions).
-fn guarded_with_environment() -> RecordingContext {
-    let mut context = guarded();
-    context.environment = true;
-    context
-}
-
 fn guarded() -> RecordingContext {
     RecordingContext::new(CommandRegistry::global_instance())
 }
 
-/// The bundled registry in a context whose commands cannot reach a network (macOS and Linux local
+/// The bundled registry in a context whose commands cannot reach a network (macOS local
 /// sessions).
-#[cfg(not(windows))]
 fn guarded_isolated() -> RecordingContext {
     let mut context = guarded();
     context.isolated = true;
-    context.environment = true;
     context
 }
 
@@ -259,7 +240,6 @@ const NETWORK_INPUTS: &[(&str, &str)] = &[
 ];
 
 /// Inputs whose completion reaches a generator that only reads the local machine.
-#[cfg(not(windows))]
 const LOCAL_INPUTS: &[(&str, &str)] = &[
     ("git checkout ", "branch"),
     ("git stash apply ", "stash"),
@@ -322,7 +302,6 @@ fn environment_dependent_generators_never_run_with_the_bundled_registry() {
     }
 }
 
-#[cfg(not(windows))]
 #[test]
 fn local_generators_still_run_with_the_bundled_registry() {
     let guarded = guarded();
@@ -335,7 +314,6 @@ fn local_generators_still_run_with_the_bundled_registry() {
     }
 }
 
-#[cfg(not(windows))]
 #[test]
 fn the_policy_decides_by_spec_and_generator_name() {
     use warp_command_signatures::GeneratorName;
@@ -638,12 +616,10 @@ fn the_injectable_and_environment_dependent_generators_are_denied_with_their_cla
         .iter()
         .chain(ENVIRONMENT_GENERATORS)
     {
-        for windows in [false, true] {
-            assert!(
-                !is_generator_allowed_on(windows, Containment::NetworkIsolated, spec, name),
-                "{spec}/{name} must not be allowed (windows: {windows})"
-            );
-        }
+        assert!(
+            !is_generator_allowed(spec, name, Containment::NetworkIsolated),
+            "{spec}/{name} must not be allowed"
+        );
         assert_eq!(
             DENIED_GENERATORS
                 .iter()
@@ -671,36 +647,24 @@ fn isolated_generators_run_only_when_the_context_is_isolated() {
     assert_eq!(generators_allowed_when_isolated(), ALLOWED_WHEN_ISOLATED);
     assert!(!ALLOWED_WHEN_ISOLATED.is_empty());
     for (spec, name) in ALLOWED_WHEN_ISOLATED {
-        for containment in [Containment::Unrestricted, Containment::OfflineEnvironment] {
-            assert!(
-                !is_generator_allowed_on(false, containment, spec, name),
-                "{spec}/{name} must not run outside a network-isolated context ({containment:?})"
-            );
-        }
         assert!(
-            is_generator_allowed_on(false, Containment::NetworkIsolated, spec, name),
-            "{spec}/{name} must run when the context is isolated"
+            !is_generator_allowed(spec, name, Containment::Unrestricted),
+            "{spec}/{name} must not run outside a network-isolated context"
         );
-        // Windows has no sandbox: only the pairs with their own Windows entry run, and then on
-        // the environment table alone.
         assert!(
-            !is_generator_allowed_on(true, Containment::NetworkIsolated, spec, name)
-                || ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT.contains(&(*spec, *name)),
-            "{spec}/{name} must not run on Windows"
+            is_generator_allowed(spec, name, Containment::NetworkIsolated),
+            "{spec}/{name} must run when the context is isolated"
         );
     }
     // Isolation does not unlock anything else.
     for (spec, name, _) in DENIED_GENERATORS {
-        for windows in [false, true] {
-            assert!(
-                !is_generator_allowed_on(windows, Containment::NetworkIsolated, spec, name),
-                "{spec}/{name} is denied even in an isolated context (windows: {windows})"
-            );
-        }
+        assert!(
+            !is_generator_allowed(spec, name, Containment::NetworkIsolated),
+            "{spec}/{name} is denied even in an isolated context"
+        );
     }
 }
 
-#[cfg(not(windows))]
 #[test]
 fn an_isolated_context_runs_the_restored_generators_and_a_plain_one_does_not() {
     for (input, marker) in [
@@ -996,142 +960,9 @@ fn typing_a_quoted_command_in_an_image_name_executes_nothing() {
     }
 }
 
-#[test]
-fn windows_runs_only_generators_that_read_files_and_take_no_tokens() {
-    for (spec, name) in ALLOWED_ON_WINDOWS {
-        assert!(
-            ALLOWED_GENERATORS.contains(&(*spec, *name)),
-            "{spec}/{name} is on the Windows list but not on the allow-list"
-        );
-        assert!(
-            is_generator_allowed_on(true, Containment::Unrestricted, spec, name),
-            "{spec}/{name}"
-        );
-        assert!(
-            is_generator_allowed_on(false, Containment::Unrestricted, spec, name),
-            "{spec}/{name}"
-        );
-    }
-    assert!(
-        ALLOWED_ON_WINDOWS.windows(2).all(|pair| pair[0] < pair[1]),
-        "ALLOWED_ON_WINDOWS must be sorted without duplicates"
-    );
-    // Everything else that starts another program is allowed elsewhere and denied on Windows,
-    // whatever the context guarantees.
-    for (spec, name) in [
-        ("docker", "from_as"),
-        ("kill", "process"),
-        ("brew", "services"),
-        ("kubectx", "context"),
-        ("git-flow", "type_branches"),
-    ] {
-        let allowed_elsewhere =
-            is_generator_allowed_on(false, Containment::Unrestricted, spec, name);
-        assert_eq!(
-            allowed_elsewhere,
-            DENIED_GENERATORS
-                .iter()
-                .all(|(s, g, _)| !(*s == spec && *g == name)),
-            "{spec}/{name}"
-        );
-        for containment in [
-            Containment::Unrestricted,
-            Containment::OfflineEnvironment,
-            Containment::NetworkIsolated,
-        ] {
-            assert!(
-                !is_generator_allowed_on(true, containment, spec, name),
-                "{spec}/{name} ({containment:?})"
-            );
-        }
-    }
-
-    let pure: BTreeSet<&str> = [
-        "cat",
-        "ls",
-        "find",
-        "grep",
-        "egrep",
-        "awk",
-        "sed",
-        "cut",
-        "sort",
-        "uniq",
-        "tr",
-        "head",
-        "tail",
-        "printf",
-        "echo",
-        "xargs",
-        "dirname",
-        "basename",
-        "true",
-        "test",
-        "expr",
-        "read",
-        "cd",
-        "Get-Variable",
-        "Get-Process",
-        "Get-Command",
-        "Where-Object",
-        "Select-Object",
-        "Sort-Object",
-        "Get-Unique",
-        "until",
-        "while",
-        "if",
-        "for",
-        "elif",
-        "done",
-        "fi",
-        "in",
-        "i",
-        "r",
-        "v",
-        "p",
-        "d",
-    ]
-    .into_iter()
-    .collect();
-    let quoted = Regex::new(r#"'[^']*'|"[^"]*""#).unwrap();
-    let separator = Regex::new(r"\||;|&&|\$\(|\)|\{|\}|\n|`|\bdo\b|\bthen\b|\belse\b").unwrap();
-    let leading = Regex::new(
-        r"^(?:(?:until|while|if|for|elif)\b\s*)?(?:\[\[.*?\]\]\s*)?(?:\w+=\S+\s+)*\\?([A-Za-z][\w.-]*)",
-    )
-    .unwrap();
-    let allowed_on_windows: BTreeSet<_> = ALLOWED_ON_WINDOWS.iter().copied().collect();
-    let mut checked = 0;
-    for (spec, name, generator) in bundled_generators() {
-        if !allowed_on_windows.contains(&(spec.as_str(), name.as_str())) {
-            continue;
-        }
-        checked += 1;
-        let GeneratorProcess::ShellCommand(command) = &generator.process else {
-            panic!("{spec}/{name} takes the user's tokens, so it cannot run on Windows");
-        };
-        let command = command.build(Shell::Posix).to_string();
-        let stripped = quoted.replace_all(&command, "''").into_owned();
-        assert!(
-            !stripped.contains("sh -c"),
-            "{spec}/{name} starts a nested shell: {command}"
-        );
-        for segment in separator.split(&stripped) {
-            if let Some(captures) = leading.captures(segment.trim()) {
-                assert!(
-                    pure.contains(&captures[1]),
-                    "{spec}/{name} starts {:?}, which is not a file read or cmdlet: {command}",
-                    &captures[1]
-                );
-            }
-        }
-    }
-    assert_eq!(checked, ALLOWED_ON_WINDOWS.len());
-}
-
-/// The git generators that run on Windows once the executor applies the offline environment
-/// table. Spelled out here so that a change to the list in `allowed.rs` shows up as a diff of
-/// this test.
-const WINDOWS_GIT_GENERATORS: &[(&str, &str)] = &[
+/// The local git generators. Spelled out here so that a change to the list in `allowed.rs` shows
+/// up as a diff of this test.
+const LOCAL_GIT_LIST: &[(&str, &str)] = &[
     ("checkov", "git_branch"),
     ("codex", "commits"),
     ("codex", "local_branches"),
@@ -1175,8 +1006,8 @@ const WINDOWS_GIT_GENERATORS: &[(&str, &str)] = &[
     ("vsce", "git_branch"),
 ];
 
-/// Generators whose command is a git invocation and that are not on the Windows list, with why.
-const GIT_GENERATORS_OFF_ON_WINDOWS: &[(&str, &str, &str)] = &[
+/// Generators whose command is a git invocation and that are not on the local git list, with why.
+const GIT_GENERATORS_OFF_THE_LIST: &[(&str, &str, &str)] = &[
     ("git", "files_for_staging", "status-like: clean filter"),
     (
         "git",
@@ -1197,23 +1028,17 @@ const GIT_GENERATORS_OFF_ON_WINDOWS: &[(&str, &str, &str)] = &[
 ];
 
 #[test]
-fn the_windows_git_list_is_pinned() {
-    assert_eq!(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, WINDOWS_GIT_GENERATORS);
-    assert_eq!(WINDOWS_GIT_GENERATORS.len(), 41);
+fn the_local_git_list_is_pinned() {
+    assert_eq!(LOCAL_GIT_GENERATORS, LOCAL_GIT_LIST);
+    assert_eq!(LOCAL_GIT_LIST.len(), 41);
     assert!(
-        WINDOWS_GIT_GENERATORS
-            .windows(2)
-            .all(|pair| pair[0] < pair[1]),
-        "the Windows git list must be sorted without duplicates"
+        LOCAL_GIT_LIST.windows(2).all(|pair| pair[0] < pair[1]),
+        "the local git list must be sorted without duplicates"
     );
-    for pair in WINDOWS_GIT_GENERATORS {
+    for pair in LOCAL_GIT_LIST {
         assert!(
             ALLOWED_GENERATORS.contains(pair) || ALLOWED_WHEN_ISOLATED.contains(pair),
-            "{pair:?} is on the Windows git list but on no allow-list"
-        );
-        assert!(
-            !ALLOWED_ON_WINDOWS.contains(pair),
-            "{pair:?} is on both Windows lists"
+            "{pair:?} is on the local git list but on no allow-list"
         );
         assert!(
             !DENIED_GENERATORS
@@ -1222,65 +1047,22 @@ fn the_windows_git_list_is_pinned() {
             "{pair:?} is denied"
         );
     }
-    for (spec, name, _) in GIT_GENERATORS_OFF_ON_WINDOWS {
+    for (spec, name, _) in GIT_GENERATORS_OFF_THE_LIST {
         assert!(
-            !WINDOWS_GIT_GENERATORS.contains(&(*spec, *name)),
-            "{spec}/{name} must stay off on Windows"
+            !LOCAL_GIT_LIST.contains(&(*spec, *name)),
+            "{spec}/{name} must stay off the local git list"
         );
-        for containment in [
-            Containment::Unrestricted,
-            Containment::OfflineEnvironment,
-            Containment::NetworkIsolated,
-        ] {
-            assert!(
-                !is_generator_allowed_on(true, containment, spec, name),
-                "{spec}/{name} ({containment:?})"
-            );
-        }
     }
 }
 
-#[test]
-fn windows_git_generators_run_only_where_the_offline_environment_is_applied() {
-    for (spec, name) in WINDOWS_GIT_GENERATORS {
-        assert!(
-            !is_generator_allowed_on(true, Containment::Unrestricted, spec, name),
-            "{spec}/{name} must not run on Windows without the offline environment table"
-        );
-        for containment in [
-            Containment::OfflineEnvironment,
-            Containment::NetworkIsolated,
-        ] {
-            assert!(
-                is_generator_allowed_on(true, containment, spec, name),
-                "{spec}/{name} ({containment:?})"
-            );
-        }
-        // Other platforms are unchanged: the allow-list pairs always run, the isolated-tier pairs
-        // only in an isolated context.
-        let isolated_only = ALLOWED_WHEN_ISOLATED.contains(&(*spec, *name));
-        assert_eq!(
-            is_generator_allowed_on(false, Containment::OfflineEnvironment, spec, name),
-            !isolated_only,
-            "{spec}/{name}"
-        );
-        assert!(is_generator_allowed_on(
-            false,
-            Containment::NetworkIsolated,
-            spec,
-            name
-        ));
-    }
-}
-
-/// The git subcommands a generator on the Windows list may run, with the option that makes each
+/// The git subcommands a generator on the local git list may run, with the option that makes each
 /// a read of the local repository. Network subcommands (`fetch`, `pull`, `push`, `clone`,
 /// `ls-remote`, `remote show`/`update`, `submodule`) and the status-like ones (`status`, `diff`
 /// without `--cached`, `ls-files --modified`) are not among them.
 const LOCAL_GIT_READS: &str = r"^git (?:--no-optional-locks )?(?:branch|tag|remote|log|rev-list|for-each-ref|stash list|worktree list|config --get-regexp|ls-files|diff --cached --name-only)\b[^|;&$`<>]*$";
 
 #[test]
-fn every_windows_git_generator_runs_exactly_one_local_git_read_in_every_shell_family() {
+fn every_local_git_generator_runs_exactly_one_local_git_read_in_every_shell_family() {
     let command = Regex::new(LOCAL_GIT_READS).unwrap();
     let forbidden = Regex::new(
         r"\b(?:fetch|pull|push|clone|ls-remote|submodule|status|remote (?:show|update|add|set-url|prune)|--modified|--others)\b",
@@ -1291,14 +1073,14 @@ fn every_windows_git_generator_runs_exactly_one_local_git_read_in_every_shell_fa
         &["git", "push", "origin", "$(touch x)", "`id`", "'; id; '"],
         &["git", "--help", "-C", "x"],
     ];
-    let windows: BTreeSet<_> = WINDOWS_GIT_GENERATORS.iter().copied().collect();
+    let local_git: BTreeSet<_> = LOCAL_GIT_LIST.iter().copied().collect();
     let mut checked = 0;
     for (spec, name, generator) in bundled_generators() {
-        if !windows.contains(&(spec.as_str(), name.as_str())) {
+        if !local_git.contains(&(spec.as_str(), name.as_str())) {
             continue;
         }
         checked += 1;
-        for shell in [Shell::Posix, Shell::Powershell, Shell::CmdExe] {
+        for shell in [Shell::Posix, Shell::Powershell] {
             let commands: BTreeSet<String> = match &generator.process {
                 GeneratorProcess::ShellCommand(command) => {
                     BTreeSet::from([command.build(shell).to_string()])
@@ -1307,7 +1089,7 @@ fn every_windows_git_generator_runs_exactly_one_local_git_read_in_every_shell_fa
                     assert_eq!(
                         super::token_policy(&spec, &name),
                         TokenPolicy::Inert,
-                        "{spec}/{name} takes tokens and is not Inert, so it cannot run on Windows"
+                        "{spec}/{name} takes tokens and is not Inert, so it is not a local git read"
                     );
                     hostile_tokens
                         .iter()
@@ -1333,19 +1115,13 @@ fn every_windows_git_generator_runs_exactly_one_local_git_read_in_every_shell_fa
             );
         }
     }
-    assert_eq!(checked, WINDOWS_GIT_GENERATORS.len());
+    assert_eq!(checked, LOCAL_GIT_LIST.len());
 }
 
 #[test]
 fn the_status_like_git_generators_never_run_in_any_context() {
     let unrestricted = unrestricted();
-    let mut isolated = guarded_with_environment();
-    isolated.isolated = true;
-    let contexts = [
-        ("plain", guarded()),
-        ("environment", guarded_with_environment()),
-        ("isolated", isolated),
-    ];
+    let contexts = [("plain", guarded()), ("isolated", guarded_isolated())];
     for (input, marker) in [
         ("git diff ", "diff --diff-filter"),
         ("git add ", "ls-files -z --exclude-standard"),
@@ -1363,44 +1139,13 @@ fn the_status_like_git_generators_never_run_in_any_context() {
             );
         }
     }
-    for (spec, name, _) in GIT_GENERATORS_OFF_ON_WINDOWS
+    for (spec, name, _) in GIT_GENERATORS_OFF_THE_LIST
         .iter()
         .filter(|(_, _, why)| why.starts_with("status-like"))
     {
-        for windows in [false, true] {
-            assert!(
-                !is_generator_allowed_on(windows, Containment::NetworkIsolated, spec, name),
-                "{spec}/{name} (windows: {windows})"
-            );
-        }
-    }
-}
-
-/// On Windows, the engine itself, with the bundled registry: git completions run when the
-/// executor applies the table and not otherwise, and a typed word still has to pass the strict
-/// token gate.
-#[cfg(windows)]
-#[test]
-fn git_completions_run_on_windows_only_with_the_offline_environment() {
-    for (input, marker) in [
-        ("git checkout ", "branch"),
-        ("git stash apply ", "stash"),
-        ("git tag -d ", "tag --list"),
-    ] {
-        // The alias generator (`git config --get alias.<word>`) runs in every context, behind the
-        // token gate, as it always has.
-        let plain = guarded().commands_for(input);
         assert!(
-            !plain.iter().any(|command| command.starts_with("git")
-                && !command.starts_with("git config --get alias.")),
-            "{input:?} ran git without the offline environment: {plain:?}"
-        );
-        let with_environment = guarded_with_environment().commands_for(input);
-        assert!(
-            with_environment
-                .iter()
-                .any(|command| command.starts_with("git") && command.contains(marker)),
-            "{input:?} should run git {marker:?} with the offline environment: {with_environment:?}"
+            !is_generator_allowed(spec, name, Containment::NetworkIsolated),
+            "{spec}/{name}"
         );
     }
 }
@@ -1413,7 +1158,7 @@ fn commands_in_every_family(spec: &str, generator: &str) -> BTreeSet<String> {
         .find(|(s, g, _)| s == spec && g == generator)
         .unwrap_or_else(|| panic!("no bundled generator {spec}/{generator}"));
     let mut commands = BTreeSet::new();
-    for shell in [Shell::Posix, Shell::Powershell, Shell::CmdExe] {
+    for shell in [Shell::Posix, Shell::Powershell] {
         match &generator.process {
             GeneratorProcess::ShellCommand(command) => {
                 commands.insert(command.build(shell).to_string());
@@ -1457,8 +1202,7 @@ fn the_codex_git_generators_are_the_same_local_git_reads_as_the_git_and_gt_ones(
         );
     }
 
-    // They are classified like the siblings: allowed everywhere the other git generators are,
-    // and on Windows only where the offline environment table is applied.
+    // They are classified like the siblings.
     for name in ["commits", "local_branches"] {
         assert!(
             !DENIED_GENERATORS
@@ -1466,38 +1210,19 @@ fn the_codex_git_generators_are_the_same_local_git_reads_as_the_git_and_gt_ones(
                 .any(|(s, g, _)| (*s, *g) == ("codex", name))
         );
         assert!(ALLOWED_GENERATORS.contains(&("codex", name)));
-        assert!(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT.contains(&("codex", name)));
+        assert!(LOCAL_GIT_GENERATORS.contains(&("codex", name)));
         assert!(!ALLOWED_WHEN_ISOLATED.contains(&("codex", name)));
-        for containment in [
-            Containment::Unrestricted,
-            Containment::OfflineEnvironment,
-            Containment::NetworkIsolated,
-        ] {
-            for windows in [false, true] {
-                assert_eq!(
-                    is_generator_allowed_on(windows, containment, "codex", name),
-                    is_generator_allowed_on(windows, containment, "gt", name),
-                    "codex/{name} must be classified like gt/{name} (windows: {windows}, {containment:?})"
-                );
-            }
+        for containment in [Containment::Unrestricted, Containment::NetworkIsolated] {
+            assert_eq!(
+                is_generator_allowed("codex", name, containment),
+                is_generator_allowed("gt", name, containment),
+                "codex/{name} must be classified like gt/{name} ({containment:?})"
+            );
         }
-        assert!(is_generator_allowed_on(
-            true,
-            Containment::OfflineEnvironment,
+        assert!(is_generator_allowed(
             "codex",
-            name
-        ));
-        assert!(!is_generator_allowed_on(
-            true,
-            Containment::Unrestricted,
-            "codex",
-            name
-        ));
-        assert!(is_generator_allowed_on(
-            false,
-            Containment::Unrestricted,
-            "codex",
-            name
+            name,
+            Containment::Unrestricted
         ));
     }
 
@@ -1508,14 +1233,11 @@ fn the_codex_git_generators_are_the_same_local_git_reads_as_the_git_and_gt_ones(
                 .iter()
                 .any(|(s, g, _)| (*s, *g) == ("codex", name))
         );
-        for windows in [false, true] {
-            assert!(!is_generator_allowed_on(
-                windows,
-                Containment::NetworkIsolated,
-                "codex",
-                name
-            ));
-        }
+        assert!(!is_generator_allowed(
+            "codex",
+            name,
+            Containment::NetworkIsolated
+        ));
     }
 }
 
@@ -1529,22 +1251,19 @@ fn runs_git(command: &str) -> bool {
 
 #[test]
 fn every_allowed_generator_that_runs_git_is_in_the_git_family_and_nothing_else_is() {
-    let family: BTreeSet<(&str, &str)> = ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT
+    let family: BTreeSet<(&str, &str)> = LOCAL_GIT_GENERATORS
         .iter()
-        .chain(GIT_GENERATORS_ON_POSIX_ONLY)
+        .chain(GIT_PIPELINE_GENERATORS)
         .copied()
         .collect();
     assert_eq!(
-        GIT_GENERATORS_ON_POSIX_ONLY,
+        GIT_PIPELINE_GENERATORS,
         [("git-flow", "type_branches")],
-        "the POSIX-only git generators are pinned"
+        "the pipeline git generators are pinned"
     );
-    for pair in GIT_GENERATORS_ON_POSIX_ONLY {
+    for pair in GIT_PIPELINE_GENERATORS {
         assert!(ALLOWED_GENERATORS.contains(pair), "{pair:?}");
-        assert!(
-            !ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT.contains(pair),
-            "{pair:?}"
-        );
+        assert!(!LOCAL_GIT_GENERATORS.contains(pair), "{pair:?}");
     }
 
     let allowed: BTreeSet<(&str, &str)> = ALLOWED_GENERATORS
@@ -1579,8 +1298,8 @@ fn every_allowed_generator_that_runs_git_is_in_the_git_family_and_nothing_else_i
     assert!(
         missing.is_empty(),
         "these allowed generators run git but are not in the git family, so they would run with a \
-         git older than 2.31 (add them to ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, or to \
-         GIT_GENERATORS_ON_POSIX_ONLY if they are not simple git reads): {missing:?}"
+         git older than 2.31 (add them to LOCAL_GIT_GENERATORS, or to \
+         GIT_PIPELINE_GENERATORS if they are not simple git reads): {missing:?}"
     );
     let extra: Vec<_> = family_owned.difference(&running_git).collect();
     assert!(
@@ -1646,7 +1365,7 @@ fn git_generators_run_only_when_the_sessions_git_is_at_least_2_31() {
         (Some(GitVersion::new(2, 39, 3)), true),
         (Some(GitVersion::new(2, 45, 1)), true),
     ] {
-        for make in [guarded, guarded_with_environment] {
+        for make in [guarded, guarded_isolated] {
             let mut context = make();
             context.git_version = version;
             for input in inputs {
@@ -1662,7 +1381,6 @@ fn git_generators_run_only_when_the_sessions_git_is_at_least_2_31() {
     }
 
     // On the platforms where the policy lets them run, the same holds in an isolated context.
-    #[cfg(not(windows))]
     for version in [None, Some(GitVersion::new(2, 30, 0))] {
         let mut context = guarded_isolated();
         context.git_version = version;
@@ -1678,7 +1396,7 @@ fn git_generators_run_only_when_the_sessions_git_is_at_least_2_31() {
 
 #[test]
 fn a_git_that_is_too_old_does_not_stop_the_generators_that_do_not_run_git() {
-    let mut context = guarded_with_environment();
+    let mut context = guarded();
     context.git_version = Some(GitVersion::new(2, 30, 0));
     let executed = context.commands_for("npm run ");
     assert!(
@@ -1822,7 +1540,6 @@ fn is_alias_generator_allowed_matches_the_listed_pairs() {
     }
 }
 
-#[cfg(not(windows))]
 #[test]
 fn is_generator_allowed_matches_the_listed_pairs() {
     use super::is_generator_allowed;
@@ -2510,8 +2227,8 @@ mod injection_corpus {
     }
 }
 
-/// Words a shell reads as syntax or as something other than a plain word, for bash, zsh, fish,
-/// PowerShell and cmd.exe.
+/// Words a shell reads as syntax or as something other than a plain word, for bash, zsh, fish
+/// and PowerShell.
 const HOSTILE_WORDS: &[&str] = &[
     "a b",
     "a\tb",
@@ -2594,7 +2311,7 @@ fn the_strict_gate_refuses_every_hostile_word_in_every_shell_family() {
         for policy in [TokenPolicy::Strict, TokenPolicy::Escaped] {
             assert!(
                 !policy.permits(ShellFamily::PowerShell, &["git", word]),
-                "{policy:?} must refuse {word:?} on PowerShell and cmd.exe"
+                "{policy:?} must refuse {word:?} on PowerShell"
             );
         }
         assert!(
@@ -2785,9 +2502,7 @@ fn the_token_policy_table_is_sorted_allowed_and_holds_up() {
 }
 
 /// Plain input keeps completing: the engine passes inert words and, for a generator that
-/// quotes, a path with a space. Windows runs none of these generators except git's, which
-/// `git_completions_run_on_windows_only_with_the_offline_environment` covers.
-#[cfg(not(windows))]
+/// quotes, a path with a space.
 #[test]
 fn valid_inputs_still_reach_their_generators() {
     let guarded = guarded();

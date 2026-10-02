@@ -22,7 +22,7 @@ use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity, Vie
 
 use super::event_loop::EventLoop;
 use super::mio_channel;
-use super::shell::{ShellStarter, ShellStarterSource};
+use super::shell::{DirectShellStarter, ShellStarterSource};
 #[cfg(unix)]
 use super::terminal_attributes::TerminalAttributesPoller;
 use crate::banner::BannerState;
@@ -205,7 +205,7 @@ impl<S> TerminalManager<S> {
             AvailableShells::handle(ctx)
                 .read(ctx, |shells, ctx| shells.get_user_preferred_shell(ctx))
         });
-        let wsl_name_or_shell_starter = ShellStarter::init(preferred_shell.clone());
+        let shell_starter_source = ShellStarterSource::init(preferred_shell.clone());
 
         // Create the terminal model with all restored blocks
         log::info!(
@@ -222,9 +222,9 @@ impl<S> TerminalManager<S> {
             channel_event_proxy.clone(),
             ShellLaunchState::DeterminingShell {
                 available_shell: Some(preferred_shell),
-                display_name: wsl_name_or_shell_starter
+                display_name: shell_starter_source
                     .as_ref()
-                    .map(|wsl_name_or_shell_starter| wsl_name_or_shell_starter.name())
+                    .map(ShellStarterSource::name)
                     .unwrap_or(ShellName::LessDescriptive("Shell".to_owned())),
             },
             BlockSpacing::for_gui(ctx),
@@ -292,12 +292,7 @@ impl<S> TerminalManager<S> {
         let terminal_manager_model = ctx.add_model(|ctx| {
             let terminal_manager: Box<dyn TerminalManagerTrait> = Box::new(terminal_manager);
             ctx.spawn(
-                async move {
-                    match wsl_name_or_shell_starter {
-                        Some(starter_source) => starter_source.to_shell_starter_source().await,
-                        None => None,
-                    }
-                },
+                async move { shell_starter_source },
                 move |terminal_manager: &mut Box<dyn TerminalManagerTrait>,
                       shell_starter_source,
                       ctx| {
@@ -385,29 +380,20 @@ fn on_shell_determined<S: TerminalSurface>(
         shell_starter_source,
         Some(ShellStarterSource::Fallback { .. })
     );
-    let shell_starter = shell_starter_source.map(ShellStarter::from);
+    let shell_starter = shell_starter_source.map(DirectShellStarter::from);
     let shell_starter = match shell_starter {
         Some(shell_starter) => shell_starter,
         None => {
             report_error!("Could not compute fallback shell");
             manager.view.update(ctx, |surface, ctx| {
                 surface.on_pty_spawn_failed(
-                    anyhow::Error::msg("Could not find a fallback shell. If you have PowerShell or WSL installed, please file an issue."),
+                    anyhow::Error::msg("Could not find a fallback shell (bash, fish or zsh)."),
                     ctx,
                 );
             });
             manager.model().lock().exit(ExitReason::ShellNotFound);
             return;
         }
-    };
-
-    // In WSL, default to the WSL home directory, not the native Windows home directory.
-    let startup_directory = if let (ShellStarter::Wsl(wsl_shell_starter), None) =
-        (&shell_starter, &startup_directory)
-    {
-        wsl_shell_starter.home_directory()
-    } else {
-        startup_directory
     };
 
     // Show a "shell unsupported" banner, if applicable.
@@ -426,18 +412,9 @@ fn on_shell_determined<S: TerminalSurface>(
         .lock()
         .set_login_shell_spawned(shell_starter.shell_type());
 
-    let shell_launch_data = match &shell_starter {
-        ShellStarter::Direct(shell_starter) => ShellLaunchData::Executable {
-            executable_path: shell_starter.logical_shell_path().to_owned(),
-            shell_type: shell_starter.shell_type(),
-        },
-        ShellStarter::Wsl(shell_starter) => ShellLaunchData::WSL {
-            distro: shell_starter.distribution().to_owned(),
-        },
-        ShellStarter::MSYS2(shell_starter) => ShellLaunchData::MSYS2 {
-            executable_path: shell_starter.logical_shell_path().to_owned(),
-            shell_type: shell_starter.shell_type(),
-        },
+    let shell_launch_data = ShellLaunchData::Executable {
+        executable_path: shell_starter.logical_shell_path().to_owned(),
+        shell_type: shell_starter.shell_type(),
     };
 
     // This needs to be done before bootstrapping starts (i.e. before spawning the event loop below).
@@ -448,15 +425,11 @@ fn on_shell_determined<S: TerminalSurface>(
 
     // Register the session ID that was generated during shell starter construction.
     // For bash, fish, and PowerShell, the session ID is already baked into the command
-    // args. For zsh and MSYS2, enqueue_init_script injects this same ID.
-    let generated_session_id = match &shell_starter {
-        ShellStarter::Direct(starter) | ShellStarter::MSYS2(starter) => starter.session_id(),
-        ShellStarter::Wsl(starter) => starter.session_id(),
-    };
+    // args. For zsh, enqueue_init_script injects this same ID.
     manager
         .model()
         .lock()
-        .register_session_id(generated_session_id);
+        .register_session_id(shell_starter.session_id());
 
     // Enqueue the init shell script (for shells that need it), then create
     // the PTY and start its corresponding event loop.
@@ -467,10 +440,8 @@ fn on_shell_determined<S: TerminalSurface>(
         model_events,
     } = shell_startup_resources;
     let model = manager.model();
-    #[cfg(windows)]
-    let event_loop_tx = manager.event_loop_tx.lock().clone();
     let pty = match manager
-        .enqueue_init_script(&shell_starter, generated_session_id)
+        .enqueue_init_script(&shell_starter, shell_starter.session_id())
         .context("Failed to write shell init script to the pty")
         .and_then(|_| {
             TerminalManager::<S>::create_pty(
@@ -478,8 +449,6 @@ fn on_shell_determined<S: TerminalSurface>(
                 shell_starter,
                 env_vars,
                 model.clone(),
-                #[cfg(windows)]
-                event_loop_tx,
                 ctx,
             )
         }) {
@@ -520,11 +489,9 @@ fn on_shell_determined<S: TerminalSurface>(
 
     manager.view.update(ctx, |surface, ctx| {
         surface.on_shell_determined(ctx);
-        surface.on_active_shell_launch_data_updated(Some(shell_launch_data), ctx);
     });
 
     // Initialize the terminal attributes poller.
-    // TODO: Implement TerminalPoller on Windows.
     #[cfg(unix)]
     {
         let terminal_attributes_poller = ctx.add_model(|_| TerminalAttributesPoller::new(fd));
@@ -560,11 +527,11 @@ impl<S> TerminalManager<S> {
 
     fn enqueue_init_script(
         &self,
-        shell_starter: &ShellStarter,
+        shell_starter: &DirectShellStarter,
         session_id: SessionId,
     ) -> Result<(), SendError<Message>> {
         let shell_type = shell_starter.shell_type();
-        if shell_type == crate::terminal::shell::ShellType::Zsh || shell_starter.is_msys2() {
+        if shell_type == crate::terminal::shell::ShellType::Zsh {
             let init_shell_script = crate::terminal::bootstrap::init_shell_script_for_shell(
                 shell_type,
                 &crate::ASSETS,
@@ -580,10 +547,9 @@ impl<S> TerminalManager<S> {
 
     fn create_pty(
         startup_directory: Option<PathBuf>,
-        shell_starter: ShellStarter,
+        shell_starter: DirectShellStarter,
         env_vars: HashMap<OsString, OsString>,
         model: Arc<FairMutex<TerminalModel>>,
-        #[cfg(windows)] event_loop_tx: mio_channel::Sender<Message>,
         ctx: &mut AppContext,
     ) -> anyhow::Result<Pty> {
         let is_shell_debug_mode_enabled = *DebugSettings::as_ref(ctx)
@@ -638,12 +604,7 @@ impl<S> TerminalManager<S> {
             close_fds: true,
         };
 
-        Pty::new(
-            options,
-            #[cfg(windows)]
-            event_loop_tx,
-            ctx,
-        )
+        Pty::new(options, ctx)
     }
 
     /// Start's the PTY event loop, returning a sender for the event loop and the event loop's join handle.

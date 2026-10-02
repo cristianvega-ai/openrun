@@ -644,30 +644,6 @@ fn parse_dcs_precmd_classifies_payload_with_completion_metadata() {
 }
 
 #[test]
-fn pending_precmd_classifies_payload_with_completion_metadata() {
-    let mut hook = PendingHook::create("Precmd").unwrap();
-    hook.update("exit_code".to_owned(), "127".to_owned());
-    hook.update("next_block_id".to_owned(), "block_id".to_owned());
-    hook.update("session_id".to_owned(), "167303092612201".to_owned());
-
-    match hook.finish().unwrap() {
-        DProtoHook::Precmd {
-            value: PrecmdHookValue::WithCompletionMetadata(value),
-        } => {
-            assert_eq!(
-                value.completion_metadata,
-                CompletionMetadata {
-                    exit_code: ExitCode::from(127),
-                    next_block_id: "block_id".to_owned().into(),
-                }
-            );
-            assert_eq!(value.prompt_metadata.session_id, Some(167303092612201));
-        }
-        _ => panic!("incorrect dcs value"),
-    }
-}
-
-#[test]
 fn parse_dcs_precmd_classifies_prompt_only_payload() {
     let bytes = hex_encoded_dcs_string(
         r#"{
@@ -713,22 +689,6 @@ fn parse_dcs_precmd_rejects_partial_completion_metadata() {
         let (_, handler) = parse_bytes(&bytes);
 
         assert!(handler.d_proto_hooks.is_empty());
-    }
-}
-
-#[test]
-fn pending_precmd_rejects_partial_or_invalid_completion_metadata() {
-    for fields in [
-        vec![("exit_code", "0")],
-        vec![("next_block_id", "block_id")],
-        vec![("exit_code", "invalid"), ("next_block_id", "block_id")],
-    ] {
-        let mut hook = PendingHook::create("Precmd").unwrap();
-        for (key, value) in fields {
-            hook.update(key.to_owned(), value.to_owned());
-        }
-
-        assert!(hook.finish().is_err());
     }
 }
 
@@ -843,7 +803,6 @@ fn parse_dcs_bootstrapped() {
                 vi_mode_enabled: None,
                 os_category: None,
                 linux_distribution: None,
-                wsl_name: None,
                 shell_path: Some("/usr/local/bin/bash".to_string())
             }
         ),
@@ -1381,40 +1340,6 @@ fn parse_osc7_empty_payload_ignored() {
     assert!(handler.cwd_updates.is_empty());
 }
 
-#[cfg(windows)]
-#[test]
-fn parse_osc7_windows_drive_letter_normalized() {
-    let local =
-        crate::model::session::get_local_hostname().expect("test requires a real local hostname");
-    let payload = format!("\x1b]7;file://{local}/E:/CLAUDE-BASE\x07");
-    let (_, handler) = parse_bytes(payload.as_bytes());
-
-    assert_eq!(handler.cwd_updates, vec![r"E:\CLAUDE-BASE".to_string()]);
-}
-
-#[cfg(windows)]
-#[test]
-fn parse_osc7_windows_drive_letter_root() {
-    let local =
-        crate::model::session::get_local_hostname().expect("test requires a real local hostname");
-    let payload = format!("\x1b]7;file://{local}/E:/\x07");
-    let (_, handler) = parse_bytes(payload.as_bytes());
-
-    assert_eq!(handler.cwd_updates, vec![r"E:\".to_string()]);
-}
-
-#[cfg(windows)]
-#[test]
-fn parse_osc7_windows_drive_letter_percent_encoded() {
-    let local =
-        crate::model::session::get_local_hostname().expect("test requires a real local hostname");
-    let payload = format!("\x1b]7;file://{local}/E:/My%20Code\x07");
-    let (_, handler) = parse_bytes(payload.as_bytes());
-
-    assert_eq!(handler.cwd_updates, vec![r"E:\My Code".to_string()]);
-}
-
-#[cfg(not(windows))]
 #[test]
 fn parse_osc7_posix_path_not_mangled_non_windows() {
     let local =

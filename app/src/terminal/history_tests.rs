@@ -178,7 +178,6 @@ fn test_append_commands() {
     });
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_append_multiple_sessions() {
     VirtualFS::test("append_multiple_sessions", |dirs, mut sandbox| {
@@ -659,7 +658,6 @@ fn test_sessions_no_dupes_new_session() {
     });
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn append_command_with_rich_history_data() {
     App::test((), |mut app| async move {

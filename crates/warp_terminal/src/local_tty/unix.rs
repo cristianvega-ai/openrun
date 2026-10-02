@@ -10,7 +10,7 @@ use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::path::PathBuf;
 use std::{io, ptr};
 
-use anyhow::{Context as _, Error, Result};
+use anyhow::{Context as _, Result};
 use command::blocking::Command;
 use itertools::Itertools;
 use libc::{self, TIOCSCTTY, c_int, winsize};
@@ -31,9 +31,7 @@ use warpui_core::{AppContext, SingletonEntity};
 use super::event_loop::{PTY_TOKEN, SIGNALS_TOKEN};
 use super::spawner::{PtyHandle, PtySpawnInfo, PtySpawner};
 use super::{ChildEvent, EventedPty, EventedReadWrite, PtyOptions, SizeInfo};
-use crate::local_tty::shell::{
-    DirectShellStarter, ShellStarter, extra_path_entries, ssh_socket_dir,
-};
+use crate::local_tty::shell::{DirectShellStarter, extra_path_entries, ssh_socket_dir};
 use crate::shell::ShellType;
 
 const BASH_HISTORY_SIZE_SENTINEL: &str = "57265949261";
@@ -191,15 +189,6 @@ pub(super) fn spawn(options: PtyOptions) -> Result<PtySpawnInfo> {
         node_version_chip_enabled,
         close_fds,
     } = options;
-    let shell_starter = match shell_starter {
-        ShellStarter::Direct(shell_starter) => shell_starter,
-        _ => {
-            return Err(Error::msg(
-                "Given invalid shell starter on Unix-based system",
-            ));
-        }
-    };
-
     let command = build_host_shell_command(
         shell_starter,
         window_id,

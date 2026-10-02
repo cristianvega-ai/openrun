@@ -397,7 +397,6 @@ impl LocalCodeEditorView {
         let view = ctx.add_typed_action_view(|ctx| {
             CodeEditorView::new(
                 None,
-                None,
                 CodeEditorRenderOptions::new(VerticalExpansionBehavior::InfiniteHeight),
                 ctx,
             )

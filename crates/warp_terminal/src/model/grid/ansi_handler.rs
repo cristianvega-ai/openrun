@@ -23,7 +23,7 @@ use warp_core::features::FeatureFlag;
 use warp_errors::report_error;
 use warpui_core::image_cache::{FitType, resize_dimensions};
 
-use super::{AbsolutePoint, FullGridClearBehavior, GridHandler, PerformResetGridChecks, TermMode};
+use super::{AbsolutePoint, FullGridClearBehavior, GridHandler, TermMode};
 use crate::event::Event;
 use crate::event_listener::ChannelEventListener;
 use crate::model::ansi::{
@@ -84,9 +84,6 @@ pub(super) struct State {
     /// commands), which can lead to cursor misalignment issues.
     pub supports_emoji_presentation_selector: bool,
 
-    /// State related to the Reset Grid logic for ConPTY.
-    reset_grid_checks: ResetGridChecks,
-
     /// Range of cells that were dirtied during the current run of byte parsing. See
     /// [`Self::finish_byte_processing`] for where this is reset.
     pub dirty_cells_range: Range<Point>,
@@ -110,17 +107,9 @@ impl State {
         event_proxy: ChannelEventListener,
         is_alt_screen: bool,
         obfuscate_secrets: ObfuscateSecrets,
-        perform_reset_grid_checks: PerformResetGridChecks,
     ) -> Self {
         let scroll_region = VisibleRow(0)..VisibleRow(size_info.rows());
         let tabs = TabStops::new(size_info.columns());
-        let reset_grid_checks = match perform_reset_grid_checks {
-            PerformResetGridChecks::Yes => ResetGridChecks::Enabled {
-                received_osc: false,
-            },
-            PerformResetGridChecks::No => ResetGridChecks::Disabled,
-        };
-
         Self {
             cell_width: size_info.cell_width_px.as_f32() as usize,
             cell_height: size_info.cell_height_px.as_f32() as usize,
@@ -134,22 +123,12 @@ impl State {
             obfuscate_secrets,
             // Assume that the Grid supports emoji presentation selector, until set otherwise.
             supports_emoji_presentation_selector: true,
-            reset_grid_checks,
             dirty_cells_range: Default::default(),
             pane_size: size_info.pane_size_px(),
             keyboard_mode: KeyboardModes::NO_MODE,
             keyboard_mode_stack: BoundedVecDeque::new(super::KEYBOARD_MODE_STACK_MAX_DEPTH),
         }
     }
-}
-
-#[derive(Default, Clone, Copy, PartialEq, Debug)]
-enum ResetGridChecks {
-    /// Checks are enabled for the grid.
-    Enabled { received_osc: bool },
-    /// Checks are disabled for the grid.
-    #[default]
-    Disabled,
 }
 
 impl ansi::Handler for GridHandler {
@@ -183,14 +162,6 @@ impl ansi::Handler for GridHandler {
         // PTY integration. `not(test)` covers this crate's own unit tests, and
         // `not(feature = "test-util")` covers dependent crates whose tests enable
         // `test-util` to build real terminal models.
-        #[cfg(all(windows, not(test), not(feature = "test-util")))]
-        if let ResetGridChecks::Enabled { received_osc } = self.ansi_handler_state.reset_grid_checks
-        {
-            debug_assert!(
-                received_osc,
-                "Grid received input but did not receive Reset Grid OSC"
-            );
-        }
         // Number of cells the char will occupy.
         let Some(width) = c.width() else {
             return;
@@ -1269,19 +1240,6 @@ impl ansi::Handler for GridHandler {
         }
     }
 
-    fn on_reset_grid(&mut self) {
-        match &mut self.ansi_handler_state.reset_grid_checks {
-            ResetGridChecks::Enabled { received_osc } => {
-                debug_assert!(
-                    !*received_osc,
-                    "Grid has already received a Reset Grid OSC."
-                );
-                *received_osc = true;
-            }
-            ResetGridChecks::Disabled => (),
-        }
-    }
-
     fn handle_completed_iterm_image(&mut self, image: ITermImage) {
         if !FeatureFlag::ITermImages.is_enabled() {
             return;
@@ -1765,20 +1723,6 @@ impl GridHandler {
         }
         self.ansi_handler_state.dirty_cells_range =
             Point::new(visible_start_row, 0)..Point::new(visible_end_row, 0);
-    }
-
-    pub fn disable_reset_grid_checks(&mut self) {
-        self.ansi_handler_state.reset_grid_checks = ResetGridChecks::Disabled;
-    }
-
-    /// Marks the grid as having NOT received the Reset Grid OSC.
-    /// This is useful for grids that expect to receive multiple OSCs.
-    pub fn reset_received_osc(&mut self) {
-        if let ResetGridChecks::Enabled { received_osc } =
-            &mut self.ansi_handler_state.reset_grid_checks
-        {
-            *received_osc = false;
-        }
     }
 
     fn handle_completed_kitty_action_internal(

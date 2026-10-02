@@ -53,8 +53,6 @@ pub fn should_use_rc_file_bootstrap_method(
     shell_type: ShellType,
     session_info: &SessionInfo,
 ) -> bool {
-    use super::ShellLaunchData;
-
     // Container subshells cannot access host temp files, so the RC-file
     // method is never viable for them.
     if is_container_subshell(session_info) {
@@ -73,17 +71,10 @@ pub fn should_use_rc_file_bootstrap_method(
                 .as_ref()
                 .map(|info| PIPENV_SUBSHELL_COMMAND_REGEX.is_match(info.spawning_command.as_str()))
                 .unwrap_or(false);
-            let is_msys2 = session_info
-                .launch_data
-                .as_ref()
-                .is_some_and(|data| matches!(data, ShellLaunchData::MSYS2 { .. }));
             shell_type == ShellType::Fish
                 || shell_type == ShellType::PowerShell
                 || is_poetry_subshell
-                || ((is_pipenv_subshell
-                    || (subshell_initialization_info.is_some() && cfg!(windows)))
-                    && shell_type == ShellType::Zsh)
-                || is_msys2
+                || (is_pipenv_subshell && shell_type == ShellType::Zsh)
         }
         BootstrapSessionType::WarpifiedRemote => false,
     }

@@ -545,11 +545,7 @@ fn init_internal(
         .filter(
             Some("wgpu_hal"),
             // On Windows with the DX12 backend, wgpu_hal outputs a ton of WARN-level logs.
-            if cfg!(windows) {
-                LevelFilter::Error
-            } else {
-                LevelFilter::Warn
-            },
+            LevelFilter::Warn,
         );
     base_logger.parse_default_env();
 
@@ -626,8 +622,6 @@ fn init_log_directory() -> Result<std::path::PathBuf> {
                 .join("Library/Logs/"))
         } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
             Ok(warp_core::paths::state_dir())
-        } else if #[cfg(windows)] {
-            Ok(warp_core::paths::state_dir().join(warp_core::paths::WARP_LOGS_DIR))
         } else {
             Err(anyhow::anyhow!("Have not configured file-based logging for the current platform!"))
         }

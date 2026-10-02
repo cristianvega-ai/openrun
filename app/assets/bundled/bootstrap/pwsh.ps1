@@ -44,12 +44,6 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
         # handled as output for an in-band command.
         $oscEndGeneratorOutput = "$([char]0x1b)]9277;B$oscEnd"
 
-        $oscResetGrid = "$([char]0x1b)]9279$oscEnd"
-
-        function Warp-Send-ResetGridOSC() {
-            Write-Host -NoNewline $oscResetGrid
-        }
-
         # Safely attempt to get Node.js version if available. Avoid literal 'node' invocation
         # to satisfy PSUseCompatibleCommands across target platforms.
         function Warp-TryGet-NodeVersion {
@@ -94,7 +88,6 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
             $byteCount = [System.Text.Encoding]::ASCII.GetByteCount($hexEncodedMessage)
 
             Write-Host -NoNewline "$oscStartGeneratorOutput$byteCount;$hexEncodedMessage$oscEndGeneratorOutput"
-            Warp-Send-ResetGridOSC
         }
 
         # Do not run this in the main thread. It mucks around with some env vars
@@ -270,7 +263,6 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
             }
         }
         Warp-Send-JsonMessage $preexecMsg
-        Warp-Send-ResetGridOSC
 
         # If this preexec is called for user command, kill ongoing generator command jobs and clean
         # up the bookkeeping temp files used to bookkeep.
@@ -346,7 +338,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
         Set-PSReadLineKeyHandler -Chord 'Alt+2' -Function BackwardDeleteLine
 
         # Input reporting. Note that ESC-1 is used instead of ESC-i as for all other shells. This
-        # is because PowerShell on Windows does some virtual key code translation which depends on
+        # is because PowerShell does some virtual key code translation which depends on
         # the selected input language. On languages without an "i" on any key, this translation
         # fails and the binding gets dropped.
         Set-PSReadLineKeyHandler -Chord 'Alt+1' -ScriptBlock {
@@ -457,7 +449,6 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
             }
         }
         Warp-Send-JsonMessage $commandFinishedMsg
-        Warp-Send-ResetGridOSC
 
         Warp-Configure-PSReadLine
 
@@ -883,11 +874,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
         # Wrap prompt in Prompt Marker OSCs
         $startPromptMarker = "$e]133;A$oscEnd"
         $startRPromptMarker = "$e]133;P;k=r$oscEnd"
-        if ("$env:WARP_HONOR_PS1" -eq '0') {
-            $endPromptMarker = "$e]133;B$oscEnd$oscResetGrid"
-        } else {
-            $endPromptMarker = "$e]133;B$oscEnd"
-        }
+        $endPromptMarker = "$e]133;B$oscEnd"
         $decoratedPrompt = "$basePrompt"
 
         # We only redecorate the prompt if it is not already decorated
@@ -979,8 +966,6 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
     # 1. Capturing it with '$_warp_original_clear = (Get-Command Clear-Host).Definition'
     # 2. Invoking it with 'Invoke-Expression $_warp_original_clear'
 
-    # TODO: On windows, these two functions should both clear the visible screen
-    # AND the scrollback
     function Clear-Host() {
         $inputBufferMsg = @{
             hook = 'Clear'

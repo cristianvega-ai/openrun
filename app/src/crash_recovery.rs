@@ -289,20 +289,12 @@ fn choose_crash_recovery_mechanism(
     // On Windows, if we haven't overridden the set of wgpu backends to use,
     // spawn a crash recovery process that won't attempt to initialize the
     // OpenGL backend.
-    if cfg!(windows) && wgpu_backends.is_none() {
-        return Some(RecoveryMechanism::DisableOpenGL);
-    }
-
     let is_only_vulkan_enabled = wgpu_backends
         .as_ref()
         .is_some_and(|backends| *backends == wgpu::Backends::VULKAN);
 
     // If a backend other than Vulkan is enabled, start a crash recovery process to force the use of
     // Vulkan.
-    if cfg!(windows) && !is_only_vulkan_enabled {
-        return Some(RecoveryMechanism::ForceVulkan);
-    }
-
     // If the user hasn't specified a preference for which type of GPU to use,
     // try recovering from a crash by forcing the use of the dedicated GPU.
     let prefer_low_power_gpu = settings::PreferLowPowerGPU::read_from_preferences(user_preferences);
@@ -319,25 +311,7 @@ fn spawn_recovery_process(
     log::debug!("Spawning crash recovery child process");
     let current_exe = std::env::current_exe()?;
     let mut command = command::blocking::Command::new(current_exe);
-    cfg_if! {
-        if #[cfg(windows)] {
-            use windows::Win32::System::Threading;
-
-            // Create a handle to our process that allows a recipient to
-            // read our process ID and wait on our termination.  This is
-            // more robust than passing a process ID, as Windows can reuse
-            // process IDs.
-            let handle = unsafe { Threading::OpenProcess(
-                Threading::PROCESS_QUERY_LIMITED_INFORMATION | Threading::PROCESS_SYNCHRONIZE,
-                true,
-                Threading::GetCurrentProcessId()
-            )? };
-            // Pass this handle to the child by serialized value.
-            command.arg(format!("--parent-handle={}", handle.0 as isize));
-        } else {
-            command.arg(format!("--parent-pid={}", std::process::id()));
-        }
-    }
+    command.arg(format!("--parent-pid={}", std::process::id()));
 
     match recovery_mechanism {
         RecoveryMechanism::DisableOpenGL => {
@@ -354,36 +328,6 @@ fn spawn_recovery_process(
     command
         .arg(format!("--crash-recovery-mechanism={recovery_mechanism}",))
         .spawn()
-}
-
-#[cfg(windows)]
-fn wait_for_parent_crash(args: &warp_cli::AppArgs) {
-    use windows::Win32::Foundation::{GetLastError, WAIT_FAILED, WAIT_OBJECT_0};
-    use windows::Win32::System::Threading::{GetProcessId, INFINITE, WaitForSingleObject};
-
-    let parent_handle = match args.parent.handle {
-        Some(handle) => handle.into_inner(),
-        None => panic!("--parent-handle must be set if {RECOVERY_MECHANISM_ARG} is set"),
-    };
-
-    unsafe {
-        log::debug!(
-            "Waiting for parent with pid {} to crash...",
-            GetProcessId(parent_handle)
-        );
-        loop {
-            let result = WaitForSingleObject(parent_handle, INFINITE);
-            if result == WAIT_OBJECT_0 {
-                log::info!("Parent has crashed; continuing execution.");
-                break;
-            } else if result == WAIT_FAILED {
-                report_error!(anyhow::anyhow!(
-                    "Encountered error while waiting on parent process: {:?}",
-                    GetLastError()
-                ));
-            }
-        }
-    }
 }
 
 #[cfg(unix)]

@@ -2,43 +2,17 @@
 // it's used in the implementation of `infer_line_ending`.
 #![allow(clippy::disallowed_methods)]
 
-use warp_core::platform::SessionPlatform;
-
 use super::*;
 
 #[test]
 fn test_infer_line_ending_empty_file() {
-    assert_eq!(
-        infer_line_ending("", None),
-        LineEnding::from_current_platform()
-    );
+    assert_eq!(infer_line_ending(""), LineEnding::from_current_platform());
 }
 
 #[test]
 fn test_infer_line_ending_single_line() {
     assert_eq!(
-        infer_line_ending("I have no line endings", None),
-        LineEnding::from_current_platform()
-    );
-}
-
-#[test]
-fn test_infer_line_ending_unix_subsystem_for_windows() {
-    assert_eq!(
-        infer_line_ending("", Some(&SessionPlatform::WSL)),
-        LineEnding::LF
-    );
-
-    assert_eq!(
-        infer_line_ending("", Some(&SessionPlatform::MSYS2)),
-        LineEnding::LF
-    );
-}
-
-#[test]
-fn test_infer_line_ending_native_platform() {
-    assert_eq!(
-        infer_line_ending("", Some(&SessionPlatform::Native)),
+        infer_line_ending("I have no line endings"),
         LineEnding::from_current_platform()
     );
 }
@@ -46,14 +20,14 @@ fn test_infer_line_ending_native_platform() {
 #[test]
 fn test_infer_line_ending_windows() {
     assert_eq!(
-        infer_line_ending("This\r\nhas\r\nlines\r\n", None),
+        infer_line_ending("This\r\nhas\r\nlines\r\n"),
         LineEnding::CRLF
     );
 }
 
 #[test]
 fn test_infer_line_ending_nix() {
-    assert_eq!(infer_line_ending("This\nhas\nlines", None), LineEnding::LF);
+    assert_eq!(infer_line_ending("This\nhas\nlines"), LineEnding::LF);
 }
 
 #[test]
@@ -61,15 +35,15 @@ fn test_infer_line_ending_mixed() {
     // There's no correct line ending in this case - we follow the `line-ending` crate's
     // most-common-ending approach.
     assert_eq!(
-        infer_line_ending("This\r\nhas\r\nmixed\nline endings", None),
+        infer_line_ending("This\r\nhas\r\nmixed\nline endings"),
         LineEnding::CRLF
     );
     assert_eq!(
-        infer_line_ending("This\nhas\r\nmixed\nline endings", None),
+        infer_line_ending("This\nhas\r\nmixed\nline endings"),
         LineEnding::LF
     );
     assert_eq!(
-        infer_line_ending("This\r\nhas\nmixed\r\nline\nendings", None),
+        infer_line_ending("This\r\nhas\nmixed\r\nline\nendings"),
         LineEnding::LF
     );
 }

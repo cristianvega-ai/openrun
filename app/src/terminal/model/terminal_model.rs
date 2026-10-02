@@ -22,7 +22,7 @@ use warpui::r#async::executor::Background;
 use warpui::image_cache::ImageType;
 
 use super::super::{AltScreen, BlockList};
-use super::ansi::{BootstrappedValue, InputBufferValue, Mode, PendingHook};
+use super::ansi::{BootstrappedValue, InputBufferValue, Mode};
 use super::block::{Block, BlockId, BlockMetadata, BlockSize, BlockState};
 use super::blockgrid::BlockGrid;
 use super::blocks::ActiveBlockCompletion;
@@ -321,15 +321,6 @@ enum IsReceivingKittyActionData {
     No,
 }
 
-/// Represents whether or not output from the PTY should be considered part of a shell hook being
-/// sent over via key-value pairs.
-///
-/// This is currently only used for Git Bash.
-enum IsReceivingHook {
-    Yes { pending_hook: Box<PendingHook> },
-    No,
-}
-
 /// Information needed to render a warpify "success" block upon successful subshell bootstrap.
 #[derive(Debug, Clone)]
 pub struct SubshellSuccessBlockInfo {
@@ -413,21 +404,11 @@ pub struct TerminalModel {
     /// `Handler::end_in_band_command_output()` are called.
     is_receiving_in_band_command_output: IsReceivingInBandCommandOutput,
 
-    #[cfg(windows)]
-    /// On Windows, in-band generators send reset grid OSCs when they finish, clearing out
-    /// any leftover state in conpty. When we receive these, we don't want to mistakenly route
-    /// them to the active grid.
-    ignore_reset_grid_after_in_band_generator: bool,
-
     is_receiving_completions_output: IsReceivingCompletionsOutput,
 
     is_receiving_iterm_image_data: IsReceivingITermImageData,
 
     is_receiving_kitty_image_data: IsReceivingKittyActionData,
-
-    /// Whether or not the terminal is receiving a shell hook via key-value pairs. This is
-    /// currently only used in Git Bash.
-    is_receiving_hook: IsReceivingHook,
 
     /// `Some(true)` if the model received a SourcedRcFile DCS.
     ///
@@ -1027,8 +1008,6 @@ impl TerminalModel {
             ignore_bootstrapping_messages: false,
             session_startup_path,
             is_receiving_in_band_command_output: IsReceivingInBandCommandOutput::No,
-            #[cfg(windows)]
-            ignore_reset_grid_after_in_band_generator: false,
             is_receiving_completions_output: IsReceivingCompletionsOutput::No,
             is_receiving_iterm_image_data: IsReceivingITermImageData::No,
             is_receiving_kitty_image_data: IsReceivingKittyActionData::No,
@@ -1037,7 +1016,6 @@ impl TerminalModel {
             shell_launch_state: shell_state,
             obfuscate_secrets,
             notify_on_end_of_ssh_login: None,
-            is_receiving_hook: IsReceivingHook::No,
             image_id_to_metadata: HashMap::new(),
             // Start mid-way through the u32 range to avoid collisions
             next_kitty_image_id: 2147483647,
@@ -1219,20 +1197,6 @@ impl TerminalModel {
         self.pending_session_info
             .as_ref()
             .map(|session_info| session_info.session_id)
-    }
-
-    pub fn is_pending_wsl(&self) -> bool {
-        matches!(
-            &self.pending_shell_launch_data,
-            Some(ShellLaunchData::WSL { .. })
-        )
-    }
-
-    pub fn is_pending_msys2(&self) -> bool {
-        matches!(
-            &self.pending_shell_launch_data,
-            Some(ShellLaunchData::MSYS2 { .. })
-        )
     }
 
     pub fn shell_launch_state(&self) -> &ShellLaunchState {
@@ -2626,7 +2590,7 @@ impl ansi::Handler for TerminalModel {
         };
     }
 
-    #[cfg_attr(not(windows), allow(unused_variables))]
+    #[allow(unused_variables)]
     fn end_in_band_command_output(&mut self, from_osc_sequence: bool) {
         match &mut self.is_receiving_in_band_command_output {
             IsReceivingInBandCommandOutput::Yes { output } => {
@@ -2659,11 +2623,6 @@ impl ansi::Handler for TerminalModel {
             }
             IsReceivingInBandCommandOutput::No => {}
         }
-
-        #[cfg(windows)]
-        if from_osc_sequence {
-            self.ignore_reset_grid_after_in_band_generator = true;
-        }
     }
 
     fn on_finish_byte_processing(&mut self, input: &ansi::ProcessorInput<'_>) {
@@ -2685,15 +2644,6 @@ impl ansi::Handler for TerminalModel {
         self.event_proxy.send_pty_read_event(bytes);
 
         delegate!(self.on_finish_byte_processing(input))
-    }
-
-    fn on_reset_grid(&mut self) {
-        #[cfg(windows)]
-        if self.ignore_reset_grid_after_in_band_generator {
-            self.ignore_reset_grid_after_in_band_generator = false;
-            return;
-        }
-        delegate!(self.on_reset_grid());
     }
 
     fn start_completions_output(&mut self) {
@@ -2828,41 +2778,6 @@ impl ansi::Handler for TerminalModel {
         );
 
         delegate!(self.handle_completed_iterm_image(image))
-    }
-
-    fn start_receiving_hook(&mut self, hook_name: String) {
-        if let Some(pending_hook) = PendingHook::create(&hook_name) {
-            self.is_receiving_hook = IsReceivingHook::Yes {
-                pending_hook: Box::new(pending_hook),
-            };
-        } else {
-            log::warn!("Creating of pending {hook_name} hook failed");
-        }
-    }
-
-    fn finish_receiving_hook(&mut self) -> Option<PendingHook> {
-        match std::mem::replace(&mut self.is_receiving_hook, IsReceivingHook::No) {
-            IsReceivingHook::Yes {
-                pending_hook: pending_shell_hook,
-            } => Some(*pending_shell_hook),
-            IsReceivingHook::No => {
-                log::warn!("Unexpectedly received an end to receiving a pending hook");
-                None
-            }
-        }
-    }
-
-    fn update_hook(&mut self, key: String, value: String) {
-        match &mut self.is_receiving_hook {
-            IsReceivingHook::Yes {
-                pending_hook: pending_shell_hook,
-            } => {
-                pending_shell_hook.update(key, value);
-            }
-            IsReceivingHook::No => {
-                log::warn!("Tried to unexpectedly update pending hook");
-            }
-        }
     }
 
     fn end_kitty_action_receiving<W: std::io::Write>(&mut self, writer: &mut W) {

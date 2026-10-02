@@ -250,16 +250,7 @@ pub(crate) fn lsp_uri_to_path(uri: &Uri) -> Result<PathBuf> {
         .into_string()
         .map_err(|e| anyhow::anyhow!("Invalid UTF-8 in URI path: {e}"))?;
 
-    let mut path_str: &str = decoded_path.as_ref();
-
-    // Windows URIs are formatted like: file:///C:/path/to/file
-    // The path component is `/C:/path/to/file`, strip the leading slash.
-    if cfg!(windows) {
-        path_str = path_str.strip_prefix('/').unwrap_or(path_str);
-        return Ok(PathBuf::from(path_str.replace('/', "\\")));
-    }
-
-    Ok(PathBuf::from(path_str))
+    Ok(PathBuf::from(decoded_path.as_ref() as &str))
 }
 
 fn path_to_workspace_folder(path: &Path) -> Result<WorkspaceFolder> {

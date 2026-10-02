@@ -1,4 +1,4 @@
-#[cfg(enable_crash_recovery)]
+#[cfg(target_os = "linux")]
 mod crash_recovery;
 pub mod global_search;
 pub(crate) mod left_panel;
@@ -178,8 +178,6 @@ use crate::settings::{
 use crate::settings_view::keybindings::{KeybindingChangedEvent, KeybindingChangedNotifier};
 use crate::settings_view::pane_manager::SettingsPaneManager;
 use crate::settings_view::{SettingsSection, SettingsView, SettingsViewEvent, flags};
-#[cfg(all(target_os = "windows", feature = "local_tty"))]
-use crate::shell_indicator::ShellIndicatorType;
 use crate::tab::{
     COMPACT_TAB_WIDTH_THRESHOLD, ColorPickerTarget, MOVE_TO_GROUP_LABEL, NewSessionMenuItem,
     PaneNameMenuTarget, SelectedTabColor, TAB_BAR_BORDER_HEIGHT, TAB_INDICATOR_HEIGHT,
@@ -197,8 +195,6 @@ use crate::tab_configs::{
 };
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
 use crate::terminal::available_shells::AvailableShell;
-#[cfg(target_os = "windows")]
-use crate::terminal::available_shells::AvailableShells;
 use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, CLIAgentSessionsModelEvent};
 use crate::terminal::general_settings::{DefaultSessionMode, GeneralSettings};
 #[cfg(not(target_family = "wasm"))]
@@ -4061,57 +4057,17 @@ impl Workspace {
         let reopen_closed_session_shortcut_label =
             keybinding_name_to_display_string("app:reopen_closed_session", ctx);
 
-        // 1. Terminal (+ individual shells on Windows)
+        // 1. Terminal
         {
-            // On Windows, list the default terminal and each available shell as
-            // individual top-level items (no submenu) so each gets a sidecar.
-            #[cfg(target_os = "windows")]
-            {
-                let is_terminal_default = effective_default == DefaultSessionMode::Terminal;
-                let mut terminal_item = MenuItemFields::new("Terminal")
-                    .with_on_select_action(WorkspaceAction::AddTerminalTab {
-                        hide_homepage: false,
-                    })
-                    .with_icon(icons::Icon::LayoutAlt01);
-                if is_terminal_default {
-                    terminal_item = terminal_item.with_key_shortcut_label(shortcut_label.clone());
-                }
-                menu_items.push(terminal_item.into_item());
-
-                #[cfg(feature = "local_tty")]
-                AvailableShells::handle(ctx).read(ctx, |model, _| {
-                    for shell in model.get_available_shells() {
-                        let shell_name = model.display_name_for_shell(shell);
-                        let icon = shell
-                            .get_valid_shell_path_and_type()
-                            .and_then(|shell_launch_data| {
-                                ShellIndicatorType::try_from(&shell_launch_data).ok()
-                            })
-                            .map(|shell_indicator_type| shell_indicator_type.to_icon())
-                            .unwrap_or(icons::Icon::Terminal);
-                        let item = MenuItemFields::new(shell_name)
-                            .with_on_select_action(WorkspaceAction::AddTabWithShell {
-                                shell: shell.clone(),
-                            })
-                            .with_icon(icon);
-                        menu_items.push(item.into_item());
-                    }
-                });
+            let mut terminal_item = MenuItemFields::new("Terminal")
+                .with_on_select_action(WorkspaceAction::AddTerminalTab {
+                    hide_homepage: false,
+                })
+                .with_icon(icons::Icon::LayoutAlt01);
+            if effective_default == DefaultSessionMode::Terminal {
+                terminal_item = terminal_item.with_key_shortcut_label(shortcut_label.clone());
             }
-
-            // On other platforms, Terminal is a regular item.
-            #[cfg(not(target_os = "windows"))]
-            {
-                let mut terminal_item = MenuItemFields::new("Terminal")
-                    .with_on_select_action(WorkspaceAction::AddTerminalTab {
-                        hide_homepage: false,
-                    })
-                    .with_icon(icons::Icon::LayoutAlt01);
-                if effective_default == DefaultSessionMode::Terminal {
-                    terminal_item = terminal_item.with_key_shortcut_label(shortcut_label.clone());
-                }
-                menu_items.push(terminal_item.into_item());
-            }
+            menu_items.push(terminal_item.into_item());
         }
 
         // 2. User tab configs
@@ -7914,10 +7870,7 @@ impl Workspace {
                 if cfg!(all(not(target_family = "wasm"), target_os = "macos")) {
                     AppContext::show_native_platform_modal(ctx, dialog);
                     return false;
-                } else if cfg!(all(
-                    not(target_family = "wasm"),
-                    any(target_os = "linux", windows)
-                )) {
+                } else if cfg!(all(not(target_family = "wasm"), target_os = "linux")) {
                     self.show_native_modal(dialog, ctx);
                     return false;
                 }
@@ -8164,12 +8117,8 @@ impl Workspace {
         hide_homepage: bool,
         ctx: &mut ViewContext<Self>,
     ) {
-        let startup_directory = self.get_new_tab_startup_directory(
-            new_session_source,
-            previous_session_window_id,
-            chosen_shell.as_ref(),
-            ctx,
-        );
+        let startup_directory =
+            self.get_new_tab_startup_directory(new_session_source, previous_session_window_id, ctx);
 
         self.add_tab_with_pane_layout(
             PanesLayout::SingleTerminal(Box::new(NewTerminalOptions {
@@ -10114,22 +10063,15 @@ impl Workspace {
         match pane_group_handle.as_ref(ctx).active_session_view(ctx) {
             Some(terminal_handle) => {
                 #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
-                let (session, pwd_location, is_local, is_wsl_session, has_pending_ssh) =
+                let (session, pwd_location, is_local, has_pending_ssh) =
                     terminal_handle.read(ctx, |terminal, ctx| {
                         let active_session_id = terminal.active_block_session_id();
                         let session = active_session_id
                             .and_then(|id| terminal.sessions_model().as_ref(ctx).get(id));
                         let pwd_location = terminal.pwd_as_local_or_remote(ctx);
                         let is_local = terminal.active_session_is_local(ctx);
-                        let is_wsl_session = session.as_ref().map(|s| s.is_wsl()).unwrap_or(false);
                         let has_pending_ssh = terminal.has_pending_ssh_command();
-                        (
-                            session,
-                            pwd_location,
-                            is_local,
-                            is_wsl_session,
-                            has_pending_ssh,
-                        )
+                        (session, pwd_location, is_local, has_pending_ssh)
                     });
 
                 let window_id = ctx.window_id();
@@ -10144,12 +10086,9 @@ impl Workspace {
                 });
 
                 let is_remote = matches!(is_local, Some(false));
-                let is_unsupported_session = is_wsl_session;
-
                 let enablement = CodingPanelEnablementState::from_session_env(
                     file_tree_and_global_search_are_enabled,
                     is_remote,
-                    is_unsupported_session,
                 );
 
                 // When an SSH command is running (pending host set + block
@@ -10172,7 +10111,7 @@ impl Workspace {
                 #[cfg(feature = "local_fs")]
                 {
                     self.right_panel_view.update(ctx, |right_panel, ctx| {
-                        right_panel.update_session_env(is_remote, is_wsl_session, ctx);
+                        right_panel.update_session_env(is_remote, ctx);
                     });
 
                     // Code review panel setup is handled by the RepositoriesChanged
@@ -10185,7 +10124,6 @@ impl Workspace {
                 let enablement = CodingPanelEnablementState::from_session_env(
                     file_tree_and_global_search_are_enabled,
                     false,
-                    false,
                 );
 
                 self.left_panel_view.update(ctx, |left_panel, ctx| {
@@ -10195,7 +10133,7 @@ impl Workspace {
                 #[cfg(feature = "local_fs")]
                 {
                     self.right_panel_view.update(ctx, |right_panel, ctx| {
-                        right_panel.update_session_env(false, false, ctx);
+                        right_panel.update_session_env(false, ctx);
                     });
                 }
             }
@@ -12685,13 +12623,13 @@ impl Workspace {
     // Allow let and return because of the conditional linux compilation (otherwise we get a clippy
     // warning on mac)
     #[allow(clippy::let_and_return)]
-    #[cfg_attr(not(enable_crash_recovery), allow(unused_variables))]
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
     fn banner_fields(&self, app: &AppContext) -> Option<WorkspaceBannerFields> {
         // It's more important that users are notified their settings file is broken than that
         // they continue to see the crash recovery banner.
         let banner_fields = self.render_settings_error_banner();
 
-        #[cfg(enable_crash_recovery)]
+        #[cfg(target_os = "linux")]
         let banner_fields = banner_fields.or_else(|| crash_recovery::banner_metadata(app));
 
         banner_fields
@@ -12906,7 +12844,7 @@ impl Workspace {
         banner_type: &WorkspaceBanner,
     ) {
         match banner_type {
-            #[cfg(all(enable_crash_recovery, target_os = "linux"))]
+            #[cfg(all(target_os = "linux", target_os = "linux"))]
             WorkspaceBanner::WaylandCrashRecovery => {
                 crash_recovery::dismiss_workspace_banner(ctx);
             }
@@ -14957,7 +14895,7 @@ impl View for Workspace {
         let panels_row = self.render_panels(app, Shrinkable::new(1.0, content).finish());
         outer_column.add_child(Shrinkable::new(1.0, panels_row).finish());
         let panels = Container::new(outer_column.finish())
-            .with_background(util::get_terminal_background_fill(self.window_id, app))
+            .with_background(util::get_terminal_background_fill(app))
             .finish();
         let mut stack = Stack::new();
 
@@ -15605,9 +15543,7 @@ impl View for Workspace {
         let mut stack = Stack::new();
         let theme = appearance.theme();
         let window_settings = WindowSettings::as_ref(app);
-        let background_opacity = window_settings
-            .background_opacity
-            .effective_opacity(self.window_id, app);
+        let background_opacity = *window_settings.background_opacity;
 
         match theme.background_image() {
             Some(img) => {
@@ -15708,10 +15644,10 @@ impl View for Workspace {
             stack.finish()
         };
 
-        #[cfg_attr(not(any(windows, target_os = "linux")), allow(unused_mut))]
+        #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
         let mut event_handler = EventHandler::new(stack);
 
-        #[cfg(any(windows, target_os = "linux"))]
+        #[cfg(target_os = "linux")]
         {
             event_handler =
                 event_handler.on_scroll_wheel(move |ctx, _app, delta, modifiers_state| {

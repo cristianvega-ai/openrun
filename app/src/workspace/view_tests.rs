@@ -38,8 +38,6 @@ use crate::test_util::settings::initialize_settings_for_tests;
 use crate::undo_close::UndoCloseSettings;
 #[cfg(feature = "local_fs")]
 use crate::user_config::tab_configs_dir;
-#[cfg(windows)]
-use crate::util::traffic_lights::windows::RendererState;
 use crate::warp_managed_paths_watcher::WarpManagedPathsWatcher;
 use crate::workflows::local_workflows::LocalWorkflows;
 use crate::workspace_metadata::PersistedWorkspace;
@@ -88,16 +86,11 @@ pub(crate) fn initialize_app(app: &mut App) {
     app.add_singleton_model(RepoMetadataModel::new);
     app.add_singleton_model(search::files::model::FileSearchModel::new);
 
-    #[cfg(windows)]
-    {
-        app.add_singleton_model(RendererState::new);
-    }
-
     #[cfg(feature = "local_tty")]
     terminal::available_shells::register(app);
     AltScreenReporting::register(app);
 
-    #[cfg(enable_crash_recovery)]
+    #[cfg(target_os = "linux")]
     crate::crash_recovery::CrashRecovery::register_for_test(app);
 
     app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));

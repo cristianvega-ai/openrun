@@ -837,7 +837,6 @@ fn test_terminal_pane_headers() {
 
 /// Tests that focusing two different panes in quick succession does not cause
 /// an infinite loop of focus changes.
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_pane_focus_does_not_have_an_infinite_event_loop() {
     App::test((), |mut app| async move {

@@ -1,10 +1,6 @@
-use warp_core::channel::{Channel, ChannelState};
-use warp_core::settings::Setting;
-use warp_errors::report_if_error;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
-use crate::root_view::has_completed_local_onboarding;
-use crate::settings::{FontSettings, PrivacySettings};
+use crate::settings::PrivacySettings;
 
 pub struct SettingsInitializer;
 
@@ -26,31 +22,9 @@ impl SettingsInitializer {
     /// longer the desired default value, but we don't want to change it for existing users (which
     /// is what would happen if we changed the default value in define_settings_group! in code).
     pub fn handle_app_launch(&self, ctx: &mut ModelContext<Self>) {
-        /// We use a font-size of 16px (12pt) on Windows to more closely match the default font size of
-        /// Windows terminal.
-        const DEFAULT_WINDOWS_MONOSPACE_FONT_SIZE: f32 = 16.;
-
-        // Integration tests start from a fresh profile that never completes onboarding, and are
-        // written against the base defaults.
-        let is_new_user =
-            !has_completed_local_onboarding(ctx) && ChannelState::channel() != Channel::Integration;
-
         PrivacySettings::handle(ctx).update(ctx, |settings, ctx| {
             settings.initialize_default_regexes_once(ctx);
         });
-
-        if is_new_user && cfg!(windows) {
-            log::debug!("Setting default font size to 16px (12pt) for a new Windows user");
-            FontSettings::handle(ctx).update(ctx, |settings, ctx| {
-                if !settings.monospace_font_size.is_value_explicitly_set() {
-                    report_if_error!(
-                        settings
-                            .monospace_font_size
-                            .set_value(DEFAULT_WINDOWS_MONOSPACE_FONT_SIZE, ctx)
-                    );
-                }
-            })
-        }
     }
 }
 

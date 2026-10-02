@@ -186,19 +186,10 @@ pub trait GeneratorContext: Send + Sync {
         false
     }
 
-    /// Whether commands run through `execute_command_at_pwd` get the offline environment table
-    /// (variables that switch off the implicit network use and code execution of tools such as
-    /// git). Defaults to false.
-    fn offline_environment_applied(&self) -> bool {
-        false
-    }
-
     /// What this context guarantees about the commands it runs.
     fn containment(&self) -> Containment {
         if self.network_isolated() {
             Containment::NetworkIsolated
-        } else if self.offline_environment_applied() {
-            Containment::OfflineEnvironment
         } else {
             Containment::Unrestricted
         }
@@ -220,18 +211,15 @@ pub trait GeneratorContext: Send + Sync {
     }
 }
 
-/// What a [`GeneratorContext`] guarantees about the commands it runs; each level includes the
-/// one before it.
+/// What a [`GeneratorContext`] guarantees about the commands it runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Containment {
     /// Nothing: the command runs in the user's own shell, on another host, or in an executor that
-    /// applies neither layer.
+    /// is not sandboxed.
     #[default]
     Unrestricted,
-    /// The offline environment table is applied to the command's environment.
-    OfflineEnvironment,
-    /// The table is applied and the operating system keeps the command from reaching an IP
-    /// network (macOS and Linux local sessions).
+    /// The offline environment table is applied and the operating system keeps the command from
+    /// reaching an IP network (macOS local sessions).
     NetworkIsolated,
 }
 

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 
-use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions};
+use super::{CommandExecutor, CommandOutput};
 use crate::terminal::shell::Shell;
 
 ///  A "no-op" implementation of `CommandExecutor` to be used as a placeholder `CommandExecutor`
@@ -28,7 +28,6 @@ impl CommandExecutor for NoOpCommandExecutor {
         _shell: &Shell,
         _current_directory_path: Option<&str>,
         _environment_variables: Option<HashMap<String, String>>,
-        _execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
         Err(anyhow!(
             "Did not execute command; using NoOpCommandExecutor"

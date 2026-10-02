@@ -34,7 +34,6 @@ use crate::editor::EditorView;
 use crate::launch_configs::launch_config::LaunchConfig;
 use crate::menu::{MenuAction, MenuItem, MenuItemFields};
 use crate::pane_group::{PaneGroup, PaneId};
-use crate::shell_indicator::ShellIndicatorType;
 use crate::terminal::view::TerminalViewState;
 use crate::themes::theme::{AnsiColorIdentifier, Fill as ThemeFill, VerticalGradient};
 use crate::ui_components::buttons::icon_button;
@@ -882,8 +881,6 @@ enum Indicator {
     Error,
     /// One of the panes in this tab is maximized.
     Maximized,
-    /// We should show a shell indicator for the tab.
-    Shell(ShellIndicatorType),
 }
 
 impl From<TerminalViewState> for Indicator {
@@ -1025,7 +1022,6 @@ impl<'a> TabComponent<'a> {
             .into();
         let has_active_pane_state_indicator = !(matches!(pane_state_indicator, Indicator::None));
         let is_maximized = tab.pane_group.as_ref(ctx).is_focused_pane_maximized(ctx);
-        let shell_indicator_type = tab.pane_group.as_ref(ctx).focused_shell_indicator_type(ctx);
 
         // If the tab indicator setting is explicitly turned off, we don't want to show any indicator.
         // But if it's on, we want to show the synced indicator if this tab is being synced.
@@ -1037,8 +1033,6 @@ impl<'a> TabComponent<'a> {
             Indicator::None
         } else if are_inputs_synced {
             Indicator::Synced
-        } else if let Some(shell_indicator_type) = shell_indicator_type {
-            Indicator::Shell(shell_indicator_type)
         } else if has_active_pane_state_indicator {
             pane_state_indicator
         } else if is_maximized {
@@ -1048,10 +1042,8 @@ impl<'a> TabComponent<'a> {
         };
 
         let tooltip_message = Self::get_tooltip_message(tab, ctx);
-        let window_id = tab.pane_group.window_id(ctx);
         let background_opacity = WindowSettings::as_ref(ctx)
             .background_opacity
-            .effective_opacity(window_id, ctx)
             .clamp(20, 100);
         let pane_group_id = tab.pane_group.id();
         let pane_id = tab.pane_group.as_ref(ctx).focused_pane_id(ctx);
@@ -1361,12 +1353,6 @@ impl<'a> TabComponent<'a> {
                             .unwrap_or(ColorU::white())
                             .into(),
                     )
-                    .finish(),
-            ),
-            Indicator::Shell(shell_indicator_type) => Some(
-                shell_indicator_type
-                    .to_icon()
-                    .to_warpui_icon(internal_colors::neutral_5(self.appearance.theme()).into())
                     .finish(),
             ),
         };

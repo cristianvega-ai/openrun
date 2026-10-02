@@ -13,8 +13,6 @@ pub mod spawner;
 pub mod terminal_attributes;
 #[cfg(unix)]
 mod unix;
-#[cfg(windows)]
-pub mod windows;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -23,12 +21,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use shell::ShellStarter;
+use shell::DirectShellStarter;
 
 #[cfg(unix)]
 pub use self::unix::*;
-#[cfg(windows)]
-pub use self::windows::*;
 use crate::SizeInfo;
 
 /// This trait defines the behaviour needed to read and/or write to a stream.
@@ -82,7 +78,7 @@ pub trait EventedPty: EventedReadWrite {
 pub struct PtyOptions {
     pub size: SizeInfo,
     pub window_id: Option<usize>,
-    pub shell_starter: ShellStarter,
+    pub shell_starter: DirectShellStarter,
     pub start_dir: Option<PathBuf>,
     /// Environment variables to add/override for the spawned PTY process.
     #[serde(default)]

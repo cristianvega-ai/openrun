@@ -620,7 +620,7 @@ impl View for BlockFilterEditor {
         let block_filter_bar_height = editor_height
             + (2. * BLOCK_FILTER_EDITOR_PADDING)
             + (2. * BLOCK_FILTER_BAR_PADDING)
-            + if cfg!(windows) { 2. } else { 0. };
+            + 0.;
 
         let block_filter_bar = Container::new(
             ConstrainedBox::new(

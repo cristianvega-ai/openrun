@@ -214,8 +214,6 @@ impl LSPServerType {
             LSPServerType::Clangd => {
                 if cfg!(target_os = "macos") {
                     "xcode-select --install"
-                } else if cfg!(windows) {
-                    "winget install LLVM.LLVM"
                 } else {
                     "Install the clangd package with your system package manager (for example: sudo apt install clangd)"
                 }

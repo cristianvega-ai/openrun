@@ -626,7 +626,7 @@ fn lookup_credential(
     Ok(grant)
 }
 fn local_control_publication_supported() -> bool {
-    cfg!(not(target_os = "windows"))
+    true
 }
 
 /// Performs browser-origin hardening for local-control endpoints.

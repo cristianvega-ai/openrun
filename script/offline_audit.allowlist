@@ -26,8 +26,6 @@ hosts | crates/persistence/migrations/2022-07-29-164418_add_users/up.sql | fireb
 hosts | crates/persistence/migrations/2023-08-07-205653_add_user_profiles_table/up.sql | firebase | historical migration, untouched (MASTER decision 14); DB-1 drops the table it creates
 hosts | crates/persistence/migrations/2026-09-29-000000_drop_dead_tables/down.sql | firebase | DB-1 down migration: recreates the dropped legacy tables, including their firebase_uid columns, to restore the old schema on rollback
 hosts | crates/warpui_extras/src/secure_storage/linux.rs | releases\.warp\.dev/channel_versions\.json | secure-storage key material, not a network call; changing it would orphan stored secrets (MASTER decision 13)
-binary-pin | app/assets/windows/x64/dxcompiler.dll | 75c019e3541980eea8ae661d81998d06f99627e3004c800532475a1c3551c6fb | third-party DirectX compiler binary (x64); `sEntry` matches `sentry` case-insensitively, so the file is pinned by hash instead of searched
-binary-pin | app/assets/windows/arm64/dxcompiler.dll | e9803ca5a658fd87985d549bbaaeecd0feaed4c9b6490d688b0470ed3c7f9111 | third-party DirectX compiler binary (arm64); same reason
 hosts | crates/secret_redaction/src/lib.rs | firebase | the redaction regex for leaked Firebase auth domains is a secret pattern, not a network call
 hosts | crates/secret_redaction/src/lib.rs | platform\.openai\.com | doc comment naming where the format of an OpenAI API key is documented; the redaction patterns detect such keys, nothing fetches the page
 hosts | crates/secret_redaction/src/lib_tests.rs | firebase | tests of that redaction regex
@@ -41,8 +39,6 @@ hosts | crates/warp_core/src/paths.rs | /opt/warpdotdev | example install path i
 hosts | flake.nix | /opt/warpdotdev | install paths stay unchanged (MASTER decision 17)
 hosts | resources/linux/* | opt/warpdotdev|%\{prefix\}/warpdotdev | install paths stay unchanged (MASTER decision 17); any other warpdotdev mention here is a finding
 hosts | script/linux/* | opt/warpdotdev | install paths stay unchanged (MASTER decision 17); any other warpdotdev mention here is a finding
-hosts | script/windows/windows-installer.iss | Warp\.dev | registry base stays unchanged (MASTER decision 17)
-hosts | crates/warpui_extras/src/user_preferences/registry_backed.rs | Warp\.dev | registry base stays unchanged (MASTER decision 17)
 
 # --- network-capable Rust (9.2) ---
 net-rust | crates/http_client/src/lib.rs | ^\s*use reqwest::IntoUrl;$ | the shared HTTP client wraps reqwest; its only consumers are node_runtime and the language server installer (deny.toml wrappers)
@@ -126,7 +122,6 @@ net-script | script/linux/install_build_deps | * | protoc download at build time
 net-script | script/offline_sandbox_macos | * | the canary: a connection to a documentation address (203.0.113.7) that the sandbox must refuse before the run
 net-script | script/linux/install_linuxdeploy | * | AppImage tooling download at build time
 net-script | script/macos/bootstrap | * | Homebrew and rustup installers
-net-script | script/windows/bootstrap.ps1 | * | rustup installer
 net-script | docker/linux-dev/Dockerfile | * | developer container image: installs curl, the GitHub CLI apt key and rustup while the image is built; never shipped in the app
 net-script | script/offline_audit | * | holds the audit patterns
 net-script | script/offline_audit.allowlist | * | documents the exceptions

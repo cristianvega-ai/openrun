@@ -900,9 +900,6 @@ def self_test_cases():
          {"app/assets/val.sh": "python3 -c \"import urllib.request as u; u.urlopen('https://example.invalid')\"\n"}, "fail"),
         ("curl in an asset script", {"app/assets/val.sh": "curl https://example.invalid\n"}, "fail"),
         ("warp host in an ordinary file", {"app/assets/val.txt": "https://app.warp.dev/x\n"}, "fail"),
-        ("changed pinned binary",
-         {"app/assets/windows/x64/dxcompiler.dll": "sEntry https://app.warp.dev/x\n",
-          "app/assets/windows/arm64/dxcompiler.dll": "sEntry\n"}, "fail"),
         # Reviewed constructs.
         ("reviewed http_client lines",
          {"crates/http_client/src/lib.rs":
@@ -1022,8 +1019,7 @@ def run_self_test(allowlist_path):
             with tempfile.TemporaryDirectory() as tree:
                 ROOT = tree
                 write_files(tree, files)
-                pinned = name == "changed pinned binary"
-                allow = Allowlist(lines=real_lines if pinned else lines)
+                allow = Allowlist(lines=lines)
                 findings = check_hosts(allow).findings + check_network(allow).findings
                 report(name, expectation, findings)
 

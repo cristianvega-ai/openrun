@@ -374,13 +374,6 @@ miniz_oxide.opt-level = 3
 inherits = "release"
 lto = "thin"
 
-# A shorthand profile for `release-lto`.
-# Windows enforces that any path is a maximum of 255 characters and
-# the length of this profile is sufficiently long that it can cause
-# compiler errors. We use a shorthand to get around these issues.
-[profile.rlto]
-inherits = "release-lto"
-
 # A profile tuned for the standalone `warpctrl` binary. We trade some compile time and a
 # small amount of runtime perf for a smaller binary.
 [profile.release-cli]
@@ -390,10 +383,6 @@ opt-level = "s"
 # larger stripped/gzipped binaries. This profile already uses thin LTO, which does most of the
 # cross-crate size optimization, so 1 was paying a lot of compile time for little extra size.
 codegen-units = 4
-
-# Short aliases keep Windows build paths below the legacy MAX_PATH limit.
-[profile.rcli]
-inherits = "release-cli"
 
 [patch.crates-io]
 # Pinned to the merge commit of servo/core-foundation-rs#746, which fixes a

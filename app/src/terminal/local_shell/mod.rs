@@ -9,20 +9,17 @@ use command::r#async::Command;
 use futures::future::{BoxFuture, FutureExt};
 use warpui::{Entity, ModelContext, SingletonEntity};
 
-use super::local_tty::shell::ShellStarter;
 #[cfg(feature = "local_tty")]
 use super::model::session::LocalCommandExecutor;
 use super::shell::ShellType;
 use crate::terminal::available_shells::AvailableShells;
-use crate::terminal::local_tty::shell::ShellStarterSourceOrWslName;
+use crate::terminal::local_tty::shell::{DirectShellStarter, ShellStarterSource};
 
 #[derive(Debug)]
 pub enum LocalShellState {
     /// The shell for a session has been loaded.
     Loaded(LocalShell),
     /// The shell state for a local session has not been loaded.
-    /// Loading shell information for WSL is extremely expensive and can take upwards of 10s to
-    /// load.
     NotLoaded,
 }
 
@@ -81,19 +78,10 @@ impl LocalShellState {
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         let preferred_shell = AvailableShells::handle(ctx)
             .read(ctx, |shells, ctx| shells.get_user_preferred_shell(ctx));
-        let shell_starter_source_or_wsl_name = match ShellStarter::init(preferred_shell) {
-            Some(shell_starter_source_or_wsl_name) => shell_starter_source_or_wsl_name,
-            None => return LocalShellState::NotLoaded,
+        let Some(starter_source) = ShellStarterSource::init(preferred_shell) else {
+            return LocalShellState::NotLoaded;
         };
-
-        let shell_starter = match shell_starter_source_or_wsl_name {
-            ShellStarterSourceOrWslName::Source(starter_source) => match starter_source.into() {
-                ShellStarter::Direct(starter) | ShellStarter::MSYS2(starter) => starter,
-                ShellStarter::Wsl(_) => return LocalShellState::NotLoaded,
-            },
-            // TODO: Implement WSL for the Local Shell model.
-            ShellStarterSourceOrWslName::WSLName { .. } => return LocalShellState::NotLoaded,
-        };
+        let shell_starter = DirectShellStarter::from(starter_source);
 
         let shell_path = shell_starter.logical_shell_path().to_owned();
         let shell_type = shell_starter.shell_type();

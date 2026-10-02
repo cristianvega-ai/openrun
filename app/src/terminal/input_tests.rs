@@ -33,8 +33,6 @@ use crate::search::slash_command_menu::static_commands::commands;
 use crate::settings::import::model::ImportedConfigModel;
 use crate::settings::{AliasExpansionSettings, AppEditorSettings, PrivacySettings};
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
-#[cfg(windows)]
-use crate::system::SystemInfo;
 use crate::system::SystemStats;
 use crate::terminal::TerminalView;
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
@@ -50,7 +48,7 @@ use crate::terminal::event::{
 use crate::terminal::general_settings::UserDefaultShellUnsupportedBannerState;
 use crate::terminal::input::slash_commands::SlashCommandsEvent;
 use crate::terminal::local_shell::LocalShellState;
-use crate::terminal::local_tty::shell::ShellStarter;
+use crate::terminal::local_tty::shell::ShellStarterSource;
 use crate::terminal::model::ansi::{Handler, PromptMetadata};
 use crate::terminal::model::block::{BlockId, SerializedBlock};
 use crate::terminal::model::session::{BootstrapSessionType, SessionInfo};
@@ -249,11 +247,6 @@ pub fn initialize_app(app: &mut App) {
         })
     });
 
-    #[cfg(windows)]
-    {
-        app.add_singleton_model(SystemInfo::new);
-    }
-
     AltScreenReporting::register(app);
     app.add_singleton_model(|_| WorkspaceRegistry::new());
     app.add_singleton_model(|_| ToastStack);
@@ -351,10 +344,7 @@ async fn add_window_with_bootstrapped_terminal_inner(
     let tips_model = app.add_model(|_| TipsCompleted::default());
 
     let shell_starter_source =
-        ShellStarter::init(crate::terminal::available_shells::AvailableShell::default())
-            .expect("Could not create a shell starter source or wsl name")
-            .to_shell_starter_source()
-            .await
+        ShellStarterSource::init(crate::terminal::available_shells::AvailableShell::default())
             .expect("Could not create a shell starter source");
     let shell_type = shell_starter_source.shell_type();
 
@@ -1099,7 +1089,6 @@ fn ctrl_t_apply_mode_forks_between_splice_and_replace_for_the_same_draft() {
 /// complexity of setting up that test. As that module depends on a TerminalModel with a valid
 /// BlockList, it was easier to utilize the boilerplate local to this module. Long-term, some of
 /// these helpers should move into shared test utils to make setup easier.
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_histignorespace_support_in_zsh() {
     let session_id: SessionId = 1.into();
@@ -1306,57 +1295,48 @@ fn assert_leading_space_command_persistence(
     }
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn zsh_histignorespace_keeps_a_leading_space_command_and_its_block_out_of_the_database() {
     assert_leading_space_command_persistence(ShellType::Zsh, zsh_options(true), false);
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn zsh_without_histignorespace_persists_a_leading_space_command() {
     assert_leading_space_command_persistence(ShellType::Zsh, zsh_options(false), true);
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn bash_histcontrol_ignorespace_keeps_a_leading_space_command_out_of_the_database() {
     assert_leading_space_command_persistence(ShellType::Bash, bash_options("ignorespace"), false);
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn bash_histcontrol_ignoreboth_keeps_a_leading_space_command_out_of_the_database() {
     assert_leading_space_command_persistence(ShellType::Bash, bash_options("ignoreboth"), false);
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn bash_histcontrol_ignoredups_persists_a_leading_space_command() {
     assert_leading_space_command_persistence(ShellType::Bash, bash_options("ignoredups"), true);
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn bash_without_histcontrol_persists_a_leading_space_command() {
     assert_leading_space_command_persistence(ShellType::Bash, None, true);
 }
 
 /// Fish does not record commands that start with a space, so neither does the app.
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn fish_keeps_a_leading_space_command_out_of_the_database() {
     assert_leading_space_command_persistence(ShellType::Fish, None, false);
 }
 
 /// PowerShell has no leading-space rule, so such a command is saved.
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn powershell_persists_a_leading_space_command() {
     assert_leading_space_command_persistence(ShellType::PowerShell, None, true);
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn history_off_persists_nothing_even_when_the_shell_would_keep_the_command() {
     let history = crate::persistence::HistoryPersistence::new(false);
@@ -1374,7 +1354,6 @@ fn history_off_persists_nothing_even_when_the_shell_would_keep_the_command() {
     );
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn history_on_persists_an_ordinary_command_and_its_block() {
     let history = crate::persistence::HistoryPersistence::new(true);
@@ -1660,7 +1639,6 @@ fn test_tab_completion_with_leading_space() {
     });
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_tab_completion_with_selection() {
     App::test((), |mut app| async move {
@@ -2742,7 +2720,6 @@ fn test_tab_completion_longest_common_prefix_with_fuzzy_suggestions() {
     });
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_newline_insertion() {
     App::test((), |mut app| async move {
@@ -2806,7 +2783,6 @@ fn test_should_not_insert_newline_on_enter_in_empty_buffer() {
     })
 }
 
-#[cfg_attr(windows, ignore = "TODO: fix on Windows")]
 #[test]
 fn test_should_insert_newline_on_enter() {
     App::test((), |mut app| async move {

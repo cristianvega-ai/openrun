@@ -2,8 +2,6 @@
 #
 # Installs cargo-bundle, which packages the macOS .app bundle.
 
-# This script should be platform-agnostic (eg. no unix-only references like /dev/null).
-
 set -eo pipefail
 
 # Both local bootstrap and release CI install through this script so that the .app

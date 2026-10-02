@@ -44,7 +44,6 @@ use std::ops::Deref;
 
 use itertools::Itertools as _;
 use line_ending::LineEnding;
-use warp_core::platform::SessionPlatform;
 
 /// A line ending format. This is the compile-time equivalent to [`LineEnding`].
 pub trait LineFormat {
@@ -351,8 +350,7 @@ impl AnyMultilineString {
     pub fn infer(text: impl Into<String>) -> Self {
         let mut text = text.into();
         let endings = evaluate_line_endings(&text);
-        // TODO: Figure out how to get a SessionPlatform here.
-        let primary_ending = endings.primary_ending(None);
+        let primary_ending = endings.primary_ending();
         if endings.is_mixed() {
             // If the text contains mixed line endings (uncommon), they must be normalized to a
             // single ending to uphold the `AnyMultilineString` contract.
@@ -462,8 +460,8 @@ impl<'a, F: LineFormat> From<&'a MultilineStr<F>> for AnyMultilineStr<'a> {
 ///
 /// This is the most common line ending in the string. If there are no line endings, the platform
 /// default is used.
-pub fn infer_line_ending(text: &str, platform: Option<&SessionPlatform>) -> LineEnding {
-    evaluate_line_endings(text).primary_ending(platform)
+pub fn infer_line_ending(text: &str) -> LineEnding {
+    evaluate_line_endings(text).primary_ending()
 }
 
 /// Results of analyzing the line endings in a string.
@@ -490,12 +488,9 @@ impl TextLineEndings {
 
     /// The primary line ending of the string. For single-line strings, this is the platform default.
     #[allow(clippy::disallowed_methods)]
-    fn primary_ending(&self, platform: Option<&SessionPlatform>) -> LineEnding {
+    fn primary_ending(&self) -> LineEnding {
         match self {
-            TextLineEndings::SingleLine => platform
-                .map_or_else(LineEnding::from_current_platform, |platform| {
-                    platform.default_line_ending()
-                }),
+            TextLineEndings::SingleLine => LineEnding::from_current_platform(),
             TextLineEndings::MultiLine { primary_ending, .. } => *primary_ending,
         }
     }

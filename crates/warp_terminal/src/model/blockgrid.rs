@@ -21,7 +21,7 @@ use crate::model::ansi::{
     PrecmdValue, PreexecValue, StandardCharset, TabulationClearMode,
 };
 use crate::model::grid::Dimensions;
-use crate::model::grid::grid_handler::{GridHandler, PerformResetGridChecks, RegexIter};
+use crate::model::grid::grid_handler::{GridHandler, RegexIter};
 use crate::model::index::{Point, VisibleRow};
 use crate::model::iterm_image::ITermImage;
 use crate::model::secrets::ObfuscateSecrets;
@@ -89,7 +89,6 @@ impl BlockGrid {
         max_scroll_limit: usize,
         event_proxy: ChannelEventListener,
         should_scan_for_secrets: ObfuscateSecrets,
-        perform_reset_grid_checks: PerformResetGridChecks,
     ) -> Self {
         let grid_handler = GridHandler::new(
             size_info,
@@ -97,7 +96,6 @@ impl BlockGrid {
             event_proxy,
             false,
             should_scan_for_secrets,
-            perform_reset_grid_checks,
         );
 
         BlockGrid {
@@ -696,14 +694,6 @@ impl BlockGrid {
             .estimated_memory_usage_bytes()
     }
 
-    pub fn disable_reset_grid_checks(&mut self) {
-        self.grid_handler.disable_reset_grid_checks();
-    }
-
-    pub fn reset_received_osc(&mut self) {
-        self.grid_handler.reset_received_osc();
-    }
-
     fn ansi_handler(&mut self) -> &mut (impl ansi::Handler + use<>) {
         self.grid_handler.ansi_handler()
     }
@@ -974,10 +964,6 @@ impl ansi::Handler for BlockGrid {
 
     fn on_finish_byte_processing(&mut self, input: &ansi::ProcessorInput<'_>) {
         self.ansi_handler().on_finish_byte_processing(input);
-    }
-
-    fn on_reset_grid(&mut self) {
-        self.ansi_handler().on_reset_grid();
     }
 
     fn handle_completed_iterm_image(&mut self, image: ITermImage) {

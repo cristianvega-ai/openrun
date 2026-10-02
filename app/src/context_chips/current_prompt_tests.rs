@@ -28,15 +28,11 @@ use crate::context_chips::prompt::Prompt;
 use crate::context_chips::{ChipAvailability, ChipDisabledReason, ContextChipKind};
 use crate::menu::MenuItem;
 use crate::settings::WarpPromptSeparator;
-#[cfg(windows)]
-use crate::system::SystemInfo;
 use crate::terminal::cli_agent_sessions::{
     CLIAgentInputState, CLIAgentSession, CLIAgentSessionContext, CLIAgentSessionStatus,
 };
 use crate::terminal::model::block::BlockMetadata;
-use crate::terminal::model::session::{
-    CommandExecutor, ExecuteCommandOptions, SessionId, SessionInfo, Sessions,
-};
+use crate::terminal::model::session::{CommandExecutor, SessionId, SessionInfo, Sessions};
 use crate::terminal::session_settings::{
     CLIAgentToolbarChipSelection, SessionSettings, ToolbarChipSelection,
 };
@@ -259,8 +255,6 @@ fn test_shell_chip_is_disabled_when_required_executable_is_missing() {
         app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
         crate::settings::InputSettings::register(&mut app);
         app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
-        #[cfg(windows)]
-        app.add_singleton_model(SystemInfo::new);
 
         let executor = Arc::new(RecordingCommandExecutor::default());
         let sessions = app.add_model(|ctx| {
@@ -404,8 +398,6 @@ fn test_disabling_chips() {
         app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
         crate::settings::InputSettings::register(&mut app);
         app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
-        #[cfg(windows)]
-        app.add_singleton_model(SystemInfo::new);
 
         let executor = Arc::new(RecordingCommandExecutor::default());
 
@@ -569,8 +561,6 @@ fn test_cli_agent_footer_chips_require_a_visible_footer() {
         crate::settings::InputSettings::register(&mut app);
         app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
         app.add_singleton_model(|_| CLIAgentSessionsModel::new());
-        #[cfg(windows)]
-        app.add_singleton_model(SystemInfo::new);
 
         let sessions = app.add_model(|_| Sessions::new_for_test());
         let current_prompt = app.add_model(move |ctx| CurrentPrompt::new(sessions, ctx));
@@ -641,8 +631,6 @@ fn test_ps1_without_active_agent_surface_runs_no_footer_generators() {
         app.add_singleton_model(|_| crate::settings::manager::SettingsManager::default());
         crate::settings::InputSettings::register(&mut app);
         app.update(crate::settings::CLIAgentSettings::register_and_subscribe_to_events);
-        #[cfg(windows)]
-        app.add_singleton_model(SystemInfo::new);
 
         let executor = Arc::new(RecordingCommandExecutor::default());
         let sessions = app.add_model(|ctx| {
@@ -1087,7 +1075,6 @@ impl CommandExecutor for RecordingCommandExecutor {
         _shell: &Shell,
         _current_directory_path: Option<&str>,
         _environment_variables: Option<HashMap<String, String>>,
-        _execute_command_options: ExecuteCommandOptions,
     ) -> anyhow::Result<CommandOutput> {
         self.commands.lock().push(command.to_string());
         let output = self

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use command::r#async::Command;
 
 use super::shared::{serialize_variables_for_shell, shell_escape_single_quotes};
-use super::{CommandExecutor, CommandOutput, ExecuteCommandOptions};
+use super::{CommandExecutor, CommandOutput};
 use crate::terminal::shell::Shell;
 
 /// `CommandExecutor` implementation that executes the given `command` in a forked process
@@ -17,14 +17,12 @@ use crate::terminal::shell::Shell;
 #[derive(Debug)]
 pub struct RemoteCommandExecutor {
     control_socket_path: PathBuf,
-    wsl_distro: Option<String>,
 }
 
 impl RemoteCommandExecutor {
-    pub fn new(control_socket_path: PathBuf, wsl_distro: Option<String>) -> Self {
+    pub fn new(control_socket_path: PathBuf) -> Self {
         Self {
             control_socket_path,
-            wsl_distro,
         }
     }
 }
@@ -37,7 +35,6 @@ impl CommandExecutor for RemoteCommandExecutor {
         shell: &Shell,
         current_directory_path: Option<&str>,
         environment_variables: Option<HashMap<String, String>>,
-        _execute_command_options: ExecuteCommandOptions,
     ) -> Result<CommandOutput> {
         // We can't use `.env` and `.current_dir` here to set the PATH and current dir respectively
         // since this is run locally. We just need the subprocess to send the bytes over the
@@ -81,18 +78,7 @@ impl CommandExecutor for RemoteCommandExecutor {
             command_str.as_str(),
         ];
 
-        // If the SSH session originated from WSL, the ControlPath also exists inside WSL.
-        // Therefore, SSH commands directly from the Windows host will not work. They must be run
-        // inside that same WSL instance
-        let mut command = match &self.wsl_distro {
-            None => Command::new("ssh"),
-            Some(distro_name) => {
-                let mut command = Command::new("wsl");
-                command.args(["-d", distro_name.as_str(), "-e", "ssh"]);
-                command
-            }
-        };
-
+        let mut command = Command::new("ssh");
         command.args(ssh_args);
         command
             .kill_on_drop(true)

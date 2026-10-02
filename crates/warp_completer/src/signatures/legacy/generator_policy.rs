@@ -26,20 +26,11 @@
 //! `ALLOWED_WHEN_ISOLATED` lists the generators whose tool can reach a network or run repository
 //! code in the environment alone but was shown not to when the operating system denies the
 //! network to the command and the offline environment table is applied. They run only when the
-//! `GeneratorContext` reports `network_isolated()` (macOS and Linux local sessions).
+//! `GeneratorContext` reports `network_isolated()` (macOS local sessions).
 //!
-//! On Windows two lists run. `ALLOWED_ON_WINDOWS` is the subset of file reads and PowerShell
-//! cmdlets that take no tokens. `ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT` is the local git
-//! generators (one `git` read of the local repository each, the `ALLOWED_WHEN_ISOLATED` git trio
-//! included); they run only when the `GeneratorContext` reports `offline_environment_applied()`,
-//! which the local PowerShell/cmd, Git Bash/MSYS2 and WSL executors do and the in-band executor
-//! does not. There is no network sandbox on Windows, so the environment table (no lazy fetch
-//! from a promisor remote, no `core.fsmonitor`, no `log.showSignature`, local transports only)
-//! is the only layer; any other generator that starts a program stays off.
-//!
-//! Generators that run `git` (every pair on `ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`, `git-flow`'s
-//! `type_branches`, and the `git/alias` alias generator) have a second condition on every
-//! platform: the session's git must be known to be at least `MINIMUM_GIT_VERSION` (2.31). The
+//! Generators that run `git` (every pair on `LOCAL_GIT_GENERATORS`, `git-flow`'s
+//! `type_branches`, and the `git/alias` alias generator) have a second condition: the session's
+//! git must be known to be at least `MINIMUM_GIT_VERSION` (2.31). The
 //! environment table protects them with `GIT_CONFIG_COUNT` overrides, which older git ignores.
 //! The engine asks `GeneratorContext::git_version` (the app probes `git --version` once per
 //! session) after the allow-list says yes; an unknown version counts as too old. See
@@ -74,46 +65,26 @@ mod denied;
 mod token_gate;
 
 use allowed::{
-    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_ON_WINDOWS,
-    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT, ALLOWED_WHEN_ISOLATED, GIT_ALIAS_GENERATORS,
-    GIT_GENERATORS_ON_POSIX_ONLY,
+    ALLOWED_ALIAS_GENERATORS, ALLOWED_GENERATORS, ALLOWED_WHEN_ISOLATED, GIT_ALIAS_GENERATORS,
+    GIT_PIPELINE_GENERATORS, LOCAL_GIT_GENERATORS,
 };
 pub(super) use token_gate::{TokenPolicy, sanitize_env_vars, token_policy};
 
 use crate::completer::Containment;
 
 /// Whether the generator named `generator` of the spec registered as `spec` (lowercase) may run
-/// a command on this platform. `containment` says what the context guarantees about the command
-/// (see [`ALLOWED_WHEN_ISOLATED`] and [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`]).
-pub(super) fn is_generator_allowed(spec: &str, generator: &str, containment: Containment) -> bool {
-    is_generator_allowed_on(cfg!(windows), containment, spec, generator)
-}
-
-/// [`is_generator_allowed`] for an explicit platform, so that the Windows tier is testable on
-/// every host.
+/// a command. `containment` says what the context guarantees about the command (see
+/// [`ALLOWED_WHEN_ISOLATED`]).
 ///
-/// * macOS and Linux: [`ALLOWED_GENERATORS`] always, [`ALLOWED_WHEN_ISOLATED`] only in a
-///   network-isolated context.
-/// * Windows: the [`ALLOWED_ON_WINDOWS`] subset always, and the [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`]
-///   git generators only when the executor applies the offline environment table. The isolated
-///   tier never runs on Windows as such: there is no network sandbox.
-pub(super) fn is_generator_allowed_on(
-    windows: bool,
-    containment: Containment,
-    spec: &str,
-    generator: &str,
-) -> bool {
+/// [`ALLOWED_GENERATORS`] always run; [`ALLOWED_WHEN_ISOLATED`] only in a network-isolated
+/// context.
+pub(super) fn is_generator_allowed(spec: &str, generator: &str, containment: Containment) -> bool {
     let listed = |list: &[(&str, &str)]| {
         list.binary_search_by(|(listed_spec, listed_generator)| {
             (*listed_spec, *listed_generator).cmp(&(spec, generator))
         })
         .is_ok()
     };
-    if windows {
-        return listed(ALLOWED_ON_WINDOWS)
-            || (containment >= Containment::OfflineEnvironment
-                && listed(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT));
-    }
     if listed(ALLOWED_GENERATORS) {
         return true;
     }
@@ -131,7 +102,7 @@ pub(super) fn generator_runs_git(spec: &str, generator: &str) -> bool {
         })
         .is_ok()
     };
-    listed(ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT) || listed(GIT_GENERATORS_ON_POSIX_ONLY)
+    listed(LOCAL_GIT_GENERATORS) || listed(GIT_PIPELINE_GENERATORS)
 }
 
 /// Whether the alias generator named `alias` of the spec registered as `spec` (lowercase) runs
@@ -140,11 +111,9 @@ pub(super) fn alias_generator_runs_git(spec: &str, alias: &str) -> bool {
     GIT_ALIAS_GENERATORS.contains(&(spec, alias))
 }
 
-/// The generators that run on Windows only when the executor applies the offline environment
-/// table.
-pub(super) fn generators_allowed_on_windows_with_environment()
--> &'static [(&'static str, &'static str)] {
-    ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT
+/// The local git generators (one `git` read of the local repository each).
+pub(super) fn local_git_generators() -> &'static [(&'static str, &'static str)] {
+    LOCAL_GIT_GENERATORS
 }
 
 /// The generators that run only in an isolated context.

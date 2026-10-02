@@ -322,11 +322,6 @@ pub fn bundled_resources_dir() -> Option<PathBuf> {
                 .ok()
                 .and_then(|executable| std::fs::canonicalize(executable).ok())
                 .and_then(|executable| executable.parent().map(|parent| parent.join("resources")))
-        } else if #[cfg(target_os = "windows")] {
-            std::env::current_exe()
-                .ok()
-                .and_then(|executable| std::fs::canonicalize(executable).ok())
-                .and_then(|executable| executable.parent().map(|parent| parent.join("resources")))
         } else {
             None
         }

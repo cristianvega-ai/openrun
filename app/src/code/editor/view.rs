@@ -12,7 +12,6 @@ use settings::Setting as _;
 use string_offset::CharOffset;
 use vec1::{Vec1, vec1};
 use vim::vim::{Direction, InsertPosition, VimMode, VimModel, VimState, VimSubscriber};
-use warp_core::platform::SessionPlatform;
 use warp_editor::content::buffer::{
     Buffer, BufferEditAction, EditOrigin, InitialBufferState, ToBufferCharOffset as _,
     ToBufferPoint,
@@ -275,11 +274,7 @@ pub struct CodeEditorView {
 }
 
 impl CodeEditorView {
-    /// A [`SessionPlatform`] is used to determine the default line ending for
-    /// the code editor. It should be provided if the code editor can modify
-    /// files on the user's system.
     pub fn new(
-        session_platform: Option<SessionPlatform>,
         buffer: Option<ModelHandle<Buffer>>,
         render_options: CodeEditorRenderOptions,
         ctx: &mut ViewContext<Self>,
@@ -303,13 +298,7 @@ impl CodeEditorView {
         });
 
         let model = ctx.add_model(|ctx| {
-            CodeEditorModel::new(
-                initial_styles,
-                session_platform,
-                render_options.lazy_layout,
-                buffer,
-                ctx,
-            )
+            CodeEditorModel::new(initial_styles, render_options.lazy_layout, buffer, ctx)
         });
         ctx.subscribe_to_model(&model, |me, _, event, ctx| {
             me.handle_editor_model_event(event, ctx);

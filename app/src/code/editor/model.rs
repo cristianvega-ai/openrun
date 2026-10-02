@@ -25,7 +25,6 @@ use vim::{
     vim_inner_block, vim_inner_line, vim_inner_paragraph, vim_inner_quote, vim_inner_word,
     vim_word_iterator_from_offset,
 };
-use warp_core::platform::SessionPlatform;
 use warp_core::semantic_selection::SemanticSelection;
 use warp_core::ui::theme::Fill;
 use warp_editor::content::anchor::Anchor;
@@ -309,7 +308,6 @@ pub struct CodeEditorModel {
 impl CodeEditorModel {
     pub fn new(
         text_styles: RichTextStyles,
-        session_platform: Option<SessionPlatform>,
         lazy_layout: bool,
         buffer: Option<ModelHandle<Buffer>>, // Whether the editor is using an underlying shared buffer.
         ctx: &mut ModelContext<Self>,
@@ -323,10 +321,6 @@ impl CodeEditorModel {
                 }))
             })
         });
-        content.update(ctx, |buffer, _| {
-            buffer.set_session_platform(session_platform);
-        });
-
         Self::from_content(
             content,
             true,        // show_current_line_highlights
@@ -1771,18 +1765,6 @@ impl CodeEditorModel {
     pub fn copy(&self, ctx: &mut ModelContext<Self>) {
         let clipboard = self.read_selected_text_as_clipboard_content(ctx);
         ctx.clipboard().write(clipboard);
-    }
-
-    #[cfg(windows)]
-    /// If there is selected text, copy it and clear the selection.
-    pub fn handle_windows_ctrl_c(&self, ctx: &mut ModelContext<Self>) {
-        let buffer = self.content().as_ref(ctx);
-        let selected_text =
-            buffer.selected_text_as_plain_text(self.buffer_selection_model().clone(), ctx);
-        if !selected_text.as_str().is_empty() {
-            self.copy(ctx);
-            self.clear_selections(ctx);
-        }
     }
 
     pub fn cut(&mut self, ctx: &mut ModelContext<Self>) {

@@ -7,9 +7,6 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use url::Url;
 use warp_core::channel::ChannelState;
 
-#[cfg(windows)]
-mod process_handle;
-
 pub mod completions;
 pub mod local_control;
 pub mod output_format;
@@ -25,14 +22,6 @@ pub struct ParentOpts {
     /// child process doesn't need to keep track of its parent.
     #[arg(long = "parent-pid", hide = true)]
     pub pid: Option<u32>,
-
-    /// A handle to our parent process.
-    ///
-    /// Used on Windows for crash recovery instead of parent_pid, as process
-    /// IDs can be reused, so a process handle is more robust.
-    #[cfg(windows)]
-    #[arg(long = "parent-handle", hide = true)]
-    pub handle: Option<process_handle::ProcessHandle>,
 }
 
 /// Normal argument parser for the shared Warp executable across all channels.
@@ -55,7 +44,7 @@ pub struct Args {
 #[derive(Debug, Default, clap::Args, Clone)]
 pub struct AppArgs {
     /// Crash recovery mechanism to use if we detect the parent process terminated.
-    #[cfg(enable_crash_recovery)]
+    #[cfg(target_os = "linux")]
     #[arg(long = "crash-recovery-mechanism", value_enum, requires = "ParentOpts")]
     pub crash_recovery_mechanism: Option<RecoveryMechanism>,
 
@@ -83,13 +72,7 @@ impl Args {
 
                 command.try_get_matches()
                     .and_then(|matches| Self::from_arg_matches(&matches))
-                    .unwrap_or_else(|err| {
-                        // We attach a console to ensure help and error messages are printed
-                        // when using the CLI.
-                        #[cfg(windows)]
-                        warp_util::windows::attach_to_parent_console();
-                        err.exit()
-                    })
+                    .unwrap_or_else(|err| err.exit())
             }
         }
     }
@@ -200,7 +183,6 @@ impl Command {
 }
 
 /// Arguments for the terminal server.
-#[cfg(not(windows))]
 #[derive(Debug, Clone, Default, clap::Args)]
 pub struct TerminalServerArgs {
     #[clap(flatten)]

@@ -13,7 +13,6 @@ use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
 use serde::{Deserialize, Serialize};
 use settings::Setting as _;
-use typed_path::TypedPath;
 use uuid::Uuid;
 use warp_core::command::ExitCode;
 use warp_core::context_flag::ContextFlag;
@@ -21,7 +20,6 @@ use warp_errors::report_if_error;
 use warp_terminal::focus_env::add_session_focus_env_vars;
 #[cfg(feature = "local_fs")]
 use warp_util::path::LineAndColumnArg;
-use warp_util::path::convert_wsl_to_windows_host_path;
 use warpui::elements::{
     ChildView, CrossAxisAlignment, DispatchEventResult, Element, EventHandler, Flex, MainAxisSize,
     ParentElement, Shrinkable, Stack,
@@ -62,7 +60,6 @@ use crate::resource_center::{
 use crate::session_management::SessionNavigationData;
 use crate::settings::PaneSettings;
 use crate::settings_view::SettingsSection;
-use crate::shell_indicator::ShellIndicatorType;
 use crate::terminal::available_shells::{AvailableShell, AvailableShells};
 use crate::terminal::general_settings::{GeneralSettings, GeneralSettingsChangedEvent};
 use crate::terminal::input::{InputConfig, InputType};
@@ -75,7 +72,7 @@ use crate::terminal::model::session::Session;
 use crate::terminal::session_settings::{NewSessionSource, SessionSettings};
 use crate::terminal::view::ssh_file_upload::FileUploadId;
 use crate::terminal::view::{BlockNotification, LeftPanelTargetView, SyncEvent, TerminalViewState};
-use crate::terminal::{ShellLaunchData, TerminalManager, TerminalModel, TerminalView};
+use crate::terminal::{TerminalManager, TerminalModel, TerminalView};
 use crate::undo_close::{UndoCloseStack, UndoCloseStackEvent};
 use crate::util::bindings::{CustomAction, is_binding_pty_compliant};
 #[cfg(feature = "local_fs")]
@@ -3049,18 +3046,6 @@ impl PaneGroup {
         self.focus_state.as_ref(ctx).is_focused_pane_maximized()
     }
 
-    pub fn focused_shell_indicator_type(&self, ctx: &AppContext) -> Option<ShellIndicatorType> {
-        self.pane_contents
-            .get(&self.focused_pane_id(ctx))
-            .and_then(|pane| pane.as_any().downcast_ref::<TerminalPane>())
-            .and_then(|terminal_pane| {
-                terminal_pane
-                    .terminal_view(ctx)
-                    .as_ref(ctx)
-                    .shell_indicator_type()
-            })
-    }
-
     /// Toggles whether or not the focused pane is maximized.
     fn toggle_maximize_pane(&mut self, ctx: &mut ViewContext<Self>) {
         if self.pane_count() > 1 {
@@ -3379,34 +3364,6 @@ impl PaneGroup {
         (terminal_view, terminal_manager)
     }
 
-    /// Whether to use the user-specified startup directory when starting
-    /// a new session. On Windows, we ignore this custom directory setting in
-    /// WSL sessions. On all other systems, we honor the custom directory.
-    #[cfg(feature = "local_tty")]
-    fn should_ignore_custom_startup_directory(
-        &self,
-        chosen_shell: &Option<AvailableShell>,
-        ctx: &ViewContext<Self>,
-    ) -> bool {
-        let wsl_distro = chosen_shell
-            .to_owned()
-            .unwrap_or_else(move || {
-                AvailableShells::handle(ctx)
-                    .read(ctx, |shells, ctx| shells.get_user_preferred_shell(ctx))
-            })
-            .wsl_distro();
-        wsl_distro.is_some()
-    }
-
-    #[cfg(not(feature = "local_tty"))]
-    const fn should_ignore_custom_startup_directory(
-        &self,
-        _chosen_shell: &Option<AvailableShell>,
-        _ctx: &ViewContext<Self>,
-    ) -> bool {
-        false
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub fn add_session(
         &mut self,
@@ -3417,9 +3374,6 @@ impl PaneGroup {
         ctx: &mut ViewContext<Self>,
     ) -> TerminalPaneId {
         let startup_directory = {
-            let ignore_custom_startup_directory =
-                self.should_ignore_custom_startup_directory(&chosen_shell, ctx);
-
             let initial_directory_from_current_session =
                 self.startup_path_for_new_session(base_pane_id_for_context, ctx);
 
@@ -3429,7 +3383,6 @@ impl PaneGroup {
                     .initial_directory_for_new_session(
                         NewSessionSource::SplitPane,
                         initial_directory_from_current_session,
-                        ignore_custom_startup_directory,
                     )
             })
         };
@@ -3704,43 +3657,7 @@ impl PaneGroup {
 
         self.terminal_view_from_pane_id(pane_id, ctx)
             .and_then(|terminal_handle| {
-                terminal_handle.read(ctx, |view, _| {
-                    let model = view.model.lock();
-                    let session_startup_path = model.session_startup_path();
-                    if let (Some(distribution_name), Some(path)) =
-                        (view.active_session_wsl_distro(ctx), &session_startup_path)
-                    {
-                        path.to_str().and_then(|path| {
-                            convert_wsl_to_windows_host_path(
-                                &TypedPath::unix(path),
-                                &distribution_name,
-                            )
-                            .inspect_err(|err| {
-                                log::warn!(
-                                    "unable to convert WSL path to Windows host path: {err:?}"
-                                );
-                            })
-                            .ok()
-                        })
-                    } else {
-                        session_startup_path
-                    }
-                })
-            })
-    }
-
-    pub fn launch_data_for_session(
-        &self,
-        pane_id: TerminalPaneId,
-        ctx: &AppContext,
-    ) -> Option<ShellLaunchData> {
-        self.terminal_view_from_pane_id(pane_id, ctx)
-            .and_then(|terminal_handle| {
-                terminal_handle.read(ctx, |view, ctx| {
-                    view.active_block_session_id()
-                        .and_then(|id| view.sessions_model().as_ref(ctx).get(id))
-                        .and_then(|s| s.launch_data().cloned())
-                })
+                terminal_handle.read(ctx, |view, _| view.model.lock().session_startup_path())
             })
     }
 

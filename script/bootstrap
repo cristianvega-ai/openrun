@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# Bootstrap dispatches to the platform-specific install scripts. Each step
-# that needs root sources `script/warp_sudo` and asks for confirmation
-# before running. Pass -y / --yes (or set WARP_SKIP_SUDO_PROMPT=1) to skip
-# the prompts in unattended environments.
+# Bootstrap runs the macOS install script. The steps that need root source
+# `script/warp_sudo` and ask for confirmation before running. Pass -y / --yes
+# (or set WARP_SKIP_SUDO_PROMPT=1) to skip the prompts in unattended environments.
 
 OS_TYPE="$(uname -s)"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
@@ -16,7 +15,7 @@ usage() {
   cat <<EOF
 Usage: ./script/bootstrap [options]
 
-Prepare this checkout for Warp development by running the platform-specific bootstrap steps.
+Prepare this checkout for development by running the macOS bootstrap steps.
 
 Options:
   -h, --help               Show this help message.
@@ -29,25 +28,14 @@ EOF
 }
 
 print_bootstrap_preview() {
-  local platform="$1"
-
-  echo "Warp bootstrap is starting for ${platform}."
+  echo "Bootstrap is starting for macOS."
   echo "It will:"
-
-  if [[ "${platform}" = "macOS" ]]; then
-    echo "  - Configure Xcode as the active developer directory."
-    echo "  - Install or update Cargo, Homebrew, PowerShell, Docker, and related development tools."
-    echo "  - Add the aarch64-apple-darwin Rust target."
-  elif [[ "${platform}" = "Linux" ]]; then
-    echo "  - Update apt package metadata."
-    echo "  - Install dependencies needed to build, run, and test Warp."
-    echo "  - Install linuxdeploy."
-  fi
-
+  echo "  - Configure Xcode as the active developer directory."
+  echo "  - Install or update Cargo, Homebrew, PowerShell, Docker, and related development tools."
+  echo "  - Add the aarch64-apple-darwin Rust target."
   echo "Run ./script/bootstrap --help to see options and environment overrides."
   echo
 }
-
 
 for arg in "$@"; do
   case "${arg}" in
@@ -57,9 +45,7 @@ for arg in "$@"; do
       ;;
     -y|--yes)
       export WARP_SKIP_SUDO_PROMPT=1
-      if [[ ! "$OS_TYPE" =~ ^(MINGW64_NT|MSYS_NT) ]]; then
-        PLATFORM_ARGS+=("${arg}")
-      fi
+      PLATFORM_ARGS+=("${arg}")
       ;;
     *)
       echo "error: unknown argument '${arg}'" >&2
@@ -69,36 +55,10 @@ for arg in "$@"; do
   esac
 done
 
-# This repository requires Git LFS; ensure it is installed and initialized
-# for this checkout.
-ensure_git_lfs() {
-  if ! command -v git-lfs >/dev/null 2>&1; then
-    echo
-    echo "warning: git-lfs is not installed. Install it before continuing:"
-    case "${OS_TYPE}" in
-      Darwin)               echo "  brew install git-lfs" ;;
-      Linux)                echo "  sudo apt-get install -y git-lfs   # or your distro's package manager" ;;
-      MINGW64_NT*|MSYS_NT*)  echo "  choco install git-lfs            # or: winget install GitHub.GitLFS" ;;
-      *)                    echo "  See https://git-lfs.com for install instructions." ;;
-    esac
-    echo "After installing, re-run ./script/bootstrap."
-    return 1
-  fi
-  git lfs install --local >/dev/null
-  git lfs pull
-}
-
-ensure_git_lfs
-
-if [[ "$OS_TYPE" = "Darwin" ]]; then
-  print_bootstrap_preview "macOS"
-  ./script/macos/bootstrap "${PLATFORM_ARGS[@]}"
-elif [[ "$OS_TYPE" = "Linux" ]]; then
-  print_bootstrap_preview "Linux"
-  ./script/linux/bootstrap "${PLATFORM_ARGS[@]}"
-elif [[ "$OS_TYPE" =~ ^(MINGW64_NT|MSYS_NT) ]]; then
-  ./script/windows/bootstrap.ps1 "${PLATFORM_ARGS[@]}"
-else
-  echo "No bootstrap script defined for the current platform!"
+if [[ "$OS_TYPE" != "Darwin" ]]; then
+  echo "Only macOS is supported."
   exit 1
 fi
+
+print_bootstrap_preview
+./script/macos/bootstrap "${PLATFORM_ARGS[@]}"

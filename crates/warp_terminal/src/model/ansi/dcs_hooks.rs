@@ -21,10 +21,6 @@ pub(super) const HEX_ENCODED_JSON_MARKER: char = 'd';
 /// In OSC, it is used as the first parameter.
 pub(super) const UNENCODED_JSON_MARKER: char = 'f';
 
-/// Indicates that the following message is a ANSI-C quoted message for receiving Warp's lifecycle
-/// hooks via key-value pairs.
-/// In OSC< it is used as the first parameter.
-pub(super) const UNENCODED_KV_MARKER: char = 'k';
 /// Session IDs decoded from shell hook payloads.
 ///
 /// These are optional at the schema layer because several hook structs implement
@@ -224,222 +220,6 @@ impl DProtoHook {
             DProtoHook::SourcedRcFileForWarp { .. } => false,
         }
     }
-
-    /// This function exists because there doesn't yet exist meaningful defaults for all shell
-    /// hooks.
-    pub fn default_from_name(hook: &str) -> Option<Self> {
-        match hook {
-            "CommandFinished" => Some(DProtoHook::CommandFinished {
-                value: Default::default(),
-            }),
-            "Preexec" => Some(DProtoHook::Preexec {
-                value: Default::default(),
-            }),
-            "Bootstrapped" => Some(DProtoHook::Bootstrapped {
-                value: Default::default(),
-            }),
-            "PreInteractiveSSHSession" => Some(DProtoHook::PreInteractiveSSHSession {
-                value: Default::default(),
-            }),
-            "SSH" => Some(DProtoHook::SSH {
-                value: Default::default(),
-            }),
-            "InitShell" => Some(DProtoHook::InitShell {
-                value: Default::default(),
-            }),
-            "InputBuffer" => Some(DProtoHook::InputBuffer {
-                value: Default::default(),
-            }),
-            "Clear" => Some(DProtoHook::Clear {
-                value: Default::default(),
-            }),
-            "InitSubshell" => Some(DProtoHook::InitSubshell {
-                value: Default::default(),
-            }),
-            "SourcedRcFileForWarp" => Some(DProtoHook::SourcedRcFileForWarp {
-                value: Default::default(),
-            }),
-            _ => {
-                debug_assert!(
-                    false,
-                    "We do not yet support receiving the {hook} hook via key-value pairs"
-                );
-                None
-            }
-        }
-    }
-
-    /// Populates a field of the hook's `value` with the given key-value pair.
-    pub fn populate_field(&mut self, key: String, v: String) {
-        let map_empty_to_none = |s: String| {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        };
-        match self {
-            DProtoHook::CommandFinished { value } => match key.as_ref() {
-                "exit_code" => {
-                    value.completion_metadata.exit_code =
-                        v.parse::<i32>().unwrap_or_default().into()
-                }
-                "next_block_id" => {
-                    value.completion_metadata.next_block_id = v.to_string().into();
-                }
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                _ => {
-                    log::warn!("Tried to add unknown field to CommandFinished");
-                }
-            },
-            DProtoHook::InitShell { value } => match key.as_ref() {
-                "session_id" => {
-                    value.session_id = v
-                        .parse::<u64>()
-                        .ok()
-                        .map(|id| id.into())
-                        .unwrap_or_default()
-                }
-                "shell" => {
-                    value.shell = v;
-                }
-                "is_subshell" => {
-                    value.is_subshell = v.parse::<bool>().ok().unwrap_or_default();
-                }
-                "user" => {
-                    value.user = trim_null_byte(v);
-                }
-                "hostname" => {
-                    value.hostname = trim_null_byte(v);
-                }
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to InitShell");
-                }
-            },
-            DProtoHook::Bootstrapped { value } => match key.as_ref() {
-                "histfile" => {
-                    value.histfile = map_empty_to_none(v);
-                }
-                "shell" => value.shell = trim_null_byte(v),
-                "home_dir" => value.home_dir = map_empty_to_none(v),
-                "path" => {
-                    value.path = map_empty_to_none(v);
-                }
-                "cdpath" => {
-                    value.cdpath = map_empty_to_none(v);
-                }
-                "editor" => {
-                    value.editor = map_empty_to_none(v);
-                }
-                "aliases" => {
-                    value.aliases = map_empty_to_none(v);
-                }
-                "abbreviations" => {
-                    value.abbreviations = map_empty_to_none(v);
-                }
-                "function_names" => {
-                    value.function_names = map_empty_to_none(v);
-                }
-                "env_var_names" => {
-                    value.env_var_names = map_empty_to_none(v);
-                }
-                "builtins" => {
-                    value.builtins = map_empty_to_none(v);
-                }
-                "keywords" => {
-                    value.keywords = map_empty_to_none(v);
-                }
-                "shell_version" => {
-                    value.shell_version = map_empty_to_none(v);
-                }
-                "shell_options" => {
-                    value.shell_options = Some(parse_shell_options_list(v));
-                }
-                "rcfiles_start_time" => {
-                    value.rcfiles_start_time = parse_float_from_string(v);
-                }
-                "rcfiles_end_time" => {
-                    value.rcfiles_end_time = parse_float_from_string(v);
-                }
-                "shell_plugins" => {
-                    value.shell_plugins = Some(parse_shell_options_list(v));
-                }
-                "vi_mode_enabled" => {
-                    value.vi_mode_enabled = map_empty_to_none(v);
-                }
-                "os_category" => {
-                    value.os_category = map_empty_to_none(v);
-                }
-                "linux_distribution" => {
-                    value.linux_distribution = map_empty_to_none(v);
-                }
-                "wsl_name" => {
-                    value.wsl_name = map_empty_to_none(v);
-                }
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to Bootstrapped hook");
-                }
-            },
-            DProtoHook::Preexec { value } => match key.as_ref() {
-                "command" => {
-                    value.command = v;
-                }
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to Preexec hook");
-                }
-            },
-            DProtoHook::PreInteractiveSSHSession { value } => match key.as_ref() {
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to PreInteractiveSSHSession hook");
-                }
-            },
-            DProtoHook::SSH { value } => match key.as_ref() {
-                "socket_path" => value.socket_path = v.into(),
-                "remote_shell" => value.remote_shell = v,
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                "remote_session_id" => value.remote_session_id = v.parse::<u64>().ok(),
-                "external_control_master" => {
-                    value.external_control_master = v.parse::<bool>().unwrap_or(false)
-                }
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to SSH hook");
-                }
-            },
-            DProtoHook::Clear { value } => match key.as_ref() {
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to Clear hook");
-                }
-            },
-            DProtoHook::InputBuffer { value } => match key.as_ref() {
-                "buffer" => {
-                    value.buffer = v;
-                }
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to InputBuffer hook");
-                }
-            },
-            DProtoHook::InitSubshell { value } => match key.as_ref() {
-                "shell" => value.shell = v,
-                "uname" => value.uname = map_empty_to_none(v),
-                "session_id" => value.session_id = v.parse::<u64>().ok(),
-                _ => {
-                    log::warn!("Tried to add unknown field {key} to InitSubshell hook");
-                }
-            },
-            _ => {
-                debug_assert!(
-                    false,
-                    "Populating fields of the {} hook is not yet supported via key-value pairs",
-                    self.name()
-                );
-            }
-        }
-    }
 }
 
 /// Payload with completion metadata received from the PTY at precmd.
@@ -498,33 +278,6 @@ where
 }
 
 impl RawPrecmdValue {
-    fn populate_field(&mut self, key: String, value: String) {
-        let map_empty_to_none = |value: String| {
-            if value.is_empty() { None } else { Some(value) }
-        };
-        match key.as_str() {
-            "pwd" => self.prompt_metadata.pwd = map_empty_to_none(value),
-            "ps1" => self.prompt_metadata.ps1 = map_empty_to_none(value),
-            "ps1_is_encoded" => self.prompt_metadata.ps1_is_encoded = value.parse::<bool>().ok(),
-            "honor_ps1" => self.prompt_metadata.honor_ps1 = value.parse::<bool>().ok(),
-            "rprompt" => self.prompt_metadata.rprompt = map_empty_to_none(value),
-            "git_head" => self.prompt_metadata.git_head = map_empty_to_none(value),
-            "git_branch" => self.prompt_metadata.git_branch = map_empty_to_none(value),
-            "virtual_env" => self.prompt_metadata.virtual_env = map_empty_to_none(value),
-            "conda_env" => self.prompt_metadata.conda_env = map_empty_to_none(value),
-            "kube_config" => self.prompt_metadata.kube_config = map_empty_to_none(value),
-            "session_id" => self.prompt_metadata.session_id = value.parse::<u64>().ok(),
-            "exit_code" => {
-                self.exit_code = RawPrecmdField::Present(value.parse::<i32>().ok().map(Into::into));
-            }
-            "next_block_id" => {
-                self.next_block_id = RawPrecmdField::Present(Some(value.into()));
-            }
-            _ => {
-                log::warn!("Tried to add unknown field {key} to Precmd");
-            }
-        }
-    }
     fn classify(self) -> Result<PrecmdHookValue, &'static str> {
         match (self.exit_code, self.next_block_id) {
             (
@@ -718,8 +471,6 @@ pub struct BootstrappedValue {
 
     pub linux_distribution: Option<String>,
 
-    pub wsl_name: Option<String>,
-
     /// The full path to the running shell binary (e.g. "/usr/bin/zsh").
     pub shell_path: Option<String>,
 }
@@ -826,8 +577,6 @@ struct RawBootstrappedValue {
     #[serde(default)]
     linux_distribution: RawBootstrappedField,
     #[serde(default)]
-    wsl_name: RawBootstrappedField,
-    #[serde(default)]
     shell_path: RawBootstrappedField,
 }
 
@@ -859,17 +608,9 @@ impl<'de> Deserialize<'de> for BootstrappedValue {
             vi_mode_enabled: raw.vi_mode_enabled.empty_string_to_none(),
             os_category: raw.os_category.empty_string_to_none(),
             linux_distribution: raw.linux_distribution.empty_string_to_none(),
-            wsl_name: raw.wsl_name.empty_string_to_none(),
             shell_path: raw.shell_path.empty_string_to_none(),
         })
     }
-}
-
-fn parse_float_from_string(s: String) -> Option<OrderedFloat<f64>> {
-    if s.is_empty() {
-        return None;
-    }
-    s.parse::<f64>().map(|f| f.into()).ok()
 }
 
 /// Received from the pty when Warp's SSH wrapper is executed, prior to
@@ -914,9 +655,6 @@ pub struct InitShellValue {
 
     #[serde(deserialize_with = "trim_null_byte_deserializer", default)]
     pub hostname: String,
-
-    #[serde(deserialize_with = "empty_string_is_none", default)]
-    pub wsl_name: Option<String>,
 }
 
 /// Emitted as part of the subshell bootstrapping process, before the shell type is known
@@ -1017,49 +755,6 @@ fn parse_shell_options_list(s: String) -> HashSet<String> {
         .filter(|s| !s.is_empty())
         .map(Into::into)
         .collect()
-}
-
-/// Represents a shell hook that will be constructed over time by receiving key-value pairs.
-#[derive(Debug)]
-pub struct PendingHook {
-    value: PendingHookValue,
-}
-
-#[derive(Debug)]
-enum PendingHookValue {
-    Precmd(RawPrecmdValue),
-    Other(DProtoHook),
-}
-
-impl PendingHook {
-    pub fn create(hook_name: &str) -> Option<Self> {
-        let value = if hook_name == "Precmd" {
-            PendingHookValue::Precmd(RawPrecmdValue::default())
-        } else {
-            PendingHookValue::Other(DProtoHook::default_from_name(hook_name)?)
-        };
-        Some(Self { value })
-    }
-
-    /// Updates the field on the hook according to the given key-value pair.
-    pub fn update(&mut self, key: String, mut value: String) {
-        if super::is_ansi_c_quoted(&value) {
-            value = super::parse_ansi_c_quoted_string(value);
-        }
-        match &mut self.value {
-            PendingHookValue::Precmd(precmd) => precmd.populate_field(key, value),
-            PendingHookValue::Other(hook) => hook.populate_field(key, value),
-        }
-    }
-
-    pub(super) fn finish(self) -> Result<DProtoHook, &'static str> {
-        match self.value {
-            PendingHookValue::Precmd(precmd) => {
-                precmd.classify().map(|value| DProtoHook::Precmd { value })
-            }
-            PendingHookValue::Other(hook) => Ok(hook),
-        }
-    }
 }
 
 #[cfg(test)]

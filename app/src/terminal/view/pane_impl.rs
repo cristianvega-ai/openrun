@@ -24,7 +24,7 @@ use crate::pane_group::pane::{PaneStack, view};
 use crate::pane_group::{BackingView, SplitPaneState, TOGGLE_MAXIMIZE_PANE_BINDING_NAME};
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;
 use crate::terminal::{TerminalManager, TerminalView};
-use crate::ui_components::{blended_colors, icons};
+use crate::ui_components::icons;
 use crate::util::bindings::keybinding_name_to_display_string;
 use crate::workspace::tab_settings::TabSettings;
 
@@ -323,23 +323,6 @@ impl TerminalView {
                 .with_height(font_size)
                 .with_width(font_size)
                 .finish(),
-            );
-        }
-
-        // Shell indicator (Windows only)
-        if let Some(shell_indicator_type) = self.shell_indicator_type {
-            let shell_indicator_icon = shell_indicator_type
-                .to_icon()
-                .to_warpui_icon(
-                    blended_colors::text_sub(appearance.theme(), appearance.theme().background())
-                        .into(),
-                )
-                .finish();
-            return Some(
-                ConstrainedBox::new(shell_indicator_icon)
-                    .with_height(font_size)
-                    .with_width(font_size)
-                    .finish(),
             );
         }
 

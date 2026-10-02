@@ -1,19 +1,11 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::{io, process};
 
-use anyhow::Context as _;
-use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
-use typed_path::UnixPathBuf;
 use warp_core::channel::{Channel, ChannelState};
 use warp_core::session_id::SessionId;
 use warp_errors::report_error;
-#[cfg(windows)]
-use warp_util::path::windows::{powershell_5_path, powershell_7_path, wsl_path};
-use warp_util::path::{
-    canonicalize_git_bash_path, is_msys2_path, resolve_executable, warp_shell_path,
-};
+use warp_util::path::{resolve_executable, warp_shell_path};
 
 use crate::bootstrap::{generate_session_id, init_shell_script_for_shell};
 use crate::shell::{ShellLaunchData, ShellName, ShellType};
@@ -52,85 +44,30 @@ pub fn is_valid_path_or_command_for_supported_shell(path_or_command: &str) -> bo
     supported_shell_path_and_type(path_or_command).is_some()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ShellStarter {
-    /// Bootstrap the shell directly.
-    Direct(DirectShellStarter),
-    /// Bootstrap the shell through WSL.
-    Wsl(WslShellStarter),
-    MSYS2(DirectShellStarter),
-}
-
-impl ShellStarter {
-    /// Constructs a `ShellStarter` represent the shell binary (and corresponding arguments) to be
-    /// used to spawn a shell process for a new top-level Warp session. If a WSL Distribution is
-    /// given, then it will always construct a `ShellStarter` starting the default shell for that
-    /// WSL Distribution.
+impl ShellStarterSource {
+    /// Constructs the shell binary (and corresponding arguments) used to spawn a shell process for
+    /// a new top-level session.
     ///
     /// Returns an enum indicating the source from which the shell was determined. If the fallback
     /// default shell is used, also includes the requested but unsupported shell information.
-    pub fn init(preferred_shell: impl AvailableShell) -> Option<ShellStarterSourceOrWslName> {
-        if let Some(launch_data) = preferred_shell.get_valid_shell_path_and_type() {
-            match launch_data {
-                ShellLaunchData::Executable {
-                    executable_path,
-                    shell_type,
-                } => {
-                    let session_id = generate_session_id();
-                    if cfg!(windows) {
-                        let executable_path = canonicalize_git_bash_path(executable_path.clone());
-                        if is_msys2_path(&executable_path) {
-                            return Some(
-                                ShellStarterSource::Override(ShellStarter::MSYS2(
-                                    DirectShellStarter {
-                                        args: msys2_arguments_for_session_spawning_command(
-                                            shell_type,
-                                        ),
-                                        shell_path: executable_path,
-                                        shell_type,
-                                        session_id,
-                                    },
-                                ))
-                                .into(),
-                            );
-                        }
-                    }
-                    let args = arguments_for_session_spawning_command(
-                        executable_path.to_string_lossy().as_ref(),
-                        shell_type,
-                        session_id,
-                    );
-                    return Some(
-                        ShellStarterSource::Override(ShellStarter::Direct(DirectShellStarter {
-                            args,
-                            shell_path: executable_path,
-                            shell_type,
-                            session_id,
-                        }))
-                        .into(),
-                    );
-                }
-                ShellLaunchData::WSL { distro } => {
-                    return Some(ShellStarterSourceOrWslName::WSLName {
-                        distro_name: distro,
-                    });
-                }
-                ShellLaunchData::MSYS2 {
-                    executable_path,
-                    shell_type,
-                } => {
-                    let session_id = generate_session_id();
-                    return Some(
-                        ShellStarterSource::Override(ShellStarter::MSYS2(DirectShellStarter {
-                            args: msys2_arguments_for_session_spawning_command(shell_type),
-                            shell_path: executable_path,
-                            shell_type,
-                            session_id,
-                        }))
-                        .into(),
-                    );
-                }
-            }
+    pub fn init(preferred_shell: impl AvailableShell) -> Option<Self> {
+        if let Some(ShellLaunchData::Executable {
+            executable_path,
+            shell_type,
+        }) = preferred_shell.get_valid_shell_path_and_type()
+        {
+            let session_id = generate_session_id();
+            let args = arguments_for_session_spawning_command(
+                executable_path.to_string_lossy().as_ref(),
+                shell_type,
+                session_id,
+            );
+            return Some(Self::Override(DirectShellStarter {
+                args,
+                shell_path: executable_path,
+                shell_type,
+                session_id,
+            }));
         }
 
         if let Some(warp_shell_env_var) = warp_shell_path() {
@@ -144,139 +81,71 @@ impl ShellStarter {
                 shell_type,
                 session_id,
             );
-            return Some(
-                ShellStarterSource::Environment(DirectShellStarter {
-                    args,
-                    shell_path: warp_shell_path,
-                    shell_type,
-                    session_id,
-                })
-                .into(),
-            );
+            return Some(Self::Environment(DirectShellStarter {
+                args,
+                shell_path: warp_shell_path,
+                shell_type,
+                session_id,
+            }));
         }
 
-        Self::compute_fallback_shell().map(|fallback_shell| fallback_shell.into())
+        Self::compute_fallback_shell()
     }
 
-    fn compute_fallback_shell() -> Option<ShellStarterSource> {
+    fn compute_fallback_shell() -> Option<Self> {
         cfg_if::cfg_if! {
             if #[cfg(unix)] {
-                let pw_shell_path = super::unix::resolve_current_user().map(|user| user.shell);
-                if pw_shell_path.is_none() {
-                    report_error!(
-                        "could not resolve the current user (getpwuid, getent, and /etc/passwd all failed)",
-                        extra: { "uid" => %nix::unistd::getuid().as_raw() }
-                    );
-                }
-                if let Some((resolved_pw_shell_path, shell_type)) =
-                    pw_shell_path.as_deref().and_then(supported_shell_path_and_type)
-                {
-                    let session_id = generate_session_id();
-                    let args = arguments_for_session_spawning_command(
-                        resolved_pw_shell_path.as_path().to_string_lossy().as_ref(),
-                        shell_type,
-                        session_id,
-                    );
-                    return Some(ShellStarterSource::UserDefault(DirectShellStarter {
-                        args,
-                        shell_path: resolved_pw_shell_path,
-                        shell_type,
-                        session_id,
-                    }));
-                }
-                let (resolved_default_shell_path, shell_type) = if let Some(shell_path_and_type) =
-                    supported_shell_path_and_type(ZSH_SHELL_PATH)
-                {
-                    shell_path_and_type
-                } else if let Some(shell_path_and_type) = supported_shell_path_and_type(BASH_SHELL_PATH) {
-                    shell_path_and_type
-                } else if let Some(shell_path_and_type) = supported_shell_path_and_type(FISH_SHELL_PATH) {
-                    shell_path_and_type
-                } else {
-                    log::warn!("Did not find valid binaries when attempting to load fallback shell (not bash, fish, or zsh).");
-                    return None;
-                };
+                        let pw_shell_path = super::unix::resolve_current_user().map(|user| user.shell);
+                        if pw_shell_path.is_none() {
+                            report_error!(
+                                "could not resolve the current user (getpwuid, getent, and /etc/passwd all failed)",
+                                extra: { "uid" => %nix::unistd::getuid().as_raw() }
+                            );
+                        }
+                        if let Some((resolved_pw_shell_path, shell_type)) =
+                            pw_shell_path.as_deref().and_then(supported_shell_path_and_type)
+                        {
+                            let session_id = generate_session_id();
+                            let args = arguments_for_session_spawning_command(
+                                resolved_pw_shell_path.as_path().to_string_lossy().as_ref(),
+                                shell_type,
+                                session_id,
+                            );
+                            return Some(Self::UserDefault(DirectShellStarter {
+                                args,
+                                shell_path: resolved_pw_shell_path,
+                                shell_type,
+                                session_id,
+                            }));
+                        }
+                        let (resolved_default_shell_path, shell_type) = if let Some(shell_path_and_type) =
+                            supported_shell_path_and_type(ZSH_SHELL_PATH)
+                        {
+                            shell_path_and_type
+                        } else if let Some(shell_path_and_type) = supported_shell_path_and_type(BASH_SHELL_PATH) {
+                            shell_path_and_type
+                        } else if let Some(shell_path_and_type) = supported_shell_path_and_type(FISH_SHELL_PATH) {
+                            shell_path_and_type
+                        } else {
+                            log::warn!("Did not find valid binaries when attempting to load fallback shell (not bash, fish, or zsh).");
+                            return None;
+                        };
 
-                let session_id = generate_session_id();
-                let args = arguments_for_session_spawning_command(
-                    resolved_default_shell_path.as_path().to_string_lossy().as_ref(),
-                    shell_type,
-                    session_id,
-                );
-                Some(ShellStarterSource::Fallback {
-                    starter: DirectShellStarter {
-                        args,
-                        shell_path: resolved_default_shell_path,
-                        shell_type,
-                        session_id,
-                    },
-                })
-            } else if #[cfg(target_os = "windows")] {
-                let (resolved_default_shell_path, shell_type) = if let Some(shell_path_and_type) = powershell_7_path().and_then(|path| parse_shell_type_from_path(path)) {
-                    shell_path_and_type
-                } else if let Some(shell_path_and_type) = powershell_5_path().and_then(|path| parse_shell_type_from_path(path)) {
-                    shell_path_and_type
-                } else if let Some(shell_path_and_type) = wsl_path().and_then(|path| parse_shell_type_from_path(path)) {
-                    shell_path_and_type
-                } else {
-                    // TODO: Consider adding Command Prompt as a fallback shell.
-                    log::warn!("Did not find valid binaries when attempting to load fallback shell (not PowerShell or WSL).");
-                    return None;
-                };
-
-                let session_id = generate_session_id();
-                let args = arguments_for_session_spawning_command(
-                    resolved_default_shell_path.as_path().to_string_lossy().as_ref(),
-                    shell_type,
-                    session_id,
-                );
-                Some(ShellStarterSource::UserDefault(DirectShellStarter {
-                    args,
-                    shell_path: resolved_default_shell_path,
-                    shell_type,
-                    session_id,
-                }))
+                        let session_id = generate_session_id();
+                        let args = arguments_for_session_spawning_command(
+                            resolved_default_shell_path.as_path().to_string_lossy().as_ref(),
+                            shell_type,
+                            session_id,
+                        );
+                        Some(Self::Fallback {
+                            starter: DirectShellStarter {
+                                args,
+                                shell_path: resolved_default_shell_path,
+                                shell_type,
+                                session_id,
+                            },
+                        })
             }
-        }
-    }
-
-    pub fn shell_type(&self) -> ShellType {
-        match self {
-            ShellStarter::Direct(starter) | ShellStarter::MSYS2(starter) => starter.shell_type(),
-            ShellStarter::Wsl(starter) => starter.shell_type(),
-        }
-    }
-
-    pub fn is_msys2(&self) -> bool {
-        matches!(self, ShellStarter::MSYS2(_))
-    }
-
-    fn display_name(&self) -> &str {
-        match self {
-            Self::Direct(starter) => starter.display_name(),
-            Self::Wsl(starter) => starter.distribution(),
-            Self::MSYS2(starter) => {
-                if starter
-                    .logical_shell_path()
-                    .iter()
-                    .any(|component| component.eq_ignore_ascii_case("git"))
-                {
-                    "Git Bash"
-                } else {
-                    starter.display_name()
-                }
-            }
-        }
-    }
-
-    /// How to present this data to the user for error messages.
-    #[cfg(windows)]
-    pub(super) fn shell_detail(&self) -> String {
-        match self {
-            Self::Direct(starter) | Self::MSYS2(starter) => {
-                starter.logical_shell_path().to_string_lossy().into_owned()
-            }
-            Self::Wsl(starter) => starter.distribution().to_owned(),
         }
     }
 }
@@ -293,36 +162,18 @@ pub struct DirectShellStarter {
 
     /// The client-generated session ID for the shell bootstrap. For shells
     /// whose init script is passed in command args, this ID is already embedded
-    /// in `args`. For zsh and MSYS2 shells, `TerminalManager::enqueue_init_script`
+    /// in `args`. For zsh, `TerminalManager::enqueue_init_script`
     /// injects this same ID immediately before PTY creation.
-    session_id: SessionId,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WslShellStarter {
-    shell_type: ShellType,
-    shell_path: String,
-
-    /// Arguments to be passed to the shell binary at [`shell_path`] when spawning a new Warp
-    /// session.
-    args: Vec<OsString>,
-    distribution: String,
-
-    /// The client-generated session ID for the WSL shell bootstrap. For WSL zsh,
-    /// `TerminalManager::enqueue_init_script` injects this same ID immediately
-    /// before PTY creation.
     session_id: SessionId,
 }
 
 #[derive(Debug)]
 pub enum ShellStarterSource {
-    /// The user chose the path by setting a custom shell path in settings or selecting a WSL
-    /// distribution.
-    Override(ShellStarter),
+    /// The user chose the path by setting a custom shell path in settings.
+    Override(DirectShellStarter),
     /// The user chose the path to the shell by setting the `WARP_SHELL_PATH` environment variable.
     Environment(DirectShellStarter),
     /// The default shell for the user (as indicated by the user's passwd entry on UNIX).
-    /// On Windows, this an ordered list of shells hardcoded _by Warp_.
     UserDefault(DirectShellStarter),
     /// We weren't able to find a shell that could be bootstrapped for the user.
     Fallback { starter: DirectShellStarter },
@@ -339,71 +190,25 @@ impl ShellStarterSource {
         }
     }
 
-    fn display_name(&self) -> &str {
-        match self {
-            Self::Override(starter) => starter.display_name(),
-            Self::Environment(starter) => starter.display_name(),
-            Self::UserDefault(starter) => starter.display_name(),
-            Self::Fallback { starter, .. } => starter.display_name(),
-        }
+    pub fn name(&self) -> ShellName {
+        let starter = match self {
+            Self::Override(starter)
+            | Self::Environment(starter)
+            | Self::UserDefault(starter)
+            | Self::Fallback { starter } => starter,
+        };
+        ShellName::MoreDescriptive(starter.shell_type().name().to_owned())
     }
 }
 
-impl From<ShellStarterSource> for ShellStarter {
+impl From<ShellStarterSource> for DirectShellStarter {
     fn from(value: ShellStarterSource) -> Self {
         match value {
-            ShellStarterSource::Override(starter) => starter,
-            ShellStarterSource::Environment(starter) => Self::Direct(starter),
-            ShellStarterSource::UserDefault(starter) => Self::Direct(starter),
-            ShellStarterSource::Fallback { starter, .. } => Self::Direct(starter),
+            ShellStarterSource::Override(starter)
+            | ShellStarterSource::Environment(starter)
+            | ShellStarterSource::UserDefault(starter)
+            | ShellStarterSource::Fallback { starter } => starter,
         }
-    }
-}
-
-/// A [`ShellStarterSource`] if a shell is not WSL or the name of a WSL distribution if this is a
-/// WSL session.  
-pub enum ShellStarterSourceOrWslName {
-    Source(ShellStarterSource),
-    WSLName { distro_name: String },
-}
-
-impl ShellStarterSourceOrWslName {
-    /// Converts the [`ShellStarterSourceOrWslName`] to a [`ShellStarterSource`].
-    /// For non WSL shells this is a trivial conversion and is synchronous.
-    /// For WSL shells this requires starting a new WSL instance so we can compute the shell type,
-    /// which can potentially be extremely latent.
-    pub async fn to_shell_starter_source(self) -> Option<ShellStarterSource> {
-        match self {
-            ShellStarterSourceOrWslName::Source(source) => Some(source),
-            ShellStarterSourceOrWslName::WSLName { distro_name } => {
-                if let Some(wsl_shell_starter) =
-                    WslShellStarter::init_from_wsl_distribution(distro_name.as_ref()).await
-                {
-                    return Some(ShellStarterSource::Override(ShellStarter::Wsl(
-                        wsl_shell_starter,
-                    )));
-                }
-
-                ShellStarter::compute_fallback_shell()
-            }
-        }
-    }
-
-    pub fn name(&self) -> ShellName {
-        match self {
-            ShellStarterSourceOrWslName::Source(shell_starter_source) => {
-                ShellName::MoreDescriptive(shell_starter_source.display_name().to_owned())
-            }
-            ShellStarterSourceOrWslName::WSLName { distro_name } => {
-                ShellName::LessDescriptive(distro_name.to_owned())
-            }
-        }
-    }
-}
-
-impl From<ShellStarterSource> for ShellStarterSourceOrWslName {
-    fn from(source: ShellStarterSource) -> Self {
-        ShellStarterSourceOrWslName::Source(source)
     }
 }
 
@@ -439,116 +244,6 @@ impl DirectShellStarter {
     /// Returns the client-generated session ID for this shell bootstrap.
     pub fn session_id(&self) -> SessionId {
         self.session_id
-    }
-
-    pub(super) fn display_name(&self) -> &str {
-        if self
-            .shell_path
-            .file_stem()
-            .is_some_and(|stem| stem.eq_ignore_ascii_case("powershell"))
-        {
-            "Windows PowerShell"
-        } else if self.shell_type == ShellType::PowerShell && cfg!(windows) {
-            "PowerShell Core"
-        } else {
-            self.shell_type.name()
-        }
-    }
-}
-
-impl WslShellStarter {
-    async fn init_from_wsl_distribution(distribution: &str) -> Option<Self> {
-        // We store the path as a String because we can't easily store a Unix path on Windows.
-        // This command can have a lot of latency because it might spin up a VM.
-        let command_result = command::r#async::Command::new("wsl")
-            .arg("--distribution")
-            .arg(distribution)
-            .arg("--shell-type")
-            .arg("standard")
-            .arg("--")
-            .arg("printenv")
-            .arg("SHELL")
-            .output()
-            .await;
-        let shell_path = decode_wsl_path_result(command_result)?
-            .to_string_lossy()
-            .into_owned();
-
-        // We don't need to check the validity of the path or the existence of the binary since
-        // we get this information directly from a spun-up shell in WSL.
-        let shell_type = if shell_path.contains("bash") {
-            ShellType::Bash
-        } else if shell_path.contains("zsh") {
-            ShellType::Zsh
-        } else if shell_path.contains("fish") {
-            ShellType::Fish
-        } else {
-            log::warn!("The shell {shell_path:#} is not yet supported in WSL");
-            return None;
-        };
-
-        let session_id = generate_session_id();
-        let args = wsl_arguments_for_session_spawning_command(
-            distribution,
-            &shell_path,
-            shell_type,
-            session_id,
-        );
-
-        Some(Self {
-            shell_type,
-            shell_path,
-            args,
-            distribution: distribution.to_string(),
-            session_id,
-        })
-    }
-
-    pub fn args(&self) -> &Vec<OsString> {
-        &self.args
-    }
-
-    pub fn shell_type(&self) -> ShellType {
-        self.shell_type
-    }
-
-    pub fn shell_path(&self) -> String {
-        self.shell_path.clone()
-    }
-
-    pub fn wsl_command() -> OsString {
-        "wsl".to_string().into()
-    }
-
-    pub fn distribution(&self) -> &str {
-        &self.distribution
-    }
-
-    /// Returns the client-generated session ID for this WSL shell bootstrap.
-    pub fn session_id(&self) -> SessionId {
-        self.session_id
-    }
-
-    /// Gives the Windows path to the WSL home directory (e.g. `\\WSL$\home\user`).
-    pub fn home_directory(&self) -> Option<PathBuf> {
-        let command_result = command::blocking::Command::new("wsl")
-            .arg("--distribution")
-            .arg(&self.distribution)
-            .arg("--shell-type")
-            .arg("standard")
-            .arg("--")
-            .arg("printenv")
-            .arg("HOME")
-            .output();
-        let home_dir =
-            decode_wsl_path_result(command_result).filter(|s| !s.as_bytes().is_empty())?;
-        warp_util::path::convert_wsl_to_windows_host_path(
-            &home_dir.to_typed_path(),
-            &self.distribution,
-        )
-        .context("error conversion WSL home dir for host")
-        .inspect_err(|err| report_error!(err))
-        .ok()
     }
 }
 
@@ -674,54 +369,6 @@ fn arguments_for_session_spawning_command(
     }
 }
 
-fn wsl_arguments_for_session_spawning_command(
-    distribution: &str,
-    shell_path: &str,
-    shell_type: ShellType,
-    session_id: SessionId,
-) -> Vec<OsString> {
-    let mut args = vec![
-        "--distribution".into(),
-        distribution.into(),
-        "--shell-type".into(),
-        "standard".into(),
-        "--exec".into(),
-        shell_path.into(),
-    ];
-    // Note we typically go through bash so that we can launch the user's shell
-    // with a leading '-', making it a login shell.
-    match shell_type {
-        ShellType::Bash | ShellType::Zsh | ShellType::Fish => {
-            let spawn_args =
-                arguments_for_session_spawning_command(shell_path, shell_type, session_id);
-            args.extend(spawn_args);
-            args
-        }
-        _ => todo!("We don't yet support bootstrapping {shell_type:?} on WSL"),
-    }
-}
-
-fn msys2_arguments_for_session_spawning_command(shell_type: ShellType) -> Vec<OsString> {
-    match shell_type {
-        ShellType::Zsh => {
-            vec!["-g".to_string().into(), "--no-rcs".to_string().into()]
-        }
-        ShellType::Bash => {
-            vec![
-                "--noprofile".to_string().into(),
-                "--norc".to_string().into(),
-            ]
-        }
-        ShellType::Fish => {
-            vec![
-                "--login".to_string().into(),
-                "--no-config".to_string().into(),
-            ]
-        }
-        ShellType::PowerShell => panic!("MSYS2 not supported for PowerShell"),
-    }
-}
-
 pub fn ssh_socket_dir() -> String {
     let mut socket_dir = if ChannelState::channel() == Channel::Integration {
         std::env::var("ORIGINAL_HOME").unwrap_or("~".into())
@@ -730,69 +377,6 @@ pub fn ssh_socket_dir() -> String {
     };
     socket_dir.push_str("/.ssh");
     socket_dir
-}
-
-/// Take the output of a wsl.exe subcommand and try to decode it while reporting errors.
-/// NOTE: The empty string Some("") may be returned.
-fn decode_wsl_path_result(result: io::Result<process::Output>) -> Option<UnixPathBuf> {
-    let output = match result.context("error finding wsl.exe") {
-        Ok(output) => output,
-        Err(err) => {
-            report_error!(err);
-            return None;
-        }
-    };
-    if !output.status.success() {
-        // Errors with wsl.exe usage itself outputs error messages in UTF-16.
-        cfg_if::cfg_if! {
-            // WSL is Windows only, but most of the WSL code isn't cfg-guarded. This
-            // snipped does need to be guarded.
-            if #[cfg(windows)] {
-                use std::os::windows::ffi::OsStringExt as _;
-                let wsl_err_msg = OsString::from_wide(bytemuck::cast_slice(&output.stdout));
-            } else {
-                let wsl_err_msg = "";
-            }
-        }
-        // If wsl.exe was correctly invoked but the Linux command had an error, that will
-        // be UTF-8.
-        if wsl_err_msg.is_empty() {
-            if let Ok(inner_err_msg) = String::from_utf8(output.stderr) {
-                log::error!("Error from WSL command: {inner_err_msg}");
-                report_error!("Error from WSL command");
-            }
-        } else {
-            log::error!("Error invoking wsl.exe: {wsl_err_msg:?}");
-            report_error!("Error invoking wsl.exe");
-        }
-        return None;
-    }
-
-    Some(UnixPathBuf::from(
-        take_until_utf16_crlf(output.stdout)
-            .into_iter()
-            .take_while(|b| *b != b'\n')
-            .collect_vec(),
-    ))
-}
-
-/// Takes bytes until [13, 0, 10, 0] is found in the byte sequence, dropping the rest.
-///
-/// This is useful for removing warning/error messages from successful wsl.exe commands. Even
-/// successful invocations of wsl.exe may have warnings or errors appended to the end. In those
-/// cases the format looks like:
-/// 1. UTF-8 encoded output from the WSL distro.
-/// 2. A UTF-16 encoded CRLF.
-/// 3. A UTF-16 error message.
-fn take_until_utf16_crlf(bytes: Vec<u8>) -> Vec<u8> {
-    const UTF16_CRLF: &[u8] = b"\r\0\n\0";
-    match bytes
-        .windows(UTF16_CRLF.len())
-        .position(|bytes| bytes == UTF16_CRLF)
-    {
-        Some(index) => Vec::from(&bytes[0..index]),
-        None => bytes,
-    }
 }
 
 #[cfg(test)]

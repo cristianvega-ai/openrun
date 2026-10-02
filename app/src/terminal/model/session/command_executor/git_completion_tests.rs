@@ -31,7 +31,7 @@ use warp_completer::completer::{
     CommandExitStatus, CompleterOptions, CompletionsFallbackStrategy, GeneratorContext as _,
     MatchStrategy, suggestions,
 };
-use warp_completer::signatures::{CommandRegistry, generators_allowed_on_windows_with_environment};
+use warp_completer::signatures::{CommandRegistry, local_git_generators};
 
 use super::network_sandbox::NetworkSandbox;
 use super::{CommandExecutor, LocalCommandExecutor, offline_environment};
@@ -44,11 +44,7 @@ fn in_ci() -> bool {
 }
 
 fn executable_name(name: &str) -> String {
-    if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_owned()
-    }
+    name.to_owned()
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
@@ -78,7 +74,7 @@ fn slash(path: &Path) -> String {
 }
 
 fn null_device() -> &'static str {
-    if cfg!(windows) { "NUL" } else { "/dev/null" }
+    "/dev/null"
 }
 
 /// A loopback listener that counts the connections made to it and answers none of them.
@@ -304,11 +300,7 @@ impl Fixture {
         in_source(&["add", "-A"]);
         in_source(&["commit", "-qm", "one"]);
         let partial = temp.path().join("partial");
-        let source_url = if cfg!(windows) {
-            format!("file:///{}", slash(&source))
-        } else {
-            format!("file://{}", slash(&source))
-        };
+        let source_url = { format!("file://{}", slash(&source)) };
         git_output(
             temp.path(),
             &[
@@ -382,26 +374,6 @@ fn session_shells() -> Vec<SessionShell> {
             shell_type: ShellType::Bash,
             family: Shell::Posix,
         }]
-    }
-    #[cfg(windows)]
-    {
-        let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
-        let mut shells = vec![SessionShell {
-            label: "Windows PowerShell 5.1",
-            path: PathBuf::from(root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"),
-            shell_type: ShellType::PowerShell,
-            family: Shell::Powershell,
-        }];
-        match find_on_path("pwsh") {
-            Some(path) => shells.push(SessionShell {
-                label: "PowerShell 7",
-                path,
-                shell_type: ShellType::PowerShell,
-                family: Shell::Powershell,
-            }),
-            None => assert!(!in_ci(), "pwsh is not installed on this CI runner"),
-        }
-        shells
     }
 }
 
@@ -493,7 +465,7 @@ const EXPECTED_OUTPUT: &[(&str, &str)] = &[
 ];
 
 fn windows_git_commands(family: Shell) -> BTreeSet<String> {
-    generators_allowed_on_windows_with_environment()
+    local_git_generators()
         .iter()
         .map(|(spec, generator)| bundled_command(spec, generator, family))
         .collect()
@@ -624,15 +596,7 @@ fn a_session_pair_in_any_spelling_is_counted_and_the_table_still_applies() {
     let Some(fixture) = Fixture::new() else {
         return;
     };
-    let spellings: &[[&str; 3]] = if cfg!(windows) {
-        &[
-            ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"],
-            ["git_config_count", "git_config_key_0", "git_config_value_0"],
-            ["Git_Config_Count", "Git_Config_Key_0", "Git_Config_Value_0"],
-        ]
-    } else {
-        &[["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]]
-    };
+    let spellings: &[[&str; 3]] = &[["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]];
     let reads_the_index = "git --no-optional-locks ls-files";
     let reads_the_sessions_pair = "git config --get alias.zz";
     for shell in session_shells() {

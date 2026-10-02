@@ -278,9 +278,6 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
 /// * `git/tracked_files`, `git/treeish`, `hub/treeish`: `git ls-files` and `git diff --cached`
 ///   run the `core.fsmonitor` program of a repository's config.
 ///
-/// The three git pairs also run on Windows, where there is no sandbox, when the executor applies
-/// the environment table: see [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`].
-///
 /// The real tools were run against a canary with the sandbox and the environment table each on
 /// its own and both together (`network_sandbox_tests.rs`, `offline_environment_tests.rs`,
 /// `restored_generators_tests.rs` in the app crate), and each pair here is checked by that last
@@ -309,11 +306,11 @@ pub(super) const ALLOWED_WHEN_ISOLATED: &[(&str, &str)] = &[
     ("rustup", "rustup_docs"),
 ];
 
-/// Allowed generators whose command runs `git` but that are not on
-/// [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`] because they are POSIX pipelines. Together with that
-/// list this is every allowed generator that runs git; `generator_policy_tests.rs` checks it
-/// against the commands of the bundled specs. Sorted.
-pub(super) const GIT_GENERATORS_ON_POSIX_ONLY: &[(&str, &str)] = &[("git-flow", "type_branches")];
+/// Allowed generators whose command runs `git` but that are not on [`LOCAL_GIT_GENERATORS`]
+/// because they are POSIX pipelines. Together with that list this is every allowed generator
+/// that runs git; `generator_policy_tests.rs` checks it against the commands of the bundled
+/// specs. Sorted.
+pub(super) const GIT_PIPELINE_GENERATORS: &[(&str, &str)] = &[("git-flow", "type_branches")];
 
 /// The alias generators that run `git`: all of [`ALLOWED_ALIAS_GENERATORS`].
 pub(super) const GIT_ALIAS_GENERATORS: &[(&str, &str)] = ALLOWED_ALIAS_GENERATORS;
@@ -323,78 +320,9 @@ pub(super) const GIT_ALIAS_GENERATORS: &[(&str, &str)] = ALLOWED_ALIAS_GENERATOR
 /// denied.
 pub(super) const ALLOWED_ALIAS_GENERATORS: &[(&str, &str)] = &[("git", "alias")];
 
-/// The subset of [`ALLOWED_GENERATORS`] that runs on Windows in every context: commands built only
-/// from file reads (`cat`, `ls`, `find`, `grep`, ...) and PowerShell process and variable
-/// cmdlets, none of which takes the user's tokens. Windows has no network sandbox (SEC-SBX covers
-/// macOS and Linux), so a generator that starts another program is not on this list; the local
-/// git generators are on [`ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT`]. Sorted.
-pub(super) const ALLOWED_ON_WINDOWS: &[(&str, &str)] = &[
-    ("apt-get", "list_all_deb_files_in_cwd"),
-    ("aptitude", "list_all_deb_files_in_cwd"),
-    ("asdf", "shims"),
-    ("aws", "profiles"),
-    ("bun", "dependencies_generator"),
-    ("bun", "get_scripts_generator"),
-    ("clear-variable", "get_variable_names"),
-    ("copilot", "cat_copilot_workspace"),
-    ("cordova", "cat_package_json"),
-    ("debug-process", "get_process_names"),
-    ("deno", "deno_binaries"),
-    ("deta", "node12_node14_python3_7_python3"),
-    ("elm-review", "echo"),
-    ("enter-pshostprocess", "get_process_names"),
-    ("get-process", "get_process_names"),
-    ("get-variable", "get_variable_names"),
-    ("hugo", "ls_archetypes"),
-    ("ignite-cli", "ls_ignite_templates"),
-    ("j", "cat"),
-    ("make", "list_targets"),
-    ("mdfind", "ls_library_saved_searches_savedsearch"),
-    ("mosh", "cat_ssh_config"),
-    ("npm", "get_scripts_generator"),
-    ("npx", "until_node_modules_do_cd"),
-    ("nr", "until_package_json_do_cd"),
-    ("nx", "local_generators"),
-    ("nx", "local_schematics"),
-    ("pacman", "list_all_pkg_tar_files_in_cwd"),
-    ("paru", "list_all_pkg_tar_files_in_cwd"),
-    ("pnpm", "dependencies_generator"),
-    ("pnpm", "get_scripts_generator"),
-    ("pnpm", "until_package_json_do_cd"),
-    ("pre-commit", "cat_pre_commit_config_yaml"),
-    ("projj", "cat_projj_cache_json"),
-    ("projj", "cat_projj_config_json"),
-    ("redwood", "until_redwood_toml_do_cd"),
-    ("remove-variable", "get_variable_names"),
-    ("robot", "for_i_in_robot"),
-    ("robot", "test_cases"),
-    ("rush", "until_rush_json_do_cd"),
-    ("rushx", "until_package_json_do_cd"),
-    ("scp", "hosts"),
-    ("set-variable", "get_variable_names"),
-    ("sftp", "cat_ssh_config"),
-    ("ssh", "addresses"),
-    ("ssh", "hosts"),
-    ("ssh", "known_hosts"),
-    ("tar", "list_tar_files"),
-    ("trex", "cat_import_map_json"),
-    ("trex", "cat_run_json"),
-    ("turbo", "until_turbo_json_do_cd"),
-    ("vite", "ls"),
-    ("wait-process", "get_process_names"),
-    ("wd", "cat_warprc"),
-    ("yarn", "dependencies_generator"),
-    ("yarn", "executables_within_node_modules"),
-    ("yarn", "get_scripts_generator"),
-    ("yay", "list_all_pkg_tar_files_in_cwd"),
-];
-
-/// The local git generators that run on Windows, only when the executor applies the offline
-/// environment table (`GeneratorContext::offline_environment_applied`: the local PowerShell/cmd
-/// executor, Git Bash/MSYS2 and WSL; not the in-band or ControlMaster executors). Windows has no
-/// network sandbox, so the table is the only layer there, and each command was run through the
-/// real executor against a repository that tries to run code and a partial clone whose promisor
-/// remote is a loopback listener (`git_completion_tests.rs` in the app crate).
+/// The local git generators. Each command was run through the real executor against a repository
+/// that tries to run code and a partial clone whose promisor remote is a loopback listener
+/// (`git_completion_tests.rs` in the app crate).
 ///
 /// Every command is one `git` invocation that reads the local repository: `branch`, `tag`,
 /// `for-each-ref`, `rev-list`, `log`, `stash list`, `worktree list`, `remote -v` and
@@ -404,14 +332,13 @@ pub(super) const ALLOWED_ON_WINDOWS: &[(&str, &str)] = &[
 /// `diff --cached --name-only` read the index and, for the second, the `HEAD` tree. None of them
 /// is a status-like command: the `clean` filter of `git status`, `git diff` and
 /// `git ls-files --modified` (the four generators in `denied.rs` with class `project-code`)
-/// stays denied on every platform. `git/local_or_remote_branch`, `git/push_refspec_branches` and
+/// stays denied. `git/local_or_remote_branch`, `git/push_refspec_branches` and
 /// `git/push_refspec_tags` take tokens but their command does not depend on them
 /// ([`TokenPolicy::Inert`](super::token_gate::TokenPolicy::Inert)). `git-flow/type_branches`
-/// is a POSIX pipeline (`p=$(...)`, `sed`, `awk`) that takes a word, so it stays off.
+/// is a POSIX pipeline (`p=$(...)`, `sed`, `awk`) that takes a word, so it is not on this list.
 ///
-/// A subset of [`ALLOWED_GENERATORS`] plus the three isolated-tier git pairs; disjoint from
-/// [`ALLOWED_ON_WINDOWS`]. Sorted.
-pub(super) const ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT: &[(&str, &str)] = &[
+/// A subset of [`ALLOWED_GENERATORS`] plus the three isolated-tier git pairs. Sorted.
+pub(super) const LOCAL_GIT_GENERATORS: &[(&str, &str)] = &[
     ("checkov", "git_branch"),
     ("codex", "commits"),
     ("codex", "local_branches"),

@@ -320,13 +320,9 @@ mod sandboxed {
         let temp = tempfile::tempdir().unwrap();
         let marker = temp.path().join("ran");
         let command = format!("touch '{}'", marker.display());
-        let result =
-            futures_lite::future::block_on(sandbox_failing_executor().execute_local_command(
-                &command,
-                temp.path().to_str(),
-                None,
-                Default::default(),
-            ));
+        let result = futures_lite::future::block_on(
+            sandbox_failing_executor().execute_local_command(&command, temp.path().to_str(), None),
+        );
         assert!(result.is_err(), "the command ran or reported success");
         assert!(!marker.exists(), "the command ran without its sandbox");
     }

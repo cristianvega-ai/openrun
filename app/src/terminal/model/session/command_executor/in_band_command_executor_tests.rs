@@ -2,7 +2,6 @@ use futures_util::future::{AbortHandle, Abortable, Aborted};
 use warpui::App;
 
 use super::*;
-use crate::terminal::model::session::ExecuteCommandOptions;
 
 impl InBandCommandExecutor {
     /// Returns an `Option` containing the ID of the actively running command.
@@ -51,11 +50,8 @@ async fn execute_test_command<F>(
     let shell = Shell::new(ShellType::Zsh, None, None, Default::default(), None);
     let test_command_result = executor
         .execute_command(
-            command,
-            &shell,
-            /*current_directory_path=*/ None,
+            command, &shell, /*current_directory_path=*/ None,
             /*environment_variables=*/ None,
-            ExecuteCommandOptions::default(),
         )
         .await;
 

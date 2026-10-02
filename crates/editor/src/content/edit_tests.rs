@@ -873,31 +873,6 @@ fn test_resolve_asset_source_keeps_drive_letter_and_backslash_relative_images() 
     }
 }
 
-#[cfg(windows)]
-#[test]
-fn test_resolve_asset_source_never_resolves_unc_paths_on_windows() {
-    // `Path::join` with an absolute argument replaces the base, so without the guard these
-    // reach `canonicalize` and `metadata` on the network share.
-    assert!(Path::new(r"\\srv\share\image.png").is_absolute());
-    let base = Path::new(r"C:\docs");
-    for source in [
-        r"\\localhost\c$\Windows\win.ini",
-        r"\\?\UNC\localhost\c$\Windows\win.ini",
-        "//localhost/c$/Windows/win.ini",
-    ] {
-        assert_eq!(
-            resolve_asset_source_relative_to_directory(source, Some(base)),
-            None,
-            "{source}"
-        );
-        assert_eq!(
-            resolve_asset_source(source, Some(&base.join("document.md"))),
-            None,
-            "{source}"
-        );
-    }
-}
-
 #[test]
 fn test_resolve_asset_source_keeps_local_markdown_images() {
     let document_path = Path::new("/tmp/session/document.md");

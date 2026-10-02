@@ -61,7 +61,6 @@ use crate::settings::{CodeSettings, CodeSettingsChangedEvent};
 
 const REMOTE_TEXT: &str = "The Project Explorer requires access to your local workspace, which isn’t supported in remote sessions.";
 const DISABLED_TEXT: &str = "The Project Explorer requires access to your local workspace. Open a new session or navigate to an active session to view.";
-const WSL_TEXT: &str = "The Project Explorer doesn't currently work in WSL.";
 
 /// Stable identifier for an item in the file tree.
 /// Includes both the root directory and the index within that root's flattened list.
@@ -1972,8 +1971,6 @@ impl FileTreeView {
 
         let open_text = if cfg!(target_os = "macos") {
             "Reveal in Finder"
-        } else if cfg!(target_os = "windows") {
-            "Reveal in Explorer"
         } else {
             "Reveal in file manager"
         };
@@ -2528,13 +2525,6 @@ impl View for FileTreeView {
         if self.displayed_directories.is_empty() {
             if matches!(self.enablement, CodingPanelEnablementState::RemoteSession) {
                 return self.render_error_state(REMOTE_TEXT.to_string(), app);
-            }
-
-            if matches!(
-                self.enablement,
-                CodingPanelEnablementState::UnsupportedSession
-            ) {
-                return self.render_error_state(WSL_TEXT.to_string(), app);
             }
 
             return self.render_loading_state(app);

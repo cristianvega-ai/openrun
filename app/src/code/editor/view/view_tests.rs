@@ -31,7 +31,6 @@ fn initialize_editor(app: &mut App) -> (WindowId, ViewHandle<CodeEditorView>) {
     let (window, editor_view) = app.add_window(WindowStyle::NotStealFocus, |ctx| {
         CodeEditorView::new(
             None,
-            None,
             CodeEditorRenderOptions::new(VerticalExpansionBehavior::GrowToMaxHeight),
             ctx,
         )

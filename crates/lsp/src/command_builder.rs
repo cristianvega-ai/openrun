@@ -35,13 +35,6 @@ impl CommandBuilder {
     /// `CreateProcessW` which only resolves `.exe` extensions.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn command(&self, program: impl AsRef<std::ffi::OsStr>) -> Command {
-        #[cfg(windows)]
-        let mut cmd = {
-            let mut cmd = Command::new("cmd.exe");
-            cmd.arg("/c").arg(program);
-            cmd
-        };
-        #[cfg(not(windows))]
         let mut cmd = Command::new(program);
         if let Some(path) = &self.path_env_var {
             cmd.env("PATH", path);

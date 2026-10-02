@@ -6,13 +6,13 @@ use warp_completer::meta::Span;
 use warpui::AppContext;
 use warpui::{Entity, ViewContext};
 
+use crate::terminal::SizeUpdate;
 #[cfg(unix)]
 use crate::terminal::event::AfterBlockCompletedEvent;
 use crate::terminal::model::completions::ShellCompletion;
 #[cfg(unix)]
 use crate::terminal::model::terminal_model::BlockIndex;
 use crate::terminal::view::ExecuteCommandEvent;
-use crate::terminal::{ShellLaunchData, SizeUpdate};
 
 /// A normalized request from a terminal UI surface to the PTY controller.
 ///
@@ -63,14 +63,6 @@ where
     /// has started, so the surface can react to shell launch metadata.
     #[cfg(feature = "local_tty")]
     fn on_shell_determined(&mut self, _ctx: &mut ViewContext<Self>) {}
-
-    /// Called when the active shell launch data is updated (e.g. shell indicator metadata).
-    fn on_active_shell_launch_data_updated(
-        &mut self,
-        _shell_launch_data: Option<ShellLaunchData>,
-        _ctx: &mut ViewContext<Self>,
-    ) {
-    }
 
     /// Called when the PTY fails to spawn so the surface can surface the error.
     #[cfg(feature = "local_tty")]

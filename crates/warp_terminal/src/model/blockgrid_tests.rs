@@ -5,7 +5,6 @@ use crate::event_listener::ChannelEventListener;
 use crate::model::ansi::{self, Handler};
 use crate::model::blockgrid::{BlockGrid, CursorDisplayPoint};
 use crate::model::grid::Dimensions;
-use crate::model::grid::grid_handler::PerformResetGridChecks;
 use crate::model::index::{Point, VisibleRow};
 use crate::model::kitty::{CursorMovementPolicy, KittyAction};
 use crate::model::secrets::ObfuscateSecrets;
@@ -21,7 +20,6 @@ pub fn test_finish_truncates_grid_basic() {
         1000, /* max_scroll_limit */
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     for c in "hello".chars() {
@@ -43,7 +41,6 @@ pub fn test_finish_truncates_grid_cursor_at_bottom() {
         1000, /* max_scroll_limit */
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     for _ in 0..300 {
@@ -67,7 +64,6 @@ pub fn test_resize_finished_block() {
         1000, /* max_scroll_limit */
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     for _ in 0..5 {
@@ -116,7 +112,6 @@ pub fn test_resize_finished_softwrapped_block() {
         1000, /* max_scroll_limit */
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     for _ in 0..5 {
@@ -165,7 +160,6 @@ pub fn test_trim_trailing_blank_rows_uses_active_floor_for_blank_started_grid() 
         1000,
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     block_grid.start();
@@ -190,7 +184,6 @@ pub fn test_non_moving_kitty_image_keeps_finished_grid_visible() {
         1000,
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
     let mut metadata = test_kitty_image_metadata_map(1);
     let mut action = test_kitty_store_and_display_action(1, 1);
@@ -217,7 +210,6 @@ pub fn test_cursor_display_point_hidden_when_cursor_below_trimmed_content() {
         1000,
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     block_grid.start();
@@ -252,7 +244,6 @@ pub fn test_cursor_display_point_not_clipped_when_trimming_disabled() {
         1000,
         ChannelEventListener::new_for_test(),
         ObfuscateSecrets::No,
-        PerformResetGridChecks::default(),
     );
 
     block_grid.start();
