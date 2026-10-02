@@ -2,7 +2,10 @@ name: CI
 
 # OpenRun runs on macOS only, so every job runs on a hosted macOS runner (Apple silicon).
 on:
+  # A branch with a pull request is built once, for the pull request: both events at once doubled
+  # the jobs, and a hosted macOS runner is scarce (5 jobs at a time on the free plan).
   push:
+    branches: [main]
   pull_request:
 
 permissions:
