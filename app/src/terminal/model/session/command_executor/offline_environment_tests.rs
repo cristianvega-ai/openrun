@@ -28,6 +28,7 @@ fn table_sets_every_documented_variable() {
         ("GIT_ALLOW_PROTOCOL", "file"),
         ("GOTOOLCHAIN", "local"),
         ("GOPROXY", "off"),
+        ("POWERSHELL_TELEMETRY_OPTOUT", "1"),
         ("POWERSHELL_UPDATECHECK", "Off"),
         ("CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK", "1"),
     ] {
@@ -274,8 +275,12 @@ fn every_table_row_names_a_verification_test_that_exists() {
         ("GOTOOLCHAIN", "go_does_not_download_a_toolchain"),
         ("GOPROXY", "go_does_not_fetch_modules"),
         (
+            "POWERSHELL_TELEMETRY_OPTOUT",
+            "powershell_update_check_and_telemetry_are_switched_off",
+        ),
+        (
             "POWERSHELL_UPDATECHECK",
-            "powershell_does_not_check_for_updates",
+            "powershell_update_check_and_telemetry_are_switched_off",
         ),
         (
             "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK",
@@ -744,22 +749,23 @@ print("PROMPTED" if re.search(rb"(^|\n)Username for", out) else "NO-PROMPT")
     }
 }
 
-/// PowerShell 7 against a loopback proxy that records every request it receives. The real `pwsh`
+/// PowerShell 7 against loopback proxies that record every request they receive. The real `pwsh`
 /// is needed: the claim is about what it does, not about what a stub would do.
 ///
 /// Two things are checked, with different strength:
 ///
-/// * `powershell_commands_run_with_the_update_check_switched_off`: the command a
+/// * `powershell_commands_run_with_the_telemetry_and_update_check_switched_off`: the command a
 ///   PowerShell session's generators use (`pwsh -NoProfile -c`, through the production executor)
-///   has the variable set and makes no request. A control shows that the proxy sees `pwsh`'s
+///   has both variables set and makes no request. A control shows that the proxy sees `pwsh`'s
 ///   own .NET HTTP traffic. But that command sends nothing without the variables either (the
 ///   telemetry and the update check are not part of a `-c` run), so this does not show what the
 ///   variables change.
-/// * `powershell_does_not_check_for_updates`: an interactive `pwsh` in a pseudo-terminal does
-///   ask `aka.ms` for the latest release about three seconds after it starts. With the
-///   variable, the same run sends nothing. That is the evidence for `POWERSHELL_UPDATECHECK`.
-///   `POWERSHELL_TELEMETRY_OPTOUT` is not in the table: no request was observed with or without
-///   it, so no test shows what it changes.
+/// * `powershell_update_check_and_telemetry_are_switched_off`: four interactive `pwsh` sessions in
+///   pseudo-terminals, with no variable, each variable alone and the table. The plain session
+///   contacts `aka.ms` (the update check, 3.1 s after start on macOS, pwsh 7.6.6) and, on the
+///   Linux runner, `dc.services.visualstudio.com` (telemetry); the session with a variable does
+///   not contact that variable's host, and the session with both contacts nothing. Each variable
+///   is verified for the hosts the plain session reached on the platform the test ran on.
 #[cfg(unix)]
 mod real_pwsh {
     use std::path::{Path, PathBuf};
@@ -773,24 +779,30 @@ mod real_pwsh {
     use crate::terminal::model::session::command_executor::network_sandbox::NetworkSandbox;
     use crate::terminal::model::session::command_executor::test_support::*;
 
-    /// Runs an interactive `pwsh` in a pseudo-terminal until the file named by the second argument
-    /// exists, then ends it. The update check runs only when the session is interactive, which
-    /// needs a terminal.
+    /// Runs an interactive `pwsh` in a pseudo-terminal. It creates the file named by the second
+    /// argument when the prompt has appeared and ends `pwsh` when the file named by the third
+    /// argument exists. The update check and the telemetry run only when the session is
+    /// interactive, which needs a terminal.
     const PTY_SCRIPT: &str = r#"
 import os, pty, select, sys, time
-pwsh, stop_file = sys.argv[1], sys.argv[2]
+pwsh, ready_file, stop_file = sys.argv[1], sys.argv[2], sys.argv[3]
 pid, fd = pty.fork()
 if pid == 0:
     os.execv(pwsh, [pwsh, "-NoProfile"])
-deadline = time.time() + 120
+seen = b""
+deadline = time.time() + 240
 while time.time() < deadline and not os.path.exists(stop_file):
     ready, _, _ = select.select([fd], [], [], 0.1)
     if ready:
         try:
-            if not os.read(fd, 4096):
-                break
+            data = os.read(fd, 4096)
         except OSError:
             break
+        if not data:
+            break
+        seen = (seen + data)[-4096:]
+        if b"PS " in seen and b"> " in seen and not os.path.exists(ready_file):
+            open(ready_file, "w").write("ready")
 try:
     os.write(fd, b"exit\r")
 except OSError:
@@ -826,7 +838,7 @@ os.waitpid(pid, 0)
     }
 
     #[test]
-    fn powershell_commands_run_with_the_update_check_switched_off() {
+    fn powershell_commands_run_with_the_telemetry_and_update_check_switched_off() {
         let Some(pwsh) = session_shell("pwsh", "OPENRUN_TEST_PWSH") else {
             return;
         };
@@ -862,9 +874,10 @@ os.waitpid(pid, 0)
         canary.reset();
 
         // The command a generator of a PowerShell session runs, through the production executor.
-        let ran = run("Write-Output \"$env:POWERSHELL_UPDATECHECK\"");
+        let ran =
+            run("Write-Output \"$env:POWERSHELL_TELEMETRY_OPTOUT/$env:POWERSHELL_UPDATECHECK\"");
         assert!(ran.success, "{}", ran.output);
-        assert_eq!(ran.output.trim(), "Off");
+        assert_eq!(ran.output.trim(), "1/Off");
         std::thread::sleep(Duration::from_secs(5));
         assert_eq!(
             canary.requests(),
@@ -873,76 +886,191 @@ os.waitpid(pid, 0)
         );
     }
 
+    /// The host of a request line the canary recorded (`CONNECT host:443 HTTP/1.1`, or
+    /// `GET http://host/path HTTP/1.1`).
+    fn host_of(request_line: &str) -> String {
+        let target = request_line.split_whitespace().nth(1).unwrap_or_default();
+        let target = target.split("://").last().unwrap_or_default();
+        target
+            .split(['/', ':'])
+            .next()
+            .unwrap_or_default()
+            .to_owned()
+    }
+
+    struct Interactive {
+        name: &'static str,
+        canary: Canary,
+        child: std::process::Child,
+        ready_file: PathBuf,
+        stop_file: PathBuf,
+    }
+
+    impl Interactive {
+        fn hosts(&self) -> Vec<String> {
+            let mut hosts: Vec<String> = self
+                .canary
+                .requests()
+                .iter()
+                .map(|line| host_of(line))
+                .collect();
+            hosts.sort();
+            hosts.dedup();
+            hosts
+        }
+    }
+
     #[test]
-    fn powershell_does_not_check_for_updates() {
+    fn powershell_update_check_and_telemetry_are_switched_off() {
         let Some(pwsh) = session_shell("pwsh", "OPENRUN_TEST_PWSH") else {
             return;
         };
         if require_tool("python3").is_none() {
             return;
         }
-        let canary = Canary::start();
         let temp = tempfile::tempdir().unwrap();
         let script = temp.path().join("interactive_pwsh.py");
         std::fs::write(&script, PTY_SCRIPT).unwrap();
         let table = OfflineEnvironment::compute(|_| None);
+        let table_value = |name: &str| -> (String, String) {
+            table
+                .set
+                .iter()
+                .find(|(candidate, _)| candidate == name)
+                .cloned()
+                .unwrap_or_else(|| panic!("{name} is not in the offline table"))
+        };
+        let powershell_variables: Vec<(String, String)> = table
+            .set
+            .iter()
+            .filter(|(name, _)| name.starts_with("POWERSHELL_"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            powershell_variables.len(),
+            2,
+            "the table is expected to hold POWERSHELL_UPDATECHECK and POWERSHELL_TELEMETRY_OPTOUT"
+        );
 
-        // Starts an interactive pwsh and watches the canary until `done` says to stop, then ends
-        // pwsh. Returns the requests seen and how long that took.
-        let run_interactive =
-            |index: usize, with_table: bool, done: &dyn Fn(&[String], Duration) -> bool| {
+        // Four interactive sessions at once, each with its own canary: no variable, each of the two
+        // alone, and both (the table). Several at once so a runner that traces every process (the
+        // network sandbox) does not take four times as long.
+        let variants: Vec<(&'static str, Vec<(String, String)>)> = vec![
+            ("control", Vec::new()),
+            (
+                "update check off only",
+                vec![table_value("POWERSHELL_UPDATECHECK")],
+            ),
+            (
+                "telemetry opt-out only",
+                vec![table_value("POWERSHELL_TELEMETRY_OPTOUT")],
+            ),
+            ("both (the table)", powershell_variables),
+        ];
+        let mut sessions: Vec<Interactive> = variants
+            .into_iter()
+            .enumerate()
+            .map(|(index, (name, variables_to_set))| {
+                let canary = Canary::start();
                 let home = temp.path().join(format!("home-{index}"));
                 std::fs::create_dir_all(&home).unwrap();
+                let ready_file = temp.path().join(format!("ready-{index}"));
                 let stop_file = temp.path().join(format!("stop-{index}"));
                 let mut variables = proxy_environment(&canary, &home);
                 variables.insert("TERM".to_owned(), "xterm".to_owned());
-                if with_table {
-                    table.apply_to(&mut variables);
+                for (variable, value) in variables_to_set {
+                    variables.insert(variable, value);
                 }
-                canary.reset();
-                let mut child = Command::new("python3")
+                let child = Command::new("python3")
                     .arg(&script)
                     .arg(&pwsh)
+                    .arg(&ready_file)
                     .arg(&stop_file)
                     .env_clear()
                     .envs(&variables)
                     .env("PATH", system_path())
                     .spawn()
                     .unwrap();
-                let started = Instant::now();
-                loop {
-                    let requests = canary.requests();
-                    if done(&requests, started.elapsed()) {
-                        break;
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
+                Interactive {
+                    name,
+                    canary,
+                    child,
+                    ready_file,
+                    stop_file,
                 }
-                let elapsed = started.elapsed();
-                let requests = canary.requests();
-                std::fs::write(&stop_file, "stop").unwrap();
-                assert!(child.wait().unwrap().success());
-                (requests, elapsed)
-            };
+            })
+            .collect();
 
-        // Control: without the table an interactive pwsh asks aka.ms for the latest release, about
-        // three seconds after it starts (much later on a runner that traces every process).
-        let (control, took) = run_interactive(0, false, &|requests, elapsed| {
-            !requests.is_empty() || elapsed > Duration::from_secs(60)
-        });
+        // The prompt of every session, then a hold after the last one: the update check starts
+        // three seconds after pwsh does (3.1 s measured), and telemetry at start-up, so by then a
+        // control that is going to send either has sent it.
+        let started = Instant::now();
+        while sessions.iter().any(|session| !session.ready_file.exists()) {
+            assert!(
+                started.elapsed() < Duration::from_secs(180),
+                "pwsh did not show a prompt in 180 s in: {:?}",
+                sessions
+                    .iter()
+                    .filter(|session| !session.ready_file.exists())
+                    .map(|session| session.name)
+                    .collect::<Vec<_>>()
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let ready_after = started.elapsed();
+        std::thread::sleep(Duration::from_secs(12));
+        // A slow runner: give the control more time before calling the fixture insensitive.
+        while sessions[0].canary.requests().is_empty()
+            && started.elapsed() < ready_after + Duration::from_secs(60)
+        {
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        std::thread::sleep(Duration::from_secs(3));
+        let hosts: Vec<(&'static str, Vec<String>)> = sessions
+            .iter()
+            .map(|session| (session.name, session.hosts()))
+            .collect();
+
+        for session in &mut sessions {
+            std::fs::write(&session.stop_file, "stop").unwrap();
+            assert!(session.child.wait().unwrap().success());
+        }
+
+        // Which hosts a plain interactive pwsh talks to differs by version and platform: 7.6.6 on
+        // macOS asked aka.ms (the update check), the Linux runner's pwsh also or only contacts
+        // dc.services.visualstudio.com (telemetry). Each variable is verified for the hosts the
+        // control reached; the message names what was seen.
+        const UPDATE_CHECK_HOST: &str = "aka.ms";
+        const TELEMETRY_HOST: &str = "dc.services.visualstudio.com";
+        let summary = format!("hosts contacted by each session: {hosts:?}");
+        let [control, update_only, telemetry_only, both] = &hosts[..] else {
+            unreachable!()
+        };
         assert!(
-            control.iter().any(|line| line.contains("aka.ms")),
-            "fixture is insensitive: an interactive pwsh without the table never asked aka.ms \
-             for the latest release in {took:?}; requests: {control:?}"
+            !control.1.is_empty(),
+            "fixture is insensitive: an interactive pwsh without the table contacted nothing \
+             ({summary})"
         );
-        // With the table's variables it sends nothing, for twice as long as the control needed.
-        let hold = (took * 2 + Duration::from_secs(3)).max(Duration::from_secs(8));
-        let (protected, _) = run_interactive(1, true, &|requests, elapsed| {
-            !requests.is_empty() || elapsed > hold
-        });
-        assert_eq!(
-            protected,
-            Vec::<String>::new(),
-            "an interactive pwsh made a request with the offline table applied"
+        assert!(
+            control
+                .1
+                .iter()
+                .all(|host| host == UPDATE_CHECK_HOST || host == TELEMETRY_HOST),
+            "the control contacted a host the table has no variable for ({summary})"
         );
+        assert_eq!(both.1, Vec::<String>::new(), "{summary}");
+        if control.1.iter().any(|host| host == UPDATE_CHECK_HOST) {
+            assert!(
+                !update_only.1.iter().any(|host| host == UPDATE_CHECK_HOST),
+                "POWERSHELL_UPDATECHECK did not stop the update check ({summary})"
+            );
+        }
+        if control.1.iter().any(|host| host == TELEMETRY_HOST) {
+            assert!(
+                !telemetry_only.1.iter().any(|host| host == TELEMETRY_HOST),
+                "POWERSHELL_TELEMETRY_OPTOUT did not stop the telemetry ({summary})"
+            );
+        }
+        eprintln!("{summary}");
     }
 }

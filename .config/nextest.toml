@@ -9,6 +9,12 @@ filter = 'test(~test_idle_session)'
 slow-timeout = { period = "150s", terminate-after = 2 }
 
 [[profile.default.overrides]]
+# Four interactive PowerShell sessions at once, each waiting for its prompt (tens of seconds under
+# the strace sandbox) and then holding to see whether it sends anything.
+filter = 'test(~powershell_update_check_and_telemetry_are_switched_off)'
+slow-timeout = { period = "60s", terminate-after = 4 }
+
+[[profile.default.overrides]]
 # The injection corpus starts thousands of real shells (bash, zsh, sh, fish, and PowerShell 7 at
 # a fraction of a second each) and shares the runner with the rest of the suite.
 filter = 'test(~generator_policy::tests::injection_corpus)'

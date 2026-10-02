@@ -54,10 +54,13 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
     // toolchain through GOPROXY, and a `require` of an uncached module is fetched from GOPROXY.
     ("GOTOOLCHAIN", "local"),
     ("GOPROXY", "off"),
-    // Verified (pwsh 7.6.6, `powershell_does_not_check_for_updates`): an interactive `pwsh`
-    // sends `CONNECT aka.ms:443` about three seconds after it starts, and with this it sends
-    // nothing. `POWERSHELL_TELEMETRY_OPTOUT` is not in the table: the `pwsh -NoProfile -c` that
-    // generators run sent no request with or without it, so no test shows what it changes.
+    // PowerShell 7 (`pwsh`). Verified against the real tool in
+    // `powershell_update_check_and_telemetry_are_switched_off`: an interactive `pwsh` contacts
+    // `aka.ms` (update check; macOS, pwsh 7.6.6) and `dc.services.visualstudio.com` (telemetry;
+    // Linux CI runner) through a loopback proxy; each variable alone stops the contact it is for
+    // and the two together leave no request. The `pwsh -NoProfile -c` that generators run sends
+    // nothing with or without them, so for generators these are defence in depth.
+    ("POWERSHELL_TELEMETRY_OPTOUT", "1"),
     ("POWERSHELL_UPDATECHECK", "Off"),
     // Effect demonstrated, not the network call (Google Cloud CLI on the Linux CI runner,
     // `gcloud_reads_the_update_check_switch_from_the_environment`): gcloud resolves the
