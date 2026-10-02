@@ -5301,6 +5301,22 @@ fn holds_github_model(app: &App, terminal: &ViewHandle<TerminalView>) -> bool {
     terminal.read(app, |view, _| view.github_repo_model.is_some())
 }
 
+/// What decides whether a terminal holds the PR model, for the message of a failed assertion.
+fn pr_info_state(app: &App, terminal: &ViewHandle<TerminalView>) -> String {
+    terminal.read(app, |view, ctx| {
+        format!(
+            "repo={:?} git_status={} model={} needs_pr_info={} on_screen={} shown={} release_pending={}",
+            view.current_repo_path,
+            view.git_repo_status.is_some(),
+            view.github_repo_model.is_some(),
+            view.needs_pr_info(ctx),
+            view.pr_info_on_screen(ctx),
+            view.pane_is_shown(ctx),
+            view.pending_pr_info_release.is_some(),
+        )
+    })
+}
+
 #[test]
 fn background_tab_releases_the_pr_model_after_the_grace_period() {
     App::test((), |mut app| async move {
@@ -6145,7 +6161,9 @@ fn maximized_pane_releases_the_pr_model_of_its_hidden_sibling() {
         // above is waited for.
         assert_eventually!(
             400 => holds_github_model(&app, hidden),
-            "un-maximizing re-acquires it"
+            "un-maximizing re-acquires it; hidden: {}; shown: {}",
+            pr_info_state(&app, hidden),
+            pr_info_state(&app, shown)
         );
         // The shown pane kept the shared model alive, so re-acquiring it is a single `gh pr view`
         // refresh and no new repository lookup.
