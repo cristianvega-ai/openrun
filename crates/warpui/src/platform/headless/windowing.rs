@@ -153,18 +153,6 @@ impl warpui_core::platform::WindowManager for WindowManager {
     fn active_cursor_position_updated(&self) {
         // No-op.
     }
-
-    fn windowing_system(&self) -> Option<crate::windowing::System> {
-        None
-    }
-
-    fn os_window_manager_name(&self) -> Option<String> {
-        None
-    }
-
-    fn is_tiling_window_manager(&self) -> bool {
-        false
-    }
 }
 
 pub struct Window {
@@ -204,18 +192,6 @@ impl platform::Window for Window {
     }
 
     fn set_titlebar_height(&self, _height: f64) {}
-
-    fn supports_transparency(&self) -> bool {
-        false
-    }
-
-    fn graphics_backend(&self) -> platform::GraphicsBackend {
-        platform::GraphicsBackend::Empty
-    }
-
-    fn supported_backends(&self) -> Vec<platform::GraphicsBackend> {
-        vec![]
-    }
 
     fn uses_native_window_decorations(&self) -> bool {
         false

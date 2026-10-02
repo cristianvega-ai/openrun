@@ -1,5 +1,4 @@
-#[cfg_attr(target_os = "macos", path = "mac.rs")]
-#[cfg_attr(not(target_os = "macos"), path = "noop.rs")]
+#[path = "mac.rs"]
 mod imp;
 
 use std::pin::Pin;

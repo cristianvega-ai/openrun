@@ -10,23 +10,18 @@ use warp_core::semantic_selection::{SemanticSelection, SemanticSelectionChangedE
 use warp_errors::{report_error, report_if_error};
 use warpui::elements::{
     Align, Border, ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Dismiss,
-    DispatchEventResult, Element, Empty, EventHandler, Fill, Flex, Hoverable, MainAxisAlignment,
-    MainAxisSize, MouseState, MouseStateHandle, ParentElement, Radius, Shrinkable, Text,
+    DispatchEventResult, Element, Empty, EventHandler, Fill, Flex, Hoverable, MainAxisSize,
+    MouseState, MouseStateHandle, ParentElement, Radius, Shrinkable, Text,
 };
 use warpui::keymap::{ContextPredicate, FixedBinding, Keystroke};
-use warpui::platform::{Cursor, GraphicsBackend};
+use warpui::platform::Cursor;
 use warpui::rendering::GPUPowerPreference;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
 use warpui::ui_components::switch::SwitchStateHandle;
 use warpui::{
     Action, AppContext, DisplayIdx, Entity, EventContext, ModelHandle, SingletonEntity, Tracked,
-    TypedActionView, View, ViewContext, ViewHandle, WindowId,
-};
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-use {
-    crate::settings::LinuxAppConfiguration,
-    warpui::platform::linux::windowing_system_is_customizable,
+    TypedActionView, View, ViewContext, ViewHandle,
 };
 
 use super::keybindings::KeyBindingModifyingState;
@@ -107,19 +102,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::COPY_ON_SELECT_CONTEXT_FLAG,
-        ),
-        ToggleSettingActionPair::new(
-            "linux selection clipboard",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleLinuxClipboardSelection,
-            )),
-            context,
-            flags::LINUX_SELECTION_CLIPBOARD_FLAG,
-        )
-        .is_supported_on_current_platform(
-            SelectionSettings::as_ref(app)
-                .linux_selection_clipboard
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "autocomplete quotes, parentheses, and brackets",
@@ -616,26 +598,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    {
-        if windowing_system_is_customizable(app) {
-            toggle_binding_pairs.push(
-                ToggleSettingActionPair::new(
-                    "Wayland for window management",
-                    builder(SettingsAction::FeaturesPageToggle(
-                        FeaturesPageAction::ToggleForceX11,
-                    )),
-                    context,
-                    flags::ALLOW_NATIVE_WAYLAND,
-                )
-                .is_supported_on_current_platform(cfg!(any(
-                    target_os = "linux",
-                    target_os = "freebsd"
-                ))),
-            );
-        }
-    }
-
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(toggle_binding_pairs, app);
 
     app.register_fixed_bindings([FixedBinding::empty(
@@ -664,7 +626,6 @@ pub enum FeaturesPageAction {
     ToggleNotifications,
     ToggleRestoreSession,
     ToggleAutocompleteSymbols,
-    ToggleLinuxClipboardSelection,
     ToggleSshReuseControlMaster,
     ToggleSnackbar,
     ToggleLinkTooltip,
@@ -721,15 +682,12 @@ pub enum FeaturesPageAction {
     SetTabBehavior(TabBehavior),
     SetCtrlTabBehavior(CtrlTabBehavior),
     SetRightClickBehavior(RightClickBehavior),
-    SetPreferredGraphicsBackend(Option<GraphicsBackend>),
     SetNewTabPlacement(NewTabPlacement),
     SetOsc52ClipboardAccess(Osc52ClipboardAccess),
     SetDefaultSessionMode(DefaultSessionMode),
     SetDefaultTabConfig(String),
     SearchForKeybinding(String),
     ToggleAutosuggestions,
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    ToggleForceX11,
     ToggleAutosuggestionKeybindingHint,
     ToggleShowAutosuggestionIgnoreButton,
     ToggleAtContextMenuInTerminalMode,
@@ -861,7 +819,6 @@ pub struct FeaturesPageView {
     word_boundary_editor: ViewHandle<EditorView>,
 
     tab_behavior_dropdown: ViewHandle<Dropdown<FeaturesPageAction>>,
-    graphics_backend_dropdown: ViewHandle<Dropdown<FeaturesPageAction>>,
     new_tab_placement_dropdown: ViewHandle<Dropdown<FeaturesPageAction>>,
     osc52_clipboard_access_dropdown: ViewHandle<Dropdown<FeaturesPageAction>>,
     default_session_mode_dropdown: ViewHandle<FilterableDropdown<FeaturesPageAction>>,
@@ -869,12 +826,7 @@ pub struct FeaturesPageView {
     completions_keystroke: Tracked<String>,
     autosuggestions_keystroke: Tracked<String>,
 
-    window_id: WindowId,
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    force_x11_changed: bool,
     gpu_power_preference_changed: bool,
-    graphics_backend_preference_changed: bool,
 }
 
 pub enum FeaturesSettingsPageEvent {
@@ -1465,37 +1417,6 @@ impl TypedActionView for FeaturesPageView {
                 });
                 self.gpu_power_preference_changed = true;
             }
-            SetPreferredGraphicsBackend(graphics_backend) => {
-                GPUSettings::handle(ctx).update(ctx, |gpu_settings, ctx| {
-                    report_if_error!(
-                        gpu_settings
-                            .preferred_backend
-                            .set_value(*graphics_backend, ctx)
-                    );
-                });
-                ctx.update_rendering_config(|config| config.backend_preference = *graphics_backend);
-                self.graphics_backend_preference_changed = true;
-            }
-            ToggleLinuxClipboardSelection => {
-                SelectionSettings::handle(ctx).update(ctx, |selection_settings, ctx| {
-                    report_if_error!(
-                        selection_settings
-                            .linux_selection_clipboard
-                            .toggle_and_save_value(ctx)
-                    );
-                });
-            }
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            ToggleForceX11 => {
-                LinuxAppConfiguration::handle(ctx).update(ctx, |linux_app_configuration, ctx| {
-                    report_if_error!(linux_app_configuration.force_x11.toggle_and_save_value(ctx));
-                });
-                self.force_x11_changed = true;
-                // This is a workaround to make sure the user sees the new text that is added to the description after changing the setting.
-                // Without scrolling, the new description text gets cut off.
-                self.page.scroll_by(warpui::units::Pixels::new(40.));
-                ctx.notify();
-            }
             ToggleQuitOnLastWindowClosed => {
                 GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(
@@ -1608,8 +1529,7 @@ impl FeaturesPageView {
         ctx.subscribe_to_model(&CommandSearchSettings::handle(ctx), |_, _, _, ctx| {
             ctx.notify()
         });
-        ctx.subscribe_to_model(&GPUSettings::handle(ctx), |me, _, _, ctx| {
-            me.refresh_preferred_graphics_backend_dropdown(ctx);
+        ctx.subscribe_to_model(&GPUSettings::handle(ctx), |_, _, _, ctx| {
             ctx.notify();
         });
         ctx.subscribe_to_model(&InputSettings::handle(ctx), |me, _, event, ctx| {
@@ -1819,7 +1739,7 @@ impl FeaturesPageView {
         });
 
         let global_hotkey_mode =
-            KeysSettings::handle(ctx).read(ctx, |settings, ctx| settings.global_hotkey_mode(ctx));
+            KeysSettings::handle(ctx).read(ctx, |settings, _| settings.global_hotkey_mode());
         let global_hotkey_dropdown = ctx.add_typed_action_view(|ctx| {
             let mut dropdown = Dropdown::new(ctx);
             init_global_hotkey_dropdown(global_hotkey_mode, &mut dropdown, ctx);
@@ -1854,8 +1774,6 @@ impl FeaturesPageView {
             }
             ctx.notify();
         });
-
-        let graphics_backend_dropdown = ctx.add_typed_action_view(Dropdown::new);
 
         #[cfg(feature = "local_tty")]
         let working_directory_view = ctx.add_typed_action_view(features::WorkingDirectoryView::new);
@@ -2079,26 +1997,19 @@ impl FeaturesPageView {
             tab_behavior_dropdown,
             ctrl_tab_behavior_dropdown,
             right_click_behavior_dropdown,
-            graphics_backend_dropdown,
             new_tab_placement_dropdown,
             osc52_clipboard_access_dropdown,
             default_session_mode_dropdown,
             tab_behavior: Default::default(),
 
-            window_id: ctx.window_id(),
-
             mouse_scroll_input_editor,
             valid_mouse_scroll_multiplier: true,
 
-            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-            force_x11_changed: false,
             gpu_power_preference_changed: false,
-            graphics_backend_preference_changed: false,
         };
 
         features_page_view.refresh_tab_behavior_state(ctx);
         features_page_view.refresh_tab_behavior_dropdown(ctx);
-        features_page_view.refresh_preferred_graphics_backend_dropdown(ctx);
         features_page_view
     }
 
@@ -2338,14 +2249,6 @@ impl FeaturesPageView {
         terminal_widgets.push(Box::new(NewTabPlacementWidget::default()));
 
         let mut system_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
-        let selection_settings = SelectionSettings::as_ref(ctx);
-        if selection_settings
-            .linux_selection_clipboard
-            .is_supported_on_current_platform()
-        {
-            system_widgets.push(Box::new(LinuxSelectionClipboardWidget::default()));
-        }
-
         let gpu_settings = GPUSettings::as_ref(ctx);
         if gpu_settings
             .prefer_low_power_gpu
@@ -2353,20 +2256,6 @@ impl FeaturesPageView {
             && GPUState::as_ref(ctx).is_low_power_gpu_available()
         {
             system_widgets.push(Box::new(GPUWidget::default()));
-        }
-
-        if gpu_settings
-            .preferred_backend
-            .is_supported_on_current_platform()
-        {
-            system_widgets.push(Box::new(GraphicsBackendWidget::default()));
-        }
-
-        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-        {
-            if windowing_system_is_customizable(ctx) {
-                system_widgets.push(Box::new(WindowSystemWidget::default()));
-            }
         }
 
         let categories = vec![
@@ -2500,7 +2389,7 @@ impl FeaturesPageView {
 
     fn handle_hotkey_settings_update(&mut self, ctx: &mut ViewContext<Self>) {
         let global_hotkey_mode =
-            KeysSettings::handle(ctx).read(ctx, |settings, ctx| settings.global_hotkey_mode(ctx));
+            KeysSettings::handle(ctx).read(ctx, |settings, _| settings.global_hotkey_mode());
         // Update the keybinding editor if it is already open.
         match global_hotkey_mode {
             GlobalHotkeyMode::Disabled => (),
@@ -2829,35 +2718,6 @@ impl FeaturesPageView {
                 self.enable_activation_hotkey_global_shortcut(ctx);
             }
         }
-    }
-
-    pub(super) fn refresh_preferred_graphics_backend_dropdown(
-        &mut self,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.graphics_backend_dropdown.update(ctx, |dropdown, ctx| {
-            if let Some(window) = ctx.windows().platform_window(ctx.window_id()) {
-                let mut items = vec![DropdownItem::new(
-                    "Default",
-                    FeaturesPageAction::SetPreferredGraphicsBackend(None),
-                )];
-                items.extend(window.supported_backends().into_iter().map(|backend| {
-                    DropdownItem::new(
-                        backend.to_label(),
-                        FeaturesPageAction::SetPreferredGraphicsBackend(Some(backend)),
-                    )
-                }));
-                dropdown.set_items(items, ctx);
-            }
-            let gpu_settings = GPUSettings::as_ref(ctx);
-            dropdown.set_selected_by_name(
-                gpu_settings
-                    .preferred_backend
-                    .map(|backend| backend.to_label())
-                    .unwrap_or("Default"),
-                ctx,
-            );
-        });
     }
 
     /// Updates the state of the tab behavior dropdown based on the current tab behavior.
@@ -3720,17 +3580,11 @@ impl SettingsPageMeta for FeaturesPageView {
         // notify on the [`DisplayCount`] model. However, no mechanism exists on Linux to trigger
         // that callback. As a workaround, we check for updates here where quake mode is
         // configured.
-        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-        DisplayCount::handle(ctx).update(ctx, |display_count, ctx| {
-            display_count.0 = ctx.windows().display_count();
-            ctx.notify();
-        });
 
         // Fetch the latest tab behavior state in case the user changed their keybindings
         // since we last loaded this page.
         self.refresh_tab_behavior_state(ctx);
         self.refresh_tab_behavior_dropdown(ctx);
-        self.refresh_preferred_graphics_backend_dropdown(ctx);
     }
 
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {
@@ -3870,41 +3724,14 @@ impl SettingsWidget for SessionRestorationWidget {
             })
             .finish();
 
-        let labeled_switch = render_body_item(
+        render_body_item(
             "Restore windows, tabs, and panes on startup".into(),
             None,
             ToggleState::Enabled,
             appearance,
             switch,
             None,
-        );
-
-        if app.is_wayland() {
-            let message = Text::new_inline(
-                "Window positions won't be restored on Wayland.",
-                appearance.ui_font_family(),
-                CONTENT_FONT_SIZE,
-            )
-            .with_color(appearance.theme().disabled_ui_text_color().into())
-            .finish();
-
-            Flex::column()
-                .with_children([
-                    labeled_switch,
-                    Container::new(
-                        Flex::row()
-                            .with_children([message])
-                            .with_main_axis_alignment(MainAxisAlignment::End)
-                            .finish(),
-                    )
-                    .with_padding_bottom(HEADER_PADDING)
-                    .finish(),
-                ])
-                .with_main_axis_size(MainAxisSize::Min)
-                .finish()
-        } else {
-            labeled_switch
-        }
+        )
     }
 }
 
@@ -4588,38 +4415,23 @@ impl SettingsWidget for GlobalHotkeyWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let mut column = Flex::column();
-        let ui_builder = appearance.ui_builder();
-        if app.is_wayland() {
-            column.add_child(render_body_item(
-                "Global hotkey:".to_owned(),
-                None,
-                ToggleState::Disabled,
-                appearance,
-                ui_builder
-                    .span("Not supported on Wayland.")
-                    .build()
-                    .finish(),
-                None,
-            ))
-        } else {
-            add_setting(
-                &mut column,
-                &KeysSettings::as_ref(app).activation_hotkey_enabled,
-                || {
-                    render_dropdown_item(
-                        appearance,
-                        "Global hotkey:",
-                        None,
-                        None,
-                        None,
-                        &view.global_hotkey_dropdown,
-                    )
-                },
-            );
-        }
+        add_setting(
+            &mut column,
+            &KeysSettings::as_ref(app).activation_hotkey_enabled,
+            || {
+                render_dropdown_item(
+                    appearance,
+                    "Global hotkey:",
+                    None,
+                    None,
+                    None,
+                    &view.global_hotkey_dropdown,
+                )
+            },
+        );
 
         let global_hotkey_mode =
-            KeysSettings::handle(app).read(app, |settings, ctx| settings.global_hotkey_mode(ctx));
+            KeysSettings::handle(app).read(app, |settings, _| settings.global_hotkey_mode());
         match global_hotkey_mode {
             GlobalHotkeyMode::QuakeMode => {
                 column.add_child(render_group(
@@ -6014,47 +5826,6 @@ impl SettingsWidget for WorkflowsInCommandSearch {
 }
 
 #[derive(Default)]
-struct LinuxSelectionClipboardWidget {
-    additional_info_link: MouseStateHandle,
-    switch_state: SwitchStateHandle,
-}
-
-impl SettingsWidget for LinuxSelectionClipboardWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "linux selection clipboard middle click"
-    }
-
-    fn render(
-        &self,
-        _view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        render_body_item(
-            "Honor linux selection clipboard".into(),
-            Some(AdditionalInfo {
-                mouse_state: self.additional_info_link.clone(),
-                tooltip_text: "Whether the Linux primary clipboard should be supported.".into(),
-            }),
-            ToggleState::Enabled,
-            appearance,
-            appearance
-                .ui_builder()
-                .switch(self.switch_state.clone())
-                .check(SelectionSettings::as_ref(app).linux_selection_clipboard_enabled())
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleLinuxClipboardSelection);
-                })
-                .finish(),
-            None,
-        )
-    }
-}
-
-#[derive(Default)]
 struct GPUWidget {
     switch_state: SwitchStateHandle,
 }
@@ -6091,137 +5862,6 @@ impl SettingsWidget for GPUWidget {
         ));
         if view.gpu_power_preference_changed {
             let theme = appearance.theme();
-            col.add_child(
-                Container::new(
-                    appearance
-                        .ui_builder()
-                        .wrappable_text("Changes will apply to new windows.", true)
-                        .with_style(UiComponentStyles {
-                            font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
-                            ..Default::default()
-                        })
-                        .build()
-                        .finish(),
-                )
-                .with_margin_bottom(10.)
-                .finish(),
-            );
-        }
-        col.finish()
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-#[derive(Default)]
-struct WindowSystemWidget {
-    additional_info_link: MouseStateHandle,
-    switch_state: SwitchStateHandle,
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-impl SettingsWidget for WindowSystemWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "wayland x11 window system compositor"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let mut children = Flex::column();
-        let force_x11 = *LinuxAppConfiguration::as_ref(app).force_x11.value();
-        children.add_child(render_body_item(
-            "Use Wayland for window management".into(),
-            Some(AdditionalInfo {
-                mouse_state: self.additional_info_link.clone(),
-                tooltip_text: "Enables the use of Wayland".to_string(),
-            }),
-            ToggleState::Enabled,
-            appearance,
-            appearance
-                .ui_builder()
-                .switch(self.switch_state.clone())
-                .check(!force_x11)
-                .build()
-                .on_click(move |ctx, _, _| {
-                    ctx.dispatch_typed_action(FeaturesPageAction::ToggleForceX11)
-                })
-                .finish(),
-            None,
-        ));
-
-        let mut secondary_text =
-            "Enabling this setting disables global hotkey support. When disabled, text \
-                    may be blurry if your Wayland compositor is using fraction scaling (ex: 125%)."
-                .to_string();
-        if view.force_x11_changed {
-            secondary_text.push_str("\n\nRestart Warp for changes to take effect.");
-        }
-        let warp_theme = appearance.theme();
-        children.add_child(
-            appearance
-                .ui_builder()
-                .wrappable_text(secondary_text, true)
-                .with_style(UiComponentStyles {
-                    font_color: Some(
-                        warp_theme
-                            .sub_text_color(warp_theme.background())
-                            .into_solid(),
-                    ),
-                    ..Default::default()
-                })
-                .build()
-                .finish(),
-        );
-        children.finish()
-    }
-}
-
-#[derive(Default)]
-struct GraphicsBackendWidget {}
-
-impl SettingsWidget for GraphicsBackendWidget {
-    type View = FeaturesPageView;
-
-    fn search_terms(&self) -> &str {
-        "gpu graphics backend vulkan dx12 directx12 opengl driver"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let theme = appearance.theme();
-        let dropdown = render_dropdown_item(
-            appearance,
-            "Preferred graphics backend",
-            None,
-            None,
-            None,
-            &view.graphics_backend_dropdown,
-        );
-        let mut col = Flex::column().with_child(dropdown);
-        if let Some(window) = app.windows().platform_window(view.window_id) {
-            let backend = window.graphics_backend();
-            col.add_child(
-                appearance
-                    .ui_builder()
-                    .wrappable_text(format!("Current backend: {}", backend.to_label()), true)
-                    .with_style(UiComponentStyles {
-                        font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
-                        ..Default::default()
-                    })
-                    .build()
-                    .finish(),
-            );
-        }
-        if view.graphics_backend_preference_changed {
             col.add_child(
                 Container::new(
                     appearance

@@ -173,11 +173,6 @@ lazy_static! {
     /// this allowlist to special case these legacy actions for the purposes of binding validation.
     pub static ref MAC_PTY_NON_COMPLIANT_ACTIONS: HashSet<&'static str> = HashSet::from_iter(["terminal:warpify_subshell", "terminal:open_block_list_context_menu_via_keybinding"]);
 
-    /// Set of actions on Windows that should be considered valid bindings even though they aren't
-    /// PTY compliant. Windows users expect pasting to work using both `ctrl-v` and `ctrl-shift-v`,
-    /// so we allowlist the terminal paste action for the purposes of binding validation.
-    pub static ref WINDOWS_PTY_NON_COMPLIANT_KEYSTROKES: HashSet<Keystroke> = HashSet::from_iter([Keystroke::parse("ctrl-v").expect("should be able to construct ctrl-v keystroke")]);
-
     /// Set of keystrokes that should be considered valid bindings on all platforms even though
     /// they aren't PTY compliant.
     pub static ref PTY_NON_COMPLIANT_KEYSTROKES: HashSet<Keystroke> = HashSet::from_iter([
@@ -830,8 +825,6 @@ pub fn is_binding_pty_compliant(binding: BindingLens) -> IsBindingValid {
 
 fn is_pty_non_compliant_binding_allowed(binding_name: &str, keystroke: &Keystroke) -> bool {
     (OperatingSystem::get().is_mac() && MAC_PTY_NON_COMPLIANT_ACTIONS.contains(binding_name))
-        || (OperatingSystem::get().is_windows()
-            && WINDOWS_PTY_NON_COMPLIANT_KEYSTROKES.contains(keystroke))
         || PTY_NON_COMPLIANT_KEYSTROKES.contains(keystroke)
 }
 

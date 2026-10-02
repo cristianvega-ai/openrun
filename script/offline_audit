@@ -921,7 +921,7 @@ def self_test_cases():
         ("reviewed user ssh session",
          {"app/src/terminal/model/session/command_executor/remote_command_executor.rs": 'None => Command::new("ssh"),\n',
           "app/src/terminal/ssh/util.rs": 'let mut command = String::from("sftp ");\n'}, "pass"),
-        ("reviewed build bootstrap script", {"script/install_rust": "curl https://sh.rustup.rs | sh\n"}, "pass"),
+        ("reviewed build bootstrap script", {"script/install_cargo_binstall": "curl -L https://github.com/cargo-bins/cargo-binstall/releases/download/v1/x.zip\n"}, "pass"),
     ]
 
 

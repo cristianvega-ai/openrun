@@ -6,7 +6,6 @@
 
 #[cfg(not(target_family = "wasm"))]
 #[cfg_attr(target_os = "macos", path = "mac.rs")]
-#[cfg_attr(any(target_os = "linux", target_os = "freebsd"), path = "linux.rs")]
 mod imp;
 mod noop;
 
@@ -45,20 +44,6 @@ pub fn register(service_name: &str, ctx: &mut warpui_core::AppContext) {
 /// Registers a no-op Secure Storage provider with the application.
 pub fn register_noop(service_name: &str, ctx: &mut warpui_core::AppContext) {
     ctx.add_singleton_model(|_| -> Model { Box::new(noop::SecureStorage::new(service_name)) });
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-pub fn register_with_fallback(
-    service_name: &str,
-    fallback_dir: std::path::PathBuf,
-    ctx: &mut warpui_core::AppContext,
-) {
-    ctx.add_singleton_model(|_| -> Model {
-        Box::new(imp::SecureStorage::new_with_fallback(
-            service_name,
-            fallback_dir,
-        ))
-    });
 }
 
 /// A trait representing a secure store for key-value pairs.

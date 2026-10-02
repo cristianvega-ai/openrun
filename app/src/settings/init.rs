@@ -12,10 +12,10 @@ use super::cli_agent::CLIAgentSettings;
 use super::initializer::SettingsInitializer;
 use super::{
     AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
-    CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings, FontSettingsChangedEvent,
-    GPUSettings, HistorySettings, InputModeSettings, InputSettings, LocalControlSettings,
-    PaneSettings, SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings,
-    ThemeSettings, VimBannerSettings,
+    CodeSettings, DebugSettings, FontSettings, FontSettingsChangedEvent, GPUSettings,
+    HistorySettings, InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
+    SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings, ThemeSettings,
+    VimBannerSettings,
 };
 use crate::appearance;
 use crate::banner::BannerState;
@@ -31,7 +31,7 @@ use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::settings::TerminalSettings;
 use crate::terminal::warpify::settings::WarpifySettings;
 use crate::undo_close::UndoCloseSettings;
-use crate::window_settings::{WindowSettings, migrate_legacy_background_backdrop};
+use crate::window_settings::WindowSettings;
 use crate::workspace::tab_settings::TabSettings;
 
 pub struct UserDefaultsOnStartup {
@@ -79,13 +79,9 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     UndoCloseSettings::register(ctx);
     SshSettings::register(ctx);
     VimBannerSettings::register(ctx);
-    EmacsBindingsSettings::register(ctx);
     SameLinePromptBlockSettings::register(ctx);
     SemanticSelection::register(ctx);
     LocalControlSettings::register(ctx);
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    super::LinuxAppConfiguration::register(ctx);
 
     #[cfg(feature = "local_fs")]
     crate::util::file::external_editor::EditorSettings::register(ctx);
@@ -110,7 +106,6 @@ pub fn init(
     if needs_settings_file_migration(ctx) {
         migrate_native_settings_to_settings_file(ctx);
     }
-    migrate_legacy_background_backdrop(ctx);
 
     let use_thin_strokes = *FontSettings::as_ref(ctx).use_thin_strokes;
 
@@ -160,7 +155,6 @@ pub fn init(
 
     let gpu_settings = GPUSettings::as_ref(ctx);
     let prefer_low_power_gpu = *gpu_settings.prefer_low_power_gpu.value();
-    let backend_preference = *gpu_settings.preferred_backend.value();
 
     // Update the rendering config.
     ctx.update_rendering_config(|config| {
@@ -170,7 +164,6 @@ pub fn init(
         } else {
             GPUPowerPreference::default()
         };
-        config.backend_preference = backend_preference;
     });
 
     ctx.subscribe_to_model(&FontSettings::handle(ctx), |font_settings, event, ctx| {
@@ -243,7 +236,7 @@ fn init_platform_native_preferences() -> user_preferences::Model {
     cfg_if::cfg_if! {
         if #[cfg(test)] {
             Box::<user_preferences::in_memory::InMemoryPreferences>::default()
-        } else if #[cfg(any(target_os = "linux", target_os = "freebsd", feature = "integration_tests"))] {
+        } else if #[cfg(feature = "integration_tests")] {
             match user_preferences::file_backed::FileBackedUserPreferences::new(super::user_preferences_file_path()) {
                 Ok(prefs) => Box::new(prefs) as user_preferences::Model,
                 Err(err) => {

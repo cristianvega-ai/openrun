@@ -55,7 +55,7 @@ fn open_repo_has_a_default_keybinding() {
 
     assert!(matches!(
         default_binding_for_command(commands::OPEN_REPO.name),
-        DefaultSlashCommandBinding::PerPlatform(_)
+        DefaultSlashCommandBinding::Single("alt-cmd-o")
     ));
     assert!(matches!(
         default_binding_for_command(commands::RENAME_TAB.name),

@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -10,15 +9,13 @@ use warp_errors::{report_error, report_if_error};
 use warp_util::path::user_friendly_path;
 use warpui::elements::{
     Align, Border, ChildView, Clipped, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment,
-    DEFAULT_UI_LINE_HEIGHT_RATIO, Dismiss, Element, Empty, Fill, Flex, FormattedTextElement,
-    Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius,
-    Shrinkable, Text, Wrap,
+    DEFAULT_UI_LINE_HEIGHT_RATIO, Dismiss, Element, Empty, Fill, Flex, Hoverable,
+    MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius, Shrinkable, Text,
+    Wrap,
 };
 use warpui::fonts::{FamilyId, FontInfo, Weight};
 use warpui::keymap::{ContextPredicate, FixedBinding};
-use warpui::platform::{
-    Cursor, FilePickerConfiguration, GraphicsBackend, SystemTheme, WindowBackdrop,
-};
+use warpui::platform::{Cursor, FilePickerConfiguration, SystemTheme};
 use warpui::rendering::ThinStrokes;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
@@ -30,7 +27,7 @@ use warpui::ui_components::switch::SwitchStateHandle;
 use warpui::units::IntoPixels;
 use warpui::{
     Action, AppContext, Entity, ModelHandle, SingletonEntity, TypedActionView, UpdateModel, View,
-    ViewContext, ViewHandle, WindowId,
+    ViewContext, ViewHandle,
 };
 
 use super::directory_color_add_picker::{DirectoryColorAddPicker, DirectoryColorAddPickerEvent};
@@ -53,7 +50,7 @@ use crate::gpu_state::{GPUState, GPUStateEvent};
 use crate::settings::app_icon::{AppIcon, AppIconSettings};
 use crate::settings::{
     AppEditorSettings, CodeSettings, CursorBlink, CursorDisplayType, DEFAULT_MONOSPACE_FONT_NAME,
-    EnforceMinimumContrast, FontSettings, FontSettingsChangedEvent, GPUSettings, InputModeSettings,
+    EnforceMinimumContrast, FontSettings, FontSettingsChangedEvent, InputModeSettings,
     MonospaceFontName, PaneSettings, ThemeSettings, active_theme_kind, respect_system_theme,
 };
 use crate::terminal::block_list_viewport::InputMode;
@@ -459,7 +456,6 @@ pub enum AppearancePageAction {
     ToggleHideTitleBarSearchBarInVerticalTabs,
     ToggleUseLatestUserPromptAsConversationTitleInTabNames,
     ToggleLigatureRendering,
-    SetWindowBackdrop(WindowBackdrop),
     ToggleLeftPanelVisibility,
     ToggleToolsPanelProjectExplorer,
     ToggleToolsPanelGlobalSearch,
@@ -482,7 +478,6 @@ pub enum AppearancePageAction {
 
 pub struct AppearanceSettingsPageView {
     page: PageType<Self>,
-    window_id: WindowId,
     font_size_editor: ViewHandle<EditorView>,
     line_height_editor: ViewHandle<EditorView>,
     notebook_font_size_editor: ViewHandle<EditorView>,
@@ -498,7 +493,6 @@ pub struct AppearanceSettingsPageView {
     thin_strokes_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     enforce_min_contrast_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     input_mode_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
-    window_backdrop_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     input_type_radio_state: RadioButtonStateHandle,
     app_icon_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
     workspace_decorations_dropdown: ViewHandle<Dropdown<AppearancePageAction>>,
@@ -573,7 +567,6 @@ impl TypedActionView for AppearanceSettingsPageView {
             ToggleRespectSystemTheme => self.toggle_respect_system_theme(ctx),
             ToggleAllAvailableFonts => self.toggle_all_available_fonts(ctx),
             ToggleDimInactivePanes => self.toggle_dim_inactive_panes(ctx),
-            SetWindowBackdrop(backdrop) => self.set_window_backdrop(*backdrop, ctx),
             ToggleLeftPanelVisibility => self.toggle_left_panel_visibility(ctx),
             ToggleToolsPanelProjectExplorer => {
                 CodeSettings::handle(ctx).update(ctx, |settings, ctx| {
@@ -916,15 +909,6 @@ impl AppearanceSettingsPageView {
                     // Reset the slider state so that it uses the current opacity value on the next render.
                     me.blur_state.reset_offset();
                 }
-                WindowSettingsChangedEvent::BackgroundBackdrop { .. } => {
-                    let backdrop = *WindowSettings::as_ref(ctx).background_backdrop;
-                    me.window_backdrop_dropdown.update(ctx, |dropdown, ctx| {
-                        dropdown.set_selected_by_action(
-                            AppearancePageAction::SetWindowBackdrop(backdrop),
-                            ctx,
-                        );
-                    });
-                }
                 WindowSettingsChangedEvent::ZoomLevel { .. } => {
                     let zoom_level = *WindowSettings::as_ref(ctx).zoom_level;
 
@@ -1205,7 +1189,6 @@ impl AppearanceSettingsPageView {
 
         AppearanceSettingsPageView {
             page: Self::build_page(ctx),
-            window_id: ctx.window_id(),
             notebook_font_size_editor,
             font_size_editor,
             line_height_editor,
@@ -1219,7 +1202,6 @@ impl AppearanceSettingsPageView {
             font_weight_dropdown,
             thin_strokes_dropdown,
             input_mode_dropdown,
-            window_backdrop_dropdown: Self::build_window_backdrop_dropdown(ctx),
             input_type_radio_state,
             app_icon_dropdown,
             enforce_min_contrast_dropdown,
@@ -1278,12 +1260,6 @@ impl AppearanceSettingsPageView {
             .is_supported_on_current_platform()
         {
             window_settings_widgets.push(Box::new(WindowBlurWidget::default()));
-        }
-        if window_settings
-            .background_backdrop
-            .is_supported_on_current_platform()
-        {
-            window_settings_widgets.push(Box::new(WindowBackdropWidget));
         }
 
         window_settings_widgets.push(Box::new(ZoomLevelWidget));
@@ -1507,9 +1483,7 @@ impl AppearanceSettingsPageView {
         // If we're on a non-Linux platform, render the dropdown item in the
         // actual font.  We currently don't do this on Linux because
         // pre-loading all of the fonts is too expensive.
-        if cfg!(not(any(target_os = "linux", target_os = "freebsd")))
-            && let Some(family_id) = ctx.font_cache().family_id_for_name(&font_name)
-        {
+        if let Some(family_id) = ctx.font_cache().family_id_for_name(&font_name) {
             initial_dropdown_item = initial_dropdown_item.with_font_override(family_id);
         }
 
@@ -1880,9 +1854,7 @@ impl AppearanceSettingsPageView {
                         // If we're on a non-Linux platform, render the dropdown item in the
                         // actual font.  We currently don't do this on Linux because
                         // pre-loading all of the fonts is too expensive.
-                        if cfg!(not(any(target_os = "linux", target_os = "freebsd")))
-                            && let Some(family_id) = family
-                        {
+                        if let Some(family_id) = family {
                             dropdown = dropdown.with_font_override(*family_id)
                         }
 
@@ -2021,13 +1993,6 @@ impl AppearanceSettingsPageView {
                     .toggle_and_save_value(ctx)
             );
         });
-    }
-
-    fn set_window_backdrop(&mut self, backdrop: WindowBackdrop, ctx: &mut ViewContext<Self>) {
-        WindowSettings::handle(ctx).update(ctx, |window_settings, ctx| {
-            report_if_error!(window_settings.background_backdrop.set_value(backdrop, ctx));
-        });
-        ctx.notify();
     }
 
     pub fn toggle_left_panel_visibility(&mut self, ctx: &mut ViewContext<Self>) {
@@ -2209,41 +2174,6 @@ impl AppearanceSettingsPageView {
         });
     }
 
-    fn build_window_backdrop_dropdown(
-        ctx: &mut ViewContext<Self>,
-    ) -> ViewHandle<Dropdown<AppearancePageAction>> {
-        ctx.add_typed_action_view(|ctx| {
-            let mut dropdown = Dropdown::new(ctx);
-            dropdown.set_items(
-                WindowBackdrop::ALL
-                    .into_iter()
-                    .map(|backdrop| {
-                        DropdownItem::new(
-                            Self::window_backdrop_dropdown_item_label(backdrop),
-                            AppearancePageAction::SetWindowBackdrop(backdrop),
-                        )
-                    })
-                    .collect(),
-                ctx,
-            );
-            dropdown.set_selected_by_action(
-                AppearancePageAction::SetWindowBackdrop(
-                    *WindowSettings::as_ref(ctx).background_backdrop,
-                ),
-                ctx,
-            );
-            dropdown
-        })
-    }
-
-    fn window_backdrop_dropdown_item_label(backdrop: WindowBackdrop) -> &'static str {
-        match backdrop {
-            WindowBackdrop::None => "No material",
-            WindowBackdrop::Mica => "Mica",
-            WindowBackdrop::Acrylic => "Acrylic",
-            WindowBackdrop::MicaAlt => "Mica Alt",
-        }
-    }
     fn build_workspace_decoration_visibility_dropdown(
         ctx: &mut ViewContext<Self>,
     ) -> ViewHandle<Dropdown<AppearancePageAction>> {
@@ -2840,13 +2770,13 @@ impl SettingsWidget for WindowOpacityWidget {
 
     fn render(
         &self,
-        view: &Self::View,
+        _view: &Self::View,
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
         let window_settings = WindowSettings::as_ref(app);
         let opacity_value = *window_settings.background_opacity;
-        let mut col = Flex::column().with_child(render_body_item(
+        let col = Flex::column().with_child(render_body_item(
             format!("Window Opacity: {opacity_value}"),
             // TODO: add AdditionalInfo here.
             None,
@@ -2873,43 +2803,6 @@ impl SettingsWidget for WindowOpacityWidget {
                 .finish(),
             None,
         ));
-        if let Some(window) = app.windows().platform_window(view.window_id) {
-            // Skip showing the warning for OpenGL since WGPU often incorrectly reports it as not
-            // supporting alpha.
-            if !window.supports_transparency() && window.graphics_backend() != GraphicsBackend::Gl {
-                let mut message = Cow::Borrowed(
-                    "The selected graphics settings may not support rendering transparent windows.",
-                );
-                let gpu_settings = GPUSettings::as_ref(app);
-                if (gpu_settings
-                    .prefer_low_power_gpu
-                    .is_supported_on_current_platform()
-                    && GPUState::as_ref(app).is_low_power_gpu_available())
-                    || gpu_settings
-                        .preferred_backend
-                        .is_supported_on_current_platform()
-                {
-                    message.to_mut().push_str(
-                        " Try changing the settings for the graphics backend or integrated GPU in \
-                        Features > System.",
-                    );
-                }
-
-                col.add_child(
-                    Container::new(
-                        FormattedTextElement::from_str(
-                            message,
-                            appearance.ui_font_family(),
-                            appearance.ui_font_size(),
-                        )
-                        .with_color(appearance.theme().disabled_ui_text_color().into_solid())
-                        .finish(),
-                    )
-                    .with_margin_bottom(8.0)
-                    .finish(),
-                );
-            }
-        }
         col.finish()
     }
 }
@@ -2963,52 +2856,6 @@ impl SettingsWidget for WindowBlurWidget {
                 None,
             ))
             .finish()
-    }
-}
-
-struct WindowBackdropWidget;
-
-impl SettingsWidget for WindowBackdropWidget {
-    type View = AppearanceSettingsPageView;
-
-    fn search_terms(&self) -> &str {
-        "window backdrop material blur acrylic mica"
-    }
-
-    fn render(
-        &self,
-        view: &Self::View,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let mut col = Flex::column().with_child(render_dropdown_item(
-            appearance,
-            "Window backdrop",
-            (*WindowSettings::as_ref(app).background_opacity == BackgroundOpacity::MAX)
-                .then_some("Backdrop is not visible at opacity 100%"),
-            None,
-            None,
-            &view.window_backdrop_dropdown,
-        ));
-        if let Some(window) = app.windows().platform_window(view.window_id)
-            && !window.supports_transparency()
-            && window.graphics_backend() != GraphicsBackend::Gl
-        {
-            col.add_child(
-                Container::new(
-                    FormattedTextElement::from_str(
-                        "The selected hardware may not support rendering transparent windows.",
-                        appearance.ui_font_family(),
-                        appearance.ui_font_size(),
-                    )
-                    .with_color(appearance.theme().disabled_ui_text_color().into_solid())
-                    .finish(),
-                )
-                .with_margin_bottom(8.0)
-                .finish(),
-            );
-        }
-        col.finish()
     }
 }
 

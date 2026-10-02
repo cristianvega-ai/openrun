@@ -48,8 +48,7 @@ pub enum LSPServerType {
 impl LSPServerType {
     /// Creates a properly configured Command for this LSP server type.
     ///
-    /// Uses `CommandBuilder` to create the command, which ensures `.cmd`/`.bat`
-    /// scripts are resolved on Windows and PATH is set correctly.
+    /// Uses `CommandBuilder` to create the command, which ensures PATH is set correctly.
     ///
     /// If a custom binary config is provided (e.g., from our data_dir installation),
     /// it will be used. Otherwise, falls back to the system PATH.
@@ -211,13 +210,7 @@ impl LSPServerType {
             LSPServerType::TypeScriptLanguageServer => {
                 "npm install -g typescript-language-server typescript"
             }
-            LSPServerType::Clangd => {
-                if cfg!(target_os = "macos") {
-                    "xcode-select --install"
-                } else {
-                    "Install the clangd package with your system package manager (for example: sudo apt install clangd)"
-                }
-            }
+            LSPServerType::Clangd => "xcode-select --install",
         }
     }
 

@@ -10,8 +10,8 @@ use warp_errors::report_error;
 use super::{TestSetupUtils, action_log, overlay};
 use crate::r#async::Timer;
 use crate::event::{Event, KeyEventDetails};
-use crate::keymap::{Keystroke, PerPlatformKeystroke};
-use crate::platform::{OperatingSystem, Window};
+use crate::keymap::Keystroke;
+use crate::platform::Window;
 use crate::{App, WindowId};
 
 const MAX_WAKEUPS_PER_SECOND: u64 = 60;
@@ -351,16 +351,6 @@ impl TestStep {
 
         self.with_keystrokes(v2.as_slice())
             .with_keystrokes(extra_keystrokes.unwrap_or(&[]))
-    }
-
-    pub fn with_per_platform_keystroke(self, keystrokes: PerPlatformKeystroke) -> Self {
-        let keystroke = if OperatingSystem::get().is_mac() {
-            keystrokes.mac
-        } else {
-            keystrokes.linux_and_windows
-        };
-
-        self.with_keystrokes(&[keystroke])
     }
 
     pub fn with_keystrokes(mut self, keystrokes: &[impl AsRef<str>]) -> Self {

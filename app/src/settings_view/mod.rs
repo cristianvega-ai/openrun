@@ -281,7 +281,6 @@ pub mod flags {
     // The following are context flags to determine if the enable or disable binding is shown.
     pub const COPY_ON_SELECT_CONTEXT_FLAG: &str = "Copy_On_Select";
 
-    pub const LINUX_SELECTION_CLIPBOARD_FLAG: &str = "Linux_Selection_Clipboard";
     pub const RESTORE_SESSION_CONTEXT_FLAG: &str = "Restore_Sessions";
     pub const HONOR_PS1_CONTEXT_FLAG: &str = "Honor_PS1";
     pub const GIT_PROMPT_CONTEXT_FLAG: &str = "Git_Prompt";
@@ -364,7 +363,6 @@ pub mod flags {
     pub const IN_BAND_GENERATORS_FLAG: &str = "In_Band_Generators_Enabled";
     pub const WARP_SAME_LINE_PROMPT_FLAG: &str = "Warp_Same_Line_Prompt_Enabled";
     pub const DEBUG_SHOW_MEMORY_STATS_FLAG: &str = "Debug_Memory_Statistics";
-    pub const ALLOW_NATIVE_WAYLAND: &str = "Allow_Native_Wayland";
     pub const IS_BLOCK_AI_SUMMARIES_ENABLED: &str = "IsBlockAISummariesEnabled";
     pub const LIGATURE_RENDERING_CONTEXT_FLAG: &str = "Ligature_Rendering_Enabled";
     pub const HAS_SETTINGS_TO_IMPORT_FLAG: &str = "HasSettingsToImport";
@@ -1486,16 +1484,6 @@ impl SettingsView {
                     None
                 }
             })
-    }
-
-    pub fn refresh_preferred_graphics_backend_dropdown(&mut self, ctx: &mut ViewContext<Self>) {
-        if let Some(features_page) = self.settings_page(SettingsSection::Features)
-            && let SettingsPageViewHandle::Features(view) = &features_page.view_handle
-        {
-            view.update(ctx, |view, ctx| {
-                view.refresh_preferred_graphics_backend_dropdown(ctx);
-            });
-        }
     }
 
     fn key_up(&mut self, ctx: &mut ViewContext<Self>) {

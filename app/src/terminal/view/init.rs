@@ -1,5 +1,5 @@
 use warpui::AppContext;
-use warpui::keymap::{EditableBinding, FixedBinding, PerPlatformKeystroke};
+use warpui::keymap::{EditableBinding, FixedBinding};
 use warpui::platform::OperatingSystem;
 use warpui::units::IntoLines;
 
@@ -141,11 +141,8 @@ pub fn init(app: &mut AppContext) {
                 TerminalAction::SplitRight(None),
                 id!("Terminal") & !id!("IMEOpen"),
             ),
-            FixedBinding::new_per_platform(
-                PerPlatformKeystroke {
-                    mac: "cmd-shift-D",
-                    linux_and_windows: "ctrl-shift-E",
-                },
+            FixedBinding::new(
+                "cmd-shift-D",
                 TerminalAction::SplitDown(None),
                 id!("Terminal") & !id!("IMEOpen"),
             ),
@@ -318,7 +315,6 @@ pub fn init(app: &mut AppContext) {
             TerminalAction::ControlSequence(Vec::from(EscCodes::WORD_LEFT)),
         )
         .with_mac_key_binding("alt-left")
-        .with_linux_or_windows_key_binding("ctrl-left")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_move_cursor_word_right",
@@ -326,7 +322,6 @@ pub fn init(app: &mut AppContext) {
             TerminalAction::ControlSequence(Vec::from(EscCodes::WORD_RIGHT)),
         )
         .with_mac_key_binding("alt-right")
-        .with_linux_or_windows_key_binding("ctrl-right")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_move_cursor_home",
@@ -350,7 +345,6 @@ pub fn init(app: &mut AppContext) {
             TerminalAction::ControlSequence(vec![escape_sequences::C0::ETB]),
         )
         .with_mac_key_binding("alt-backspace")
-        .with_linux_or_windows_key_binding("ctrl-backspace")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_delete_line_start",

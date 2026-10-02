@@ -415,7 +415,7 @@ impl WatchedFilesRegistry {
             return None;
         };
 
-        // Normalize to forward slashes so glob patterns and event paths are comparable across platforms (esp. Windows).
+        // Normalize to forward slashes so glob patterns and event paths.
         let prefix = warp_util::path::normalize_relative_path_for_glob(base_relative);
 
         if prefix.is_empty() {

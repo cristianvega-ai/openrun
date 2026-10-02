@@ -461,7 +461,6 @@ pub enum Event {
     CtrlD,
     CtrlC,
     ExecuteCommand(Box<ExecuteCommandEvent>),
-    EmacsBindingUsed,
     InputFocusedFromMiddleClick,
     EditorFocused,
     OpenSettings(SettingsSection),
@@ -1222,8 +1221,7 @@ pub fn init(app: &mut AppContext) {
         InputAction::ClearAndResetAtMenuQuery,
     )
     .with_context_predicate(id!("Input") & id!("AtMenuOpen") & !id!("IMEOpen"))
-    .with_mac_key_binding("cmd-shift-backspace")
-    .with_linux_or_windows_key_binding("ctrl-shift-backspace")]);
+    .with_mac_key_binding("cmd-shift-backspace")]);
 
     let slash_command_bindings = COMMAND_REGISTRY
         .all_commands()
@@ -1247,9 +1245,6 @@ pub fn init(app: &mut AppContext) {
             binding = match slash_command_bindings::default_binding_for_command(command.name) {
                 DefaultSlashCommandBinding::None => binding,
                 DefaultSlashCommandBinding::Single(keys) => binding.with_key_binding(keys),
-                DefaultSlashCommandBinding::PerPlatform(keys) => binding
-                    .with_mac_key_binding(keys.mac)
-                    .with_linux_or_windows_key_binding(keys.linux_and_windows),
             };
 
             binding
@@ -5079,9 +5074,6 @@ impl Input {
             EditorEvent::VimStatusUpdate => ctx.notify(),
             EditorEvent::BackspaceOnEmptyBuffer | EditorEvent::BackspaceAtBeginningOfBuffer => {
                 self.handle_backspace_at_buffer_boundary(ctx);
-            }
-            EditorEvent::EmacsBindingUsed => {
-                ctx.emit(Event::EmacsBindingUsed);
             }
             EditorEvent::UpdatePeers { .. } => {}
             EditorEvent::MiddleClickPaste => {

@@ -7,15 +7,10 @@ use std::process::Command;
 use std::{env, fs};
 
 use anyhow::Result;
-use cfg_aliases::cfg_aliases;
 use walkdir::WalkDir;
 use warp_util::path::app_target_dir;
 
 fn main() -> Result<()> {
-    cfg_aliases! {
-        enable_crash_recovery: { target_os = "linux" },
-    }
-
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_OS");
     println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_FAMILY");

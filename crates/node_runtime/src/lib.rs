@@ -1,8 +1,7 @@
 //! Node.js and npm runtime management for Warp.
 //!
 //! This module provides functionality to install and manage Node.js/npm,
-//! supporting multiple platforms (macOS, Linux, Windows) and architectures
-//! (x64, arm64).
+//! on macOS for both architectures (x64, arm64).
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -92,22 +91,11 @@ impl NpmInfo {
     }
 }
 
-/// Archive type for Node.js distribution.
-#[cfg(feature = "local_fs")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveType {
-    /// A gzip-compressed tarball (for macOS and Linux)
-    TarGz,
-    /// A zip archive (for Windows)
-    Zip,
-}
-
 /// Platform-specific Node.js distribution information.
 #[cfg(feature = "local_fs")]
 struct NodeDistribution {
     os: &'static str,
     arch: &'static str,
-    archive_type: ArchiveType,
 }
 
 #[cfg(feature = "local_fs")]
@@ -116,8 +104,6 @@ impl NodeDistribution {
     fn current() -> Result<Self> {
         let os = match std::env::consts::OS {
             "macos" => "darwin",
-            "linux" => "linux",
-            "windows" => "win",
             other => bail!("Unsupported operating system: {}", other),
         };
 
@@ -127,16 +113,7 @@ impl NodeDistribution {
             other => bail!("Unsupported architecture: {}", other),
         };
 
-        let archive_type = match std::env::consts::OS {
-            "windows" => ArchiveType::Zip,
-            _ => ArchiveType::TarGz,
-        };
-
-        Ok(Self {
-            os,
-            arch,
-            archive_type,
-        })
+        Ok(Self { os, arch })
     }
 
     /// Returns the folder name for the extracted Node.js distribution.
@@ -144,23 +121,9 @@ impl NodeDistribution {
         format!("node-{}-{}-{}", version, self.os, self.arch)
     }
 
-    /// Returns the file extension for the archive.
-    fn file_extension(&self) -> &'static str {
-        match self.archive_type {
-            ArchiveType::TarGz => "tar.gz",
-            ArchiveType::Zip => "zip",
-        }
-    }
-
     /// Returns the download URL for the Node.js distribution.
     fn download_url(&self, version: &str) -> String {
-        let file_name = format!(
-            "node-{}-{}-{}.{}",
-            version,
-            self.os,
-            self.arch,
-            self.file_extension()
-        );
+        let file_name = format!("node-{}-{}-{}.tar.gz", version, self.os, self.arch);
         format!("https://nodejs.org/dist/{}/{}", version, file_name)
     }
 }
@@ -261,14 +224,7 @@ pub async fn install_npm(downloader: &Downloader) -> Result<PathBuf> {
     log::info!("Download complete, extracting...");
 
     // Extract the archive
-    match dist.archive_type {
-        ArchiveType::TarGz => {
-            extract_tar_gz(&bytes, &node_containing_dir)?;
-        }
-        ArchiveType::Zip => {
-            extract_zip(&bytes, &node_containing_dir, None::<fn(&str) -> bool>).await?;
-        }
-    }
+    extract_tar_gz(&bytes, &node_containing_dir)?;
 
     log::info!("Node.js extracted successfully to {}", node_dir.display());
 
@@ -482,12 +438,6 @@ pub async fn find_working_node_binary(path_env_var: Option<&str>) -> Option<Path
 #[cfg(feature = "local_fs")]
 pub async fn detect_system_node(path_env_var: impl AsRef<OsStr>) -> Result<()> {
     let path_env_var = path_env_var.as_ref();
-
-    // On Windows, we must use `cmd.exe /c node` so that the provided PATH
-    // (set via `.env("PATH", ...)`) is used for executable search.
-    // `CreateProcessW` uses the parent process's PATH, not the child's
-    // `lpEnvironment` PATH, so running `node` directly would find node.exe
-    // via Warp's inherited env rather than the captured interactive PATH.
 
     let output = Command::new("node")
         .env("PATH", path_env_var)

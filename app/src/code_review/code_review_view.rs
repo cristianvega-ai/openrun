@@ -131,7 +131,7 @@ use crate::view_components::action_button::{
 };
 use crate::view_components::find::{Event as FindViewEvent, Find, FindEvent, FindWithinBlockState};
 use crate::workspace::view::right_panel::{ReviewDestination, ReviewSubmissionResult};
-use crate::workspace::{ToastStack, Workspace, WorkspaceAction};
+use crate::workspace::{ToastStack, WorkspaceAction};
 
 pub struct CodeReviewHeaderFields {
     pub is_in_split_pane: bool,
@@ -6800,19 +6800,6 @@ impl BackingView for CodeReviewView {
 
             if cfg!(all(not(target_family = "wasm"), target_os = "macos")) {
                 AppContext::show_native_platform_modal(ctx, dialog);
-            } else if cfg!(all(
-                not(target_family = "wasm"),
-                any(target_os = "linux", target_os = "freebsd")
-            )) {
-                // Find the workspace to show the Warp-native modal
-                if let Some(workspace) = ctx
-                    .views_of_type::<Workspace>(ctx.window_id())
-                    .and_then(|workspaces| workspaces.first().cloned())
-                {
-                    workspace.update(ctx, |view, ctx| {
-                        view.show_native_modal(dialog, ctx);
-                    });
-                }
             }
         } else {
             ctx.emit(CodeReviewViewEvent::Pane(PaneEvent::Close));

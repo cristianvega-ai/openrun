@@ -32,7 +32,7 @@ use warpui::elements::{
 };
 use warpui::event::ModifiersState;
 use warpui::image_cache::ImageType;
-use warpui::keymap::{EditableBinding, FixedBinding, PerPlatformKeystroke};
+use warpui::keymap::{EditableBinding, FixedBinding};
 use warpui::platform::{Cursor, OperatingSystem};
 use warpui::presenter::ChildView;
 #[cfg(feature = "local_fs")]
@@ -191,11 +191,8 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::MoveForwardsByWord,
             text_entry.clone(),
         ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "shift-alt-left",
-                linux_and_windows: "shift-ctrl-left",
-            },
+        FixedBinding::new(
+            "shift-alt-left",
             EditorViewAction::SelectBackwardsByWord,
             text_entry.clone(),
         ),
@@ -204,11 +201,8 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::SelectBackwardsByWord,
             text_entry.clone(),
         ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "shift-alt-right",
-                linux_and_windows: "shift-ctrl-right",
-            },
+        FixedBinding::new(
+            "shift-alt-right",
             EditorViewAction::SelectForwardsByWord,
             text_entry.clone(),
         ),
@@ -381,16 +375,14 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::MoveBackwardsByWord,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-left")
-        .with_linux_or_windows_key_binding("ctrl-left"),
+        .with_mac_key_binding("alt-left"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move Forward One Word",
             EditorViewAction::MoveForwardsByWord,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-right")
-        .with_linux_or_windows_key_binding("ctrl-right"),
+        .with_mac_key_binding("alt-right"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move forward one word",
@@ -445,8 +437,7 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::MoveToLineStart,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("cmd-left")
-        .with_linux_or_windows_key_binding("home"),
+        .with_mac_key_binding("cmd-left"),
         EditableBinding::new(
             "editor_view:move_to_paragraph_end",
             "Move to end of paragraph",
@@ -456,8 +447,7 @@ pub fn init(app: &mut AppContext) {
         .with_mac_key_binding("ctrl-e"),
         EditableBinding::new("editor_view:end", "End", EditorViewAction::MoveToLineEnd)
             .with_context_predicate(text_entry.clone())
-            .with_mac_key_binding("cmd-right")
-            .with_linux_or_windows_key_binding("end"),
+            .with_mac_key_binding("cmd-right"),
     ]);
 
     // Editable selection keybindings:
@@ -583,8 +573,7 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::DeleteWordLeft,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-backspace")
-        .with_linux_or_windows_key_binding("ctrl-backspace"),
+        .with_mac_key_binding("alt-backspace"),
         EditableBinding::new(
             "editor_view:cut_word_right",
             "Cut word right",
@@ -598,8 +587,7 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::DeleteWordRight,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-delete")
-        .with_linux_or_windows_key_binding("ctrl-delete"),
+        .with_mac_key_binding("alt-delete"),
         EditableBinding::new(
             "editor_view:cut_all_left",
             "Cut all left",
@@ -615,8 +603,7 @@ pub fn init(app: &mut AppContext) {
         // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
         // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
         // to clear all blocks within the blocklist.
-        .with_mac_key_binding("cmd-backspace")
-        .with_linux_or_windows_key_binding("ctrl-y"),
+        .with_mac_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:cut_all_right",
             "Cut all right",
@@ -851,31 +838,6 @@ pub enum EditorViewAction {
     OpenMermaidDiagramLightbox {
         block_start: CharOffset,
     },
-}
-
-impl EditorViewAction {
-    fn is_new_text_selection(&self) -> bool {
-        matches!(
-            self,
-            EditorViewAction::SelectUp
-                | EditorViewAction::SelectDown
-                | EditorViewAction::SelectLeft
-                | EditorViewAction::SelectRight
-                | EditorViewAction::SelectBackwardsByWord
-                | EditorViewAction::SelectForwardsByWord
-                | EditorViewAction::SelectToLineStart
-                | EditorViewAction::SelectToLineEnd
-                | EditorViewAction::SelectToParagraphStart
-                | EditorViewAction::SelectToParagraphEnd
-                | EditorViewAction::SelectAll
-                | EditorViewAction::SelectWord { .. }
-                | EditorViewAction::SelectLine { .. }
-                | EditorViewAction::SelectionStart { .. }
-                | EditorViewAction::SelectionUpdate(_)
-                | EditorViewAction::SelectBlock { .. }
-                | EditorViewAction::SelectionEnd
-        )
-    }
 }
 
 #[derive(Default)]
@@ -2974,18 +2936,6 @@ impl TypedActionView for RichTextEditorView {
                     force_open_in_warp: *force_open_in_warp,
                 });
             }
-        }
-
-        if action.is_new_text_selection() {
-            SelectionSettings::handle(ctx).update(ctx, |selection_settings, ctx| {
-                let clipboard_contents_fn = |ctx: &mut AppContext| {
-                    self.model
-                        .as_ref(ctx)
-                        .read_selected_text_as_clipboard_content(ctx)
-                };
-                selection_settings
-                    .maybe_write_to_linux_selection_clipboard(clipboard_contents_fn, ctx);
-            });
         }
     }
 

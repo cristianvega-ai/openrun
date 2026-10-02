@@ -23,7 +23,6 @@ pub use file_picker::{
 use lazy_static::lazy_static;
 use pathfinder_geometry::rect::{RectF, RectI};
 use pathfinder_geometry::vector::{Vector2F, Vector2I};
-use serde::{Deserialize, Serialize};
 use warp_util::path::ShellFamily;
 
 use crate::accessibility::AccessibilityContent;
@@ -45,25 +44,6 @@ use crate::{
 lazy_static! {
     pub static ref KEYS_TO_IGNORE: HashSet<Keystroke> = HashSet::new();
 }
-/// The system backdrop material applied behind a window's transparent content.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "schema_gen", derive(schemars::JsonSchema))]
-pub enum WindowBackdrop {
-    #[default]
-    None,
-    Mica,
-    Acrylic,
-    MicaAlt,
-}
-
-impl WindowBackdrop {
-    pub const ALL: [Self; 4] = [Self::None, Self::Mica, Self::Acrylic, Self::MicaAlt];
-}
-
-#[cfg(feature = "settings_value")]
-impl settings_value::SettingsValue for WindowBackdrop {}
-
 /// Type of the callback function that provides the result of requesting
 /// desktop notification permissions.
 pub type RequestNotificationPermissionsCallback =
@@ -104,15 +84,8 @@ pub struct WindowOptions {
     pub title: Option<String>,
     pub style: WindowStyle,
     pub background_blur_radius_pixels: Option<u8>,
-    pub background_backdrop: WindowBackdrop,
     pub gpu_power_preference: GPUPowerPreference,
-    pub backend_preference: Option<GraphicsBackend>,
     pub on_gpu_device_info_reported: Box<OnGPUDeviceSelected>,
-    /// This is an identifier to distinguish different windows among one application. It is a no-op
-    /// on all platforms except X11 Linux.
-    /// See docs on the "WM_CLASS" property:
-    /// https://www.x.org/docs/ICCCM/icccm.pdf
-    pub window_instance: Option<String>,
 }
 
 impl std::fmt::Debug for WindowOptions {
@@ -126,10 +99,7 @@ impl std::fmt::Debug for WindowOptions {
                 "background_blur_radius_pixels",
                 &self.background_blur_radius_pixels,
             )
-            .field("background_backdrop", &self.background_backdrop)
             .field("gpu_power_preference", &self.gpu_power_preference)
-            .field("backend_preference", &self.backend_preference)
-            .field("window_instance", &self.window_instance)
             .finish()
     }
 }
@@ -437,15 +407,9 @@ pub trait Window: 'static + WindowContext + std::any::Any {
     fn toggle_maximized(&self);
     fn toggle_fullscreen(&self);
     fn fullscreen_state(&self) -> FullscreenState;
-    fn set_background_backdrop(&self, _backdrop: WindowBackdrop) {}
     /// Whether the window has the native OS window frame (title bar and buttons).
     fn uses_native_window_decorations(&self) -> bool;
     fn set_titlebar_height(&self, height: f64);
-
-    /// Whether any hardware supports window transparency
-    fn supports_transparency(&self) -> bool;
-    fn graphics_backend(&self) -> GraphicsBackend;
-    fn supported_backends(&self) -> Vec<GraphicsBackend>;
 
     fn as_ctx(&self) -> &dyn WindowContext;
     fn callbacks(&self) -> &WindowCallbacks;
@@ -610,13 +574,6 @@ pub trait WindowManager {
 
     fn active_cursor_position_updated(&self);
 
-    fn windowing_system(&self) -> Option<crate::windowing::System>;
-
-    /// The name of the operating system's window server/manager/compositor.
-    fn os_window_manager_name(&self) -> Option<String>;
-    /// Whether or not this is a tiling window manager.
-    fn is_tiling_window_manager(&self) -> bool;
-
     /// Returns the IDs of all application windows in front-to-back z-order.
     /// An empty vector indicates that z-ordering information is not available
     /// on this platform.
@@ -649,20 +606,11 @@ pub enum Cursor {
     DragCopy,
 }
 
-/// The current operating system in which this library is running. If on the web, this reads the
-/// user agent to determine the backing OS, otherwise this is determined at compile time based on
-/// the value of `target_arch` (<https://doc.rust-lang.org/reference/conditional-compilation.html#target_arch>).
+/// The operating system in which this library is running. OpenRun only runs on macOS.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum OperatingSystem {
-    /// Any distribution of Linux.
-    Linux,
     /// MacOS.
     Mac,
-    /// Windows.
-    Windows,
-    /// The operating system is unknown or not one of the ones specified.
-    /// Contains the name of the operating system if it is known.
-    Other(Option<&'static str>),
 }
 
 impl OperatingSystem {
@@ -675,64 +623,7 @@ impl OperatingSystem {
         *self == OperatingSystem::Mac
     }
 
-    /// Returns true if the current [`OperatingSystem`] is Linux.
-    pub fn is_linux(&self) -> bool {
-        *self == OperatingSystem::Linux
-    }
-
-    /// Returns true if the current [`OperatingSystem`] is Windows.
-    pub fn is_windows(&self) -> bool {
-        *self == OperatingSystem::Windows
-    }
-
     pub fn default_shell_family(&self) -> ShellFamily {
-        match self {
-            OperatingSystem::Linux | OperatingSystem::Mac | OperatingSystem::Other(_) => {
-                ShellFamily::Posix
-            }
-            OperatingSystem::Windows => ShellFamily::PowerShell,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Deserialize, Serialize)]
-#[cfg_attr(feature = "schema_gen", derive(schemars::JsonSchema))]
-#[cfg_attr(
-    feature = "schema_gen",
-    schemars(
-        description = "Graphics rendering backend used for display output.",
-        rename_all = "snake_case"
-    )
-)]
-#[cfg_attr(feature = "settings_value", derive(settings_value::SettingsValue))]
-pub enum GraphicsBackend {
-    /// This maps to [`wgpu::Backend::Empty`].
-    #[cfg_attr(
-        feature = "schema_gen",
-        schemars(description = "No-op backend for testing.")
-    )]
-    Empty,
-    #[cfg_attr(feature = "schema_gen", schemars(description = "DirectX 12."))]
-    Dx12,
-    #[cfg_attr(feature = "schema_gen", schemars(description = "Vulkan."))]
-    Vulkan,
-    #[cfg_attr(feature = "schema_gen", schemars(description = "OpenGL."))]
-    Gl,
-    #[cfg_attr(feature = "schema_gen", schemars(description = "Metal."))]
-    Metal,
-    #[cfg_attr(feature = "schema_gen", schemars(description = "WebGPU (browser)."))]
-    BrowserWebGpu,
-}
-
-impl GraphicsBackend {
-    pub fn to_label(&self) -> &'static str {
-        match self {
-            GraphicsBackend::Empty => "",
-            GraphicsBackend::Dx12 => "DirectX 12",
-            GraphicsBackend::Vulkan => "Vulkan",
-            GraphicsBackend::Gl => "OpenGL",
-            GraphicsBackend::Metal => "Metal",
-            GraphicsBackend::BrowserWebGpu => "WebGPU",
-        }
+        ShellFamily::Posix
     }
 }

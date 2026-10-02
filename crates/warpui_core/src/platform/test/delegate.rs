@@ -164,18 +164,6 @@ impl platform::WindowManager for WindowManager {
     fn active_cursor_position_updated(&self) {
         // no-op for tests
     }
-
-    fn windowing_system(&self) -> Option<crate::windowing::System> {
-        None
-    }
-
-    fn os_window_manager_name(&self) -> Option<String> {
-        None
-    }
-
-    fn is_tiling_window_manager(&self) -> bool {
-        false
-    }
 }
 
 impl platform::Delegate for AppDelegate {
@@ -423,18 +411,6 @@ impl platform::Window for Window {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-
-    fn supports_transparency(&self) -> bool {
-        true
-    }
-
-    fn graphics_backend(&self) -> platform::GraphicsBackend {
-        platform::GraphicsBackend::Empty
-    }
-
-    fn supported_backends(&self) -> Vec<platform::GraphicsBackend> {
-        vec![]
     }
 
     fn uses_native_window_decorations(&self) -> bool {

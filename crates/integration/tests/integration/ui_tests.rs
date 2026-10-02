@@ -61,8 +61,6 @@ integration_tests! {
     test_restore_snapshot_with_code_file,
     test_multi_block_selections,
     test_input_focused_after_executing_command,
-    // TODO(alokedesai): Determine why this test doesn't reliably pass on CI.
-    #[cfg_attr(target_os="linux", ignore)]
     test_with_launch_config,
     test_command_xray_hover,
     test_command_xray_for_partial_command,
@@ -230,10 +228,6 @@ integration_tests! {
     test_settings_search_top_level_page_still_renders_content,
     test_settings_search_clear_restores_umbrella_state,
     test_settings_search_preserved_on_sidebar_click,
-
-    // Middle-click-paste is only implemented for Linux right now.
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    test_middle_click_paste,
 
     test_undo_close_stack_timeout_cleanup,
 

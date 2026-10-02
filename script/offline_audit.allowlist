@@ -25,7 +25,6 @@ hosts | *Cargo.toml | github\.com/warpdotdev/ | build-time git dependencies on t
 hosts | crates/persistence/migrations/2022-07-29-164418_add_users/up.sql | firebase | historical migration, untouched (MASTER decision 14); DB-1 drops the table it creates
 hosts | crates/persistence/migrations/2023-08-07-205653_add_user_profiles_table/up.sql | firebase | historical migration, untouched (MASTER decision 14); DB-1 drops the table it creates
 hosts | crates/persistence/migrations/2026-09-29-000000_drop_dead_tables/down.sql | firebase | DB-1 down migration: recreates the dropped legacy tables, including their firebase_uid columns, to restore the old schema on rollback
-hosts | crates/warpui_extras/src/secure_storage/linux.rs | releases\.warp\.dev/channel_versions\.json | secure-storage key material, not a network call; changing it would orphan stored secrets (MASTER decision 13)
 hosts | crates/secret_redaction/src/lib.rs | firebase | the redaction regex for leaked Firebase auth domains is a secret pattern, not a network call
 hosts | crates/secret_redaction/src/lib.rs | platform\.openai\.com | doc comment naming where the format of an OpenAI API key is documented; the redaction patterns detect such keys, nothing fetches the page
 hosts | crates/secret_redaction/src/lib_tests.rs | firebase | tests of that redaction regex
@@ -35,10 +34,6 @@ hosts | crates/warp_completer/src/signatures/legacy/generator_policy_tests.rs | 
 hosts | crates/lsp/src/config_tests.rs | firebase | path of an npm package (`node_modules/@firebase/auth`) used as a URI fixture
 hosts | crates/persistence/test_data/pre_drop_dead_tables_seed.sql | firebase | seeds the columns of the pre-DB-1 schema that the migration drops
 hosts | crates/integration/tests/data/test_json_object.sqlite | firebase_uid | legacy cloud-object fixture: its pre-DB-1 schema (users.firebase_uid) is dropped by the startup migration
-hosts | crates/warp_core/src/paths.rs | /opt/warpdotdev | example install path in a doc comment (MASTER decision 17)
-hosts | flake.nix | /opt/warpdotdev | install paths stay unchanged (MASTER decision 17)
-hosts | resources/linux/* | opt/warpdotdev|%\{prefix\}/warpdotdev | install paths stay unchanged (MASTER decision 17); any other warpdotdev mention here is a finding
-hosts | script/linux/* | opt/warpdotdev | install paths stay unchanged (MASTER decision 17); any other warpdotdev mention here is a finding
 
 # --- network-capable Rust (9.2) ---
 net-rust | crates/http_client/src/lib.rs | ^\s*use reqwest::IntoUrl;$ | the shared HTTP client wraps reqwest; its only consumers are node_runtime and the language server installer (deny.toml wrappers)
@@ -116,12 +111,7 @@ net-dep | git-dep:warp-command-signatures/src/generators/vagrant.rs | "http://ex
 # --- developer and CI bootstrap (9.2) ---
 # These fetch third-party toolchains for building the app; nothing here ships in the app.
 net-script | script/install_cargo_binstall | * | fetches cargo-binstall from GitHub releases at build time
-net-script | script/install_rust | * | rustup installer
-net-script | script/linux/configure_musl_toolchain | * | musl toolchain download at build time
-net-script | script/linux/install_build_deps | * | protoc download at build time
 net-script | script/offline_sandbox_macos | * | the canary: a connection to a documentation address (203.0.113.7) that the sandbox must refuse before the run
-net-script | script/linux/install_linuxdeploy | * | AppImage tooling download at build time
 net-script | script/macos/bootstrap | * | Homebrew and rustup installers
-net-script | docker/linux-dev/Dockerfile | * | developer container image: installs curl, the GitHub CLI apt key and rustup while the image is built; never shipped in the app
 net-script | script/offline_audit | * | holds the audit patterns
 net-script | script/offline_audit.allowlist | * | documents the exceptions

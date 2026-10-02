@@ -15,8 +15,6 @@ mod command_palette;
 mod completer;
 #[allow(dead_code)]
 mod context_chips;
-#[cfg(target_os = "linux")]
-mod crash_recovery;
 mod debug_dump;
 mod default_terminal;
 mod global_resource_handles;
@@ -227,15 +225,6 @@ impl LaunchMode {
             LaunchMode::App { .. } => None,
         }
     }
-
-    /// Whether or not to start a crash recovery process (on platforms that support it).
-    #[cfg(target_os = "linux")]
-    pub(crate) fn crash_recovery_enabled(&self) -> bool {
-        match self {
-            LaunchMode::App { .. } => true,
-            LaunchMode::Test { .. } => false,
-        }
-    }
 }
 
 /// If the given event is a key down event containing alt modifiers, and those
@@ -372,17 +361,7 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // subscriber is installed, so a no-op subscriber keeps them out of the logs.
     tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::new())?;
 
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "linux")] {
-            if crash_recovery::is_crash_recovery_process(launch_mode.args().as_ref()) {
-                warp_logging::init_for_crash_recovery_process()?;
-            } else {
-                warp_logging::init(warp_logging::LogConfig::default())?;
-            }
-        } else {
-            warp_logging::init(warp_logging::LogConfig::default())?;
-        }
-    }
+    warp_logging::init(warp_logging::LogConfig::default())?;
 
     timer.mark_interval_end("LOG_FILE_SETUP_COMPLETE");
 
@@ -390,28 +369,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // any children we spawn (like the terminal server) inherit our adjusted
     // rlimits.
     resource_limits::adjust_resource_limits();
-
-    #[cfg(all(
-        feature = "release_bundle",
-        any(target_os = "linux", target_os = "freebsd")
-    ))]
-    if let LaunchMode::App { .. } = launch_mode {
-        match app_services::linux::pass_startup_args_to_existing_instance(
-            launch_mode.args().as_ref(),
-        ) {
-            // If we were able to contact an existing application instance, quit -
-            // we only want to run a single instance of Warp at a time.
-            Ok(_) => std::process::exit(0),
-            // If Warp isn't already running, we're good to go.
-            Err(app_services::linux::StartupArgsForwardingError::NoExistingInstance) => {}
-            // If we were unable to perform the forwarding for an unknown reason,
-            // it's better to run a second instance than potentially end up in a
-            // state where Warp refuses to run even a first instance.
-            Err(err) => {
-                report_error!(anyhow::Error::from(err).context("Failed to forward startup args"));
-            }
-        }
-    }
 
     // Sets up a Job Object that we associate with the Warp process to handle
     // shared fate with its child processes. This should be called before we
@@ -421,21 +378,9 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     let (public_preferences, startup_toml_parse_error) = settings::init_public_user_preferences();
 
     // Public settings live in the TOML-backed store. Use it for pre-app reads.
-    #[cfg_attr(
-        not(any(
-            target_os = "linux",
-            target_os = "linux",
-            target_os = "freebsd",
-            target_os = "macos"
-        )),
-        expect(unused)
-    )]
+    #[cfg_attr(not(target_os = "macos"), expect(unused))]
     let prefs_for_public_settings: &dyn warpui_extras::user_preferences::UserPreferences =
         public_preferences.as_ref();
-
-    #[cfg(target_os = "linux")]
-    let crash_recovery =
-        crash_recovery::CrashRecovery::new(&launch_mode, prefs_for_public_settings);
 
     // Set up the pty spawner before doing any meaningful work. We want to
     // ensure that the process is in the cleanest possible state (minimal opened
@@ -474,21 +419,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         app_builder.set_dock_menu_builder(|_| app_menus::dock_menu());
     }
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    {
-        use warpui::platform::linux::{self, AppBuilderExt};
-
-        use crate::settings::ForceX11;
-
-        app_builder.set_window_class(ChannelState::app_id().to_string());
-
-        let force_x11 = ForceX11::read_from_preferences(prefs_for_public_settings)
-            .unwrap_or(ForceX11::default_value());
-        // Force use of wayland if the user has passed the `WARP_ENABLE_WAYLAND` env var.
-        let allow_wayland = linux::is_wayland_env_var_set() || !force_x11;
-        app_builder.force_x11(!allow_wayland);
-    }
-
     // Override any bindings that have a `Custom` trigger to a `Keystroke`-based trigger. In theory,
     // this should be a noop on Mac (since the keystrokes registered via the  Mac menus first
     // intercept the binding), but just to be safe we only enable this in cases where we don't
@@ -522,9 +452,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         ctx.add_singleton_model(move |_ctx| private_preferences);
         let startup_toml_parse_error = startup_toml_parse_error;
 
-        #[cfg(target_os = "linux")]
-        ctx.add_singleton_model(move |_ctx| crash_recovery);
-
         let app_state = initialize_app(timer, startup_toml_parse_error, ctx);
 
         launch(ctx, app_state, launch_mode);
@@ -546,8 +473,6 @@ pub(crate) fn initialize_app(
     cfg_if::cfg_if! {
         if #[cfg(feature = "integration_tests")] {
             warpui_extras::secure_storage::register_noop(&secure_storage_service_name, ctx);
-        } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
-            warpui_extras::secure_storage::register_with_fallback(&secure_storage_service_name, warp_core::paths::state_dir(), ctx)
         } else {
             warpui_extras::secure_storage::register(&secure_storage_service_name, ctx);
         }
@@ -676,32 +601,10 @@ pub(crate) fn initialize_app(
 
     ctx.set_a11y_verbosity(*AccessibilitySettings::as_ref(ctx).a11y_verbosity);
 
-    #[cfg(target_os = "linux")]
-    ctx.on_draw_frame_error(|ctx, window_id| {
-        crash_recovery::CrashRecovery::handle(ctx).update(ctx, |crash_recovery, _ctx| {
-            crash_recovery.on_draw_frame_error(window_id);
-        });
-    });
-
     ctx.on_first_frame_drawn(|ctx| {
         GPUState::handle(ctx).update(ctx, |gpu_state, ctx| {
             gpu_state.set_has_lower_power_gpu(warpui::rendering::is_low_power_gpu_available(), ctx);
         });
-
-        let settings_views = SettingsPaneManager::as_ref(ctx)
-            .settings_views()
-            .cloned()
-            .collect_vec();
-        for settings_view in settings_views {
-            settings_view.update(ctx, |settings, ctx| {
-                settings.refresh_preferred_graphics_backend_dropdown(ctx);
-            });
-        }
-    });
-
-    #[cfg(target_os = "linux")]
-    ctx.on_frame_drawn(|ctx, window_id| {
-        crash_recovery::CrashRecovery::as_ref(ctx).on_frame_drawn(window_id);
     });
 
     #[cfg(not(target_family = "wasm"))]
@@ -904,18 +807,11 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
             // Tear down any application profilers that are running, writing
             // results to disk.
             profiling::teardown();
-
-            #[cfg(target_os = "linux")]
-            crash_recovery::CrashRecovery::handle(ctx).update(ctx, |crash_recovery, _ctx| {
-                crash_recovery.teardown();
-            });
         })),
         on_should_close_window: Some(Box::new(move |window_id, ctx| {
             let general_settings = GeneralSettings::as_ref(ctx);
-            // On Linux or Windows, if we're about to close the final window, we should quit the app instead.
-            // On Mac, we do this conditionally based on a user setting.
-            let quit_on_last_window_closed = cfg!(any(target_os = "linux", target_os = "freebsd"))
-                || *general_settings.quit_on_last_window_closed;
+            // If we're about to close the final window, quit the app depending on a user setting.
+            let quit_on_last_window_closed = *general_settings.quit_on_last_window_closed;
             if ctx.window_ids().count() == 1 && quit_on_last_window_closed {
                 log::info!("No windows left, terminating app");
                 ctx.terminate_app(TerminationMode::Cancellable, None);

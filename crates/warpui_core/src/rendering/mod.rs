@@ -3,8 +3,6 @@ pub mod texture_cache;
 pub use gpu_info::{GPUBackend, GPUDeviceInfo, GPUDeviceType, OnGPUDeviceSelected};
 use serde::{Deserialize, Serialize};
 
-use crate::platform::GraphicsBackend;
-
 /// Circumstances under which glyphs should be rasterized with thin strokes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema_gen", derive(schemars::JsonSchema))]
@@ -71,8 +69,6 @@ pub struct Config {
     /// there's a choice between a discrete high-performance GPU and a more power-efficient
     /// integrated GPU.
     pub gpu_power_preference: GPUPowerPreference,
-
-    pub backend_preference: Option<GraphicsBackend>,
 }
 
 #[derive(Clone, Debug, Default)]

@@ -113,8 +113,7 @@ impl warpui_core::SingletonEntity for PublicPreferences {}
 ///
 /// Private settings (those marked `private: true` in `define_settings_group!`)
 /// are stored here instead of in the user-visible settings file. This always
-/// uses the platform-native store (e.g. UserDefaults on macOS, JSON file on
-/// Linux, registry on Windows).
+/// uses the platform-native store (UserDefaults on macOS).
 pub struct PrivatePreferences(Box<dyn UserPreferences>);
 
 impl PrivatePreferences {
@@ -141,38 +140,13 @@ impl warpui_core::SingletonEntity for PrivatePreferences {}
 #[derive(Debug, Clone)]
 pub enum SupportedPlatforms {
     ALL,
-    DESKTOP, /* Refers to running on device, not web-based, such as Mac, Linux, and Windows */
+    DESKTOP,
     MAC,
-    LINUX,
-    WINDOWS,
-    WEB,
-    OR(Box<SupportedPlatforms>, Box<SupportedPlatforms>),
 }
 
 impl SupportedPlatforms {
     pub fn matches_current_platform(&self) -> bool {
-        match self {
-            SupportedPlatforms::ALL => true,
-            SupportedPlatforms::DESKTOP => {
-                cfg!(not(target_family = "wasm"))
-            }
-            SupportedPlatforms::MAC => {
-                cfg!(all(not(target_family = "wasm"), target_os = "macos"))
-            }
-            SupportedPlatforms::LINUX => {
-                cfg!(all(
-                    not(target_family = "wasm"),
-                    any(target_os = "linux", target_os = "freebsd")
-                ))
-            }
-            SupportedPlatforms::WINDOWS => false,
-            SupportedPlatforms::WEB => {
-                cfg!(target_family = "wasm")
-            }
-            SupportedPlatforms::OR(first, second) => {
-                first.matches_current_platform() || second.matches_current_platform()
-            }
-        }
+        true
     }
 }
 

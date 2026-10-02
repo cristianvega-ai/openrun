@@ -90,9 +90,6 @@ pub(crate) fn initialize_app(app: &mut App) {
     terminal::available_shells::register(app);
     AltScreenReporting::register(app);
 
-    #[cfg(target_os = "linux")]
-    crate::crash_recovery::CrashRecovery::register_for_test(app);
-
     app.add_singleton_model(|ctx| PersistedWorkspace::new(vec![], HashMap::new(), None, ctx));
     app.add_singleton_model(|_| History::new(vec![]));
 

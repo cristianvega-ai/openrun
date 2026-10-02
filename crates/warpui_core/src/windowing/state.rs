@@ -8,7 +8,7 @@ use crate::platform::{self, FullscreenState, TerminationMode, WindowFocusBehavio
 use crate::scene::{CornerRadius, Radius};
 use crate::{
     DisplayId, DisplayIdx, Entity, ModelContext, OptionalPlatformWindow, SingletonEntity, WindowId,
-    geometry, windowing,
+    geometry,
 };
 
 /// Description of the current stage in the lifecycle of the app.
@@ -175,29 +175,15 @@ impl WindowManager {
         self.platform.display_count()
     }
 
-    pub fn is_tiling_window_manager(&self) -> bool {
-        self.platform.is_tiling_window_manager()
-    }
-
-    pub fn os_window_manager_name(&self) -> Option<String> {
-        self.platform.os_window_manager_name()
-    }
-
     pub fn did_window_change_focus(window_id: WindowId, current: &State, previous: &State) -> bool {
         let current_window_is_active = current.active_window == Some(window_id);
         let previous_window_was_active = previous.active_window == Some(window_id);
         current_window_is_active != previous_window_was_active
     }
 
-    /// The window itself usually has rounded corners, except when running in a tiling window
-    /// manager.
+    /// The window itself has rounded corners.
     pub fn window_corner_radius(&self) -> CornerRadius {
-        let radius = if self.is_tiling_window_manager() {
-            0.
-        } else {
-            8.
-        };
-        CornerRadius::with_all(Radius::Pixels(radius))
+        CornerRadius::with_all(Radius::Pixels(8.))
     }
 
     /// Like [`Self::window_corner_radius`], but square when the given window is fullscreen: a
@@ -314,10 +300,6 @@ impl WindowManager {
 
     pub fn state(&self) -> &State {
         &self.state
-    }
-
-    pub fn windowing_system(&self) -> Option<windowing::System> {
-        self.platform.windowing_system()
     }
 
     /// Helper function used to ensure that updates to [`State`] end up triggering the proper event

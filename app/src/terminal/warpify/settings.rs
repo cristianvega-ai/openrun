@@ -77,7 +77,7 @@ maybe_define_setting!(EnableSshWrapper, group: WarpifySettings, {
 maybe_define_setting!(UseSshTmuxWrapper, group: WarpifySettings, {
     type: bool,
     default: false,
-    supported_platforms: SupportedPlatforms::OR(SupportedPlatforms::MAC.into(), SupportedPlatforms::LINUX.into()),
+    supported_platforms: SupportedPlatforms::MAC,
     private: false,
     toml_path: "warpify.ssh.use_ssh_tmux_wrapper",
     description: "Deprecated: whether to use a tmux-based wrapper for SSH warpification.",
@@ -90,7 +90,7 @@ maybe_define_setting!(UseSshTmuxWrapper, group: WarpifySettings, {
 maybe_define_setting!(SshTmuxDeprecationNoticePending, group: WarpifySettings, {
     type: bool,
     default: false,
-    supported_platforms: SupportedPlatforms::OR(SupportedPlatforms::MAC.into(), SupportedPlatforms::LINUX.into()),
+    supported_platforms: SupportedPlatforms::MAC,
     private: false,
     toml_path: "warpify.ssh.ssh_tmux_deprecation_notice_pending",
     description: "Internal: whether to show the one-time tmux SSH deprecation notice.",

@@ -2,7 +2,7 @@ use settings::macros::define_settings_group;
 use settings::{Setting, SupportedPlatforms};
 use warp_errors::{report_error, report_if_error};
 use warpui::keymap::Keystroke;
-use warpui::{AppContext, DisplayIdx, ModelContext};
+use warpui::{DisplayIdx, ModelContext};
 
 use crate::root_view::{QuakeModePinPosition, update_quake_window_bounds};
 use crate::settings::{
@@ -182,12 +182,8 @@ impl KeysSettings {
         report_if_error!(self.quake_mode_settings.set_value(quake_mode_settings, ctx));
     }
 
-    pub fn global_hotkey_mode(&self, app: &AppContext) -> GlobalHotkeyMode {
+    pub fn global_hotkey_mode(&self) -> GlobalHotkeyMode {
         let mut selected = GlobalHotkeyMode::Disabled;
-
-        if app.is_wayland() {
-            return selected;
-        }
 
         if *self.quake_mode_enabled && *self.activation_hotkey_enabled {
             report_error!(

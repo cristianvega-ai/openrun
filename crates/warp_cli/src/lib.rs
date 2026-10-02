@@ -43,11 +43,6 @@ pub struct Args {
 /// along with their own flags, or convert their flags into an `AppArgs` value.
 #[derive(Debug, Default, clap::Args, Clone)]
 pub struct AppArgs {
-    /// Crash recovery mechanism to use if we detect the parent process terminated.
-    #[cfg(target_os = "linux")]
-    #[arg(long = "crash-recovery-mechanism", value_enum, requires = "ParentOpts")]
-    pub crash_recovery_mechanism: Option<RecoveryMechanism>,
-
     /// Options related to the parent process that spawned this Warp instance.
     #[clap(flatten)]
     pub parent: ParentOpts,
@@ -191,9 +186,6 @@ pub struct TerminalServerArgs {
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
 pub enum RecoveryMechanism {
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    #[value(name = "force-x11")]
-    X11,
     #[value(name = "force-dedicated-gpu")]
     DedicatedGpu,
     #[value(name = "disable-opengl")]

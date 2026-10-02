@@ -3,7 +3,6 @@
 use anyhow::Result;
 use warpui::{Entity, SingletonEntity};
 
-#[cfg_attr(any(target_os = "linux", target_os = "freebsd"), path = "linux.rs")]
 #[cfg_attr(target_os = "macos", path = "macos.rs")]
 // TODO(WASM): Replace this with a functional implementation for the web.
 #[cfg_attr(target_family = "wasm", path = "noop.rs")]

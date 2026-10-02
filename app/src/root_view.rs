@@ -257,8 +257,7 @@ pub fn init(app: &mut AppContext) {
             RootViewAction::ToggleFullscreen,
         )
         .with_group(bindings::BindingGroup::Navigation.as_str())
-        .with_context_predicate(id!("RootView"))
-        .with_linux_or_windows_key_binding("f11"),
+        .with_context_predicate(id!("RootView")),
         // Debug binding for onboarding state
         EditableBinding::new(
             "root_view:enter_onboarding_state",
@@ -393,7 +392,6 @@ pub fn create_transferred_window(
             window_bounds,
             title: Some(WINDOW_TITLE.to_owned()),
             background_blur_radius_pixels: Some(*window_settings.background_blur_radius),
-            background_backdrop: *window_settings.background_backdrop,
             ..Default::default()
         },
         |ctx| {
@@ -443,12 +441,9 @@ fn open_from_restored(arg: &OpenFromRestoredArg, ctx: &mut AppContext) {
     if let Some(app_state) = &arg.app_state {
         maybe_register_global_window_shortcuts(global_resource_handles.clone(), ctx);
 
-        let (background_blur_radius_pixels, background_backdrop) = {
+        let background_blur_radius_pixels = {
             let window_settings = WindowSettings::as_ref(ctx);
-            (
-                Some(*window_settings.background_blur_radius),
-                *window_settings.background_backdrop,
-            )
+            Some(*window_settings.background_blur_radius)
         };
 
         // Check whether user has enabled session restoration.
@@ -476,12 +471,10 @@ fn open_from_restored(arg: &OpenFromRestoredArg, ctx: &mut AppContext) {
                             title: Some("Warp".to_owned()),
                             fullscreen_state: window.fullscreen_state,
                             background_blur_radius_pixels,
-                            background_backdrop,
                             // Don't use the quake window for positioning new windows.
                             anchor_new_windows_from_closed_position:
                                 NextNewWindowsHasThisWindowsBoundsUponClose::No,
                             on_gpu_driver_selected: None,
-                            window_instance: Some(ChannelState::app_id().to_string() + "-hotkey"),
                         },
                         |ctx| {
                             let mut view = RootView::new(
@@ -519,7 +512,6 @@ fn open_from_restored(arg: &OpenFromRestoredArg, ctx: &mut AppContext) {
                                 title: Some("Warp".to_owned()),
                                 fullscreen_state: window.fullscreen_state,
                                 background_blur_radius_pixels,
-                                background_backdrop,
                                 ..Default::default()
                             },
                             |ctx| {
@@ -570,7 +562,6 @@ fn open_from_restored(arg: &OpenFromRestoredArg, ctx: &mut AppContext) {
                         title: Some("Warp".to_owned()),
                         fullscreen_state: window.fullscreen_state,
                         background_blur_radius_pixels,
-                        background_backdrop,
                         ..Default::default()
                     },
                     |ctx| {
@@ -750,7 +741,6 @@ fn default_window_options(window_settings: &WindowSettings, ctx: &AppContext) ->
         window_bounds: next_bounds,
         title: Some("Warp".to_owned()),
         background_blur_radius_pixels: Some(*window_settings.background_blur_radius),
-        background_backdrop: *window_settings.background_backdrop,
         ..Default::default()
     }
 }
@@ -932,11 +922,9 @@ fn toggle_quake_mode_window(global_resource_handles: &GlobalResourceHandles, ctx
                     window_bounds: WindowBounds::ExactPosition(config.window_bounds),
                     title: Some("Warp".to_owned()),
                     background_blur_radius_pixels: Some(*window_settings.background_blur_radius),
-                    background_backdrop: *window_settings.background_backdrop,
                     // Ignore the quake window for positioning the next window
                     anchor_new_windows_from_closed_position:
                         warpui::NextNewWindowsHasThisWindowsBoundsUponClose::No,
-                    window_instance: Some(ChannelState::app_id().to_string() + "-hotkey"),
                     ..Default::default()
                 },
                 |ctx| {

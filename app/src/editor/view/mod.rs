@@ -56,7 +56,7 @@ use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::clipboard::ClipboardContent;
 use warpui::elements::{ChildView, DEFAULT_UI_LINE_HEIGHT_RATIO, Hoverable, MouseStateHandle};
 use warpui::fonts::{Cache as FontCache, FamilyId, Properties};
-use warpui::keymap::{EditableBinding, FixedBinding, Keystroke, PerPlatformKeystroke};
+use warpui::keymap::{EditableBinding, FixedBinding, Keystroke};
 use warpui::platform::{Cursor, FilePickerConfiguration, OperatingSystem};
 use warpui::text::TextBuffer;
 use warpui::text::word_boundaries::WordBoundariesPolicy;
@@ -161,11 +161,8 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::Enter,
             id!("EditorView") & !id!("IMEOpen"),
         ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "cmd-enter",
-                linux_and_windows: "ctrl-shift-enter",
-            },
+        FixedBinding::new(
+            "cmd-enter",
             EditorAction::CmdEnter,
             id!("EditorView") & !id!("IMEOpen"),
         ),
@@ -265,11 +262,8 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::SelectRight,
             id!("EditorView") & !id!("IMEOpen"),
         ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "shift-alt-left",
-                linux_and_windows: "shift-ctrl-left",
-            },
+        FixedBinding::new(
+            "shift-alt-left",
             EditorAction::SelectLeftByWord,
             id!("EditorView") & !id!("IMEOpen"),
         ),
@@ -278,11 +272,8 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::SelectLeftByWord,
             id!("EditorView") & !id!("IMEOpen"),
         ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "shift-alt-right",
-                linux_and_windows: "shift-ctrl-right",
-            },
+        FixedBinding::new(
+            "shift-alt-right",
             EditorAction::SelectRightByWord,
             id!("EditorView") & !id!("IMEOpen"),
         ),
@@ -407,17 +398,6 @@ pub fn init(ctx: &mut AppContext) {
                 id!("EditorView") & !id!("IMEOpen"),
             ),
         ]);
-    }
-
-    // Register Linux-specific `FixedBinding`s.
-    if OperatingSystem::get().is_linux() {
-        // The Emacs banner banner binding is registered as a `FixedBinding` so
-        // that it doesn't get displayed under Settings --> Keyboard Shortcuts.
-        ctx.register_fixed_bindings([FixedBinding::new(
-            "ctrl-e",
-            EditorAction::EmacsBinding,
-            id!("EditorView") & !id!("IMEOpen"),
-        )]);
     }
 
     if ChannelState::channel() == Channel::Integration {
@@ -596,12 +576,10 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::MoveToVisualLineStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-left")
-        .with_linux_or_windows_key_binding("home"),
+        .with_mac_key_binding("cmd-left"),
         EditableBinding::new("editor_view:end", "End", EditorAction::MoveToVisualLineEnd)
             .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-            .with_mac_key_binding("cmd-right")
-            .with_linux_or_windows_key_binding("end"),
+            .with_mac_key_binding("cmd-right"),
         EditableBinding::new(
             "editor_view:cmd_down",
             "Move cursor to the bottom",
@@ -609,8 +587,7 @@ pub fn init(ctx: &mut AppContext) {
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Match the behavior of VSCode, see https://code.visualstudio.com/docs/getstarted/keybindings#_basic-editing.
-        .with_mac_key_binding("cmd-down")
-        .with_linux_or_windows_key_binding("ctrl-end"),
+        .with_mac_key_binding("cmd-down"),
         EditableBinding::new(
             "editor_view:cmd_up",
             "Move cursor to the top",
@@ -618,24 +595,21 @@ pub fn init(ctx: &mut AppContext) {
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Match the behavior of VSCode, see https://code.visualstudio.com/docs/getstarted/keybindings#_basic-editing.
-        .with_mac_key_binding("cmd-up")
-        .with_linux_or_windows_key_binding("ctrl-home"),
+        .with_mac_key_binding("cmd-up"),
         EditableBinding::new(
             "editor_view:move_to_and_select_buffer_start",
             "Select and move to the top",
             EditorAction::MoveToAndSelectBufferStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-shift-up")
-        .with_linux_or_windows_key_binding("ctrl-shift-home"),
+        .with_mac_key_binding("cmd-shift-up"),
         EditableBinding::new(
             "editor_view:move_to_and_select_buffer_end",
             "Select and move to the bottom",
             EditorAction::MoveToAndSelectBufferEnd,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-shift-down")
-        .with_linux_or_windows_key_binding("ctrl-shift-end"),
+        .with_mac_key_binding("cmd-shift-down"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move forward one word",
@@ -717,8 +691,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::DeleteWordLeft,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-backspace")
-        .with_linux_or_windows_key_binding("ctrl-backspace"),
+        .with_mac_key_binding("alt-backspace"),
         EditableBinding::new(
             "editor_view:cut_word_right",
             "Cut word right",
@@ -735,8 +708,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::DeleteWordRight,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-delete")
-        .with_linux_or_windows_key_binding("ctrl-delete"),
+        .with_mac_key_binding("alt-delete"),
         EditableBinding::new(
             "editor_view:clear_lines",
             "Clear selected lines",
@@ -770,8 +742,7 @@ pub fn init(ctx: &mut AppContext) {
         // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
         // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
         // to clear all blocks within the blocklist.
-        .with_mac_key_binding("cmd-backspace")
-        .with_linux_or_windows_key_binding("ctrl-y"),
+        .with_mac_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:insert_newline",
             "Insert newline",
@@ -806,16 +777,14 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::MoveBackwardOneWord,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-left")
-        .with_linux_or_windows_key_binding("ctrl-left"),
+        .with_mac_key_binding("alt-left"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move Forward One Word",
             EditorAction::MoveForwardOneWord,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-right")
-        .with_linux_or_windows_key_binding("ctrl-right"),
+        .with_mac_key_binding("alt-right"),
         EditableBinding::new(
             "editor_view:move_backward_one_subword",
             "Move Backward One Subword",
@@ -1020,7 +989,6 @@ pub enum EditorAction {
     InsertNonExpandingSpace,
     ShowCharacterPalette,
     InsertAutosuggestion,
-    EmacsBinding,
     AttachFiles,
     SetAtMenuOpen(bool),
     ReadAndProcessImagesAsync {
@@ -1044,27 +1012,6 @@ impl EditorAction {
                 | EditorAction::TryToShowXRay(_)
                 | EditorAction::HideXRay
                 | EditorAction::Select(_)
-        )
-    }
-
-    fn is_new_selection(&self) -> bool {
-        matches!(
-            self,
-            EditorAction::Select(
-                SelectAction::Update { .. } | SelectAction::Extend { .. } | SelectAction::End,
-            ) | EditorAction::SelectToLineStart
-                | EditorAction::SelectToLineEnd
-                | EditorAction::SelectUp
-                | EditorAction::SelectDown
-                | EditorAction::SelectLeft
-                | EditorAction::SelectRight
-                | EditorAction::SelectWord(_)
-                | EditorAction::SelectLine(_)
-                | EditorAction::SelectAll
-                | EditorAction::SelectRightByWord
-                | EditorAction::SelectLeftByWord
-                | EditorAction::SelectRightBySubword
-                | EditorAction::SelectLeftBySubword
         )
     }
 }
@@ -6460,8 +6407,6 @@ impl EditorView {
     }
 
     pub fn select_all(&mut self, ctx: &mut ViewContext<Self>) {
-        ctx.emit(Event::EmacsBindingUsed);
-
         self.vim_force_insert_mode(ctx);
         self.change_selections(ctx, |editor_model, ctx| {
             editor_model
@@ -7587,8 +7532,6 @@ pub enum Event {
     /// Emitted when the 'delete all left' keybinding is triggered (cmd-delete on mac, ctrl-y on
     /// linux).
     DeleteAllLeft,
-    /// Notify the user that they're using a MacOS-style binding that conflicts with a non-MacOS-style binding.
-    EmacsBindingUsed,
     UpdatePeers {
         operations: Rc<Vec<CrdtOperation>>,
     },
@@ -7802,7 +7745,6 @@ impl TypedActionView for EditorView {
                 ctx,
             ),
             VimEscape => self.vim_escape(ctx),
-            EmacsBinding => ctx.emit(Event::EmacsBindingUsed),
             DragAndDropFiles(paths) => {
                 self.drag_and_drop_files(paths, ctx);
             }
@@ -7827,18 +7769,8 @@ impl TypedActionView for EditorView {
             ClearMarkedText => self.clear_marked_text(ctx),
         }
 
-        if self.is_focused() {
-            if action.should_report_active_cursor_position_updated() {
-                ctx.report_active_cursor_position_update();
-            }
-            if action.is_new_selection() {
-                SelectionSettings::handle(ctx).update(ctx, |selection_settings, ctx| {
-                    selection_settings.maybe_write_to_linux_selection_clipboard(
-                        |ctx| ClipboardContent::plain_text(self.selected_text(ctx)),
-                        ctx,
-                    );
-                });
-            }
+        if self.is_focused() && action.should_report_active_cursor_position_updated() {
+            ctx.report_active_cursor_position_update();
         }
     }
 }

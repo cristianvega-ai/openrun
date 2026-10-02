@@ -1,150 +1,4 @@
-use super::seccomp::{
-    self, AARCH64, AF_NETLINK, AF_UNIX, Architecture, SockFilter, Verdict, X86_64,
-};
 use super::*;
-
-const EPERM: u32 = 1;
-
-fn socket_verdict(arch: Architecture, family: u64) -> Verdict {
-    seccomp::run(
-        &seccomp::program(arch),
-        arch.audit_arch,
-        arch.nr_socket,
-        family,
-    )
-}
-
-#[test]
-fn filter_has_the_layout_of_sock_filter() {
-    assert_eq!(std::mem::size_of::<SockFilter>(), 8);
-    assert_eq!(std::mem::align_of::<SockFilter>(), 4);
-}
-
-#[test]
-fn socket_is_allowed_only_for_unix_and_netlink() {
-    for arch in [X86_64, AARCH64] {
-        assert_eq!(socket_verdict(arch, AF_UNIX.into()), Verdict::Allow);
-        assert_eq!(socket_verdict(arch, AF_NETLINK.into()), Verdict::Allow);
-        for (family, name) in [
-            (0u64, "AF_UNSPEC"),
-            (2, "AF_INET"),
-            (10, "AF_INET6"),
-            (17, "AF_PACKET"),
-            (29, "AF_CAN"),
-            (31, "AF_BLUETOOTH"),
-            (38, "AF_ALG"),
-            (40, "AF_VSOCK"),
-            (44, "AF_XDP"),
-            (45, "AF_MCTP"),
-            (4096, "unknown"),
-        ] {
-            assert_eq!(
-                socket_verdict(arch, family),
-                Verdict::Errno(EPERM),
-                "{name} on {:#x}",
-                arch.audit_arch
-            );
-        }
-    }
-}
-
-#[test]
-fn only_the_low_word_of_the_family_argument_counts() {
-    let arch = X86_64;
-    // The kernel reads `socket`'s first argument as an `int`; junk in the upper half of the
-    // register must neither hide an INET socket nor turn a UNIX one into a denial.
-    assert_eq!(
-        socket_verdict(arch, (1u64 << 32) | 2),
-        Verdict::Errno(EPERM)
-    );
-    assert_eq!(
-        socket_verdict(arch, 0xdead_beef_0000_0000 | u64::from(AF_UNIX)),
-        Verdict::Allow
-    );
-}
-
-#[test]
-fn other_system_calls_are_allowed_and_io_uring_is_not() {
-    for arch in [X86_64, AARCH64] {
-        let program = seccomp::program(arch);
-        for nr in [0u32, 1, 3, 42, 56, 59, 202, 231, 435] {
-            if nr == arch.nr_socket || nr == arch.nr_io_uring_setup {
-                continue;
-            }
-            assert_eq!(
-                seccomp::run(&program, arch.audit_arch, nr, 2),
-                Verdict::Allow,
-                "syscall {nr}"
-            );
-        }
-        assert_eq!(
-            seccomp::run(&program, arch.audit_arch, arch.nr_io_uring_setup, 0),
-            Verdict::Errno(EPERM)
-        );
-    }
-}
-
-#[test]
-fn the_alternate_x32_abi_cannot_be_used_to_reach_socket() {
-    let program = seccomp::program(X86_64);
-    let x32_socket = 0x4000_0000 | X86_64.nr_socket;
-    assert_eq!(
-        seccomp::run(&program, X86_64.audit_arch, x32_socket, 2),
-        Verdict::Errno(EPERM)
-    );
-    assert_eq!(
-        seccomp::run(&program, X86_64.audit_arch, 0x4000_0000, 0),
-        Verdict::Errno(EPERM)
-    );
-}
-
-#[test]
-fn a_foreign_architecture_is_killed() {
-    // 32-bit x86 on a 64-bit kernel.
-    let program = seccomp::program(X86_64);
-    assert_eq!(
-        seccomp::run(&program, 0x4000_0003, X86_64.nr_socket, 2),
-        Verdict::Kill
-    );
-    let program = seccomp::program(AARCH64);
-    assert_eq!(
-        seccomp::run(&program, X86_64.audit_arch, AARCH64.nr_socket, 1),
-        Verdict::Kill
-    );
-}
-
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-#[test]
-fn x86_64_numbers_match_libc() {
-    assert_eq!(X86_64.nr_socket as libc::c_long, libc::SYS_socket);
-    assert_eq!(
-        X86_64.nr_io_uring_setup as libc::c_long,
-        libc::SYS_io_uring_setup
-    );
-    assert_eq!(AF_UNIX as libc::c_int, libc::AF_UNIX);
-    assert_eq!(AF_NETLINK as libc::c_int, libc::AF_NETLINK);
-}
-
-#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-#[test]
-fn aarch64_numbers_match_libc() {
-    assert_eq!(AARCH64.nr_socket as libc::c_long, libc::SYS_socket);
-    assert_eq!(
-        AARCH64.nr_io_uring_setup as libc::c_long,
-        libc::SYS_io_uring_setup
-    );
-}
-
-#[test]
-fn only_unix_platforms_with_a_sandbox_report_isolation() {
-    let default = NetworkSandbox::platform_default();
-    assert_eq!(
-        default.isolates_network(),
-        cfg!(any(target_os = "macos", target_os = "linux"))
-    );
-    assert!(!NetworkSandbox::Unavailable.isolates_network());
-    assert!(!NetworkSandbox::Off.isolates_network());
-}
 
 #[test]
 fn macos_profile_denies_ip_dns_and_background_transfers() {
@@ -167,7 +21,6 @@ fn macos_profile_denies_ip_dns_and_background_transfers() {
 /// Tests that need a unix machine to run real processes. They check, for the sandbox alone (the
 /// environment table is switched off), that real tools cannot reach the loopback canary and that
 /// ordinary local work still functions.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod sandboxed {
     use std::os::unix::net::UnixListener;
 
@@ -315,7 +168,7 @@ mod sandboxed {
 
     #[test]
     fn a_failing_setup_runs_nothing() {
-        // The pre-exec hook of the Linux sandbox and the missing tool of the macOS one both end in
+        // The missing sandbox tool ends in
         // an error from the executor, never in a command that ran without the sandbox.
         let temp = tempfile::tempdir().unwrap();
         let marker = temp.path().join("ran");
@@ -327,21 +180,13 @@ mod sandboxed {
         assert!(!marker.exists(), "the command ran without its sandbox");
     }
 
-    #[cfg(target_os = "macos")]
     fn sandbox_failing_executor() -> LocalCommandExecutor {
         production_executor().with_network_sandbox(NetworkSandbox::EnforcedWithTool(
             "/nonexistent/sandbox-exec".into(),
         ))
     }
-
-    #[cfg(target_os = "linux")]
-    fn sandbox_failing_executor() -> LocalCommandExecutor {
-        // A pre-exec hook that fails stands in for a kernel without seccomp filters.
-        production_executor().with_network_sandbox(NetworkSandbox::FailingForTest)
-    }
 }
 
-#[cfg(unix)]
 #[test]
 fn a_failing_pre_exec_hook_prevents_the_command_from_running() {
     let temp = tempfile::tempdir().unwrap();
@@ -360,7 +205,6 @@ fn a_failing_pre_exec_hook_prevents_the_command_from_running() {
     assert!(!marker.exists());
 }
 
-#[cfg(target_os = "macos")]
 mod macos_only {
     use crate::terminal::model::session::command_executor::test_support::*;
 
@@ -462,49 +306,56 @@ _ = d.sem.wait(timeout: .now() + 8)
     }
 }
 
-#[cfg(target_os = "linux")]
-mod linux_only {
-    use crate::terminal::model::session::command_executor::test_support::*;
-
-    fn sandbox_only_executor() -> crate::terminal::model::session::LocalCommandExecutor {
-        production_executor().without_offline_environment()
-    }
-
-    #[test]
-    fn socket_calls_fail_with_eperm_for_inet_and_inet6_and_work_for_unix() {
-        let Some(python) = require_tool("python3") else {
-            return;
-        };
-        let temp = tempfile::tempdir().unwrap();
-        let script = temp.path().join("sockets.py");
-        std::fs::write(
-            &script,
-            "import socket, errno\n\
-             for name, family in (('inet', socket.AF_INET), ('inet6', socket.AF_INET6), ('unix', socket.AF_UNIX)):\n\
-             \x20   try:\n\
-             \x20       socket.socket(family); print(name, 'ok')\n\
-             \x20   except OSError as e:\n\
-             \x20       print(name, errno.errorcode[e.errno])\n",
-        )
+/// The switch that makes the executor trust an outer sandbox (`WARP_NETWORK_SANDBOX_BY_PARENT`)
+/// must exist only in test and integration-test builds. This checks the source: every mention of
+/// the switch outside the test module sits under a `cfg` that requires `test` or the
+/// `integration_tests` feature, and that feature is not part of any release feature.
+#[test]
+fn the_outer_sandbox_switch_is_compiled_only_into_test_builds() {
+    let source = include_str!("network_sandbox.rs");
+    let production = source
+        .split("#[cfg(test)]\n#[path = \"network_sandbox_tests.rs\"]")
+        .next()
         .unwrap();
-        let command = format!("{} {}", python.display(), script.display());
-        let variables = base_environment(temp.path());
-
-        let control = run_unprotected(&command, temp.path(), &system_path(), &variables);
+    let lines: Vec<&str> = production.lines().collect();
+    let mut mentions = 0;
+    for (index, line) in lines.iter().enumerate() {
+        let is_doc_or_comment = line.trim_start().starts_with("//");
+        if is_doc_or_comment
+            || !(line.contains("OUTER_SANDBOX_VARIABLE")
+                || line.contains("WARP_NETWORK_SANDBOX_BY_PARENT"))
+        {
+            continue;
+        }
+        mentions += 1;
+        // The item (`const`) carries its own attribute; a use inside `sandboxed_command` sits in an
+        // `if` whose statement carries the attribute a few lines above.
+        let attribute = lines[..index]
+            .iter()
+            .rev()
+            .take(4)
+            .find(|candidate| candidate.trim_start().starts_with("#[cfg("))
+            .unwrap_or_else(|| panic!("no cfg attribute above line {}: {line}", index + 1));
         assert!(
-            control.output.contains("inet ok"),
-            "fixture is insensitive: {}",
-            control.output
+            (attribute.contains("test") || attribute.contains("integration_tests"))
+                && !attribute.contains("not("),
+            "line {} is not compiled only into test builds: {attribute}",
+            index + 1
         );
-        let ran = run_as_generator(
-            sandbox_only_executor(),
-            &command,
-            temp.path(),
-            &system_path(),
-            &variables,
-        );
-        assert!(ran.output.contains("inet EPERM"), "{}", ran.output);
-        assert!(ran.output.contains("inet6 EPERM"), "{}", ran.output);
-        assert!(ran.output.contains("unix ok"), "{}", ran.output);
     }
+    assert!(
+        mentions >= 2,
+        "expected the definition and the use of the switch"
+    );
+
+    let manifest = include_str!("../../../../../Cargo.toml");
+    let release_features = manifest
+        .lines()
+        .filter(|line| line.starts_with("release_bundle") || line.starts_with("default"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !release_features.contains("integration_tests"),
+        "a release feature enables integration_tests: {release_features}"
+    );
 }

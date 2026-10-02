@@ -6855,7 +6855,6 @@ dependencies = [
 name = "prevent_sleep"
 version = "0.0.0"
 dependencies = [
- "cfg_aliases 0.2.1",
  "futures",
  "itertools 0.14.0",
  "log",
@@ -10142,7 +10141,6 @@ dependencies = [
  "bytes",
  "cc",
  "cfg-if",
- "cfg_aliases 0.2.1",
  "chrono",
  "clap",
  "cocoa",
@@ -10380,7 +10378,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "cfg-if",
- "cfg_aliases 0.2.1",
  "clap",
  "clap_complete",
  "color-print",

@@ -28,11 +28,6 @@ impl CommandBuilder {
     /// Use this when you need to run a command. The returned Command has the
     /// same API as `command::r#async::Command`, so callers don't need to change
     /// how they construct commands.
-    ///
-    /// On Windows, the command is wrapped in `cmd.exe /c` so that `.cmd` and
-    /// `.bat` scripts on PATH are resolved correctly (e.g. `npm.cmd`,
-    /// `typescript-language-server.cmd`). Rust's `Command::new` uses
-    /// `CreateProcessW` which only resolves `.exe` extensions.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn command(&self, program: impl AsRef<std::ffi::OsStr>) -> Command {
         let mut cmd = Command::new(program);

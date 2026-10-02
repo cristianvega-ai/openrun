@@ -12,7 +12,7 @@ pub struct RustAnalyzerCandidate;
 /// Returns the rust-analyzer asset name for the current platform.
 ///
 /// Asset names follow the pattern: rust-analyzer-{arch}-{vendor}-{os}.{ext}
-/// e.g. rust-analyzer-aarch64-apple-darwin.gz, rust-analyzer-x86_64-unknown-linux-gnu.gz
+/// e.g. rust-analyzer-aarch64-apple-darwin.gz
 #[cfg(feature = "local_fs")]
 fn asset_name() -> &'static str {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -22,23 +22,6 @@ fn asset_name() -> &'static str {
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     {
         "rust-analyzer-x86_64-apple-darwin.gz"
-    }
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    {
-        "rust-analyzer-x86_64-unknown-linux-gnu.gz"
-    }
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    {
-        "rust-analyzer-aarch64-unknown-linux-gnu.gz"
-    }
-    #[cfg(not(any(
-        all(target_os = "macos", target_arch = "aarch64"),
-        all(target_os = "macos", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "aarch64")
-    )))]
-    {
-        todo!("Unsupported platform for rust-analyzer")
     }
 }
 
@@ -116,13 +99,6 @@ impl LanguageServerCandidate for RustAnalyzerCandidate {
         _executor: &CommandBuilder,
         downloader: &Downloader,
     ) -> anyhow::Result<()> {
-        anyhow::ensure!(
-            !cfg!(target_os = "freebsd"),
-            "rust-analyzer is not auto-installable on FreeBSD: upstream \
-             GitHub releases publish no FreeBSD asset. Install it via \
-             `rustup component add rust-analyzer` or `pkg install \
-             rust-analyzer` and warp will pick it up off PATH."
-        );
         let asset_kind = AssetKind::from_filename(asset_name()).ok_or_else(|| {
             anyhow::anyhow!("Unsupported archive format for asset: {}", asset_name())
         })?;
@@ -134,11 +110,6 @@ impl LanguageServerCandidate for RustAnalyzerCandidate {
         &self,
         downloader: &Downloader,
     ) -> anyhow::Result<LanguageServerMetadata> {
-        anyhow::ensure!(
-            !cfg!(target_os = "freebsd"),
-            "rust-analyzer release metadata is unavailable on FreeBSD: \
-             upstream GitHub releases publish no FreeBSD asset."
-        );
         fetch_latest_metadata_from_github(
             downloader,
             "rust-lang",

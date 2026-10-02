@@ -267,14 +267,6 @@ fn parse_file_outline(path: &Path) -> anyhow::Result<FileOutline> {
     // of the allocator).
     //
     // See: https://github.com/tree-sitter/tree-sitter/issues/3129
-    #[cfg(all(
-        any(target_os = "linux", target_os = "freebsd"),
-        target_env = "gnu",
-        not(feature = "jemalloc")
-    ))]
-    unsafe {
-        nix::libc::malloc_trim(0);
-    }
 
     Ok(FileOutline { symbols })
 }

@@ -1,12 +1,9 @@
 pub mod state;
 
-mod system;
-
 use std::rc::Rc;
 
 use pathfinder_geometry::rect::RectF;
 pub use state::{State, StateEvent, WindowManager};
-pub use system::{CreateWindowingSystemError, System};
 
 use crate::actions::StandardAction;
 use crate::platform::WindowContext;

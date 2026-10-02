@@ -4,30 +4,11 @@
 //! depends on the platform. The Warp app must use this information to avoid rendering UI elements
 //! underneath them.
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-mod linux_only {
-    pub(super) use std::sync::Arc;
-
-    pub(super) use pathfinder_color::ColorU;
-    pub(super) use pathfinder_geometry::vector::vec2f;
-    pub(super) use warpui::elements::{
-        Align, Border, ChildAnchor, ConstrainedBox, Container, CornerRadius, Flex, Hoverable, Icon,
-        OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Radius, Rect, Stack,
-    };
-
-    pub(super) use crate::workspace::TOTAL_TAB_BAR_HEIGHT;
-}
-
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-use linux_only::*;
 use warpui::elements::{Empty, MouseStateHandle};
 use warpui::platform::FullscreenState;
 use warpui::{AppContext, Element, WindowId};
 
 use crate::themes::theme::WarpTheme;
-
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-const BUTTON_ICON_SIZE: f32 = 22.;
 
 pub fn traffic_light_data(ctx: &AppContext, window_id: WindowId) -> Option<TrafficLightData> {
     // If native window frame is on, the traffic lights are already in the frame.
@@ -44,14 +25,6 @@ pub fn traffic_light_data(ctx: &AppContext, window_id: WindowId) -> Option<Traff
             width: 64.,
             side: TrafficLightSide::Left,
             scales_with_zoom: false,
-        })
-    } else if cfg!(any(target_os = "linux", target_os = "freebsd"))
-        && !ctx.windows().is_tiling_window_manager()
-    {
-        Some(TrafficLightData {
-            width: 116.,
-            side: TrafficLightSide::Right,
-            scales_with_zoom: true,
         })
     } else {
         None
@@ -113,168 +86,6 @@ impl TrafficLightData {
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    pub fn render(
-        &self,
-        fullscreen_state: FullscreenState,
-        mouse_states: &TrafficLightMouseStates,
-        theme: &WarpTheme,
-        _app: &AppContext,
-    ) -> Box<dyn Element> {
-        if !cfg!(any(target_os = "linux", target_os = "freebsd")) {
-            return Empty::new().finish();
-        }
-
-        let fg_color = theme.foreground().into_solid();
-        let maximize_button_icon =
-            Self::render_linux_maximize_button_icon(fg_color, fullscreen_state);
-
-        ConstrainedBox::new(
-            Align::new(
-                Flex::row()
-                    .with_children([
-                        Container::new(
-                            Self::render_button(
-                                Arc::clone(&mouse_states.minimize_window_button),
-                                ConstrainedBox::new(
-                                    Rect::new().with_background_color(fg_color).finish(),
-                                )
-                                .with_height(2.)
-                                .with_width(8.)
-                                .finish(),
-                                theme,
-                            )
-                            .on_click(|evt, _, _| {
-                                evt.dispatch_action("root_view:minimize_window", ());
-                            })
-                            .finish(),
-                        )
-                        .with_margin_right(16.)
-                        .finish(),
-                        Self::render_button(
-                            Arc::clone(&mouse_states.maximize_window_button),
-                            maximize_button_icon,
-                            theme,
-                        )
-                        .on_click(move |evt, _, _| {
-                            if fullscreen_state == FullscreenState::Fullscreen {
-                                evt.dispatch_action("root_view:toggle_fullscreen", ());
-                            } else {
-                                evt.dispatch_action("root_view:toggle_maximize_window", ());
-                            }
-                        })
-                        .finish(),
-                        Container::new(
-                            Self::render_button(
-                                Arc::clone(&mouse_states.close_window_button),
-                                ConstrainedBox::new(
-                                    Icon::new("bundled/svg/linux/decorations/close.svg", fg_color)
-                                        .finish(),
-                                )
-                                .with_height(8.)
-                                .with_width(8.)
-                                .finish(),
-                                theme,
-                            )
-                            .on_click(|evt, _, _| {
-                                evt.dispatch_action("root_view:close_window", ());
-                            })
-                            .finish(),
-                        )
-                        .with_margin_left(16.)
-                        .with_margin_right(12.)
-                        .finish(),
-                    ])
-                    .finish(),
-            )
-            .finish(),
-        )
-        .with_max_height(TOTAL_TAB_BAR_HEIGHT)
-        .with_width(self.width)
-        .finish()
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn render_linux_maximize_button_icon(
-        fg_color: ColorU,
-        fullscreen_state: FullscreenState,
-    ) -> Box<dyn Element> {
-        let mut maximize_button_icon = ConstrainedBox::new(
-            Rect::new()
-                .with_border(Border::all(2.).with_border_color(fg_color))
-                .finish(),
-        )
-        .with_width(6.)
-        .with_height(6.)
-        .finish();
-
-        // If the window is already maximized, the icon looks a bit different.
-        if fullscreen_state != FullscreenState::Normal {
-            let mut stack = Stack::new();
-            stack.add_positioned_child(
-                maximize_button_icon,
-                OffsetPositioning::offset_from_parent(
-                    vec2f(0., 0.),
-                    ParentOffsetBounds::Unbounded,
-                    ParentAnchor::BottomLeft,
-                    ChildAnchor::BottomLeft,
-                ),
-            );
-            stack.add_positioned_child(
-                ConstrainedBox::new(
-                    Rect::new()
-                        .with_border(
-                            Border::new(1.)
-                                .with_sides(true, false, false, true)
-                                .with_border_color(fg_color),
-                        )
-                        .with_corner_radius(CornerRadius::with_all(Radius::Pixels(1.)))
-                        .finish(),
-                )
-                .with_width(6.)
-                .with_height(6.)
-                .finish(),
-                OffsetPositioning::offset_from_parent(
-                    vec2f(0., 0.),
-                    ParentOffsetBounds::Unbounded,
-                    ParentAnchor::TopRight,
-                    ChildAnchor::TopRight,
-                ),
-            );
-            maximize_button_icon = ConstrainedBox::new(stack.finish())
-                .with_width(8.)
-                .with_height(8.)
-                .finish();
-        }
-
-        maximize_button_icon
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn render_button(
-        mouse_state: MouseStateHandle,
-        child: Box<dyn Element>,
-        theme: &WarpTheme,
-    ) -> Hoverable {
-        Hoverable::new(mouse_state, |state| {
-            let background_color = if state.is_hovered() {
-                theme.surface_3()
-            } else {
-                theme.surface_2()
-            };
-            Container::new(
-                ConstrainedBox::new(Align::new(child).finish())
-                    .with_width(BUTTON_ICON_SIZE)
-                    .with_height(BUTTON_ICON_SIZE)
-                    .finish(),
-            )
-            .with_background(background_color)
-            .with_corner_radius(CornerRadius::with_all(Radius::Percentage(50.)))
-            .finish()
-        })
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
     pub fn render(
         &self,
         _fullscreen_state: FullscreenState,

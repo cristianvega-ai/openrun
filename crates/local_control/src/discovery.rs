@@ -279,9 +279,6 @@ pub fn discovery_dir() -> PathBuf {
     if let Some(path) = std::env::var_os(DISCOVERY_DIR_ENV) {
         return PathBuf::from(path);
     }
-    if let Some(path) = std::env::var_os("XDG_RUNTIME_DIR") {
-        return PathBuf::from(path).join("warp").join("local-control");
-    }
     let home = std::env::var_os("HOME").unwrap_or_else(|| ".".into());
     PathBuf::from(home).join(".warp").join("local-control")
 }

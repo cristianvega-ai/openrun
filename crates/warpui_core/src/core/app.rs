@@ -51,7 +51,7 @@ use crate::platform::{
 };
 use crate::presenter::{CursorUpdate, DispatchedActionKind};
 use crate::util::post_inc;
-use crate::windowing::{self, WindowCallbacks, WindowManager};
+use crate::windowing::{WindowCallbacks, WindowManager};
 use crate::{
     AccessibilityData, Action, AddSingletonModel, AddWindowOptions, AnyModel, AnyModelHandle,
     ApplicationBundleInfo, Clipboard, CursorInfo, Effect, Element, Entity, EntityId, EntityIdMap,
@@ -1165,9 +1165,6 @@ impl AppContext {
     }
 
     pub fn unregister_global_shortcut(&mut self, shortcut: &Keystroke) {
-        if self.is_wayland() {
-            return;
-        }
         self.global_shortcuts.remove(shortcut);
         self.platform_delegate.unregister_global_shortcut(shortcut);
     }
@@ -1178,9 +1175,6 @@ impl AppContext {
         action: &'static str,
         arg: T,
     ) {
-        if self.is_wayland() {
-            return;
-        }
         // Note that for global hotkey we don't support registering the meta key so
         // we will treat meta key as alt.
         if shortcut.meta {
@@ -2455,10 +2449,8 @@ impl AppContext {
             title,
             fullscreen_state,
             background_blur_radius_pixels,
-            background_backdrop,
             anchor_new_windows_from_closed_position,
             on_gpu_driver_selected: on_gpu_driver_reported,
-            window_instance,
         } = add_window_options;
 
         let window_id = window_id.unwrap_or_else(WindowId::new);
@@ -2483,11 +2475,8 @@ impl AppContext {
             title,
             style: window_style,
             background_blur_radius_pixels,
-            background_backdrop,
             gpu_power_preference: self.rendering_config.gpu_power_preference,
-            backend_preference: self.rendering_config.backend_preference,
             on_gpu_device_info_reported: on_gpu_driver_reported.unwrap_or(Box::new(|_| {})),
-            window_instance,
         };
 
         let callbacks = WindowCallbacks {
@@ -2791,7 +2780,6 @@ impl AppContext {
         &mut self,
         data: ClosedWindowData,
         background_blur_radius_pixels: Option<u8>,
-        background_backdrop: platform::WindowBackdrop,
     ) {
         let ClosedWindowData {
             window_id,
@@ -2820,7 +2808,6 @@ impl AppContext {
 
         let add_window_options = AddWindowOptions {
             background_blur_radius_pixels,
-            background_backdrop,
             window_bounds: WindowBounds::ExactPosition(bounds),
             // TODO(alokedesai): Determine if, and how, we want to pass the on_gpu_driver_reported
             // callback from the original window back to this window.
@@ -4359,7 +4346,6 @@ impl AppContext {
             window_bounds: WindowBounds::ExactPosition(RectF::new(origin, size)),
             anchor_new_windows_from_closed_position:
                 NextNewWindowsHasThisWindowsBoundsUponClose::No,
-            window_instance: Some("dev.warp.warpui-debug".to_owned()),
             title: Some("View Tree Debugger".to_owned()),
             ..Default::default()
         };
@@ -4591,13 +4577,6 @@ impl AppContext {
 
     pub fn window_ids(&self) -> impl Iterator<Item = WindowId> + '_ {
         self.windows.keys().cloned()
-    }
-
-    pub fn is_wayland(&self) -> bool {
-        matches!(
-            self.windows().windowing_system(),
-            Some(windowing::System::Wayland)
-        )
     }
 
     /// Returns all view IDs registered in the given window.

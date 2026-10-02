@@ -100,7 +100,7 @@ use warpui::geometry::vector::{Vector2F, vec2f};
 use warpui::image_cache::ImageType;
 use warpui::keymap::Keystroke;
 use warpui::notification::{NotificationSendError, RequestPermissionsOutcome, UserNotification};
-use warpui::platform::{Cursor, OperatingSystem};
+use warpui::platform::Cursor;
 use warpui::text::SelectionType;
 use warpui::ui_components::components::UiComponent;
 use warpui::units::{IntoLines, IntoPixels, Lines, Pixels};
@@ -164,9 +164,9 @@ use crate::settings::import::view::{SettingsImportEvent, SettingsImportView};
 use crate::settings::{
     AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
     BlockVisibilitySettingsChangedEvent, CLIAgentSettings, CodeSettings, DebugSettings,
-    DebugSettingsChangedEvent, EmacsBindingsSettings, FontSettings, FontSettingsChangedEvent,
-    InputModeSettings, InputModeSettingsChangedEvent, InputSettings, PaneSettings,
-    PaneSettingsChangedEvent, SelectionSettings, VimBannerSettings,
+    DebugSettingsChangedEvent, FontSettings, FontSettingsChangedEvent, InputModeSettings,
+    InputModeSettingsChangedEvent, InputSettings, PaneSettings, PaneSettingsChangedEvent,
+    SelectionSettings, VimBannerSettings,
 };
 use crate::settings_view::keybindings::KeybindingChangedNotifier;
 use crate::settings_view::{SettingsSection, flags};
@@ -274,7 +274,7 @@ use crate::throttle::throttle;
 use crate::ui_components::icons::{self};
 use crate::util::bindings::{
     CustomAction, custom_tag_to_keystroke, keybinding_name_to_display_string,
-    keybinding_name_to_keystroke, set_custom_keybinding,
+    keybinding_name_to_keystroke,
 };
 use crate::util::clipboard::clipboard_content_with_escaped_paths;
 use crate::util::color::darken;
@@ -425,13 +425,6 @@ pub const ALIAS_EXPANSION_BANNER_SEEN_KEY: &str = "AliasExpansionBannerSeen";
 /// and triggering the warpification (subshell bootstrapping).
 /// Reached this number after experimenting with different values to find a reliable delay.
 const AUTO_WARPIFY_DELAY: u64 = 1000;
-
-/// Binding names to be customized if the user indicates they prefer
-/// Emacs-style keybindings instead of IDE-style keybindings.
-/// These are specific to non-MacOS desktop platforms.
-const SELECT_ALL_BINDING_NAME: &str = "editor_view:select_all";
-const MOVE_LINE_START_BINDING_NAME: &str = "editor_view:move_to_line_start";
-const MOVE_LINE_END_BINDING_NAME: &str = "editor_view:move_to_line_end";
 
 /// `shell_plugins` tags reported by bootstrap when ctrl-r identifies a supported shell plugin.
 /// fzf provides ctrl-r, ctrl-t, and alt-c, while atuin only provides ctrl-r.
@@ -1516,11 +1509,6 @@ pub struct TerminalView {
     incompatible_configuration_banner: ViewHandle<Banner<TerminalAction>>,
     is_incompatible_configuration_banner_open: bool,
 
-    /// Non-MacOS banner to ask if the user prefers MacOS bindings
-    /// or Emacs-style bindings for `ctrl-a` and `ctrl-e`.
-    emacs_bindings_banner: ViewHandle<Banner<TerminalAction>>,
-    is_emacs_bindings_banner_open: bool,
-
     /// Banner shown when an OSC 52 clipboard operation is blocked by the user's setting.
     osc52_clipboard_blocked_banner: ViewHandle<Banner<TerminalAction>>,
     /// Which type of clipboard operation was blocked (if the banner is visible).
@@ -2080,47 +2068,6 @@ impl TerminalView {
             me.handle_incompatible_configuration_banner_event(event, ctx);
         });
 
-        let emacs_bindings_banner = ctx.add_typed_action_view(|_| {
-            Banner::new_with_buttons(
-                BannerTextContent::formatted_text(vec![
-                    FormattedTextFragment::plain_text("Did you intend "),
-                    FormattedTextFragment::inline_code("ctrl-a"),
-                    FormattedTextFragment::plain_text("/"),
-                    FormattedTextFragment::inline_code("ctrl-e"),
-                    FormattedTextFragment::plain_text(" to move the cursor?"),
-                ]),
-                // Here, we use DismissalType::Temporary and DismissalType::Permanent variants
-                // as stand-ins for changing bindings vs. leaving them as-is.
-                // TODO: update Banner to support generic event type.
-                vec![
-                    BannerTextButton::new(
-                        String::from("Yes, use Emacs-style bindings"),
-                        Rc::new(|event_ctx, _app_ctx, _| {
-                            event_ctx.dispatch_typed_action(
-                                BannerAction::<TerminalAction>::Dismiss(DismissalType::Temporary),
-                            );
-                        }),
-                    ),
-                    BannerTextButton::new(
-                        String::from("No, keep IDE bindings"),
-                        Rc::new(|event_ctx, _app_ctx, _| {
-                            event_ctx.dispatch_typed_action(
-                                BannerAction::<TerminalAction>::Dismiss(DismissalType::Permanent),
-                            );
-                        }),
-                    ),
-                ],
-                /* with_close_button */ false,
-            )
-            .with_icon(icons::Icon::HelpCircle)
-        });
-
-        if OperatingSystem::get().is_linux() {
-            ctx.subscribe_to_view(&emacs_bindings_banner, |me, _, event, ctx| {
-                me.handle_emacs_bindings_banner_clicked(event, ctx);
-            });
-        }
-
         let osc52_clipboard_blocked_banner = ctx.add_typed_action_view(|_| {
             Banner::<TerminalAction>::new_with_buttons(
                 BannerTextContent::plain_text(
@@ -2350,8 +2297,6 @@ impl TerminalView {
             slow_bootstrap_banner_auto_dismiss_handle: None,
             incompatible_configuration_banner,
             is_incompatible_configuration_banner_open: false,
-            emacs_bindings_banner,
-            is_emacs_bindings_banner_open: false,
             control_master_error_banner,
             control_master_error_banner_state: Default::default(),
             control_master_error_banner_suppressed,
@@ -6863,15 +6808,6 @@ impl TerminalView {
         if !self.selected_blocks.is_empty() {
             self.copy_blocks(BlockEntity::CommandAndOutput, ctx);
         }
-
-        // If nothing was copied and a fullscreen TUI (alt screen) is managing its own selection,
-        // forward the copy intent to the foreground TUI so it can copy its own selection.
-        if cfg!(target_os = "linux")
-            && self.selected_blocks.is_empty()
-            && self.model.lock().is_alt_screen_active()
-        {
-            self.user_write_ctrl_c_to_pty(ctx);
-        }
     }
 
     fn copy_commands(&mut self, ctx: &mut ViewContext<Self>) {
@@ -9435,12 +9371,6 @@ impl TerminalView {
             InputEvent::CtrlC => {
                 self.ctrl_c(ctx);
             }
-            InputEvent::EmacsBindingUsed => {
-                if OperatingSystem::get().is_linux() && self.should_show_emacs_bindings_banner(ctx)
-                {
-                    self.show_emacs_bindings_banner(ctx);
-                }
-            }
             InputEvent::InputFocusedFromMiddleClick => {
                 self.focus_input_box(ctx);
             }
@@ -9775,48 +9705,6 @@ impl TerminalView {
     /// Whether the incompatible shell configuration banner is open.
     pub fn is_incompatible_configuration_banner_open(&self) -> bool {
         self.is_incompatible_configuration_banner_open
-    }
-
-    fn handle_emacs_bindings_banner_clicked(
-        &mut self,
-        event: &BannerEvent<TerminalAction>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        if matches!(event, BannerEvent::Dismiss(DismissalType::Temporary)) {
-            set_custom_keybinding(SELECT_ALL_BINDING_NAME, &CTRL_SHIFT_A_KEYSTROKE, ctx);
-            set_custom_keybinding(MOVE_LINE_START_BINDING_NAME, &CTRL_A_KEYSTROKE, ctx);
-            set_custom_keybinding(MOVE_LINE_END_BINDING_NAME, &CTRL_E_KEYSTROKE, ctx);
-        }
-        EmacsBindingsSettings::handle(ctx).update(ctx, |settings_model, settings_ctx| {
-            report_if_error!(
-                settings_model
-                    .emacs_bindings_banner_state
-                    .set_value(BannerState::Dismissed, settings_ctx)
-            );
-        });
-        self.is_emacs_bindings_banner_open = false;
-        ctx.notify();
-    }
-
-    fn should_show_emacs_bindings_banner(&mut self, ctx: &mut ViewContext<Self>) -> bool {
-        // Is this the active session?
-        // We should only show the banner in one place at a time.
-        if !self.is_active_session(ctx) {
-            return false;
-        }
-
-        // Was the banner already open or dismissed?
-        let emacs_bindings_banner_displayed = self.is_emacs_bindings_banner_open
-            || EmacsBindingsSettings::handle(ctx).read(ctx, |banner_settings, _| {
-                *banner_settings.emacs_bindings_banner_state.value() == BannerState::Dismissed
-            });
-
-        !emacs_bindings_banner_displayed
-    }
-
-    fn show_emacs_bindings_banner(&mut self, ctx: &mut ViewContext<Self>) {
-        self.is_emacs_bindings_banner_open = true;
-        ctx.notify();
     }
 
     /// Updates the state of the "incompatible shell configuration" banner with
@@ -11681,15 +11569,6 @@ impl TerminalView {
 
                 // On Linux, immediately mark the request permission status as accepted since there's no concept of
                 // requesting desktop notification permissions.
-                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                {
-                    if let NotificationsDiscoveryBanner::Open {
-                        request_outcome, ..
-                    } = &mut self.inline_banners_state.notifications_discovery_banner
-                    {
-                        *request_outcome = Some(RequestPermissionsOutcome::Accepted);
-                    }
-                }
 
                 ctx.request_desktop_notification_permissions(move |view, outcome, ctx| {
                     if let NotificationsDiscoveryBanner::Open {
@@ -13027,8 +12906,6 @@ impl View for TerminalView {
             stack.add_child(ChildView::new(&self.control_master_error_banner).finish());
         } else if self.is_incompatible_configuration_banner_open {
             stack.add_child(ChildView::new(&self.incompatible_configuration_banner).finish());
-        } else if self.is_emacs_bindings_banner_open {
-            stack.add_child(ChildView::new(&self.emacs_bindings_banner).finish());
         } else if self.osc52_clipboard_blocked_type.is_some() {
             stack.add_child(ChildView::new(&self.osc52_clipboard_blocked_banner).finish());
         }

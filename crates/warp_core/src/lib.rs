@@ -10,7 +10,6 @@ pub mod features;
 pub mod interval_timer;
 #[cfg(target_os = "macos")]
 pub mod macos;
-pub mod operating_system_info;
 pub mod paths;
 pub mod platform;
 pub mod safe_log;

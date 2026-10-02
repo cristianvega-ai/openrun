@@ -6,19 +6,6 @@ pub trait Clipboard: 'static {
     fn write(&mut self, contents: ClipboardContent);
 
     fn read(&mut self) -> ClipboardContent;
-
-    /// Writes to the primary clipboard, used to support the Primary Selection Protocol (middle-click paste).
-    ///
-    /// NOTE: For platforms that don't support the primary clipboard, it writes to the default clipboard instead.
-    fn write_to_primary_clipboard(&mut self, contents: ClipboardContent) {
-        self.write(contents)
-    }
-
-    /// Reads the primary clipboard, used to support the Primary Selection Protocol (middle-click paste).
-    /// This reads from the default clipboard on platforms other than Linux.
-    fn read_from_primary_clipboard(&mut self) -> ClipboardContent {
-        self.read()
-    }
 }
 
 // Clipboard could contain content with multiple data types at the same type.

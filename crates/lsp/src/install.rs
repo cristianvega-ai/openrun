@@ -147,7 +147,7 @@ where
 pub enum AssetKind {
     /// A gzip-compressed file (e.g., `rust-analyzer-aarch64-apple-darwin.gz`)
     Gz,
-    /// A zip archive (e.g., `rust-analyzer-x86_64-pc-windows-msvc.zip`)
+    /// A zip archive (e.g., `clangd-mac-v21.0.0.zip`)
     Zip,
 }
 
@@ -217,7 +217,7 @@ pub async fn install_from_github(
         .await
         .with_context(|| format!("Failed to create install directory: {:?}", install_dir))?;
 
-    // The binary name is the server name (with .exe on Windows)
+    // The binary name is the server name
     let binary_name = server_name.to_string();
 
     // Download the file

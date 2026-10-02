@@ -1,5 +1,3 @@
-#[cfg(target_os = "linux")]
-mod crash_recovery;
 pub mod global_search;
 pub(crate) mod left_panel;
 pub(crate) mod right_panel;
@@ -409,10 +407,6 @@ enum TabConfigsMenuOpenSource {
 /// This enumerates the different kinds of banners we show to the user.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum WorkspaceBanner {
-    /// to display when recovering from a crash that may have been due to use
-    /// of Wayland
-    #[cfg(target_os = "linux")]
-    WaylandCrashRecovery,
     /// to display when settings.toml has errors (parse failure or invalid values)
     InvalidSettings,
 }
@@ -421,8 +415,6 @@ impl WorkspaceBanner {
     /// Whether the banner shows a close button.
     fn is_dismissible(&self) -> bool {
         match self {
-            #[cfg(target_os = "linux")]
-            Self::WaylandCrashRecovery => true,
             Self::InvalidSettings => true,
         }
     }
@@ -7870,9 +7862,6 @@ impl Workspace {
                 if cfg!(all(not(target_family = "wasm"), target_os = "macos")) {
                     AppContext::show_native_platform_modal(ctx, dialog);
                     return false;
-                } else if cfg!(all(not(target_family = "wasm"), target_os = "linux")) {
-                    self.show_native_modal(dialog, ctx);
-                    return false;
                 }
             }
         }
@@ -10374,12 +10363,6 @@ impl Workspace {
             WindowSettingsChangedEvent::BackgroundOpacity { .. } => {
                 ctx.notify();
             }
-            WindowSettingsChangedEvent::BackgroundBackdrop { .. } => {
-                let backdrop = *WindowSettings::as_ref(ctx).background_backdrop;
-                if let Some(window) = ctx.windows().platform_window(ctx.window_id()) {
-                    window.set_background_backdrop(backdrop);
-                }
-            }
             WindowSettingsChangedEvent::LeftPanelVisibilityAcrossTabs { .. } => {
                 if self.left_panel_visibility_across_tabs_enabled(ctx) {
                     self.left_panel_open = self
@@ -12623,14 +12606,11 @@ impl Workspace {
     // Allow let and return because of the conditional linux compilation (otherwise we get a clippy
     // warning on mac)
     #[allow(clippy::let_and_return)]
-    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+    #[allow(unused_variables)]
     fn banner_fields(&self, app: &AppContext) -> Option<WorkspaceBannerFields> {
         // It's more important that users are notified their settings file is broken than that
         // they continue to see the crash recovery banner.
         let banner_fields = self.render_settings_error_banner();
-
-        #[cfg(target_os = "linux")]
-        let banner_fields = banner_fields.or_else(|| crash_recovery::banner_metadata(app));
 
         banner_fields
     }
@@ -12844,10 +12824,6 @@ impl Workspace {
         banner_type: &WorkspaceBanner,
     ) {
         match banner_type {
-            #[cfg(all(target_os = "linux", target_os = "linux"))]
-            WorkspaceBanner::WaylandCrashRecovery => {
-                crash_recovery::dismiss_workspace_banner(ctx);
-            }
             WorkspaceBanner::InvalidSettings => {
                 self.settings_error_banner_dismissed = true;
                 self.sync_settings_error_state_into_settings_pane(ctx);
@@ -13160,10 +13136,6 @@ impl Workspace {
             context.set.insert(flags::COPY_ON_SELECT_CONTEXT_FLAG);
         }
 
-        if SelectionSettings::as_ref(app).linux_selection_clipboard_enabled() {
-            context.set.insert(flags::LINUX_SELECTION_CLIPBOARD_FLAG);
-        }
-
         if *editor_settings.autocomplete_symbols {
             context.set.insert(flags::AUTOCOMPLETE_SYMBOLS_CONTEXT_FLAG);
         }
@@ -13409,17 +13381,6 @@ impl Workspace {
             context
                 .set
                 .insert(flags::SHOW_AUTOSUGGESTION_IGNORE_BUTTON_FLAG);
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            let force_x11 = *crate::settings::LinuxAppConfiguration::as_ref(app)
-                .force_x11
-                .value();
-
-            if !force_x11 {
-                context.set.insert(flags::ALLOW_NATIVE_WAYLAND);
-            }
         }
 
         let terminal_settings = TerminalSettings::as_ref(app);
@@ -15644,27 +15605,8 @@ impl View for Workspace {
             stack.finish()
         };
 
-        #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+        #[allow(unused_mut)]
         let mut event_handler = EventHandler::new(stack);
-
-        #[cfg(target_os = "linux")]
-        {
-            event_handler =
-                event_handler.on_scroll_wheel(move |ctx, _app, delta, modifiers_state| {
-                    if !modifiers_state.ctrl {
-                        return DispatchEventResult::PropagateToParent;
-                    }
-
-                    // If the control key is being held, scrolling should scale the zoom level or font size
-                    if delta.y() > 0.0 {
-                        ctx.dispatch_typed_action(WorkspaceAction::IncreaseZoom);
-                    } else if delta.y() < 0.0 {
-                        ctx.dispatch_typed_action(WorkspaceAction::DecreaseZoom);
-                    }
-
-                    DispatchEventResult::StopPropagation
-                });
-        }
 
         let event_handler =
             event_handler.on_modifier_state_changed(|ctx, _app, key_code, state| {

@@ -235,21 +235,8 @@ fn project_dirs_for_app_id(
     app_id: AppId,
     data_profile: Option<&str>,
 ) -> Option<directories::ProjectDirs> {
-    cfg_if::cfg_if! {
-        if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
-            // Adjust the base application name so that we end up with
-            // directories like "warp-terminal" and "warp-terminal-dev", to
-            // match our Linux package name.
-            let base_app_name = match app_id.application_name() {
-                "Warp" => "Warp-Terminal".to_owned(),
-                "WarpOss" => "Warp-Oss".to_owned(),
-                other if other.starts_with("Warp") => other.replace("Warp", "Warp-Terminal-"),
-                _ => app_id.application_name().to_owned(),
-            };
-        } else {
-            let base_app_name = app_id.application_name().to_owned();
-        }
-    }
+    let base_app_name = app_id.application_name().to_owned();
+
     let app_name = if let Some(data_profile) = data_profile {
         format!("{base_app_name}-{data_profile}")
     } else {
@@ -299,17 +286,8 @@ pub fn app_group_container_path() -> Option<PathBuf> {
 /// Unlike [`warpui_core::AssetProvider`] assets, which are generally embedded in the binary, these are
 /// stored on the filesystem alongside the rest of Warp.
 ///
-/// ## macOS
 /// For the `.app` bundle, the resources directory is `$APP_DIR/Contents/Resources`
 /// (e.g. `/Applications/Warp.app/Contents/Resources`).
-///
-/// ## Linux
-/// The resources directory is `$INSTALL_DIR/resources`, where `$INSTALL_DIR` depends on the
-/// specific package manager. For example, on Ubuntu this might be `/opt/warpdotdev/warp-terminal/resources`.
-///
-/// ## Windows
-/// The resources directory is `$INSTALL_DIR/resources`, where `$INSTALL_DIR` is the directory
-/// containing the Warp executable (e.g. `C:\Program Files\WarpDev\resources`).
 pub fn bundled_resources_dir() -> Option<PathBuf> {
     cfg_if::cfg_if! {
         if #[cfg(target_os = "macos")] {
@@ -317,11 +295,6 @@ pub fn bundled_resources_dir() -> Option<PathBuf> {
             crate::macos::get_bundle_path()
                 .ok()
                 .map(|bundle_path| PathBuf::from(bundle_path).join("Contents").join("Resources"))
-        } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
-            std::env::current_exe()
-                .ok()
-                .and_then(|executable| std::fs::canonicalize(executable).ok())
-                .and_then(|executable| executable.parent().map(|parent| parent.join("resources")))
         } else {
             None
         }

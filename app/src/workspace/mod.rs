@@ -289,8 +289,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::ToggleTabConfigsMenu,
         )
         .with_context_predicate(id!("Workspace"))
-        .with_mac_key_binding("cmd-ctrl-t")
-        .with_linux_or_windows_key_binding("ctrl-alt-shift-T"),
+        .with_mac_key_binding("cmd-ctrl-t"),
         EditableBinding::new(
             "workspace:activate_first_tab",
             "Switch to 1st tab",
@@ -371,8 +370,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("Workspace") & id!("Workspace_MultipleTabs") & !id!("Workspace_PaneDragging"),
         )
-        .with_mac_key_binding("shift-cmd-{")
-        .with_linux_or_windows_key_binding("ctrl-pageup"),
+        .with_mac_key_binding("shift-cmd-{"),
         EditableBinding::new(
             "workspace:activate_next_tab",
             "Activate next tab",
@@ -382,8 +380,7 @@ pub fn init(app: &mut AppContext) {
             id!("Workspace") & id!("Workspace_MultipleTabs") & !id!("Workspace_PaneDragging"),
         )
         .with_group(bindings::BindingGroup::Navigation.as_str())
-        .with_mac_key_binding("shift-cmd-}")
-        .with_linux_or_windows_key_binding("ctrl-pagedown"),
+        .with_mac_key_binding("shift-cmd-}"),
         EditableBinding::new(
             "pane_group:navigate_prev",
             "Activate previous pane",
@@ -433,8 +430,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_enabled(|| cfg!(feature = "local_fs"))
         .with_context_predicate(id!("Workspace"))
-        .with_mac_key_binding("cmd-shift-+")
-        .with_linux_or_windows_key_binding("ctrl-shift-+"),
+        .with_mac_key_binding("cmd-shift-+"),
         EditableBinding::new(
             TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME,
             BindingDescription::new("Toggle vertical tabs panel")
@@ -467,8 +463,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::Navigation.as_str())
         .with_context_predicate(id!("Workspace") & id!(flags::SHOW_PROJECT_EXPLORER))
-        .with_mac_key_binding("cmd-shift->")
-        .with_linux_or_windows_key_binding("ctrl-shift->"),
+        .with_mac_key_binding("cmd-shift->"),
         EditableBinding::new(
             TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
             BindingDescription::new("Toggle project explorer")
@@ -483,9 +478,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::OpenGlobalSearch,
         )
         .with_context_predicate(id!("Workspace") & id!(flags::SHOW_GLOBAL_SEARCH))
-        .with_mac_key_binding("cmd-shift-F")
-        // we use alt because we use ctrl-shift-f for find because ctrl-f needs to be reserved for the shell
-        .with_linux_or_windows_key_binding("alt-shift-F"),
+        .with_mac_key_binding("cmd-shift-F"),
         EditableBinding::new(
             "workspace:close_panel",
             BindingDescription::new("Close focused panel")
@@ -863,7 +856,6 @@ pub fn init(app: &mut AppContext) {
     )
     .with_context_predicate(id!("Workspace"))
     .with_mac_key_binding("cmd-shift-G")
-    .with_linux_or_windows_key_binding("ctrl-shift-G")
     .with_group(bindings::BindingGroup::CliAgents.as_str())]);
 
     app.register_editable_bindings([EditableBinding::new(
@@ -873,7 +865,6 @@ pub fn init(app: &mut AppContext) {
     )
     .with_context_predicate(id!("Workspace"))
     .with_mac_key_binding("cmd-shift-U")
-    .with_linux_or_windows_key_binding("ctrl-shift-U")
     .with_group(bindings::BindingGroup::CliAgents.as_str())]);
 
     add_open_setting_pages_as_editable_binding(app);

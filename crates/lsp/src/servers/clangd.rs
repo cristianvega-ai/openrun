@@ -53,8 +53,6 @@ impl ClangdCandidate {
 fn asset_os_suffix() -> anyhow::Result<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("macos", _) => Ok("mac"),
-        ("linux", "x86_64") => Ok("linux"),
-        ("windows", "x86_64") => Ok("windows"),
         (os, arch) => anyhow::bail!("Unsupported platform for clangd: {os}/{arch}"),
     }
 }

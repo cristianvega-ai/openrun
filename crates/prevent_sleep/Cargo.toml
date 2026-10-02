@@ -23,6 +23,3 @@ objc2-foundation = { workspace = true, features = [
     "NSProcessInfo",
     "NSString",
 ] }
-
-[build-dependencies]
-cfg_aliases.workspace = true

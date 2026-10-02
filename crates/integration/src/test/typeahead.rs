@@ -238,7 +238,6 @@ pub fn test_input_reporting_powershell() -> Builder {
 }
 
 /// This tests UNIX-specific signal handling.
-#[cfg(not(windows))]
 pub fn test_background_output() -> Builder {
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -331,10 +330,4 @@ time.sleep(100)
                 ),
             ),
         )
-}
-
-#[cfg(windows)]
-// TODO: enable this test for windows
-pub fn test_background_output() -> Builder {
-    new_builder()
 }

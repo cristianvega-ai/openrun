@@ -316,7 +316,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process", 
 [build-dependencies]
 anyhow = "1.0"
 cc = "1.0"
-cfg_aliases.workspace = true
 tempfile.workspace = true
 walkdir = "2.3.2"
 warp_util.workspace = true

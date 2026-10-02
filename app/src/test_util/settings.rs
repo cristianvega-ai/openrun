@@ -21,10 +21,10 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     use crate::settings::manager::SettingsManager;
     use crate::settings::{
         AccessibilitySettings, AliasExpansionSettings, AppEditorSettings, BlockVisibilitySettings,
-        CLIAgentSettings, CodeSettings, DebugSettings, EmacsBindingsSettings, FontSettings,
-        GPUSettings, HistorySettings, InputModeSettings, InputSettings, LocalControlSettings,
-        PaneSettings, SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings,
-        ThemeSettings, VimBannerSettings, init_and_register_user_preferences,
+        CLIAgentSettings, CodeSettings, DebugSettings, FontSettings, GPUSettings, HistorySettings,
+        InputModeSettings, InputSettings, LocalControlSettings, PaneSettings,
+        SameLinePromptBlockSettings, ScrollSettings, SelectionSettings, SshSettings, ThemeSettings,
+        VimBannerSettings, init_and_register_user_preferences,
     };
     use crate::terminal::BlockListSettings;
     use crate::terminal::general_settings::GeneralSettings;
@@ -57,7 +57,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     CommandSearchSettings::register(app);
     DebugSettings::register(app);
     AppIconSettings::register(app);
-    EmacsBindingsSettings::register(app);
 
     #[cfg(feature = "local_fs")]
     {
@@ -73,12 +72,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     KeysSettings::register(app);
     LigatureSettings::register(app);
     LocalControlSettings::register(app);
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    {
-        use crate::settings::LinuxAppConfiguration;
-        LinuxAppConfiguration::register(app);
-    }
 
     SafeModeSettings::register(app);
     SameLinePromptBlockSettings::register(app);

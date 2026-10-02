@@ -28,8 +28,8 @@ use warpui_core::actions::StandardAction;
 use warpui_core::r#async::{Timer, executor};
 use warpui_core::event::ModifiersState;
 use warpui_core::platform::{
-    self, FilePickerCallback, FilePickerConfiguration, FullscreenState, GraphicsBackend,
-    TerminationMode, WindowBounds, WindowFocusBehavior, WindowOptions, WindowStyle, file_picker,
+    self, FilePickerCallback, FilePickerConfiguration, FullscreenState, TerminationMode,
+    WindowBounds, WindowFocusBehavior, WindowOptions, WindowStyle, file_picker,
 };
 use warpui_core::rendering::GPUPowerPreference;
 use warpui_core::windowing::WindowCallbacks;
@@ -206,18 +206,6 @@ impl platform::WindowManager for WindowManager {
         // no-op on macOS
     }
 
-    fn windowing_system(&self) -> Option<crate::windowing::System> {
-        Some(crate::windowing::System::AppKit)
-    }
-
-    fn os_window_manager_name(&self) -> Option<String> {
-        None
-    }
-
-    fn is_tiling_window_manager(&self) -> bool {
-        false
-    }
-
     fn ordered_window_ids(&self) -> Vec<WindowId> {
         // SAFETY: `WindowManager` methods run on the main thread.
         let mtm = unsafe { MainThreadMarker::new_unchecked() };
@@ -358,18 +346,6 @@ impl platform::WindowManager for IntegrationTestWindowManager {
 
     fn active_cursor_position_updated(&self) {
         // no-op on macOS
-    }
-
-    fn windowing_system(&self) -> Option<crate::windowing::System> {
-        None
-    }
-
-    fn os_window_manager_name(&self) -> Option<String> {
-        None
-    }
-
-    fn is_tiling_window_manager(&self) -> bool {
-        false
     }
 
     fn ordered_window_ids(&self) -> Vec<WindowId> {
@@ -996,18 +972,6 @@ impl platform::Window for Window {
 
     fn callbacks(&self) -> &WindowCallbacks {
         &self.0.callbacks
-    }
-
-    fn supports_transparency(&self) -> bool {
-        true
-    }
-
-    fn graphics_backend(&self) -> GraphicsBackend {
-        GraphicsBackend::Metal
-    }
-
-    fn supported_backends(&self) -> Vec<GraphicsBackend> {
-        vec![GraphicsBackend::Metal]
     }
 
     /// We never use the MacOS native window frame.

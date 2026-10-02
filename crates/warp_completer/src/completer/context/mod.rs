@@ -41,12 +41,7 @@ pub trait CompletionContext: Send + Sync {
         // This is fallback logic. Ultimately, the escape character depends on the shell, _not_ the
         // OS. Use the shell to determine this whenever possible. However, if we are in a context
         // where we don't know/have a running shell, we will go by the default shell per OS.
-        match OperatingSystem::get() {
-            OperatingSystem::Windows => EscapeChar::Backtick,
-            OperatingSystem::Linux | OperatingSystem::Mac | OperatingSystem::Other(_) => {
-                EscapeChar::Backslash
-            }
-        }
+        EscapeChar::Backslash
     }
 
     /// Returns top-level commands to be suggested when completing on an empty buffer.

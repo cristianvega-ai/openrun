@@ -18,7 +18,7 @@ use warp_util::user_input::UserInput;
 use warpui::actions::StandardAction;
 use warpui::elements::Axis;
 use warpui::event::ModifiersState;
-use warpui::keymap::{EditableBinding, FixedBinding, Keystroke, PerPlatformKeystroke};
+use warpui::keymap::{EditableBinding, FixedBinding, Keystroke};
 use warpui::units::Pixels;
 use warpui::{AppContext, TypedActionView, ViewContext, WeakViewHandle};
 
@@ -185,11 +185,8 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::MoveForwardsByWord,
             text_entry.clone(),
         ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "shift-alt-left",
-                linux_and_windows: "shift-ctrl-left",
-            },
+        FixedBinding::new(
+            "shift-alt-left",
             CodeEditorViewAction::SelectBackwardsByWord,
             text_entry.clone(),
         ),
@@ -198,11 +195,8 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::SelectBackwardsByWord,
             text_entry.clone(),
         ),
-        FixedBinding::new_per_platform(
-            PerPlatformKeystroke {
-                mac: "shift-alt-right",
-                linux_and_windows: "shift-ctrl-right",
-            },
+        FixedBinding::new(
+            "shift-alt-right",
             CodeEditorViewAction::SelectForwardsByWord,
             text_entry.clone(),
         ),
@@ -286,16 +280,14 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::MoveBackwardsByWord,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-left")
-        .with_linux_or_windows_key_binding("ctrl-left"),
+        .with_mac_key_binding("alt-left"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move Forward One Word",
             CodeEditorViewAction::MoveForwardsByWord,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-right")
-        .with_linux_or_windows_key_binding("ctrl-right"),
+        .with_mac_key_binding("alt-right"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move forward one word",
@@ -352,8 +344,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::MoveToLineStart,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("cmd-left")
-        .with_linux_or_windows_key_binding("home"),
+        .with_mac_key_binding("cmd-left"),
         EditableBinding::new(
             "editor_view:move_to_line_end",
             "Move to line end",
@@ -367,8 +358,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::MoveToLineEnd,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("cmd-right")
-        .with_linux_or_windows_key_binding("end"),
+        .with_mac_key_binding("cmd-right"),
         EditableBinding::new(
             "editor_view:cursor_at_buffer_start",
             "Cursor at buffer start",
@@ -518,8 +508,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::DeleteWordLeft,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-backspace")
-        .with_linux_or_windows_key_binding("ctrl-backspace"),
+        .with_mac_key_binding("alt-backspace"),
         EditableBinding::new(
             "editor_view:cut_word_right",
             "Cut word right",
@@ -533,8 +522,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::DeleteWordRight,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-delete")
-        .with_linux_or_windows_key_binding("ctrl-delete"),
+        .with_mac_key_binding("alt-delete"),
         EditableBinding::new(
             "editor_view:cut_all_left",
             "Cut all left",
@@ -550,8 +538,7 @@ pub fn init(app: &mut AppContext) {
         // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
         // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
         // to clear all blocks within the blocklist.
-        .with_mac_key_binding("cmd-backspace")
-        .with_linux_or_windows_key_binding("ctrl-y"),
+        .with_mac_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:cut_all_right",
             "Cut all right",

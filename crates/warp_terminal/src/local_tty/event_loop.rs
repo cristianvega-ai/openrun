@@ -459,10 +459,6 @@ where
                                     // just loop back round for the inevitable `Exited` event.
                                     // This sucks, but checking the process is either racy or
                                     // blocking.
-                                    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                                    if err.kind() == ErrorKind::Other {
-                                        continue;
-                                    }
 
                                     error!("Error reading from PTY in event loop: {err}");
                                     break 'event_loop;

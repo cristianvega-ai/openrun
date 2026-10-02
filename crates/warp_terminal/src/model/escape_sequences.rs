@@ -588,8 +588,6 @@ fn meta_keystroke_to_escape_sequence(
 }
 
 /// Returns DEL (0x7f) for an unmodified or Shift-only Backspace.
-/// Guards against winit on Windows reporting `\x08` (Ctrl+H) for Shift+Backspace,
-/// which readline-style TUIs interpret as `backward-kill-word`. See GH#11342.
 fn backspace_keystroke_to_escape_sequence(keystroke: &Keystroke) -> Option<Vec<u8>> {
     if keystroke.ctrl || keystroke.alt || keystroke.meta || keystroke.cmd {
         return None;

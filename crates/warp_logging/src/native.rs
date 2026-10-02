@@ -533,20 +533,9 @@ fn init_internal(
 
     base_logger.filter_level(LevelFilter::Info);
 
-    // Only include `WARN` or higher logs for wgpu. By default, wgpu outputs logs at the `INFO`
-    // level multiple times _per_ frame. See https://github.com/gfx-rs/wgpu/issues/3206.
-    // Naga is overly noisy at `DEBUG`, so increase to `INFO`.
-    base_logger
-        .filter(Some("naga"), LevelFilter::Info)
-        .filter(Some("wgpu_core"), LevelFilter::Warn)
-        // Since we always pair an insertion with a deletion to avoid duplicate,
-        // tantivy will log a lot of warnings for deleting a non-existing doc.
-        .filter(Some("tantivy"), LevelFilter::Error)
-        .filter(
-            Some("wgpu_hal"),
-            // On Windows with the DX12 backend, wgpu_hal outputs a ton of WARN-level logs.
-            LevelFilter::Warn,
-        );
+    // Since we always pair an insertion with a deletion to avoid duplicate,
+    // tantivy will log a lot of warnings for deleting a non-existing doc.
+    base_logger.filter(Some("tantivy"), LevelFilter::Error);
     base_logger.parse_default_env();
 
     let stdout_is_a_tty = std::io::stdout().is_terminal();
@@ -620,8 +609,6 @@ fn init_log_directory() -> Result<std::path::PathBuf> {
                     anyhow::anyhow!("could not locate home directory in order to create a log file")
                 })?
                 .join("Library/Logs/"))
-        } else if #[cfg(any(target_os = "linux", target_os = "freebsd"))] {
-            Ok(warp_core::paths::state_dir())
         } else {
             Err(anyhow::anyhow!("Have not configured file-based logging for the current platform!"))
         }

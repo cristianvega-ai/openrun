@@ -1,19 +1,15 @@
-use warpui::keymap::{BindingDescription, PerPlatformKeystroke};
+use warpui::keymap::BindingDescription;
 
 use super::StaticCommand;
 
 pub enum DefaultSlashCommandBinding {
     None,
     Single(&'static str),
-    PerPlatform(PerPlatformKeystroke),
 }
 
 pub fn default_binding_for_command(name: &'static str) -> DefaultSlashCommandBinding {
     match name {
-        "/open-repo" => DefaultSlashCommandBinding::PerPlatform(PerPlatformKeystroke {
-            mac: "alt-cmd-o",
-            linux_and_windows: "ctrl-alt-o",
-        }),
+        "/open-repo" => DefaultSlashCommandBinding::Single("alt-cmd-o"),
         _ => DefaultSlashCommandBinding::None,
     }
 }

@@ -24,9 +24,6 @@ windows = { workspace = true, features = [
     "Win32_Foundation"
 ] }
 
-[build-dependencies]
-cfg_aliases.workspace = true
-
 [features]
 integration_tests = []
 

@@ -441,7 +441,7 @@ impl<T: Action + Clone> SearchBar<T> {
 
                 let modified_enter = match event {
                     EditorEvent::CmdEnter if cfg!(target_os = "macos") => true,
-                    EditorEvent::ShiftEnter if cfg!(target_os = "linux") => true,
+                    EditorEvent::ShiftEnter if false => true,
                     _ => false,
                 };
 
