@@ -13,6 +13,14 @@ on:
         description: weight job - the commit that run built
         default: ""
         type: string
+      threads_required:
+        description: weight job - weight of one integration test (nextest threads-required)
+        default: "1"
+        type: string
+      shards:
+        description: weight job - shards to run, as a JSON list
+        default: "[1, 2, 3]"
+        type: string
       repeats:
         description: weight job - times the shard runs (nextest --stress-count)
         default: "4"
@@ -126,14 +134,14 @@ jobs:
   # time on the three cores), from the archive of an earlier ci-next run, in the network sandbox
   # as the real jobs do. Any failure is a flake the lower weight introduced.
   weight:
-    name: Weight 1, shard ${{ matrix.shard }}
+    name: Weight ${{ inputs.threads_required }}, shard ${{ matrix.shard }}
     if: ${{ inputs.archive_run != '' }}
     runs-on: macos-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: ${{ fromJSON(inputs.shards || '[1, 2, 3]') }}
     env:
       WARP_NETWORK_SANDBOX_BY_PARENT: "1"
       NEXTEST_PROFILE: ci
@@ -153,8 +161,10 @@ jobs:
           gh run download "${{ inputs.archive_run }}" -R "$GITHUB_REPOSITORY" -n test-archive -D "$RUNNER_TEMP/test-archive"
           echo "NEXTEST_ARCHIVE=$RUNNER_TEMP/test-archive/tests.tar.zst" >> "$GITHUB_ENV"
       - uses: ./.github/actions/offline-canary
-      - name: Set the weight of an integration test to 1
-        run: sed -i '' "s/^threads-required = 2$/threads-required = 1/" .config/nextest.toml
+      - name: Set the weight of an integration test
+        env:
+          THREADS_REQUIRED: ${{ inputs.threads_required }}
+        run: sed -i '' "s/^threads-required = 2$/threads-required = $THREADS_REQUIRED/" .config/nextest.toml
       - name: Run the shard ${{ inputs.repeats }} times
         run: |
           WARP_SHELL_PATH=$(command -v zsh)
