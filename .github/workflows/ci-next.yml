@@ -259,6 +259,9 @@ jobs:
         shard: [1, 2, 3]
     env:
       WARP_NETWORK_SANDBOX_BY_PARENT: "1"
+      # Two integration tests at a time on the three cores (each counts for two of four threads);
+      # the weight of one test stays 2. See CHANGES.md for the measurements.
+      CI_NEXTEST_TEST_THREADS: "4"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/rust-macos
@@ -383,14 +386,24 @@ jobs:
   # (crates/integration/shell_matrix.txt, each with its reason), checks that those skip themselves,
   # and runs the rest with `CI=true`, so a test that skips or fails fails the job.
   shells:
-    name: Shell matrix ${{ matrix.shell }} (macOS)
+    name: Shell matrix ${{ matrix.shell }} ${{ matrix.part }} (macOS)
     needs: build
     runs-on: macos-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        shell: [bash3, bash5, fish, pwsh]
+        # The suite takes about 9 minutes with bash or fish and 21 with PowerShell (a start of
+        # `pwsh` is slow); the parts are split by test name (SHELL_MATRIX_PARTITION).
+        include:
+          - {shell: bash3, part: 1/1}
+          - {shell: bash5, part: 1/1}
+          - {shell: fish, part: 1/1}
+          - {shell: pwsh, part: 1/2}
+          - {shell: pwsh, part: 2/2}
+    env:
+      CI_NEXTEST_TEST_THREADS: "4"
+      SHELL_MATRIX_PARTITION: ${{ matrix.part }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/rust-macos
@@ -413,7 +426,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ always() }}
         with:
-          name: junit-shells-${{ matrix.shell }}
+          name: junit-shells-${{ matrix.shell }}-${{ strategy.job-index }}
           path: junit
           if-no-files-found: error
 

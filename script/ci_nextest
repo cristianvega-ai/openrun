@@ -9,6 +9,10 @@
 # this checkout. The JUnit report of the run is copied to `junit/REPORT.xml`: the final job of the
 # workflow reads the reports to check that every test ran somewhere (script/ci_check_coverage).
 #
+# CI_NEXTEST_TEST_THREADS=N adds --test-threads N. The integration jobs set it to 4 on the 3-core
+# runner: with each integration test counting for 2 threads (.config/nextest.toml), two tests run at
+# a time instead of one.
+#
 # Works with the bash 3.2 that macOS ships. Exit status: that of nextest.
 set -u
 
@@ -21,9 +25,14 @@ shift
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$root" || exit 2
 
+threads=()
+if [ -n "${CI_NEXTEST_TEST_THREADS:-}" ]; then
+  threads=(--test-threads "$CI_NEXTEST_TEST_THREADS")
+fi
+
 # --retries 0: a test that passes only on a retry (nextest reports it as FLAKY) is not a pass.
 cargo nextest run --archive-file "$NEXTEST_ARCHIVE" --workspace-remap "$root" \
-  --extract-to "$root" --extract-overwrite --retries 0 "$@"
+  --extract-to "$root" --extract-overwrite --retries 0 ${threads[@]+"${threads[@]}"} "$@"
 status=$?
 
 mkdir -p junit

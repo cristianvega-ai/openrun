@@ -19,6 +19,8 @@ Three runs, each of which must pass, and all of which are made even if an earlie
               runs and passes in this shell fails here, so a stale entry cannot hide a test that
               could run.
 
+SHELL_MATRIX_PARTITION=K/N limits the first run to one of N parts of the suite (see main()).
+
 When NEXTEST_ARCHIVE names a nextest archive (the CI build job makes one) the runs go through
 `script/ci_nextest`, which keeps one JUnit report per run in junit/; otherwise they use cargo.
 """
@@ -133,12 +135,24 @@ def main():
     if names:
         not_excluded += f" and not ({filterset(names)})"
 
-    statuses = {"suite": run(shell, "suite", [], not_excluded, env)}
-    own = OWN_MODULE.get(shell)
+    # SHELL_MATRIX_PARTITION=K/N runs the K-th of N parts of the suite (split by test name, nextest
+    # --partition hash), so that CI can spread a slow shell over several jobs. The runs of the
+    # shell's own module and of the excluded tests are small and run in part 1 only.
+    partition = os.environ.get("SHELL_MATRIX_PARTITION")
+    suite_args, label, first_part = [], "suite", True
+    if partition:
+        index, _, total = partition.partition("/")
+        if not (index.isdigit() and total.isdigit() and 1 <= int(index) <= int(total)):
+            sys.exit(f"ci_shell_matrix: SHELL_MATRIX_PARTITION must be K/N, got {partition!r}")
+        suite_args = ["--partition", f"hash:{index}/{total}"]
+        label = f"suite-{index}of{total}"
+        first_part = index == "1"
+    statuses = {label: run(shell, label, suite_args, not_excluded, env)}
+    own = OWN_MODULE.get(shell) if first_part else None
     if own:
         own_expression = f"{not_excluded} and test(~shell_integration_tests::{own}::)"
         statuses["own"] = run(shell, "own", ["--run-ignored", "only"], own_expression, env)
-    if names:
+    if names and first_part:
         expect = dict(env, OPENRUN_EXPECT_SKIP="1")
         statuses["excluded"] = run(
             shell, "excluded", ["--run-ignored", "all"], f"package(integration) and ({filterset(names)})", expect
