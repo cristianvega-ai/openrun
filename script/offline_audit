@@ -716,8 +716,86 @@ def net_log_violation(address, port):
     return None
 
 
+MACOS_SANDBOX_HEADER = "# openrun-offline-sandbox-macos 1"
+
+# A line of `log stream --predicate 'eventMessage CONTAINS "Sandbox"'`: the kernel reporting that a
+# sandbox profile denied an operation, optionally coalesced ("3 duplicate reports for ...").
+MACOS_DENIAL = re.compile(r"Sandbox: (?P<name>.+?)\((?P<pid>\d+)\) deny\(\d+\) (?P<op>\S+) ?(?P<detail>.*)$")
+
+# Processes outside the sandboxed command whose own profiles deny network access now and then.
+# The kernel logs their denials in the same stream; a denial by a process that is not in the
+# command's tree and not listed here fails the audit, so a new name shows up as a failure to look
+# at, not as a pass. Measured on the macos-latest runner (see CHANGES.md, "macOS offline proof").
+MACOS_SANDBOX_NOISE = frozenset(["languageassetd"])
+
+
+def macos_denial_violation(op, detail):
+    """Why a denial counts as an attempt to reach the network, or None."""
+    if op == "network-outbound":
+        if detail.startswith("remote:"):
+            return "connection to a non-local address (%s)" % detail
+        return "network access (%s)" % detail
+    if op == "mach-lookup" and (detail.startswith("com.apple.dnssd") or detail.startswith("com.apple.nsurlsessiond")):
+        return "request to a system network service (%s)" % detail
+    return None
+
+
+def check_net_log_macos(path, lines, result):
+    """The log of script/offline_sandbox_macos: a header, the processes of the command, then the
+    unified-log stream of sandbox reports, then `# end`."""
+    meta = {"canary": None, "end": False, "canaries": set()}
+    tree_pids = set()
+    tree_names = set()
+    for raw in lines:
+        text = raw.rstrip("\n")
+        if text.startswith("# canary: seen pid "):
+            meta["canary"] = text[len("# canary: seen pid "):].strip()
+        elif text.startswith("# canary-pid: "):
+            meta["canaries"].add(text[len("# canary-pid: "):].strip())
+        elif text.startswith("# tree: "):
+            fields = text[len("# tree: "):].split(None, 1)
+            if fields:
+                tree_pids.add(fields[0])
+                if len(fields) > 1:
+                    tree_names.add(fields[1].strip("()")[:15])
+        elif text == "# end":
+            meta["end"] = True
+    if meta["canary"] is None:
+        result.add(path, None, "no canary: the sandbox did not show that it records denials")
+    if not meta["end"]:
+        result.add(path, None, "incomplete: the run did not finish writing the log (no `# end`)")
+    for number, raw in enumerate(lines, 1):
+        if raw.startswith("#"):
+            continue
+        if "Messages dropped" in raw:
+            result.add(path, number, "the log stream dropped messages: denials may be missing from this log")
+            continue
+        match = MACOS_DENIAL.search(raw)
+        if not match:
+            continue
+        reason = macos_denial_violation(match.group("op"), match.group("detail").strip())
+        if not reason:
+            continue
+        pid = match.group("pid")
+        name = match.group("name")
+        if pid == meta["canary"] or pid in meta["canaries"]:
+            continue
+        if pid not in tree_pids and name[:15] not in tree_names and name in MACOS_SANDBOX_NOISE:
+            continue
+        result.add(path, number, "%s(%s): %s" % (name, pid, reason))
+
+
 def check_net_log(path):
     result = Result("netlog", "Sandboxed run: connect/send targets in %s (9.4a)" % path)
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        if lines and lines[0].startswith("# openrun-offline-sandbox-macos"):
+            if lines[0].rstrip("\n") != MACOS_SANDBOX_HEADER:
+                result.add(path, 1, "unknown log format version: " + lines[0].strip())
+                return result
+            check_net_log_macos(path, lines, result)
+            return result
     if not os.path.isfile(path):
         # `script/offline_sandbox` writes the log when its command has ended. No file means the
         # step did not get that far (it hung, was cancelled or never started), so nothing is known
@@ -874,6 +952,15 @@ def self_test_cases():
     ]
 
 
+MAC_HEADER = MACOS_SANDBOX_HEADER + "\n# command: cargo nextest run\n"
+MAC_CANARY = "# canary: seen pid 77\n# tree: 500 integration\n# tree: 501 sandbox-exec\n# stream:\n"
+MAC_END = "# end\n"
+
+
+def mac_denial(name, pid, rest):
+    return "2026-10-02 02:08:18.959121-0500 0x594b02e  Error  0x0  0  0  kernel: (Sandbox) Sandbox: %s(%d) deny(1) %s\n" % (name, pid, rest)
+
+
 def self_test_net_log_cases():
     """(name, strace log text, expectation): what `check_net_log` must flag or accept."""
     v4 = '1234 connect(%d, {sa_family=AF_INET, sin_port=htons(%d), sin_addr=inet_addr("%s")}, 16) = %s\n'
@@ -882,6 +969,23 @@ def self_test_net_log_cases():
     return [
         ("net log: empty", "", "pass"),
         ("net log: missing file", None, "fail"),
+        ("net log (macOS): only the canary", MAC_HEADER + MAC_CANARY + MAC_END, "pass"),
+        ("net log (macOS): connection to a non-local address", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "network-outbound remote:*:443") + MAC_END, "fail"),
+        ("net log (macOS): datagram to port 53", MAC_HEADER + MAC_CANARY + mac_denial("integration", 501, "network-outbound remote:*:53") + MAC_END, "fail"),
+        ("net log (macOS): name lookup through the DNS daemon", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "network-outbound /private/var/run/mDNSResponder") + MAC_END, "fail"),
+        ("net log (macOS): request to the DNS service", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "mach-lookup com.apple.dnssd.service") + MAC_END, "fail"),
+        ("net log (macOS): request to nsurlsessiond", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "mach-lookup com.apple.nsurlsessiond.xpc") + MAC_END, "fail"),
+        ("net log (macOS): coalesced denial", MAC_HEADER + MAC_CANARY + "2026-10-02 02:08:18.9-0500 0x1  Error  0x0  0  0  kernel: (Sandbox) 3 duplicate reports for Sandbox: warp(500) deny(1) network-outbound remote:*:80\n" + MAC_END, "fail"),
+        ("net log (macOS): denial by a process nobody listed", MAC_HEADER + MAC_CANARY + mac_denial("someunknownd", 9999, "network-outbound remote:*:443") + MAC_END, "fail"),
+        ("net log (macOS): denial of the canary itself", MAC_HEADER + MAC_CANARY + mac_denial("curl", 77, "network-outbound remote:*:9") + MAC_END, "pass"),
+        ("net log (macOS): other kinds of denial", MAC_HEADER + MAC_CANARY + mac_denial("integration", 500, "system-info vfs.disk-space") + mac_denial("integration", 500, "mach-lookup com.apple.diagnosticd") + MAC_END, "pass"),
+        ("net log (macOS): denial by a listed system process", MAC_HEADER + MAC_CANARY + mac_denial("languageassetd", 969, "network-outbound /private/var/run/mDNSResponder") + MAC_END, "pass"),
+        ("net log (macOS): a listed name inside the tree is still ours", MAC_HEADER + "# canary: seen pid 77\n# tree: 969 languageassetd\n# stream:\n" + mac_denial("languageassetd", 969, "network-outbound remote:*:443") + MAC_END, "fail"),
+        ("net log (macOS): no canary", MAC_HEADER + MAC_END, "fail"),
+        ("net log (macOS): dropped messages", MAC_HEADER + MAC_CANARY + "=== Messages dropped during live streaming (use `log show` to see what they were)\n" + MAC_END, "fail"),
+        ("net log (macOS): denial of an earlier canary attempt", MAC_HEADER + "# canary-pid: 76\n" + MAC_CANARY + mac_denial("curl", 76, "network-outbound remote:*:9") + MAC_END, "pass"),
+        ("net log (macOS): run did not finish", MAC_HEADER + MAC_CANARY, "fail"),
+        ("net log (macOS): unknown format version", "# openrun-offline-sandbox-macos 2\n" + MAC_CANARY + MAC_END, "fail"),
         ("net log: loopback connect", v4 % (3, 8080, "127.0.0.1", "0"), "pass"),
         ("net log: loopback IPv6 connect", v6 % (3, 8080, "::1", "0"), "pass"),
         ("net log: local socket", '1234 connect(3, {sa_family=AF_UNIX, sun_path="/run/x"}, 110) = 0\n', "pass"),

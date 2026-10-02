@@ -103,6 +103,11 @@ pub fn command_for(
     Ok(command::r#async::Command::new_with_process_group(program))
 }
 
+/// When set in a test or integration-test build on macOS, the process tree already runs under a
+/// profile that denies the network (see `sandboxed_command`).
+#[cfg(all(target_os = "macos", any(test, feature = "integration_tests")))]
+const OUTER_SANDBOX_VARIABLE: &str = "WARP_NETWORK_SANDBOX_BY_PARENT";
+
 /// The macOS sandbox tool.
 #[cfg(target_os = "macos")]
 pub const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
@@ -124,6 +129,17 @@ pub const MACOS_PROFILE: &str = r#"(version 1)
 pub fn sandboxed_command(sandbox: &NetworkSandbox, shell_program: &str) -> Result<Command> {
     use anyhow::anyhow;
 
+    // The offline proof runs the whole test process tree under one `sandbox-exec` profile
+    // (script/offline_sandbox_macos), and a sandboxed process cannot apply a second profile
+    // (`sandbox_apply` fails with EPERM, the kernel reports `forbidden-sandbox-reinit`). The
+    // profile of the proof denies the same accesses, so the commands run directly in it. The
+    // switch exists only in test and integration-test builds; a release build always sandboxes.
+    #[cfg(any(test, feature = "integration_tests"))]
+    if matches!(sandbox, NetworkSandbox::Enforced)
+        && std::env::var_os(OUTER_SANDBOX_VARIABLE).is_some()
+    {
+        return Ok(Command::new_with_process_group(shell_program));
+    }
     let tool = match sandbox {
         #[cfg(all(test, target_os = "macos"))]
         NetworkSandbox::EnforcedWithTool(path) => path.as_path(),

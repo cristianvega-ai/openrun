@@ -123,6 +123,7 @@ net-script | script/install_cargo_binstall | * | fetches cargo-binstall from Git
 net-script | script/install_rust | * | rustup installer
 net-script | script/linux/configure_musl_toolchain | * | musl toolchain download at build time
 net-script | script/linux/install_build_deps | * | protoc download at build time
+net-script | script/offline_sandbox_macos | * | the canary: a connection to a documentation address (203.0.113.7) that the sandbox must refuse before the run
 net-script | script/linux/install_linuxdeploy | * | AppImage tooling download at build time
 net-script | script/macos/bootstrap | * | Homebrew and rustup installers
 net-script | script/windows/bootstrap.ps1 | * | rustup installer

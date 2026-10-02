@@ -1,0 +1,162 @@
+#!/bin/bash
+# Runs a command in a macOS network sandbox and records every network access it is denied.
+#
+#   script/offline_sandbox_macos LOG COMMAND [ARG...]
+#
+# The command runs under `sandbox-exec` with a profile that denies every network access to an
+# address that is not on this machine (loopback and the addresses of its own interfaces stay
+# reachable, as do unix sockets, except the one of the DNS daemon, so a name lookup is refused as
+# well). The kernel reports each denial to the unified log; `log stream` is started before the
+# command and writes them to LOG together with the processes the command started, and
+# `script/offline_audit --net-log LOG` turns that into a pass or fail. Two layers, as on Linux:
+# the kernel refuses the access, and the log shows that nothing tried.
+#
+# The sandbox is inherited by every child process, so a process that is not in the tree of the
+# command (a system daemon with a profile of its own) is a different case; the audit tells them
+# apart by process id and name.
+#
+# Fail-closed: before the command starts, a canary (a connection to 203.0.113.7) runs under the same
+# profile and its denial must show up in the log stream. If it does not within 30 seconds, the
+# command does not run and the exit status is 125.
+#
+# LOG ends with `# end` when the run completed; a log without it is a failure for the audit.
+#
+# Used by the `offline-audit` job in .github/workflows/ci.yml. Works with the bash 3.2 that macOS
+# ships. Exit status: that of the command, or 125 when the sandbox could not be set up.
+set -u
+
+if [ "$#" -lt 2 ]; then
+  echo "usage: $0 LOG COMMAND [ARG...]" >&2
+  exit 2
+fi
+log=$1
+shift
+
+sandbox_exec=/usr/bin/sandbox-exec
+log_tool=/usr/bin/log
+for tool in "$sandbox_exec" "$log_tool" /usr/bin/curl /bin/ps; do
+  if [ ! -x "$tool" ]; then
+    echo "offline_sandbox_macos: $tool is missing; the command is not run" >&2
+    exit 125
+  fi
+done
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/offline-sandbox.XXXXXX")
+profile=$work/profile.sb
+stream=$work/stream.txt
+tree=$work/tree.txt
+: > "$tree"
+stream_pid=
+tracker_pid=
+
+# shellcheck disable=SC2329 # Called by the EXIT trap.
+cleanup() {
+  [ -n "$tracker_pid" ] && kill "$tracker_pid" 2> /dev/null
+  [ -n "$stream_pid" ] && kill "$stream_pid" 2> /dev/null
+  [ -n "$stream_pid" ] && wait "$stream_pid" 2> /dev/null
+  rm -rf "$work"
+}
+trap cleanup EXIT
+
+# Later rules win. The first rule refuses the socket of the DNS daemon (a name lookup is a request
+# to the daemon, which asks the network for the process), the next two refuse every IP address that
+# is not local. The rule order matters: a refusal of a socket path placed after the address rules
+# makes every address refused.
+cat > "$profile" << 'EOF'
+(version 1)
+(allow default)
+(deny network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))
+(deny network-outbound (remote ip))
+(allow network-outbound (remote ip "localhost:*"))
+(deny mach-lookup (global-name "com.apple.dnssd.service") (global-name-prefix "com.apple.nsurlsessiond"))
+EOF
+
+# The stream must be running before the command, or the first denials are lost.
+# Only the reports that can mean network access are asked for: the less the stream carries, the less
+# of it the system drops under load (it says so in the stream when it does).
+predicate='eventMessage CONTAINS "Sandbox" AND (eventMessage CONTAINS "network-outbound" OR eventMessage CONTAINS "dnssd" OR eventMessage CONTAINS "nsurlsessiond")'
+"$log_tool" stream --info --debug --predicate "$predicate" > "$stream" 2>&1 &
+stream_pid=$!
+sleep 3
+if ! kill -0 "$stream_pid" 2> /dev/null; then
+  echo "offline_sandbox_macos: 'log stream' did not start; the command is not run" >&2
+  cat "$stream" >&2
+  exit 125
+fi
+
+# The canary: a denied connection must appear in the stream. It is tried again every 5 seconds,
+# six times, in case the stream was not yet recording.
+seen=0
+canary_pid=
+for _ in 1 2 3 4 5 6; do
+  "$sandbox_exec" -f "$profile" /usr/bin/curl -s -m 2 -o /dev/null http://203.0.113.7:9/ > /dev/null 2>&1
+  for _ in 1 2 3 4 5; do
+    canary_pid=$(sed -n 's/.*Sandbox: curl(\([0-9][0-9]*\)) deny(1) network-outbound remote.*/\1/p' "$stream" | tail -n 1)
+    [ -n "$canary_pid" ] && break
+    sleep 1
+  done
+  if [ -n "$canary_pid" ]; then
+    seen=1
+    break
+  fi
+done
+if [ "$seen" -ne 1 ]; then
+  echo "offline_sandbox_macos: the denial of the canary connection did not reach the log stream within 30 s (6 attempts); the command is not run" >&2
+  exit 125
+fi
+
+# Remember every process of the command's tree: the log names the process and its id.
+track() {
+  local root=$1
+  while kill -0 "$root" 2> /dev/null; do
+    /bin/ps -axo pid=,ppid=,comm= | awk -v root="$root" '
+      {
+        pid = $1; ppid = $2
+        name = $0
+        sub(/^[ ]*[0-9]+[ ]+[0-9]+[ ]+/, "", name)
+        n = split(name, parts, "/")
+        par[pid] = ppid
+        nm[pid] = parts[n]
+      }
+      END {
+        for (p in par) {
+          q = p
+          depth = 0
+          while (q != "" && q != 0 && q != 1 && depth < 64) {
+            if (q == root) { print p, nm[p]; break }
+            q = par[q]
+            depth++
+          }
+        }
+      }' >> "$tree"
+    sleep 0.05
+  done
+}
+
+"$sandbox_exec" -f "$profile" "$@" &
+command_pid=$!
+track "$command_pid" &
+tracker_pid=$!
+status=0
+wait "$command_pid" || status=$?
+kill "$tracker_pid" 2> /dev/null
+wait "$tracker_pid" 2> /dev/null
+tracker_pid=
+
+# The log is written a little after the event.
+sleep 3
+kill "$stream_pid" 2> /dev/null
+wait "$stream_pid" 2> /dev/null
+stream_pid=
+
+{
+  echo "# openrun-offline-sandbox-macos 1"
+  echo "# command: $*"
+  echo "# canary: seen pid $canary_pid"
+  sed -n 's/.*Sandbox: curl(\([0-9][0-9]*\)) deny(1) network-outbound remote.*/# canary-pid: \1/p' "$stream" | sort -u | head -n 8
+  sort -u "$tree" | sed 's/^/# tree: /'
+  echo "# stream:"
+  cat "$stream"
+  echo "# end"
+} > "$log"
+exit "$status"
