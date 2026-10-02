@@ -5,6 +5,18 @@ name: CI lab
 on:
   workflow_dispatch:
     inputs:
+      archive_run:
+        description: weight job - run id of a ci-next run whose test archive is used
+        default: ""
+        type: string
+      archive_sha:
+        description: weight job - the commit that run built
+        default: ""
+        type: string
+      repeats:
+        description: weight job - times the shard runs (nextest --stress-count)
+        default: "4"
+        type: string
       chain:
         description: Commits to build in turn, as offsets below the dispatched commit
         default: "20 3 0"
@@ -12,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,6 +32,7 @@ env:
 jobs:
   bench:
     name: Bench ${{ matrix.name }}
+    if: ${{ inputs.archive_run == '' }}
     runs-on: macos-latest
     timeout-minutes: 120
     strategy:
@@ -107,3 +121,49 @@ jobs:
           zstd -dc "$RUNNER_TEMP/cache.tar.zst" | tar -C "$RUNNER_TEMP/restore" -xf -
           end=$(date +%s)
           echo "RESULT ${{ matrix.name }} restore_seconds=$((end - start))"
+
+  # Runs the integration tests many times with the weight of one test lowered to 1 (three at a
+  # time on the three cores), from the archive of an earlier ci-next run, in the network sandbox
+  # as the real jobs do. Any failure is a flake the lower weight introduced.
+  weight:
+    name: Weight 1, shard ${{ matrix.shard }}
+    if: ${{ inputs.archive_run != '' }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      WARP_NETWORK_SANDBOX_BY_PARENT: "1"
+      NEXTEST_PROFILE: ci
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.archive_sha }}
+      - uses: ./.github/actions/rust-macos
+        with:
+          metal: "false"
+      - uses: ./.github/actions/macos-test-tools
+      - name: Download the test archive of run ${{ inputs.archive_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/test-archive"
+          gh run download "${{ inputs.archive_run }}" -R "$GITHUB_REPOSITORY" -n test-archive -D "$RUNNER_TEMP/test-archive"
+          echo "NEXTEST_ARCHIVE=$RUNNER_TEMP/test-archive/tests.tar.zst" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/offline-canary
+      - name: Set the weight of an integration test to 1
+        run: sed -i '' "s/^threads-required = 2$/threads-required = 1/" .config/nextest.toml
+      - name: Run the shard ${{ inputs.repeats }} times
+        run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
+          ./script/offline_sandbox_macos net-weight-${{ matrix.shard }}.log \
+            ./script/ci_nextest weight-${{ matrix.shard }} --no-fail-fast --stress-count ${{ inputs.repeats }} \
+              --partition hash:${{ matrix.shard }}/3 -E 'package(integration)'
+      - uses: ./.github/actions/offline-check
+        if: ${{ !cancelled() }}
+        with:
+          name: weight-${{ matrix.shard }}
+          logs: net-weight-${{ matrix.shard }}.log
