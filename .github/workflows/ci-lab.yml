@@ -25,10 +25,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: ws-nofix
-            incremental: "0"
-            fix: "no"
-            debug: ""
           - name: ws
             incremental: "0"
             fix: "yes"

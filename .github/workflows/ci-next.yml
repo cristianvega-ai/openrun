@@ -5,11 +5,12 @@ name: CI next
 # OpenRun runs on macOS only, so every job runs on a hosted macOS runner (Apple silicon). A public
 # repository has five of them at a time, which shapes the job graph:
 #
-#   fmt, audit, clippy      start together with `build` (none of them needs the tests)
+#   checks, clippy         start together with `build` (neither needs the tests)
 #   build                   compiles every test once and makes one nextest archive
-#   after the build         unit (sandboxed), security (plain), integration 1-3 (sandboxed), idle
-#                           (sandboxed) and shells (plain) start from the archive
-#   result                  checks that the jobs together ran every test
+#   after the build         sandboxed (unit tests and the idle session), integration 1-3 (all
+#                           in the network sandbox) and plain (security and shell tests, outside
+#                           it) start from the archive: five jobs for five runners
+#   result                  checks that the jobs together ran every test (no macOS runner needed)
 #
 # The tests run from the archive (script/ci_nextest) in the checkout the archive was built in.
 on:
@@ -35,18 +36,63 @@ env:
   INTEGRATION_SHARDS: "3"
 
 jobs:
-  fmt:
-    name: Formatting
+  # Formatting and the static offline audit: neither needs a build, and both are short, so they
+  # share a runner (a public repository has five macOS runners at a time).
+  #
+  # The audit fails when the tree or the dependency graph reaches for Warp-owned hosts or any
+  # non-local address. The sandboxed test runs below check the other half: what the tests and the
+  # app do at run time.
+  #
+  # Known RUSTSEC advisories in Cargo.lock (unmaintained crates and a few vulnerabilities in
+  # transitive dependencies, all older than this fork) are deliberately not part of this job:
+  # `cargo deny check advisories` fails on them and the dependency versions are not ours to bump
+  # here. Only `bans licenses sources` run below. CHANGES.md ("Offline guardrails") lists them.
+  checks:
+    name: Formatting and static audit (macOS)
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Install the Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-macos
+        with:
+          metal: "false"
+          tools: cargo-deny
 
       - name: Check formatting
         run: ./script/format --check
+
+      # The integration tests have no retry of any kind: a step that fails once fails the test.
+      # A retry would turn a race into a green run, so nothing that retries or reruns may return.
+      - name: Check that the integration framework has no retries
+        run: |
+          if grep -rnE 'set_retries|RERUN_EXIT_CODE|PreconditionFailed|set_on_failure_handler' crates app/src --include='*.rs'; then
+            echo "::error::the integration framework must not retry or rerun a step or a test"
+            exit 1
+          fi
+
+      - name: Install ripgrep
+        run: |
+          if ! command -v rg > /dev/null; then
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ripgrep
+          fi
+
+      # The static audit reads the sources of git dependencies (found with `cargo metadata`). Fetch
+      # them first so it does not depend on a cached build; it skips build-generated directories.
+      - name: Fetch dependencies
+        run: cargo fetch --locked
+
+      # Greps for Warp hosts and services, network-capable code outside its allowed consumers
+      # (including the sources of git dependencies and the completion generator classification),
+      # banned crates and `cargo deny check bans licenses sources`. Exceptions are listed, with
+      # reasons, in script/offline_audit.allowlist.
+      - name: Static audit
+        run: ./script/offline_audit --summary
+
+      # Runs the audit's checks against fixture trees: every prohibited construct must be found
+      # and every reviewed one accepted, so a loosened pattern or allowlist entry fails here.
+      - name: Audit self-test
+        run: ./script/offline_audit --self-test
 
   clippy:
     name: Clippy (macOS)
@@ -68,49 +114,6 @@ jobs:
 
       - name: Run cargo clippy
         run: cargo clippy --locked --workspace --all-targets --tests -- -D warnings
-
-  # Fails when the tree or the dependency graph reaches for Warp-owned hosts or any non-local
-  # address. It needs no build. The sandboxed test runs below check the other half: what the
-  # tests and the app do at run time.
-  #
-  # Known RUSTSEC advisories in Cargo.lock (unmaintained crates and a few vulnerabilities in
-  # transitive dependencies, all older than this fork) are deliberately not part of this job:
-  # `cargo deny check advisories` fails on them and the dependency versions are not ours to bump
-  # here. Only `bans licenses sources` run below. CHANGES.md ("Offline guardrails") lists them.
-  audit:
-    name: Offline audit, static (macOS)
-    runs-on: macos-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Install ripgrep
-        run: |
-          if ! command -v rg > /dev/null; then
-            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ripgrep
-          fi
-
-      - uses: ./.github/actions/rust-macos
-        with:
-          metal: "false"
-          tools: cargo-deny
-
-      # The static audit reads the sources of git dependencies (found with `cargo metadata`). Fetch
-      # them first so it does not depend on a cached build; it skips build-generated directories.
-      - name: Fetch dependencies
-        run: cargo fetch --locked
-
-      # Greps for Warp hosts and services, network-capable code outside its allowed consumers
-      # (including the sources of git dependencies and the completion generator classification),
-      # banned crates and `cargo deny check bans licenses sources`. Exceptions are listed, with
-      # reasons, in script/offline_audit.allowlist.
-      - name: Static audit
-        run: ./script/offline_audit --summary
-
-      # Runs the audit's checks against fixture trees: every prohibited construct must be found
-      # and every reviewed one accepted, so a loosened pattern or allowlist entry fails here.
-      - name: Audit self-test
-        run: ./script/offline_audit --self-test
 
   # Compiles every test of the workspace once. The jobs below run the tests from the archive, so
   # the build, which is most of the time of a run, is not repeated in each of them.
@@ -196,15 +199,17 @@ jobs:
             target
           key: ${{ env.CACHE_PREFIX }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
 
-  # Every test except the `integration` package, in the network sandbox. The modules that test the
-  # sandbox itself (`network_sandbox`) and the offline environment of real tools cannot run inside
-  # a sandbox (a second one cannot be applied); the Security tests job runs them.
+  # Every test except the `integration` package, in the network sandbox, then the two-minute idle
+  # session in the same kind of sandbox. The modules that test the sandbox itself
+  # (`network_sandbox`) and the offline environment of real tools cannot run inside a sandbox (a
+  # second one cannot be applied); the Security tests step of the `plain` job runs them.
   #
   # The whole test process tree runs in one sandbox profile, so the app runs the commands of its
   # completion generators directly (see network_sandbox.rs; only test and integration-test
-  # builds read this variable).
-  unit:
-    name: Unit tests (macOS, network sandbox)
+  # builds read this variable). Each run writes a log of its own, checked by
+  # `offline_audit --net-log` after canaries proved on this runner that a refused access is seen.
+  sandboxed:
+    name: Unit tests and idle session (macOS, network sandbox)
     needs: build
     runs-on: macos-latest
     timeout-minutes: 40
@@ -229,48 +234,27 @@ jobs:
             ./script/ci_nextest sandboxed-unit --no-fail-fast \
               -E 'not package(integration) and not test(~command_executor::network_sandbox) and not test(~command_executor::offline_environment)'
 
+      # Boots the app and leaves it idle for two minutes, so periodic timers (flushes, polling,
+      # update checks) get a chance to reach out. The test is ignored in the regular run because
+      # of its length.
+      - name: Run an idle session in the network sandbox
+        if: ${{ !cancelled() }}
+        run: |
+          WARP_SHELL_PATH=$(command -v zsh)
+          export WARP_SHELL_PATH
+          ./script/offline_sandbox_macos net-idle.log \
+            ./script/ci_nextest sandboxed-idle --no-fail-fast \
+              --run-ignored only -E 'test(~test_idle_session)'
+
       - uses: ./.github/actions/offline-check
         if: ${{ !cancelled() }}
         with:
-          name: unit
-          logs: net-unit.log
+          name: unit-idle
+          logs: net-unit.log net-idle.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ always() }}
         with:
-          name: junit-unit
-          path: junit
-          if-no-files-found: error
-
-  # The command executor tests for the macOS sandbox (`sandbox-exec` profile, the DNS daemon and
-  # background URL session canaries), the offline environment, the restored completion
-  # generators and the generator policy with its injection corpus. They run outside the network
-  # sandbox, on purpose: they apply sandboxes of their own, and they exercise the production
-  # path, where every completion command is wrapped in `sandbox-exec`. The tests that use real
-  # tools (git, npm, corepack, rustup, docker, python3, fish, pwsh) fail instead of skipping when
-  # a tool is missing and `CI=true`, which GitHub Actions sets, so the tools are installed or
-  # checked first.
-  security:
-    name: Security tests (macOS)
-    needs: build
-    runs-on: macos-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: ./.github/actions/rust-macos
-        with:
-          metal: "false"
-      - uses: ./.github/actions/macos-test-tools
-      - uses: ./.github/actions/test-archive
-
-      - name: Run the command executor security tests
-        run: |
-          ./script/ci_nextest plain-security --no-fail-fast \
-            -E '(package(warp) and test(~terminal::model::session::command_executor)) | (package(warp_completer) and test(~generator_policy))'
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ always() }}
-        with:
-          name: junit-security
+          name: junit-sandboxed
           path: junit
           if-no-files-found: error
 
@@ -305,6 +289,10 @@ jobs:
         run: sed -i '' "s/^threads-required = 2$/threads-required = $THREADS_REQUIRED/" .config/nextest.toml
 
       - name: Run integration tests ${{ matrix.shard }} of ${{ env.INTEGRATION_SHARDS }} in the network sandbox
+        env:
+          # A scenario that doesn't apply to the shell of the run is a skip, which fails the test in
+          # CI unless it is in ALLOWED_CI_SKIPS (crates/integration/tests/common/mod.rs).
+          OPENRUN_SKIP_REPORT: ${{ runner.temp }}/integration-skips.txt
         run: |
           if [ "${{ strategy.job-total }}" != "$INTEGRATION_SHARDS" ]; then
             echo "::error::the shard list has ${{ strategy.job-total }} entries but INTEGRATION_SHARDS is $INTEGRATION_SHARDS: tests would not run"
@@ -328,53 +316,30 @@ jobs:
           path: junit
           if-no-files-found: error
 
-  # Boots the app and leaves it idle for two minutes in the same kind of sandbox, so periodic
-  # timers (flushes, polling, update checks) get a chance to reach out. The test is ignored in
-  # the regular run because of its length.
-  idle:
-    name: Idle session (macOS, network sandbox)
-    needs: build
-    runs-on: macos-latest
-    timeout-minutes: 30
-    env:
-      WARP_NETWORK_SANDBOX_BY_PARENT: "1"
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: ./.github/actions/rust-macos
-        with:
-          metal: "false"
-      - uses: ./.github/actions/macos-test-tools
-      - uses: ./.github/actions/test-archive
-      - uses: ./.github/actions/offline-canary
-
-      - name: Run an idle session in the network sandbox
-        run: |
-          WARP_SHELL_PATH=$(command -v zsh)
-          export WARP_SHELL_PATH
-          ./script/offline_sandbox_macos net-idle.log \
-            ./script/ci_nextest sandboxed-idle --no-fail-fast \
-              --run-ignored only -E 'test(~test_idle_session)'
-
-      - uses: ./.github/actions/offline-check
-        if: ${{ !cancelled() }}
-        with:
-          name: idle
-          logs: net-idle.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - name: List the skipped integration scenarios
         if: ${{ always() }}
-        with:
-          name: junit-idle
-          path: junit
-          if-no-files-found: error
+        env:
+          OPENRUN_SKIP_REPORT: ${{ runner.temp }}/integration-skips.txt
+        run: |
+          {
+            echo "### Skipped integration scenarios (zsh, shard ${{ matrix.shard }})"
+            if [ -s "$OPENRUN_SKIP_REPORT" ]; then
+              sed 's/^/- /' "$OPENRUN_SKIP_REPORT"
+            else
+              echo "None."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  # A short selection of integration tests outside the network sandbox, with the shells the
-  # sandboxed runs do not use (they all run zsh):
+  # The tests that run outside the network sandbox:
+  #  - the security tests (below), which apply sandboxes of their own;
+  #  - a short selection of integration tests, with the shells the sandboxed runs do not use (they
+  #    all run zsh):
   #  - the production path: every completion command of the app is wrapped in `sandbox-exec`, and
   #    the sandboxed runs skip that wrapper (WARP_NETWORK_SANDBOX_BY_PARENT), so the sessions that
   #    list executables and complete commands run here without the switch;
   #  - the bash that macOS ships (3.2) and Homebrew's bash (5.x) as the session's shell.
-  shells:
-    name: Shell tests (macOS, zsh and bash)
+  plain:
+    name: Security and shell tests (macOS)
     needs: build
     runs-on: macos-latest
     timeout-minutes: 40
@@ -402,6 +367,18 @@ jobs:
           metal: "false"
       - uses: ./.github/actions/macos-test-tools
       - uses: ./.github/actions/test-archive
+
+      # The command executor tests for the macOS sandbox (`sandbox-exec` profile, the DNS daemon
+      # and background URL session canaries), the offline environment, the restored completion
+      # generators and the generator policy with its injection corpus. They run outside the
+      # network sandbox, on purpose: they apply sandboxes of their own, and they exercise the
+      # production path. The tests that use real tools (git, npm, corepack, rustup, docker,
+      # python3, fish, pwsh) fail instead of skipping when a tool is missing and `CI=true`, which
+      # GitHub Actions sets, so the tools are installed or checked first.
+      - name: Run the command executor security tests
+        run: |
+          ./script/ci_nextest plain-security --no-fail-fast \
+            -E '(package(warp) and test(~terminal::model::session::command_executor)) | (package(warp_completer) and test(~generator_policy))'
 
       - name: Install Homebrew's bash
         run: |
@@ -436,13 +413,14 @@ jobs:
         run: |
           WARP_SHELL_PATH=$(command -v pwsh)
           export WARP_SHELL_PATH
+          # shellcheck disable=SC2016 # a PowerShell variable, not a shell one
           "$WARP_SHELL_PATH" -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
           ./script/ci_nextest plain-shells-pwsh --no-fail-fast --run-ignored all -E "package(integration) and test(~shell_integration_tests::pwsh_only::)"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ always() }}
         with:
-          name: junit-shells
+          name: junit-plain
           path: junit
           if-no-files-found: error
 
@@ -450,9 +428,11 @@ jobs:
   # ran every test (script/ci_check_coverage).
   result:
     name: CI result
-    needs: [fmt, clippy, audit, build, unit, security, integration, idle, shells]
+    needs: [checks, clippy, build, sandboxed, integration, plain]
     if: ${{ always() }}
-    runs-on: macos-latest
+    # Python only, no build and no test: a hosted macOS runner would queue behind the test jobs of
+    # every other run for nothing (measured: 16 minutes in run 37023024672).
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3

@@ -59,3 +59,7 @@ __pycache__/
 # Project notes
 .note/
 .claude/scheduled_tasks.lock
+
+# CI test reports and sandbox logs (script/ci_nextest, script/offline_sandbox_macos)
+/junit/
+/net-*.log

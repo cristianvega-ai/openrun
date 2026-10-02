@@ -7,7 +7,7 @@
 use super::integration_tests;
 
 integration_tests! {
-    #[ignore = "Idles for two minutes; the CI offline-audit job runs it in a network sandbox"]
+    #[ignore = "Idles for two minutes; the CI idle job runs it in a network sandbox"]
     test_idle_session,
     test_add_many_sessions,
     test_ctrl_tab_session_switching,

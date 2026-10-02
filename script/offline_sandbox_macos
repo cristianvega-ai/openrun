@@ -27,7 +27,7 @@
 #
 # LOG ends with `# end` when the run completed; a log without it is a failure for the audit.
 #
-# Used by the `offline-audit` job in .github/workflows/ci.yml. Works with the bash 3.2 that macOS
+# Used by the sandboxed jobs in .github/workflows/ci.yml. Works with the bash 3.2 that macOS
 # ships. Exit status: that of the command, or 125 when the sandbox or the log could not be relied on.
 set -u
 

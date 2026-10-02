@@ -14,7 +14,7 @@ Modes:
   script/offline_audit --report   List every finding and exit 0.
   script/offline_audit --net-log net.log [more.log ...]
                                   Check the logs of sandboxed runs (made by
-                                  script/offline_sandbox_macos, see the `offline-audit` job in
+                                  script/offline_sandbox_macos, see the sandboxed jobs in
                                   .github/workflows/ci.yml): fail on any refused network access of
                                   the run's processes, on a missing, incomplete or unreadable log,
                                   and on a log whose canary is missing.

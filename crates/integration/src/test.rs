@@ -438,8 +438,8 @@ pub fn test_single_command() -> Builder {
 }
 
 /// Boots the app, then leaves it idle for two minutes so that periodic timers (flushes, polling,
-/// update checks) get a chance to fire. It is ignored by default; the CI `offline-audit` job runs
-/// it under a network sandbox (`--run-ignored only`).
+/// update checks) get a chance to fire. It is ignored by default; the CI `idle` job runs it
+/// under a network sandbox (`--run-ignored only`).
 pub fn test_idle_session() -> Builder {
     const IDLE_DURATION: Duration = Duration::from_secs(120);
 
