@@ -39,6 +39,8 @@ integration_tests! {
     test_ps1_value_not_null_or_exit,
     // Tests zsh-specific behavior.
     test_auto_title,
+    // The tab title right after the bootstrap, in every shell.
+    test_tab_title_after_bootstrap,
     // Tests zsh-specific behavior.
     test_warp_auto_title_disabled,
     // Tests zsh-specific behavior.
@@ -90,8 +92,6 @@ integration_tests! {
     // Tests of subshell logic from bootstrap script.
     test_can_bootstrap_local_bash_subshell,
     test_can_bootstrap_local_zsh_subshell,
-    // Disabled due to flakiness on CI.
-    #[ignore]
     test_can_bootstrap_local_fish_subshell,
 
     // Tests loading command history from shell histfile.

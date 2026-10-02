@@ -18,7 +18,6 @@ use warpui_core::async_assert;
 use warpui_core::integration::TestStep;
 
 use super::{Builder, new_builder};
-use crate::util::skip_if_powershell;
 
 pub fn test_secret_is_obfuscated_on_copy() -> Builder {
     let phone_number = "123-456-7890";
@@ -85,8 +84,6 @@ pub fn test_secret_tooltip_shows_on_click() -> Builder {
 pub fn test_secret_tooltip_respects_safe_mode_setting() -> Builder {
     let phone_number = "123-456-7890";
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_step(initialize_secret_regexes())
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(toggle_setting(SettingsAction::PrivacyPageToggle(
@@ -159,8 +156,6 @@ pub fn test_alt_screen_secret_detection() -> Builder {
         .with_keystrokes(&["enter"]);
 
     new_builder()
-        // TODO: Flakey on Powershell
-        .set_should_run_test(skip_if_powershell)
         .with_step(initialize_secret_regexes())
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(toggle_setting(SettingsAction::PrivacyPageToggle(
@@ -245,11 +240,10 @@ pub fn test_secrets_are_redacted_in_both_safe_mode_display_modes() -> Builder {
     let secret_api_key = "sk-1234567890abcdef";
     let expected_redacted_phone = "************";
     let expected_redacted_api_key = "******************";
-    let test_command = "echo 'Phone: 123-456-7890 API: sk-1234567890abcdef'.";
+    let test_command = "echo 'Phone: 123-456-7890 API: sk-1234567890abcdef.'";
     let test_output = "Phone: 123-456-7890 API: sk-1234567890abcdef.";
 
     new_builder()
-        .set_should_run_test(skip_if_powershell)
         .with_step(initialize_secret_regexes())
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         // Test case 1: Strikethrough mode - secrets are redacted in the block output

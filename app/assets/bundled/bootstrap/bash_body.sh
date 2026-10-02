@@ -1483,6 +1483,10 @@ esac
 
     WARP_BOOTSTRAPPED=1
 
+    # The first precmd after the bootstrap belongs to a generator command, which skips the
+    # precmd functions above, so the tab would stay named after the shell until the first command.
+    warp_set_title_idle_on_precmd
+
     warp_update_prompt_vars
 
     # Set the history file to append

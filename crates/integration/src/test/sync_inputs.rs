@@ -12,7 +12,7 @@ use warpui_core::integration::TestStep;
 use warpui_core::{async_assert, async_assert_eq};
 
 use super::{Builder, new_builder};
-use crate::util::{get_input_buffer, skip_if_powershell};
+use crate::util::get_input_buffer;
 
 pub fn test_input_syncing_is_off_by_default() -> Builder {
     new_builder()
@@ -99,8 +99,6 @@ pub fn test_can_run_command_in_synced_panes_in_tab() -> Builder {
     let expected_output = "typedInPane2";
 
     new_builder()
-        // TODO: Flakey on Powershell
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("create one additional pane")
@@ -139,8 +137,6 @@ pub fn test_can_run_command_in_synced_panes_in_tab() -> Builder {
 
 pub fn test_synced_panes_long_running_commands() -> Builder {
     new_builder()
-        // TODO: Flakey on Powershell
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("create one additional pane")
@@ -204,10 +200,7 @@ pub fn test_synced_panes_long_running_commands() -> Builder {
 /// Tests that as you use synced inputs and terminals switch between
 /// alt-screens and the block-list, the correct terminal view maintains focus.
 pub fn test_synced_inputs_terminal_mode_change_view_focus() -> Builder {
-    let mut builder = new_builder()
-        // TODO: Flakey on Powershell
-        .set_should_run_test(skip_if_powershell)
-        .with_step(wait_until_bootstrapped_single_pane_for_tab(0));
+    let mut builder = new_builder().with_step(wait_until_bootstrapped_single_pane_for_tab(0));
 
     for i in 1..=3 {
         builder = builder

@@ -6,16 +6,13 @@ use warp::integration_testing::input::{
     tab_completions_menu_is_open,
 };
 use warp::integration_testing::step::new_step_with_default_assertions;
-use warp::integration_testing::terminal::util::{
-    ExpectedExitStatus, current_shell_starter_and_version,
-};
+use warp::integration_testing::terminal::util::ExpectedExitStatus;
 use warp::integration_testing::terminal::{
     execute_command_for_single_terminal_in_tab, wait_until_bootstrapped_single_pane_for_tab,
 };
 use warp::integration_testing::view_getters::{
     single_input_view_for_tab, single_terminal_view_for_tab,
 };
-use warp::terminal::shell::ShellType;
 use warpui_core::integration::TestStep;
 use warpui_core::{Event, async_assert_eq};
 
@@ -148,12 +145,6 @@ pub fn test_git_prompt_chips() -> Builder {
     // here because that would put us in the warp repo. We need to
     // be in a place in the filesystem that's not already a git repo.
     new_builder()
-        .set_should_run_test(|| {
-            // TODO(alokedesai): Re-enable for Powershell once the cause of the flakiness has been
-            // resolved.
-            let (starter, _) = current_shell_starter_and_version();
-            starter.shell_type() != ShellType::PowerShell
-        })
         .use_tmp_filesystem_for_test_root_directory()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(

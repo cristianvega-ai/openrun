@@ -1,5 +1,4 @@
 use warp::cmd_or_ctrl_shift;
-use warp::integration_testing::terminal::util::current_shell_starter_and_version;
 use warp::integration_testing::terminal::{
     assert_context_menu_is_open, initialize_secret_regexes,
     wait_until_bootstrapped_single_pane_for_tab,
@@ -9,7 +8,6 @@ use warp::settings_view::{PrivacyPageAction, SettingsAction};
 use warp::terminal::GridType;
 use warp::terminal::model::index::Point;
 use warp::terminal::model::terminal_model::{BlockIndex, WithinBlock, WithinModel};
-use warp::terminal::shell::ShellType;
 use warpui_core::{async_assert, async_assert_eq};
 
 use super::new_builder;
@@ -258,14 +256,6 @@ pub fn test_block_filtering_filter_then_find() -> Builder {
 
 pub fn test_block_filtering_with_secrets() -> Builder {
     new_builder()
-        // TODO: Fish flaking on linux
-        .set_should_run_test(|| {
-            let (starter, _) = current_shell_starter_and_version();
-            !matches!(
-                starter.shell_type(),
-                ShellType::Fish | ShellType::PowerShell
-            )
-        })
         .with_step(initialize_secret_regexes())
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(clear_blocklist_to_remove_bootstrapped_blocks())
@@ -279,10 +269,25 @@ pub fn test_block_filtering_with_secrets() -> Builder {
         .with_step(open_block_filter_editor())
         .with_step(SecretTestCase::perform_filter_query())
         .with_step(
-            // Note: ideally, we shouldn't hardcode a secret handle ID here but we're doing this
-            // for now. This is affected by the addition/removal of new `GridType`s!
+            // The handle ID counts the secrets the session has found so far, which depends on
+            // what the shell prints around the command, so read it from the secret itself.
             new_step_with_default_assertions("Click on secret to show tooltip")
-                .with_click_on_saved_position("terminal_view:first_cell_in_secret_1")
+                .with_click_on_saved_position_fn(|app, window_id| {
+                    let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
+                    terminal_view.read(app, |view, _ctx| {
+                        let model = view.model.lock();
+                        let secret =
+                            model.secret_at_point(&WithinModel::BlockList(WithinBlock::new(
+                                Point::new(0, 24),
+                                BlockIndex::zero(),
+                                GridType::Output,
+                            )));
+                        let id = secret
+                            .map(|(handle, _)| handle.id())
+                            .expect("Secret exists");
+                        format!("terminal_view:first_cell_in_secret_{id}")
+                    })
+                })
                 .add_assertion(assert_secret_tooltip_open(true))
                 .add_assertion(|app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);

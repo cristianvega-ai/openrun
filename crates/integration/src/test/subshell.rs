@@ -13,7 +13,6 @@ use warpui_core::windowing::state::ApplicationStage;
 use warpui_core::{UpdateModel, async_assert};
 
 use super::{Builder, new_builder};
-use crate::util::skip_if_powershell;
 
 /// Generates an integration test that asserts that a local subshell of the given shell type can be
 /// successfully bootstrapped.
@@ -26,8 +25,6 @@ macro_rules! generate_can_bootstrap_local_subshell_for_shell {
                 // cleaning up files after the test, so we use a temp dir
                 // to hedge against this.
                 .use_tmp_filesystem_for_test_root_directory()
-                // TODO: Re-enable once powershell has subshell support
-                .set_should_run_test(skip_if_powershell)
                 .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
                 .with_step(enter_local_subshell_command($shell))
                 .with_step(assert_warpify_footer_is_showing())
@@ -47,8 +44,6 @@ pub fn test_can_auto_bootstrap() -> Builder {
     const SUBSHELL_COMMAND: &str = "zsh";
 
     new_builder()
-        // TODO: Re-enable once powershell has subshell support
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(TestStep::new("foo").add_assertion(|app, window_id| {
             app.update_model(

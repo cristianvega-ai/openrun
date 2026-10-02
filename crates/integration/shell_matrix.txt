@@ -1,0 +1,49 @@
+# The integration tests that cannot apply to a login shell, for `script/ci_shell_matrix`.
+#
+# The suite runs under zsh, bash 3.2 (bash3, the bash that macOS ships), Homebrew's bash (bash5),
+# fish and PowerShell 7 (pwsh). Every test runs in every shell except the ones listed here, and a
+# test that is listed is left out of that shell's run (a filter, not a skip) and checked instead:
+# in the "excluded" run each one must skip itself (OPENRUN_EXPECT_SKIP=1), so an entry whose
+# test could run now fails CI. Each test still carries its own check of the shell
+# (`set_should_run_test`), so a test that runs in a shell it does not fit is a failure in CI
+# (CI=true), not a pass.
+#
+# A group is `[shells] reason`, followed by the full names of its tests (see `cargo nextest list`).
+# A reason says why the scenario does not exist in that shell. A product gap is not hidden here:
+# its reason says so, and the gap is tracked outside this file.
+
+[bash3 bash5 fish pwsh] a zsh-only scenario: it needs a zsh option, plugin, prompt or startup file
+shell_integration_tests::test_auto_title
+shell_integration_tests::test_color_overrides_in_prompt_dont_crash
+shell_integration_tests::test_detect_powerlevel10k
+shell_integration_tests::test_warp_honors_user_title_zsh
+shell_integration_tests::test_warp_prompt_unsets_zsh_rprompt
+shell_integration_tests::test_zsh_bootstraps_with_nounset_option
+shell_integration_tests::test_zsh_cursor_mode_vi_bindings_do_not_corrupt_commands
+shell_integration_tests::test_zshrc_keypress
+ui_tests::test_instant_prompt_bootstrap
+
+[bash3 bash5 pwsh] a right prompt exists in zsh and fish only
+ui_tests::test_rprompt_doesnt_show_when_not_enough_space
+
+[fish pwsh] bash and zsh only: bootstrap support for it (WARP_DISABLE_AUTO_TITLE) or the startup-file idiom it tests exists in those two
+shell_integration_tests::test_alias_guards_on_ps1_set
+shell_integration_tests::test_warp_auto_title_disabled
+
+[bash3 pwsh] no autocd: bash before 4.0 and PowerShell have no option to cd by typing a directory name
+shell_integration_tests::test_completions_with_autocd
+
+[bash3] PROMPT_COMMAND arrays exist in bash 5.1 and newer
+shell_integration_tests::bash_only::test_bash_bootstraps_with_prompt_command_array
+shell_integration_tests::bash_only::test_bash_bootstraps_with_prompt_command_array_that_sets_ps1
+
+[pwsh] the posix-shell variant of the typeahead test; PowerShell ignores newlines in typeahead and has pwsh_only::test_input_reporting_powershell
+shell_integration_tests::test_input_reporting_posix_shells
+
+[pwsh] product gap: PowerShell's Precmd hook sends no PS1 yet (`ps1 = ''` in pwsh.ps1), so the copied prompt is blank
+shell_integration_tests::test_copy_prompt_from_block_honor_ps1_enabled
+shell_integration_tests::test_copy_block_command_and_output_honor_ps1_enabled
+
+[fish] product limitation: fish reads config.fish before Warp's --init-command runs, so Warp does not see a startup file that waits for input
+ui_tests::test_paste_and_type_characters_before_bootstrap
+shell_integration_tests::test_ctrl_d_handled_by_read_during_bootstrapping

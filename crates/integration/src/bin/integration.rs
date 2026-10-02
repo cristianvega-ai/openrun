@@ -185,6 +185,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_bash_honor_ps1_expands_dynamic_prompt_once);
     register_test!(test_completions_with_autocd);
     register_test!(test_auto_title);
+    register_test!(test_tab_title_after_bootstrap);
     register_test!(test_warp_auto_title_disabled);
     register_test!(test_warp_honors_user_title_bash);
     register_test!(test_warp_honors_user_title_zsh);

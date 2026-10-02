@@ -40,9 +40,11 @@ const VISIBLE_TEXT: &str = "Click me";
 
 /// Build a `printf` command that emits an OSC 8 hyperlink wrapping
 /// `visible` and pointing at `uri`. Single-quoted so the shell does not
-/// interpolate; `printf` itself decodes `\033` (ESC) and `\\` (backslash).
+/// interpolate; `printf` itself decodes `\033` (ESC), `\134` (the backslash that ends the
+/// sequence with ESC `\`) and `\n`. The backslash is written in octal because fish reads `\\`
+/// inside single quotes as one backslash, which would leave `printf` with the wrong sequence.
 fn osc8_printf(uri: &str, visible: &str) -> String {
-    format!(r#"printf '\033]8;;{uri}\033\\{visible}\033]8;;\033\\\n'"#)
+    format!(r#"printf '\033]8;;{uri}\033\134{visible}\033]8;;\033\134\n'"#)
 }
 
 /// Bootstrap. All OSC 8 tests share this prelude.

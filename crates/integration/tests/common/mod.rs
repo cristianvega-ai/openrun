@@ -19,6 +19,11 @@ fn is_ci() -> bool {
     env::var("CI").is_ok_and(|value| !value.is_empty() && value != "false")
 }
 
+/// Set by the exclusion check of `script/ci_shell_matrix`, which runs the tests that are left out of
+/// a shell's run: each of them must skip itself. A test that runs instead means the exclusion is
+/// stale.
+const EXPECT_SKIP_ENV_VAR: &str = "OPENRUN_EXPECT_SKIP";
+
 /// Setting this outside CI lets a run skip scenarios that don't apply to its shell (for example
 /// the whole suite under fish) without failing.
 const ALLOW_SKIPS_ENV_VAR: &str = "OPENRUN_ALLOW_SKIPS";
@@ -31,6 +36,9 @@ const ALLOW_SKIPS_ENV_VAR: &str = "OPENRUN_ALLOW_SKIPS";
 fn handle_skip(name: &str) -> Result<(), String> {
     let shell = env::var("WARP_SHELL_PATH").unwrap_or_else(|_| "(default shell)".to_owned());
     println!("TEST SKIPPED: {name} was not run (shell: {shell}); it is not a pass");
+    if env::var_os(EXPECT_SKIP_ENV_VAR).is_some() {
+        return Ok(());
+    }
     if let Ok(path) = env::var(SKIP_REPORT_ENV_VAR)
         && let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
@@ -108,6 +116,10 @@ pub fn run_integration_test(name: &str) -> Result<(), String> {
         .status()
     {
         Ok(status) => match status.code() {
+            Some(0) if env::var_os(EXPECT_SKIP_ENV_VAR).is_some() => Err(format!(
+                "Test {name} ran, but it is excluded for this shell and was expected to skip itself. \
+                 Remove it from crates/integration/shell_matrix.txt."
+            )),
             Some(0) => {
                 println!("Test exited with success.");
                 Ok(())

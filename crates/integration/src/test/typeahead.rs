@@ -16,7 +16,6 @@ use warpui_core::integration::{TestSetupUtils, TestStep};
 use warpui_core::{async_assert, async_assert_eq};
 
 use super::{Builder, new_builder};
-use crate::util::skip_if_powershell;
 
 /// The script that stands in for a long-running command. It runs until [`release_hold`] creates
 /// its release file, so a test decides when the command ends instead of racing a `sleep`.
@@ -54,8 +53,6 @@ fn start_hold_command() -> TestStep {
 
 pub fn test_typeahead() -> Builder {
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_setup(write_hold_script)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(start_hold_command())

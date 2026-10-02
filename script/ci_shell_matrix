@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Runs the integration suite with one login shell, the way CI does.
+
+  script/ci_shell_matrix SHELL [--list]
+
+SHELL is one of zsh, bash3 (the bash 3.2 that macOS ships), bash5 (Homebrew's bash), fish, pwsh.
+The shell is found on the PATH (bash3: /bin/bash; bash5: Homebrew's prefix); the environment
+variable SHELL_MATRIX_PATH names it instead.
+
+Three runs, each of which must pass, and all of which are made even if an earlier one fails:
+
+  1. suite    every integration test except the ones that cannot apply to this shell
+              (crates/integration/shell_matrix.txt, with the reason of each). `CI=true`, which GitHub
+              Actions sets, turns a skipped test (one whose scenario does not fit the shell) into a
+              failure, so a scenario cannot stop running unnoticed.
+  2. own      the tests of the module named after the shell (`bash_only`, `pwsh_only`; ignored by
+              default because they only exist in that shell), if the shell has one.
+  3. excluded the excluded tests, with OPENRUN_EXPECT_SKIP=1: each must skip itself. A test that
+              runs and passes in this shell fails here, so a stale entry cannot hide a test that
+              could run.
+
+When NEXTEST_ARCHIVE names a nextest archive (the CI build job makes one) the runs go through
+`script/ci_nextest`, which keeps one JUnit report per run in junit/; otherwise they use cargo.
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MATRIX_FILE = os.path.join(ROOT, "crates", "integration", "shell_matrix.txt")
+
+SHELLS = ("zsh", "bash3", "bash5", "fish", "pwsh")
+OWN_MODULE = {"bash3": "bash_only", "bash5": "bash_only", "pwsh": "pwsh_only"}
+
+
+def shell_path(shell):
+    override = os.environ.get("SHELL_MATRIX_PATH")
+    if override:
+        return override
+    if shell == "bash3":
+        return "/bin/bash"
+    if shell == "bash5":
+        prefix = subprocess.run(["brew", "--prefix"], capture_output=True, text=True, check=True).stdout.strip()
+        return os.path.join(prefix, "bin", "bash")
+    name = {"zsh": "zsh", "fish": "fish", "pwsh": "pwsh"}[shell]
+    path = shutil.which(name)
+    if not path:
+        sys.exit(f"ci_shell_matrix: {name} is not installed")
+    return path
+
+
+def read_matrix():
+    """Returns {shell: [(test, reason)]} from the matrix file."""
+    excluded = {shell: [] for shell in SHELLS}
+    shells, reason = None, None
+    with open(MATRIX_FILE, encoding="utf-8") as handle:
+        for number, raw in enumerate(handle, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("["):
+                head, _, reason = line[1:].partition("]")
+                shells = head.split()
+                reason = reason.strip()
+                unknown = [s for s in shells if s not in SHELLS]
+                if unknown or not shells or not reason:
+                    sys.exit(f"{MATRIX_FILE}:{number}: a group needs known shells and a reason: {line}")
+                continue
+            if shells is None:
+                sys.exit(f"{MATRIX_FILE}:{number}: a test before the first group")
+            for shell in shells:
+                excluded[shell].append((line, reason))
+    return excluded
+
+
+def filterset(names):
+    return " | ".join(f"test(={name})" for name in names)
+
+
+def check_names_exist(names, env):
+    """Fails when an excluded name is not a test of the build (a rename would silently drop it)."""
+    command = ["cargo", "nextest", "list", "-p", "integration", "--run-ignored", "all", "--message-format", "json"]
+    if os.environ.get("NEXTEST_ARCHIVE"):
+        command = ["cargo", "nextest", "list", "--archive-file", os.environ["NEXTEST_ARCHIVE"],
+                   "--workspace-remap", ROOT, "--extract-to", ROOT, "--extract-overwrite",
+                   "-E", "package(integration)", "--run-ignored", "all", "--message-format", "json"]
+    out = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True)
+    if out.returncode != 0:
+        sys.exit(f"ci_shell_matrix: listing the tests failed:\n{out.stderr}")
+    import json
+
+    known = set()
+    for suite in json.loads(out.stdout)["rust-suites"].values():
+        known.update(suite["testcases"])
+    missing = [name for name in names if name not in known]
+    if missing:
+        sys.exit("ci_shell_matrix: excluded tests that do not exist: " + ", ".join(missing))
+
+
+def run(shell, label, extra_args, expression, env):
+    """Runs nextest for one of the three runs; returns its exit status."""
+    print(f"\n=== {shell}: {label} ===", flush=True)
+    args = ["--no-fail-fast", "-E", expression] + extra_args
+    if os.environ.get("NEXTEST_ARCHIVE"):
+        command = [os.path.join(ROOT, "script", "ci_nextest"), f"plain-shell-{shell}-{label}"] + args
+    else:
+        command = ["cargo", "nextest", "run", "--locked", "--retries", "0", "--profile", "ci", "-p", "integration"] + args
+    return subprocess.run(command, cwd=ROOT, env=env).returncode
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in SHELLS:
+        sys.exit(__doc__)
+    shell = sys.argv[1]
+    excluded = read_matrix()[shell]
+    names = [name for name, _ in excluded]
+    if "--list" in sys.argv[2:]:
+        for name, reason in excluded:
+            print(f"{name}\t{reason}")
+        return
+
+    path = shell_path(shell)
+    env = dict(os.environ, WARP_SHELL_PATH=path, CI=os.environ.get("CI", "true"))
+    env.pop("OPENRUN_ALLOW_SKIPS", None)
+    env.pop("OPENRUN_EXPECT_SKIP", None)
+    print(f"shell: {shell} ({path})")
+    subprocess.run([path, "--version"], check=False)
+    check_names_exist(names, env)
+
+    not_excluded = "package(integration)"
+    if names:
+        not_excluded += f" and not ({filterset(names)})"
+
+    statuses = {"suite": run(shell, "suite", [], not_excluded, env)}
+    own = OWN_MODULE.get(shell)
+    if own:
+        own_expression = f"{not_excluded} and test(~shell_integration_tests::{own}::)"
+        statuses["own"] = run(shell, "own", ["--run-ignored", "only"], own_expression, env)
+    if names:
+        expect = dict(env, OPENRUN_EXPECT_SKIP="1")
+        statuses["excluded"] = run(
+            shell, "excluded", ["--run-ignored", "all"], f"package(integration) and ({filterset(names)})", expect
+        )
+
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as handle:
+            handle.write(f"### {shell}: tests left out of the run (they must skip themselves)\n")
+            for name, reason in excluded or [("none", "")]:
+                handle.write(f"- `{name}`: {reason}\n")
+
+    print("\n=== summary ===")
+    for label, status in statuses.items():
+        print(f"{shell} {label}: {'ok' if status == 0 else f'FAILED ({status})'}")
+    sys.exit(0 if all(status == 0 for status in statuses.values()) else 1)
+
+
+if __name__ == "__main__":
+    main()

@@ -216,13 +216,6 @@ pub fn per_shell_output(
     None
 }
 
-/// Indicates a test that currently does not work in powershell. We should
-/// eventually be removing all uses of this function.
-pub fn skip_if_powershell() -> bool {
-    let (starter, _) = current_shell_starter_and_version();
-    !matches!(starter.shell_type(), ShellType::PowerShell)
-}
-
 /// Gets the name of the system user for which the test binary is running.
 pub fn get_local_user() -> String {
     whoami::username()

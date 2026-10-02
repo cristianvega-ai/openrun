@@ -11,9 +11,7 @@ use warp::integration_testing::clipboard::assert_clipboard_contains_string;
 use warp::integration_testing::command_palette::assert_command_palette_is_closed;
 use warp::integration_testing::pane_group::assert_focused_pane_index;
 use warp::integration_testing::step::new_step_with_default_assertions;
-use warp::integration_testing::terminal::util::{
-    ExpectedExitStatus, current_shell_starter_and_version,
-};
+use warp::integration_testing::terminal::util::ExpectedExitStatus;
 use warp::integration_testing::terminal::{
     assert_active_session_local_path, assert_command_executed_for_single_terminal_in_tab,
     assert_focused_editor_in_tab, assert_input_editor_contents, execute_command,
@@ -29,7 +27,6 @@ use warp::integration_testing::window::{
 use warp::integration_testing::workspace::{assert_focused_tab_index, assert_tab_count};
 use warp::search::command_palette::mixer::CommandPaletteItemAction;
 use warp::settings::PaneSettings;
-use warp::terminal::shell::ShellType;
 use warp::themes::theme::AnsiColorIdentifier;
 use warp::workspace::WorkspaceAction;
 use warp::workspace::tab_settings::{TabSettings, VerticalTabsDisplayGranularity};
@@ -43,7 +40,6 @@ use warpui_core::{
 
 use super::new_builder;
 use crate::Builder;
-use crate::util::skip_if_powershell;
 
 const SOURCE_WINDOW_KEY: &str = "source window";
 const TARGET_WINDOW_KEY: &str = "target window";
@@ -173,11 +169,6 @@ fn assert_selected_cycle_tab_color_binding() -> AssertionCallback {
     })
 }
 
-fn should_run_tab_context_menu_metadata_test() -> bool {
-    let (starter, _) = current_shell_starter_and_version();
-    starter.shell_type() != ShellType::PowerShell
-}
-
 fn set_active_tab_name(name: &'static str) -> TestStep {
     TestStep::new("Set active tab name").with_action(move |app, window_id, _| {
         let workspace = workspace_view(app, window_id);
@@ -246,7 +237,6 @@ fn open_first_vertical_tab_pane_context_menu(step_name: &'static str) -> TestSte
 
 fn add_tab_context_metadata_setup_steps(builder: Builder) -> Builder {
     builder
-        .set_should_run_test(should_run_tab_context_menu_metadata_test)
         .use_tmp_filesystem_for_test_root_directory()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(set_active_tab_name(METADATA_TAB_TITLE))
@@ -590,7 +580,6 @@ pub fn test_cycle_active_tab_color_with_keybinding() -> Builder {
 
 pub fn test_active_session_follows_focus() -> Builder {
     new_builder()
-        .set_should_run_test(skip_if_powershell)
         .with_setup(|utils| {
             fs::create_dir(utils.test_dir().join("dir1")).expect("Couldn't create subdirectory");
             fs::create_dir(utils.test_dir().join("dir2")).expect("Couldn't create subdirectory");

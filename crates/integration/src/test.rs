@@ -174,7 +174,7 @@ pub use workflows::*;
 pub use workspace::*;
 
 use crate::builder::cargo_target_tmpdir;
-use crate::util::{ShellRcType, skip_if_powershell};
+use crate::util::ShellRcType;
 use crate::{Builder, user_defaults};
 
 const ADD_NEXT_OCCURRENCE_KEYBINDING: &str = "ctrl-g";
@@ -2083,8 +2083,6 @@ pub fn test_shell_reinitializing() -> Builder {
 /// started `sleep`, in which case the interrupt is lost and `sleep` runs for 999 s.
 pub fn test_ctrl_c() -> Builder {
     new_builder()
-        // TODO: Unknown failure for Powershell
-        .set_should_run_test(skip_if_powershell)
         .with_setup(|utils| {
             std::fs::write(
                 utils.test_dir().join("print_then_sleep.sh"),
@@ -2148,11 +2146,6 @@ pub fn test_hover_over_menu() -> Builder {
     }
 
     new_builder()
-        // TODO: Fish flaking on linux
-        .set_should_run_test(|| {
-            let (starter, _) = current_shell_starter_and_version();
-            !matches!(starter.shell_type(), ShellType::Fish)
-        })
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
             0,
@@ -2901,8 +2894,6 @@ pub fn test_block_based_snackbar_appears_for_running_command_waterfall_mode() ->
 /// `git log`) is running when input waterfall mode is enabled.
 pub fn test_block_based_snackbar_not_visible_pager_command_waterfall_mode() -> Builder {
     new_builder()
-        // TODO: There is some flakiness with long-running commands exiting.
-        .set_should_run_test(skip_if_powershell)
         .with_user_defaults(user_defaults::input_mode(InputMode::Waterfall))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
@@ -2976,8 +2967,6 @@ pub fn test_block_based_snackbar_small_window() -> Builder {
 pub fn test_multi_block_selections() -> Builder {
     // Check that multi block selections work as expected
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_echo(0))
         .with_step(execute_echo(0))
@@ -3165,6 +3154,18 @@ pub fn test_auto_title() -> Builder {
         ))
 }
 
+/// A new session's tab is named after the directory (`~` in the home directory) as soon as the
+/// shell is bootstrapped, in every shell. No command runs, so a title that only appears after the
+/// first command fails this test.
+pub fn test_tab_title_after_bootstrap() -> Builder {
+    new_builder()
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(tab_title_step(
+            "Assert the tab is named after the directory",
+            "~".to_string(),
+        ))
+}
+
 /// Validate that disabling Warp's auto title feature will not mess with oh-my-zsh settings.
 pub fn test_warp_auto_title_disabled() -> Builder {
     new_builder()
@@ -3276,13 +3277,6 @@ precmd_functions+=(set_title)
 /// in sync with the shell.
 pub fn test_osc7_updates_current_working_directory() -> Builder {
     new_builder()
-        .set_should_run_test(|| {
-            let (starter, _) = current_shell_starter_and_version();
-            matches!(
-                starter.shell_type(),
-                shell::ShellType::Bash | shell::ShellType::Zsh
-            )
-        })
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(clear_blocklist_to_remove_bootstrapped_blocks())
         .with_step(execute_command_for_single_terminal_in_tab(
@@ -3412,14 +3406,8 @@ pub fn test_new_session_focuses_input() -> Builder {
         )
 }
 
-/// TODO: make this test work for fish as well
 pub fn test_executable_completions() -> Builder {
     new_builder()
-        .set_should_run_test(|| {
-            let (starter, _version) = current_shell_starter_and_version();
-            // TODO: Unknown failure for Powershell
-            !matches!(starter.shell_type(), ShellType::Fish) && skip_if_powershell()
-        })
         .with_setup(|utils| {
             let dir = utils.test_dir();
             let dir_string = dir
@@ -3433,6 +3421,20 @@ pub fn test_executable_completions() -> Builder {
             "#
             );
             write_rc_files_for_test(&dir, rc_contents, [ShellRcType::Bash, ShellRcType::Zsh]);
+            write_rc_files_for_test(
+                &dir,
+                format!(
+                    "touch {filepath}; chmod a+x {filepath}\nset -gx PATH $PATH {dir_string}\n"
+                ),
+                [ShellRcType::Fish],
+            );
+            write_rc_files_for_test(
+                &dir,
+                format!(
+                    "New-Item -ItemType File -Force '{filepath}' | Out-Null\nchmod a+x '{filepath}'\n$env:PATH += ':{dir_string}'\n"
+                ),
+                [ShellRcType::PowerShell],
+            );
         })
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
@@ -3471,18 +3473,21 @@ pub fn test_executable_completions() -> Builder {
         )
 }
 
-// TODO: we should test this for fish someday too.
 pub fn test_function_completions() -> Builder {
     new_builder()
-        .set_should_run_test(|| {
-            let (starter, _version) = current_shell_starter_and_version();
-            // TODO: Unknown failure for Powershell
-            !matches!(starter.shell_type(), ShellType::Fish) && skip_if_powershell()
-        })
         .with_setup(|utils| {
             let dir = utils.test_dir();
-            let content = "my_func () { true ; }";
-            write_rc_files_for_test(dir, content, [ShellRcType::Bash, ShellRcType::Zsh]);
+            write_rc_files_for_test(
+                &dir,
+                "my_func () { true ; }",
+                [ShellRcType::Bash, ShellRcType::Zsh],
+            );
+            write_rc_files_for_test(&dir, "function my_func; true; end", [ShellRcType::Fish]);
+            write_rc_files_for_test(
+                &dir,
+                "function my_func { $true }",
+                [ShellRcType::PowerShell],
+            );
         })
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
@@ -3613,8 +3618,6 @@ pub fn test_add_windows_correct_position_and_cascade() -> Builder {
 
 pub fn test_command_xray_hover() -> Builder {
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Type in command")
@@ -4322,8 +4325,6 @@ pub fn test_create_session_with_new_tab_while_bootstrapping() -> Builder {
     // directory.
     let test_dir = PathBuf::from(cargo_target_tmpdir::get());
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
             0,
@@ -4404,7 +4405,11 @@ pub fn test_completions_as_you_type() -> Builder {
                 "alias gittest='git'\nalias gittext='git'",
                 [ShellRcType::Bash, ShellRcType::Zsh, ShellRcType::Fish],
             );
-            write_rc_files_for_test(dir, "New-Alias gittest git", [ShellRcType::PowerShell]);
+            write_rc_files_for_test(
+                dir,
+                "New-Alias gittest git\nNew-Alias gittext git",
+                [ShellRcType::PowerShell],
+            );
         })
         .with_user_defaults(HashMap::from([(
             CompletionsOpenWhileTyping::storage_key().to_string(),
@@ -4799,8 +4804,6 @@ pub fn test_completions_as_you_type_execute_on_enter() -> Builder {
 
 pub fn test_alias_expansion_has_limit() -> Builder {
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_user_defaults(HashMap::from([(
             NativeShellCompletionsEnabled::storage_key().to_string(),
             false.to_string(),
@@ -4848,8 +4851,6 @@ pub fn test_alias_expansion_has_limit() -> Builder {
 
 pub fn test_command_corrections() -> Builder {
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
             0,
@@ -4886,8 +4887,6 @@ pub fn test_start_shell_in_deleted_directory() -> Builder {
     let initial_dir =
         PathBuf::from(cargo_target_tmpdir::get()).join("test_start_shell_in_deleted_directory");
     new_builder()
-        // TODO: Flakey on Powershell (Linux)
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         // Start the test in a fresh directory within the test temporary files
         // directory, to make the test more hermetic.
@@ -5141,8 +5140,6 @@ pub fn test_git_prompt() -> Builder {
     // here because that would put us in the warp repo. We need to
     // be in a place in the filesystem that's not already a git repo.
     new_builder()
-        // TODO: Unknown failure for Powershell
-        .set_should_run_test(skip_if_powershell)
         .use_tmp_filesystem_for_test_root_directory()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
@@ -5238,8 +5235,6 @@ pub fn test_terminal_announces_capabilities_to_shell() -> Builder {
 
 pub fn test_find_query_not_evaluated_on_terminal_mode_change() -> Builder {
     new_builder()
-        // TODO: Flakey on Powershell
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(execute_command_for_single_terminal_in_tab(
             0,
@@ -5405,8 +5400,12 @@ pub fn test_copy_prompt_from_block_honor_ps1_disabled() -> Builder {
 pub fn test_copy_prompt_from_block_honor_ps1_enabled() -> Builder {
     let prompt_text = "this is my custom prompt";
     new_builder()
-        // TODO: Flakey on linux
-        .set_should_run_test(skip_if_powershell)
+        // PowerShell's Precmd hook sends no PS1 yet (`ps1 = ''` in pwsh.ps1), so the copied prompt
+        // is blank there.
+        .set_should_run_test(|| {
+            let (starter, _) = current_shell_starter_and_version();
+            starter.shell_type() != ShellType::PowerShell
+        })
         .with_user_defaults(HashMap::from([(
             HonorPS1::storage_key().to_owned(),
             true.to_string(),
@@ -5502,8 +5501,12 @@ pub fn test_copy_block_command_and_output_honor_ps1_enabled() -> Builder {
     let prompt_text = "this is my custom prompt";
     let command = "echo WARP_PS1_COPY_E2E_OUTPUT";
     new_builder()
-        // TODO: Flakey on linux
-        .set_should_run_test(skip_if_powershell)
+        // PowerShell's Precmd hook sends no PS1 yet (`ps1 = ''` in pwsh.ps1), so the copied prompt
+        // is blank there.
+        .set_should_run_test(|| {
+            let (starter, _) = current_shell_starter_and_version();
+            starter.shell_type() != ShellType::PowerShell
+        })
         .with_user_defaults(HashMap::from([(
             HonorPS1::storage_key().to_owned(),
             true.to_string(),
@@ -5933,8 +5936,6 @@ pub fn test_block_bulk_deletion_using_escape_codes() -> Builder {
 /// are only sent if the terminal is the focused terminal.
 pub fn test_escape_sequences_sent_to_focused_terminal() -> Builder {
     new_builder()
-        // TODO: There is some flakiness with long-running commands exiting.
-        .set_should_run_test(skip_if_powershell)
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(TestStep::new("Create a new session").with_keystrokes(&[cmd_or_ctrl_shift("d")]))
         .with_step(

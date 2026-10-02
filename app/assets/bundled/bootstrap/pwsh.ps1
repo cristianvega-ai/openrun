@@ -169,9 +169,13 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
             'PSWorkflow', # Legacy workflow (Windows PS 5)
             'PSWorkflowUtility'        # Legacy workflow utility (Windows PS 5)
         )
-        $functionNamesRaw = Get-Command -CommandType Function -Module $corePsModules |
+        # Functions that belong to no module are the user's own (profile, dot-sourced scripts). The
+        # command that loads the other functions later runs in a separate process, which does not
+        # see them.
+        $functionNamesRaw = @(Get-Command -CommandType Function -Module $corePsModules) + `
+            @(Get-Command -CommandType Function | Where-Object { -not $_.ModuleName }) |
             Where-Object { -not $_.Name.StartsWith('Warp') } |
-            Select-Object -ExpandProperty Name
+            Select-Object -ExpandProperty Name -Unique
         $functionNames = $functionNamesRaw -join [Environment]::NewLine
         $builtinsRaw = Get-Command -CommandType Cmdlet -Module $corePsModules | Select-Object -ExpandProperty Name
         $builtins = $builtinsRaw -join [Environment]::NewLine
