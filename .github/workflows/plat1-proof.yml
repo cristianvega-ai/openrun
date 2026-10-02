@@ -62,29 +62,6 @@ jobs:
           /usr/bin/sandbox-exec -n no-network /usr/bin/true && echo "sandbox-exec works"
           zsh --version; bash --version | head -1
 
-      # Can the denials be read after the run (`log show`), with and without sudo?
-      - name: Probe - read denials with log show
-        run: |
-          start=$(date "+%Y-%m-%d %H:%M:%S")
-          cat > probe.py << 'EOF'
-          import socket
-          c = socket.socket()
-          c.settimeout(2)
-          try:
-              c.connect(("203.0.113.7", 443))
-          except OSError as error:
-              print("failed:", error)
-          EOF
-          ./script/offline_sandbox_macos net-probe.log /usr/bin/python3 probe.py
-          sleep 10
-          echo "--- sudo -n true: $(sudo -n true && echo yes || echo no)"
-          echo "--- log show (no sudo)"
-          /usr/bin/log show --start "$start" --info --debug --predicate 'eventMessage CONTAINS "Sandbox" AND eventMessage CONTAINS "network-outbound"' 2>&1 | grep -E "Python|network-outbound" | head -5 || true
-          echo "--- log show (sudo)"
-          sudo -n /usr/bin/log show --start "$start" --info --debug --predicate 'eventMessage CONTAINS "Sandbox" AND eventMessage CONTAINS "network-outbound"' 2>&1 | grep -E "Python|network-outbound" | head -5 || true
-          echo "--- stream log"
-          grep -E "Python|dropped" net-probe.log | head -5 || true
-
       # What the sandbox log holds when nothing of ours runs: the denials of system processes.
       - name: Measure the log noise of the runner (90 s, nothing running)
         run: |

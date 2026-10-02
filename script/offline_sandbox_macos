@@ -6,23 +6,29 @@
 # The command runs under `sandbox-exec` with a profile that denies every network access to an
 # address that is not on this machine (loopback and the addresses of its own interfaces stay
 # reachable, as do unix sockets, except the one of the DNS daemon, so a name lookup is refused as
-# well). The kernel reports each denial to the unified log; `log stream` is started before the
-# command and writes them to LOG together with the processes the command started, and
-# `script/offline_audit --net-log LOG` turns that into a pass or fail. Two layers, as on Linux:
-# the kernel refuses the access, and the log shows that nothing tried.
+# well). The kernel reports each denial to the unified log. After the run, `log show` reads the
+# reports of the run's time window into LOG, together with the processes the command started, and
+# `script/offline_audit --net-log LOG` turns that into a pass or fail. Two layers, as on Linux: the
+# kernel refuses the access, and the log shows that nothing tried.
 #
-# The sandbox is inherited by every child process, so a process that is not in the tree of the
-# command (a system daemon with a profile of its own) is a different case; the audit tells them
-# apart by process id and name.
+# `log show` and not `log stream`: on a hosted runner the stream drops messages all the time
+# ("=== Messages dropped during live streaming"), also when nothing runs, and a dropped denial is a
+# missing proof. The persisted log is complete. (The stream stays available for a machine on which
+# `log show` does not return the reports: OFFLINE_SANDBOX_MACOS_LOG=stream. The audit fails on any
+# gap the stream reports.)
+#
+# The sandbox is inherited by every child process, but the stream holds the denials of system
+# daemons with profiles of their own too; the audit tells them apart by process id and name.
 #
 # Fail-closed: before the command starts, a canary (a connection to 203.0.113.7) runs under the same
-# profile and its denial must show up in the log stream. If it does not within 30 seconds, the
-# command does not run and the exit status is 125.
+# profile and its denial must be readable in the log; after the command ended a second canary must
+# be readable, which proves the log is complete up to that point. If either is missing within 60
+# seconds the exit status is 125 (the command is not run, or the log is marked incomplete).
 #
 # LOG ends with `# end` when the run completed; a log without it is a failure for the audit.
 #
 # Used by the `offline-audit` job in .github/workflows/ci.yml. Works with the bash 3.2 that macOS
-# ships. Exit status: that of the command, or 125 when the sandbox could not be set up.
+# ships. Exit status: that of the command, or 125 when the sandbox or the log could not be relied on.
 set -u
 
 if [ "$#" -lt 2 ]; then
@@ -41,11 +47,14 @@ for tool in "$sandbox_exec" "$log_tool" /usr/bin/curl /bin/ps; do
   fi
 done
 
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/offline-sandbox.XXXXXX")
 profile=$work/profile.sb
 stream=$work/stream.txt
 tree=$work/tree.txt
 : > "$tree"
+: > "$stream"
+mode=${OFFLINE_SANDBOX_MACOS_LOG:-show}
 stream_pid=
 tracker_pid=
 
@@ -71,37 +80,58 @@ cat > "$profile" << 'EOF'
 (deny mach-lookup (global-name "com.apple.dnssd.service") (global-name-prefix "com.apple.nsurlsessiond"))
 EOF
 
-# The stream must be running before the command, or the first denials are lost.
-# Only the reports that can mean network access are asked for: the less the stream carries, the less
-# of it the system drops under load (it says so in the stream when it does).
+# Only the reports that can mean network access are asked for.
 predicate='eventMessage CONTAINS "Sandbox" AND (eventMessage CONTAINS "network-outbound" OR eventMessage CONTAINS "dnssd" OR eventMessage CONTAINS "nsurlsessiond")'
-"$log_tool" stream --info --debug --predicate "$predicate" > "$stream" 2>&1 &
-stream_pid=$!
-sleep 3
-if ! kill -0 "$stream_pid" 2> /dev/null; then
-  echo "offline_sandbox_macos: 'log stream' did not start; the command is not run" >&2
-  cat "$stream" >&2
-  exit 125
-fi
+start_time=$(date "+%Y-%m-%d %H:%M:%S")
 
-# The canary: a denied connection must appear in the stream. It is tried again every 5 seconds,
-# six times, in case the stream was not yet recording.
-seen=0
-canary_pid=
-for _ in 1 2 3 4 5 6; do
-  "$sandbox_exec" -f "$profile" /usr/bin/curl -s -m 2 -o /dev/null http://203.0.113.7:9/ > /dev/null 2>&1
-  for _ in 1 2 3 4 5; do
-    canary_pid=$(sed -n 's/.*Sandbox: curl(\([0-9][0-9]*\)) deny(1) network-outbound remote.*/\1/p' "$stream" | tail -n 1)
-    [ -n "$canary_pid" ] && break
-    sleep 1
-  done
-  if [ -n "$canary_pid" ]; then
-    seen=1
-    break
+case "$mode" in
+  show) ;;
+  stream)
+    # The stream must be running before the command, or the first denials are lost.
+    "$log_tool" stream --info --debug --predicate "$predicate" > "$stream" 2>&1 &
+    stream_pid=$!
+    sleep 3
+    if ! kill -0 "$stream_pid" 2> /dev/null; then
+      echo "offline_sandbox_macos: 'log stream' did not start; the command is not run" >&2
+      cat "$stream" >&2
+      exit 125
+    fi
+    ;;
+  *)
+    echo "offline_sandbox_macos: OFFLINE_SANDBOX_MACOS_LOG must be show or stream" >&2
+    exit 125
+    ;;
+esac
+
+# The denials reported since the start of the run.
+read_denials() {
+  if [ "$mode" = show ]; then
+    "$log_tool" show --start "$start_time" --info --debug --predicate "$predicate" 2> /dev/null
+  else
+    cat "$stream"
   fi
-done
-if [ "$seen" -ne 1 ]; then
-  echo "offline_sandbox_macos: the denial of the canary connection did not reach the log stream within 30 s (6 attempts); the command is not run" >&2
+}
+
+# Runs a denied connection under the profile and waits until the log shows it. The port tells the
+# two canaries apart; the result is the process id of the curl that was denied.
+canary() {
+  local port=$1 pid
+  for _ in 1 2 3 4 5 6; do
+    "$sandbox_exec" -f "$profile" /usr/bin/curl -s -m 2 -o /dev/null "http://203.0.113.7:$port/" > /dev/null 2>&1
+    for _ in 1 2 3 4 5 6; do
+      pid=$(read_denials | sed -n "s/.*Sandbox: curl(\\([0-9][0-9]*\\)) deny(1) network-outbound remote:\\*:$port\$/\\1/p" | tail -n 1)
+      if [ -n "$pid" ]; then
+        echo "$pid"
+        return 0
+      fi
+      sleep 2
+    done
+  done
+  return 1
+}
+
+if ! canary_pid=$(canary 9); then
+  echo "offline_sandbox_macos: the denial of the canary connection is not in the log after 60 s ($mode mode); the command is not run" >&2
   exit 125
 fi
 
@@ -143,20 +173,33 @@ kill "$tracker_pid" 2> /dev/null
 wait "$tracker_pid" 2> /dev/null
 tracker_pid=
 
-# The log is written a little after the event.
-sleep 3
-kill "$stream_pid" 2> /dev/null
-wait "$stream_pid" 2> /dev/null
-stream_pid=
+# A second canary after the run: the log is written a little after the event, and once this one
+# is readable everything before it is.
+end_canary_pid=
+complete=1
+if ! end_canary_pid=$(canary 10); then
+  echo "offline_sandbox_macos: the denial of the final canary is not in the log after 60 s; the log of this run is incomplete" >&2
+  complete=0
+fi
+if [ -n "$stream_pid" ]; then
+  kill "$stream_pid" 2> /dev/null
+  wait "$stream_pid" 2> /dev/null
+  stream_pid=
+fi
 
 {
   echo "# openrun-offline-sandbox-macos 1"
   echo "# command: $*"
+  echo "# mode: $mode"
   echo "# canary: seen pid $canary_pid"
-  sed -n 's/.*Sandbox: curl(\([0-9][0-9]*\)) deny(1) network-outbound remote.*/# canary-pid: \1/p' "$stream" | sort -u | head -n 8
+  [ -n "$end_canary_pid" ] && echo "# canary-pid: $end_canary_pid"
+  read_denials | sed -nE 's/.*Sandbox: curl\(([0-9]+)\) deny\(1\) network-outbound remote:\*:(9|10)$/# canary-pid: \1/p' | sort -u
   sort -u "$tree" | sed 's/^/# tree: /'
   echo "# stream:"
-  cat "$stream"
-  echo "# end"
+  read_denials
+  [ "$complete" -eq 1 ] && echo "# end"
 } > "$log"
+if [ "$complete" -ne 1 ]; then
+  exit 125
+fi
 exit "$status"
