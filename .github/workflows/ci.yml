@@ -169,11 +169,15 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # The scenarios that only exist in one shell (bash, PowerShell 7). They are ignored in the zsh
-  # run above, so this job is where they run: every test here must run, and a skip fails it
-  # (`CI=true`). The runner ships bash 3.2 and PowerShell 7; bash 5.1 or newer comes from Homebrew.
+  # The whole integration suite under the other login shells users have on a Mac: the bash that
+  # macOS ships (3.2), Homebrew's bash 5, fish and PowerShell 7, plus the scenarios that exist in
+  # one shell only (`bash_only`, `pwsh_only`; ignored in the zsh run above). `script/ci_shell_matrix`
+  # leaves out the tests that cannot apply to a shell (crates/integration/shell_matrix.txt, each
+  # with its reason), checks that those do skip themselves, and runs the rest with `CI=true`, so a
+  # test that skips or fails fails the job. The runner ships bash 3.2 and PowerShell 7; bash 5 and
+  # fish come from Homebrew.
   integration-shells:
-    name: Integration tests, bash and PowerShell (macOS)
+    name: Integration tests, shell matrix (macOS)
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
@@ -205,20 +209,20 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install bash
           "$(brew --prefix)/bin/bash" --version
 
-      - name: Run the bash scenarios
-        run: |
-          WARP_SHELL_PATH="$(brew --prefix)/bin/bash"
-          export WARP_SHELL_PATH
-          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
-            --run-ignored only -E 'package(integration) and test(~shell_integration_tests::bash_only::)'
+      - name: bash 3.2 (the bash of macOS)
+        run: script/ci_shell_matrix bash3
 
-      - name: Run the PowerShell scenarios
+      - name: bash 5 (Homebrew)
         if: ${{ !cancelled() }}
-        run: |
-          WARP_SHELL_PATH=$(command -v pwsh)
-          export WARP_SHELL_PATH
-          cargo nextest run --locked --workspace --retries 0 --no-fail-fast \
-            --run-ignored only -E 'package(integration) and test(~shell_integration_tests::pwsh_only::)'
+        run: script/ci_shell_matrix bash5
+
+      - name: fish
+        if: ${{ !cancelled() }}
+        run: script/ci_shell_matrix fish
+
+      - name: PowerShell 7
+        if: ${{ !cancelled() }}
+        run: script/ci_shell_matrix pwsh
 
   # The command executor tests for the macOS sandbox (`sandbox-exec` profile, the DNS daemon and
   # background URL session canaries), the offline environment, the restored completion

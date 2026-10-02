@@ -8,8 +8,9 @@ name: CI next
 #   checks, clippy         start together with `build` (neither needs the tests)
 #   build                   compiles every test once and makes one nextest archive
 #   after the build         sandboxed (unit tests and the idle session), integration 1-3 (all
-#                           in the network sandbox) and plain (security and shell tests, outside
-#                           it) start from the archive: five jobs for five runners
+#                           in the network sandbox), plain (security and zsh completion tests,
+#                           outside it) and shells (the whole suite under bash 3.2, bash 5, fish
+#                           and PowerShell 7, outside it) start from the archive
 #   result                  checks that the jobs together ran every test (no macOS runner needed)
 #
 # The tests run from the archive (script/ci_nextest) in the checkout the archive was built in.
@@ -317,12 +318,9 @@ jobs:
 
   # The tests that run outside the network sandbox:
   #  - the security tests (below), which apply sandboxes of their own;
-  #  - a short selection of integration tests, with the shells the sandboxed runs do not use (they
-  #    all run zsh):
   #  - the production path: every completion command of the app is wrapped in `sandbox-exec`, and
-  #    the sandboxed runs skip that wrapper (WARP_NETWORK_SANDBOX_BY_PARENT), so the sessions that
-  #    list executables and complete commands run here without the switch;
-  #  - the bash that macOS ships (3.2) and Homebrew's bash (5.x) as the session's shell.
+  #    the sandboxed runs skip that wrapper (WARP_NETWORK_SANDBOX_BY_PARENT), so a short selection
+  #    of the sessions that list executables and complete commands runs here without the switch.
   plain:
     name: Security and shell tests (macOS)
     needs: build
@@ -364,13 +362,6 @@ jobs:
           ./script/ci_nextest plain-security --no-fail-fast \
             -E '(package(warp) and test(~terminal::model::session::command_executor)) | (package(warp_completer) and test(~generator_policy))'
 
-      - name: Install Homebrew's bash
-        run: |
-          if [ ! -x "$(brew --prefix)/bin/bash" ]; then
-            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install bash
-          fi
-          "$(brew --prefix)/bin/bash" --version | head -1
-
       # test_auto_title only runs with zsh: with another shell it is a skip, which fails in CI.
       - name: Run the core sessions with zsh
         if: ${{ !cancelled() }}
@@ -379,33 +370,6 @@ jobs:
           export WARP_SHELL_PATH
           ./script/ci_nextest plain-shells-zsh --no-fail-fast -E "package(integration) and ($CORE_TESTS | test(=shell_integration_tests::test_auto_title) | test(=shell_integration_tests::test_can_bootstrap_local_zsh_subshell))"
 
-      - name: Run the bash sessions with the bash of macOS (3.2)
-        if: ${{ !cancelled() }}
-        run: |
-          WARP_SHELL_PATH=/bin/bash
-          export WARP_SHELL_PATH
-          /bin/bash --version | head -1
-          # The bash-only scenarios are ignored by default and run with --run-ignored; the two that need
-          # bash 5.1 or newer (PROMPT_COMMAND arrays) are left to the Homebrew bash below, where
-          # they run: a scenario that does not apply to the shell is a failure in CI, not a pass.
-          ./script/ci_nextest plain-shells-bash32 --no-fail-fast --run-ignored all -E "package(integration) and ($CORE_TESTS | test(~shell_integration_tests::bash_only::) | test(=shell_integration_tests::test_can_bootstrap_local_bash_subshell)) and not test(~prompt_command_array)"
-
-      - name: Run the bash sessions with Homebrew's bash
-        if: ${{ !cancelled() }}
-        run: |
-          WARP_SHELL_PATH="$(brew --prefix)/bin/bash"
-          export WARP_SHELL_PATH
-          ./script/ci_nextest plain-shells-bash5 --no-fail-fast --run-ignored all -E "package(integration) and ($CORE_TESTS | test(~shell_integration_tests::bash_only::) | test(=shell_integration_tests::test_can_bootstrap_local_bash_subshell))"
-
-      - name: Run the PowerShell sessions
-        if: ${{ !cancelled() }}
-        run: |
-          WARP_SHELL_PATH=$(command -v pwsh)
-          export WARP_SHELL_PATH
-          # shellcheck disable=SC2016 # a PowerShell variable, not a shell one
-          "$WARP_SHELL_PATH" -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
-          ./script/ci_nextest plain-shells-pwsh --no-fail-fast --run-ignored all -E "package(integration) and test(~shell_integration_tests::pwsh_only::)"
-
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ always() }}
         with:
@@ -413,11 +377,58 @@ jobs:
           path: junit
           if-no-files-found: error
 
+  # The whole integration suite under the other login shells (bash 3.2, bash 5, fish, PowerShell 7)
+  # and the scenarios of one shell only (`bash_only`, `pwsh_only`), from the archive, outside the
+  # network sandbox. `script/ci_shell_matrix` leaves out the tests that cannot apply to a shell
+  # (crates/integration/shell_matrix.txt, each with its reason), checks that those skip themselves,
+  # and runs the rest with `CI=true`, so a test that skips or fails fails the job.
+  shells:
+    name: Shell matrix (macOS)
+    needs: build
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: ./.github/actions/rust-macos
+        with:
+          metal: "false"
+      - uses: ./.github/actions/macos-test-tools
+      - uses: ./.github/actions/test-archive
+
+      - name: Install Homebrew's bash
+        run: |
+          if [ ! -x "$(brew --prefix)/bin/bash" ]; then
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install bash
+          fi
+          "$(brew --prefix)/bin/bash" --version | head -1
+
+      - name: bash 3.2 (the bash of macOS)
+        run: script/ci_shell_matrix bash3
+
+      - name: bash 5 (Homebrew)
+        if: ${{ !cancelled() }}
+        run: script/ci_shell_matrix bash5
+
+      - name: fish
+        if: ${{ !cancelled() }}
+        run: script/ci_shell_matrix fish
+
+      - name: PowerShell 7
+        if: ${{ !cancelled() }}
+        run: script/ci_shell_matrix pwsh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ always() }}
+        with:
+          name: junit-shells
+          path: junit
+          if-no-files-found: error
+
   # The single result of the workflow: it fails unless every job succeeded and the jobs together
   # ran every test (script/ci_check_coverage).
   result:
     name: CI result
-    needs: [checks, clippy, build, sandboxed, integration, plain]
+    needs: [checks, clippy, build, sandboxed, integration, plain, shells]
     if: ${{ always() }}
     # Python only, no build and no test: a hosted macOS runner would queue behind the test jobs of
     # every other run for nothing (measured: 16 minutes in run 37023024672).
