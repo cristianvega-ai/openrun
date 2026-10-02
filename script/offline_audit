@@ -726,7 +726,7 @@ MACOS_DENIAL = re.compile(r"Sandbox: (?P<name>.+?)\((?P<pid>\d+)\) deny\(\d+\) (
 # The kernel logs their denials in the same stream; a denial by a process that is not in the
 # command's tree and not listed here fails the audit, so a new name shows up as a failure to look
 # at, not as a pass. Measured on the macos-latest runner (see CHANGES.md, "macOS offline proof").
-MACOS_SANDBOX_NOISE = frozenset(["languageassetd", "voicebankingd"])
+MACOS_SANDBOX_NOISE = frozenset(["languageassetd", "nsattributedstringagent", "voicebankingd"])
 
 
 def macos_denial_violation(op, detail):

@@ -1,0 +1,43 @@
+name: macOS test tools
+description: >-
+  Installs the tools that real-tool tests run (docker command-line client, fish, PowerShell 7) and
+  fails when any tool a test needs is missing. The tests fail instead of skipping when CI=true.
+
+runs:
+  using: composite
+  steps:
+    # Only the command-line client is needed: the tests check what `docker` does with a remote
+    # host or context, not containers.
+    - name: Install the docker command-line client
+      shell: bash
+      run: |
+        if ! command -v docker > /dev/null; then
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install docker
+        fi
+
+    # The injection tests run generator commands in real fish and PowerShell 7 (`pwsh`). fish
+    # comes from Homebrew (a bottle, seconds). The macOS image ships pwsh; if a runner image does
+    # not, it is installed from the Homebrew cask, which is slower.
+    - name: Install fish and PowerShell
+      shell: bash
+      run: |
+        if ! command -v fish > /dev/null; then
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install fish
+        fi
+        if ! command -v pwsh > /dev/null; then
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask powershell
+        fi
+
+    - name: Check the tools the real-tool tests use
+      shell: bash
+      run: |
+        missing=0
+        for tool in git npm corepack rustup python3 docker sandbox-exec fish pwsh zsh bash; do
+          if path=$(command -v "$tool"); then
+            echo "$tool: $path"
+          else
+            echo "::error::$tool is not installed on this runner"
+            missing=1
+          fi
+        done
+        exit "$missing"
