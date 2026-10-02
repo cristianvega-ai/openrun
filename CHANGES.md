@@ -4176,6 +4176,8 @@ After the change `terminal::view::tests::` passes 6 of 6 iterations under 60 bus
 - `CI=true`, zsh, all 240 integration tests that are not ignored: 240 passed, no skip in the skip report.
 - `CI=true` with zsh, `pwsh_only::test_input_reporting_powershell`: fails with "was skipped in CI ... not in ALLOWED_CI_SKIPS"; without `CI` it fails with the `OPENRUN_ALLOW_SKIPS` hint; with `WARP_SHELL_PATH` set to pwsh it passes.
 
+**CI runs (attempt 1, no FLAKY, no retry):** 37024861304 (head `176f2971c`): all 7 jobs green, integration 240 passed, bash scenarios 6 of 6 and PowerShell scenarios 3 of 3 on the hosted runner (PowerShell 7 is preinstalled; bash 5 from Homebrew). 37030862649 (head `2bbc424d3`, code-review tests running again): all 7 jobs green, integration 246 passed (in the sandbox too), bash 6 of 6, PowerShell 3 of 3.
+
 **User-visible impact:** none (tests, test harness and CI only).
 
 **Notes:** the executable listing retry of CI-3 (`Session::load_external_commands`) is product behavior (a listing killed by Enter is run again), not a test retry, and stays. The `ignore`d tests that remain (`test_waterfall_*`, `test_session_navigation_recency_*`, `test_restore_snapshot_with_code_file`, `test_copy_rprompt_from_input_honor_ps1_enabled`, `test_can_bootstrap_local_fish_subshell`) are listed as skipped by nextest and were not changed. The tests of `shell_integration_tests` that should run against every shell still run with zsh only in CI.
