@@ -4138,6 +4138,8 @@ No bundled git-family generator runs `fetch`, `pull`, `push`, `clone`, `ls-remot
 - Baselines of "no more lookups" were taken while an earlier lookup was still on its way, so a late `gh` call counted as polling (`(2, 2)` against `(2, 1)`; reproduced locally with 60 busy loops, 6 of 6 iterations). `wait_until_gh_is_quiet` waits for 300 ms without a lookup before each baseline (10 places), and two "at once" assertions after a settings change wait for the view to handle the pane group's event (`assert_eventually`), as another test of the group already did.
 After the change `terminal::view::tests::` passes 6 of 6 iterations under 60 busy loops (before: 6 of 6 failed).
 
+**CI runs after the fix:** 37009332668 (head `d1b5efab1`, attempt 1): Formatting 34 s, Clippy 4 min, Unit tests 14 min (5043 passed), Integration tests 22 min (251 passed), Security tests 17 min (58 + 43 passed), Offline audit 28 min (unit 4987 passed in 153 s, integration 251 passed in 561 s, idle 123 s, connection check clean); no FLAKY, no `TRY 1 FAIL`.
+
 **Stress workflow:** `.github/workflows/stress.yml` is back as a macOS workflow (`gh workflow run stress.yml -f filter=... -f count=100 [-f rust_log=...]`): builds the tests and runs a nextest filter many times on a hosted runner, to measure tests that only misbehave there.
 
 **Notes:** the bash integration run of the old job (the system bash 3.2 as the shell) is not repeated; macOS tests run with zsh, the default shell. Rust platform code, `script/linux`, `script/windows` and the other non-Rust Linux/Windows files are removed by PLAT-4.
