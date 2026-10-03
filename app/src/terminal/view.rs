@@ -69,7 +69,6 @@ use vec1::vec1;
 use warp_completer::meta::Span;
 use warp_core::r#async::debounce;
 use warp_core::command::ExitCode;
-use warp_core::context_flag::ContextFlag;
 use warp_core::semantic_selection::SemanticSelection;
 use warp_core::user_preferences::GetUserPreferences as _;
 use warp_errors::{report_error, report_if_error};
@@ -7194,38 +7193,36 @@ impl TerminalView {
     ) -> Vec<MenuItem<TerminalAction>> {
         let mut items = vec![];
 
-        if ContextFlag::CreateNewSession.is_enabled() {
-            items.extend(vec![
-                MenuItemFields::new("Split pane right")
-                    .with_on_select_action(TerminalAction::SplitRight(shell.clone()))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_right",
-                        ctx,
-                    ))
-                    .into_item(),
-                MenuItemFields::new("Split pane left")
-                    .with_on_select_action(TerminalAction::SplitLeft(shell.clone()))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_left",
-                        ctx,
-                    ))
-                    .into_item(),
-                MenuItemFields::new("Split pane down")
-                    .with_on_select_action(TerminalAction::SplitDown(shell.clone()))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_down",
-                        ctx,
-                    ))
-                    .into_item(),
-                MenuItemFields::new("Split pane up")
-                    .with_on_select_action(TerminalAction::SplitUp(shell))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_up",
-                        ctx,
-                    ))
-                    .into_item(),
-            ]);
-        }
+        items.extend(vec![
+            MenuItemFields::new("Split pane right")
+                .with_on_select_action(TerminalAction::SplitRight(shell.clone()))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_right",
+                    ctx,
+                ))
+                .into_item(),
+            MenuItemFields::new("Split pane left")
+                .with_on_select_action(TerminalAction::SplitLeft(shell.clone()))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_left",
+                    ctx,
+                ))
+                .into_item(),
+            MenuItemFields::new("Split pane down")
+                .with_on_select_action(TerminalAction::SplitDown(shell.clone()))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_down",
+                    ctx,
+                ))
+                .into_item(),
+            MenuItemFields::new("Split pane up")
+                .with_on_select_action(TerminalAction::SplitUp(shell))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_up",
+                    ctx,
+                ))
+                .into_item(),
+        ]);
 
         let pane_state = self.split_pane_state(ctx);
         if pane_state.is_in_split_pane() {
@@ -12813,9 +12810,7 @@ impl View for TerminalView {
 
         // Only show one of these banners at a time, to avoid them visually
         // stacking on top of each other.
-        if self.is_slow_bootstrap_banner_open
-            && ContextFlag::ShowSlowShellStartupBanner.is_enabled()
-        {
+        if self.is_slow_bootstrap_banner_open {
             stack.add_child(ChildView::new(&self.slow_bootstrap_banner).finish());
         } else if self.control_master_error_banner_state.is_open {
             stack.add_child(ChildView::new(&self.control_master_error_banner).finish());

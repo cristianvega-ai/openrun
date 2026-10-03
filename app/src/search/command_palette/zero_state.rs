@@ -2,7 +2,6 @@ mod items;
 use std::collections::HashMap;
 
 pub use items::Items;
-use warp_core::context_flag::ContextFlag;
 use warpui::elements::{Container, Flex, MouseStateHandle, ParentElement, Shrinkable, Wrap};
 use warpui::{
     AppContext, Element, Entity, ModelHandle, SingletonEntity, TypedActionView, View, ViewContext,
@@ -76,9 +75,7 @@ impl ZeroState {
 
         valid_filters.extend([QueryFilter::Actions, QueryFilter::Sessions]);
 
-        if ContextFlag::LaunchConfigurations.is_enabled() {
-            valid_filters.push(QueryFilter::LaunchConfigurations);
-        }
+        valid_filters.push(QueryFilter::LaunchConfigurations);
 
         valid_filters.into_iter()
     }

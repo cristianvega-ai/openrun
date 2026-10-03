@@ -15,7 +15,6 @@ anyhow.workspace = true
 command-corrections.workspace = true
 dirs.workspace = true
 directories.workspace = true
-enum-iterator.workspace = true
 futures-lite.workspace = true
 warp_errors.workspace = true
 warp_features.workspace = true

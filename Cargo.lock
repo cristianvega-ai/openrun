@@ -9058,7 +9058,6 @@ dependencies = [
  "command-corrections",
  "directories",
  "dirs",
- "enum-iterator",
  "futures",
  "futures-lite 1.13.0",
  "getset",

@@ -5,7 +5,6 @@ pub(crate) mod cross_window_tab_drag;
 mod global_actions;
 pub mod header_toolbar_editor;
 pub mod header_toolbar_item;
-mod home;
 mod lightbox_view;
 mod native_modal;
 mod registry;
@@ -27,7 +26,6 @@ pub use view::{
     NEW_SESSION_MENU_BUTTON_POSITION_ID, NEW_TAB_BUTTON_POSITION_ID, PANEL_HEADER_HEIGHT,
     TAB_BAR_HEIGHT, TOTAL_TAB_BAR_HEIGHT, WORKSPACE_PADDING, Workspace,
 };
-use warp_core::context_flag::ContextFlag;
 use warpui::AppContext;
 use warpui::accessibility::AccessibilityVerbosity;
 use warpui::elements::DropTargetData;
@@ -154,8 +152,7 @@ pub fn init(app: &mut AppContext) {
         WorkspaceAction::AddWindow,
     )
     .with_custom_action(CustomAction::AddWindow)
-    .with_context_predicate(id!("Workspace"))
-    .with_enabled(|| ContextFlag::CreateNewSession.is_enabled())]);
+    .with_context_predicate(id!("Workspace"))]);
 
     app.register_editable_bindings([EditableBinding::new(
         NEW_FILE_BINDING_NAME,
@@ -189,14 +186,12 @@ pub fn init(app: &mut AppContext) {
         .with_group(bindings::BindingGroup::Settings.as_str()),
     ]);
 
-    if ContextFlag::LaunchConfigurations.is_enabled() {
-        app.register_fixed_bindings([FixedBinding::custom(
-            CustomAction::SaveCurrentConfig,
-            WorkspaceAction::OpenLaunchConfigSaveModal,
-            "Save new launch configuration",
-            id!("Workspace"),
-        )]);
-    }
+    app.register_fixed_bindings([FixedBinding::custom(
+        CustomAction::SaveCurrentConfig,
+        WorkspaceAction::OpenLaunchConfigSaveModal,
+        "Save new launch configuration",
+        id!("Workspace"),
+    )]);
 
     if ChannelState::channel() == Channel::Integration {
         // Hack: Add explicit bindings for the tests, since the tests' injected
@@ -397,8 +392,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::AddDefaultTab,
         )
         .with_context_predicate(id!("Workspace") & !id!("Workspace_PaneDragging"))
-        .with_custom_action(CustomAction::NewTab)
-        .with_enabled(|| ContextFlag::CreateNewSession.is_enabled()),
+        .with_custom_action(CustomAction::NewTab),
         EditableBinding::new(
             NEW_TERMINAL_TAB_BINDING_NAME,
             BindingDescription::new("New Terminal Tab"),
@@ -407,8 +401,7 @@ pub fn init(app: &mut AppContext) {
             },
         )
         .with_context_predicate(id!("Workspace") & !id!("Workspace_PaneDragging"))
-        .with_custom_action(CustomAction::NewTerminalTab)
-        .with_enabled(|| ContextFlag::CreateNewSession.is_enabled()),
+        .with_custom_action(CustomAction::NewTerminalTab),
         EditableBinding::new(
             "workspace:toggle_left_panel",
             BindingDescription::new("Open Left Panel"),
@@ -685,8 +678,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::TerminateApp,
         )
         .with_context_predicate(id!("Workspace"))
-        .with_group(bindings::BindingGroup::Close.as_str())
-        .with_enabled(|| ContextFlag::CloseWindow.is_enabled()),
+        .with_group(bindings::BindingGroup::Close.as_str()),
         EditableBinding::new(
             "workspace:close_window",
             BindingDescription::new("Close Window")
@@ -696,8 +688,7 @@ pub fn init(app: &mut AppContext) {
         .with_key_binding("cmd-shift-W")
         .with_context_predicate(id!("Workspace"))
         .with_group(bindings::BindingGroup::Close.as_str())
-        .with_custom_action(CustomAction::CloseWindow)
-        .with_enabled(|| ContextFlag::CloseWindow.is_enabled()),
+        .with_custom_action(CustomAction::CloseWindow),
         EditableBinding::new(
             "workspace:close_active_tab",
             "Close the current tab",
@@ -763,8 +754,7 @@ pub fn init(app: &mut AppContext) {
             },
         )
         .with_context_predicate(id!("Workspace"))
-        .with_custom_action(CustomAction::LaunchConfigPalette)
-        .with_enabled(|| ContextFlag::LaunchConfigurations.is_enabled()),
+        .with_custom_action(CustomAction::LaunchConfigPalette),
         EditableBinding::new(
             "workspace:toggle_files_palette",
             "Toggle Files Palette",
@@ -781,8 +771,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::OpenLaunchConfigSaveModal,
         )
         .with_context_predicate(id!("Workspace"))
-        .with_custom_action(CustomAction::SaveCurrentConfig)
-        .with_enabled(|| ContextFlag::LaunchConfigurations.is_enabled()),
+        .with_custom_action(CustomAction::SaveCurrentConfig),
     ]);
 
     // Warp Control CLI install/uninstall actions (macOS only)

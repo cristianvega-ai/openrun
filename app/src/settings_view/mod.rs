@@ -17,7 +17,6 @@ use settings_page::{
     SettingsPageViewHandle,
 };
 use warp_core::channel::ChannelState;
-use warp_core::context_flag::ContextFlag;
 use warp_core::features::FeatureFlag;
 use warp_core::settings::ToggleableSetting as _;
 use warp_core::ui::theme::color::internal_colors;
@@ -1157,38 +1156,36 @@ impl SettingsView {
     fn context_menu_items(&self, ctx: &mut ViewContext<Self>) -> Vec<MenuItem<SettingsAction>> {
         let mut items = vec![];
 
-        if ContextFlag::CreateNewSession.is_enabled() {
-            items.extend(vec![
-                MenuItemFields::new("Split pane right")
-                    .with_on_select_action(SettingsAction::Split(Direction::Right))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_right",
-                        ctx,
-                    ))
-                    .into_item(),
-                MenuItemFields::new("Split pane left")
-                    .with_on_select_action(SettingsAction::Split(Direction::Left))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_left",
-                        ctx,
-                    ))
-                    .into_item(),
-                MenuItemFields::new("Split pane down")
-                    .with_on_select_action(SettingsAction::Split(Direction::Down))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_down",
-                        ctx,
-                    ))
-                    .into_item(),
-                MenuItemFields::new("Split pane up")
-                    .with_on_select_action(SettingsAction::Split(Direction::Up))
-                    .with_key_shortcut_label(keybinding_name_to_display_string(
-                        "pane_group:add_up",
-                        ctx,
-                    ))
-                    .into_item(),
-            ]);
-        }
+        items.extend(vec![
+            MenuItemFields::new("Split pane right")
+                .with_on_select_action(SettingsAction::Split(Direction::Right))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_right",
+                    ctx,
+                ))
+                .into_item(),
+            MenuItemFields::new("Split pane left")
+                .with_on_select_action(SettingsAction::Split(Direction::Left))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_left",
+                    ctx,
+                ))
+                .into_item(),
+            MenuItemFields::new("Split pane down")
+                .with_on_select_action(SettingsAction::Split(Direction::Down))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_down",
+                    ctx,
+                ))
+                .into_item(),
+            MenuItemFields::new("Split pane up")
+                .with_on_select_action(SettingsAction::Split(Direction::Up))
+                .with_key_shortcut_label(keybinding_name_to_display_string(
+                    "pane_group:add_up",
+                    ctx,
+                ))
+                .into_item(),
+        ]);
 
         let split_pane_state = self
             .focus_handle

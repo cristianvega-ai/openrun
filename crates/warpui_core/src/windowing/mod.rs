@@ -14,8 +14,6 @@ use crate::{AppContext, AppContextRefMut, CursorInfo, Event, Scene};
 pub struct EventDispatchResult {
     /// Whether the event was handled by the UI framework.
     pub handled: bool,
-    /// Whether the soft keyboard should be shown (mobile WASM only).
-    pub soft_keyboard_requested: bool,
 }
 
 pub(crate) type EventCallback = Box<dyn Fn(Event, &mut AppContext) -> EventDispatchResult>;

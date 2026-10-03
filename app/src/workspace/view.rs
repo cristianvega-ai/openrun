@@ -28,7 +28,6 @@ use pathfinder_color::ColorU;
 use pathfinder_geometry::rect::RectF;
 use repo_metadata::repositories::DetectedRepositories;
 use serde_json;
-use warp_core::context_flag::ContextFlag;
 use warp_core::features::FeatureFlag;
 use warp_core::semantic_selection::SemanticSelection;
 use warp_core::ui::Icon;
@@ -2538,26 +2537,20 @@ impl Workspace {
         ctx.notify();
     }
 
-    // Configure an empty workspace. The behavior here is platform-specific.
+    // Configure an empty workspace.
     fn configure_empty_workspace(
         &mut self,
         previous_active_window: Option<WindowId>,
         shell: Option<AvailableShell>,
         ctx: &mut ViewContext<Self>,
     ) {
-        let show_warp_home = !ContextFlag::CreateNewSession.is_enabled();
-        if show_warp_home {
-            let home_pane = super::home::create_home_pane(ctx);
-            self.add_tab_from_existing_pane(home_pane, 0, None, ctx);
-        } else {
-            self.add_new_session_tab(
-                NewSessionSource::Window,
-                previous_active_window,
-                shell,
-                false, /* hide_homepage */
-                ctx,
-            );
-        }
+        self.add_new_session_tab(
+            NewSessionSource::Window,
+            previous_active_window,
+            shell,
+            false, /* hide_homepage */
+            ctx,
+        );
     }
 
     fn current_focus_region(&self, ctx: &mut ViewContext<Self>) -> FocusRegion {
@@ -7572,9 +7565,7 @@ impl Workspace {
         // If this is the last tab, close the window instead of actually removing
         // the tab.
         if self.tabs.len() == 1 {
-            if ContextFlag::CloseWindow.is_enabled() {
-                ctx.close_window();
-            }
+            ctx.close_window();
             return;
         }
 
@@ -7725,10 +7716,6 @@ impl Workspace {
         ctx: &mut ViewContext<Self>,
     ) {
         let is_last_tab = self.tabs.len() == 1;
-        if !ContextFlag::CloseWindow.is_enabled() && is_last_tab {
-            return;
-        }
-
         let tabs_closed = self.close_tabs(
             vec![index].into_iter(),
             skip_confirmation || is_last_tab, // If this is the last tab, the confirmation dialog will be handled by the window close.
@@ -9976,15 +9963,6 @@ impl Workspace {
         // * The active session is busy but the fallback behavior is OpenIfNeeded
         // In this case, open a new terminal pane to the right.
 
-        if !ContextFlag::CreateNewSession.is_enabled() {
-            self.toast_stack.update(ctx, |toast_stack, ctx| {
-                let toast =
-                    DismissibleToast::error("Cannot open a new terminal session".to_string());
-                toast_stack.add_ephemeral_toast(toast, ctx);
-            });
-            return None;
-        }
-
         active_pane_group.as_ref(ctx).active_session_view(ctx)
     }
 
@@ -11785,9 +11763,7 @@ impl Workspace {
                 tab_bar.add_child(self.render_tab_hover_indicator(appearance));
             }
 
-            if ContextFlag::CreateNewSession.is_enabled() {
-                tab_bar.add_child(self.render_new_session_button(ctx));
-            }
+            tab_bar.add_child(self.render_new_session_button(ctx));
         }
 
         // Trailing spacer fills only the leftover width. When groups are collapsed
@@ -12782,7 +12758,7 @@ impl Workspace {
                 )
             }
             HeaderToolbarItemKind::ToolsPanel => {
-                if !pane_group.left_panel_open || warpui::platform::is_mobile_device() {
+                if !pane_group.left_panel_open {
                     return None;
                 }
                 Some(ChildView::new(&self.left_panel_view).finish())
@@ -14132,9 +14108,7 @@ impl TypedActionView for Workspace {
                 ctx.terminate_app(TerminationMode::Cancellable, None);
             }
             CloseWindow => {
-                if ContextFlag::CloseWindow.is_enabled() {
-                    ctx.close_window();
-                }
+                ctx.close_window();
             }
             RunCommand(code) => {
                 let command = code.trim().to_string();
@@ -14434,9 +14408,7 @@ impl View for Workspace {
             context.set.insert("AccessibilityVerbosity_Verbose");
         }
 
-        if ContextFlag::CloseWindow.is_enabled() {
-            context.set.insert("Workspace_CloseWindow");
-        }
+        context.set.insert("Workspace_CloseWindow");
 
         match self.tab_count() {
             0 => {

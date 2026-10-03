@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use warp_core::context_flag::ContextFlag;
 use warpui::keymap::BindingId;
 use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 
@@ -65,12 +64,10 @@ impl DataSourceStore {
         mixer.update(ctx, |mixer, ctx| {
             mixer.reset(ctx);
 
-            if ContextFlag::LaunchConfigurations.is_enabled() {
-                mixer.add_sync_source(
-                    self.launch_config_data_source.clone(),
-                    HashSet::from([QueryFilter::LaunchConfigurations]),
-                );
-            }
+            mixer.add_sync_source(
+                self.launch_config_data_source.clone(),
+                HashSet::from([QueryFilter::LaunchConfigurations]),
+            );
 
             mixer.add_sync_source(
                 self.sessions_data_source.clone(),

@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use settings::Setting as _;
 use uuid::Uuid;
 use warp_core::command::ExitCode;
-use warp_core::context_flag::ContextFlag;
 use warp_errors::report_if_error;
 use warp_terminal::focus_env::add_session_focus_env_vars;
 use warp_util::path::LineAndColumnArg;
@@ -236,16 +235,14 @@ pub fn init(app: &mut AppContext) {
             PaneGroupAction::Add(Direction::Left),
         )
         .with_context_predicate(id!("PaneGroup") & !id!("PaneGroup_PaneDragging"))
-        .with_custom_action(CustomAction::SplitPaneLeft)
-        .with_enabled(|| ContextFlag::CreateNewSession.is_enabled()),
+        .with_custom_action(CustomAction::SplitPaneLeft),
         EditableBinding::new(
             "pane_group:add_up",
             "Split pane up",
             PaneGroupAction::Add(Direction::Up),
         )
         .with_context_predicate(id!("PaneGroup") & !id!("PaneGroup_PaneDragging"))
-        .with_custom_action(CustomAction::SplitPaneUp)
-        .with_enabled(|| ContextFlag::CreateNewSession.is_enabled()),
+        .with_custom_action(CustomAction::SplitPaneUp),
         EditableBinding::new(
             "pane_group:navigate_left",
             "Switch panes left",
@@ -333,16 +330,14 @@ pub fn init(app: &mut AppContext) {
             PaneGroupAction::Add(Direction::Down),
         )
         .with_context_predicate(id!("PaneGroup") & !id!("PaneGroup_PaneDragging"))
-        .with_custom_action(CustomAction::SplitPaneDown)
-        .with_enabled(|| ContextFlag::CreateNewSession.is_enabled()),
+        .with_custom_action(CustomAction::SplitPaneDown),
         EditableBinding::new(
             "pane_group:add_right",
             "Split pane right",
             PaneGroupAction::Add(Direction::Right),
         )
         .with_context_predicate(id!("PaneGroup") & !id!("PaneGroup_PaneDragging"))
-        .with_custom_action(CustomAction::SplitPaneRight)
-        .with_enabled(|| ContextFlag::CreateNewSession.is_enabled()),
+        .with_custom_action(CustomAction::SplitPaneRight),
         EditableBinding::new(
             TOGGLE_MAXIMIZE_PANE_BINDING_NAME,
             "Toggle Maximize Active Pane",

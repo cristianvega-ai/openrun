@@ -6,13 +6,12 @@ use warpui_core::{AppContext, AssetProvider};
 
 use super::AsInnerMut;
 
-/// Platform-specific app implementation. On any given platform, there are at least two possible
-/// implementations:
-/// * The platform-native GUI backend (e.g. Cocoa on macOS, or Winit+X11/Wayland on Linux)
+/// The app implementation. There are two possible implementations:
+/// * The GUI backend (Cocoa and Metal)
 /// * A windowless backend that drives an event loop without native windows or rendering, used
 ///   by headless processes
 pub enum AppBackend {
-    CurrentPlatform(Box<super::current::App>),
+    CurrentPlatform(Box<super::mac::App>),
     Windowless(Box<super::headless::App>),
 }
 
@@ -52,7 +51,7 @@ impl AppBuilder {
         assets: Box<dyn AssetProvider>,
         test_driver: Option<TestDriver>,
     ) -> Self {
-        let inner = super::current::App::new(callbacks, assets, test_driver.as_ref());
+        let inner = super::mac::App::new(callbacks, assets, test_driver.as_ref());
 
         Self {
             inner: AppBackend::CurrentPlatform(Box::new(inner)),
