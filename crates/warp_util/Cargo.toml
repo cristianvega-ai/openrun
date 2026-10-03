@@ -31,12 +31,6 @@ pin-project.workspace = true
 futures-util.workspace = true
 log.workspace = true
 warp_errors.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-directories.workspace = true
-windows.workspace = true
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
 is_executable = "1.0.1"
 
 [dev-dependencies]

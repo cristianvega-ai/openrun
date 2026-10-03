@@ -7,11 +7,6 @@ publish.workspace = true
 license.workspace = true
 description = "Language Server Protocol implementation for Warp"
 
-[features]
-local_fs = []
-
-[build-dependencies]
-anyhow = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -35,9 +30,6 @@ warp_errors.workspace = true
 warp_util.workspace = true
 warpui_core.workspace = true
 instant.workspace = true
-cfg-if.workspace = true
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 async-fs = { workspace = true }
 url = "2"
 async-process = { workspace = true }

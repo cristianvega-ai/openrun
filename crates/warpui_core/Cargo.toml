@@ -39,12 +39,10 @@ enum-iterator.workspace = true
 float-cmp.workspace = true
 font-kit.workspace = true
 futures = "0.3"
-futures-lite.workspace = true
 futures-util = { version = "0.3", default-features = false }
 image.workspace = true
 minimp4 = { workspace = true, optional = true }
 openh264 = { workspace = true, optional = true }
-infer = "0.19.0"
 instant.workspace = true
 itertools.workspace = true
 lazy_static = "1.4.0"
@@ -61,7 +59,6 @@ pathfinder_color.workspace = true
 pathfinder_geometry.workspace = true
 rand.workspace = true
 rangemap.workspace = true
-raw-window-handle = "0.6.2"
 resvg.workspace = true
 rstar = "0.12.2"
 rustc-hash.workspace = true

@@ -103,8 +103,6 @@ pub fn run_integration_test(name: &str) -> Result<(), String> {
             // Propagate any Warp-specific variables.
             || k.starts_with("WARP_")
             || k.starts_with("WARPUI_")
-            // Propagate any wgpu-specific variables.
-            || k.starts_with("WGPU_")
     });
     match Command::new(integration_binary())
         .arg(name)

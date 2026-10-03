@@ -13,7 +13,6 @@ test = false
 
 [dependencies]
 anyhow = "1.0"
-cfg-if.workspace = true
 chrono.workspace = true
 clap.workspace = true
 command.workspace = true
@@ -40,15 +39,10 @@ warpui_extras = { workspace = true, features = [
     "user_preferences-file",
 ] }
 whoami = "1.5.2"
+sysinfo.workspace = true
+nix = { workspace = true, features = ["user", "signal"] }
 
 [dev-dependencies]
 command = { workspace = true, features = ["test-util"] }
 warpui = { workspace = true, features = ["integration_tests"] }
 warp_core = { workspace = true, features = ["test-util"] }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-diesel = { version = "2.2.4", features = ["sqlite", "chrono"] }
-sysinfo.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["user", "signal"] }

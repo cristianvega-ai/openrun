@@ -10,27 +10,21 @@ license.workspace = true
 jemalloc = []
 
 [dependencies]
-cfg-if.workspace = true
 ignore = "0.4.23"
 itertools.workspace = true
 lazy_static.workspace = true
 rayon.workspace = true
 repo_metadata.workspace = true
 serde.workspace = true
-
-[target.'cfg(unix)'.dependencies]
-nix.workspace = true
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 anyhow.workspace = true
 arborium.workspace = true
 futures.workspace = true
 languages.workspace = true
-log.workspace = true
 streaming-iterator.workspace = true
 syntax_tree.workspace = true
 warp_errors.workspace = true
 warp_util.workspace = true
+log.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

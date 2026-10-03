@@ -57,7 +57,7 @@ deny = [
     { crate = "hyper", wrappers = ["reqwest", "axum", "hyper-util", "hyper-rustls"], reason = "transport of reqwest and the local_control axum server" },
     { crate = "axum", wrappers = ["warp"], reason = "local_control server only" },
     { crate = "tower-http", wrappers = ["reqwest"], reason = "unconditional dependency of reqwest; nothing else may use it" },
-    { crate = "interprocess", wrappers = ["ipc"], reason = "local IPC with the terminal-server child only" },
+    { crate = "interprocess", reason = "the local IPC crate was removed with the Windows single-instance service; do not reintroduce it" },
     # Warp server protocols and clients.
     { crate = "cynic", reason = "GraphQL client for the removed Warp server" },
     { crate = "tungstenite", reason = "websocket transport of the removed Warp server and session sharing" },
@@ -82,7 +82,7 @@ allow-git = [
     # version to crates.io.
     "https://github.com/servo/core-foundation-rs",
 ]
-# Build-time git dependencies: the forks and Warp-authored crates (vte, winit, font-kit, notify,
+# Build-time git dependencies: the forks and Warp-authored crates (vte, font-kit, notify,
 # command-signatures, warp-workflows, ...) are still fetched from the warpdotdev organization.
 # Nothing they do at runtime reaches a Warp service; this only lets cargo fetch the sources at
 # build time. Drop this entry when those dependencies are vendored or repointed.

@@ -8,7 +8,6 @@ license.workspace = true
 [dependencies]
 async-compat.workspace = true
 bytes.workspace = true
-cfg-if.workspace = true
 futures.workspace = true
 http.workspace = true
 prevent_sleep.workspace = true
