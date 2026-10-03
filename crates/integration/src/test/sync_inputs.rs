@@ -1,3 +1,9 @@
+use std::fs::OpenOptions;
+use std::io::Write as _;
+use std::os::unix::fs::OpenOptionsExt as _;
+use std::path::Path;
+use std::sync::{Arc, OnceLock};
+
 use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::terminal::util::ExpectedExitStatus;
@@ -135,8 +141,42 @@ pub fn test_can_run_command_in_synced_panes_in_tab() -> Builder {
         )
 }
 
+/// The long-running command of [`test_synced_panes_long_running_commands`]. It leaves a file for
+/// each pane that runs it, once it is running. The shell reports that a command starts (the
+/// preexec hook) before the command does: PowerShell sends it from its line-editor wrapper, and
+/// the terminal settings of the line editor are changed again after that. Text typed in between
+/// is lost, so the test types only when both panes have a running script.
+const HANG_SCRIPT: &str = "#!/bin/sh\ntouch \"running.$$\"\nexec sleep 1000000\n";
+
+fn running_scripts(dir: &Path) -> usize {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().starts_with("running."))
+                .count()
+        })
+        .unwrap_or(0)
+}
+
 pub fn test_synced_panes_long_running_commands() -> Builder {
+    let test_dir = Arc::new(OnceLock::new());
+    let test_dir_for_setup = test_dir.clone();
     new_builder()
+        .with_setup(move |utils| {
+            let dir = utils.test_dir();
+            OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .mode(0o755)
+                .open(dir.join("hang.sh"))
+                .expect("could not create the script")
+                .write_all(HANG_SCRIPT.as_bytes())
+                .expect("could not write the script");
+            test_dir_for_setup
+                .set(dir)
+                .expect("the test directory is set once");
+        })
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("create one additional pane")
@@ -159,17 +199,21 @@ pub fn test_synced_panes_long_running_commands() -> Builder {
             ),
         )
         .with_step(
-            TestStep::new("Execute sleep 1000000 in both panes")
-                .with_typed_characters(&["sleep 1000000"])
+            TestStep::new("Execute a long-running script in both panes")
+                .with_typed_characters(&["./hang.sh"])
                 .with_keystrokes(&["enter"])
                 .add_named_assertion(
-                    "check that sleep 1000000 ran in pane 0",
+                    "check that the script ran in pane 0",
                     assert_long_running_block_executing(true, 0, 0),
                 )
                 .add_named_assertion(
-                    "check that sleep 1000000 ran in pane 1",
+                    "check that the script ran in pane 1",
                     assert_long_running_block_executing(true, 0, 1),
-                ),
+                )
+                .add_named_assertion("check that both scripts are running", move |_, _| {
+                    let running = running_scripts(test_dir.get().expect("set by the setup"));
+                    async_assert_eq!(running, 2, "scripts that are running")
+                }),
         )
         .with_step(
             TestStep::new("Send text to both panes")
@@ -184,7 +228,7 @@ pub fn test_synced_panes_long_running_commands() -> Builder {
                 ),
         )
         .with_step(
-            TestStep::new("Exit sleep 1000000 in both panes")
+            TestStep::new("Exit the script in both panes")
                 .with_keystrokes(&["ctrl-c"])
                 .add_named_assertion(
                     "check that no command is running in pane 0",

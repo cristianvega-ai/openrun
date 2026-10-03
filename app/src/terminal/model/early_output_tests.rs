@@ -75,6 +75,49 @@ fn test_lazy_background_insertion() {
     assert_eq!(background.output_to_string(), "hi\n");
 }
 
+/// The tty echoes the input-reporting key (ESC i) as `^[i` when the shell is not reading yet. That
+/// echo is not background output: the first line of output that follows must not be preceded by it.
+#[test]
+fn test_input_reporting_echo_is_not_background_output() {
+    let mut block_list = new_block_list(
+        ChannelEventListener::new_for_test(),
+        TypeaheadMode::ShellReported,
+    );
+
+    for c in "^[iOutput 1".chars() {
+        block_list.input(c);
+    }
+    block_list.linefeed();
+    block_list.on_finish_byte_processing(&ansi::ProcessorInput::new(&[]));
+
+    let background = block_list
+        .background_block_mut()
+        .expect("Background block should exist");
+    assert_eq!(background.output_to_string(), "Output 1\n");
+}
+
+/// Text that starts like the echo but is not the echo is kept.
+#[test]
+fn test_text_that_starts_like_the_input_reporting_echo_is_kept() {
+    let mut block_list = new_block_list(
+        ChannelEventListener::new_for_test(),
+        TypeaheadMode::ShellReported,
+    );
+
+    for c in "^^[x^[".chars() {
+        block_list.input(c);
+    }
+    block_list.input('i');
+    block_list.input('!');
+    block_list.linefeed();
+    block_list.on_finish_byte_processing(&ansi::ProcessorInput::new(&[]));
+
+    let background = block_list
+        .background_block_mut()
+        .expect("Background block should exist");
+    assert_eq!(background.output_to_string(), "^^[x!\n");
+}
+
 #[test]
 fn test_background_triggers_wakeup() {
     let (wakeups_tx, wakeups_rx) = async_channel::unbounded();
