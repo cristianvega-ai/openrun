@@ -1,8 +1,10 @@
 name: CI
 
-# OpenRun runs on macOS only, so every job runs on a hosted macOS runner (Apple silicon). A public
-# repository has five of them at a time, shared by everything the account runs, which shapes the
-# job graph:
+# OpenRun runs on macOS only, so every job that builds or runs it runs on a hosted macOS runner
+# (Apple silicon). The two jobs that only run Python and a path diff (`Changed paths` and
+# `CI result`) run on Linux runners on purpose: a public repository has five macOS runners at a
+# time, shared by everything the account runs, and these jobs would only queue for one. Nothing
+# of OpenRun is built or run on Linux. The macOS runner limit shapes the job graph:
 #
 #   checks, clippy          start together with `build` (neither needs the tests)
 #   build                   compiles every test once and makes one nextest archive
@@ -52,6 +54,8 @@ jobs:
   # lists the paths and why). No build, so no macOS runner.
   changes:
     name: Changed paths
+    # Linux runner on purpose: this job only runs a path diff in Python and macOS runners are
+    # scarce. OpenRun itself is never built or run on Linux.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -479,7 +483,9 @@ jobs:
     needs: [changes, checks, clippy, build, sandboxed, integration, plain, shells]
     if: ${{ always() }}
     # Python only, no build and no test: a hosted macOS runner would queue behind the test jobs of
-    # every other run for nothing (measured: 16 minutes in run 37023024672).
+    # every other run for nothing (measured: 16 minutes in run 37023024672). Linux runner on
+    # purpose, as for `Changed paths`: macOS runners are scarce, and OpenRun itself is never built
+    # or run on Linux.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -1,7 +1,3 @@
-// Allow the use of `LineEnding::from_current_platform` in this test file, since
-// it's used in the implementation of `infer_line_ending`.
-#![allow(clippy::disallowed_methods)]
-
 use super::*;
 
 #[test]

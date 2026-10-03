@@ -8,7 +8,7 @@
 # reachable, as do unix sockets, except the one of the DNS daemon, so a name lookup is refused as
 # well). The kernel reports each denial to the unified log. After the run, `log show` reads the
 # reports of the run's time window into LOG, together with the processes the command started, and
-# `script/offline_audit --net-log LOG` turns that into a pass or fail. Two layers, as on Linux: the
+# `script/offline_audit --net-log LOG` turns that into a pass or fail. Two layers: the
 # kernel refuses the access, and the log shows that nothing tried.
 #
 # `log show` and not `log stream`: on a hosted runner the stream drops messages all the time

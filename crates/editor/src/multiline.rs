@@ -487,7 +487,6 @@ impl TextLineEndings {
     }
 
     /// The primary line ending of the string. For single-line strings, this is the platform default.
-    #[allow(clippy::disallowed_methods)]
     fn primary_ending(&self) -> LineEnding {
         match self {
             TextLineEndings::SingleLine => LineEnding::from_current_platform(),

@@ -53,7 +53,7 @@ body:
     id: "os-version"
     attributes:
       label: "Operating system and version"
-      description: "For example: Debian 11.2"
+      description: "For example: macOS 15.1"
     validations:
       required: true
   - type: input
