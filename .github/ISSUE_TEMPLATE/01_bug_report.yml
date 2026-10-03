@@ -47,8 +47,6 @@ body:
       options:
         - "Select an OS"
         - macOS
-        - Linux
-        - Windows
     validations:
       required: true
   - type: input
@@ -99,7 +97,7 @@ body:
     id: "additional-context"
     attributes:
       label: "Additional context"
-      description: "Add any other context about the problem here. On Linux, tell us whether you use X11 or Wayland. For graphical issues, start the app with `RUST_LOG=wgpu_core=info,wgpu_hal=info MESA_DEBUG=1 EGL_LOG_LEVEL=debug`, attach the logs, and include the output of `eglinfo`."
+      description: "Add any other context about the problem here."
     validations:
       required: false
   - type: dropdown

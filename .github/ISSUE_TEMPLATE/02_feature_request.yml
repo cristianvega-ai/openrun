@@ -38,9 +38,6 @@ body:
       options:
         - "Select an OS"
         - macOS
-        - Linux
-        - Windows
-        - Cross-platform
     validations:
       required: true
   - type: dropdown

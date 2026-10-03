@@ -82,7 +82,7 @@ The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`,
 
 1. **Entity-Handle System**: Views reference other views via handles, not direct ownership
 2. **Modular Structure**: Workspace contains multiple workspace configurations, each with terminals, code editors, etc.
-3. **Cross-Platform**: Native implementations for macOS, Windows and Linux. The `cfg(target_family = "wasm")` branches that remain are dormant: there is no web build.
+3. **macOS only**: AppKit and Metal. Windows, Linux and web (wasm) support were removed, so the code carries no platform `cfg`s. SSH sessions to Linux hosts are supported; the bundled shell bootstrap scripts keep their Linux branches for them.
 
 ### Development Guidelines
 

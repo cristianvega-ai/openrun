@@ -113,3 +113,17 @@ fn the_setting_round_trips_through_the_settings_file() {
         Some(false)
     );
 }
+
+/// Settings that only existed on Windows or Linux were removed with those platforms. A settings
+/// file that still has their keys keeps loading: no key fails and its neighbours keep their values.
+#[test]
+fn keys_of_removed_platform_settings_are_ignored() {
+    let (failed_keys, save, restore) = load_settings_file(
+        "[appearance.window]\nbackdrop = \"acrylic\"\noverride_blur_texture = true\n\n\
+         [system]\npreferred_graphics_backend = \"vulkan\"\nlinux_selection_clipboard = false\n\n\
+         [privacy]\nsave_command_history = false\n\n[general]\nrestore_session = false\n",
+    );
+    assert!(failed_keys.is_empty(), "{failed_keys:?}");
+    assert!(!save);
+    assert!(!restore);
+}
