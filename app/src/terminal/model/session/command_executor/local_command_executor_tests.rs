@@ -4,11 +4,10 @@ mod unix {
     use std::io::Write as _;
     use std::os::unix::fs::OpenOptionsExt as _;
     use std::path::Path;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use async_io::Timer;
     use futures_util::future::{AbortHandle, Abortable, Aborted};
-    use instant::Instant;
     use nix::sys::signal::kill;
     use nix::sys::stat::Mode;
     use nix::unistd::{Pid, mkfifo};

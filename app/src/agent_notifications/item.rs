@@ -1,5 +1,6 @@
+use std::time::Instant;
+
 use enum_iterator::Sequence;
-use instant::Instant;
 use uuid::Uuid;
 use warpui::EntityId;
 

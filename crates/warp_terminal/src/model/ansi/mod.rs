@@ -14,7 +14,7 @@ mod dcs_hooks;
 mod handler;
 
 use std::fmt::Write;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{io, str};
 
 use byte_unit::{Byte, Unit as ByteUnit};
@@ -22,7 +22,6 @@ pub use control_sequence_parameters::*;
 pub use dcs_hooks::*;
 pub use handler::*;
 use hex;
-use instant::Instant;
 use lazy_static::lazy_static;
 use log::debug;
 use vte::{Params, Parser as VteParser, Perform as VtePerform};

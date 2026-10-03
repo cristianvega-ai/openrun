@@ -29,7 +29,6 @@ warp_core = { workspace = true }
 warp_errors.workspace = true
 warp_util.workspace = true
 warpui_core.workspace = true
-instant.workspace = true
 async-fs = { workspace = true }
 url = "2"
 async-process = { workspace = true }

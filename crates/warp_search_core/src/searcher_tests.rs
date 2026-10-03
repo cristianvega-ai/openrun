@@ -1,7 +1,6 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use instant::Instant;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use tantivy::tokenizer::{TextAnalyzer, Token};

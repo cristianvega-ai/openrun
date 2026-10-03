@@ -16,11 +16,10 @@ mod macos {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use anyhow::anyhow;
     use dispatch2::run_on_main;
-    use instant::Instant;
     use warpui::r#async::Timer;
     use warpui::platform::TerminationMode;
     use warpui::platform::app::{AppBuilder, AppCallbacks};

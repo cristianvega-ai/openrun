@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use async_broadcast::{InactiveReceiver, Sender as BroadcastSender};
@@ -10,7 +10,6 @@ use futures::StreamExt;
 use futures::channel::mpsc::{self, Receiver as MpscReceiver, Sender as MpscSender};
 use futures::channel::oneshot::{self, Receiver, Sender};
 use futures::future::{AbortHandle, Abortable};
-use instant::Instant;
 use warpui_core::r#async::Timer;
 use warpui_core::r#async::executor::Background;
 use warpui_core::{Entity, RetryOption, SingletonEntity};

@@ -13,9 +13,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, OnceLock};
 use std::thread::JoinHandle;
+use std::time::Instant;
 
 use chrono::{DateTime, Local};
-use instant::Instant;
 use lsp::supported_servers::LSPServerType;
 // Only re-exported for integration tests (via `integration_testing::persistence`);
 // in-crate code should resolve paths through `database_file_path_for_current_scope`.

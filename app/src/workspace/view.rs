@@ -15,13 +15,12 @@ use std::convert::TryFrom;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, process};
 
 use ::settings::{Setting, ToggleableSetting};
 use anyhow::Result;
 use command::blocking::Command;
-use instant::Instant;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use parking_lot::FairMutex;

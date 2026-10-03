@@ -2,9 +2,8 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use instant::Instant;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
 
 use super::Event;

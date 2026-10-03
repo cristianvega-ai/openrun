@@ -8,11 +8,11 @@ use std::num::NonZeroUsize;
 use std::ops::{Range, RangeInclusive};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
 use enum_iterator::all;
 use hex;
-use instant::Instant;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::Vector2F;
 use secret_redaction::redact_secrets;

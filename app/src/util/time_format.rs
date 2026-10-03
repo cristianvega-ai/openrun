@@ -139,7 +139,7 @@ pub fn format_elapsed_seconds(elapsed: StdDuration) -> String {
 
 /// Formats a monotonic `Instant` as a human-readable relative timestamp.
 /// (Uses `Instant` rather than wall-clock `DateTime` for elapsed-time display.)
-pub fn format_elapsed_since(created_at: instant::Instant) -> String {
+pub fn format_elapsed_since(created_at: std::time::Instant) -> String {
     let secs = created_at.elapsed().as_secs();
 
     if secs < 60 {

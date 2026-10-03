@@ -794,10 +794,9 @@ print("PROMPTED" if re.search(rb"(^|\n)Username for", out) else "NO-PROMPT")
 ///   is verified for the hosts the plain session reached on the platform the test ran on.
 mod real_pwsh {
     use std::path::{Path, PathBuf};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use command::blocking::Command;
-    use instant::Instant;
 
     use super::*;
     use crate::terminal::model::session::LocalCommandExecutor;

@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use futures_lite::FutureExt;
 use fuzzy_match::FuzzyMatchResult;
-use instant::Instant;
 use itertools::Itertools;
 use warp_util::path::CleanPathResult;
 use warpui::{AppContext, Entity, SingletonEntity};

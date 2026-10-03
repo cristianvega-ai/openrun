@@ -15,7 +15,6 @@ derive-new = "0.5.8"
 futures.workspace = true
 fuzzy_match.workspace = true
 getset.workspace = true
-instant.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true
 log.workspace = true

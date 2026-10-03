@@ -1,8 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bounded_vec_deque::BoundedVecDeque;
-use instant::Instant;
 
 use super::time::{Global, Lamport, LamportValue};
 use crate::editor::view::PlainTextEditorViewAction;

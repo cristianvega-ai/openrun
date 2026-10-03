@@ -1,8 +1,8 @@
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use std::time::Instant;
 
-use instant::Instant;
 use warp_terminal::ImageProtocol;
 pub use warp_terminal::event::{ExecutedExecutorCommandEvent, ParseGeneratorOutputError};
 use warp_util::lazy::Lazy;

@@ -19,7 +19,6 @@ command.workspace = true
 directories.workspace = true
 itertools.workspace = true
 float-cmp.workspace = true
-instant.workspace = true
 log = { version = "0.4", features = ["serde"] }
 parking_lot = { version = "0.12.1", features = ["serde"] }
 pathfinder_geometry.workspace = true

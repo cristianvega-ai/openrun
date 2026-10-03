@@ -2,7 +2,8 @@ pub mod new_session_shell;
 pub mod startup_shell;
 pub mod working_directory_config;
 
-use instant::Duration;
+use std::time::Duration;
+
 use lazy_static::lazy_static;
 pub use new_session_shell::*;
 use serde::{Deserialize, Serialize};

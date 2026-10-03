@@ -1,4 +1,5 @@
-use instant::Duration;
+use std::time::Duration;
+
 use settings::{PrivatePreferences, PublicPreferences, Setting, SettingsManager};
 use settings_value::SettingsValue;
 use warp_core::settings::SupportedPlatforms;

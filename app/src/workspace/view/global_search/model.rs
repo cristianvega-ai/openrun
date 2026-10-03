@@ -1,8 +1,8 @@
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::Result;
 use futures::StreamExt as _;
-use instant::Instant;
 use num_traits::SaturatingSub;
 use regex::escape;
 use string_offset::ByteOffset;

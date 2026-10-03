@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use bounded_vec_deque::BoundedVecDeque;
-use instant::Instant;
 use lazy_static::lazy_static;
 
 lazy_static! {

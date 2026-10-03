@@ -1,8 +1,8 @@
 use std::fmt::Write;
 use std::path::Path;
+use std::time::Instant;
 
 use command::r#async::Command;
-use instant::Instant;
 use objc2::rc::{Retained, autoreleasepool};
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSBundle, NSString, NSURL};

@@ -27,7 +27,7 @@ pub(crate) struct FileSnapshot {
     /// Last-opened timestamps for files, keyed by path. Populated from
     /// `OpenedFilesModel` at snapshot time. Used as a secondary recency
     /// signal within each scoring tier.
-    pub(crate) last_opened: HashMap<String, instant::Instant>,
+    pub(crate) last_opened: HashMap<String, std::time::Instant>,
 }
 
 /// Builds the repository-backed file search source used by the @ menu.
@@ -104,7 +104,7 @@ pub fn file_data_source_for_pwd(
 
 /// Captures last-opened timestamps from `OpenedFilesModel` for the active
 /// repo at snapshot time. Returns an empty map when no repo is active.
-fn snapshot_last_opened(app: &AppContext) -> HashMap<String, instant::Instant> {
+fn snapshot_last_opened(app: &AppContext) -> HashMap<String, std::time::Instant> {
     let repo_root = app
         .windows()
         .state()
@@ -145,7 +145,7 @@ pub(crate) fn fuzzy_match_files(
 /// `None` first) and return a map from path to sort position.
 fn build_recency_index(
     contents: &[FileSearchResult],
-    last_opened: &HashMap<String, instant::Instant>,
+    last_opened: &HashMap<String, std::time::Instant>,
 ) -> HashMap<String, usize> {
     let mut opened: Vec<_> = contents
         .iter()

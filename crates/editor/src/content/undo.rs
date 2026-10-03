@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use instant::Instant;
 use warp_util::content_version::ContentVersion;
 
 use super::core::{CoreEditorAction, ReplacementRange};

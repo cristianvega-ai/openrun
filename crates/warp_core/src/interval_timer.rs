@@ -1,6 +1,5 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use instant::Instant;
 use serde::{Deserialize, Serialize};
 use warpui_core::{Entity, SingletonEntity};
 

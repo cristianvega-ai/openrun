@@ -930,7 +930,7 @@ impl AsyncFindController {
                         is_regex_enabled: config.is_regex_enabled,
                         blocks_to_include_in_results: None,
                     };
-                    let start = instant::Instant::now();
+                    let start = std::time::Instant::now();
                     let match_ids = view.run_find(&options, ctx);
                     let elapsed = start.elapsed();
                     log::trace!(

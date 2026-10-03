@@ -2,8 +2,8 @@
 //! which tracks files that have been opened, organized by repository.
 
 use std::collections::HashMap;
+use std::time::Instant;
 
-use instant::Instant;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::{Entity, ModelContext, SingletonEntity};
 

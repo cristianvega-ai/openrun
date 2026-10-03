@@ -4,10 +4,9 @@ use std::cmp::{self};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use instant::Instant;
 use parking_lot::Mutex;
 use pathfinder_geometry::vector::Vector2F;
 use rayon::prelude::*;

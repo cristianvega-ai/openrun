@@ -1,4 +1,4 @@
-use instant::Instant;
+use std::time::Instant;
 
 pub const OVERLAY_LOG_KEY: &str = "overlay_log";
 

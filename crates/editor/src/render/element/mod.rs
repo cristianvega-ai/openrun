@@ -2,10 +2,9 @@ use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use float_cmp::ApproxEq;
-use instant::Instant;
 use parking_lot::Mutex;
 use string_offset::CharOffset;
 use temporary_block::RenderableTemporaryBlock;

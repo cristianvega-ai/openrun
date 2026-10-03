@@ -2,9 +2,8 @@ use std::any::Any;
 use std::backtrace::Backtrace;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use instant::Instant;
 use warp_errors::report_error;
 
 use super::{TestSetupUtils, action_log, overlay};
@@ -518,7 +517,7 @@ impl TestStep {
                 #[cfg(feature = "integration_tests")]
                 let recording_start = recorder.recording_start();
                 #[cfg(not(feature = "integration_tests"))]
-                let recording_start: Option<instant::Instant> = None;
+                let recording_start: Option<std::time::Instant> = None;
                 if let Some(log) = super::action_log::get_action_log_mut(step_data_map) {
                     if let Some(start) = recording_start {
                         log.set_recording_start(start);

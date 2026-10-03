@@ -1,11 +1,10 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use code_outline::Symbol;
 use fuzzy_match::FuzzyMatchResult;
-use instant::Instant;
 use itertools::Itertools;
 use repo_metadata::repositories::DetectedRepositories;
 use warp_util::local_or_remote_path::LocalOrRemotePath;

@@ -3,9 +3,9 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 
 use anyhow::{Error, Result};
-use instant::Instant;
 use jsonrpc::ServerNotificationEvent;
 use lsp_types::notification::{self, Notification};
 use lsp_types::{

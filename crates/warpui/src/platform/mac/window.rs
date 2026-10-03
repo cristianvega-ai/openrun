@@ -5,11 +5,10 @@ use std::path::Path;
 use std::ptr;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
 use cocoa::base::id;
-use instant::Instant;
 use num_traits::FromPrimitive;
 use objc::runtime::Object;
 use objc2::rc::{Retained, autoreleasepool};

@@ -55,7 +55,7 @@ const EXECUTABLE_LISTING_ATTEMPTS: usize = 3;
 /// Pause between two attempts to list the executables. Commands of a session are cancelled
 /// together (when the user runs a command or an autosuggestion is dropped); the pause lets such a
 /// burst pass before the next attempt.
-const EXECUTABLE_LISTING_RETRY_DELAY: instant::Duration = instant::Duration::from_millis(250);
+const EXECUTABLE_LISTING_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// Runs a command that lists the executables of a session until it succeeds, at most
 /// [`EXECUTABLE_LISTING_ATTEMPTS`] times. The listing is not a command of the user: it can be
@@ -68,7 +68,7 @@ where
 {
     let mut last_error = anyhow::anyhow!("the executables were not listed");
     for attempt in 1..=EXECUTABLE_LISTING_ATTEMPTS {
-        let started_at = instant::Instant::now();
+        let started_at = std::time::Instant::now();
         match run().await {
             Ok(output) if output.status == CommandExitStatus::Success => {
                 log::info!(
@@ -1021,7 +1021,7 @@ impl Session {
                 .as_deref()
                 .map(|path| HashMap::from_iter([("PATH".to_string(), path.to_string())]));
 
-            let started_at = instant::Instant::now();
+            let started_at = std::time::Instant::now();
             let result = run_executable_listing(shell.shell_type().name(), || {
                 self.execute_command(shell_command_to_get_executables, None, env_vars.clone())
             })

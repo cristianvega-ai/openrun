@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 #[cfg(feature = "integration_tests")]
 use anyhow::Context as _;
 use image::ImageEncoder;
-use instant::Instant;
 #[cfg(feature = "integration_tests")]
 use warp_errors::report_error;
 

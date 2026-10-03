@@ -23,7 +23,7 @@ include!(concat!(env!("OUT_DIR"), "/cargo_target_tmpdir.rs"));
 /// hard timeout for the test itself.  nextest should kill tests that hit the
 /// timeout, but we sometimes see test processes sticking around on the test
 /// runner devices, and this should help ensure those get cleaned up.
-const TEST_TIMEOUT: instant::Duration = instant::Duration::from_secs(2 * 60);
+const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2 * 60);
 
 /// Custom wrapper around an [`integration::Builder`] that ensures we create and setup tests in a
 /// consistent way.

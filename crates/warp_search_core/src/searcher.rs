@@ -2,11 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 use std::sync::Arc;
 use std::thread::available_parallelism;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use futures::FutureExt as _;
-use instant::Instant;
 use itertools::Itertools;
 use parking_lot::{Mutex, RwLock};
 use sha2::{Digest, Sha256};

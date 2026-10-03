@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "integration_tests")]
+use std::time::Instant;
 
 use image::ImageEncoder;
-#[cfg(feature = "integration_tests")]
-use instant::Instant;
 
 use crate::platform::CapturedFrame;
 

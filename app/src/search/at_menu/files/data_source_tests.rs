@@ -807,15 +807,15 @@ fn test_file_data_source_for_pwd_holistic_behavior() {
 
 /// Helper: create an `Instant` that is `millis` milliseconds after a baseline.
 /// We use small sleeps to guarantee monotonically increasing instants.
-fn instant_offset(millis: u64) -> instant::Instant {
+fn instant_offset(millis: u64) -> std::time::Instant {
     // Sleep to advance the clock relative to previous calls.
     std::thread::sleep(std::time::Duration::from_millis(millis));
-    instant::Instant::now()
+    std::time::Instant::now()
 }
 
 #[test]
 fn test_zero_state_recently_opened_files_rank_above_untouched() {
-    let opened_at = instant::Instant::now();
+    let opened_at = std::time::Instant::now();
     let last_opened = HashMap::from([("src/opened.rs".to_string(), opened_at)]);
 
     let contents = vec![make_file("src/untouched.rs"), make_file("src/opened.rs")];
@@ -857,7 +857,7 @@ fn test_zero_state_recently_opened_files_rank_above_untouched() {
 
 #[test]
 fn test_zero_state_git_changed_ranks_above_recently_opened() {
-    let opened_at = instant::Instant::now();
+    let opened_at = std::time::Instant::now();
     let last_opened = HashMap::from([("src/opened.rs".to_string(), opened_at)]);
 
     let contents = vec![make_file("src/changed.rs"), make_file("src/opened.rs")];
@@ -1002,7 +1002,7 @@ fn test_zero_state_git_changed_also_ordered_by_recency() {
 
 #[test]
 fn test_fuzzy_query_recently_opened_bonus() {
-    let opened_at = instant::Instant::now();
+    let opened_at = std::time::Instant::now();
     let last_opened = HashMap::from([("src/components/opened_button.rs".to_string(), opened_at)]);
 
     let contents = vec![

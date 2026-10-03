@@ -1,4 +1,5 @@
-use instant::Instant;
+use std::time::Instant;
+
 use warpui::assets::asset_cache::AssetSource;
 use warpui::elements::{
     CacheOption, ConstrainedBox, CrossAxisAlignment, Flex, Image, ParentElement, Shrinkable, Stack,

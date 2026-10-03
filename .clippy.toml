@@ -3,7 +3,6 @@ disallowed-macros = [
 ]
 
 disallowed-types = [
-    { path = "std::time::Instant", reason = "std::time::Instant is not implemented for wasm targets. Use instant::Instant instead." },
     { path = "std::process::Command", reason = "std::process::Command inherits the app's stdin, stdout and stderr by default. Use command::blocking::Command instead." },
     { path = "async_process::Command", reason = "async_process::Command inherits the app's stdin, stdout and stderr by default. Use command::r#async::Command instead." },
 ]

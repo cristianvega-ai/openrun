@@ -16,10 +16,10 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use futures::{Future, FutureExt};
-use instant::{Duration, Instant};
 use warp_errors::report_error;
 
 use crate::r#async::FutureExt as _;

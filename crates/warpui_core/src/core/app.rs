@@ -7,11 +7,11 @@ use std::pin::pin;
 use std::rc::{self, Rc};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::time::Instant;
 
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use futures::prelude::*;
-use instant::Instant;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use parking_lot::Mutex;

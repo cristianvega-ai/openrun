@@ -129,7 +129,6 @@ image = { version = "0.25.9", default-features = false, features = [
   "gif",
   "webp",
 ] }
-instant = "0.1.12"
 itertools = "0.14.0"
 jsonschema = { version = "0.45", default-features = false }
 lazy_static = "1.4.0"

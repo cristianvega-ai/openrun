@@ -20,6 +20,14 @@ use crate::r#async::executor;
 use crate::image_cache::ImageCache;
 use crate::{Entity, ModelContext, SingletonEntity};
 
+/// The current time in milliseconds since the Unix epoch, used to order assets by age.
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|since_epoch| since_epoch.as_millis() as u64)
+        .unwrap_or_default()
+}
+
 pub trait FetchAsset: crate::r#async::Spawnable + Future<Output = Result<Bytes>> {}
 impl<T: crate::r#async::Spawnable + Future<Output = Result<Bytes>> + ?Sized> FetchAsset for T {}
 
@@ -419,7 +427,7 @@ impl AssetCache {
                         .and_then(|bytes| T::try_from_bytes(&bytes))
                     {
                         Ok(asset) => {
-                            let timestamp = instant::now() as u64;
+                            let timestamp = now_millis();
                             let size_in_bytes = asset.size_in_bytes();
 
                             AssetStateInternal::Loaded {
@@ -471,7 +479,7 @@ impl AssetCache {
         };
         match T::try_from_bytes(bytes) {
             Ok(asset) => {
-                let timestamp = instant::now() as u64;
+                let timestamp = now_millis();
                 let size_in_bytes = asset.size_in_bytes();
 
                 assets.insert(
@@ -576,7 +584,7 @@ impl AssetCache {
                         Ok(asset) => {
                             log::debug!("Asset fetch succeeded: {asset_source:?}");
 
-                            let timestamp = instant::now() as u64;
+                            let timestamp = now_millis();
                             let size_in_bytes = asset.size_in_bytes();
 
                             assets.insert(

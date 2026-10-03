@@ -3,8 +3,8 @@
 //! utilizing a combined prompt/command grid, with helper methods to expose the prompt and command.
 use std::cmp::max;
 use std::io;
+use std::time::Instant;
 
-use instant::Instant;
 use pathfinder_color::ColorU;
 use warp_errors::report_error;
 use warp_terminal::model::{KeyboardModes, KeyboardModesApplyBehavior};

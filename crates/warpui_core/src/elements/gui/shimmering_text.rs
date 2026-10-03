@@ -3,9 +3,8 @@ mod glyph_index;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use instant::Instant;
 use rangemap::RangeMap;
 use string_offset::CharOffset;
 

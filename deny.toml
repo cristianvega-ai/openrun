@@ -11,7 +11,6 @@ ignore = [
     { id = "RUSTSEC-2024-0425", reason = "get-size is unmaintained; we should try to find an alternative." },
     { id = "RUSTSEC-2024-0427", reason = "get-size-derive is an unmaintained dependency of get-size." },
     { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is a unmaintained dependency of get-size-derive." },
-    { id = "RUSTSEC-2024-0384", reason = "instant is unmaintained; we should migrate to web-time." },
     { id = "RUSTSEC-2020-0077", reason = "memmap is unmaintained; we should migrate to memmap2." },
     { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; this is a dependency of metal, which we should eliminate by moving to the objc2 family of crates."},
 ]

@@ -43,7 +43,6 @@ futures-util = { version = "0.3", default-features = false }
 image.workspace = true
 minimp4 = { workspace = true, optional = true }
 openh264 = { workspace = true, optional = true }
-instant.workspace = true
 itertools.workspace = true
 lazy_static = "1.4.0"
 log = "0.4"

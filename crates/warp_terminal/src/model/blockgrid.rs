@@ -3,8 +3,8 @@ use std::io;
 use std::num::NonZeroUsize;
 use std::ops::{Range, RangeInclusive};
 use std::sync::{Arc, OnceLock};
+use std::time::Instant;
 
-use instant::Instant;
 use pathfinder_color::ColorU;
 
 use super::find::RegexDFAs;

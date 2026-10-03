@@ -15,9 +15,9 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use instant::Duration;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 // Re-export the derive macro when available.

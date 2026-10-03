@@ -45,7 +45,7 @@ impl CommandRegistry {
     fn new_with_embedded_signatures() -> Self {
         CommandRegistry::new(
             |command| {
-                let start = instant::Instant::now();
+                let start = std::time::Instant::now();
                 let signature = warp_command_signatures::signature_by_name(command);
                 log::debug!(
                     "Lazily loaded command signature for {command} in {}s",

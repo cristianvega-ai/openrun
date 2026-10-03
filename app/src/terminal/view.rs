@@ -34,7 +34,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::SyncSender;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub use action::TerminalAction;
 use async_channel::{Receiver, Sender};
@@ -54,7 +54,6 @@ use inline_banner::{
     render_shell_process_terminated_banner, render_vim_mode_banner,
 };
 pub use inline_banner::{NotificationsDiscoveryBannerAction, NotificationsErrorBannerAction};
-use instant::Instant;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use markdown_parser::FormattedTextFragment;
