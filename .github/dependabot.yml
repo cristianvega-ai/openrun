@@ -1,27 +1,30 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# A pull request runs the whole CI workflow on hosted macOS runners, and a public repository has five
+# of them at a time, so there is one grouped pull request per ecosystem per week, and at most two
+# open per ecosystem.
 
 version: 2
 updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "daily"
-    # Only send security updates, not general version updates.
-    open-pull-requests-limit: 0
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    groups:
+      cargo:
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+    open-pull-requests-limit: 2
     cooldown:
       # Don't update to any action release that is less than two weeks old.
       default-days: 14
     groups:
-      # Group all non-major updates of official actions together - they're lower-risk.
-      official-actions:
-        applies-to: version-updates
+      github-actions:
         patterns:
-          - "actions/*"
-        update-types:
-          - "minor"
-          - "patch"
+          - "*"

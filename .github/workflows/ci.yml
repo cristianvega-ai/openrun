@@ -28,9 +28,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Only pull request runs are cancelled by a newer push. A run on `main` finishes, so
-  # every commit that lands there gets a complete result.
+  # A pull request run is cancelled by a newer push to the same branch. Every other run (a push to
+  # `main`, the nightly run, a manual run) has a group of its own and never waits for another: runs
+  # on `main` used to queue behind each other for up to 37 minutes. Nothing needs them to serialize:
+  # the build cache key contains the commit, so two runs never write the same cache entry, and the
+  # artifacts belong to a run.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
