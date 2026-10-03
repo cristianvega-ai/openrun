@@ -1,25 +1,23 @@
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use command::blocking::Command;
 use fuzzy_match::{
     FuzzyMatchResult, contains_wildcards, match_indices_case_insensitive,
     match_wildcard_pattern_case_insensitive,
 };
-use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
-
-use crate::workspace::ActiveSession;
-use command::blocking::Command;
 use repo_metadata::RepoMetadataModel;
 use repo_metadata::local_model::GetContentsArgs;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::repository_identifier::RepositoryIdentifier;
 use repo_metadata::wrapper_model::RepoMetadataEvent;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
+use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use super::search_item::FileSearchResult;
+use crate::workspace::ActiveSession;
 
 /// Shared model for file search functionality across different UI components.
 /// This singleton provides common file discovery, fuzzy matching, and git integration.

@@ -19,8 +19,7 @@ use warpui::{
 
 use crate::appearance::Appearance;
 use crate::code::buffer_location::LocalOrRemotePath;
-use crate::code::file_tree::FileTreeEvent;
-use crate::code::file_tree::FileTreeView;
+use crate::code::file_tree::{FileTreeEvent, FileTreeView};
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
 use crate::pane_group::pane::view::header::PANE_HEADER_HEIGHT;
 use crate::pane_group::pane::view::header::components::HEADER_EDGE_PADDING;
@@ -34,9 +33,8 @@ use crate::ui_components::buttons::{icon_button, icon_button_with_color};
 use crate::ui_components::icons;
 use crate::util::bindings::keybinding_name_to_display_string;
 use crate::util::file::external_editor::EditorSettings;
-use crate::util::openable_file_type::FileTarget;
 use crate::util::openable_file_type::{
-    EditorLayout, is_markdown_file, resolve_file_target_with_editor_choice,
+    EditorLayout, FileTarget, is_markdown_file, resolve_file_target_with_editor_choice,
 };
 use crate::workspace::WorkspaceAction;
 use crate::workspace::view::global_search::view::{

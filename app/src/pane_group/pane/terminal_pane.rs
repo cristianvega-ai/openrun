@@ -12,8 +12,7 @@ use super::{
 };
 use crate::app_state::{LeafContents, TerminalPaneSnapshot};
 use crate::code::buffer_location::LocalOrRemotePath;
-use crate::pane_group::CodeSource;
-use crate::pane_group::{self, Direction, PaneGroup};
+use crate::pane_group::{self, CodeSource, Direction, PaneGroup};
 use crate::persistence::{BlockCompleted, ModelEvent};
 use crate::session_management::SessionNavigationData;
 use crate::terminal::cli_agent_sessions::CLIAgentSessionsModel;

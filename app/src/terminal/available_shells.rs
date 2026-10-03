@@ -1,12 +1,10 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use settings::Setting as _;
-use warpui::{AppContext, ModelContext};
-use warpui::{Entity, SingletonEntity};
+use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use super::ShellLaunchData;
 use super::session_settings::{NewSessionShell, StartupShell};

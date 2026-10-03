@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use pane_group::{FilePane, PaneState, SettingsPane, SplitPaneState, TerminalPaneId};
-use repo_metadata::CanonicalizedPath;
-use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
+use repo_metadata::{CanonicalizedPath, RepoMetadataModel};
 use tempfile::TempDir;
 use terminal::view::ActiveSessionState;
 use warp_editor::editor::NavigationKey;

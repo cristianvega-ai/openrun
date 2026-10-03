@@ -1,13 +1,11 @@
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write as _};
+use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::Arc;
 #[cfg(not(test))]
 use std::sync::OnceLock;
 use std::sync::mpsc;
-use std::{
-    fs::{self, File, OpenOptions},
-    io::{self, Write as _},
-    path::{Path, PathBuf},
-};
 
 use chrono::{Local, SecondsFormat};
 #[cfg(test)]

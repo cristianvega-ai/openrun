@@ -10,7 +10,6 @@ use crate::elements::{
     Flex, Icon, MinSize, ParentElement,
 };
 use crate::keymap::Keystroke;
-
 use crate::scene::Border;
 
 type IconForKeystrokeFn = Arc<dyn Fn(&str) -> Option<Icon>>;

@@ -5,10 +5,8 @@ pub use warp_terminal::bootstrap::{
 };
 use warpui::{AppContext, AssetProvider, SingletonEntity};
 
-use super::{
-    model::session::{BootstrapSessionType, SessionInfo},
-    warpify::settings::{PIPENV_SUBSHELL_COMMAND_REGEX, POETRY_SUBSHELL_COMMAND_REGEX},
-};
+use super::model::session::{BootstrapSessionType, SessionInfo};
+use super::warpify::settings::{PIPENV_SUBSHELL_COMMAND_REGEX, POETRY_SUBSHELL_COMMAND_REGEX};
 use crate::terminal::session_settings::SessionSettings;
 use crate::terminal::shell::ShellType;
 

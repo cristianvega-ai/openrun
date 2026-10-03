@@ -1,11 +1,11 @@
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{fs, sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
 use notify_debouncer_full::notify::{RecursiveMode, WatchFilter};
-use repo_metadata::RepositoryUpdate;
-use repo_metadata::TargetFile;
-use warpui::ModelHandle;
-use warpui::{Entity, ModelContext, SingletonEntity};
+use repo_metadata::{RepositoryUpdate, TargetFile};
+use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity};
 use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
 
 /// Duration between filesystem watch events for the Warp managed paths watcher, in milliseconds.

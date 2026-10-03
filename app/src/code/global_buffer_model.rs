@@ -6,21 +6,17 @@ use std::sync::Arc;
 use bimap::BiMap;
 use futures_util::stream::AbortHandle;
 use lsp::types::TextDocumentContentChangeEvent;
-use lsp::{LspManagerModel, LspServerLogLevel, LspServerModel};
+use lsp::{LspManagerModel, LspManagerModelEvent, LspServerLogLevel, LspServerModel};
 use vec1::vec1;
-use warp_editor::content::buffer::Buffer;
+use warp_editor::content::buffer::{Buffer, EditOrigin};
 use warp_editor::content::diff::{TextDiff, text_diff};
 use warp_editor::content::edit::PreciseDelta;
+use warp_editor::content::text::{IndentBehavior, IndentUnit};
 use warp_editor::content::version::BufferVersion;
+use warp_files::{FileModel, FileModelEvent};
 use warp_util::content_version::ContentVersion;
 use warp_util::file::{FileId, FileLoadError, FileSaveError};
 use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle};
-
-use lsp::LspManagerModelEvent;
-use warp_editor::content::buffer::EditOrigin;
-use warp_editor::content::text::IndentBehavior;
-use warp_editor::content::text::IndentUnit;
-use warp_files::{FileModel, FileModelEvent};
 
 /// State for a shared buffer including the file ID and buffer handle.
 #[derive(Debug, Clone)]

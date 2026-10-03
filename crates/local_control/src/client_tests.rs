@@ -1,7 +1,6 @@
 use std::io::{Read as _, Write as _};
 
-use chrono::Duration;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use uuid::Uuid;
 
 use super::*;

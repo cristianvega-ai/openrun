@@ -46,8 +46,9 @@ use crate::ui_components::icons;
 use crate::util::bindings::{CustomAction, keybinding_name_to_display_string};
 use crate::util::openable_file_type::FileTarget;
 use crate::util::path::display_location_path;
-use crate::view_components::action_button::{ActionButton, PaneHeaderTheme};
-use crate::view_components::action_button::{NakedTheme, TooltipAlignment};
+use crate::view_components::action_button::{
+    ActionButton, NakedTheme, PaneHeaderTheme, TooltipAlignment,
+};
 use crate::view_components::{Dropdown, DropdownItem};
 use crate::workspace::WorkspaceAction;
 use crate::workspace::view::TOGGLE_RIGHT_PANEL_BINDING_NAME;

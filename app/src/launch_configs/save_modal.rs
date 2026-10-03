@@ -25,8 +25,8 @@ use crate::editor::{
     EditorView, Event as EditorEvent, PropagateAndNoOpNavigationKeys, SingleLineEditorOptions,
 };
 use crate::launch_configs::launch_config::LaunchConfig;
-use crate::user_config::launch_configs_dir;
-use crate::user_config::{WarpConfig, util::file_name_to_human_readable_name};
+use crate::user_config::util::file_name_to_human_readable_name;
+use crate::user_config::{WarpConfig, launch_configs_dir};
 use crate::util::bindings::keybinding_name_to_display_string;
 use crate::util::openable_file_type::FileTarget;
 

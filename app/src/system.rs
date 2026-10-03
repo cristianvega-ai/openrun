@@ -1,6 +1,5 @@
 mod info;
 pub use info::SystemInfo;
-
 use warpui::{Entity, ModelContext, SingletonEntity};
 
 #[derive(Clone, Copy, Default, PartialEq)]

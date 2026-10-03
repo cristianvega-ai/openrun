@@ -46,8 +46,9 @@ use crate::settings::FontSettings;
 use crate::terminal::model::session::Session;
 use crate::ui_components::icons::Icon;
 use crate::util::openable_file_type::FileTarget;
-pub use crate::util::openable_file_type::renders_in_warp_notebook_viewer;
-pub use crate::util::openable_file_type::{is_jupyter_notebook_file, is_markdown_file};
+pub use crate::util::openable_file_type::{
+    is_jupyter_notebook_file, is_markdown_file, renders_in_warp_notebook_viewer,
+};
 use crate::view_components::{MarkdownToggleEvent, MarkdownToggleView};
 use crate::workflows::{WorkflowSource, WorkflowType};
 use crate::workspace::ActiveSession;

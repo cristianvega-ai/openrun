@@ -1,21 +1,18 @@
 //! Inline repos menu view for switching between known repos.
 
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use warpui::SingletonEntity;
 use warpui::elements::ChildView;
-use warpui::{Element, Entity, ModelHandle, View, ViewContext, ViewHandle};
+use warpui::{Element, Entity, ModelHandle, SingletonEntity, View, ViewContext, ViewHandle};
 
 use crate::search::data_source::{Query, QueryFilter};
 use crate::search::mixer::{AddAsyncSourceOptions, SearchMixer};
 use crate::terminal::input::buffer_model::{InputBufferModel, InputBufferUpdateEvent};
 use crate::terminal::input::inline_menu::{InlineMenuEvent, InlineMenuPositioner, InlineMenuView};
 use crate::terminal::input::repos::AcceptRepo;
-use crate::terminal::input::repos::data_source::GitSummaryCache;
-use crate::terminal::input::repos::data_source::RepoMenuDataSource;
+use crate::terminal::input::repos::data_source::{GitSummaryCache, RepoMenuDataSource};
 use crate::terminal::input::suggestions_mode_model::{
     InputSuggestionsModeEvent, InputSuggestionsModeModel,
 };

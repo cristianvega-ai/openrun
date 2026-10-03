@@ -1,7 +1,8 @@
 use ::local_control::{ActionKind, ErrorCode};
 
-use super::resolve_against_working_directory;
-use super::{ensure_surface_available, validate_staged_input_text};
+use super::{
+    ensure_surface_available, resolve_against_working_directory, validate_staged_input_text,
+};
 use crate::local_control::handlers::metadata::SurfaceDestination;
 
 #[test]

@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::path::Path;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use indexmap::IndexSet;
 use repo_metadata::repositories::DetectedRepositories;
-use warpui::{AppContext, SingletonEntity as _};
-use warpui::{Entity, EntityId, ModelContext, ModelHandle, ViewHandle};
+use warpui::{
+    AppContext, Entity, EntityId, ModelContext, ModelHandle, SingletonEntity as _, ViewHandle,
+};
 
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::file_tree::FileTreeView;

@@ -14,9 +14,8 @@ use lsp_types::{
 };
 use simple_logger::manager::LogManager;
 use warp_errors::report_error;
-use warpui_core::SingletonEntity;
 use warpui_core::r#async::executor::Background;
-use warpui_core::{Entity, ModelContext};
+use warpui_core::{Entity, ModelContext, SingletonEntity};
 
 use crate::config::{LanguageId, lsp_uri_to_path};
 use crate::supported_servers::LSPServerType;
@@ -24,8 +23,10 @@ use crate::types::{
     DefinitionLocation, DocumentVersion, HoverResult, Location, ReferenceLocation,
     TextDocumentContentChangeEvent, TextEdit, WatchedFileChangeEvent,
 };
-use crate::{LspServerConfig, LspServerLogLevel, LspService};
-use crate::{LspServiceInitializationResult, spawn_lsp_service};
+use crate::{
+    LspServerConfig, LspServerLogLevel, LspService, LspServiceInitializationResult,
+    spawn_lsp_service,
+};
 
 static NEXT_LANGUAGE_SERVER_ID: AtomicUsize = AtomicUsize::new(0);
 

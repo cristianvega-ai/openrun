@@ -4,7 +4,6 @@ use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity};
 mod mac;
 
 use mac::*;
-
 use warp_errors::report_error;
 
 pub struct DefaultTerminal {

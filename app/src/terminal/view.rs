@@ -75,8 +75,7 @@ use warp_core::semantic_selection::SemanticSelection;
 use warp_core::user_preferences::GetUserPreferences as _;
 use warp_errors::{report_error, report_if_error};
 use warp_util::local_or_remote_path::LocalOrRemotePath;
-use warp_util::path::LineAndColumnArg;
-use warp_util::path::ShellFamily;
+use warp_util::path::{LineAndColumnArg, ShellFamily};
 use warpui::accessibility::{AccessibilityContent, ActionAccessibilityContent, WarpA11yRole};
 use warpui::assets::asset_cache::{AssetCache, AssetCacheEvent};
 use warpui::r#async::{SpawnedFutureHandle, Timer};
@@ -274,7 +273,8 @@ use crate::util::bindings::{
 };
 use crate::util::clipboard::clipboard_content_with_escaped_paths;
 use crate::util::color::darken;
-use crate::util::file::external_editor::{EditorSettings, settings::EditorLayout};
+use crate::util::file::external_editor::EditorSettings;
+use crate::util::file::external_editor::settings::EditorLayout;
 use crate::util::openable_file_type::{
     FileTarget, renders_in_warp_notebook_viewer, resolve_file_target,
 };

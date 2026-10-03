@@ -1,29 +1,22 @@
 use std::ops::Deref;
+use std::path::PathBuf;
 
 use serde::{Serialize, Serializer};
+use unicode_general_category::{GeneralCategory, get_general_category};
+use unicode_width::UnicodeWidthChar;
+use warp_errors::report_error;
+use warp_util::path::{CleanPathResult, LineAndColumnArg};
 use warpui::ViewContext;
 use warpui::platform::Cursor;
 
-use crate::terminal::TerminalModel;
+use super::{FindLinkArg, TerminalEditor};
 use crate::terminal::model::RespectObfuscatedSecrets;
+use crate::terminal::model::grid::grid_handler;
 use crate::terminal::model::grid::grid_handler::Link;
 use crate::terminal::model::index::Point;
 use crate::terminal::model::terminal_model::{WithinBlock, WithinModel};
-
-use crate::{
-    terminal::ShellLaunchData,
-    terminal::model::grid::grid_handler,
-    util::file::{FileLink, ShellPathType, absolute_path_if_valid},
-};
-use std::path::PathBuf;
-use unicode_general_category::{GeneralCategory, get_general_category};
-use unicode_width::UnicodeWidthChar;
-use warp_util::path::CleanPathResult;
-use warp_util::path::LineAndColumnArg;
-
-use warp_errors::report_error;
-
-use super::{FindLinkArg, TerminalEditor};
+use crate::terminal::{ShellLaunchData, TerminalModel};
+use crate::util::file::{FileLink, ShellPathType, absolute_path_if_valid};
 
 // "a/" and "b/" are prefixes specific to Git Diff
 const PREFIXES_TO_REMOVE: [&str; 2] = ["a/", "b/"];

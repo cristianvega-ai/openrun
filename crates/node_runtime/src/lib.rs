@@ -3,16 +3,16 @@
 //! This module provides functionality to install and manage Node.js/npm,
 //! on macOS for both architectures (x64, arm64).
 
-use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use std::ffi::OsStr;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
+use anyhow::{Context, Result, bail};
 use command::r#async::Command;
 use flate2::read::GzDecoder;
 use futures::io::AsyncWriteExt;
 use semver::Version;
-use std::ffi::OsStr;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use serde::Deserialize;
 use tar::Archive;
 
 /// The pinned Node.js version to install.

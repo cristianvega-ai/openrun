@@ -1,10 +1,8 @@
 use warpui::elements::ScrollOffset;
 use warpui::units::Pixels;
-use warpui::{AppContext, WeakViewHandle};
-use warpui::{ViewContext, ViewHandle};
+use warpui::{AppContext, ViewContext, ViewHandle, WeakViewHandle};
 
-use super::FILE_HEADER_HEIGHT;
-use super::{CodeReviewView, CodeReviewViewState};
+use super::{CodeReviewView, CodeReviewViewState, FILE_HEADER_HEIGHT};
 use crate::code::editor::model::StableEditorLine;
 use crate::code::local_code_editor::LocalCodeEditorView;
 

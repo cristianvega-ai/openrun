@@ -68,8 +68,7 @@ use std::net::SocketAddr;
 use std::os::unix::fs::PermissionsExt as _;
 use std::sync::{Arc, Mutex};
 
-use ::local_control::auth::CredentialGrant;
-use ::local_control::auth::{CredentialRequest, ScopedCredential};
+use ::local_control::auth::{CredentialGrant, CredentialRequest, ScopedCredential};
 use ::local_control::{
     ActionKind, AuthToken, ControlEndpoint, ControlError, ControlResponse, ErrorCode,
     ErrorResponseEnvelope, InstanceId, InstanceRecord, RegisteredInstance, RequestEnvelope,

@@ -1,8 +1,7 @@
 use std::mem::ManuallyDrop;
 use std::ops::ControlFlow;
 use std::sync::Arc;
-use std::sync::mpsc::TryRecvError;
-use std::sync::mpsc::{self, Receiver, SendError};
+use std::sync::mpsc::{self, Receiver, SendError, TryRecvError};
 
 use objc2_core_foundation::{
     CFRetained, CFRunLoop, CFRunLoopSource, CFRunLoopSourceContext, kCFRunLoopDefaultMode,

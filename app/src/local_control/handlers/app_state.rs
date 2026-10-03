@@ -14,8 +14,7 @@ use ::local_control::{ActionKind, ControlError, ErrorCode, InstanceId};
 use serde_json::json;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warp_util::path::LineAndColumnArg;
-use warpui::SingletonEntity;
-use warpui::{AppContext, ModelContext, TypedActionView};
+use warpui::{AppContext, ModelContext, SingletonEntity, TypedActionView};
 
 use crate::code::editor_management::CodeSource;
 use crate::local_control::LocalControlBridge;
@@ -32,8 +31,7 @@ use crate::pane_group::{ActivationReason, Direction, PaneGroupAction};
 use crate::settings_view::SettingsSection;
 use crate::util::file::external_editor::EditorSettings;
 use crate::util::openable_file_type::{EditorLayout, resolve_file_target_to_open_in_warp};
-use crate::workspace::PaneViewLocator;
-use crate::workspace::{CommandSearchOptions, InitContent, WorkspaceAction};
+use crate::workspace::{CommandSearchOptions, InitContent, PaneViewLocator, WorkspaceAction};
 
 const MAX_PANE_RESIZE_STEPS: u32 = 1_000;
 

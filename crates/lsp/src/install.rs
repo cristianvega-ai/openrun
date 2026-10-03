@@ -1,9 +1,9 @@
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use async_fs::unix::PermissionsExt;
 use serde::Deserialize;
-
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
 
 use crate::Downloader;
 use crate::language_server_candidate::LanguageServerMetadata;

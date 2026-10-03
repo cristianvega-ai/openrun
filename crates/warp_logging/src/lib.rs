@@ -26,9 +26,8 @@ mod imp;
 
 mod rotation;
 
-pub use imp::init;
-pub use imp::{create_log_bundle_zip, log_directory, log_file_path, rotate_log_files};
 pub use imp::{
-    init_for_crash_recovery_process, init_logging_for_unit_tests, on_crash_recovery_process_killed,
-    on_parent_process_crash,
+    create_log_bundle_zip, init, init_for_crash_recovery_process, init_logging_for_unit_tests,
+    log_directory, log_file_path, on_crash_recovery_process_killed, on_parent_process_crash,
+    rotate_log_files,
 };

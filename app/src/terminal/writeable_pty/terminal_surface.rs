@@ -2,8 +2,7 @@ use std::borrow::Cow;
 
 use async_channel::Sender;
 use warp_completer::meta::Span;
-use warpui::AppContext;
-use warpui::{Entity, ViewContext};
+use warpui::{AppContext, Entity, ViewContext};
 
 use crate::terminal::SizeUpdate;
 use crate::terminal::event::AfterBlockCompletedEvent;

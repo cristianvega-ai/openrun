@@ -10,8 +10,7 @@ use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 use super::WorkflowSource;
 use super::workflow::Workflow;
 use crate::terminal::model::session::Session;
-use crate::user_config::WarpConfig;
-use crate::user_config::load_workflows;
+use crate::user_config::{WarpConfig, load_workflows};
 
 pub fn workflows_dir(base_dir: impl AsRef<Path>) -> PathBuf {
     base_dir.as_ref().join("workflows")

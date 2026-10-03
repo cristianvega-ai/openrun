@@ -2,8 +2,7 @@
 
 use warp_core::settings::{Setting as _, ToggleableSetting as _};
 use warp_errors::report_if_error;
-use warpui::elements::Element;
-use warpui::elements::{ChildView, Empty};
+use warpui::elements::{ChildView, Element, Empty};
 use warpui::keymap::ContextPredicate;
 use warpui::ui_components::components::UiComponent;
 use warpui::ui_components::switch::SwitchStateHandle;

@@ -4,8 +4,7 @@
 //! all repositories tracked by Warp.
 
 use std::cell::Cell;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -38,18 +37,19 @@ pub struct RepoContents<'a> {
     pub truncated: bool,
 }
 
+use notify_debouncer_full::notify::RecursiveMode;
 use warp_util::standardized_path::StandardizedPath;
+use warpui_core::SingletonEntity as _;
+use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
 
-use crate::entry::LAZY_LOAD_FILE_LIMIT;
-use crate::entry::repo_watch_filter;
-use crate::entry::{BuildTreeError, BuildTreeOptions, Entry, FileId, IgnoredPathStrategy};
+use crate::entry::{
+    BuildTreeError, BuildTreeOptions, Entry, FileId, IgnoredPathStrategy, LAZY_LOAD_FILE_LIMIT,
+    repo_watch_filter,
+};
 use crate::repositories::{DetectedRepositories, DetectedRepositoriesEvent};
 use crate::repository::Repository;
 use crate::watcher::DirectoryWatcher;
 use crate::{RepoMetadataError, gitignores_for_directory, matches_gitignores};
-use notify_debouncer_full::notify::RecursiveMode;
-use warpui_core::SingletonEntity as _;
-use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
 
 /// Duration between filesystem watch events in seconds
 const FILESYSTEM_WATCHER_DEBOUNCE_SECS: u64 = 1;

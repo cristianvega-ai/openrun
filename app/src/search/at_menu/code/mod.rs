@@ -3,8 +3,7 @@ pub mod search_item;
 
 use std::path::Path;
 
-use warpui::AppContext;
-use warpui::SingletonEntity;
+use warpui::{AppContext, SingletonEntity};
 
 use crate::code::outline::{OutlineStatus, RepoOutlines};
 use crate::workspace::ActiveSession;

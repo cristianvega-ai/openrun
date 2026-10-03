@@ -31,10 +31,9 @@ use warpui::{
     ViewHandle, WindowId,
 };
 
-use crate::app_state::CodePaneSnapShot;
 use crate::app_state::{
-    self, BranchSnapshot, LeafContents, LeafSnapshot, NotebookPaneSnapshot, PaneNodeSnapshot,
-    PaneUuid, SettingsPaneSnapshot, TerminalPaneSnapshot,
+    self, BranchSnapshot, CodePaneSnapShot, LeafContents, LeafSnapshot, NotebookPaneSnapshot,
+    PaneNodeSnapshot, PaneUuid, SettingsPaneSnapshot, TerminalPaneSnapshot,
 };
 use crate::appearance::Appearance;
 use crate::banner::{Banner, BannerEvent, BannerState, BannerTextContent, DismissalType};
@@ -60,8 +59,10 @@ use crate::settings_view::SettingsSection;
 use crate::terminal::available_shells::{AvailableShell, AvailableShells};
 use crate::terminal::general_settings::{GeneralSettings, GeneralSettingsChangedEvent};
 use crate::terminal::input::{InputConfig, InputType};
-use crate::terminal::local_tty::TerminalManager as LocalTtyTerminalManager;
-use crate::terminal::local_tty::{TerminalViewSurfaceConfig, create_terminal_view_surface};
+use crate::terminal::local_tty::{
+    TerminalManager as LocalTtyTerminalManager, TerminalViewSurfaceConfig,
+    create_terminal_view_surface,
+};
 use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::session::Session;
 use crate::terminal::session_settings::{NewSessionSource, SessionSettings};

@@ -3,8 +3,7 @@
 use settings::Setting as _;
 use warp_core::channel::ChannelState;
 use warp_errors::report_if_error;
-use warpui::elements::MouseStateHandle;
-use warpui::elements::{ChildView, Element};
+use warpui::elements::{ChildView, Element, MouseStateHandle};
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::UiComponent;
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle};
@@ -16,8 +15,7 @@ use super::settings_page::{
 use super::{SettingsSection, ToggleState};
 use crate::appearance::Appearance;
 use crate::settings::{LocalControlMode, LocalControlSettings};
-use crate::view_components::DismissibleToast;
-use crate::view_components::{Dropdown, DropdownItem};
+use crate::view_components::{DismissibleToast, Dropdown, DropdownItem};
 use crate::workspace::{ToastStack, cli_install};
 
 #[derive(Clone, Debug, PartialEq)]

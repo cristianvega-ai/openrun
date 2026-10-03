@@ -31,8 +31,9 @@ use warpui::{
 use crate::settings::CodeSettings;
 use crate::ui_components::blended_colors;
 use crate::view_components::action_button::{ActionButton, ButtonSize, NakedTheme};
-use crate::workspace_metadata::PersistedWorkspaceEvent;
-use crate::workspace_metadata::{LSPEnablementResultForFile, LspRepoStatus, PersistedWorkspace};
+use crate::workspace_metadata::{
+    LSPEnablementResultForFile, LspRepoStatus, PersistedWorkspace, PersistedWorkspaceEvent,
+};
 
 const FOOTER_HEIGHT: f32 = 24.;
 /// Margin around the LSP icon container

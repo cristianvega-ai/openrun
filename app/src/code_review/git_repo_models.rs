@@ -6,12 +6,10 @@ use repo_metadata::repositories::DetectedRepositories;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle};
 
-use super::git_repo_model::GitRepoStatusModel;
-use super::git_repo_model::new_local_git_repo_status_model;
+use super::git_repo_model::{GitRepoStatusModel, new_local_git_repo_status_model};
 #[cfg(test)]
 use super::github_repo_model::GitHubCli;
-use super::github_repo_model::GitHubRepoModel;
-use super::github_repo_model::LocalGitHubRepoModel;
+use super::github_repo_model::{GitHubRepoModel, LocalGitHubRepoModel};
 
 // ── GitRepoModels (singleton cache) ─────────────────────────────────────────
 

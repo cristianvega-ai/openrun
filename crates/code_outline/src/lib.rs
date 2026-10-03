@@ -1,13 +1,12 @@
 //! Code-symbol outlines of repositories, built by parsing source files with tree-sitter.
 mod native;
-pub use native::build_outline;
-
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use ignore::gitignore::Gitignore;
 use itertools::Itertools;
+pub use native::build_outline;
 use repo_metadata::{Entry, FileId};
 use serde::{Deserialize, Serialize};
 

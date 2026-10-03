@@ -19,8 +19,7 @@ use warp_core::{safe_error, safe_info};
 use warp_editor::content::buffer::{AutoScrollBehavior, InitialBufferState, SelectionOffsets};
 use warp_editor::model::CoreEditorModel;
 use warp_editor::render::element::VerticalExpansionBehavior;
-use warp_editor::render::model::AutoScrollMode;
-use warp_editor::render::model::LineCount;
+use warp_editor::render::model::{AutoScrollMode, LineCount};
 use warp_util::content_version::ContentVersion;
 use warp_util::path::LineAndColumnArg;
 use warp_util::standardized_path::StandardizedPath;
@@ -56,8 +55,6 @@ use super::diff_size_limits::DiffSize;
 use super::git_dialog::{GitDialog, GitDialogEvent, GitDialogKind};
 use super::{GlobalCodeReviewEvent, GlobalCodeReviewModel};
 use crate::appearance::Appearance;
-use crate::code::ShowCommentEditorProvider;
-use crate::code::ShowFindReferencesCard;
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor::comment_editor::DEFAULT_COMMENT_MAX_WIDTH;
 use crate::code::editor::line::EditorLineLocation;
@@ -73,6 +70,7 @@ use crate::code::local_code_editor::{
     LocalCodeEditorEvent, LocalCodeEditorView, render_unsaved_circle_with_tooltip,
 };
 use crate::code::view::PendingSaveIntent;
+use crate::code::{ShowCommentEditorProvider, ShowFindReferencesCard};
 use crate::code_review::DiffSetScope;
 use crate::code_review::comments::{
     AgentReviewCommentBatch, AttachedReviewCommentTarget, CommentId, ReviewCommentBatch,
@@ -116,8 +114,7 @@ use crate::util::bindings::{
 };
 use crate::util::file::external_editor::EditorSettings;
 use crate::util::git::{BranchEntry, PrInfo};
-use crate::util::openable_file_type::FileTarget;
-use crate::util::openable_file_type::resolve_file_target_with_editor_choice;
+use crate::util::openable_file_type::{FileTarget, resolve_file_target_with_editor_choice};
 use crate::view_components::DismissibleToast;
 use crate::view_components::action_button::{
     ActionButton, ActionButtonTheme, AdjoinedSide, ButtonSize, DangerPrimaryTheme, KeystrokeSource,

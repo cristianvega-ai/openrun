@@ -25,12 +25,11 @@ use warpui::{
 };
 
 use super::keybindings::KeyBindingModifyingState;
-use super::settings_page::render_sub_sub_header;
 use super::settings_page::{
     AdditionalInfo, CONTENT_FONT_SIZE, Category, HEADER_PADDING, MatchData, PageType,
     SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, TOGGLE_BUTTON_RIGHT_PADDING,
     ToggleState, add_setting, build_reset_button, render_body_item, render_body_item_label,
-    render_dropdown_item, render_dropdown_item_label,
+    render_dropdown_item, render_dropdown_item_label, render_sub_sub_header,
 };
 use super::{
     DisplayCount, SettingsAction, SettingsSection, ToggleSettingActionPair, features, flags,

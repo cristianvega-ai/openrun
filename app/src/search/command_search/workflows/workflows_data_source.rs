@@ -11,8 +11,7 @@ use crate::search::data_source::{Query, QueryResult};
 use crate::search::mixer::{DataSourceRunErrorWrapper, SyncDataSource};
 use crate::search::workflows::fuzzy_match::FuzzyMatchWorkflowResult;
 use crate::user_config::WarpConfig;
-use crate::workflows::local_workflows::LocalWorkflows;
-use crate::workflows::local_workflows::UseCache;
+use crate::workflows::local_workflows::{LocalWorkflows, UseCache};
 use crate::workflows::workflow::Workflow;
 use crate::workflows::{WorkflowSource, WorkflowType};
 

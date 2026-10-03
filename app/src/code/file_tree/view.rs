@@ -47,9 +47,9 @@ use crate::terminal::view::{TerminalDropTargetData, TerminalView};
 use crate::ui_components::icons::Icon;
 use crate::ui_components::item_highlight::{ImageOrIcon, ItemHighlightState};
 use crate::util::file::external_editor::EditorSettings;
-use crate::util::openable_file_type::{EditorLayout, FileTarget, is_file_content_binary};
 use crate::util::openable_file_type::{
-    resolve_file_target_to_open_in_warp, resolve_file_target_with_editor_choice,
+    EditorLayout, FileTarget, is_file_content_binary, resolve_file_target_to_open_in_warp,
+    resolve_file_target_with_editor_choice,
 };
 
 mod editing;

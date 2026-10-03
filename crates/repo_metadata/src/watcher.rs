@@ -3,23 +3,22 @@ use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::sync::Arc;
 
-use futures::{FutureExt as _, future::OptionFuture};
+use futures::FutureExt as _;
+use futures::future::OptionFuture;
+use ignore::gitignore::Gitignore;
 use warp_util::standardized_path::StandardizedPath;
 use warpui_core::{Entity, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle};
-
-use crate::repository::SubscriberId;
-use crate::{RepoMetadataError, Repository};
-
-use std::sync::Arc;
+use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
 
 use crate::entry::{
     extract_worktree_git_dir, is_commit_related_git_file, is_common_git_config,
     is_git_internal_path, is_index_lock_file, is_remote_tracking_ref, is_shared_git_ref,
     is_tracking_state_git_file,
 };
-use ignore::gitignore::Gitignore;
-use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
+use crate::repository::SubscriberId;
+use crate::{RepoMetadataError, Repository};
 /// Duration between filesystem watch events in milliseconds
 const FILESYSTEM_WATCHER_DEBOUNCE_MILLI_SECS: u64 = 500;
 

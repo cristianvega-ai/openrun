@@ -8,17 +8,12 @@ use std::time::Duration;
 use futures::future::ready;
 use ignore::gitignore::Gitignore;
 use warp_util::standardized_path::StandardizedPath;
-use warpui_core::SingletonEntity;
 use warpui_core::r#async::{BoxFuture, SpawnedFutureHandle};
-use warpui_core::{Entity, ModelContext, ModelHandle};
+use warpui_core::{Entity, ModelContext, ModelHandle, SingletonEntity};
 
-use crate::watcher::DirectoryWatcher;
-use crate::watcher::TaskQueue;
-use crate::{RepoMetadataError, RepositoryUpdate};
-use crate::{
-    entry::{matches_gitignores, should_ignore_git_path},
-    gitignores_for_directory,
-};
+use crate::entry::{matches_gitignores, should_ignore_git_path};
+use crate::watcher::{DirectoryWatcher, TaskQueue};
+use crate::{RepoMetadataError, RepositoryUpdate, gitignores_for_directory};
 
 /// Trait for entities that want to subscribe to repository file changes.
 pub trait RepositorySubscriber: Send + Sync {

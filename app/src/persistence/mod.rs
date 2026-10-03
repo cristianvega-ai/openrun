@@ -2,8 +2,7 @@ mod block_list;
 pub mod commands;
 mod sqlite;
 
-pub use persistence::model;
-pub use persistence::schema;
+pub use persistence::{model, schema};
 
 #[cfg(feature = "integration_tests")]
 pub mod testing;
@@ -18,14 +17,13 @@ use std::thread::JoinHandle;
 use chrono::{DateTime, Local};
 use instant::Instant;
 use lsp::supported_servers::LSPServerType;
-pub use sqlite::database_file_path_for_current_scope;
 // Only re-exported for integration tests (via `integration_testing::persistence`);
 // in-crate code should resolve paths through `database_file_path_for_current_scope`.
 #[cfg_attr(not(feature = "integration_tests"), expect(unused_imports))]
 pub use sqlite::database_file_path_for_scope;
-pub use sqlite::establish_ro_connection;
 #[cfg(test)]
 pub(crate) use sqlite::persist_events_for_test;
+pub use sqlite::{database_file_path_for_current_scope, establish_ro_connection};
 use warp_core::command::ExitCode;
 use warp_errors::report_error;
 use warpui::{Entity, SingletonEntity};

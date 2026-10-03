@@ -1,27 +1,24 @@
 //! History lookups and command validation behind the input's inline command autosuggestions.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Duration;
 
+use diesel::SqliteConnection;
 use warp_completer::completer::{
     self, AliasExpansionResult, CompleterOptions, CompletionsFallbackStrategy, MatchStrategy,
     expand_command_aliases,
 };
 use warp_completer::meta::Spanned;
 use warp_completer::parsers::ParsedExpression;
-use warp_completer::parsers::hir::{Command, Expression, FlagType};
+use warp_completer::parsers::hir::{ArgType, Command, Expression, FlagType};
 use warp_core::command::ExitCode;
 use warpui::r#async::FutureExt;
 use warpui::{AppContext, SingletonEntity};
 
 use super::CompleterData;
 use crate::completer::SessionContext;
-use crate::terminal::ShellHost;
-use crate::terminal::{History, HistoryEntry};
-
-use diesel::SqliteConnection;
-use std::path::PathBuf;
-use warp_completer::parsers::hir::ArgType;
+use crate::terminal::{History, HistoryEntry, ShellHost};
 
 /// The maximum number of earlier runs of the same command to look at when finding the commands
 /// that followed it. The lower this is, the faster new patterns are picked up.

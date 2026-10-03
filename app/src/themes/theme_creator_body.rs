@@ -1,7 +1,8 @@
 use std::default::Default;
 use std::fmt;
+use std::fs::copy;
+use std::io::Write;
 use std::path::PathBuf;
-use std::{fs::copy, io::Write};
 
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
@@ -22,8 +23,7 @@ use warpui::{
 
 use crate::appearance::{Appearance, AppearanceManager};
 use crate::editor::{EditorView, Event as EditorEvent};
-use crate::themes::theme::CustomTheme;
-use crate::themes::theme::{InMemoryThemeOptions, ThemeKind};
+use crate::themes::theme::{CustomTheme, InMemoryThemeOptions, ThemeKind};
 use crate::user_config;
 
 const BUTTON_PADDING: f32 = 12.;

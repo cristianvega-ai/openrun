@@ -50,9 +50,8 @@ use crate::view_components::DismissibleToast;
 use crate::view_components::action_button::{
     ActionButton, ActionButtonTheme, ButtonSize, KeystrokeSource, TooltipAlignment,
 };
-use crate::workspace::ToastStack;
-use crate::workspace::WorkspaceAction;
 use crate::workspace::view::TOGGLE_PROJECT_EXPLORER_BINDING_NAME;
+use crate::workspace::{ToastStack, WorkspaceAction};
 
 pub struct CLIAgentFooter {
     terminal_view_id: EntityId,

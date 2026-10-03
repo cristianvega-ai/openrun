@@ -12,13 +12,11 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
-use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::process;
 use std::sync::{Arc, mpsc};
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{env, process};
 
 use ::settings::{Setting, ToggleableSetting};
 use anyhow::Result;
@@ -107,8 +105,7 @@ use crate::banner::BannerState;
 use crate::channel::ChannelState;
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor::{add_color, remove_color};
-use crate::code::editor_management::CodeManager;
-use crate::code::editor_management::CodeSource;
+use crate::code::editor_management::{CodeManager, CodeSource};
 use crate::code_review::GlobalCodeReviewModel;
 use crate::code_review::diff_state::DiffStateModel;
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
@@ -127,12 +124,11 @@ use crate::menu::{
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::notification::NotificationContext;
 use crate::palette::{PaletteMode, PaletteSource};
-use crate::pane_group::FilePane;
 use crate::pane_group::focus_state::PrBadgeScope;
 use crate::pane_group::pane::ActionOrigin;
 use crate::pane_group::{
     self, AnyPaneContent, CodePane, CodeReviewPanelArg, Direction as PaneGroupDirection, Direction,
-    NewTerminalOptions, PaneGroup, PaneId, PanesLayout, TabBarHoverIndex, TerminalPaneId,
+    FilePane, NewTerminalOptions, PaneGroup, PaneId, PanesLayout, TabBarHoverIndex, TerminalPaneId,
 };
 use crate::persistence::ModelEvent;
 use crate::projects::ProjectManagementModel;
@@ -190,8 +186,7 @@ use crate::terminal::ligature_settings::should_use_ligature_rendering;
 use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::blockgrid::BlockGrid;
 use crate::terminal::model::escape_sequences::C0;
-use crate::terminal::model::session::Session;
-use crate::terminal::model::session::SessionId;
+use crate::terminal::model::session::{Session, SessionId};
 use crate::terminal::resizable_data::{
     DEFAULT_LEFT_PANEL_WIDTH, DEFAULT_RIGHT_PANEL_WIDTH, ModalSizes, ModalType, ResizableData,
 };
@@ -219,17 +214,16 @@ use crate::ui_components::buttons::{combo_inner_button, icon_button_with_color};
 use crate::ui_components::icons;
 use crate::ui_components::window_focus_dimming::WindowFocusDimming;
 use crate::undo_close::UndoCloseStack;
-use crate::user_config::{WarpConfig, WarpConfigUpdateEvent};
 use crate::user_config::{
-    ensure_default_worktree_config, find_unused_tab_config_path, find_unused_toml_path,
-    find_unused_worktree_config_path, materialize_default_worktree_config, sanitize_toml_base_name,
-    tab_configs_dir,
+    WarpConfig, WarpConfigUpdateEvent, ensure_default_worktree_config, find_unused_tab_config_path,
+    find_unused_toml_path, find_unused_worktree_config_path, materialize_default_worktree_config,
+    sanitize_toml_base_name, tab_configs_dir,
 };
 use crate::util::bindings::{keybinding_name_to_display_string, keybinding_name_to_keystroke};
-use crate::util::file::external_editor::Editor;
-use crate::util::file::external_editor::EditorSettings;
-use crate::util::openable_file_type::FileTarget;
-use crate::util::openable_file_type::{EditorLayout, resolve_file_target_with_editor_choice};
+use crate::util::file::external_editor::{Editor, EditorSettings};
+use crate::util::openable_file_type::{
+    EditorLayout, FileTarget, resolve_file_target_with_editor_choice,
+};
 use crate::util::traffic_lights::{TrafficLightMouseStates, TrafficLightSide, traffic_light_data};
 use crate::util::truncation::truncate_from_end;
 use crate::view_components::{DismissibleToast, DismissibleToastStack, ToastLink};

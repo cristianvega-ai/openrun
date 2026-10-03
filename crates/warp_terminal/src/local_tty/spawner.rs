@@ -1,12 +1,14 @@
-use anyhow::Result;
+use std::cmp::Reverse;
+use std::collections::HashMap;
+use std::ffi::OsString;
+use std::process::Child;
+
+use anyhow::{Result, bail};
 use warp_errors::report_error;
 use warpui_core::{Entity, SingletonEntity};
-use {
-    crate::local_tty::server::TerminalServer, anyhow::bail, std::cmp::Reverse,
-    std::collections::HashMap, std::ffi::OsString, std::process::Child,
-};
 
 use super::{PtyOptions, PtySpawnResult};
+use crate::local_tty::server::TerminalServer;
 use crate::local_tty::{self};
 
 /// A handle that can be used to interact with a pty process.

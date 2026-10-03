@@ -1,14 +1,12 @@
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 use string_offset::ByteOffset;
-
-use crate::terminal::model::grid::grid_handler::is_file_link_separator;
+use warp_util::path::CleanPathResult;
 
 use crate::terminal::ShellLaunchData;
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::path::PathBuf;
-use warp_util::path::CleanPathResult;
+use crate::terminal::model::grid::grid_handler::is_file_link_separator;
 
 /// A file path detected in text, with the line and column it points at if any.
 #[derive(Clone, Debug)]

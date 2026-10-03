@@ -3,12 +3,10 @@ pub mod util;
 #[path = "native.rs"]
 mod imp;
 
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub(crate) use imp::load_tab_configs;
-pub use imp::load_workflows;
-pub use imp::{load_launch_configs, load_theme_configs};
+pub use imp::{load_launch_configs, load_theme_configs, load_workflows};
 use lazy_static::lazy_static;
 use warp_core::ui::theme::WarpTheme;
 use warpui::{Entity, ModelContext, SingletonEntity};

@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use code_outline::Symbol;
@@ -10,9 +9,7 @@ use instant::Instant;
 use itertools::Itertools;
 use repo_metadata::repositories::DetectedRepositories;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
-use warpui::AppContext;
-use warpui::ModelSpawner;
-use warpui::SingletonEntity;
+use warpui::{AppContext, ModelSpawner, SingletonEntity};
 
 use super::search_item::CodeSearchItem;
 use crate::code::outline::{OutlineStatus, RepoOutlines, RepoOutlinesEvent};

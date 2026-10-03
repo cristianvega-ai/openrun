@@ -94,9 +94,9 @@ use code::opened_files::OpenedFilesModel;
 use code_review::GlobalCodeReviewModel;
 use code_review::git_repo_model::GitRepoModels;
 use quit_warning::UnsavedStateSummary;
-use repo_metadata::{
-    RepoMetadataModel, repositories::DetectedRepositories, watcher::DirectoryWatcher,
-};
+use repo_metadata::RepoMetadataModel;
+use repo_metadata::repositories::DetectedRepositories;
+use repo_metadata::watcher::DirectoryWatcher;
 use settings::import::model::ImportedConfigModel;
 use settings::initializer::SettingsInitializer;
 use settings_view::pane_manager::SettingsPaneManager;
@@ -113,8 +113,7 @@ pub mod workspace;
 use std::borrow::Cow;
 
 use ::settings::{Setting, ToggleableSetting};
-use anyhow::Context;
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use appearance::{Appearance, AppearanceManager};
 use channel::ChannelState;
 use interval_timer::IntervalTimer;

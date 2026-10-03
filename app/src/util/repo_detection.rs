@@ -8,13 +8,10 @@
 
 use std::future::Future;
 
-use futures::future::Either;
-use futures::future::ready;
-use repo_metadata::repositories::DetectedRepositories;
-use repo_metadata::repositories::RepoDetectionSource;
+use futures::future::{Either, ready};
+use repo_metadata::repositories::{DetectedRepositories, RepoDetectionSource};
 use warp_util::local_or_remote_path::LocalOrRemotePath;
-use warpui::AppContext;
-use warpui::SingletonEntity;
+use warpui::{AppContext, SingletonEntity};
 
 /// Describes whether the active session is local or remote.
 pub enum RepoDetectionSessionType {

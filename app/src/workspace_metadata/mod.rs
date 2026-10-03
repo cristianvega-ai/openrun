@@ -5,10 +5,8 @@ use std::sync::mpsc::SyncSender;
 use anyhow::Context;
 use chrono::Utc;
 use itertools::Itertools;
-use lsp::LanguageId;
-use lsp::LspEvent;
 use lsp::supported_servers::LSPServerType;
-use lsp::{DownloadPermit, Downloader, LspManagerModel, LspServerConfig};
+use lsp::{DownloadPermit, Downloader, LanguageId, LspEvent, LspManagerModel, LspServerConfig};
 use repo_metadata::RepoMetadataModel;
 use serde::{Deserialize, Serialize};
 use warp_core::channel::ChannelState;
@@ -21,10 +19,8 @@ use crate::code::language_server_shutdown_manager::LanguageServerShutdownManager
 use crate::persistence::ModelEvent;
 use crate::settings::CodeSettings;
 use crate::terminal::local_shell::LocalShellState;
-use crate::{
-    view_components::{DismissibleToast, ToastLink},
-    workspace::ToastStack,
-};
+use crate::view_components::{DismissibleToast, ToastLink};
+use crate::workspace::ToastStack;
 
 mod metadata;
 

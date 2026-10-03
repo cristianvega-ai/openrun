@@ -17,8 +17,7 @@ use warpui::platform::mac::FontDB as MacFontDB;
 use warpui_core::App;
 use warpui_core::color::ColorU;
 use warpui_core::elements::{Border, Fill};
-use warpui_core::fonts::Cache as FontCache;
-use warpui_core::fonts::{FamilyId, Weight};
+use warpui_core::fonts::{Cache as FontCache, FamilyId, Weight};
 use warpui_core::units::IntoPixels;
 
 const BLOCK_COUNT: usize = 4_096;

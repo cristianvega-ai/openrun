@@ -33,10 +33,8 @@ use crate::terminal::local_tty::terminal_attributes::Event as TerminalAttributes
 use crate::terminal::local_tty::{Pty, PtyOptions};
 use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::session::Sessions;
-use crate::terminal::model::terminal_model::BlockIndex;
-use crate::terminal::model::terminal_model::{ExitReason, ShellProcessInfo};
-use crate::terminal::model_events::ModelEvent as TerminalModelEvent;
-use crate::terminal::model_events::ModelEventDispatcher;
+use crate::terminal::model::terminal_model::{BlockIndex, ExitReason, ShellProcessInfo};
+use crate::terminal::model_events::{ModelEvent as TerminalModelEvent, ModelEventDispatcher};
 use crate::terminal::session_settings::{SessionSettings, ToolbarChipSelection};
 use crate::terminal::shell::ShellName;
 use crate::terminal::terminal_manager::BlockSpacing;
