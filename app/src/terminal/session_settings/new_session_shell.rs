@@ -4,7 +4,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use settings_value::SettingsValue;
 use warp_util::path::ShellFamily;
-use warpui::platform::OperatingSystem;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Serialize, schemars::JsonSchema)]
 #[schemars(
@@ -79,7 +78,7 @@ impl SettingsValue for NewSessionShell {
 impl NewSessionShell {
     pub fn shell_family(&self) -> ShellFamily {
         let shell = match self {
-            NewSessionShell::SystemDefault => return OperatingSystem::get().default_shell_family(),
+            NewSessionShell::SystemDefault => return ShellFamily::Posix,
             NewSessionShell::Executable(shell) | NewSessionShell::Custom(shell) => shell,
         };
 

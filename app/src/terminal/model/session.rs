@@ -23,7 +23,6 @@ use warp_completer::completer::{
 };
 use warp_errors::{ErrorExt, register_error};
 use warp_util::path::ShellFamily;
-use warpui::platform::OperatingSystem;
 use warpui::{Entity, ModelContext, SingletonEntity};
 
 use super::ansi::{BootstrappedValue, InitShellValue, SSHValue};
@@ -749,7 +748,7 @@ impl Session {
             .os_category
             .as_deref()
             .map(TopLevelCommandCaseSensitivity::from_os_category)
-            .unwrap_or_else(|| OperatingSystem::get().into());
+            .unwrap_or(TopLevelCommandCaseSensitivity::CaseInsensitive);
 
         Self {
             info: session_info,

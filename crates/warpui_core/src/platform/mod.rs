@@ -23,7 +23,6 @@ pub use file_picker::{
 use lazy_static::lazy_static;
 use pathfinder_geometry::rect::{RectF, RectI};
 use pathfinder_geometry::vector::{Vector2F, Vector2I};
-use warp_util::path::ShellFamily;
 
 use crate::accessibility::AccessibilityContent;
 use crate::fonts::canvas::RasterFormat;
@@ -604,26 +603,4 @@ pub enum Cursor {
     ResizeUpDown,
     /// The drag copy cursor, indicating the currently will result in a copy action.
     DragCopy,
-}
-
-/// The operating system in which this library is running. OpenRun only runs on macOS.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum OperatingSystem {
-    /// MacOS.
-    Mac,
-}
-
-impl OperatingSystem {
-    pub fn get() -> Self {
-        OperatingSystem::Mac
-    }
-
-    /// Returns true if the current [`OperatingSystem`] is Mac.
-    pub fn is_mac(&self) -> bool {
-        *self == OperatingSystem::Mac
-    }
-
-    pub fn default_shell_family(&self) -> ShellFamily {
-        ShellFamily::Posix
-    }
 }

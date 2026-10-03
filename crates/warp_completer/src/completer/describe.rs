@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use string_offset::ByteOffset;
-use warpui_core::platform::OperatingSystem;
 
 use super::context::CompletionContext;
 use super::suggest::{CompleterOptions, CompletionsFallbackStrategy, SuggestionType, suggestions};
@@ -40,14 +39,6 @@ impl TopLevelCommandCaseSensitivity {
         match os_category.to_lowercase().as_str() {
             "windows" | "macos" => Self::CaseInsensitive,
             _ => Self::CaseSensitive,
-        }
-    }
-}
-
-impl From<OperatingSystem> for TopLevelCommandCaseSensitivity {
-    fn from(value: OperatingSystem) -> Self {
-        match value {
-            OperatingSystem::Mac => Self::CaseInsensitive,
         }
     }
 }

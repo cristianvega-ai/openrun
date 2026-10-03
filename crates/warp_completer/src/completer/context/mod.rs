@@ -7,7 +7,6 @@ use smol_str::SmolStr;
 use typed_path::{TypedPath, TypedPathBuf};
 use warp_core::command::ExitCode;
 use warp_util::path::{EscapeChar, ShellFamily};
-use warpui_core::platform::OperatingSystem;
 
 use super::engine::EngineDirEntry;
 use crate::completer::TopLevelCommandCaseSensitivity;
@@ -27,7 +26,7 @@ pub trait CompletionContext: Send + Sync {
     fn generator_context(&self) -> Option<&dyn GeneratorContext>;
 
     fn command_case_sensitivity(&self) -> TopLevelCommandCaseSensitivity {
-        OperatingSystem::get().into()
+        TopLevelCommandCaseSensitivity::CaseInsensitive
     }
 
     fn alias_and_function_case_sensitivity(&self) -> TopLevelCommandCaseSensitivity {

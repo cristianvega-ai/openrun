@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use warp_util::path::ShellFamily;
 use warp_workflows::workflows as global_workflows;
-use warpui::platform::OperatingSystem;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
 use super::WorkflowSource;
@@ -155,12 +154,9 @@ impl SingletonEntity for LocalWorkflows {}
 
 /// Returns all app workflows.
 fn app_workflows() -> Vec<Workflow> {
-    {
-        let shell_family = OperatingSystem::get().default_shell_family();
-        self::prompt_chip_logging_workflow(shell_family)
-            .into_iter()
-            .collect()
-    }
+    self::prompt_chip_logging_workflow(ShellFamily::Posix)
+        .into_iter()
+        .collect()
 }
 
 /// Loads project-level workflows (if any) from the warp config directory in the current working
