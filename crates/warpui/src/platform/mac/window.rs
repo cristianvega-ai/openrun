@@ -973,11 +973,6 @@ impl platform::Window for Window {
         &self.0.callbacks
     }
 
-    /// We never use the MacOS native window frame.
-    fn uses_native_window_decorations(&self) -> bool {
-        false
-    }
-
     fn set_titlebar_height(&self, height: f64) {
         self.0.set_titlebar_height(height);
     }

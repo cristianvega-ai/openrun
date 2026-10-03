@@ -223,7 +223,7 @@ use crate::util::file::external_editor::{Editor, EditorSettings};
 use crate::util::openable_file_type::{
     EditorLayout, FileTarget, resolve_file_target_with_editor_choice,
 };
-use crate::util::traffic_lights::{TrafficLightMouseStates, TrafficLightSide, traffic_light_data};
+use crate::util::traffic_lights::traffic_light_width;
 use crate::util::truncation::truncate_from_end;
 use crate::view_components::{DismissibleToast, DismissibleToastStack, ToastLink};
 use crate::window_settings::{WindowSettings, WindowSettingsChangedEvent, ZoomLevel};
@@ -541,7 +541,6 @@ pub struct Workspace {
     pub(crate) hovered_tab_index: Option<TabBarHoverIndex>,
     tab_bar_hover_state: MouseStateHandle,
     tab_fixed_width: Option<f32>,
-    traffic_light_mouse_states: TrafficLightMouseStates,
     /// Tab groups in this workspace, keyed by id.
     pub(crate) tab_groups: HashMap<TabGroupId, TabGroup>,
     /// Per-group hover state for the horizontal tab bar.
@@ -1866,7 +1865,6 @@ impl Workspace {
             tab_mru_order: Vec::new(),
             hovered_tab_index: None,
             tab_bar_hover_state: Default::default(),
-            traffic_light_mouse_states: Default::default(),
             tab_groups: HashMap::new(),
             horizontal_tab_group_mouse_states: RefCell::default(),
             tab_rename_editor: Self::tab_rename_editor(ctx),
@@ -8366,8 +8364,7 @@ impl Workspace {
         let is_hovered = self
             .tab_bar_hover_state
             .lock()
-            .is_ok_and(|state| state.is_hovered())
-            || self.traffic_light_mouse_states.are_traffic_lights_hovered();
+            .is_ok_and(|state| state.is_hovered());
 
         // Check if any of the menus/popups rendered relative to the tab bar are open.
         let is_vertical_tabs_active =
@@ -11943,23 +11940,10 @@ impl Workspace {
                 .with_margin_left(TAB_BAR_PADDING_LEFT)
                 .finish(),
         );
-
-        let zoom_factor = WindowSettings::as_ref(ctx).zoom_level.as_zoom_factor();
-        let traffic_light_data = traffic_light_data(ctx, self.window_id);
-        if let Some(traffic_light_data) = traffic_light_data.as_ref()
-            && should_reserve_traffic_light_space_in_tab_bar(traffic_light_data.side)
-        {
-            target.add_child(
-                ConstrainedBox::new(Empty::new().finish())
-                    .with_width(traffic_light_data.width(zoom_factor))
-                    .finish(),
-            );
-        }
     }
 
     fn compute_tab_bar_left_padding(&self, ctx: &AppContext) -> f32 {
         let zoom_factor = WindowSettings::as_ref(ctx).zoom_level.as_zoom_factor();
-        let traffic_light_data = traffic_light_data(ctx, self.window_id);
         let is_window_fullscreen = ctx
             .windows()
             .platform_window(self.window_id)
@@ -11969,12 +11953,7 @@ impl Workspace {
             // Full-screen mode on MacOS does not need as much padding (traffic lights are hidden).
             TAB_BAR_PADDING_LEFT
         } else {
-            traffic_light_data
-                .as_ref()
-                .filter(|data| data.side == TrafficLightSide::Left)
-                .map(|data| data.width(zoom_factor))
-                .unwrap_or(0.)
-                + 16.
+            traffic_light_width(zoom_factor) + 16.
         }
     }
 
@@ -12030,34 +12009,6 @@ impl Workspace {
             TAB_BAR_POSITION_ID,
         )
         .finish()
-    }
-
-    // Render traffic lights, if appropriate for the current platform.
-    fn maybe_render_traffic_lights(&self, stack: &mut Stack, app: &AppContext) {
-        let Some(traffic_light_data) = traffic_light_data(app, self.window_id) else {
-            return;
-        };
-
-        let appearance = Appearance::as_ref(app);
-        let fullscreen_state = app
-            .windows()
-            .platform_window(self.window_id)
-            .map(|window| window.fullscreen_state())
-            .unwrap_or_default();
-        stack.add_positioned_child(
-            traffic_light_data.render(
-                fullscreen_state,
-                &self.traffic_light_mouse_states,
-                appearance.theme(),
-                app,
-            ),
-            OffsetPositioning::offset_from_parent(
-                Vector2F::zero(),
-                ParentOffsetBounds::WindowByPosition,
-                ParentAnchor::TopRight,
-                ChildAnchor::TopRight,
-            ),
-        );
     }
 
     fn render_new_session_button(&self, ctx: &AppContext) -> Box<dyn Element> {
@@ -12639,24 +12590,6 @@ impl Workspace {
         let appearance = Appearance::as_ref(app);
 
         let mut col = Flex::column().with_main_axis_size(MainAxisSize::Max);
-        let mut contents = contents;
-
-        let traffic_light_data = traffic_light_data(app, self.window_id);
-        let vertical_tabs_active = *TabSettings::as_ref(app).use_vertical_tabs;
-        // Add a spacer for the traffic light buttons on Windows/Linux.
-        if traffic_light_data.is_some_and(|data| data.side == TrafficLightSide::Right)
-            && *side == PanelPosition::Right
-            && !vertical_tabs_active
-        {
-            col.add_child(
-                ConstrainedBox::new(Empty::new().finish())
-                    .with_height(TAB_BAR_HEIGHT)
-                    .finish(),
-            );
-            contents = Container::new(contents)
-                .with_border(Border::top(1.).with_border_fill(appearance.theme().surface_2()))
-                .finish();
-        }
         col.add_child(Shrinkable::new(1.0, contents).finish());
 
         self.wrap_in_panel_surface(appearance, side, col.finish(), *PANEL_CORNER_RADIUS)
@@ -14723,13 +14656,6 @@ impl View for Workspace {
             }
         }
 
-        // If the tab bar is being shown in "stacked" mode, we want to render
-        // the traffic lights relative to the full workspace, so they appear
-        // in the top-right corner even if a right-side panel is open.
-        if tab_bar_mode == ShowTabBar::Stacked {
-            self.maybe_render_traffic_lights(&mut stack, app);
-        }
-
         // Conditionally render tab bar menus. These must be added after the tab bar itself
         // (whether stacked inside panels or as an overlay) so that tab bar button save
         // positions are committed to the position cache before these menus read them.
@@ -16713,10 +16639,6 @@ impl Workspace {
             }
         }
     }
-}
-
-fn should_reserve_traffic_light_space_in_tab_bar(side: TrafficLightSide) -> bool {
-    side == TrafficLightSide::Right
 }
 
 /// Total width/height of the collage area in the group header.

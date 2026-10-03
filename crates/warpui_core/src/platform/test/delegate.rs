@@ -412,10 +412,6 @@ impl platform::Window for Window {
     fn as_any(&self) -> &dyn Any {
         self
     }
-
-    fn uses_native_window_decorations(&self) -> bool {
-        false
-    }
 }
 
 impl platform::WindowContext for Window {

@@ -147,24 +147,6 @@ fn transferred_tab_workspace(
 }
 
 #[test]
-fn test_tab_bar_traffic_light_space_regression_for_resource_center_overlap() {
-    // Regression test: the Resource Center/right panel can be open on
-    // Windows/Linux, but vertical-tabs and right-panel state should not decide
-    // whether the tab bar reserves space for titlebar controls.
-    let cases = [
-        (TrafficLightSide::Left, false),
-        (TrafficLightSide::Right, true),
-    ];
-
-    for (side, should_reserve_space) in cases {
-        assert_eq!(
-            should_reserve_traffic_light_space_in_tab_bar(side),
-            should_reserve_space
-        );
-    }
-}
-
-#[test]
 fn test_theme_chooser_does_not_suppress_tab_bar_traffic_light_padding() {
     App::test((), |mut app| async move {
         initialize_app(&mut app);

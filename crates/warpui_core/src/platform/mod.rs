@@ -406,8 +406,6 @@ pub trait Window: 'static + WindowContext + std::any::Any {
     fn toggle_maximized(&self);
     fn toggle_fullscreen(&self);
     fn fullscreen_state(&self) -> FullscreenState;
-    /// Whether the window has the native OS window frame (title bar and buttons).
-    fn uses_native_window_decorations(&self) -> bool;
     fn set_titlebar_height(&self, height: f64);
 
     fn as_ctx(&self) -> &dyn WindowContext;

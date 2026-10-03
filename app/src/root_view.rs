@@ -14,9 +14,6 @@ use warp_core::channel::Channel;
 use warp_core::context_flag::ContextFlag;
 use warp_core::user_preferences::GetUserPreferences as _;
 use warp_errors::{report_error, report_if_error};
-use warpui::elements::{
-    ChildAnchor, OffsetPositioning, ParentAnchor, ParentElement, ParentOffsetBounds, Stack,
-};
 use warpui::keymap::{EditableBinding, FixedBinding};
 use warpui::platform::{WindowBounds, WindowStyle};
 use warpui::presenter::ChildView;
@@ -45,7 +42,6 @@ use crate::themes::onboarding_theme_picker_themes;
 use crate::themes::theme::{AnsiColorIdentifier, ThemeKind, WarpThemeConfig};
 use crate::uri::OpenSettingsArgs;
 use crate::util::bindings::{self, is_binding_pty_compliant};
-use crate::util::traffic_lights::{TrafficLightData, TrafficLightMouseStates, traffic_light_data};
 use crate::window_settings::WindowSettings;
 use crate::workspace::{PaneViewLocator, Workspace, WorkspaceAction, WorkspaceRegistry};
 use crate::{
@@ -1123,12 +1119,6 @@ enum OnboardingState {
 pub struct RootView {
     onboarding_state: OnboardingState,
     pub model_event_sender: Option<SyncSender<ModelEvent>>,
-    mouse_states: TrafficLightMouseStates,
-    /// The window ID is needed because the "maximize" button needs to change its icon based on
-    /// whether or not the current window is maximized. Ideally the window ID could just be fetched
-    /// in the [`Self::render`] method, but there is no [`ViewContext`] available there. So, we
-    /// need to store it in a field instead.
-    window_id: WindowId,
 }
 
 impl RootView {
@@ -1163,8 +1153,6 @@ impl RootView {
         let root_view = Self {
             onboarding_state,
             model_event_sender,
-            mouse_states: Default::default(),
-            window_id: ctx.window_id(),
         };
 
         // Ensure the onboarding view has focus after all views are created, so keyboard input
@@ -1467,16 +1455,6 @@ impl RootView {
         ctx.notify();
         true
     }
-
-    fn traffic_light_data(&self, ctx: &AppContext) -> Option<TrafficLightData> {
-        // The workspace view will handle rendering of the traffic lights (so
-        // that they can be hidden when the tab bar is hidden).
-        if matches!(self.onboarding_state, OnboardingState::Terminal(_)) {
-            return None;
-        }
-
-        traffic_light_data(ctx, self.window_id)
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -1504,36 +1482,13 @@ impl View for RootView {
         }
     }
 
-    fn render(&self, app: &AppContext) -> Box<dyn Element> {
-        let child = match &self.onboarding_state {
+    fn render(&self, _app: &AppContext) -> Box<dyn Element> {
+        match &self.onboarding_state {
             OnboardingState::Onboarding {
                 onboarding_view, ..
             } => ChildView::new(onboarding_view).finish(),
             OnboardingState::Terminal(workspace) => ChildView::new(workspace).finish(),
-        };
-
-        let mut stack = Stack::new();
-        stack.add_child(child);
-
-        if let Some(traffic_light_data) = self.traffic_light_data(app) {
-            let theme = Appearance::as_ref(app).theme();
-            let fullscreen_state = app
-                .windows()
-                .platform_window(self.window_id)
-                .map(|window| window.fullscreen_state())
-                .unwrap_or_default();
-            stack.add_positioned_child(
-                traffic_light_data.render(fullscreen_state, &self.mouse_states, theme, app),
-                OffsetPositioning::offset_from_parent(
-                    vec2f(0., 0.),
-                    ParentOffsetBounds::WindowByPosition,
-                    ParentAnchor::TopRight,
-                    ChildAnchor::TopRight,
-                ),
-            );
         }
-
-        stack.finish()
     }
 
     fn keymap_context(&self, app: &AppContext) -> warpui::keymap::Context {

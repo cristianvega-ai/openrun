@@ -38,7 +38,7 @@ use crate::ui_components::buttons::{close_button, icon_button};
 use crate::ui_components::icons;
 use crate::ui_components::window_focus_dimming::WindowFocusDimming;
 use crate::user_config::{WarpConfig, WarpConfigUpdateEvent, load_theme_configs, themes_dir};
-use crate::util::traffic_lights::{TrafficLightData, TrafficLightSide, traffic_light_data};
+use crate::util::traffic_lights::traffic_light_width;
 use crate::window_settings::WindowSettings;
 use crate::workspace::PANEL_HEADER_HEIGHT;
 
@@ -534,22 +534,10 @@ impl ThemeChooser {
         ctx.emit(ThemeChooserEvent::Click);
     }
 
-    fn render_header(
-        &self,
-        traffic_light_data: Option<&TrafficLightData>,
-        appearance: &Appearance,
-        app: &AppContext,
-    ) -> Box<dyn Element> {
-        let mut margin_left = 16.;
-
+    fn render_header(&self, appearance: &Appearance, app: &AppContext) -> Box<dyn Element> {
+        // This panel is always on the left, next to the traffic lights.
         let zoom_factor = WindowSettings::as_ref(app).zoom_level.as_zoom_factor();
-        // Since this panel is always on the left, only account for left-side traffic lights.
-        if let Some(width) = traffic_light_data
-            .filter(|data| data.side == TrafficLightSide::Left)
-            .map(|data| data.width(zoom_factor))
-        {
-            margin_left += width;
-        }
+        let margin_left = 16. + traffic_light_width(zoom_factor);
 
         let close_button = close_button(
             appearance,
@@ -806,11 +794,10 @@ impl View for ThemeChooser {
 
     fn render(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
-        let traffic_light_data = traffic_light_data(app, self.window_id);
 
         Container::new(
             Flex::column()
-                .with_child(self.render_header(traffic_light_data.as_ref(), appearance, app))
+                .with_child(self.render_header(appearance, app))
                 .with_child(self.render_title_row(appearance))
                 .with_child(self.mode.render_hint_text(appearance))
                 .with_child(self.render_search_bar(appearance))

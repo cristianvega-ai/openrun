@@ -193,10 +193,6 @@ impl platform::Window for Window {
 
     fn set_titlebar_height(&self, _height: f64) {}
 
-    fn uses_native_window_decorations(&self) -> bool {
-        false
-    }
-
     fn as_ctx(&self) -> &dyn platform::WindowContext {
         self
     }
