@@ -4,7 +4,6 @@ use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::terminal::util::ExpectedExitStatus;
 use warp::integration_testing::terminal::{
@@ -25,7 +24,7 @@ pub fn test_input_syncing_is_off_by_default() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("create one additional pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
         .with_step(
@@ -62,7 +61,7 @@ pub fn test_can_sync_input_editor_text_in_tab() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("create one additional pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
         .with_step(
@@ -108,7 +107,7 @@ pub fn test_can_run_command_in_synced_panes_in_tab() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("create one additional pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
         .with_step(
@@ -180,7 +179,7 @@ pub fn test_synced_panes_long_running_commands() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("create one additional pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
         .with_step(
@@ -250,15 +249,13 @@ pub fn test_synced_inputs_terminal_mode_change_view_focus() -> Builder {
         builder = builder
             .with_step(
                 new_step_with_default_assertions(format!("create pane {i} in tab 0").as_str())
-                    .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                    .with_keystrokes(&["cmd-d"]),
             )
             .with_step(wait_until_bootstrapped_pane(0, i));
     }
 
-    builder = builder.with_step(
-        new_step_with_default_assertions("create 2nd tab")
-            .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
-    );
+    builder = builder
+        .with_step(new_step_with_default_assertions("create 2nd tab").with_keystrokes(&["cmd-t"]));
     // The first pane of the new tab bootstraps like the others. When it finishes after the
     // text is typed to every synced pane, the shell is not reading yet and, with fish on a loaded
     // runner, the program never starts in the pane the test watches (seen on the hosted runner).
@@ -268,7 +265,7 @@ pub fn test_synced_inputs_terminal_mode_change_view_focus() -> Builder {
         builder = builder
             .with_step(
                 new_step_with_default_assertions(format!("create pane {i} in tab 1").as_str())
-                    .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                    .with_keystrokes(&["cmd-d"]),
             )
             .with_step(wait_until_bootstrapped_pane(1, i));
     }

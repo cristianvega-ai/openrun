@@ -659,14 +659,6 @@ impl EditableBinding {
         self
     }
 
-    /// Sets the binding to that of `binding`.
-    pub fn with_mac_key_binding<K>(self, binding: K) -> Self
-    where
-        K: AsRef<str>,
-    {
-        self.with_key_binding(binding)
-    }
-
     pub fn with_key_binding<K>(mut self, binding: K) -> Self
     where
         K: AsRef<str>,

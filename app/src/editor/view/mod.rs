@@ -98,7 +98,7 @@ use crate::terminal::input::pending_attachments::{
     PendingAttachment, PendingAttachmentsModel, PendingFile,
 };
 use crate::themes::theme::Fill;
-use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, keybinding_name_to_keystroke};
+use crate::util::bindings::{CustomAction, keybinding_name_to_keystroke};
 use crate::util::clipboard::clipboard_content_with_escaped_paths;
 use crate::util::color::{ContrastingColor, MinimumAllowedContrast};
 use crate::util::image::{
@@ -419,7 +419,7 @@ pub fn init(ctx: &mut AppContext) {
                 id!("EditorView") & !id!("IMEOpen"),
             ),
             FixedBinding::new(
-                cmd_or_ctrl_shift("a"),
+                "cmd-a",
                 EditorAction::SelectAll,
                 id!("EditorView") & !id!("IMEOpen"),
             ),
@@ -455,7 +455,7 @@ pub fn init(ctx: &mut AppContext) {
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Make this mac only so it is symmetric with the emacs keybinding for `SelectRight`,
         // which is Mac-only because it would otherwise conflict with the find bar.
-        .with_mac_key_binding("shift-ctrl-B"),
+        .with_key_binding("shift-ctrl-B"),
         // Mac only to prevent conflicts with the opening the find bar.
         // NOTE "shift-right" exists a cross-platform keybinding for this action.
         EditableBinding::new(
@@ -464,19 +464,19 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::SelectRight,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("shift-ctrl-F"),
+        .with_key_binding("shift-ctrl-F"),
         EditableBinding::new(SELECT_UP_ACTION_NAME, "Select up", EditorAction::SelectUp)
             .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
             // Set this to Mac only since otherwise it could conflict with opening the command
             // palette. NOTE `shift-up` still exists as a cross platform keybinding for this action.
-            .with_mac_key_binding("shift-ctrl-P"),
+            .with_key_binding("shift-ctrl-P"),
         EditableBinding::new(
             SELECT_DOWN_ACTION_NAME,
             "Select down",
             EditorAction::SelectDown,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("shift-ctrl-N"),
+        .with_key_binding("shift-ctrl-N"),
         EditableBinding::new(
             "editor_view:select_all",
             "Select all",
@@ -490,14 +490,14 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::SelectToLineStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("shift-ctrl-A"),
+        .with_key_binding("shift-ctrl-A"),
         EditableBinding::new(
             "editor:select_to_line_end",
             "Select to end of line",
             EditorAction::SelectToLineEnd,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("shift-ctrl-E"),
+        .with_key_binding("shift-ctrl-E"),
         EditableBinding::new(
             "editor_view:clear_and_copy_lines",
             "Copy and clear selected lines",
@@ -521,7 +521,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::SelectToLineEnd,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-shift-right"),
+        .with_key_binding("cmd-shift-right"),
         // `end` is registered on all platforms for this action.
         EditableBinding::new(
             "editor_view:select_to_line_start",
@@ -529,7 +529,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::SelectToLineStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-shift-left"),
+        .with_key_binding("cmd-shift-left"),
         // Navigation
         EditableBinding::new("editor_view:up", "Move cursor up", EditorAction::Up)
             .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
@@ -555,7 +555,7 @@ pub fn init(ctx: &mut AppContext) {
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Mac only so it doesn't conflict with "SelectAll" on Linux / Windows.
         // VSCode does not have a default binding for this on non-Mac.
-        .with_mac_key_binding("ctrl-a"),
+        .with_key_binding("ctrl-a"),
         EditableBinding::new(
             "editor_view:move_to_line_end",
             "Move to end of line",
@@ -565,7 +565,7 @@ pub fn init(ctx: &mut AppContext) {
         // Make this Mac-only so it is symmetric with ctrl-a for `MoveToLineStart`, which is Mac
         // only because it would otherwise conflict with `SelectAll`. VSCode does not have a default
         // binding for this on non-Mac.
-        .with_mac_key_binding("ctrl-e"),
+        .with_key_binding("ctrl-e"),
         // Match the behavior of both VSCode and Intellij by using `cmd-left/right` on Mac and
         // `home/end` on Windows and Linux. See https://www.jetbrains.com/help/idea/reference-keymap-win-default.html#caret_navigation.
         EditableBinding::new(
@@ -574,10 +574,10 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::MoveToVisualLineStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-left"),
+        .with_key_binding("cmd-left"),
         EditableBinding::new("editor_view:end", "End", EditorAction::MoveToVisualLineEnd)
             .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-            .with_mac_key_binding("cmd-right"),
+            .with_key_binding("cmd-right"),
         EditableBinding::new(
             "editor_view:cmd_down",
             "Move cursor to the bottom",
@@ -585,7 +585,7 @@ pub fn init(ctx: &mut AppContext) {
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Match the behavior of VSCode, see https://code.visualstudio.com/docs/getstarted/keybindings#_basic-editing.
-        .with_mac_key_binding("cmd-down"),
+        .with_key_binding("cmd-down"),
         EditableBinding::new(
             "editor_view:cmd_up",
             "Move cursor to the top",
@@ -593,21 +593,21 @@ pub fn init(ctx: &mut AppContext) {
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Match the behavior of VSCode, see https://code.visualstudio.com/docs/getstarted/keybindings#_basic-editing.
-        .with_mac_key_binding("cmd-up"),
+        .with_key_binding("cmd-up"),
         EditableBinding::new(
             "editor_view:move_to_and_select_buffer_start",
             "Select and move to the top",
             EditorAction::MoveToAndSelectBufferStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-shift-up"),
+        .with_key_binding("cmd-shift-up"),
         EditableBinding::new(
             "editor_view:move_to_and_select_buffer_end",
             "Select and move to the bottom",
             EditorAction::MoveToAndSelectBufferEnd,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("cmd-shift-down"),
+        .with_key_binding("cmd-shift-down"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move forward one word",
@@ -660,14 +660,14 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::MoveToBufferStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("home"),
+        .with_key_binding("home"),
         EditableBinding::new(
             "editor_view:move_to_buffer_end",
             "Move to the end of the buffer",
             EditorAction::MoveToBufferEnd,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("end"),
+        .with_key_binding("end"),
         // Buffer modifications
         EditableBinding::new(
             "editor_view:backspace",
@@ -689,7 +689,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::DeleteWordLeft,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-backspace"),
+        .with_key_binding("alt-backspace"),
         EditableBinding::new(
             "editor_view:cut_word_right",
             "Cut word right",
@@ -706,7 +706,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::DeleteWordRight,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-delete"),
+        .with_key_binding("alt-delete"),
         EditableBinding::new(
             "editor_view:clear_lines",
             "Clear selected lines",
@@ -715,7 +715,7 @@ pub fn init(ctx: &mut AppContext) {
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen") & !id!("Vim"))
         // Mac only because otherwise this would conflict with the keybinding to clear all blocks.
         // NOTE ctrl-u exists as a default binding for this action that works across all platforms.
-        .with_mac_key_binding("cmd-shift-K"),
+        .with_key_binding("cmd-shift-K"),
         EditableBinding::new(
             "editor_view:cut_all_right",
             "Cut all right",
@@ -730,7 +730,7 @@ pub fn init(ctx: &mut AppContext) {
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // VSCode only binds a default binding on Mac, see https://github.com/microsoft/vscode/blob/ceda6cc4856841f1550a60327a3eaf3a1d0c306a/src/vs/editor/contrib/linesOperations/browser/linesOperations.ts#L657.
-        .with_mac_key_binding("cmd-delete"),
+        .with_key_binding("cmd-delete"),
         EditableBinding::new(
             "editor_view:delete_all_left",
             "Delete all left",
@@ -740,7 +740,7 @@ pub fn init(ctx: &mut AppContext) {
         // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
         // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
         // to clear all blocks within the blocklist.
-        .with_mac_key_binding("cmd-backspace"),
+        .with_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:insert_newline",
             "Insert newline",
@@ -775,14 +775,14 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::MoveBackwardOneWord,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-left"),
+        .with_key_binding("alt-left"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move Forward One Word",
             EditorAction::MoveForwardOneWord,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        .with_mac_key_binding("alt-right"),
+        .with_key_binding("alt-right"),
         EditableBinding::new(
             "editor_view:move_backward_one_subword",
             "Move Backward One Subword",
@@ -791,7 +791,7 @@ pub fn init(ctx: &mut AppContext) {
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Only assign a default keybinding for subword navigation on Mac, this is also what VSCode
         // does: https://github.com/microsoft/vscode/blob/e08f57208f087abed82852b24b5f4937357a95c1/src/vs/editor/contrib/wordPartOperations/browser/wordPartOperations.ts#L85.
-        .with_mac_key_binding("ctrl-alt-left"),
+        .with_key_binding("ctrl-alt-left"),
         EditableBinding::new(
             "editor_view:move_forward_one_subword",
             "Move Forward One Subword",
@@ -800,7 +800,7 @@ pub fn init(ctx: &mut AppContext) {
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Only assign a default keybinding for subword navigation on Mac, this is also what VSCode
         // does: https://github.com/microsoft/vscode/blob/e08f57208f087abed82852b24b5f4937357a95c1/src/vs/editor/contrib/wordPartOperations/browser/wordPartOperations.ts#L85.
-        .with_mac_key_binding("ctrl-alt-right"),
+        .with_key_binding("ctrl-alt-right"),
         EditableBinding::new(
             "editor_view:select_left_by_subword",
             "Select one subword to the left",
@@ -809,7 +809,7 @@ pub fn init(ctx: &mut AppContext) {
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Only assign a default keybinding for subword navigation on Mac, this is also what VSCode
         // does: https://github.com/microsoft/vscode/blob/e08f57208f087abed82852b24b5f4937357a95c1/src/vs/editor/contrib/wordPartOperations/browser/wordPartOperations.ts#L85.
-        .with_mac_key_binding("ctrl-alt-shift-left"),
+        .with_key_binding("ctrl-alt-shift-left"),
         EditableBinding::new(
             "editor_view:select_right_by_subword",
             "Select one subword to the right",
@@ -818,7 +818,7 @@ pub fn init(ctx: &mut AppContext) {
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         // Only assign a default keybinding for subword navigation on Mac, this is also what VSCode
         // does: https://github.com/microsoft/vscode/blob/e08f57208f087abed82852b24b5f4937357a95c1/src/vs/editor/contrib/wordPartOperations/browser/wordPartOperations.ts#L85.
-        .with_mac_key_binding("ctrl-alt-shift-right"),
+        .with_key_binding("ctrl-alt-shift-right"),
         EditableBinding::new(
             ACCEPT_AUTOSUGGESTION_KEYBINDING_NAME,
             "Accept autosuggestion",

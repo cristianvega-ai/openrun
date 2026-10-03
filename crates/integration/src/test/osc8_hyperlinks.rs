@@ -16,7 +16,6 @@
 use std::sync::OnceLock;
 
 use parking_lot::Mutex;
-use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::terminal::util::{ExactLine, ExpectedExitStatus};
 use warp::integration_testing::terminal::{
@@ -94,7 +93,7 @@ pub fn test_osc8_copy_block_yields_visible_text_only() -> Builder {
             new_step_with_default_assertions("Select last block and copy")
                 // Copy via the actual `CopyBlock` binding: `cmdorctrl-c` is
                 // plain SIGINT off macOS, so it never reaches the clipboard.
-                .with_keystrokes(&["cmdorctrl-up".to_owned(), cmd_or_ctrl_shift("c")])
+                .with_keystrokes(&["cmdorctrl-up", "cmd-c"])
                 .add_assertion(|app, _window_id| {
                     // Can't use `assert_clipboard_contains_string` (exact
                     // match) — the copy includes the command line plus

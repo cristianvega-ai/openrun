@@ -6,7 +6,6 @@ use std::time::Duration;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::{Vector2F, vec2f};
 use settings::Setting as _;
-use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::clipboard::assert_clipboard_contains_string;
 use warp::integration_testing::command_palette::assert_command_palette_is_closed;
 use warp::integration_testing::pane_group::assert_focused_pane_index;
@@ -266,7 +265,7 @@ fn add_active_pane_context_metadata_setup_steps(builder: Builder) -> Builder {
         .with_step(set_active_pane_name(METADATA_CLICKED_PANE_TITLE))
         .with_step(
             new_step_with_default_assertions("Create active split pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
         .with_step(set_active_pane_name(METADATA_PANE_TITLE))
@@ -562,7 +561,7 @@ pub fn test_cycle_active_tab_color_with_keybinding() -> Builder {
         ))
         .with_step(
             TestStep::new("Select exact cycle color action in Command Palette")
-                .with_keystrokes(&[cmd_or_ctrl_shift("p")])
+                .with_keystrokes(&["cmd-p"])
                 .with_typed_characters(&[CYCLE_TAB_COLOR_LABEL])
                 .add_assertion(assert_selected_cycle_tab_color_binding())
                 .add_assertion(assert_tab_color(Some(AnsiColorIdentifier::Green)))
@@ -590,7 +589,7 @@ pub fn test_active_session_follows_focus() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Create another session in the same tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
         .with_step(
@@ -602,10 +601,7 @@ pub fn test_active_session_follows_focus() -> Builder {
                 .with_keystrokes(&["cmdorctrl-meta-left"])
                 .add_assertion(assert_active_session_local_path("~")),
         )
-        .with_step(
-            new_step_with_default_assertions("Open a new tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
-        )
+        .with_step(new_step_with_default_assertions("Open a new tab").with_keystrokes(&["cmd-t"]))
         .with_step(wait_until_bootstrapped_pane(1, 0))
         .with_step(
             execute_command(1, 0, "cd dir2".to_string(), ExpectedExitStatus::Success, ())
@@ -618,7 +614,7 @@ pub fn test_active_session_follows_focus() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Close the tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w"), cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w", "cmd-w"])
                 .add_assertion(assert_active_session_local_path("~/dir2")),
         )
 }
@@ -650,7 +646,7 @@ pub fn test_focus_panes_on_hover() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Create a new session in a split pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
+                .with_keystrokes(&["cmd-d"])
                 .add_assertion(assert_focused_pane_index(0, 1)),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
@@ -696,7 +692,7 @@ pub fn test_focus_panes_on_hover() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Create another new session in a split pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 2))
         .with_step(
@@ -739,10 +735,7 @@ pub fn test_reorder_tabs_with_drag() -> Builder {
             ExpectedExitStatus::Success,
             (),
         ))
-        .with_step(
-            new_step_with_default_assertions("Open a new tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
-        )
+        .with_step(new_step_with_default_assertions("Open a new tab").with_keystrokes(&["cmd-t"]))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(execute_command_for_single_terminal_in_tab(
             1,
@@ -824,10 +817,7 @@ pub fn test_detach_tab_to_new_window_with_drag() -> Builder {
             )
             .add_assertion(save_active_window_id(SOURCE_WINDOW_KEY)),
         )
-        .with_step(
-            new_step_with_default_assertions("Open a new tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
-        )
+        .with_step(new_step_with_default_assertions("Open a new tab").with_keystrokes(&["cmd-t"]))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(execute_command_for_single_terminal_in_tab(
             1,
@@ -939,10 +929,7 @@ pub fn test_attach_tab_to_other_window_and_continue_drag() -> Builder {
             )
             .add_assertion(save_active_window_id(SOURCE_WINDOW_KEY)),
         )
-        .with_step(
-            new_step_with_default_assertions("Open a new tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
-        )
+        .with_step(new_step_with_default_assertions("Open a new tab").with_keystrokes(&["cmd-t"]))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(execute_command_for_single_terminal_in_tab(
             1,
@@ -1109,10 +1096,7 @@ pub fn test_multi_tab_drag_back_to_source_and_out_again() -> Builder {
             )
             .add_assertion(save_active_window_id(SOURCE_WINDOW_KEY)),
         )
-        .with_step(
-            new_step_with_default_assertions("Open a new tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
-        )
+        .with_step(new_step_with_default_assertions("Open a new tab").with_keystrokes(&["cmd-t"]))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(execute_command_for_single_terminal_in_tab(
             1,

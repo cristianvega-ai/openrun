@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::pane_group::{assert_focused_pane_index, assert_num_panes_in_tab};
 use warp::integration_testing::step::new_step_with_default_assertions;
 use warp::integration_testing::terminal::util::ExpectedExitStatus;
@@ -29,7 +28,7 @@ pub fn test_restore_single_closed_pane() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Split off a new pane to the right")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
+                .with_keystrokes(&["cmd-d"])
                 .add_assertion(assert_focused_pane_index(0, 1)),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
@@ -42,7 +41,7 @@ pub fn test_restore_single_closed_pane() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Close the pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_focused_pane_index(0, 0)),
         )
         .with_step(trigger_undo_close())
@@ -84,7 +83,7 @@ pub fn test_restore_multiple_closed_panes() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Split off first new pane to the right")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
+                .with_keystrokes(&["cmd-d"])
                 .add_assertion(assert_focused_pane_index(0, 1)),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
@@ -97,7 +96,7 @@ pub fn test_restore_multiple_closed_panes() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Split off second new pane to the right")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
+                .with_keystrokes(&["cmd-d"])
                 .add_assertion(assert_focused_pane_index(0, 2)),
         )
         .with_step(wait_until_bootstrapped_pane(0, 2))
@@ -110,12 +109,12 @@ pub fn test_restore_multiple_closed_panes() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Close pane 2")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_focused_pane_index(0, 1)),
         )
         .with_step(
             new_step_with_default_assertions("Close pane 1")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_focused_pane_index(0, 0)),
         )
         .with_step(trigger_undo_close().add_assertion(assert_focused_pane_index(0, 1)))
@@ -176,7 +175,7 @@ pub fn test_undo_close_grace_period_cleanup() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Split off a new pane to the right")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
+                .with_keystrokes(&["cmd-d"])
                 .add_assertion(assert_focused_pane_index(0, 1)),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
@@ -189,7 +188,7 @@ pub fn test_undo_close_grace_period_cleanup() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Close the pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_focused_pane_index(0, 0))
                 // The closed pane is hidden, not removed, while the grace period runs: it is
                 // still in the pane group and on the undo close stack. Without this the test
@@ -243,7 +242,7 @@ pub fn test_closed_panes_cleared_on_rearrangement() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Split off first new pane to the right")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
+                .with_keystrokes(&["cmd-d"])
                 .add_assertion(assert_focused_pane_index(0, 1)),
         )
         .with_step(wait_until_bootstrapped_pane(0, 1))
@@ -256,7 +255,7 @@ pub fn test_closed_panes_cleared_on_rearrangement() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Split off second new pane to the right")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
+                .with_keystrokes(&["cmd-d"])
                 .add_assertion(assert_focused_pane_index(0, 2)),
         )
         .with_step(wait_until_bootstrapped_pane(0, 2))
@@ -394,7 +393,7 @@ pub fn test_tab_closes_when_last_visible_pane_closed() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Create a new tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")])
+                .with_keystrokes(&["cmd-t"])
                 .add_assertion(assert_tab_count(2)),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
@@ -412,7 +411,7 @@ pub fn test_tab_closes_when_last_visible_pane_closed() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Close the only pane in first tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .set_timeout(Duration::from_secs(10)) // Allow time for tab closure
                 .add_assertion(assert_tab_count(1)) // Tab should be closed, leaving only one tab
                 .add_assertion(assert_focused_pane_index(0, 0)), // Should be focused on the remaining tab (previously tab 1)

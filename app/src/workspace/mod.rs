@@ -37,7 +37,7 @@ use crate::channel::{Channel, ChannelState};
 use crate::palette::{PaletteMode, PaletteSource};
 use crate::settings_view::{self, SettingsSection, flags};
 use crate::tab::{NewSessionMenuItem, uses_vertical_tabs};
-use crate::util::bindings::{self, CustomAction, cmd_or_ctrl_shift, is_binding_pty_compliant};
+use crate::util::bindings::{self, CustomAction, is_binding_pty_compliant};
 use crate::{code, modal, notebooks, tab_configs};
 
 // Helper function to access panel header corner radius from other modules
@@ -203,13 +203,9 @@ pub fn init(app: &mut AppContext) {
         // keypresses won't trigger Mac menu items. Unfortunately we can't use
         // cfg[test] because we are a separate process!
         app.register_fixed_bindings([
+            FixedBinding::new("cmd-t", WorkspaceAction::AddDefaultTab, id!("Workspace")),
             FixedBinding::new(
-                cmd_or_ctrl_shift("t"),
-                WorkspaceAction::AddDefaultTab,
-                id!("Workspace"),
-            ),
-            FixedBinding::new(
-                cmd_or_ctrl_shift("p"),
+                "cmd-p",
                 WorkspaceAction::TogglePalette {
                     mode: PaletteMode::Command,
                     source: PaletteSource::IntegrationTest,
@@ -287,7 +283,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::ToggleTabConfigsMenu,
         )
         .with_context_predicate(id!("Workspace"))
-        .with_mac_key_binding("cmd-ctrl-t"),
+        .with_key_binding("cmd-ctrl-t"),
         EditableBinding::new(
             "workspace:activate_first_tab",
             "Switch to 1st tab",
@@ -368,7 +364,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("Workspace") & id!("Workspace_MultipleTabs") & !id!("Workspace_PaneDragging"),
         )
-        .with_mac_key_binding("shift-cmd-{"),
+        .with_key_binding("shift-cmd-{"),
         EditableBinding::new(
             "workspace:activate_next_tab",
             "Activate next tab",
@@ -378,7 +374,7 @@ pub fn init(app: &mut AppContext) {
             id!("Workspace") & id!("Workspace_MultipleTabs") & !id!("Workspace_PaneDragging"),
         )
         .with_group(bindings::BindingGroup::Navigation.as_str())
-        .with_mac_key_binding("shift-cmd-}"),
+        .with_key_binding("shift-cmd-}"),
         EditableBinding::new(
             "pane_group:navigate_prev",
             "Activate previous pane",
@@ -427,7 +423,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::ToggleRightPanel,
         )
         .with_context_predicate(id!("Workspace"))
-        .with_mac_key_binding("cmd-shift-+"),
+        .with_key_binding("cmd-shift-+"),
         EditableBinding::new(
             TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME,
             BindingDescription::new("Toggle vertical tabs panel")
@@ -436,7 +432,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_context_predicate(id!("Workspace") & id!(flags::USE_VERTICAL_TABS_FLAG))
         .with_group(bindings::BindingGroup::Navigation.as_str())
-        .with_key_binding(cmd_or_ctrl_shift("b")),
+        .with_key_binding("cmd-b"),
         EditableBinding::new(
             LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME,
             BindingDescription::new("Left Panel: Project explorer"),
@@ -460,7 +456,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::Navigation.as_str())
         .with_context_predicate(id!("Workspace") & id!(flags::SHOW_PROJECT_EXPLORER))
-        .with_mac_key_binding("cmd-shift->"),
+        .with_key_binding("cmd-shift->"),
         EditableBinding::new(
             TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
             BindingDescription::new("Toggle project explorer")
@@ -475,7 +471,7 @@ pub fn init(app: &mut AppContext) {
             WorkspaceAction::OpenGlobalSearch,
         )
         .with_context_predicate(id!("Workspace") & id!(flags::SHOW_GLOBAL_SEARCH))
-        .with_mac_key_binding("cmd-shift-F"),
+        .with_key_binding("cmd-shift-F"),
         EditableBinding::new(
             "workspace:close_panel",
             BindingDescription::new("Close focused panel")
@@ -542,7 +538,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_group(bindings::BindingGroup::KeyboardShortcuts.as_str())
         .with_context_predicate(id!("Workspace"))
-        .with_mac_key_binding("cmd-ctrl-k"),
+        .with_key_binding("cmd-ctrl-k"),
         EditableBinding::new(
             "workspace:toggle_block_snackbar",
             "Toggle sticky command header",
@@ -697,7 +693,7 @@ pub fn init(app: &mut AppContext) {
                 .with_custom_description(bindings::MAC_MENUS_CONTEXT, "Close Window"),
             WorkspaceAction::CloseWindow,
         )
-        .with_mac_key_binding("cmd-shift-W")
+        .with_key_binding("cmd-shift-W")
         .with_context_predicate(id!("Workspace"))
         .with_group(bindings::BindingGroup::Close.as_str())
         .with_custom_action(CustomAction::CloseWindow)
@@ -849,7 +845,7 @@ pub fn init(app: &mut AppContext) {
         WorkspaceAction::JumpToLatestToast,
     )
     .with_context_predicate(id!("Workspace"))
-    .with_mac_key_binding("cmd-shift-G")
+    .with_key_binding("cmd-shift-G")
     .with_group(bindings::BindingGroup::CliAgents.as_str())]);
 
     app.register_editable_bindings([EditableBinding::new(
@@ -858,7 +854,7 @@ pub fn init(app: &mut AppContext) {
         WorkspaceAction::ToggleNotificationMailbox { select_first: true },
     )
     .with_context_predicate(id!("Workspace"))
-    .with_mac_key_binding("cmd-shift-U")
+    .with_key_binding("cmd-shift-U")
     .with_group(bindings::BindingGroup::CliAgents.as_str())]);
 
     add_open_setting_pages_as_editable_binding(app);

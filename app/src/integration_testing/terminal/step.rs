@@ -12,7 +12,6 @@ use super::{
     assert_long_running_block_executing_for_single_terminal_in_tab, assert_terminal_bootstrapped,
     validate_block_output,
 };
-use crate::cmd_or_ctrl_shift;
 use crate::integration_testing::block::assert_num_blocks_in_model;
 use crate::integration_testing::command_palette::open_command_palette_and_run_action;
 use crate::integration_testing::step::{
@@ -428,7 +427,7 @@ pub fn performance_test(tab_idx: usize, test_file: &str, repetitions: usize) -> 
 /// assumes that there is only one terminal view in tab 0.
 pub fn clear_blocklist_to_remove_bootstrapped_blocks() -> TestStep {
     new_step_with_default_assertions("Clear blocklist")
-        .with_keystrokes(&[cmd_or_ctrl_shift("k")])
+        .with_keystrokes(&["cmd-k"])
         .set_timeout(Duration::from_secs(10))
         .add_assertion(assert_num_blocks_in_model(1))
 }

@@ -1,4 +1,3 @@
-use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::terminal::{
     assert_context_menu_is_open, initialize_secret_regexes,
     wait_until_bootstrapped_single_pane_for_tab,
@@ -169,7 +168,7 @@ pub fn test_block_filtering_toggle_filter_while_find_active() -> Builder {
         .with_step(SimpleTestCase::execute_command())
         .with_step(
             new_step_with_default_assertions("Open find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .with_typed_characters(&["line"])
                 .add_named_assertion("Assert that there 6 find matches", |app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
@@ -204,7 +203,7 @@ pub fn test_block_filtering_toggle_filter_while_find_active() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open find bar and clear find query")
-                .with_keystrokes(&[cmd_or_ctrl_shift("a"), "backspace".to_string()])
+                .with_keystrokes(&["cmd-a", "backspace"])
                 .add_named_assertion(
                     "Assert that there 6 find matches again",
                     |app, window_id| {
@@ -234,7 +233,7 @@ pub fn test_block_filtering_filter_then_find() -> Builder {
         .with_step(SimpleTestCase::perform_filter_query())
         .with_step(
             new_step_with_default_assertions("Open find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .with_typed_characters(&["line"])
                 .add_named_assertion("Assert that there 4 find matches", |app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
@@ -325,7 +324,7 @@ pub fn test_block_filtering_clear_blocklist() -> Builder {
         .with_step(LongRunningCommandTestCase::perform_filter_query())
         .with_step(
             TestStep::new("Escape block filter editor and clear blocklist")
-                .with_keystrokes(&["escape", cmd_or_ctrl_shift("k").as_str()])
+                .with_keystrokes(&["escape", "cmd-k"])
                 .add_named_assertion(
                     "Assert that only the cursor line is included in the displayed rows",
                     |app, window_id| {

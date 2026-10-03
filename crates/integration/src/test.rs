@@ -77,7 +77,6 @@ pub use typeahead::*;
 use version_compare::Cmp;
 pub use video_recording::*;
 use warp::appearance::Appearance;
-use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::assertions::assert_binding_display_string;
 use warp::integration_testing::block::{
     BlockPosition, LinePosition, assert_block_visible, assert_bottom_of_block_approx_at,
@@ -933,8 +932,7 @@ pub fn test_waterfall_input_scrolling() -> Builder {
     // Make sure executing a small command keeps the input at the bottom.
     builder = builder
         .with_step(
-            new_step_with_default_assertions("Focus the input box")
-                .with_keystrokes(&[cmd_or_ctrl_shift("l")]),
+            new_step_with_default_assertions("Focus the input box").with_keystrokes(&["cmd-l"]),
         )
         .with_step(execute_echo(0).add_assertion(assert_input_at_bottom_of_terminal()));
 
@@ -945,7 +943,7 @@ pub fn test_waterfall_input_scrolling() -> Builder {
     builder = builder
         .with_step(
             new_step_with_default_assertions("Focus the input box before long command")
-                .with_keystrokes(&[cmd_or_ctrl_shift("l")]),
+                .with_keystrokes(&["cmd-l"]),
         )
         .with_step(
             create_long_block()
@@ -1562,7 +1560,7 @@ pub fn test_cut_paste_from_input_context_menu() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Select all text then press Cut in context menu")
-                .with_keystrokes(&[cmd_or_ctrl_shift("a")]),
+                .with_keystrokes(&["cmd-a"]),
         )
         .with_step(open_input_context_menu())
         .with_step(
@@ -1779,12 +1777,12 @@ pub fn test_removing_tabs_out_of_order() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Close the first tab")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_tab_count(2)),
         )
         .with_step(
             new_step_with_default_assertions("Close the new first tab (which was the 2nd tab)")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_tab_count(1)),
         )
 }
@@ -1802,7 +1800,7 @@ pub fn test_add_and_close_session() -> Builder {
             new_step_with_default_assertions(
                 "Add a second session using cmd-t and verify it bootstraps",
             )
-            .with_keystrokes(&[cmd_or_ctrl_shift("t")])
+            .with_keystrokes(&["cmd-t"])
             .set_timeout(Duration::from_secs(10))
             .add_assertion(|app, window_id| {
                 assert_single_terminal_in_tab_bootstrapped(app, window_id, 1)
@@ -1846,7 +1844,7 @@ pub fn test_add_and_close_session() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Remove second session")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_tab_count(1)),
         )
         .with_step(
@@ -1888,7 +1886,7 @@ pub fn test_add_many_sessions() -> Builder {
                 new_step_with_default_assertions(
                     format!("Add a session {i} using cmd-t and verify it bootstraps").as_str(),
                 )
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")])
+                .with_keystrokes(&["cmd-t"])
                 .set_timeout(Duration::from_secs(10))
                 .add_assertion(move |app, window_id| {
                     assert_single_terminal_in_tab_bootstrapped(app, window_id, tab_idx)
@@ -1926,7 +1924,7 @@ pub fn test_ctrl_tab_session_switching() -> Builder {
                 new_step_with_default_assertions(
                     format!("Add a session {i} using cmd-t and verify it bootstraps").as_str(),
                 )
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")])
+                .with_keystrokes(&["cmd-t"])
                 .set_timeout(Duration::from_secs(10))
                 .add_assertion(move |app, window_id| {
                     assert_single_terminal_in_tab_bootstrapped(app, window_id, tab_idx)
@@ -2213,8 +2211,7 @@ precmd_functions+=(_p9k_precmd)
         .with_step(check_banner_open(0, true))
         // Additionally, a new tab should show the banner from the start.
         .with_step(
-            new_step_with_default_assertions("Add a new session")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+            new_step_with_default_assertions("Add a new session").with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(check_banner_open(1, true))
@@ -2244,7 +2241,7 @@ pub fn test_exit_multiple_tabs() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Add a new session using cmd-t")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")])
+                .with_keystrokes(&["cmd-t"])
                 .set_timeout(Duration::from_secs(10))
                 .add_assertion(|app, window_id| {
                     assert_single_terminal_in_tab_bootstrapped(app, window_id, 1)
@@ -2356,7 +2353,7 @@ pub fn test_find_within_block() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open Find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .add_assertion(|app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
                     let is_find_bar_open =
@@ -2455,7 +2452,7 @@ pub fn test_case_sensitive_find() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open Find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .add_assertion(|app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
                     let is_find_bar_open =
@@ -2532,7 +2529,7 @@ pub fn test_find_bar_autoselects_text() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open Find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .add_assertion(|app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
                     let is_find_bar_open =
@@ -2579,7 +2576,7 @@ pub fn test_find_bar_autoselects_text() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("Re-open the find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .add_assertion(|app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
                     let is_find_bar_open =
@@ -3318,7 +3315,7 @@ pub fn test_input_focused_after_executing_command() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Open Find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .add_assertion(|app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
                     let is_find_bar_open =
@@ -3809,7 +3806,7 @@ pub fn test_session_navigation_recency_change_tab() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Add a second session using cmd-t")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+                .with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(open_navigation_palette_step())
@@ -3866,7 +3863,7 @@ pub fn test_session_navigation_recency_navigate_to_tab() -> Builder {
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Open a new tab using cmd-t")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+                .with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(open_navigation_palette_step())
@@ -4240,8 +4237,8 @@ pub fn test_create_session_with_split_pane_while_bootstrapping() -> Builder {
                 "Create two new sessions in two split panes, with the second being created before \
                 the first is done bootstrapping.",
             )
-            .with_keystrokes(&[cmd_or_ctrl_shift("d")])
-            .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+            .with_keystrokes(&["cmd-d"])
+            .with_keystrokes(&["cmd-d"]),
         )
         .with_step(
             wait_until_bootstrapped_single_pane_for_tab(1)
@@ -4322,8 +4319,8 @@ pub fn test_create_session_with_new_tab_while_bootstrapping() -> Builder {
                 "Create two new sessions in two new tabs, with the second being created before \
                 the first is done bootstrapping.",
             )
-            .with_keystrokes(&[cmd_or_ctrl_shift("t")])
-            .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+            .with_keystrokes(&["cmd-t"])
+            .with_keystrokes(&["cmd-t"]),
         )
         .with_step(
             wait_until_bootstrapped_single_pane_for_tab(1)
@@ -4895,7 +4892,7 @@ pub fn test_start_shell_in_deleted_directory() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open a new tab using cmd-t")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+                .with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         // Make sure the new tab opened in the to-delete subdirectory.
@@ -4917,7 +4914,7 @@ pub fn test_start_shell_in_deleted_directory() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open a new tab using cmd-t")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+                .with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(2))
         // Ensure a new tab opened from a session where the current and initial
@@ -5082,7 +5079,7 @@ pub fn test_preferred_shell() -> Builder {
         // Now that the shell exists, a new tab should use it.
         .with_step(
             new_step_with_default_assertions("Open a new tab using cmd-t")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+                .with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(execute_command_for_single_terminal_in_tab(
@@ -5100,7 +5097,7 @@ pub fn test_preferred_shell() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open a new tab using cmd-t")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+                .with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(2))
         .with_step(execute_command_for_single_terminal_in_tab(
@@ -5223,7 +5220,7 @@ pub fn test_find_query_not_evaluated_on_terminal_mode_change() -> Builder {
         ))
         .with_step(
             new_step_with_default_assertions("Open Find bar")
-                .with_keystrokes(&[cmd_or_ctrl_shift("f")])
+                .with_keystrokes(&["cmd-f"])
                 .add_assertion(|app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
                     let is_find_bar_open =
@@ -5913,7 +5910,7 @@ pub fn test_block_bulk_deletion_using_escape_codes() -> Builder {
 pub fn test_escape_sequences_sent_to_focused_terminal() -> Builder {
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
-        .with_step(TestStep::new("Create a new session").with_keystrokes(&[cmd_or_ctrl_shift("d")]))
+        .with_step(TestStep::new("Create a new session").with_keystrokes(&["cmd-d"]))
         .with_step(
             wait_until_bootstrapped_pane(0 /* tab_index */, 1 /* pane_index */)
                 .set_timeout(Duration::from_secs(10))
@@ -6182,8 +6179,8 @@ pub fn test_pane_group_state_multi_pane() -> Builder {
     new_builder()
         .with_step(
             new_step_with_default_assertions("create 2 additional panes")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")])
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"])
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 0))
         .with_step(wait_until_bootstrapped_pane(0, 1))
@@ -6281,7 +6278,7 @@ pub fn test_pane_group_state_close_pane() -> Builder {
     new_builder()
         .with_step(
             new_step_with_default_assertions("create 1 additional pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("d")]),
+                .with_keystrokes(&["cmd-d"]),
         )
         .with_step(wait_until_bootstrapped_pane(0, 0))
         .with_step(wait_until_bootstrapped_pane(0, 1))
@@ -6296,7 +6293,7 @@ pub fn test_pane_group_state_close_pane() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("(pane 2) close pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("w")])
+                .with_keystrokes(&["cmd-w"])
                 .add_assertion(assert_pane_group_has_state(0, TerminalViewState::Normal)),
         )
 }
@@ -6312,7 +6309,7 @@ pub fn test_pane_group_state_clear_blocks() -> Builder {
         )
         .with_step(
             new_step_with_default_assertions("clear the pane")
-                .with_keystrokes(&[cmd_or_ctrl_shift("k")])
+                .with_keystrokes(&["cmd-k"])
                 .add_assertion(assert_pane_group_has_state(0, TerminalViewState::Normal)),
         )
 }

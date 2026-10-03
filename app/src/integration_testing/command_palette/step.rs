@@ -5,7 +5,6 @@ use crate::integration_testing::command_palette::assertions::{
     assert_command_palette_has_results, assert_command_palette_is_closed,
     assert_command_palette_is_open,
 };
-use crate::util::bindings::cmd_or_ctrl_shift;
 
 /// Extension trait for `Vec<TestStep>` that allows chaining assertions onto the last step.
 pub trait TestStepsExt {
@@ -42,7 +41,7 @@ impl TestStepsExt for Vec<TestStep> {
 
 pub fn open_command_palette() -> TestStep {
     TestStep::new("Open Command Palette")
-        .with_keystrokes(&[cmd_or_ctrl_shift("p")])
+        .with_keystrokes(&["cmd-p"])
         .add_assertion(assert_command_palette_is_open())
 }
 
@@ -54,7 +53,7 @@ pub fn open_command_palette() -> TestStep {
 pub fn open_command_palette_and_run_action(action: &str) -> Vec<TestStep> {
     vec![
         TestStep::new(format!("Type {action} in command palette").as_str())
-            .with_keystrokes(&[cmd_or_ctrl_shift("p")])
+            .with_keystrokes(&["cmd-p"])
             .with_typed_characters(&[action])
             .add_assertion(assert_command_palette_has_results()),
         TestStep::new(format!("Run {action} in command palette").as_str())

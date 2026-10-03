@@ -2,7 +2,6 @@
 
 use settings::Setting as _;
 use version_compare::Cmp;
-use warp::cmd_or_ctrl_shift;
 use warp::integration_testing::input::{
     input_contains_string, input_editor_is_focused, input_editor_is_not_focused, input_is_empty,
 };
@@ -50,8 +49,7 @@ pub fn test_rc_files_only_sourced_once_during_bootstrapping() -> Builder {
             (),
         ))
         .with_step(
-            new_step_with_default_assertions("Add a new session")
-                .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
+            new_step_with_default_assertions("Add a new session").with_keystrokes(&["cmd-t"]),
         )
         .with_step(wait_until_bootstrapped_single_pane_for_tab(1))
         .with_step(execute_command_for_single_terminal_in_tab(
@@ -120,7 +118,7 @@ pub fn test_paste_and_type_characters_before_bootstrap() -> Builder {
         )
         .with_step(
             TestStep::new("Pasted text go into the pty and not warp input")
-                .with_keystrokes(&[cmd_or_ctrl_shift("v")])
+                .with_keystrokes(&["cmd-v"])
                 .add_named_assertion("Input should be empty", input_is_empty(0))
                 .add_named_assertion("Pasted text should go to pty", |app, window_id| {
                     let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
@@ -163,7 +161,7 @@ pub fn test_paste_and_type_characters_before_bootstrap() -> Builder {
         )
         .with_step(
             TestStep::new("Pasted text should go in input since input is focused")
-                .with_keystrokes(&[cmd_or_ctrl_shift("v")])
+                .with_keystrokes(&["cmd-v"])
                 .add_assertion(input_contains_string(0, "this is the pasted text".to_owned()))
         )
         .with_step(

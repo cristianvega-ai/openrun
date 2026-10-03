@@ -9,7 +9,7 @@ use crate::terminal::TerminalView;
 use crate::terminal::model::escape_sequences::{self, EscCodes};
 use crate::terminal::model::selection::SelectionDirection;
 use crate::util::bindings;
-use crate::util::bindings::{CustomAction, cmd_or_ctrl_shift, is_binding_pty_compliant};
+use crate::util::bindings::{CustomAction, is_binding_pty_compliant};
 
 pub const TOGGLE_BLOCK_FILTER_KEYBINDING: &str =
     "terminal:toggle_block_filter_on_selected_or_last_block";
@@ -115,22 +115,18 @@ pub fn init(app: &mut AppContext) {
             // keypresses won't trigger Mac menu items. Unfortunately we can't use
             // cfg[test] because we are a separate process!
             FixedBinding::new(
-                cmd_or_ctrl_shift("l"),
+                "cmd-l",
                 TerminalAction::FocusInputAndClearSelection,
                 id!("Terminal"),
             ),
+            FixedBinding::new("cmd-f", TerminalAction::ShowFindBar, id!("Terminal")),
             FixedBinding::new(
-                cmd_or_ctrl_shift("f"),
-                TerminalAction::ShowFindBar,
-                id!("Terminal"),
-            ),
-            FixedBinding::new(
-                cmd_or_ctrl_shift("k"),
+                "cmd-k",
                 TerminalAction::ClearBuffer,
                 id!("Terminal") & !id!("IMEOpen"),
             ),
             FixedBinding::new(
-                cmd_or_ctrl_shift("d"),
+                "cmd-d",
                 TerminalAction::SplitRight(None),
                 id!("Terminal") & !id!("IMEOpen"),
             ),
@@ -140,12 +136,12 @@ pub fn init(app: &mut AppContext) {
                 id!("Terminal") & !id!("IMEOpen"),
             ),
             FixedBinding::new(
-                cmd_or_ctrl_shift("v"),
+                "cmd-v",
                 TerminalAction::Paste,
                 id!("Terminal") & !id!("IMEOpen"),
             ),
             FixedBinding::new(
-                cmd_or_ctrl_shift("c"),
+                "cmd-c",
                 TerminalAction::Copy,
                 id!("Terminal") & !id!("IMEOpen"),
             ),
@@ -256,7 +252,7 @@ pub fn init(app: &mut AppContext) {
             "Find in Terminal",
             TerminalAction::ShowFindBar,
         )
-        .with_key_binding(cmd_or_ctrl_shift("f"))
+        .with_key_binding("cmd-f")
         .with_custom_action(CustomAction::Find)
         .with_context_predicate(id!("Terminal")),
         EditableBinding::new(
@@ -278,7 +274,7 @@ pub fn init(app: &mut AppContext) {
             "Open block context menu",
             TerminalAction::OpenBlockListContextMenu,
         )
-        .with_mac_key_binding("ctrl-m")
+        .with_key_binding("ctrl-m")
         .with_context_predicate(
             id!("Terminal") & ne!("TerminalView_BlockSelectionCardinality", "None"),
         ),
@@ -306,14 +302,14 @@ pub fn init(app: &mut AppContext) {
             "Move cursor one word to the left within an executing command",
             TerminalAction::ControlSequence(Vec::from(EscCodes::WORD_LEFT)),
         )
-        .with_mac_key_binding("alt-left")
+        .with_key_binding("alt-left")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_move_cursor_word_right",
             "Move cursor one word to the right within an executing command",
             TerminalAction::ControlSequence(Vec::from(EscCodes::WORD_RIGHT)),
         )
-        .with_mac_key_binding("alt-right")
+        .with_key_binding("alt-right")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_move_cursor_home",
@@ -322,21 +318,21 @@ pub fn init(app: &mut AppContext) {
         )
         // We already have bindings for home/end (the keybindings for this on Linux and Mac) that
         // send the correct control sequence to the PTY.
-        .with_mac_key_binding("cmd-left")
+        .with_key_binding("cmd-left")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_move_cursor_end",
             "Move cursor end within an executing command",
             TerminalAction::ControlSequence(vec![escape_sequences::C0::ENQ]),
         )
-        .with_mac_key_binding("cmd-right")
+        .with_key_binding("cmd-right")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_delete_word_left",
             "Delete word left within an executing command",
             TerminalAction::ControlSequence(vec![escape_sequences::C0::ETB]),
         )
-        .with_mac_key_binding("alt-backspace")
+        .with_key_binding("alt-backspace")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
             "terminal:executing_command_delete_line_start",
@@ -346,7 +342,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand"))
         // Set this for mac-only. The default binding for this on Linux / Windows is `ctrl-y`, which
         // we can't hijack because it is already reserved for the PTY.
-        .with_mac_key_binding("cmd-backspace"),
+        .with_key_binding("cmd-backspace"),
         EditableBinding::new(
             "terminal:executing_command_delete_line_end",
             "Delete to line end within an executing command",
@@ -354,7 +350,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand"))
         // Set this for mac-only since the corresponding editor action is also Mac-only.
-        .with_mac_key_binding("cmd-delete"),
+        .with_key_binding("cmd-delete"),
         EditableBinding::new(
             "terminal:backward_tabulation",
             "Backward tabulation within an executing command",
@@ -574,7 +570,7 @@ pub fn init(app: &mut AppContext) {
         "Toggle block filter on selected or last block",
         TerminalAction::ToggleBlockFilterOnSelectedOrLastBlock,
     )
-    .with_mac_key_binding("shift-alt-F")
+    .with_key_binding("shift-alt-F")
     .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & !id!("AltScreen"))]);
 
     app.register_editable_bindings([EditableBinding::new(

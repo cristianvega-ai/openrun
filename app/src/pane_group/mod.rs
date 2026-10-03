@@ -38,7 +38,6 @@ use crate::app_state::{
 use crate::appearance::Appearance;
 use crate::banner::{Banner, BannerEvent, BannerState, BannerTextContent, DismissalType};
 use crate::channel::{Channel, ChannelState};
-use crate::cmd_or_ctrl_shift;
 use crate::code::active_file::ActiveFileModel;
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor_management::CodeSource;
@@ -297,7 +296,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("PaneGroup") & !id!("PaneGroup_PaneMaximized") & !id!("PaneGroup_PaneDragging"),
         )
-        .with_mac_key_binding("cmd-ctrl-left"),
+        .with_key_binding("cmd-ctrl-left"),
         EditableBinding::new(
             "pane_group:resize_right",
             "Resize pane > Move divider right",
@@ -306,7 +305,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("PaneGroup") & !id!("PaneGroup_PaneMaximized") & !id!("PaneGroup_PaneDragging"),
         )
-        .with_mac_key_binding("cmd-ctrl-right"),
+        .with_key_binding("cmd-ctrl-right"),
         EditableBinding::new(
             "pane_group:resize_up",
             "Resize pane > Move divider up",
@@ -315,7 +314,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("PaneGroup") & !id!("PaneGroup_PaneMaximized") & !id!("PaneGroup_PaneDragging"),
         )
-        .with_mac_key_binding("cmd-ctrl-up"),
+        .with_key_binding("cmd-ctrl-up"),
         EditableBinding::new(
             "pane_group:resize_down",
             "Resize pane > Move divider down",
@@ -324,7 +323,7 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(
             id!("PaneGroup") & !id!("PaneGroup_PaneMaximized") & !id!("PaneGroup_PaneDragging"),
         )
-        .with_mac_key_binding("cmd-ctrl-down"),
+        .with_key_binding("cmd-ctrl-down"),
     ]);
 
     app.register_editable_bindings([
@@ -358,7 +357,7 @@ pub fn init(app: &mut AppContext) {
         // keypresses won't trigger Mac menu items. Unfortunately we can't use
         // cfg[test] because we are a separate process!
         app.register_fixed_bindings([FixedBinding::new(
-            cmd_or_ctrl_shift("w"),
+            "cmd-w",
             PaneGroupAction::RemoveActive,
             id!("PaneGroup"),
         )]);

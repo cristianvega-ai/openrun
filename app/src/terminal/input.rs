@@ -1203,7 +1203,7 @@ pub fn init(app: &mut AppContext) {
         InputAction::ClearAndResetAtMenuQuery,
     )
     .with_context_predicate(id!("Input") & id!("AtMenuOpen") & !id!("IMEOpen"))
-    .with_mac_key_binding("cmd-shift-backspace")]);
+    .with_key_binding("cmd-shift-backspace")]);
 
     let slash_command_bindings = COMMAND_REGISTRY
         .all_commands()

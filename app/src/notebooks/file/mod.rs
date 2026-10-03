@@ -42,6 +42,7 @@ use crate::pane_group::pane::view::header::components::{
     render_three_column_header,
 };
 use crate::pane_group::{BackingView, PaneConfiguration, PaneEvent};
+use crate::safe_warn;
 use crate::settings::FontSettings;
 use crate::terminal::model::session::Session;
 use crate::ui_components::icons::Icon;
@@ -52,7 +53,6 @@ pub use crate::util::openable_file_type::{
 use crate::view_components::{MarkdownToggleEvent, MarkdownToggleView};
 use crate::workflows::{WorkflowSource, WorkflowType};
 use crate::workspace::ActiveSession;
-use crate::{cmd_or_ctrl_shift, safe_warn};
 
 /// Display mode for markdown files shown via the header segmented control.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -201,7 +201,7 @@ pub fn init(app: &mut AppContext) {
             FileNotebookAction::FocusTerminalInput,
         )
         .with_context_predicate(id!("FileNotebookView"))
-        .with_key_binding(cmd_or_ctrl_shift("l")),
+        .with_key_binding("cmd-l"),
         EditableBinding::new(
             "notebookview:reload_file",
             "Reload file",

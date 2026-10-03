@@ -19,7 +19,6 @@ use warpui::keymap::{EditableBinding, FixedBinding, Keystroke};
 use warpui::units::Pixels;
 use warpui::{AppContext, TypedActionView, ViewContext, WeakViewHandle};
 
-use crate::cmd_or_ctrl_shift;
 use crate::code::editor::line::EditorLineLocation;
 use crate::code::editor::model::CodeEditorModel;
 use crate::code::editor::view::{CodeEditorEvent, CodeEditorView, VimMode};
@@ -277,14 +276,14 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::MoveBackwardsByWord,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-left"),
+        .with_key_binding("alt-left"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move Forward One Word",
             CodeEditorViewAction::MoveForwardsByWord,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-right"),
+        .with_key_binding("alt-right"),
         EditableBinding::new(
             "editor_view:move_forward_one_word",
             "Move forward one word",
@@ -334,28 +333,28 @@ pub fn init(app: &mut AppContext) {
         )
         .with_context_predicate(text_entry.clone())
         // Mac-only to not conflict with SelectAll on Linux and Windows.
-        .with_mac_key_binding("ctrl-a"),
+        .with_key_binding("ctrl-a"),
         EditableBinding::new(
             "editor_view:home",
             "Home",
             CodeEditorViewAction::MoveToLineStart,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("cmd-left"),
+        .with_key_binding("cmd-left"),
         EditableBinding::new(
             "editor_view:move_to_line_end",
             "Move to line end",
             CodeEditorViewAction::MoveToLineEnd,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("ctrl-e"),
+        .with_key_binding("ctrl-e"),
         EditableBinding::new(
             "editor_view:end",
             "End",
             CodeEditorViewAction::MoveToLineEnd,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("cmd-right"),
+        .with_key_binding("cmd-right"),
         EditableBinding::new(
             "editor_view:cursor_at_buffer_start",
             "Cursor at buffer start",
@@ -410,14 +409,14 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(text_entry.clone())
         // Set this to Mac only since otherwise it could conflict with opening the command
         // palette. NOTE `shift-up` still exists as a cross platform keybinding for this action.
-        .with_mac_key_binding("shift-ctrl-P"),
+        .with_key_binding("shift-ctrl-P"),
         EditableBinding::new(
             "editor_view:select_down",
             "Select down",
             CodeEditorViewAction::SelectDown,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("shift-ctrl-N"),
+        .with_key_binding("shift-ctrl-N"),
         EditableBinding::new(
             "editor_view:select_all",
             "Select all",
@@ -431,14 +430,14 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::SelectToLineStart,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("shift-ctrl-A"),
+        .with_key_binding("shift-ctrl-A"),
         EditableBinding::new(
             "editor:select_to_line_end",
             "Select to end of line",
             CodeEditorViewAction::SelectToLineEnd,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("shift-ctrl-E"),
+        .with_key_binding("shift-ctrl-E"),
         // `shift-end` is registered on all platforms for this action.
         EditableBinding::new(
             "editor_view:select_to_line_end",
@@ -446,7 +445,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::SelectToLineEnd,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("cmd-shift-right"),
+        .with_key_binding("cmd-shift-right"),
         // `end` is registered on all platforms for this action.
         EditableBinding::new(
             "editor_view:select_to_line_start",
@@ -454,7 +453,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::SelectToLineStart,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("cmd-shift-left"),
+        .with_key_binding("cmd-shift-left"),
     ]);
 
     // Editable text-manipulation bindings
@@ -505,7 +504,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::DeleteWordLeft,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-backspace"),
+        .with_key_binding("alt-backspace"),
         EditableBinding::new(
             "editor_view:cut_word_right",
             "Cut word right",
@@ -519,7 +518,7 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::DeleteWordRight,
         )
         .with_context_predicate(text_entry.clone())
-        .with_mac_key_binding("alt-delete"),
+        .with_key_binding("alt-delete"),
         EditableBinding::new(
             "editor_view:cut_all_left",
             "Cut all left",
@@ -535,7 +534,7 @@ pub fn init(app: &mut AppContext) {
         // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
         // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
         // to clear all blocks within the blocklist.
-        .with_mac_key_binding("cmd-backspace"),
+        .with_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:cut_all_right",
             "Cut all right",
@@ -550,7 +549,7 @@ pub fn init(app: &mut AppContext) {
         )
         .with_context_predicate(text_entry.clone())
         // VSCode only binds a default binding on Mac.
-        .with_mac_key_binding("cmd-delete"),
+        .with_key_binding("cmd-delete"),
     ]);
 
     // Editable Vim keybindings
@@ -568,7 +567,7 @@ pub fn init(app: &mut AppContext) {
         "Find in code editor",
         CodeEditorViewAction::ShowFindBar,
     )
-    .with_key_binding(cmd_or_ctrl_shift("f"))
+    .with_key_binding("cmd-f")
     .with_custom_action(CustomAction::Find)
     .with_context_predicate(text_entry.clone() & id!("FindBarAvailable"))]);
 

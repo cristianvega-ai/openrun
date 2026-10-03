@@ -103,7 +103,6 @@ use settings_view::pane_manager::SettingsPaneManager;
 use terminal::general_settings::GeneralSettings;
 use terminal::keys_settings::KeysSettings;
 use terminal::local_shell::LocalShellState;
-pub use util::bindings::cmd_or_ctrl_shift;
 use watcher::HomeDirectoryWatcher;
 use workspace_metadata::PersistedWorkspace;
 

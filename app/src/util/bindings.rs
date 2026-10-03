@@ -206,14 +206,14 @@ pub fn trigger_to_keystroke(trigger: &Trigger) -> Option<Keystroke> {
         Trigger::Custom(custom) => custom_tag_to_keystroke(*custom),
         // Similarly, Standard Actions have their keyboard shortcuts set when creating the menu
         Trigger::Standard(standard) => match standard {
-            StandardAction::Close => mac_only_keystroke("cmd-shift-W"),
+            StandardAction::Close => Keystroke::parse("cmd-shift-W").ok(),
             // "cmd-q" to quit and "cmd-h" to hide are the standard bindings for these actions on
             // Mac.
-            StandardAction::Quit => mac_only_keystroke("cmd-q"),
-            StandardAction::Hide => mac_only_keystroke("cmd-h"),
+            StandardAction::Quit => Keystroke::parse("cmd-q").ok(),
+            StandardAction::Hide => Keystroke::parse("cmd-h").ok(),
             StandardAction::HideOtherApps => Keystroke::parse("cmdorctrl-alt-h").ok(),
-            StandardAction::ToggleFullScreen => mac_only_keystroke("cmd-ctrl-f"),
-            StandardAction::Paste => Keystroke::parse(cmd_or_ctrl_shift("v")).ok(),
+            StandardAction::ToggleFullScreen => Keystroke::parse("cmd-ctrl-f").ok(),
+            StandardAction::Paste => Keystroke::parse("cmd-v").ok(),
             StandardAction::ShowAllApps
             | StandardAction::BringAllToFront
             | StandardAction::Minimize
@@ -226,11 +226,11 @@ pub fn trigger_to_keystroke(trigger: &Trigger) -> Option<Keystroke> {
 /// Returns the corresponding [`Keystroke`], if any, of a [`CustomTag`].
 pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
     match custom.into() {
-        CustomAction::FocusInput => Keystroke::parse(cmd_or_ctrl_shift("l")).ok(),
-        CustomAction::NewTab => Keystroke::parse(cmd_or_ctrl_shift("t")).ok(),
+        CustomAction::FocusInput => Keystroke::parse("cmd-l").ok(),
+        CustomAction::NewTab => Keystroke::parse("cmd-t").ok(),
         CustomAction::Cut => Keystroke::parse("cmdorctrl-x").ok(),
-        CustomAction::Copy => Keystroke::parse(cmd_or_ctrl_shift("c")).ok(),
-        CustomAction::Paste => Keystroke::parse(cmd_or_ctrl_shift("v")).ok(),
+        CustomAction::Copy => Keystroke::parse("cmd-c").ok(),
+        CustomAction::Paste => Keystroke::parse("cmd-v").ok(),
         CustomAction::Undo => Keystroke::parse("cmdorctrl-z").ok(),
         CustomAction::Redo => Keystroke::parse("cmdorctrl-shift-Z").ok(),
         CustomAction::ClearEditor => Keystroke::parse("ctrl-c").ok(),
@@ -240,8 +240,8 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         CustomAction::AddNextOccurrence => Keystroke::parse("ctrl-g").ok(),
         CustomAction::AddCursorAbove => Keystroke::parse("ctrl-shift-up").ok(),
         CustomAction::AddCursorBelow => Keystroke::parse("ctrl-shift-down").ok(),
-        CustomAction::CommandPalette => Keystroke::parse(cmd_or_ctrl_shift("p")).ok(),
-        CustomAction::Find => Keystroke::parse(cmd_or_ctrl_shift("f")).ok(),
+        CustomAction::CommandPalette => Keystroke::parse("cmd-p").ok(),
+        CustomAction::Find => Keystroke::parse("cmd-f").ok(),
         CustomAction::SelectAll => Keystroke::parse("cmdorctrl-a").ok(),
         CustomAction::CommandSearch => Keystroke::parse("ctrl-r").ok(),
         CustomAction::Workflows => Keystroke::parse("ctrl-shift-R").ok(),
@@ -252,7 +252,7 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         CustomAction::IncreaseZoom => Keystroke::parse("cmdorctrl-=").ok(),
         CustomAction::DecreaseZoom => Keystroke::parse("cmdorctrl--").ok(),
         CustomAction::ResetZoom => Keystroke::parse("cmdorctrl-0").ok(),
-        CustomAction::SplitPaneRight => Keystroke::parse(cmd_or_ctrl_shift("d")).ok(),
+        CustomAction::SplitPaneRight => Keystroke::parse("cmd-d").ok(),
         CustomAction::SplitPaneDown => Keystroke::parse("cmd-shift-D").ok(),
         CustomAction::MoveTabLeft => Keystroke::parse("shift-ctrl-left").ok(),
         CustomAction::MoveTabRight => Keystroke::parse("shift-ctrl-right").ok(),
@@ -260,37 +260,37 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         CustomAction::ActivatePreviousTab => Keystroke::parse("shift-cmd-{").ok(),
         CustomAction::ActivateNextPane => Keystroke::parse("cmd-]").ok(),
         CustomAction::ActivatePreviousPane => Keystroke::parse("cmd-[").ok(),
-        CustomAction::NavigationPalette => mac_only_keystroke("cmd-shift-P"),
-        CustomAction::LaunchConfigPalette => mac_only_keystroke("ctrl-cmd-l"),
-        CustomAction::FilesPalette => Keystroke::parse(cmd_or_ctrl_shift("o")).ok(),
-        CustomAction::ClearBlocks => Keystroke::parse(cmd_or_ctrl_shift("k")).ok(),
+        CustomAction::NavigationPalette => Keystroke::parse("cmd-shift-P").ok(),
+        CustomAction::LaunchConfigPalette => Keystroke::parse("ctrl-cmd-l").ok(),
+        CustomAction::FilesPalette => Keystroke::parse("cmd-o").ok(),
+        CustomAction::ClearBlocks => Keystroke::parse("cmd-k").ok(),
         CustomAction::SelectBlockAbove => Keystroke::parse("cmdorctrl-up").ok(),
         CustomAction::SelectBlockBelow => Keystroke::parse("cmdorctrl-down").ok(),
-        CustomAction::ToggleBookmarkBlock => Keystroke::parse(cmd_or_ctrl_shift("b")).ok(),
+        CustomAction::ToggleBookmarkBlock => Keystroke::parse("cmd-b").ok(),
         CustomAction::CopyBlockOutput => Keystroke::parse("cmdorctrl-alt-shift-C").ok(),
         // Set this to mac-only. On Linux this conflicts with the general binding to copy.
-        CustomAction::CopyBlockCommand => mac_only_keystroke("cmd-shift-C"),
+        CustomAction::CopyBlockCommand => Keystroke::parse("cmd-shift-C").ok(),
         // Set this to mac-only. On Linux this conflicts with the cmd-enter keybindings
         // (used for actions on the input suggestions menu).
-        CustomAction::ToggleMaximizePane => mac_only_keystroke("cmd-shift-enter"),
+        CustomAction::ToggleMaximizePane => Keystroke::parse("cmd-shift-enter").ok(),
         // Set this to mac-only. On Linux/Windows `cmdorctrl-/` resolves to `ctrl-/`, which is
         // reserved for the PTY: keybindings are dispatched before terminal input, so this
         // swallowed the keystroke before the terminal ever saw it.
-        CustomAction::ToggleKeybindingsPage => mac_only_keystroke("cmd-/"),
+        CustomAction::ToggleKeybindingsPage => Keystroke::parse("cmd-/").ok(),
         CustomAction::ScrollToTopOfSelectedBlocks => Keystroke::parse("cmdorctrl-shift-up").ok(),
         CustomAction::ScrollToBottomOfSelectedBlocks => {
             Keystroke::parse("cmdorctrl-shift-down").ok()
         }
-        CustomAction::CopyBlock => Keystroke::parse(cmd_or_ctrl_shift("c")).ok(),
-        CustomAction::FindWithinBlock => Keystroke::parse(cmd_or_ctrl_shift("f")).ok(),
+        CustomAction::CopyBlock => Keystroke::parse("cmd-c").ok(),
+        CustomAction::FindWithinBlock => Keystroke::parse("cmd-f").ok(),
         CustomAction::ToggleSyncTerminalInputsInCurrentTab => {
             Keystroke::parse("alt-cmdorctrl-i").ok()
         }
         CustomAction::ReopenClosedSession => Keystroke::parse("cmd-shift-T").ok(),
-        CustomAction::AddWindow => Keystroke::parse(cmd_or_ctrl_shift("n")).ok(),
+        CustomAction::AddWindow => Keystroke::parse("cmd-n").ok(),
         CustomAction::ToggleLeftPanel => Keystroke::parse("cmd-\\").ok(),
-        CustomAction::CloseWindow => mac_only_keystroke("cmd-shift-W"),
-        CustomAction::CloseCurrentSession => Keystroke::parse(cmd_or_ctrl_shift("w")).ok(),
+        CustomAction::CloseWindow => Keystroke::parse("cmd-shift-W").ok(),
+        CustomAction::CloseCurrentSession => Keystroke::parse("cmd-w").ok(),
         CustomAction::ToggleProjectExplorer => Keystroke::parse("ctrl-1").ok(),
         CustomAction::OpenRepository => Keystroke::parse("cmd-shift-O").ok(),
         CustomAction::GoToLine => Keystroke::parse("ctrl-g").ok(),
@@ -674,11 +674,6 @@ impl BindingGroup {
     }
 }
 
-/// Constructs the `cmd-key` keybinding.
-pub fn cmd_or_ctrl_shift(key: &str) -> String {
-    format!("cmd-{key}")
-}
-
 /// Returns whether the given [`BindingLens`] is compliant with the PTY.
 /// A binding is considered PTY compliant if it does not interfere with a control character that
 /// needs to be sent to the PTY. A binding is considered to be a control character if the only
@@ -701,12 +696,6 @@ pub fn is_binding_pty_compliant(binding: BindingLens) -> IsBindingValid {
 fn is_pty_non_compliant_binding_allowed(binding_name: &str, keystroke: &Keystroke) -> bool {
     MAC_PTY_NON_COMPLIANT_ACTIONS.contains(binding_name)
         || PTY_NON_COMPLIANT_KEYSTROKES.contains(keystroke)
-}
-
-/// Attempts to construct a [`Keystroke`] from the given source string. Returns `None` if a
-/// [`Keystroke`] was unable to be constructed from the source string.
-fn mac_only_keystroke(source: &str) -> Option<Keystroke> {
-    Keystroke::parse(source).ok()
 }
 
 #[cfg(test)]
