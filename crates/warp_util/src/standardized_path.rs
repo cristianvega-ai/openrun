@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::{fmt, io};
 
 use serde::{Deserialize, Serialize};
-use typed_path::{PathType, TypedPath, TypedPathBuf};
+use typed_path::{TypedPath, TypedPathBuf};
 
 /// Error returned when a path cannot be converted into a [`StandardizedPath`].
 #[derive(Debug, thiserror::Error)]
@@ -31,23 +31,12 @@ pub struct StandardizedPath(TypedPathBuf);
 impl StandardizedPath {
     // ── Construction APIs ─────────────────────────────────────────────
 
-    /// Create from a string, inferring Unix vs Windows encoding.
+    /// Create from a string, inferring Unix vs Windows encoding (a stored path may have been
+    /// written by another system).
     /// Normalizes the path (removes `.`/`..`, collapses separators).
     /// Returns an error if the path is not absolute.
     pub fn try_new(path: &str) -> Result<Self, InvalidPathError> {
         let typed = TypedPathBuf::from(path);
-        let normalized = typed.normalize();
-        if !normalized.is_absolute() {
-            return Err(InvalidPathError::NotAbsolute(path.to_owned()));
-        }
-        Ok(Self(normalized))
-    }
-
-    /// Create with an explicit path type (Unix or Windows).
-    /// Returns an error if the path is not absolute.
-    pub fn try_with_encoding(path: &str, path_type: PathType) -> Result<Self, InvalidPathError> {
-        let typed = TypedPathBuf::new(path_type);
-        let typed = typed.join(path);
         let normalized = typed.normalize();
         if !normalized.is_absolute() {
             return Err(InvalidPathError::NotAbsolute(path.to_owned()));
@@ -184,11 +173,6 @@ impl StandardizedPath {
         self.0.to_path().is_unix()
     }
 
-    /// Whether the path uses Windows encoding.
-    pub fn is_windows(&self) -> bool {
-        self.0.to_path().is_windows()
-    }
-
     /// Sets the file name component of this path, analogous to
     /// [`PathBuf::set_file_name`].
     pub fn set_file_name(&mut self, name: &str) {
@@ -210,7 +194,7 @@ impl StandardizedPath {
     // ── Conversion APIs ──────────────────────────────────────────────
 
     /// Convert to a local `PathBuf` if the encoding matches the current OS.
-    /// Returns `None` for a Unix-encoded path on Windows or vice versa.
+    /// Returns `None` for a Windows-encoded path.
     pub fn to_local_path(&self) -> Option<PathBuf> {
         if encoding_matches_local(&self.0) {
             Some(PathBuf::from(self.as_str()))
@@ -265,16 +249,13 @@ impl<'de> Deserialize<'de> for StandardizedPath {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/// Construct a `TypedPathBuf` using the local platform's encoding.
-///
-/// On Unix targets the path is always treated as Unix-encoded; on Windows
-/// targets it is always treated as Windows-encoded. This avoids ambiguity
+/// Construct a `TypedPathBuf` using the local platform's (Unix) encoding. This avoids ambiguity
 /// from the heuristic-based `TypedPathBuf::from` inference.
 fn local_typed_path_buf(path_str: &str) -> TypedPathBuf {
     typed_path::UnixPathBuf::from(path_str).to_typed_path_buf()
 }
 
-/// Returns true if the `TypedPathBuf` encoding matches the compilation target.
+/// Returns true if the `TypedPathBuf` encoding is the local (Unix) one.
 fn encoding_matches_local(typed: &TypedPathBuf) -> bool {
     let path = typed.to_path();
     path.is_unix()
