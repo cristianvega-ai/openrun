@@ -49,19 +49,17 @@ pub(super) struct EventReceiver {
 pub(super) fn channel() -> (EventSender, EventReceiver) {
     let (sender, receiver) = mpsc::channel();
 
-    {
-        let run_loop_signal = Arc::new(RunLoopSignal::new());
-        (
-            EventSender {
-                sender,
-                run_loop_signal: run_loop_signal.clone(),
-            },
-            EventReceiver {
-                receiver,
-                _run_loop_signal: run_loop_signal,
-            },
-        )
-    }
+    let run_loop_signal = Arc::new(RunLoopSignal::new());
+    (
+        EventSender {
+            sender,
+            run_loop_signal: run_loop_signal.clone(),
+        },
+        EventReceiver {
+            receiver,
+            _run_loop_signal: run_loop_signal,
+        },
+    )
 }
 
 struct RunLoopSignal {
@@ -132,19 +130,17 @@ pub(super) fn run(
     callbacks.initialize_app(init_fn);
 
     // Process events until termination.
-    {
-        'event_loop: loop {
-            CFRunLoop::run();
-            loop {
-                match receiver.receiver.try_recv() {
-                    Ok(event) => {
-                        if process_event(event, &mut ui_app, callbacks).is_break() {
-                            break 'event_loop;
-                        }
+    'event_loop: loop {
+        CFRunLoop::run();
+        loop {
+            match receiver.receiver.try_recv() {
+                Ok(event) => {
+                    if process_event(event, &mut ui_app, callbacks).is_break() {
+                        break 'event_loop;
                     }
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => break 'event_loop,
                 }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => break 'event_loop,
             }
         }
     }

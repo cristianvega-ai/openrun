@@ -152,9 +152,7 @@ fn make_new_app_menu(ctx: &AppContext) -> Menu {
         preferences_menu_items,
     )));
 
-    {
-        menu_items.push(MenuItem::Services);
-    }
+    menu_items.push(MenuItem::Services);
 
     menu_items.push(MenuItem::Separator);
 

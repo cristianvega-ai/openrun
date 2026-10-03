@@ -496,25 +496,23 @@ fn list_nvm_versions() -> Vec<String> {
 
     let mut out: Vec<String> = Vec::new();
 
-    {
-        // Prefer $NVM_DIR/versions/node
-        let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-        if let Ok(nvm_dir) = env::var("NVM_DIR") {
-            candidates.push(Path::new(&nvm_dir).join("versions").join("node"));
-        }
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join(".nvm").join("versions").join("node"));
-        }
+    // Prefer $NVM_DIR/versions/node
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(nvm_dir) = env::var("NVM_DIR") {
+        candidates.push(Path::new(&nvm_dir).join("versions").join("node"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(home.join(".nvm").join("versions").join("node"));
+    }
 
-        for base in candidates {
-            if let Ok(read_dir) = std::fs::read_dir(&base) {
-                for entry in read_dir.flatten() {
-                    if let Ok(ft) = entry.file_type()
-                        && ft.is_dir()
-                    {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        out.push(name);
-                    }
+    for base in candidates {
+        if let Ok(read_dir) = std::fs::read_dir(&base) {
+            for entry in read_dir.flatten() {
+                if let Ok(ft) = entry.file_type()
+                    && ft.is_dir()
+                {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    out.push(name);
                 }
             }
         }

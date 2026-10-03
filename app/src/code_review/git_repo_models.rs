@@ -114,29 +114,27 @@ impl GitRepoModels {
 
         let handle = match repo {
             LocalOrRemotePath::Local(repo_path) => {
-                {
-                    // LocalGitHubRepoModel needs a sibling GitRepoStatusModel for
-                    // branch info.
-                    let git_status = self.subscribe(repo, ctx)?;
-                    let repo_path = repo_path.clone();
+                // LocalGitHubRepoModel needs a sibling GitRepoStatusModel for
+                // branch info.
+                let git_status = self.subscribe(repo, ctx)?;
+                let repo_path = repo_path.clone();
+                #[cfg(test)]
+                let github_cli_override = self.github_cli_override.clone();
+                let inner = ctx.add_model(|ctx| {
                     #[cfg(test)]
-                    let github_cli_override = self.github_cli_override.clone();
-                    let inner = ctx.add_model(|ctx| {
-                        #[cfg(test)]
-                        if let Some(github_cli) = github_cli_override {
-                            return LocalGitHubRepoModel::new_with_github_cli(
-                                repo_path, git_status, github_cli, ctx,
-                            );
-                        }
-                        LocalGitHubRepoModel::new(repo_path, git_status, ctx)
+                    if let Some(github_cli) = github_cli_override {
+                        return LocalGitHubRepoModel::new_with_github_cli(
+                            repo_path, git_status, github_cli, ctx,
+                        );
+                    }
+                    LocalGitHubRepoModel::new(repo_path, git_status, ctx)
+                });
+                ctx.add_model(|ctx| {
+                    ctx.subscribe_to_model(&inner, |me, _, event, ctx| {
+                        GitHubRepoModel::forward_event(me, event, ctx)
                     });
-                    ctx.add_model(|ctx| {
-                        ctx.subscribe_to_model(&inner, |me, _, event, ctx| {
-                            GitHubRepoModel::forward_event(me, event, ctx)
-                        });
-                        GitHubRepoModel::Local(inner)
-                    })
-                }
+                    GitHubRepoModel::Local(inner)
+                })
             }
             LocalOrRemotePath::Remote(remote_path) => {
                 anyhow::bail!(

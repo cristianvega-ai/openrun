@@ -247,31 +247,29 @@ fn surface_code_review_open(
     ensure_surface_available(action, SurfaceDestination::CodeReview, ctx)?;
     let workspace = target_workspace(action, target, ctx)?;
     activate_target(&workspace, action, target, ctx)?;
-    {
-        let pane_group = target_pane_group(action, target, ctx)?;
-        let pane_id = target_pane_id(action, target, &pane_group, ctx)?;
-        let has_repository = pane_group.read(ctx, |pane_group, ctx| {
-            pane_group
-                .terminal_view_from_pane_id(pane_id, ctx)
-                .is_some_and(|terminal| terminal.as_ref(ctx).current_repo_path().is_some())
-        });
-        if !has_repository {
-            return Err(ControlError::new(
-                ErrorCode::TargetStateConflict,
-                "surface.code_review.open requires an active terminal in a repository",
-            ));
-        }
-        workspace.update(ctx, |workspace, ctx| {
-            workspace.handle_action(
-                &WorkspaceAction::OpenCodeReviewPanel(PaneViewLocator {
-                    pane_group_id: pane_group.id(),
-                    pane_id,
-                }),
-                ctx,
-            );
-        });
-        Ok(ack(instance_id, action))
+    let pane_group = target_pane_group(action, target, ctx)?;
+    let pane_id = target_pane_id(action, target, &pane_group, ctx)?;
+    let has_repository = pane_group.read(ctx, |pane_group, ctx| {
+        pane_group
+            .terminal_view_from_pane_id(pane_id, ctx)
+            .is_some_and(|terminal| terminal.as_ref(ctx).current_repo_path().is_some())
+    });
+    if !has_repository {
+        return Err(ControlError::new(
+            ErrorCode::TargetStateConflict,
+            "surface.code_review.open requires an active terminal in a repository",
+        ));
     }
+    workspace.update(ctx, |workspace, ctx| {
+        workspace.handle_action(
+            &WorkspaceAction::OpenCodeReviewPanel(PaneViewLocator {
+                pane_group_id: pane_group.id(),
+                pane_id,
+            }),
+            ctx,
+        );
+    });
+    Ok(ack(instance_id, action))
 }
 
 fn ensure_surface_available(
@@ -688,25 +686,23 @@ fn file_open(
     let workspace = target_workspace(ActionKind::FileOpen, target, ctx)?;
     let path = resolve_file_open_path(&params.path, target, ctx)?;
     activate_target(&workspace, ActionKind::FileOpen, target, ctx)?;
-    {
-        let layout = params.new_tab.then_some(EditorLayout::NewTab);
-        let file_target =
-            resolve_file_target_to_open_in_warp(&path, EditorSettings::as_ref(ctx), layout);
-        workspace.update(ctx, |workspace, ctx| {
-            workspace.open_file_with_target(
-                path.clone(),
-                file_target,
-                line_and_column,
-                CodeSource::Link {
-                    path,
-                    range_start: None,
-                    range_end: None,
-                },
-                ctx,
-            );
-        });
-        Ok(ack(instance_id, ActionKind::FileOpen))
-    }
+    let layout = params.new_tab.then_some(EditorLayout::NewTab);
+    let file_target =
+        resolve_file_target_to_open_in_warp(&path, EditorSettings::as_ref(ctx), layout);
+    workspace.update(ctx, |workspace, ctx| {
+        workspace.open_file_with_target(
+            path.clone(),
+            file_target,
+            line_and_column,
+            CodeSource::Link {
+                path,
+                range_start: None,
+                range_end: None,
+            },
+            ctx,
+        );
+    });
+    Ok(ack(instance_id, ActionKind::FileOpen))
 }
 
 /// Resolves the path for `file.open` against the targeted terminal session's working

@@ -583,25 +583,23 @@ impl LocalRepoMetadataModel {
             ));
         }
 
-        {
-            // Replace any prior registration before re-registering.
-            let had_previous = !self.watched_roots.insert(repo_path.clone());
-            if let Some(ref watcher) = self.watcher {
-                let watch_path = local_path.clone();
-                // Build the gitignore set (root + global) so the descend
-                // filter prunes gitignored subtrees.
-                let gitignores = crate::gitignores_for_directory(&watch_path);
-                watcher.update(ctx, |watcher, _ctx| {
-                    if had_previous {
-                        std::mem::drop(watcher.unregister_path(&watch_path));
-                    }
-                    std::mem::drop(watcher.register_path(
-                        &watch_path,
-                        repo_watch_filter(watch_path.clone(), gitignores),
-                        RecursiveMode::Recursive,
-                    ));
-                });
-            }
+        // Replace any prior registration before re-registering.
+        let had_previous = !self.watched_roots.insert(repo_path.clone());
+        if let Some(ref watcher) = self.watcher {
+            let watch_path = local_path.clone();
+            // Build the gitignore set (root + global) so the descend
+            // filter prunes gitignored subtrees.
+            let gitignores = crate::gitignores_for_directory(&watch_path);
+            watcher.update(ctx, |watcher, _ctx| {
+                if had_previous {
+                    std::mem::drop(watcher.unregister_path(&watch_path));
+                }
+                std::mem::drop(watcher.register_path(
+                    &watch_path,
+                    repo_watch_filter(watch_path.clone(), gitignores),
+                    RecursiveMode::Recursive,
+                ));
+            });
         }
 
         // Insert the repository state into the map
@@ -626,13 +624,11 @@ impl LocalRepoMetadataModel {
         }
         if self.remove_repository_state(repo_path).is_some() {
             // Drop the recorded watch entry and unregister from the watcher.
-            {
-                self.watched_roots.remove(repo_path);
-                if let (Some(watcher), Some(root)) = (&self.watcher, repo_path.to_local_path()) {
-                    watcher.update(ctx, |watcher, _ctx| {
-                        std::mem::drop(watcher.unregister_path(&root));
-                    });
-                }
+            self.watched_roots.remove(repo_path);
+            if let (Some(watcher), Some(root)) = (&self.watcher, repo_path.to_local_path()) {
+                watcher.update(ctx, |watcher, _ctx| {
+                    std::mem::drop(watcher.unregister_path(&root));
+                });
             }
 
             ctx.emit(RepositoryMetadataEvent::RepositoryRemoved {

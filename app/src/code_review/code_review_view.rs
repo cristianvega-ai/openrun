@@ -628,23 +628,22 @@ impl CodeReviewView {
 
             // Subscribe to PersistedWorkspace events to refresh the footer
             // UI after LSP installation succeeds or fails.
-            {
-                use crate::workspace_metadata::{PersistedWorkspace, PersistedWorkspaceEvent};
+            use crate::workspace_metadata::{PersistedWorkspace, PersistedWorkspaceEvent};
 
-                // PersistedWorkspace handles spawning the server after install;
-                // we only subscribe to refresh the footer UI.
-                ctx.subscribe_to_model(&PersistedWorkspace::handle(ctx), |me, _, event, ctx| {
-                    match event {
-                        PersistedWorkspaceEvent::InstallationSucceeded
-                        | PersistedWorkspaceEvent::InstallationFailed => {
-                            if let Some(footer) = &me.code_review_footer {
-                                footer.update(ctx, |_, ctx| ctx.notify());
-                            }
+            // PersistedWorkspace handles spawning the server after install;
+            // we only subscribe to refresh the footer UI.
+            ctx.subscribe_to_model(
+                &PersistedWorkspace::handle(ctx),
+                |me, _, event, ctx| match event {
+                    PersistedWorkspaceEvent::InstallationSucceeded
+                    | PersistedWorkspaceEvent::InstallationFailed => {
+                        if let Some(footer) = &me.code_review_footer {
+                            footer.update(ctx, |_, ctx| ctx.notify());
                         }
-                        _ => {}
                     }
-                });
-            }
+                    _ => {}
+                },
+            );
         }
 
         // Always reload diffs on open, re-reading the filesystem.
@@ -727,16 +726,13 @@ impl CodeReviewView {
                 });
             }
             CodeFooterViewEvent::OpenLogs { path } => {
-                {
-                    // Look up the LSP server for this path and emit the log path
-                    let lsp_manager = lsp::LspManagerModel::handle(ctx);
-                    if let Some(server) = lsp_manager.as_ref(ctx).server_for_path(path, ctx) {
-                        let repo_root = server.as_ref(ctx).initial_workspace().to_path_buf();
-                        let server_type = server.as_ref(ctx).server_type();
-                        let log_path =
-                            crate::code::lsp_logs::log_file_path(server_type, &repo_root);
-                        ctx.emit(CodeReviewViewEvent::OpenLspLogs { log_path });
-                    }
+                // Look up the LSP server for this path and emit the log path
+                let lsp_manager = lsp::LspManagerModel::handle(ctx);
+                if let Some(server) = lsp_manager.as_ref(ctx).server_for_path(path, ctx) {
+                    let repo_root = server.as_ref(ctx).initial_workspace().to_path_buf();
+                    let server_type = server.as_ref(ctx).server_type();
+                    let log_path = crate::code::lsp_logs::log_file_path(server_type, &repo_root);
+                    ctx.emit(CodeReviewViewEvent::OpenLspLogs { log_path });
                 }
                 let _ = path;
             }
@@ -1837,70 +1833,68 @@ impl CodeReviewView {
                 buffer,
             });
 
-            {
-                let CodeReviewViewState::Loaded(state) = self.state() else {
-                    return;
-                };
+            let CodeReviewViewState::Loaded(state) = self.state() else {
+                return;
+            };
 
-                ctx.subscribe_to_view(
-                    &state.file_states[editor_index]
-                        .editor_state
-                        .as_ref()
-                        .unwrap()
-                        .editor,
-                    move |view, editor_view, event, ctx| {
-                        if let LocalCodeEditorEvent::ViewportUpdated = event {
-                            let Some(pending) = view.pending_precise_scroll.take() else {
-                                return;
-                            };
+            ctx.subscribe_to_view(
+                &state.file_states[editor_index]
+                    .editor_state
+                    .as_ref()
+                    .unwrap()
+                    .editor,
+                move |view, editor_view, event, ctx| {
+                    if let LocalCodeEditorEvent::ViewportUpdated = event {
+                        let Some(pending) = view.pending_precise_scroll.take() else {
+                            return;
+                        };
 
-                            let CodeReviewViewState::Loaded(state) = view.state() else {
-                                // Put it back if we're not in the right state yet.
-                                view.pending_precise_scroll = Some(pending);
-                                return;
-                            };
+                        let CodeReviewViewState::Loaded(state) = view.state() else {
+                            // Put it back if we're not in the right state yet.
+                            view.pending_precise_scroll = Some(pending);
+                            return;
+                        };
 
-                            let firing_editor_index =
-                                state.file_states.values().position(|file_state| {
-                                    file_state
-                                        .editor_state
-                                        .as_ref()
-                                        .map(|es| es.editor.id() == editor_view.id())
-                                        .unwrap_or(false)
-                                });
+                        let firing_editor_index =
+                            state.file_states.values().position(|file_state| {
+                                file_state
+                                    .editor_state
+                                    .as_ref()
+                                    .map(|es| es.editor.id() == editor_view.id())
+                                    .unwrap_or(false)
+                            });
 
-                            // Only apply if the firing editor matches the pending target to avoid race conditions
-                            if firing_editor_index == Some(pending.editor_index) {
-                                // Character bounds are available now after layout
-                                if let Some((start_top_y, end_bottom_y)) = view
-                                    .get_match_character_bounds(
-                                        pending.editor_index,
-                                        pending.start_offset,
-                                        pending.end_offset,
-                                        ctx,
-                                    )
-                                {
-                                    view.vertically_scroll_to_match(
-                                        pending.editor_index,
-                                        start_top_y,
-                                        end_bottom_y,
-                                        pending.buffer,
-                                    );
-                                    view.horizontally_scroll_to_match(
-                                        pending.editor_index,
-                                        pending.start_offset,
-                                        pending.end_offset,
-                                        ctx,
-                                    );
-                                }
-                            } else {
-                                // Wrong editor fired - put pending back
-                                view.pending_precise_scroll = Some(pending);
+                        // Only apply if the firing editor matches the pending target to avoid race conditions
+                        if firing_editor_index == Some(pending.editor_index) {
+                            // Character bounds are available now after layout
+                            if let Some((start_top_y, end_bottom_y)) = view
+                                .get_match_character_bounds(
+                                    pending.editor_index,
+                                    pending.start_offset,
+                                    pending.end_offset,
+                                    ctx,
+                                )
+                            {
+                                view.vertically_scroll_to_match(
+                                    pending.editor_index,
+                                    start_top_y,
+                                    end_bottom_y,
+                                    pending.buffer,
+                                );
+                                view.horizontally_scroll_to_match(
+                                    pending.editor_index,
+                                    pending.start_offset,
+                                    pending.end_offset,
+                                    ctx,
+                                );
                             }
+                        } else {
+                            // Wrong editor fired - put pending back
+                            view.pending_precise_scroll = Some(pending);
                         }
-                    },
-                );
-            }
+                    }
+                },
+            );
         }
     }
 
@@ -2334,12 +2328,10 @@ impl CodeReviewView {
         for file in files {
             let editor_state = {
                 // Go through the global-buffer path whenever we have a repo.
-                {
-                    if self.repo_path().is_some() {
-                        self.create_code_review_model_with_global_buffer(file, ctx)
-                    } else {
-                        self.create_code_review_model(file, ctx)
-                    }
+                if self.repo_path().is_some() {
+                    self.create_code_review_model_with_global_buffer(file, ctx)
+                } else {
+                    self.create_code_review_model(file, ctx)
                 }
             };
             let is_expanded = self.should_auto_expand_file(&file.file_diff);

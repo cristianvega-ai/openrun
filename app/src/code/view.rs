@@ -251,9 +251,7 @@ impl CodeView {
         let location = source.location();
         let mut view = Self::new_internal(source, ctx);
         view.open_or_focus_existing(location, line_col, ctx);
-        {
-            view.update_markdown_mode_segmented_control(ctx);
-        }
+        view.update_markdown_mode_segmented_control(ctx);
         view
     }
 
@@ -321,9 +319,7 @@ impl CodeView {
 
         if let Some(path) = path {
             view.open_in_preview_or_promote(path, ctx);
-            {
-                view.update_markdown_mode_segmented_control(ctx);
-            }
+            view.update_markdown_mode_segmented_control(ctx);
         } else {
             log::warn!("Preview CodeView constructed with no path");
         }
@@ -1255,9 +1251,7 @@ impl CodeView {
             tab_index: index,
         });
 
-        {
-            self.update_markdown_mode_segmented_control(ctx);
-        }
+        self.update_markdown_mode_segmented_control(ctx);
 
         ctx.notify();
     }

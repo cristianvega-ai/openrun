@@ -240,16 +240,14 @@ impl AtMenu {
     /// inside a repository.
     pub(crate) fn get_categories(app: &AppContext) -> Vec<AtMenuCategory> {
         let is_active_dir_in_git_repo = {
-            {
-                let active_window_id = app.windows().state().active_window;
-                active_window_id
-                    .and_then(|window_id| ActiveSession::as_ref(app).working_directory(window_id))
-                    .is_some_and(|dir| {
-                        DetectedRepositories::as_ref(app)
-                            .get_root_for_canonical_path(dir)
-                            .is_some()
-                    })
-            }
+            let active_window_id = app.windows().state().active_window;
+            active_window_id
+                .and_then(|window_id| ActiveSession::as_ref(app).working_directory(window_id))
+                .is_some_and(|dir| {
+                    DetectedRepositories::as_ref(app)
+                        .get_root_for_canonical_path(dir)
+                        .is_some()
+                })
         };
 
         let mut categories = if is_active_dir_in_git_repo {

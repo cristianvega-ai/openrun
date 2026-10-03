@@ -126,18 +126,16 @@ impl PaneContent for CodePane {
                     });
 
                     // Track the opened file in the OpenedFilesModel
+                    use repo_metadata::repositories::DetectedRepositories;
+
+                    use crate::code::opened_files::OpenedFilesModel;
+
+                    if let Some(repo_root) =
+                        DetectedRepositories::as_ref(ctx).get_root_for_path(location)
                     {
-                        use repo_metadata::repositories::DetectedRepositories;
-
-                        use crate::code::opened_files::OpenedFilesModel;
-
-                        if let Some(repo_root) =
-                            DetectedRepositories::as_ref(ctx).get_root_for_path(location)
-                        {
-                            OpenedFilesModel::handle(ctx).update(ctx, |opened_files, ctx| {
-                                opened_files.file_opened(repo_root, location, ctx);
-                            });
-                        }
+                        OpenedFilesModel::handle(ctx).update(ctx, |opened_files, ctx| {
+                            opened_files.file_opened(repo_root, location, ctx);
+                        });
                     }
                 }
                 CodeViewEvent::OpenLspLogs { log_path } => {

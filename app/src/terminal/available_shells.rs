@@ -285,12 +285,10 @@ impl AvailableShells {
         // The PATH here is limited since it doesn't include the locations added
         // by the user's login shell. We add the Homebrew installer locations to
         // the search paths so we can detect shells installed via Homebrew.
-        {
-            // Apple Silicon homebrew path
-            paths_to_search.push(PathBuf::from("/opt/homebrew/bin"));
-            // Intel homebrew path
-            paths_to_search.push(PathBuf::from("/usr/local/bin"));
-        }
+        // Apple Silicon homebrew path
+        paths_to_search.push(PathBuf::from("/opt/homebrew/bin"));
+        // Intel homebrew path
+        paths_to_search.push(PathBuf::from("/usr/local/bin"));
 
         let shells = Self::load_known_shells(&paths_to_search, fallback_shells_path);
 

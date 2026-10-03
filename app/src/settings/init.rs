@@ -179,14 +179,12 @@ pub fn init(
     // Set up hot-reload for the settings file. When the WarpConfig watcher
     // detects a change to settings.toml, reload preferences from disk and
     // push changed values into setting models.
-    {
-        let prefs = <settings::PublicPreferences as warpui::SingletonEntity>::as_ref(ctx);
-        if prefs.is_settings_file() {
-            ctx.subscribe_to_model(
-                &crate::user_config::WarpConfig::handle(ctx),
-                handle_warp_config_change,
-            );
-        }
+    let prefs = <settings::PublicPreferences as warpui::SingletonEntity>::as_ref(ctx);
+    if prefs.is_settings_file() {
+        ctx.subscribe_to_model(
+            &crate::user_config::WarpConfig::handle(ctx),
+            handle_warp_config_change,
+        );
     }
 
     user_defaults_on_startup

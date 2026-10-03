@@ -38,11 +38,9 @@ impl Device {
         _gpu_power_preference: GPUPowerPreference,
         on_gpu_device_info: Box<OnGPUDeviceSelected>,
     ) -> Self {
-        {
-            let gpu_device_info = get_gpu_device_info(&_metal_device);
-            on_gpu_device_info(gpu_device_info);
-            Device::Metal(_metal_device)
-        }
+        let gpu_device_info = get_gpu_device_info(&_metal_device);
+        on_gpu_device_info(gpu_device_info);
+        Device::Metal(_metal_device)
     }
 }
 

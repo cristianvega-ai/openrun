@@ -48,15 +48,13 @@ impl Client {
         let mut builder = reqwest::Client::builder();
 
         // Set some HTTP/2-related settings that aren't available on wasm.
-        {
-            builder = builder
-                .http2_keep_alive_interval(Duration::from_secs(60))
-                // If a pong is not received within 15s, consider the connection dead.
-                .http2_keep_alive_timeout(Duration::from_secs(15))
-                // Send these even when there aren't active streams, to ensure that we detect
-                // dead connections before we attempt to use them.
-                .http2_keep_alive_while_idle(true);
-        }
+        builder = builder
+            .http2_keep_alive_interval(Duration::from_secs(60))
+            // If a pong is not received within 15s, consider the connection dead.
+            .http2_keep_alive_timeout(Duration::from_secs(15))
+            // Send these even when there aren't active streams, to ensure that we detect
+            // dead connections before we attempt to use them.
+            .http2_keep_alive_while_idle(true);
 
         Self::from_client_builder(builder).expect("should not fail to create client")
     }

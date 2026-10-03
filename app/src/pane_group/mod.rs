@@ -1517,16 +1517,14 @@ impl PaneGroup {
     pub fn selected_text_from_focused_pane(&self, ctx: &AppContext) -> Option<String> {
         let focused_pane_id = self.focused_pane_id(ctx);
 
-        {
-            // If the focused pane is a code pane, return the selected text from the code view.
-            if focused_pane_id.is_code_pane() {
-                let text = self
-                    .downcast_pane_by_id::<CodePane>(focused_pane_id)
-                    .and_then(|pane| pane.file_view(ctx).as_ref(ctx).selected_text(ctx));
-                // If the text is not empty and does not contain a newline, return early.
-                if text.as_ref().is_some_and(|t| !t.is_empty()) {
-                    return text;
-                }
+        // If the focused pane is a code pane, return the selected text from the code view.
+        if focused_pane_id.is_code_pane() {
+            let text = self
+                .downcast_pane_by_id::<CodePane>(focused_pane_id)
+                .and_then(|pane| pane.file_view(ctx).as_ref(ctx).selected_text(ctx));
+            // If the text is not empty and does not contain a newline, return early.
+            if text.as_ref().is_some_and(|t| !t.is_empty()) {
+                return text;
             }
         }
 
@@ -1598,22 +1596,20 @@ impl PaneGroup {
     ) {
         self.panes_of::<TerminalPane>()
             .for_each(move |session_data| {
-                {
-                    session_data
-                        .terminal_manager(app)
-                        .update(app, |terminal_manager, ctx| {
-                            if let Some(manager) = terminal_manager
-                                .as_any()
-                                .downcast_ref::<LocalTtyTerminalManager<TerminalView>>()
-                            {
-                                if honor_ps1 {
-                                    manager.send_switch_to_ps1_bindkey(ctx);
-                                } else {
-                                    manager.send_switch_to_warp_prompt_bindkey(ctx);
-                                }
+                session_data
+                    .terminal_manager(app)
+                    .update(app, |terminal_manager, ctx| {
+                        if let Some(manager) = terminal_manager
+                            .as_any()
+                            .downcast_ref::<LocalTtyTerminalManager<TerminalView>>()
+                        {
+                            if honor_ps1 {
+                                manager.send_switch_to_ps1_bindkey(ctx);
+                            } else {
+                                manager.send_switch_to_warp_prompt_bindkey(ctx);
                             }
-                        });
-                }
+                        }
+                    });
                 // TODO: Potentially handle the mock TerminalManager case here as well?
             });
     }
@@ -3038,14 +3034,12 @@ impl PaneGroup {
                 return;
             }
 
-            {
-                // if the app is active, but the window is not active, activate the target window.
-                let current_window_id: WindowId = ctx.window_id();
-                let active_window_id = ctx.windows().state().active_window;
-                if active_window_id != Some(current_window_id) {
-                    ctx.windows()
-                        .show_window_and_focus_app_without_ordering_front(current_window_id);
-                }
+            // if the app is active, but the window is not active, activate the target window.
+            let current_window_id: WindowId = ctx.window_id();
+            let active_window_id = ctx.windows().state().active_window;
+            if active_window_id != Some(current_window_id) {
+                ctx.windows()
+                    .show_window_and_focus_app_without_ordering_front(current_window_id);
             }
         }
 

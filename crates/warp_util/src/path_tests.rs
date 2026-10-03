@@ -24,66 +24,64 @@ fn test_to_relative_path() {
     use super::to_relative_path;
 
     // Basic relative path conversion
-    {
-        assert_eq!(
-            to_relative_path(
-                Path::new("/Users/john/projects/app/src/main.rs"),
-                Path::new("/Users/john/projects")
-            ),
-            Some("app/src/main.rs".to_string())
-        );
+    assert_eq!(
+        to_relative_path(
+            Path::new("/Users/john/projects/app/src/main.rs"),
+            Path::new("/Users/john/projects")
+        ),
+        Some("app/src/main.rs".to_string())
+    );
 
-        // Same directory
-        assert_eq!(
-            to_relative_path(
-                Path::new("/Users/john/projects"),
-                Path::new("/Users/john/projects")
-            ),
-            Some(".".to_string())
-        );
+    // Same directory
+    assert_eq!(
+        to_relative_path(
+            Path::new("/Users/john/projects"),
+            Path::new("/Users/john/projects")
+        ),
+        Some(".".to_string())
+    );
 
-        // Parent directory
-        assert_eq!(
-            to_relative_path(Path::new("/Users/john"), Path::new("/Users/john/projects")),
-            Some("..".to_string())
-        );
+    // Parent directory
+    assert_eq!(
+        to_relative_path(Path::new("/Users/john"), Path::new("/Users/john/projects")),
+        Some("..".to_string())
+    );
 
-        // Nested parent
-        assert_eq!(
-            to_relative_path(Path::new("/Users"), Path::new("/Users/john/projects")),
-            Some("../..".to_string())
-        );
+    // Nested parent
+    assert_eq!(
+        to_relative_path(Path::new("/Users"), Path::new("/Users/john/projects")),
+        Some("../..".to_string())
+    );
 
-        // Cross-branch paths
-        assert_eq!(
-            to_relative_path(
-                Path::new("/Users/john/documents/file.txt"),
-                Path::new("/Users/john/projects")
-            ),
-            Some("../documents/file.txt".to_string())
-        );
+    // Cross-branch paths
+    assert_eq!(
+        to_relative_path(
+            Path::new("/Users/john/documents/file.txt"),
+            Path::new("/Users/john/projects")
+        ),
+        Some("../documents/file.txt".to_string())
+    );
 
-        // Root to subdirectory
-        assert_eq!(
-            to_relative_path(Path::new("/var/log/system.log"), Path::new("/")),
-            Some("var/log/system.log".to_string())
-        );
+    // Root to subdirectory
+    assert_eq!(
+        to_relative_path(Path::new("/var/log/system.log"), Path::new("/")),
+        Some("var/log/system.log".to_string())
+    );
 
-        // Handles paths that would have leading slashes correctly
-        assert_eq!(
-            to_relative_path(Path::new("/home/user/file.txt"), Path::new("/home")),
-            Some("user/file.txt".to_string())
-        );
+    // Handles paths that would have leading slashes correctly
+    assert_eq!(
+        to_relative_path(Path::new("/home/user/file.txt"), Path::new("/home")),
+        Some("user/file.txt".to_string())
+    );
 
-        // Test with current directory references that should be cleaned
-        assert_eq!(
-            to_relative_path(
-                Path::new("/Users/john/projects/./app/src/main.rs"),
-                Path::new("/Users/john/projects")
-            ),
-            Some("app/src/main.rs".to_string()),
-        );
-    }
+    // Test with current directory references that should be cleaned
+    assert_eq!(
+        to_relative_path(
+            Path::new("/Users/john/projects/./app/src/main.rs"),
+            Path::new("/Users/john/projects")
+        ),
+        Some("app/src/main.rs".to_string()),
+    );
 }
 
 #[test]

@@ -660,38 +660,36 @@ fn open_file(window_id: Option<WindowId>, path: PathBuf, ctx: &mut AppContext) {
             ctx.dispatch_global_action("root_view:open_new_with_file_notebook", &path);
         }
     } else if action == OpenFileAction::Editor {
+        use crate::code::editor_management::CodeSource;
+        use crate::root_view::{NewWorkspaceSource, open_new_with_workspace_source};
+        use crate::util::file::external_editor::EditorSettings;
+        use crate::util::openable_file_type::resolve_file_target_to_open_in_warp;
+
+        // Open text/code files in Warp's code editor, respecting the user's layout preference.
+        let editor_settings = EditorSettings::as_ref(ctx);
+        let target = resolve_file_target_to_open_in_warp(&path, editor_settings, None);
+
+        let window_id = if let Some((wid, _)) = primary_window_and_view {
+            wid
+        } else {
+            open_new_with_workspace_source(
+                NewWorkspaceSource::Session {
+                    options: Box::default(),
+                },
+                ctx,
+            )
+            .0
+        };
+
+        ctx.windows().show_window_and_focus_app(window_id);
+
+        if let Some(workspaces) = ctx.views_of_type::<Workspace>(window_id)
+            && let Some(workspace) = workspaces.into_iter().next()
         {
-            use crate::code::editor_management::CodeSource;
-            use crate::root_view::{NewWorkspaceSource, open_new_with_workspace_source};
-            use crate::util::file::external_editor::EditorSettings;
-            use crate::util::openable_file_type::resolve_file_target_to_open_in_warp;
-
-            // Open text/code files in Warp's code editor, respecting the user's layout preference.
-            let editor_settings = EditorSettings::as_ref(ctx);
-            let target = resolve_file_target_to_open_in_warp(&path, editor_settings, None);
-
-            let window_id = if let Some((wid, _)) = primary_window_and_view {
-                wid
-            } else {
-                open_new_with_workspace_source(
-                    NewWorkspaceSource::Session {
-                        options: Box::default(),
-                    },
-                    ctx,
-                )
-                .0
-            };
-
-            ctx.windows().show_window_and_focus_app(window_id);
-
-            if let Some(workspaces) = ctx.views_of_type::<Workspace>(window_id)
-                && let Some(workspace) = workspaces.into_iter().next()
-            {
-                workspace.update(ctx, |workspace, ctx| {
-                    let source = CodeSource::Finder { path: path.clone() };
-                    workspace.open_file_with_target(path, target, None, source, ctx);
-                });
-            }
+            workspace.update(ctx, |workspace, ctx| {
+                let source = CodeSource::Finder { path: path.clone() };
+                workspace.open_file_with_target(path, target, None, source, ctx);
+            });
         }
     } else {
         let directory_path = if path.is_file() {
@@ -743,49 +741,47 @@ fn open_file_editor(
     line_col: Option<LineAndColumnArg>,
     ctx: &mut AppContext,
 ) {
+    use crate::code::editor_management::CodeSource;
+    use crate::root_view::{NewWorkspaceSource, open_new_with_workspace_source};
+    use crate::util::file::external_editor::EditorSettings;
+    use crate::util::openable_file_type::resolve_file_target_to_open_in_warp;
+
+    if !can_open_file_editor_path(&path) {
+        log::warn!("open_file_editor action rejected non-openable path: {path:?}");
+        return;
+    }
+
+    let editor_settings = EditorSettings::as_ref(ctx);
+    let target = resolve_file_target_to_open_in_warp(&path, editor_settings, None);
+
+    let window_id = if let Some((wid, _)) = primary_window_id.and_then(|window_id| {
+        ctx.root_view_id(window_id)
+            .map(|view_id| (window_id, view_id))
+    }) {
+        wid
+    } else {
+        open_new_with_workspace_source(
+            NewWorkspaceSource::Session {
+                options: Box::default(),
+            },
+            ctx,
+        )
+        .0
+    };
+
+    ctx.windows().show_window_and_focus_app(window_id);
+
+    if let Some(workspaces) = ctx.views_of_type::<Workspace>(window_id)
+        && let Some(workspace) = workspaces.into_iter().next()
     {
-        use crate::code::editor_management::CodeSource;
-        use crate::root_view::{NewWorkspaceSource, open_new_with_workspace_source};
-        use crate::util::file::external_editor::EditorSettings;
-        use crate::util::openable_file_type::resolve_file_target_to_open_in_warp;
-
-        if !can_open_file_editor_path(&path) {
-            log::warn!("open_file_editor action rejected non-openable path: {path:?}");
-            return;
-        }
-
-        let editor_settings = EditorSettings::as_ref(ctx);
-        let target = resolve_file_target_to_open_in_warp(&path, editor_settings, None);
-
-        let window_id = if let Some((wid, _)) = primary_window_id.and_then(|window_id| {
-            ctx.root_view_id(window_id)
-                .map(|view_id| (window_id, view_id))
-        }) {
-            wid
-        } else {
-            open_new_with_workspace_source(
-                NewWorkspaceSource::Session {
-                    options: Box::default(),
-                },
-                ctx,
-            )
-            .0
-        };
-
-        ctx.windows().show_window_and_focus_app(window_id);
-
-        if let Some(workspaces) = ctx.views_of_type::<Workspace>(window_id)
-            && let Some(workspace) = workspaces.into_iter().next()
-        {
-            workspace.update(ctx, |workspace, ctx| {
-                let source = CodeSource::Link {
-                    path: path.clone(),
-                    range_start: line_col,
-                    range_end: None,
-                };
-                workspace.open_file_with_target(path, target, line_col, source, ctx);
-            });
-        }
+        workspace.update(ctx, |workspace, ctx| {
+            let source = CodeSource::Link {
+                path: path.clone(),
+                range_start: line_col,
+                range_end: None,
+            };
+            workspace.open_file_with_target(path, target, line_col, source, ctx);
+        });
     }
 }
 

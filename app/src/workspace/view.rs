@@ -3789,28 +3789,26 @@ impl Workspace {
                         );
                     }
                     LocalOrRemotePath::Remote(_) => {
-                        {
-                            // Honor a notebook-viewer target (e.g. a remote
-                            // Jupyter notebook) instead of always opening remote
-                            // files as raw code in the editor.
-                            if let FileTarget::MarkdownViewer(layout) = target {
-                                self.open_file_notebook(
-                                    location.clone(),
-                                    None,
-                                    *layout,
-                                    Some(code_source),
-                                    ctx,
-                                );
-                            } else {
-                                self.open_code(
-                                    code_source,
-                                    crate::util::openable_file_type::EditorLayout::SplitPane,
-                                    *line_col,
-                                    false,
-                                    &[],
-                                    ctx,
-                                );
-                            }
+                        // Honor a notebook-viewer target (e.g. a remote
+                        // Jupyter notebook) instead of always opening remote
+                        // files as raw code in the editor.
+                        if let FileTarget::MarkdownViewer(layout) = target {
+                            self.open_file_notebook(
+                                location.clone(),
+                                None,
+                                *layout,
+                                Some(code_source),
+                                ctx,
+                            );
+                        } else {
+                            self.open_code(
+                                code_source,
+                                crate::util::openable_file_type::EditorLayout::SplitPane,
+                                *line_col,
+                                false,
+                                &[],
+                                ctx,
+                            );
                         }
                     }
                 }
@@ -6302,21 +6300,19 @@ impl Workspace {
     }
 
     fn should_include_worktree_sidecar_repo(repo_path: &Path, ctx: &AppContext) -> bool {
-        {
-            // This performs one repo-metadata lookup per persisted workspace while the
-            // sidecar items are rebuilt. That's acceptable for now given the expected
-            // repo counts here, and it keeps linked-worktree filtering scoped to the
-            // only UI that currently needs it.
-            let Some(repository) =
-                DetectedRepositories::as_ref(ctx).get_local_watched_repo_for_path(repo_path, ctx)
-            else {
-                return true;
-            };
-            // Linked worktrees (and submodules) have an external gitdir; exclude
-            // them so only primary repository checkouts appear in the list.
+        // This performs one repo-metadata lookup per persisted workspace while the
+        // sidecar items are rebuilt. That's acceptable for now given the expected
+        // repo counts here, and it keeps linked-worktree filtering scoped to the
+        // only UI that currently needs it.
+        let Some(repository) =
+            DetectedRepositories::as_ref(ctx).get_local_watched_repo_for_path(repo_path, ctx)
+        else {
+            return true;
+        };
+        // Linked worktrees (and submodules) have an external gitdir; exclude
+        // them so only primary repository checkouts appear in the list.
 
-            repository.as_ref(ctx).external_git_directory().is_none()
-        }
+        repository.as_ref(ctx).external_git_directory().is_none()
     }
 
     fn build_worktree_sidecar_items(
@@ -8120,64 +8116,62 @@ impl Workspace {
     }
 
     pub fn add_tab_for_new_code_file(&mut self, ctx: &mut ViewContext<Self>) {
+        let default_directory = self
+            .active_session_view(ctx)
+            .and_then(|view| view.as_ref(ctx).pwd())
+            .map(PathBuf::from)
+            .or_else(dirs::home_dir);
+        let source = CodeSource::New { default_directory };
+
+        let layout = *EditorSettings::as_ref(ctx).open_file_layout.value();
+
+        // Check if we can add the new file to an existing code pane (when using split pane
+        // layout).
+        if layout == EditorLayout::SplitPane
+            && *EditorSettings::as_ref(ctx)
+                .prefer_tabbed_editor_view
+                .value()
         {
-            let default_directory = self
-                .active_session_view(ctx)
-                .and_then(|view| view.as_ref(ctx).pwd())
-                .map(PathBuf::from)
-                .or_else(dirs::home_dir);
-            let source = CodeSource::New { default_directory };
+            let code_view = self
+                .active_tab_pane_group()
+                .as_ref(ctx)
+                .code_panes(ctx)
+                .find(|(pane_id, _)| {
+                    !self
+                        .active_tab_pane_group()
+                        .as_ref(ctx)
+                        .is_pane_hidden_for_close(*pane_id)
+                });
 
-            let layout = *EditorSettings::as_ref(ctx).open_file_layout.value();
-
-            // Check if we can add the new file to an existing code pane (when using split pane
-            // layout).
-            if layout == EditorLayout::SplitPane
-                && *EditorSettings::as_ref(ctx)
-                    .prefer_tabbed_editor_view
-                    .value()
-            {
-                let code_view = self
-                    .active_tab_pane_group()
-                    .as_ref(ctx)
-                    .code_panes(ctx)
-                    .find(|(pane_id, _)| {
-                        !self
-                            .active_tab_pane_group()
-                            .as_ref(ctx)
-                            .is_pane_hidden_for_close(*pane_id)
-                    });
-
-                if let Some((pane_id, code_view)) = code_view {
-                    code_view.update(ctx, |code_view, ctx| {
-                        code_view.open_or_focus_existing(None, None, ctx);
-                    });
-                    self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-                        pane_group.focus_pane(pane_id, true, ctx);
-                    });
-                    return;
-                }
+            if let Some((pane_id, code_view)) = code_view {
+                code_view.update(ctx, |code_view, ctx| {
+                    code_view.open_or_focus_existing(None, None, ctx);
+                });
+                self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+                    pane_group.focus_pane(pane_id, true, ctx);
+                });
+                return;
             }
+        }
 
-            let pane = CodePane::new(source, None, ctx);
+        let pane = CodePane::new(source, None, ctx);
 
-            match layout {
-                EditorLayout::NewTab => {
-                    // A new code file opened in a new tab joins the active tab's
-                    // group (if any) and stays contiguous instead of splitting it.
-                    let (new_idx, group_id) = self.new_tab_index_and_group(ctx);
-                    self.add_tab_from_existing_pane(Box::new(pane), new_idx, group_id, ctx);
-                }
-                EditorLayout::SplitPane => {
-                    self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
-                        pane_group.add_pane_with_direction(
-                            Direction::Right,
-                            pane,
-                            true, /* focus_new_pane */
-                            ctx,
-                        );
-                    });
-                }
+        match layout {
+            EditorLayout::NewTab => {
+                // A new code file opened in a new tab joins the active tab's
+                // group (if any) and stays contiguous instead of splitting it.
+                let (new_idx, group_id) = self.new_tab_index_and_group(ctx);
+                self.add_tab_from_existing_pane(Box::new(pane), new_idx, group_id, ctx);
+            }
+            EditorLayout::SplitPane => {
+                self.active_tab_pane_group().update(ctx, |pane_group, ctx| {
+                    pane_group.add_pane_with_direction(
+                        Direction::Right,
+                        pane,
+                        true, /* focus_new_pane */
+                        ctx,
+                    );
+                });
             }
         }
     }
@@ -8770,43 +8764,39 @@ impl Workspace {
                 path,
                 line_and_column_arg,
             } => {
-                {
-                    // Build a LocalOrRemotePath for the file. For remote sessions
-                    // the host_id comes from the active working directory.
-                    let location = {
-                        let window_id = ctx.window_id();
-                        ActiveSession::as_ref(ctx)
-                            .working_directory(window_id)
-                            .and_then(|wd| match wd {
-                                LocalOrRemotePath::Remote(remote) => {
-                                    let std_path =
-                                        warp_util::standardized_path::StandardizedPath::try_new(
-                                            path,
-                                        )
+                // Build a LocalOrRemotePath for the file. For remote sessions
+                // the host_id comes from the active working directory.
+                let location = {
+                    let window_id = ctx.window_id();
+                    ActiveSession::as_ref(ctx)
+                        .working_directory(window_id)
+                        .and_then(|wd| match wd {
+                            LocalOrRemotePath::Remote(remote) => {
+                                let std_path =
+                                    warp_util::standardized_path::StandardizedPath::try_new(path)
                                         .ok()?;
-                                    Some(LocalOrRemotePath::Remote(
-                                        warp_util::remote_path::RemotePath::new(
-                                            remote.host_id.clone(),
-                                            std_path,
-                                        ),
-                                    ))
-                                }
-                                LocalOrRemotePath::Local(_) => None,
-                            })
-                            .unwrap_or_else(|| LocalOrRemotePath::Local(PathBuf::from(path)))
-                    };
+                                Some(LocalOrRemotePath::Remote(
+                                    warp_util::remote_path::RemotePath::new(
+                                        remote.host_id.clone(),
+                                        std_path,
+                                    ),
+                                ))
+                            }
+                            LocalOrRemotePath::Local(_) => None,
+                        })
+                        .unwrap_or_else(|| LocalOrRemotePath::Local(PathBuf::from(path)))
+                };
 
-                    let code_source = CodeSource::CommandPalette { location };
+                let code_source = CodeSource::CommandPalette { location };
 
-                    self.open_code(
-                        code_source,
-                        *EditorSettings::as_ref(ctx).open_file_layout.value(),
-                        *line_and_column_arg,
-                        false, // preview
-                        &[],
-                        ctx,
-                    );
-                }
+                self.open_code(
+                    code_source,
+                    *EditorSettings::as_ref(ctx).open_file_layout.value(),
+                    *line_and_column_arg,
+                    false, // preview
+                    &[],
+                    ctx,
+                );
             }
             CommandPaletteEvent::OpenDirectory { path } => {
                 let active_terminal_view = self
@@ -9183,131 +9173,112 @@ impl Workspace {
                             }
                         }
                         TabBarHoverIndex::OverTab(workspace_tab_index) => {
-                            {
-                                let prefers_tabbed_editor_view = *EditorSettings::as_ref(ctx)
-                                    .prefer_tabbed_editor_view
-                                    .value();
+                            let prefers_tabbed_editor_view = *EditorSettings::as_ref(ctx)
+                                .prefer_tabbed_editor_view
+                                .value();
 
-                                let target_pane_group =
-                                    self.get_pane_group_view(workspace_tab_index);
-                                let target_code_view = target_pane_group.and_then(|pane_group| {
-                                    pane_group
-                                        .as_ref(ctx)
-                                        .code_panes(ctx)
-                                        .next()
-                                        .map(|(_, view)| view)
-                                });
+                            let target_pane_group = self.get_pane_group_view(workspace_tab_index);
+                            let target_code_view = target_pane_group.and_then(|pane_group| {
+                                pane_group
+                                    .as_ref(ctx)
+                                    .code_panes(ctx)
+                                    .next()
+                                    .map(|(_, view)| view)
+                            });
 
-                                if let ActionOrigin::EditorTab(editor_tab_index) = origin {
-                                    // If the target pane group has an existing editor view, we want to open the dragged file as a tab in it.
-                                    if let Some(target_code_view) = target_code_view {
-                                        // If an editor tab is dropped onto its originating workspace tab, ensure that tab becomes the active editor within that workspace tab.
-                                        if self.active_tab_index() == workspace_tab_index {
-                                            target_code_view.update(ctx, |view, ctx| {
-                                                view.set_active_tab_index(*editor_tab_index, ctx);
-                                            });
-                                            return;
-                                        }
-
-                                        let moved_file_path =
-                                            pane_group.update(ctx, |pane_group, ctx| {
-                                                pane_group.code_pane_by_id(*pane_id).and_then(
-                                                    |pane| {
-                                                        pane.file_view(ctx).update(
-                                                            ctx,
-                                                            |file_view, ctx| {
-                                                                let moved_file_path = file_view
-                                                                    .tab_at(*editor_tab_index)
-                                                                    .and_then(|t| t.local_path());
-
-                                                                file_view.remove_tab_for_move(
-                                                                    *editor_tab_index,
-                                                                    ctx,
-                                                                );
-
-                                                                moved_file_path
-                                                            },
-                                                        )
-                                                    },
-                                                )
-                                            });
-
-                                        // After removing the file from the origin's editor, we want to open it in the target's editor.
-                                        if let Some(path) = moved_file_path {
-                                            target_code_view.update(ctx, |view, ctx| {
-                                                view.open_or_focus_existing(
-                                                    Some(LocalOrRemotePath::Local(path)),
-                                                    None,
-                                                    ctx,
-                                                );
-                                            });
-                                        }
+                            if let ActionOrigin::EditorTab(editor_tab_index) = origin {
+                                // If the target pane group has an existing editor view, we want to open the dragged file as a tab in it.
+                                if let Some(target_code_view) = target_code_view {
+                                    // If an editor tab is dropped onto its originating workspace tab, ensure that tab becomes the active editor within that workspace tab.
+                                    if self.active_tab_index() == workspace_tab_index {
+                                        target_code_view.update(ctx, |view, ctx| {
+                                            view.set_active_tab_index(*editor_tab_index, ctx);
+                                        });
                                         return;
-                                    } else if let Some(target_pane_group) = target_pane_group {
-                                        // Otherwise, we want to open the dragged file in a new editor pane in the hovered tab's pane group.
+                                    }
+
+                                    let moved_file_path =
                                         pane_group.update(ctx, |pane_group, ctx| {
-                                            pane_group
-                                                .code_pane_by_id(*pane_id)
-                                                .and_then(|pane| {
-                                                    pane.file_view(ctx).update(
+                                            pane_group.code_pane_by_id(*pane_id).and_then(|pane| {
+                                                pane.file_view(ctx).update(ctx, |file_view, ctx| {
+                                                    let moved_file_path = file_view
+                                                        .tab_at(*editor_tab_index)
+                                                        .and_then(|t| t.local_path());
+
+                                                    file_view.remove_tab_for_move(
+                                                        *editor_tab_index,
                                                         ctx,
-                                                        |file_view, ctx| {
-                                                            file_view.remove_tab_for_move(
-                                                                *editor_tab_index,
-                                                                ctx,
-                                                            )
-                                                        },
-                                                    )
+                                                    );
+
+                                                    moved_file_path
                                                 })
-                                                .map(|new_pane| {
-                                                    target_pane_group.update(
+                                            })
+                                        });
+
+                                    // After removing the file from the origin's editor, we want to open it in the target's editor.
+                                    if let Some(path) = moved_file_path {
+                                        target_code_view.update(ctx, |view, ctx| {
+                                            view.open_or_focus_existing(
+                                                Some(LocalOrRemotePath::Local(path)),
+                                                None,
+                                                ctx,
+                                            );
+                                        });
+                                    }
+                                    return;
+                                } else if let Some(target_pane_group) = target_pane_group {
+                                    // Otherwise, we want to open the dragged file in a new editor pane in the hovered tab's pane group.
+                                    pane_group.update(ctx, |pane_group, ctx| {
+                                        pane_group
+                                            .code_pane_by_id(*pane_id)
+                                            .and_then(|pane| {
+                                                pane.file_view(ctx).update(ctx, |file_view, ctx| {
+                                                    file_view
+                                                        .remove_tab_for_move(*editor_tab_index, ctx)
+                                                })
+                                            })
+                                            .map(|new_pane| {
+                                                target_pane_group.update(ctx, |pane_group, ctx| {
+                                                    pane_group.add_pane_with_direction(
+                                                        Direction::Right,
+                                                        new_pane,
+                                                        true, /* focus_new_pane */
                                                         ctx,
-                                                        |pane_group, ctx| {
-                                                            pane_group.add_pane_with_direction(
-                                                                Direction::Right,
-                                                                new_pane,
-                                                                true, /* focus_new_pane */
-                                                                ctx,
-                                                            );
+                                                    );
+                                                });
+                                            })
+                                    });
+                                }
+
+                                self.set_active_tab_index(workspace_tab_index, ctx);
+                                return;
+                            } else if prefers_tabbed_editor_view
+                                && pane_id.is_code_pane()
+                                && target_code_view.is_some()
+                                && self.active_tab_index() != workspace_tab_index
+                            {
+                                // If a CodePane is dropped onto a tab with another CodePane and grouping is enabled, we want to merge them.
+                                if let Some(target_code_view) = target_code_view.as_ref() {
+                                    pane_group.update(ctx, |pane_group, ctx| {
+                                        if let Some(pane) = pane_group.code_pane_by_id(*pane_id) {
+                                            pane.file_view(ctx).update(
+                                                ctx,
+                                                |source_file_view, ctx| {
+                                                    target_code_view.update(
+                                                        ctx,
+                                                        |target_code_view, ctx| {
+                                                            target_code_view
+                                                                .merge_tabs(source_file_view, ctx);
                                                         },
                                                     );
-                                                })
-                                        });
-                                    }
-
-                                    self.set_active_tab_index(workspace_tab_index, ctx);
-                                    return;
-                                } else if prefers_tabbed_editor_view
-                                    && pane_id.is_code_pane()
-                                    && target_code_view.is_some()
-                                    && self.active_tab_index() != workspace_tab_index
-                                {
-                                    // If a CodePane is dropped onto a tab with another CodePane and grouping is enabled, we want to merge them.
-                                    if let Some(target_code_view) = target_code_view.as_ref() {
-                                        pane_group.update(ctx, |pane_group, ctx| {
-                                            if let Some(pane) = pane_group.code_pane_by_id(*pane_id)
-                                            {
-                                                pane.file_view(ctx).update(
-                                                    ctx,
-                                                    |source_file_view, ctx| {
-                                                        target_code_view.update(
-                                                            ctx,
-                                                            |target_code_view, ctx| {
-                                                                target_code_view.merge_tabs(
-                                                                    source_file_view,
-                                                                    ctx,
-                                                                );
-                                                            },
-                                                        );
-                                                    },
-                                                );
-                                                pane_group.remove_pane_for_move(pane_id, ctx);
-                                            }
-                                        });
-                                    }
-                                    self.set_active_tab_index(workspace_tab_index, ctx);
-                                    return;
+                                                },
+                                            );
+                                            pane_group.remove_pane_for_move(pane_id, ctx);
+                                        }
+                                    });
                                 }
+                                self.set_active_tab_index(workspace_tab_index, ctx);
+                                return;
                             }
 
                             #[allow(unreachable_code)]
@@ -9808,11 +9779,9 @@ impl Workspace {
     fn update_active_session(&mut self, ctx: &mut ViewContext<Self>) {
         let pane_group_handle = self.active_tab_pane_group();
         let file_tree_and_global_search_are_enabled = {
-            {
-                Self::should_enable_file_tree_and_global_search_for_pane_group(
-                    self.active_tab_pane_group().as_ref(ctx),
-                )
-            }
+            Self::should_enable_file_tree_and_global_search_for_pane_group(
+                self.active_tab_pane_group().as_ref(ctx),
+            )
         };
 
         // Update working directories for the current pane group
@@ -9866,16 +9835,14 @@ impl Workspace {
                     left_panel.update_coding_panel_enablement(enablement, ctx);
                 });
 
-                {
-                    self.right_panel_view.update(ctx, |right_panel, ctx| {
-                        right_panel.update_session_env(is_remote, ctx);
-                    });
+                self.right_panel_view.update(ctx, |right_panel, ctx| {
+                    right_panel.update_session_env(is_remote, ctx);
+                });
 
-                    // Code review panel setup is handled by the RepositoriesChanged
-                    // event emitted from refresh_working_directories earlier in this
-                    // function. Calling setup_code_review_panel here would race
-                    // with that path and re-create models that were just dropped.
-                }
+                // Code review panel setup is handled by the RepositoriesChanged
+                // event emitted from refresh_working_directories earlier in this
+                // function. Calling setup_code_review_panel here would race
+                // with that path and re-create models that were just dropped.
             }
             _ => {
                 let enablement = CodingPanelEnablementState::from_session_env(
@@ -9887,11 +9854,9 @@ impl Workspace {
                     left_panel.update_coding_panel_enablement(enablement, ctx);
                 });
 
-                {
-                    self.right_panel_view.update(ctx, |right_panel, ctx| {
-                        right_panel.update_session_env(false, ctx);
-                    });
-                }
+                self.right_panel_view.update(ctx, |right_panel, ctx| {
+                    right_panel.update_session_env(false, ctx);
+                });
             }
         }
     }
@@ -13498,27 +13463,25 @@ impl TypedActionView for Workspace {
                 path,
                 toast_object_id,
             } => {
-                {
-                    let settings = EditorSettings::as_ref(ctx);
-                    let target = resolve_file_target_with_editor_choice(
-                        path,
-                        *settings.open_code_panels_file_editor,
-                        *settings.prefer_markdown_viewer,
-                        *settings.open_file_layout,
-                        None,
-                    );
-                    self.open_file_with_target(
-                        path.clone(),
-                        target,
-                        None,
-                        CodeSource::Link {
-                            path: path.clone(),
-                            range_start: None,
-                            range_end: None,
-                        },
-                        ctx,
-                    );
-                }
+                let settings = EditorSettings::as_ref(ctx);
+                let target = resolve_file_target_with_editor_choice(
+                    path,
+                    *settings.open_code_panels_file_editor,
+                    *settings.prefer_markdown_viewer,
+                    *settings.open_file_layout,
+                    None,
+                );
+                self.open_file_with_target(
+                    path.clone(),
+                    target,
+                    None,
+                    CodeSource::Link {
+                        path: path.clone(),
+                        range_start: None,
+                        range_end: None,
+                    },
+                    ctx,
+                );
                 self.dismiss_older_toasts(toast_object_id, ctx);
             }
             TabConfigSidecarMakeDefault {

@@ -881,12 +881,10 @@ impl LocalCodeEditorView {
 
         let Some(lsp_server) = lsp_manager.as_ref(ctx).server_for_path(&path, ctx) else {
             // If the LSP is not registered, try to start it via PersistedWorkspace.
-            {
-                use crate::workspace_metadata::LspTask;
-                PersistedWorkspace::handle(ctx).update(ctx, |workspace, ctx| {
-                    workspace.execute_lsp_task(LspTask::Spawn { file_path: path }, ctx);
-                });
-            }
+            use crate::workspace_metadata::LspTask;
+            PersistedWorkspace::handle(ctx).update(ctx, |workspace, ctx| {
+                workspace.execute_lsp_task(LspTask::Spawn { file_path: path }, ctx);
+            });
             return;
         };
 
@@ -1344,14 +1342,12 @@ impl LocalCodeEditorView {
             });
 
             // Subscribe to PersistedWorkspace events for LSP installation completion
-            {
-                ctx.subscribe_to_model(
-                    &PersistedWorkspace::handle(ctx),
-                    move |me, _, event, ctx| {
-                        Self::handle_persisted_workspace_event(me, event, ctx);
-                    },
-                );
-            }
+            ctx.subscribe_to_model(
+                &PersistedWorkspace::handle(ctx),
+                move |me, _, event, ctx| {
+                    Self::handle_persisted_workspace_event(me, event, ctx);
+                },
+            );
 
             self.footer = Some(footer);
         }

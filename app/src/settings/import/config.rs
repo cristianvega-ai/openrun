@@ -173,50 +173,46 @@ impl Config {
     }
 
     pub(super) fn write_theme(&self) -> Option<ThemeType> {
-        {
-            if !self.theme.should_import {
-                return None;
+        if !self.theme.should_import {
+            return None;
+        }
+
+        let Ok(theme) = self.theme.value() else {
+            return None;
+        };
+
+        let dir = user_config::themes_dir();
+
+        match theme {
+            ThemeType::LightAndDark { light, dark } => {
+                let light_theme_yaml_file_name = format!("{}_light_theme.yaml", self.terminal_name);
+                let light_written = ThemeCreatorBody::write_theme(
+                    light,
+                    dir.clone(),
+                    light_theme_yaml_file_name,
+                    None,
+                    |_| light.clone(),
+                );
+
+                let dark_theme_yaml_file_name = format!("{}_dark_theme.yaml", self.terminal_name);
+                let dark_written = ThemeCreatorBody::write_theme(
+                    dark,
+                    dir,
+                    dark_theme_yaml_file_name,
+                    None,
+                    |_| dark.clone(),
+                );
+
+                match (light_written, dark_written) {
+                    (Some(light), Some(dark)) => Some(ThemeType::LightAndDark { light, dark }),
+                    _ => None,
+                }
             }
-
-            let Ok(theme) = self.theme.value() else {
-                return None;
-            };
-
-            let dir = user_config::themes_dir();
-
-            match theme {
-                ThemeType::LightAndDark { light, dark } => {
-                    let light_theme_yaml_file_name =
-                        format!("{}_light_theme.yaml", self.terminal_name);
-                    let light_written = ThemeCreatorBody::write_theme(
-                        light,
-                        dir.clone(),
-                        light_theme_yaml_file_name,
-                        None,
-                        |_| light.clone(),
-                    );
-
-                    let dark_theme_yaml_file_name =
-                        format!("{}_dark_theme.yaml", self.terminal_name);
-                    let dark_written = ThemeCreatorBody::write_theme(
-                        dark,
-                        dir,
-                        dark_theme_yaml_file_name,
-                        None,
-                        |_| dark.clone(),
-                    );
-
-                    match (light_written, dark_written) {
-                        (Some(light), Some(dark)) => Some(ThemeType::LightAndDark { light, dark }),
-                        _ => None,
-                    }
-                }
-                ThemeType::Single(normal) => {
-                    let theme_yaml_file_name = format!("{}_theme.yaml", self.terminal_name);
-                    ThemeCreatorBody::write_theme(normal, dir, theme_yaml_file_name, None, |_| {
-                        ThemeType::Single(normal.clone())
-                    })
-                }
+            ThemeType::Single(normal) => {
+                let theme_yaml_file_name = format!("{}_theme.yaml", self.terminal_name);
+                ThemeCreatorBody::write_theme(normal, dir, theme_yaml_file_name, None, |_| {
+                    ThemeType::Single(normal.clone())
+                })
             }
         }
     }

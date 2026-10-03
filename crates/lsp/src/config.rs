@@ -209,17 +209,14 @@ pub(crate) fn path_to_lsp_uri(path: &Path) -> Result<Uri> {
     // url::Url::from_file_path handles percent-encoding internally but is not
     // available on WASM. LSP is not supported on WASM either, so the fallback
     // is a simple string concatenation.
-    {
-        let url = url::Url::from_file_path(path).map_err(|()| {
-            anyhow::anyhow!("Failed to convert path to file URI: {}", path.display())
-        })?;
+    let url = url::Url::from_file_path(path)
+        .map_err(|()| anyhow::anyhow!("Failed to convert path to file URI: {}", path.display()))?;
 
-        // The url crate doesn't encode brackets, but LSP requires them to be
-        // percent-encoded (e.g. Next.js [slug].tsx routes).
-        let uri_str = url.as_str().replace('[', "%5B").replace(']', "%5D");
+    // The url crate doesn't encode brackets, but LSP requires them to be
+    // percent-encoded (e.g. Next.js [slug].tsx routes).
+    let uri_str = url.as_str().replace('[', "%5B").replace(']', "%5D");
 
-        uri_str.parse::<Uri>().map_err(anyhow::Error::from)
-    }
+    uri_str.parse::<Uri>().map_err(anyhow::Error::from)
 }
 
 pub(crate) fn lsp_uri_to_path(uri: &Uri) -> Result<PathBuf> {

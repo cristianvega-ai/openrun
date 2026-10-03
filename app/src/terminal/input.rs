@@ -2362,29 +2362,27 @@ impl Input {
             return Err("Tried to open file in code editor for a remote session".to_string());
         }
 
-        {
-            // Get the current working directory from the active terminal session
-            let current_dir = self
-                .active_block_metadata
-                .as_ref()
-                .and_then(|metadata| metadata.current_working_directory())
-                .map(std::path::PathBuf::from)
-                .ok_or("Failed to get current working directory".to_string())?;
-            let file_path = current_dir.join(_file_name);
-            // Create a CodeSource for the file
-            let code_source = CodeSource::Link {
-                path: file_path,
-                range_start: None,
-                range_end: None,
-            };
-            // Emit an event to create a new code pane
-            ctx.emit(Event::OpenCodeInWarp {
-                source: code_source,
-                layout: *external_editor::EditorSettings::as_ref(ctx)
-                    .open_file_layout
-                    .value(),
-            });
-        }
+        // Get the current working directory from the active terminal session
+        let current_dir = self
+            .active_block_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.current_working_directory())
+            .map(std::path::PathBuf::from)
+            .ok_or("Failed to get current working directory".to_string())?;
+        let file_path = current_dir.join(_file_name);
+        // Create a CodeSource for the file
+        let code_source = CodeSource::Link {
+            path: file_path,
+            range_start: None,
+            range_end: None,
+        };
+        // Emit an event to create a new code pane
+        ctx.emit(Event::OpenCodeInWarp {
+            source: code_source,
+            layout: *external_editor::EditorSettings::as_ref(ctx)
+                .open_file_layout
+                .value(),
+        });
 
         Ok(())
     }
@@ -5094,42 +5092,40 @@ impl Input {
                         let file_path = if is_ai_mode {
                             file_path.to_string()
                         } else {
-                            {
-                                // Try to get current working directory and process the file path
-                                let processed_path = self
-                                    .active_block_metadata
-                                    .as_ref()
-                                    .and_then(BlockMetadata::current_working_directory)
-                                    .and_then(|pwd| {
-                                        // Find git repo and construct absolute path
-                                        use repo_metadata::repositories::DetectedRepositories;
-                                        use warp_util::local_or_remote_path::LocalOrRemotePath;
-                                        let git_repo_path = DetectedRepositories::as_ref(ctx)
-                                            .get_root_for_path(&LocalOrRemotePath::Local(
-                                                Path::new(pwd).to_path_buf(),
-                                            ))
-                                            .and_then(|r| PathBuf::try_from(r).ok())?;
-                                        let absolute_path = git_repo_path.join(file_path);
+                            // Try to get current working directory and process the file path
+                            let processed_path = self
+                                .active_block_metadata
+                                .as_ref()
+                                .and_then(BlockMetadata::current_working_directory)
+                                .and_then(|pwd| {
+                                    // Find git repo and construct absolute path
+                                    use repo_metadata::repositories::DetectedRepositories;
+                                    use warp_util::local_or_remote_path::LocalOrRemotePath;
+                                    let git_repo_path = DetectedRepositories::as_ref(ctx)
+                                        .get_root_for_path(&LocalOrRemotePath::Local(
+                                            Path::new(pwd).to_path_buf(),
+                                        ))
+                                        .and_then(|r| PathBuf::try_from(r).ok())?;
+                                    let absolute_path = git_repo_path.join(file_path);
 
-                                        // Try to get relative path if it's shorter
-                                        let relative_path = warp_util::path::to_relative_path(
-                                            &absolute_path,
-                                            Path::new(pwd),
-                                        );
+                                    // Try to get relative path if it's shorter
+                                    let relative_path = warp_util::path::to_relative_path(
+                                        &absolute_path,
+                                        Path::new(pwd),
+                                    );
 
-                                        match relative_path {
+                                    match relative_path {
+                                        Some(rel)
+                                            if rel.len()
+                                                < absolute_path.to_string_lossy().len() =>
+                                        {
                                             Some(rel)
-                                                if rel.len()
-                                                    < absolute_path.to_string_lossy().len() =>
-                                            {
-                                                Some(rel)
-                                            }
-                                            _ => Some(absolute_path.to_string_lossy().to_string()),
                                         }
-                                    });
+                                        _ => Some(absolute_path.to_string_lossy().to_string()),
+                                    }
+                                });
 
-                                processed_path.unwrap_or_else(|| file_path.to_string())
-                            }
+                            processed_path.unwrap_or_else(|| file_path.to_string())
                         };
                         self.replace_at_symbol_with_text(&file_path, ctx);
                     }
@@ -5696,28 +5692,26 @@ impl Input {
 
     /// Whether the @ menu cannot be opened in the current session or input mode.
     fn is_at_menu_disabled(&self, app: &AppContext) -> bool {
-        {
-            // The @ menu requires repo metadata, which is only available for local sessions.
-            let (is_ssh_session, is_subshell) = self
-                .active_block_metadata
-                .as_ref()
-                .and_then(|metadata| metadata.session_id())
-                .and_then(|session_id| self.sessions.as_ref(app).get(session_id))
-                .map(|session| {
-                    let is_ssh_session = session.is_ssh_wrapper_session()
-                        || matches!(session.session_type(), SessionType::WarpifiedRemote);
-                    (is_ssh_session, session.subshell_info().is_some())
-                })
-                .unwrap_or((false, false));
+        // The @ menu requires repo metadata, which is only available for local sessions.
+        let (is_ssh_session, is_subshell) = self
+            .active_block_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.session_id())
+            .and_then(|session_id| self.sessions.as_ref(app).get(session_id))
+            .map(|session| {
+                let is_ssh_session = session.is_ssh_wrapper_session()
+                    || matches!(session.session_type(), SessionType::WarpifiedRemote);
+                (is_ssh_session, session.subshell_info().is_some())
+            })
+            .unwrap_or((false, false));
 
-            let is_disabled_in_shell_mode = self.input_mode_model.as_ref(app).input_type()
-                == InputType::Shell
-                && !*InputSettings::as_ref(app)
-                    .at_context_menu_in_terminal_mode
-                    .value();
+        let is_disabled_in_shell_mode = self.input_mode_model.as_ref(app).input_type()
+            == InputType::Shell
+            && !*InputSettings::as_ref(app)
+                .at_context_menu_in_terminal_mode
+                .value();
 
-            is_disabled_in_shell_mode || is_ssh_session || is_subshell
-        }
+        is_disabled_in_shell_mode || is_ssh_session || is_subshell
     }
 
     fn should_expand_aliases(&self, ctx: &mut ViewContext<Self>) -> bool {

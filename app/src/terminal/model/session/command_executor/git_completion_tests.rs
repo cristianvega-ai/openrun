@@ -248,10 +248,8 @@ impl Fixture {
                 format!("#!/bin/sh\necho x >> '{}/{name}'\n{body}", slash(&markers)),
             )
             .unwrap();
-            {
-                use std::os::unix::fs::PermissionsExt as _;
-                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-            }
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
             path
         };
         let fsmonitor = program("fsmonitor", "printf '\\0'\n");

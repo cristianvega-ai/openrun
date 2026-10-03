@@ -39,18 +39,17 @@ impl AppearanceManager {
             me.refresh_theme_state(ctx);
         });
 
-        {
-            ctx.subscribe_to_model(&AppIconSettings::handle(ctx), move |me, _, event, ctx| {
-                match event {
-                    AppIconSettingsChangedEvent::AppIconState { .. } => {
-                        me.set_app_icon(ctx);
-                    }
-                    AppIconSettingsChangedEvent::ShowDockIconState { .. } => {
-                        me.apply_dock_icon_visibility(ctx);
-                    }
+        ctx.subscribe_to_model(
+            &AppIconSettings::handle(ctx),
+            move |me, _, event, ctx| match event {
+                AppIconSettingsChangedEvent::AppIconState { .. } => {
+                    me.set_app_icon(ctx);
                 }
-            });
-        }
+                AppIconSettingsChangedEvent::ShowDockIconState { .. } => {
+                    me.apply_dock_icon_visibility(ctx);
+                }
+            },
+        );
 
         ctx.subscribe_to_model(
             &FontSettings::handle(ctx),

@@ -438,98 +438,91 @@ impl CodeFooterView {
         );
 
         // Kick off async detection of available servers for this workspace
-        {
-            let persisted = PersistedWorkspace::handle(ctx);
-            persisted.update(ctx, |model, ctx| {
-                model.detect_available_servers_for_workspaces(vec![root_path.clone()], false, ctx);
-            });
+        let persisted = PersistedWorkspace::handle(ctx);
+        persisted.update(ctx, |model, ctx| {
+            model.detect_available_servers_for_workspaces(vec![root_path.clone()], false, ctx);
+        });
 
-            // Subscribe to AvailableServersDetected to populate per-server statuses
-            let workspace_root_for_detect = root_path.clone();
-            ctx.subscribe_to_model(&persisted, move |me, _model_handle, event, ctx| {
-                match event {
-                    PersistedWorkspaceEvent::AvailableServersDetected {
-                        workspace_path,
-                        servers,
-                    } if *workspace_path == workspace_root_for_detect => {
-                        let FooterMode::Workspace {
-                            root_path,
-                            lsp_repo_statuses,
-                            ..
-                        } = &mut me.mode
-                        else {
-                            return;
-                        };
+        // Subscribe to AvailableServersDetected to populate per-server statuses
+        let workspace_root_for_detect = root_path.clone();
+        ctx.subscribe_to_model(&persisted, move |me, _model_handle, event, ctx| {
+            match event {
+                PersistedWorkspaceEvent::AvailableServersDetected {
+                    workspace_path,
+                    servers,
+                } if *workspace_path == workspace_root_for_detect => {
+                    let FooterMode::Workspace {
+                        root_path,
+                        lsp_repo_statuses,
+                        ..
+                    } = &mut me.mode
+                    else {
+                        return;
+                    };
 
-                        // For each suggested server, detect its installation status
-                        let root = root_path.clone();
-                        for &server_type in servers {
-                            let proposed =
-                                PersistedWorkspace::handle(ctx).update(ctx, |model, ctx| {
-                                    model.detect_lsp_workspace_status(
-                                        root.clone(),
-                                        server_type,
-                                        ctx,
-                                    )
-                                });
-                            lsp_repo_statuses.update_status(
-                                server_type,
-                                proposed,
-                                &me.lsp_servers,
-                                ctx,
-                            );
-                        }
+                    // For each suggested server, detect its installation status
+                    let root = root_path.clone();
+                    for &server_type in servers {
+                        let proposed = PersistedWorkspace::handle(ctx).update(ctx, |model, ctx| {
+                            model.detect_lsp_workspace_status(root.clone(), server_type, ctx)
+                        });
+                        lsp_repo_statuses.update_status(
+                            server_type,
+                            proposed,
+                            &me.lsp_servers,
+                            ctx,
+                        );
+                    }
 
-                        // Create enable button for all CTA-worthy servers
-                        let downloads_allowed =
-                            *CodeSettings::as_ref(ctx).allow_language_server_downloads;
-                        let cta_statuses = me.mode.cta_lsp_repo_statuses(downloads_allowed);
-                        if let Some(label) =
-                            Self::button_label_for_cta_statuses(&cta_statuses, downloads_allowed)
-                        {
-                            me.enable_lsp_button = Some(ctx.add_typed_action_view(|_ctx| {
-                                ActionButton::new(label, NakedTheme)
-                                    .with_size(ButtonSize::Small)
-                                    .on_click(|ctx| {
-                                        ctx.dispatch_typed_action(CodeFooterViewAction::EnableLSP);
-                                    })
-                            }));
-                        }
+                    // Create enable button for all CTA-worthy servers
+                    let downloads_allowed =
+                        *CodeSettings::as_ref(ctx).allow_language_server_downloads;
+                    let cta_statuses = me.mode.cta_lsp_repo_statuses(downloads_allowed);
+                    if let Some(label) =
+                        Self::button_label_for_cta_statuses(&cta_statuses, downloads_allowed)
+                    {
+                        me.enable_lsp_button = Some(ctx.add_typed_action_view(|_ctx| {
+                            ActionButton::new(label, NakedTheme)
+                                .with_size(ButtonSize::Small)
+                                .on_click(|ctx| {
+                                    ctx.dispatch_typed_action(CodeFooterViewAction::EnableLSP);
+                                })
+                        }));
+                    }
 
+                    ctx.notify();
+                }
+                PersistedWorkspaceEvent::InstallStatusUpdate {
+                    server_type,
+                    status,
+                } => {
+                    let FooterMode::Workspace {
+                        lsp_repo_statuses, ..
+                    } = &mut me.mode
+                    else {
+                        return;
+                    };
+
+                    // Only update if we're tracking this server type
+                    if lsp_repo_statuses.contains_key(server_type) {
+                        let proposed =
+                            LspRepoStatus::from_installation_status(status, *server_type);
+                        lsp_repo_statuses.update_status(
+                            *server_type,
+                            proposed,
+                            &me.lsp_servers,
+                            ctx,
+                        );
+                        me.update_enable_button_label(ctx);
                         ctx.notify();
                     }
-                    PersistedWorkspaceEvent::InstallStatusUpdate {
-                        server_type,
-                        status,
-                    } => {
-                        let FooterMode::Workspace {
-                            lsp_repo_statuses, ..
-                        } = &mut me.mode
-                        else {
-                            return;
-                        };
-
-                        // Only update if we're tracking this server type
-                        if lsp_repo_statuses.contains_key(server_type) {
-                            let proposed =
-                                LspRepoStatus::from_installation_status(status, *server_type);
-                            lsp_repo_statuses.update_status(
-                                *server_type,
-                                proposed,
-                                &me.lsp_servers,
-                                ctx,
-                            );
-                            me.update_enable_button_label(ctx);
-                            ctx.notify();
-                        }
-                    }
-                    PersistedWorkspaceEvent::AvailableServersDetected { .. }
-                    | PersistedWorkspaceEvent::InstallationSucceeded
-                    | PersistedWorkspaceEvent::InstallationFailed
-                    | PersistedWorkspaceEvent::WorkspaceAdded { .. } => {}
                 }
-            });
-        }
+                PersistedWorkspaceEvent::AvailableServersDetected { .. }
+                | PersistedWorkspaceEvent::InstallationSucceeded
+                | PersistedWorkspaceEvent::InstallationFailed
+                | PersistedWorkspaceEvent::WorkspaceAdded { .. } => {}
+            }
+        });
 
         let mut view = Self {
             mode: FooterMode::Workspace {

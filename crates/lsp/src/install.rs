@@ -284,16 +284,14 @@ pub async fn install_from_github(
     };
 
     // Make the binary executable on Unix systems
-    {
-        let mut perms = async_fs::metadata(&binary_path)
-            .await
-            .with_context(|| format!("Failed to get metadata for {:?}", binary_path))?
-            .permissions();
-        perms.set_mode(0o755);
-        async_fs::set_permissions(&binary_path, perms)
-            .await
-            .with_context(|| format!("Failed to set permissions for {:?}", binary_path))?;
-    }
+    let mut perms = async_fs::metadata(&binary_path)
+        .await
+        .with_context(|| format!("Failed to get metadata for {:?}", binary_path))?
+        .permissions();
+    perms.set_mode(0o755);
+    async_fs::set_permissions(&binary_path, perms)
+        .await
+        .with_context(|| format!("Failed to set permissions for {:?}", binary_path))?;
 
     log::info!("Successfully installed {server_name} to {:?}", binary_path);
     Ok(binary_path)

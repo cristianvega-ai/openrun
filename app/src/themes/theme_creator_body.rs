@@ -181,26 +181,24 @@ impl ThemeCreatorBody {
 
             theme_options.set_path(dir.join(format!("{theme_name}.{image_extension}")));
             let mut errored = true;
-            {
-                ThemeCreatorBody::write_theme(
-                    &theme_options.theme(),
-                    dir,
-                    theme_yaml_file_name,
-                    Some((
-                        original_theme_image_path_clone,
-                        theme_name.clone(),
-                        image_extension,
-                    )),
-                    |path| {
-                        ctx.emit(ThemeCreatorBodyEvent::SetCustomTheme {
-                            theme: ThemeKind::Custom(CustomTheme::new(theme_name, path)),
-                        });
-                        errored = false;
-                        self.close(ctx);
-                        ctx.notify();
-                    },
-                );
-            }
+            ThemeCreatorBody::write_theme(
+                &theme_options.theme(),
+                dir,
+                theme_yaml_file_name,
+                Some((
+                    original_theme_image_path_clone,
+                    theme_name.clone(),
+                    image_extension,
+                )),
+                |path| {
+                    ctx.emit(ThemeCreatorBodyEvent::SetCustomTheme {
+                        theme: ThemeKind::Custom(CustomTheme::new(theme_name, path)),
+                    });
+                    errored = false;
+                    self.close(ctx);
+                    ctx.notify();
+                },
+            );
             if errored {
                 self.send_error_toast("Something went wrong".to_string(), ctx);
             }

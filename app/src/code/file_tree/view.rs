@@ -727,16 +727,14 @@ impl FileTreeView {
 
         // Unregister any lazy-loaded paths that are no longer displayed
         // (includes absorbed descendants that were standalone-registered).
-        {
-            let removed_lazy_loaded_paths: Vec<StandardizedPath> = self
-                .registered_lazy_loaded_paths
-                .iter()
-                .filter(|p| !new_displayed.contains(p))
-                .cloned()
-                .collect();
-            for path in removed_lazy_loaded_paths {
-                self.remove_lazy_loaded_entry(&path, ctx);
-            }
+        let removed_lazy_loaded_paths: Vec<StandardizedPath> = self
+            .registered_lazy_loaded_paths
+            .iter()
+            .filter(|p| !new_displayed.contains(p))
+            .cloned()
+            .collect();
+        for path in removed_lazy_loaded_paths {
+            self.remove_lazy_loaded_entry(&path, ctx);
         }
 
         // Retain roots that are in `new_displayed`.

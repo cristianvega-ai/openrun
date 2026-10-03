@@ -138,22 +138,20 @@ impl TerminalView {
             let mut show_in_file_explorer = None;
             let modifier = directly_open_link_keybinding_string();
             let mut detail = Some(format!("[{modifier} Click]"));
+            if let GridHighlightedLink::File(file_link) = link
+                && let Some(path) = file_link.get_inner().absolute_path()
             {
-                if let GridHighlightedLink::File(file_link) = link
-                    && let Some(path) = file_link.get_inner().absolute_path()
-                {
-                    open_in_warp = open_in_warp_tooltip(
-                        path.clone(),
-                        file_link.get_inner().line_and_column_num,
-                        &mut detail,
-                        self.mouse_states.open_in_warp_tooltip.clone(),
-                        app,
-                    );
-                    show_in_file_explorer = Some(show_in_file_explorer_tooltip(
-                        path,
-                        self.mouse_states.show_in_file_explorer_tooltip.clone(),
-                    ));
-                }
+                open_in_warp = open_in_warp_tooltip(
+                    path.clone(),
+                    file_link.get_inner().line_and_column_num,
+                    &mut detail,
+                    self.mouse_states.open_in_warp_tooltip.clone(),
+                    app,
+                );
+                show_in_file_explorer = Some(show_in_file_explorer_tooltip(
+                    path,
+                    self.mouse_states.show_in_file_explorer_tooltip.clone(),
+                ));
             }
 
             links.push(GridTooltipLink {

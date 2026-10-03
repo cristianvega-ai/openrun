@@ -1203,11 +1203,9 @@ impl LocalDiffStateModel {
     fn interactive_path_future(
         ctx: &mut ModelContext<Self>,
     ) -> futures::future::BoxFuture<'static, Option<String>> {
-        {
-            LocalShellState::handle(ctx).update(ctx, |shell_state, ctx| {
-                shell_state.get_interactive_path_env_var(ctx)
-            })
-        }
+        LocalShellState::handle(ctx).update(ctx, |shell_state, ctx| {
+            shell_state.get_interactive_path_env_var(ctx)
+        })
     }
 
     fn handle_repository_updated(

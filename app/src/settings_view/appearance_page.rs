@@ -2481,32 +2481,28 @@ impl SettingsWidget for CustomAppIconWidget {
             None,
         );
 
-        {
-            use crate::appearance::AppearanceManager;
+        use crate::appearance::AppearanceManager;
 
-            let app_icon_at_startup = AppearanceManager::as_ref(app).app_icon_at_startup();
-            let current_icon = *AppIconSettings::as_ref(app).app_icon;
-            if current_icon == AppIcon::Default && app_icon_at_startup != AppIcon::Default {
-                let theme = appearance.theme();
-                let column = Flex::column().with_child(dropdown).with_child(
-                    appearance
-                        .ui_builder()
-                        .wrappable_text(
-                            "You may need to restart Warp for MacOS to apply the preferred icon style.",
-                            true,
-                        )
-                        .with_style(UiComponentStyles {
-                            font_color: Some(
-                                theme.sub_text_color(theme.background()).into_solid(),
-                            ),
-                            margin: Some(Coords::default().bottom(8.)),
-                            ..Default::default()
-                        })
-                        .build()
-                        .finish(),
-                );
-                return column.with_child(show_dock_icon_toggle).finish();
-            }
+        let app_icon_at_startup = AppearanceManager::as_ref(app).app_icon_at_startup();
+        let current_icon = *AppIconSettings::as_ref(app).app_icon;
+        if current_icon == AppIcon::Default && app_icon_at_startup != AppIcon::Default {
+            let theme = appearance.theme();
+            let column = Flex::column().with_child(dropdown).with_child(
+                appearance
+                    .ui_builder()
+                    .wrappable_text(
+                        "You may need to restart Warp for MacOS to apply the preferred icon style.",
+                        true,
+                    )
+                    .with_style(UiComponentStyles {
+                        font_color: Some(theme.sub_text_color(theme.background()).into_solid()),
+                        margin: Some(Coords::default().bottom(8.)),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            );
+            return column.with_child(show_dock_icon_toggle).finish();
         }
 
         Flex::column()

@@ -524,12 +524,10 @@ impl LeftPanelView {
         enablement: CodingPanelEnablementState,
         ctx: &mut ViewContext<Self>,
     ) {
-        {
-            if let Some(file_tree_view) = self.active_file_tree_view(ctx) {
-                file_tree_view.update(ctx, |view, ctx| {
-                    view.set_enablement_state(enablement, ctx);
-                });
-            }
+        if let Some(file_tree_view) = self.active_file_tree_view(ctx) {
+            file_tree_view.update(ctx, |view, ctx| {
+                view.set_enablement_state(enablement, ctx);
+            });
         }
 
         if let Some(global_search_view) = self.active_global_search_view(ctx) {

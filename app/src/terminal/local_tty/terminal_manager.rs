@@ -476,18 +476,16 @@ fn on_shell_determined<S: TerminalSurface>(
     });
 
     // Initialize the terminal attributes poller.
-    {
-        let terminal_attributes_poller = ctx.add_model(|_| TerminalAttributesPoller::new(fd));
-        wire_up_terminal_attribute_poller_with_surface(
-            &terminal_attributes_poller,
-            &manager.view,
-            &model_events,
-            model.clone(),
-            ctx,
-        );
+    let terminal_attributes_poller = ctx.add_model(|_| TerminalAttributesPoller::new(fd));
+    wire_up_terminal_attribute_poller_with_surface(
+        &terminal_attributes_poller,
+        &manager.view,
+        &model_events,
+        model.clone(),
+        ctx,
+    );
 
-        manager.terminal_attributes_poller = Some(terminal_attributes_poller);
-    }
+    manager.terminal_attributes_poller = Some(terminal_attributes_poller);
 }
 
 impl<S> TerminalManager<S> {

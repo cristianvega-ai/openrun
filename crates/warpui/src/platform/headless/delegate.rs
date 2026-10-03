@@ -64,10 +64,8 @@ impl platform::Delegate for AppDelegate {
     }
 
     fn open_url(&self, url: &str) -> bool {
-        {
-            // Use macOS platform implementation
-            crate::platform::mac::Window::open_url(url)
-        }
+        // Use macOS platform implementation
+        crate::platform::mac::Window::open_url(url)
     }
 
     fn open_file_path(&self, _path: &std::path::Path) {

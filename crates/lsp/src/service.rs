@@ -181,10 +181,8 @@ impl LspService {
     }
 
     pub fn log_to_server_log(&self, level: LspServerLogLevel, message: impl Into<String>) {
-        {
-            if let Some(logger) = &self.logger {
-                logger.log(format!("[{level}] {}", message.into()));
-            }
+        if let Some(logger) = &self.logger {
+            logger.log(format!("[{level}] {}", message.into()));
         }
     }
 

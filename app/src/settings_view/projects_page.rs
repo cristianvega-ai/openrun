@@ -258,20 +258,18 @@ impl TypedActionView for ProjectsPageView {
                 workspace_path,
                 server_type,
             } => {
-                {
-                    let workspace_path = workspace_path.clone();
-                    let server_type = *server_type;
-                    PersistedWorkspace::handle(ctx).update(ctx, |workspace, _ctx| {
-                        workspace.execute_lsp_task(
-                            crate::workspace_metadata::LspTask::Install {
-                                file_path: workspace_path.clone(),
-                                repo_root: workspace_path,
-                                server_type,
-                            },
-                            _ctx,
-                        );
-                    });
-                }
+                let workspace_path = workspace_path.clone();
+                let server_type = *server_type;
+                PersistedWorkspace::handle(ctx).update(ctx, |workspace, _ctx| {
+                    workspace.execute_lsp_task(
+                        crate::workspace_metadata::LspTask::Install {
+                            file_path: workspace_path.clone(),
+                            repo_root: workspace_path,
+                            server_type,
+                        },
+                        _ctx,
+                    );
+                });
                 ctx.notify();
             }
             ProjectsPageAction::EnableSuggestedLspServer {
@@ -902,33 +900,31 @@ impl ProjectsWidget {
         }
 
         // Show "View logs" when the server has been started (Available, Starting/Busy, or Failed)
-        {
-            let has_logs = server_model.is_some_and(|model| {
-                matches!(
-                    model.as_ref(app).state(),
-                    LspState::Available { .. } | LspState::Starting | LspState::Failed { .. }
-                )
-            });
-            if has_logs {
-                let log_path = crate::code::lsp_logs::log_file_path(server_type, workspace_path);
-                let view_logs_button = ui_builder
-                    .button(ButtonVariant::Accent, mouse_states.view_logs)
-                    .with_style(UiComponentStyles {
-                        font_size: Some(12.),
-                        ..Default::default()
-                    })
-                    .with_text_label("View logs".to_owned())
-                    .build()
-                    .with_cursor(Cursor::PointingHand)
-                    .on_click(move |ctx, _, _| {
-                        ctx.dispatch_typed_action(ProjectsPageAction::OpenLspLogs {
-                            log_path: log_path.clone(),
-                        });
-                    })
-                    .finish();
+        let has_logs = server_model.is_some_and(|model| {
+            matches!(
+                model.as_ref(app).state(),
+                LspState::Available { .. } | LspState::Starting | LspState::Failed { .. }
+            )
+        });
+        if has_logs {
+            let log_path = crate::code::lsp_logs::log_file_path(server_type, workspace_path);
+            let view_logs_button = ui_builder
+                .button(ButtonVariant::Accent, mouse_states.view_logs)
+                .with_style(UiComponentStyles {
+                    font_size: Some(12.),
+                    ..Default::default()
+                })
+                .with_text_label("View logs".to_owned())
+                .build()
+                .with_cursor(Cursor::PointingHand)
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(ProjectsPageAction::OpenLspLogs {
+                        log_path: log_path.clone(),
+                    });
+                })
+                .finish();
 
-                right_content.add_child(view_logs_button);
-            }
+            right_content.add_child(view_logs_button);
         }
 
         // Toggle switch (always shown)

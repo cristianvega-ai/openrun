@@ -2935,15 +2935,13 @@ fn test_home_end_keybinding_resolution() {
                     })
             };
 
-            {
-                assert_eq!(resolve("home").as_deref(), Some("MoveToBufferStart"));
-                assert_eq!(resolve("end").as_deref(), Some("MoveToBufferEnd"));
-                assert_eq!(
-                    resolve("cmd-left").as_deref(),
-                    Some("MoveToVisualLineStart")
-                );
-                assert_eq!(resolve("cmd-right").as_deref(), Some("MoveToVisualLineEnd"));
-            }
+            assert_eq!(resolve("home").as_deref(), Some("MoveToBufferStart"));
+            assert_eq!(resolve("end").as_deref(), Some("MoveToBufferEnd"));
+            assert_eq!(
+                resolve("cmd-left").as_deref(),
+                Some("MoveToVisualLineStart")
+            );
+            assert_eq!(resolve("cmd-right").as_deref(), Some("MoveToVisualLineEnd"));
         });
     });
 }

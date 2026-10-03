@@ -47,104 +47,101 @@ impl DetectedRepositories {
         source: RepoDetectionSource,
         ctx: &mut ModelContext<Self>,
     ) -> impl Future<Output = Option<PathBuf>> + use<> {
+        use futures::channel::oneshot;
+
+        let Ok(path) = StandardizedPath::from_local_canonicalized(Path::new(active_directory))
+        else {
+            return Either::Right(ready(None));
+        };
+
+        let local_key = path.to_local_path().map(LocalOrRemotePath::Local);
+        if let Some(ref key) = local_key
+            && self.repository_roots.contains(key)
         {
-            use futures::channel::oneshot;
-
-            let Ok(path) = StandardizedPath::from_local_canonicalized(Path::new(active_directory))
-            else {
-                return Either::Right(ready(None));
-            };
-
-            let local_key = path.to_local_path().map(LocalOrRemotePath::Local);
-            if let Some(ref key) = local_key
-                && self.repository_roots.contains(key)
-            {
-                if let Some(local_path) = path.to_local_path() {
-                    if let Some(repository) =
-                        DirectoryWatcher::as_ref(ctx).get_watched_directory_for_path(&local_path)
-                    {
-                        ctx.emit(DetectedRepositoriesEvent::DetectedGitRepo {
-                            repository: repository.clone(),
-                            source,
-                        });
-                        // Watcher is alive — use the cached result.
-                        return Either::Right(ready(path.to_local_path()));
-                    }
-                    // Watcher was cleaned up (e.g. diff state model dropped
-                    // and recreated). Fall through to the full scan which
-                    // will re-register the watcher.
-                } else {
+            if let Some(local_path) = path.to_local_path() {
+                if let Some(repository) =
+                    DirectoryWatcher::as_ref(ctx).get_watched_directory_for_path(&local_path)
+                {
+                    ctx.emit(DetectedRepositoriesEvent::DetectedGitRepo {
+                        repository: repository.clone(),
+                        source,
+                    });
+                    // Watcher is alive — use the cached result.
                     return Either::Right(ready(path.to_local_path()));
                 }
+                // Watcher was cleaned up (e.g. diff state model dropped
+                // and recreated). Fall through to the full scan which
+                // will re-register the watcher.
+            } else {
+                return Either::Right(ready(path.to_local_path()));
             }
+        }
 
-            let local_path_for_search = path.to_local_path();
-            let (tx, rx) = oneshot::channel::<Option<PathBuf>>();
-            let spawned_handle = ctx.spawn(
-                async move {
-                    if let Some(local_path) = local_path_for_search {
-                        find_git_repo(&local_path).await
-                    } else {
-                        None
-                    }
-                },
-                move |me, res, ctx| {
-                    if let Some(info) = res {
-                        if let Some(repo_root_path) = info
-                            .working_tree_path
-                            .as_ref()
-                            .and_then(|path| StandardizedPath::from_local_canonicalized(path).ok())
+        let local_path_for_search = path.to_local_path();
+        let (tx, rx) = oneshot::channel::<Option<PathBuf>>();
+        let spawned_handle = ctx.spawn(
+            async move {
+                if let Some(local_path) = local_path_for_search {
+                    find_git_repo(&local_path).await
+                } else {
+                    None
+                }
+            },
+            move |me, res, ctx| {
+                if let Some(info) = res {
+                    if let Some(repo_root_path) = info
+                        .working_tree_path
+                        .as_ref()
+                        .and_then(|path| StandardizedPath::from_local_canonicalized(path).ok())
+                    {
+                        if let Some(local_path) = repo_root_path.to_local_path() {
+                            me.repository_roots
+                                .insert(LocalOrRemotePath::Local(local_path));
+                        }
+
+                        let external_git_dir =
+                            StandardizedPath::from_local_canonicalized(info.git_dir_path.as_path())
+                                .ok()
+                                // Only treat as external if it's outside the working tree.
+                                .filter(|p| !p.starts_with(&repo_root_path));
+
+                        if let Some(repository) =
+                            DirectoryWatcher::handle(ctx).update(ctx, |watcher, ctx| {
+                                watcher
+                                    .add_directory_with_git_dir(
+                                        repo_root_path,
+                                        external_git_dir,
+                                        ctx,
+                                    )
+                                    .ok()
+                            })
                         {
-                            if let Some(local_path) = repo_root_path.to_local_path() {
-                                me.repository_roots
-                                    .insert(LocalOrRemotePath::Local(local_path));
-                            }
-
-                            let external_git_dir = StandardizedPath::from_local_canonicalized(
-                                info.git_dir_path.as_path(),
-                            )
-                            .ok()
-                            // Only treat as external if it's outside the working tree.
-                            .filter(|p| !p.starts_with(&repo_root_path));
-
-                            if let Some(repository) =
-                                DirectoryWatcher::handle(ctx).update(ctx, |watcher, ctx| {
-                                    watcher
-                                        .add_directory_with_git_dir(
-                                            repo_root_path,
-                                            external_git_dir,
-                                            ctx,
-                                        )
-                                        .ok()
-                                })
-                            {
-                                let repo_path = repository.as_ref(ctx).root_dir().to_local_path();
-                                ctx.emit(DetectedRepositoriesEvent::DetectedGitRepo {
-                                    repository,
-                                    source,
-                                });
-                                let _ = tx.send(repo_path);
-                            } else {
-                                let _ = tx.send(None);
-                            }
+                            let repo_path = repository.as_ref(ctx).root_dir().to_local_path();
+                            ctx.emit(DetectedRepositoriesEvent::DetectedGitRepo {
+                                repository,
+                                source,
+                            });
+                            let _ = tx.send(repo_path);
                         } else {
-                            // No working tree path; do not treat git_dir_path as a repository path.
                             let _ = tx.send(None);
                         }
                     } else {
+                        // No working tree path; do not treat git_dir_path as a repository path.
                         let _ = tx.send(None);
                     }
-                },
-            );
+                } else {
+                    let _ = tx.send(None);
+                }
+            },
+        );
 
-            #[cfg(not(test))]
-            let _ = spawned_handle;
+        #[cfg(not(test))]
+        let _ = spawned_handle;
 
-            #[cfg(test)]
-            self.spawned_futures.push(spawned_handle.future_id());
+        #[cfg(test)]
+        self.spawned_futures.push(spawned_handle.future_id());
 
-            Either::Left(async move { rx.await.unwrap_or(None) })
-        }
+        Either::Left(async move { rx.await.unwrap_or(None) })
     }
 
     #[cfg(test)]

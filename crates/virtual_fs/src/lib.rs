@@ -122,12 +122,10 @@ impl VirtualFS {
 
                 std::fs::write(&path, contents.as_bytes()).expect("can not create file");
 
-                {
-                    if matches!(f, Stub::MockExecutable(_)) {
-                        use std::os::unix::fs::PermissionsExt;
-                        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-                            .expect("can not set permissions for executable");
-                    }
+                if matches!(f, Stub::MockExecutable(_)) {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+                        .expect("can not set permissions for executable");
                 }
             })
             .for_each(drop);

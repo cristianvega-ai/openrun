@@ -419,66 +419,62 @@ impl FileNotebookView {
             session: session.clone(),
         });
 
-        {
-            // Reopening (e.g. "Try again") must not leave the previous read, its watcher, or its
-            // event subscription behind: `subscribe_to_model` appends, so re-subscribing without
-            // this would stack one stale closure per attempt.
-            self.release_file_model(ctx);
+        // Reopening (e.g. "Try again") must not leave the previous read, its watcher, or its
+        // event subscription behind: `subscribe_to_model` appends, so re-subscribing without
+        // this would stack one stale closure per attempt.
+        self.release_file_model(ctx);
 
-            let file_model = FileModel::handle(ctx);
-            let file_id = file_model.update(ctx, |m, ctx| m.open(&local_path, true, ctx));
-            self.file_id = Some(file_id);
+        let file_model = FileModel::handle(ctx);
+        let file_id = file_model.update(ctx, |m, ctx| m.open(&local_path, true, ctx));
+        self.file_id = Some(file_id);
 
-            ctx.subscribe_to_model(
-                &file_model,
-                move |me, file_model: ModelHandle<FileModel>, event: &FileModelEvent, ctx| {
-                    if event.file_id() != file_id {
-                        return;
-                    }
-                    match event {
-                        FileModelEvent::FileLoaded { content, .. } => {
-                            me.set_content(content, ctx);
+        ctx.subscribe_to_model(
+            &file_model,
+            move |me, file_model: ModelHandle<FileModel>, event: &FileModelEvent, ctx| {
+                if event.file_id() != file_id {
+                    return;
+                }
+                match event {
+                    FileModelEvent::FileLoaded { content, .. } => {
+                        me.set_content(content, ctx);
 
-                            // Record the canonical path instead of the input path when available.
-                            if let Some(canonical_path) = file_model.as_ref(ctx).file_path(file_id)
-                            {
-                                me.file_state = FileState::Loaded(SourceFile::FileBased {
-                                    path: LocalOrRemotePath::Local(canonical_path),
-                                    session: session.clone(),
-                                });
-                            }
-
-                            me.pane_configuration.update(ctx, |pane_config, ctx| {
-                                pane_config.refresh_pane_header_overflow_menu_items(ctx);
+                        // Record the canonical path instead of the input path when available.
+                        if let Some(canonical_path) = file_model.as_ref(ctx).file_path(file_id) {
+                            me.file_state = FileState::Loaded(SourceFile::FileBased {
+                                path: LocalOrRemotePath::Local(canonical_path),
+                                session: session.clone(),
                             });
+                        }
 
-                            ctx.notify();
+                        me.pane_configuration.update(ctx, |pane_config, ctx| {
+                            pane_config.refresh_pane_header_overflow_menu_items(ctx);
+                        });
 
-                            // Trigger to save the open file path for session restoration.
-                            ctx.emit(FileNotebookEvent::FileLoaded);
-                        }
-                        FileModelEvent::FailedToLoad { error, .. } => {
-                            safe_warn!(
-                                safe: ("Unable to read local notebook file"),
-                                full: ("Unable to read local notebook file: {error}")
-                            );
-                            me.file_state =
-                                match mem::replace(&mut me.file_state, FileState::NoFile) {
-                                    FileState::NoFile => FileState::NoFile,
-                                    FileState::Loading(source)
-                                    | FileState::Loaded(source)
-                                    | FileState::Error(source) => FileState::Error(source),
-                                };
-                            ctx.notify();
-                        }
-                        FileModelEvent::FileUpdated { content, .. } => {
-                            me.set_content(content, ctx);
-                        }
-                        FileModelEvent::FileSaved { .. } | FileModelEvent::FailedToSave { .. } => {}
+                        ctx.notify();
+
+                        // Trigger to save the open file path for session restoration.
+                        ctx.emit(FileNotebookEvent::FileLoaded);
                     }
-                },
-            );
-        }
+                    FileModelEvent::FailedToLoad { error, .. } => {
+                        safe_warn!(
+                            safe: ("Unable to read local notebook file"),
+                            full: ("Unable to read local notebook file: {error}")
+                        );
+                        me.file_state = match mem::replace(&mut me.file_state, FileState::NoFile) {
+                            FileState::NoFile => FileState::NoFile,
+                            FileState::Loading(source)
+                            | FileState::Loaded(source)
+                            | FileState::Error(source) => FileState::Error(source),
+                        };
+                        ctx.notify();
+                    }
+                    FileModelEvent::FileUpdated { content, .. } => {
+                        me.set_content(content, ctx);
+                    }
+                    FileModelEvent::FileSaved { .. } | FileModelEvent::FailedToSave { .. } => {}
+                }
+            },
+        );
     }
 
     /// The [`FileId`] this view currently holds open, if any.

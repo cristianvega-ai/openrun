@@ -168,13 +168,11 @@ impl GlobalBufferModel {
         for id in ids_to_remove {
             self.buffers.remove(&id);
 
-            {
-                let file_model = FileModel::handle(ctx);
-                file_model.update(ctx, |file_model, ctx| {
-                    file_model.cancel(id);
-                    file_model.unsubscribe(id, ctx);
-                });
-            }
+            let file_model = FileModel::handle(ctx);
+            file_model.update(ctx, |file_model, ctx| {
+                file_model.cancel(id);
+                file_model.unsubscribe(id, ctx);
+            });
         }
     }
 
@@ -193,13 +191,11 @@ impl GlobalBufferModel {
 
         self.buffers.remove(&file_id);
 
-        {
-            let file_model = FileModel::handle(_ctx);
-            file_model.update(_ctx, |file_model, ctx| {
-                file_model.cancel(file_id);
-                file_model.unsubscribe(file_id, ctx);
-            });
-        }
+        let file_model = FileModel::handle(_ctx);
+        file_model.update(_ctx, |file_model, ctx| {
+            file_model.cancel(file_id);
+            file_model.unsubscribe(file_id, ctx);
+        });
     }
 
     /// Returns the buffer handle if it is 1) still exists + active 2) loaded.

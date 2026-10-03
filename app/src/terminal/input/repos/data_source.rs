@@ -56,40 +56,38 @@ impl AsyncDataSource for RepoMenuDataSource {
         };
 
         Box::pin(async move {
-            {
-                use crate::terminal::input::repos::search_item::RepoSearchItem;
+            use crate::terminal::input::repos::search_item::RepoSearchItem;
 
-                let mut items: Vec<RepoSearchItem> = workspace_paths
+            let mut items: Vec<RepoSearchItem> = workspace_paths
+                .into_iter()
+                .map(|path| {
+                    let summary = git_summaries.get(&path).cloned();
+                    RepoSearchItem::new(path, summary)
+                })
+                .collect();
+            items.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+
+            let results: Vec<QueryResult<AcceptRepo>> = if query_text.is_empty() {
+                items.into_iter().map(QueryResult::from).collect()
+            } else {
+                items
                     .into_iter()
-                    .map(|path| {
-                        let summary = git_summaries.get(&path).cloned();
-                        RepoSearchItem::new(path, summary)
+                    .filter_map(|item| {
+                        let match_result = fuzzy_match::match_indices_case_insensitive(
+                            &item.display_name,
+                            &query_text,
+                        )?;
+                        if match_result.score < 25 {
+                            return None;
+                        }
+                        Some(QueryResult::from(
+                            item.with_name_match_result(Some(match_result)),
+                        ))
                     })
-                    .collect();
-                items.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+                    .collect()
+            };
 
-                let results: Vec<QueryResult<AcceptRepo>> = if query_text.is_empty() {
-                    items.into_iter().map(QueryResult::from).collect()
-                } else {
-                    items
-                        .into_iter()
-                        .filter_map(|item| {
-                            let match_result = fuzzy_match::match_indices_case_insensitive(
-                                &item.display_name,
-                                &query_text,
-                            )?;
-                            if match_result.score < 25 {
-                                return None;
-                            }
-                            Some(QueryResult::from(
-                                item.with_name_match_result(Some(match_result)),
-                            ))
-                        })
-                        .collect()
-                };
-
-                Ok(results)
-            }
+            Ok(results)
         })
     }
 }

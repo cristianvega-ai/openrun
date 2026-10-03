@@ -168,14 +168,12 @@ fn text_layout_benchmarks(criterion: &mut Criterion) {
                 f32::MAX,
             );
             layout_delta(&test_delta, &test_text_layout, &layout_options, ctx);
-            {
-                let core_text_layout = TextLayout::new(
-                    core_text_font_cache.text_layout_system(),
-                    &core_text_styles,
-                    f32::MAX,
-                );
-                layout_delta(&core_text_delta, &core_text_layout, &layout_options, ctx);
-            }
+            let core_text_layout = TextLayout::new(
+                core_text_font_cache.text_layout_system(),
+                &core_text_styles,
+                f32::MAX,
+            );
+            layout_delta(&core_text_delta, &core_text_layout, &layout_options, ctx);
             {
                 let mut group = criterion.benchmark_group("editor_text_layout/test_backend");
                 group.throughput(Throughput::Elements(test_chars as u64));
@@ -191,21 +189,19 @@ fn text_layout_benchmarks(criterion: &mut Criterion) {
                 });
                 group.finish();
             }
-            {
-                let mut group = criterion.benchmark_group("editor_text_layout/core_text");
-                group.throughput(Throughput::Elements(core_text_chars as u64));
-                group.bench_function("layout_delta_4096_shaping_blocks_6_threads", |bench| {
-                    bench.iter(|| {
-                        let text_layout = TextLayout::new(
-                            core_text_font_cache.text_layout_system(),
-                            &core_text_styles,
-                            f32::MAX,
-                        );
-                        layout_delta(&core_text_delta, &text_layout, &layout_options, ctx)
-                    })
-                });
-                group.finish();
-            }
+            let mut group = criterion.benchmark_group("editor_text_layout/core_text");
+            group.throughput(Throughput::Elements(core_text_chars as u64));
+            group.bench_function("layout_delta_4096_shaping_blocks_6_threads", |bench| {
+                bench.iter(|| {
+                    let text_layout = TextLayout::new(
+                        core_text_font_cache.text_layout_system(),
+                        &core_text_styles,
+                        f32::MAX,
+                    );
+                    layout_delta(&core_text_delta, &text_layout, &layout_options, ctx)
+                })
+            });
+            group.finish();
         });
     });
 }

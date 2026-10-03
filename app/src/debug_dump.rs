@@ -9,10 +9,8 @@ use warp_core::channel::ChannelState;
 pub(crate) fn run() -> anyhow::Result<()> {
     println!("Warp version: {:?}", ChannelState::app_version());
 
-    {
-        let uname = collect_output_or_suggest_install("uname -a");
-        println!("uname(1) output: {}", uname.trim_end());
-    }
+    let uname = collect_output_or_suggest_install("uname -a");
+    println!("uname(1) output: {}", uname.trim_end());
 
     Ok(())
 }

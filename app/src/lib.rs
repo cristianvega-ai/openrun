@@ -374,25 +374,23 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         launch_mode.take_test_driver(),
     );
 
-    {
-        use warpui::AssetProvider as _;
-        use warpui::platform::mac::AppExt;
+    use warpui::AssetProvider as _;
+    use warpui::platform::mac::AppExt;
 
-        let activate_on_launch = !launch_mode.is_integration_test()
-            || std::env::var("WARPUI_USE_REAL_DISPLAY_IN_INTEGRATION_TESTS").is_ok();
-        app_builder.set_activate_on_launch(activate_on_launch);
+    let activate_on_launch = !launch_mode.is_integration_test()
+        || std::env::var("WARPUI_USE_REAL_DISPLAY_IN_INTEGRATION_TESTS").is_ok();
+    app_builder.set_activate_on_launch(activate_on_launch);
 
-        let dev_icon = ASSETS.get("bundled/png/local.png")?;
-        app_builder.set_dev_icon(dev_icon);
+    let dev_icon = ASSETS.get("bundled/png/local.png")?;
+    app_builder.set_dev_icon(dev_icon);
 
-        let show_dock_icon = crate::settings::app_icon::ShowDockIconState::read_from_preferences(
-            prefs_for_public_settings,
-        )
-        .unwrap_or_else(crate::settings::app_icon::ShowDockIconState::default_value);
-        app_builder.set_show_dock_icon_on_launch(show_dock_icon);
-        app_builder.set_menu_bar_builder(app_menus::menu_bar);
-        app_builder.set_dock_menu_builder(|_| app_menus::dock_menu());
-    }
+    let show_dock_icon = crate::settings::app_icon::ShowDockIconState::read_from_preferences(
+        prefs_for_public_settings,
+    )
+    .unwrap_or_else(crate::settings::app_icon::ShowDockIconState::default_value);
+    app_builder.set_show_dock_icon_on_launch(show_dock_icon);
+    app_builder.set_menu_bar_builder(app_menus::menu_bar);
+    app_builder.set_dock_menu_builder(|_| app_menus::dock_menu());
 
     // Override any bindings that have a `Custom` trigger to a `Keystroke`-based trigger. In theory,
     // this should be a noop on Mac (since the keystrokes registered via the  Mac menus first
@@ -571,27 +569,23 @@ pub(crate) fn initialize_app(
         });
     });
 
-    {
-        ctx.add_singleton_model(DirectoryWatcher::new);
-        ctx.add_singleton_model(|_| DetectedRepositories::default());
-        if let Some(home_dir) = dirs::home_dir() {
-            ctx.add_singleton_model(|ctx| HomeDirectoryWatcher::new(home_dir, ctx));
-        } else {
-            log::info!("Home directory not found; skipping HomeDirectoryWatcher registration");
-        }
+    ctx.add_singleton_model(DirectoryWatcher::new);
+    ctx.add_singleton_model(|_| DetectedRepositories::default());
+    if let Some(home_dir) = dirs::home_dir() {
+        ctx.add_singleton_model(|ctx| HomeDirectoryWatcher::new(home_dir, ctx));
+    } else {
+        log::info!("Home directory not found; skipping HomeDirectoryWatcher registration");
     }
 
-    {
-        let imported_config_model = ctx.add_singleton_model(ImportedConfigModel::new);
+    let imported_config_model = ctx.add_singleton_model(ImportedConfigModel::new);
 
-        if ChannelState::channel() != warp_core::channel::Channel::Integration {
-            imported_config_model.update(ctx, |model, ctx| {
-                model.search_for_settings_to_import(ctx);
-            });
-        }
-
-        ctx.add_singleton_model(RepoMetadataModel::new);
+    if ChannelState::channel() != warp_core::channel::Channel::Integration {
+        imported_config_model.update(ctx, |model, ctx| {
+            model.search_for_settings_to_import(ctx);
+        });
     }
+
+    ctx.add_singleton_model(RepoMetadataModel::new);
 
     ctx.add_singleton_model(|_| GitRepoModels::new());
 
@@ -663,10 +657,8 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(NotebookKeybindings::new);
     ctx.add_singleton_model(|_| ActiveSession::default());
 
-    {
-        ctx.add_singleton_model(LocalShellState::new);
-        ctx.add_singleton_model(system::SystemInfo::new);
-    }
+    ctx.add_singleton_model(LocalShellState::new);
+    ctx.add_singleton_model(system::SystemInfo::new);
 
     // Add a singleton model that holds the current prompt configuration.
     ctx.add_singleton_model(Prompt::new);
@@ -698,10 +690,8 @@ pub(crate) fn initialize_app(
 
     ctx.add_singleton_model(move |_| IgnoredSuggestionsModel::new(persisted_ignored_suggestions));
 
-    {
-        ctx.add_singleton_model(local_control::LocalControlBridge::new);
-        ctx.add_singleton_model(local_control::LocalControlServer::new);
-    }
+    ctx.add_singleton_model(local_control::LocalControlBridge::new);
+    ctx.add_singleton_model(local_control::LocalControlServer::new);
 
     app_state
 }
@@ -1028,17 +1018,15 @@ fn launch(ctx: &mut warpui::AppContext, app_state: Option<AppState>, launch_mode
     });
 
     // TODO(ben): We should skip this for LaunchMode::Test.
-    {
-        use crate::login_item::maybe_register_app_as_login_item;
-        use crate::terminal::general_settings::GeneralSettingsChangedEvent;
-        // Note that we put this here because it depends on settings already having been initialized.
-        ctx.subscribe_to_model(&GeneralSettings::handle(ctx), |_, event, ctx| {
-            if matches!(event, GeneralSettingsChangedEvent::LoginItem { .. }) {
-                maybe_register_app_as_login_item(ctx);
-            }
-        });
-        maybe_register_app_as_login_item(ctx);
-    }
+    use crate::login_item::maybe_register_app_as_login_item;
+    use crate::terminal::general_settings::GeneralSettingsChangedEvent;
+    // Note that we put this here because it depends on settings already having been initialized.
+    ctx.subscribe_to_model(&GeneralSettings::handle(ctx), |_, event, ctx| {
+        if matches!(event, GeneralSettingsChangedEvent::LoginItem { .. }) {
+            maybe_register_app_as_login_item(ctx);
+        }
+    });
+    maybe_register_app_as_login_item(ctx);
 }
 
 /// Initializes the logger before running tests.

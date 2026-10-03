@@ -2733,22 +2733,20 @@ impl TerminalView {
                     ctx.emit(event_constructor(arg));
                 } else {
                     // Check if repo has uncommitted changes via the per-repo sub-model.
-                    {
-                        let is_dirty = self
-                            .git_status_metadata(ctx)
-                            .map(|m| !m.stats_against_head.has_no_changes());
-                        match is_dirty {
-                            Some(true) => ctx.emit(event_constructor(arg)),
-                            // Metadata not loaded yet — defer until the next
-                            // git repo status update delivers it.
-                            None => {
-                                self.deferred_code_review_open = Some(DeferredCodeReviewOpen {
-                                    git_delta_preference: delta_pref,
-                                    focus_new_pane,
-                                });
-                            }
-                            Some(false) => {}
+                    let is_dirty = self
+                        .git_status_metadata(ctx)
+                        .map(|m| !m.stats_against_head.has_no_changes());
+                    match is_dirty {
+                        Some(true) => ctx.emit(event_constructor(arg)),
+                        // Metadata not loaded yet — defer until the next
+                        // git repo status update delivers it.
+                        None => {
+                            self.deferred_code_review_open = Some(DeferredCodeReviewOpen {
+                                git_delta_preference: delta_pref,
+                                focus_new_pane,
+                            });
                         }
+                        Some(false) => {}
                     }
                 }
             }
@@ -12986,13 +12984,11 @@ impl View for TerminalView {
             context.set.insert("InsideRepository");
         }
 
+        let imported_config_model = ImportedConfigModel::as_ref(app);
+        if !imported_config_model.finished_searching_for_settings()
+            || imported_config_model.configs().count() >= 1
         {
-            let imported_config_model = ImportedConfigModel::as_ref(app);
-            if !imported_config_model.finished_searching_for_settings()
-                || imported_config_model.configs().count() >= 1
-            {
-                context.set.insert(flags::HAS_SETTINGS_TO_IMPORT_FLAG);
-            }
+            context.set.insert(flags::HAS_SETTINGS_TO_IMPORT_FLAG);
         }
 
         context

@@ -58,9 +58,7 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     DebugSettings::register(app);
     AppIconSettings::register(app);
 
-    {
-        crate::util::file::external_editor::EditorSettings::register(app);
-    }
+    crate::util::file::external_editor::EditorSettings::register(app);
 
     FontSettings::register(app);
     GeneralSettings::register(app);
