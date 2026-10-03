@@ -1,38 +1,30 @@
-//! This module defines types used in the context of keyboard events across platforms. The types
-//! are based on winit types, however, we include them in this module to avoid needing to include
-//! the entirety of winit as a dependency for MacOS.
-
-use serde::{Deserialize, Serialize};
+//! This module defines types used in the context of keyboard events. The types are based on winit
+//! types (winit is licensed under Apache-2.0), redefined here so that OpenRun does not depend on
+//! winit.
 
 // The following types and functions are taken from winit's implementation.
-// We redefine them here to avoid needing to include the entirety of winit as a dependency for MacOS.
 // --------------------------------------------------------------------------------------------------------
 
-/// Contains the platform-native physical key identifier
+/// Contains the native physical key identifier
 ///
-/// The exact values vary from platform to platform (which is part of why this is a per-platform
-/// enum), but the values are primarily tied to the key's physical location on the keyboard.
+/// The values are primarily tied to the key's physical location on the keyboard.
 ///
-/// This enum is primarily used to store raw keycodes when Winit doesn't map a given native
-/// physical key identifier to a meaningful [`KeyCode`] variant. In the presence of identifiers we
-/// haven't mapped for you yet, this lets you use use [`KeyCode`] to:
+/// This enum is used to store raw keycodes when we don't map a given native physical key
+/// identifier to a meaningful [`KeyCode`] variant. In the presence of identifiers we haven't
+/// mapped, this lets you use [`KeyCode`] to:
 ///
 /// - Correctly match key press and release events.
-/// - On non-Web platforms, support assigning keybinds to virtually any key through a UI.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// - Support assigning keybinds to virtually any key through a UI.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NativeKeyCode {
     Unidentified,
     /// A macOS "scancode".
     MacOS(u16),
-    /// A Windows "scancode".
-    Windows(u16),
-    /// An XKB "keycode".
-    Xkb(u32),
 }
 
 impl std::fmt::Debug for NativeKeyCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use NativeKeyCode::{MacOS, Unidentified, Windows, Xkb};
+        use NativeKeyCode::{MacOS, Unidentified};
         let mut debug_tuple;
         match self {
             Unidentified => {
@@ -40,14 +32,6 @@ impl std::fmt::Debug for NativeKeyCode {
             }
             MacOS(code) => {
                 debug_tuple = f.debug_tuple("MacOS");
-                debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
-            Windows(code) => {
-                debug_tuple = f.debug_tuple("Windows");
-                debug_tuple.field(&format_args!("0x{code:04X}"));
-            }
-            Xkb(code) => {
-                debug_tuple = f.debug_tuple("Xkb");
                 debug_tuple.field(&format_args!("0x{code:04X}"));
             }
         }
@@ -59,7 +43,7 @@ impl std::fmt::Debug for NativeKeyCode {
 ///
 /// This type is a superset of [`KeyCode`], including an [`Unidentified`][Self::Unidentified]
 /// variant.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PhysicalKey {
     /// A known key code
     Code(KeyCode),
@@ -81,7 +65,7 @@ pub enum PhysicalKey {
 ///
 /// [`KeyboardEvent.code`]: https://w3c.github.io/uievents-code/#code-value-tables
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum KeyCode {
     /// <kbd>`</kbd> on a US keyboard. This is also called a backtick or grave.
     /// This is the <kbd>半角</kbd>/<kbd>全角</kbd>/<kbd>漢字</kbd>
