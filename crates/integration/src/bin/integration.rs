@@ -192,6 +192,7 @@ fn register_tests() -> HashMap<&'static str, BoxedBuilderFn> {
     register_test!(test_command_xray_for_partial_command);
     register_test!(test_ctrl_r_multi_cursor);
     register_test!(test_histcontrol_env_var);
+    register_test!(test_exit_status_ignores_stray_terminal_output_bash);
     register_test!(test_session_navigation_recency_change_tab);
     register_test!(test_session_navigation_recency_navigate_to_tab);
     register_test!(test_session_navigation_recency_click_on_window);

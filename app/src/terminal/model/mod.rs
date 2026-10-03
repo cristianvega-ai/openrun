@@ -22,6 +22,8 @@ pub mod rich_content;
 pub mod secrets;
 
 pub mod early_output;
+#[cfg(any(test, feature = "integration_tests"))]
+pub mod exit_status_check;
 pub mod index;
 pub(in crate::terminal) mod lifecycle;
 pub mod session;

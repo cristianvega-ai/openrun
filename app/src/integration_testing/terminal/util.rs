@@ -6,7 +6,6 @@ use command::blocking::Command;
 use rand::distributions::Alphanumeric;
 use rand::{Rng, thread_rng};
 use regex::Regex;
-use warp_core::command::ExitCode;
 
 use crate::terminal::local_tty::shell::{DirectShellStarter, ShellStarterSource};
 use crate::terminal::shell;
@@ -76,17 +75,7 @@ pub fn nonce() -> String {
         .collect()
 }
 
-/// Different options for asserting the value of the exit code.
-pub enum ExpectedExitStatus {
-    /// Checks code == 0
-    Success,
-    /// Checks code != 0
-    Failure,
-    /// Checks code == expected
-    ExactCode(ExitCode),
-    /// Any exit status is considered valid.
-    Any,
-}
+pub use crate::terminal::model::exit_status_check::ExpectedExitStatus;
 
 /// A representation of the expected output from running a command.
 pub trait ExpectedOutput: std::fmt::Debug {

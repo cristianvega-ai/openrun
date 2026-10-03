@@ -547,6 +547,7 @@ jobs:
               shell_integration_tests::bash_only::test_bash_honor_ps1_expands_dynamic_prompt_once \
               shell_integration_tests::bash_only::test_warp_honors_user_title_bash \
               shell_integration_tests::bash_only::test_histcontrol_env_var \
+              shell_integration_tests::bash_only::test_exit_status_ignores_stray_terminal_output_bash \
               shell_integration_tests::bash_only::test_bash_bootstraps_with_prompt_command_array \
               shell_integration_tests::bash_only::test_bash_bootstraps_with_prompt_command_array_that_sets_ps1 \
               shell_integration_tests::pwsh_only::test_input_reporting_powershell \

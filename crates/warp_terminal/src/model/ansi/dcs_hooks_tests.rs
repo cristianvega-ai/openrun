@@ -229,6 +229,44 @@ fn precmd_hook_without_completion_metadata_is_prompt_only() {
     assert!(matches!(value, PrecmdHookValue::PromptOnly(_)));
 }
 
+/// The status the shell sent is what the log shows, for the hooks that carry one and no other.
+#[test]
+fn completion_summary_shows_the_status_the_shell_sent() {
+    let hook = |json: &str| serde_json::from_str::<DProtoHook>(json).unwrap();
+
+    assert_eq!(
+        hook(r#"{"hook": "CommandFinished", "value": {"exit_code": 1, "next_block_id": "b-1", "session_id": 7}}"#)
+            .completion_summary()
+            .as_deref(),
+        Some("exit_code=1 next_block_id=b-1")
+    );
+    assert_eq!(
+        hook(r#"{"hook": "Precmd", "value": {"pwd": "/Users/me", "exit_code": 127, "next_block_id": "b-2", "session_id": 7}}"#)
+            .completion_summary()
+            .as_deref(),
+        Some("exit_code=127 next_block_id=b-2")
+    );
+    // A status of 0 is shown as 0 and not left out, so a log can tell it from a missing one.
+    assert_eq!(
+        hook(r#"{"hook": "CommandFinished", "value": {"exit_code": 0, "next_block_id": "b-3", "session_id": 7}}"#)
+            .completion_summary()
+            .as_deref(),
+        Some("exit_code=0 next_block_id=b-3")
+    );
+
+    // A prompt-only precmd and the other hooks have none, and nothing of the command is shown.
+    assert_eq!(
+        hook(r#"{"hook": "Precmd", "value": {"pwd": "/Users/me", "session_id": 7}}"#)
+            .completion_summary(),
+        None
+    );
+    assert_eq!(
+        hook(r#"{"hook": "Preexec", "value": {"command": "echo secret", "session_id": 7}}"#)
+            .completion_summary(),
+        None
+    );
+}
+
 #[test]
 fn sourced_rc_file_hook_parses_frozen_snippet_format() {
     // This literal payload shape ships inside user RC files, so it must keep

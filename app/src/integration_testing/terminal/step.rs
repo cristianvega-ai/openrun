@@ -10,7 +10,7 @@ use super::{
     PYTHON_PROMPT_READY, assert_active_block_output_for_single_terminal_in_tab,
     assert_active_block_received_precmd, assert_alt_grid_active, assert_command_executed,
     assert_long_running_block_executing_for_single_terminal_in_tab, assert_terminal_bootstrapped,
-    validate_block_output,
+    check_exit_status_of_last_command, validate_block_output,
 };
 use crate::integration_testing::block::assert_num_blocks_in_model;
 use crate::integration_testing::command_palette::open_command_palette_and_run_action;
@@ -308,59 +308,14 @@ pub fn execute_command(
     expected_exit_code: ExpectedExitStatus,
     expected_output: impl ExpectedOutput + 'static,
 ) -> TestStep {
-    execute_command_step(tab_idx, pane_idx, command, move |app, window_id| {
+    execute_command_step(tab_idx, pane_idx, command.clone(), move |app, window_id| {
         validate_block_output_on_finished_block(&expected_output, tab_idx, pane_idx, window_id, app)
     })
     .add_named_assertion("assert exit code", move |app, window_id| {
         let terminal_view = terminal_view(app, window_id, tab_idx, pane_idx);
         terminal_view.read(app, |view, _ctx| {
             let model = view.model.lock();
-            // After the last test step, there should always be a block here, but for
-            // some reason, it sometimes doesn't exist.
-            let last_block = model
-                .block_list()
-                .last_non_hidden_block()
-                .expect("Block should exist");
-            match expected_exit_code {
-                ExpectedExitStatus::Success => {
-                    if last_block.exit_code().value() != 0 {
-                        return AssertionOutcome::immediate_failure(format!(
-                            "Expected exit code 0, but got {}. Block output:\n{}\n",
-                            last_block.exit_code().value(),
-                            last_block
-                                .output_grid()
-                                .contents_to_string_with_secrets_unobfuscated(
-                                    false, /*include_escape_sequences*/
-                                    None,  /*max_rows*/
-                                )
-                        ));
-                    }
-                }
-                ExpectedExitStatus::Failure => {
-                    if last_block.exit_code().value() == 0 {
-                        return AssertionOutcome::immediate_failure(format!(
-                            "Expected non-zero exit code, but got 0. Block output:\n{}\n",
-                            last_block
-                                .output_grid()
-                                .contents_to_string_with_secrets_unobfuscated(
-                                    false, /*include_escape_sequences*/
-                                    None,  /*max_rows*/
-                                )
-                        ));
-                    }
-                }
-                ExpectedExitStatus::ExactCode(code) => {
-                    if last_block.exit_code() != code {
-                        return AssertionOutcome::immediate_failure(format!(
-                            "Expected exit code {}, but got {}",
-                            code.value(),
-                            last_block.exit_code().value()
-                        ));
-                    }
-                }
-                ExpectedExitStatus::Any => (),
-            };
-            AssertionOutcome::Success
+            check_exit_status_of_last_command(model.block_list(), &command, &expected_exit_code)
         })
     })
     .add_named_assertion(

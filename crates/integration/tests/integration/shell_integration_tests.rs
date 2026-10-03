@@ -133,6 +133,9 @@ mod bash_only {
         // Tests bash-specific history behavior.
         #[ignore = "ENG-233: bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_histcontrol_env_var,
+        // Output of the shell after a command finished is background output, not the command's.
+        #[ignore = "ENG-233: bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        test_exit_status_ignores_stray_terminal_output_bash,
         // Tests PROMPT_COMMAND arrays, which need bash 5.1 or newer.
         #[ignore = "ENG-233: bash 5.1 or newer only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_bash_bootstraps_with_prompt_command_array,

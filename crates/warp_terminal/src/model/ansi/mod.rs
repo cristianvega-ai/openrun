@@ -650,7 +650,10 @@ impl<'a, H: Handler + 'a, W: io::Write> Performer<'a, H, W> {
 
                 let hook = serde_json::from_slice::<DProtoHook>(&decoded_data);
                 if let Ok(hook) = &hook {
-                    log::info!("Received {} hook", hook.name());
+                    match hook.completion_summary() {
+                        Some(summary) => log::info!("Received {} hook ({summary})", hook.name()),
+                        None => log::info!("Received {} hook", hook.name()),
+                    }
                 }
                 self.handle_decoded_hook(hook);
             }

@@ -65,6 +65,14 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
     }
     trap __warp_generator_pid_file_cleanup EXIT
 
+    # Debugging aid: when WARP_HOOK_TRACE_FILE names a file, the precmd and preexec hooks append
+    # to it what the shell saw (the status, the process ID, the command). Builtins only, so that it
+    # forks nothing and changes no timing. The CI stress workflow sets it to find out which status
+    # the shell had when the app recorded another; nothing sets it otherwise.
+    warp_hook_trace () {
+      printf '%s pid=%s %s\n' "$SECONDS" "$$" "$*" >> "$WARP_HOOK_TRACE_FILE"
+    }
+
     # Writes a hex-encoded JSON message to the pty.
     warp_send_json_message () {
         # Sends a message to the controlling terminal as a DSC control sequence.
@@ -322,6 +330,9 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
     # Note that this is very performance sensitive code, so try not to
     # invoke any external commands in here.
     warp_preexec () {
+        if [[ -n ${WARP_HOOK_TRACE_FILE:-} ]]; then
+          warp_hook_trace "preexec bp_status=${__bp_last_ret_value:-} bash_command=$BASH_COMMAND"
+        fi
         # Use the $BASH_COMMAND environment variable instead of $1, which is passed in by bash_preeexec.
         #
         # Bash_preexec intends to pass the command to preexec functions (as $1), but it utilizes session
@@ -484,6 +495,9 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # executed within this block instead of the actual last
         # command that was run.
         local exit_code=$?
+        if [[ -n ${WARP_HOOK_TRACE_FILE:-} ]]; then
+          warp_hook_trace "precmd status=$exit_code bp_status=${__bp_last_ret_value:-} generator=${_WARP_GENERATOR_COMMAND:-0}"
+        fi
         local next_block_id="precmd-$WARP_SESSION_ID-$((block_id++))"
         warp_send_json_message "{\"hook\": \"CommandFinished\", \"value\": {\"exit_code\": $exit_code, \"next_block_id\": \"$next_block_id\", \"session_id\": $WARP_SESSION_ID}}"
 

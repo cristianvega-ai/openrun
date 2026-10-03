@@ -4975,12 +4975,18 @@ impl TerminalView {
 
                     self.maybe_suggest_open_in_warp(block_completed, ctx);
 
-                    let terminal_view_state = {
-                        let model = self.model.lock();
-                        match model.block_list().last_non_hidden_block() {
-                            Some(block) if block.has_failed() => TerminalViewState::Errored,
-                            _ => TerminalViewState::Normal,
-                        }
+                    // The state follows the last command. Output of the shell that came after it
+                    // (a warning of its own, a notice of a background job) is a block of its
+                    // own with exit code 0, and must not turn a failed command into a normal one.
+                    let terminal_view_state = if self
+                        .model
+                        .lock()
+                        .block_list()
+                        .last_command_block_has_failed()
+                    {
+                        TerminalViewState::Errored
+                    } else {
+                        TerminalViewState::Normal
                     };
                     self.did_notify_long_running = false;
                     self.set_current_state(terminal_view_state, ctx);

@@ -178,6 +178,7 @@ Each section below records the behavior and evidence at that change's commit. La
 - [macOS only: remaining residue](#macos-only-remaining-residue) — the platform scaffolding PLAT-4 left (`SupportedPlatforms`, `OperatingSystem`, the key binding and path wrappers, traffic light sides, `instant`, `dunce`, `ContextFlag`, the Linux quit modal), the Windows, Linux and web remarks in code, comments, docs and tooling, and a cargo-deny and license list that cover the macOS targets only (PLAT-6)
 - [Tracking work in Linear (AGENTS.md)](#tracking-work-in-linear-agentsmd) — AGENTS.md now says how issues, closing comments, deferrals, CI evidence and `#[ignore]` reasons are recorded
 - [Review 4: completion safety, history cleanup and terminal output](#review-4-completion-safety-history-cleanup-and-terminal-output) — hostile project runtimes and Git transports denied, all generators restricted to the audited local executor, transactional history cleanup debt, lossless terminal output, collector identity controls, fatal process leaks and owned test ignores
+- [Review 5: exit status of a command followed by shell output (bash 3.2)](#review-5-exit-status-of-a-command-followed-by-shell-output-bash-32) — the pane state and the exit-code check of the integration steps read the last command, not the last block shown; CI hook diagnostics and a bash 3.2 stress choice
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -4395,3 +4396,30 @@ OpenRun now builds and runs on macOS only (PLAT-4, under PLAT-RM). Windows, Linu
 - ENG-253 and ENG-254 track missing typeahead and synced-input coverage during shell-to-program handoff. A real fish PTY retained bytes with delayed echo during a slow preexec hook. Draft screen-echo assertions do not demonstrate actual product input loss; timing experiments were excluded from the shipping registry. Deterministic consumed-byte coverage remains follow-up work.
 
 **Validation:** Acceptance is recorded with the final commit, local gate logs, independent review and exact-tip CI in the private R4 evidence record and Linear comments. This section describes the implementation and its evidence boundaries; it does not certify an unrun gate or close an issue.
+
+## Review 5: exit status of a command followed by shell output (bash 3.2)
+
+**Problem (ENG-256):** push run 37150427042 (`01fc3ace7`, job "Shell matrix bash3") failed `ui_tests::test_pane_group_state_single_pane`: after `false`, "Expected non-zero exit code, but got 0. Block output: bash: child setpgid (82747 to 82747): Operation not permitted". The dispatch of the same commit (37152234775) passed 237 of 237.
+
+**Cause:** two things, only the first of which is environmental.
+- bash 3.2 printed a diagnostic of its own job control (`child setpgid ... Operation not permitted`) while the prompt hook ran, after the hook had reported the end of `false` and before it reported the prompt. The hook forks many times in that window (`$(...)` and pipelines). This message is not new and not from R4: CHANGES.md already records it under load before R4 (the typeahead test and the shell matrix, both earlier sections). Why the kernel refuses `setpgid` was not found: 2 x 300 iterations on the hosted runner (macOS, bash 3.2.57) with the pre-R4 commit and with `4c12ac956`, 1000 iterations locally under a load of 50 to 90, and 160,000 three-stage pipelines in `$(...)` in a pseudo-terminal (half of them beside about 208,000 short-lived children in their own process groups, killed as a group, like the app's helper commands), produced none.
+- OpenRun read the line as the last block. Output that arrives after a command finished and before the prompt is a background block (by design) whose exit code is 0. Two places took "the last block shown" for "the last command": the exit-code check of the integration command steps, and the state of the pane (`TerminalView`, `Errored` or `Normal`), set when a command's block completes. The recorded status was right: `false` kept exit code 1; it was the block read that was wrong. A product consequence: a failed command followed by such a line showed the pane as `Normal`. Reading depended on a race too: the line only counts as shown once its block has a height.
+
+**Changes:**
+- `BlockList::last_command_block_has_failed` (the last command block that is shown, background blocks left out); the pane state uses it (`terminal/view.rs`).
+- The exit-code check of the command steps is `check_exit_status_of_last_command` (`terminal/model/exit_status_check.rs`): it reads the last command block, checks that it is the block of the typed command, and lists the last four blocks (index, ID, background, state, exit code, command, output) in its failure message.
+- The log line "Received CommandFinished hook" (and Precmd) now carries `exit_code` and `next_block_id`; with `WARP_HOOK_TRACE_FILE` set, the bash hooks append the status they saw. The stress workflow sets it and prints the file.
+- `stress.yml`: shell `bash3` (`/bin/bash`, bash 3.2) and a `ref` input, to compare commits with one workflow.
+
+**Tests:**
+- `blocks_tests`: `exit_status_check_*` and `last_command_*` (a failed command followed by the line: the check and the pane state read the command; success expected of the failed command still fails; a succeeded command with a failure expected still fails; the check names the command; no command block yet is a retryable failure). `completion_summary_shows_the_status_the_shell_sent` (the status 0 is shown, the command is not).
+- `shell_integration_tests::bash_only::test_exit_status_ignores_stray_terminal_output_bash` (bash 3.2 and bash 5 jobs, listed as must-run): a `git` first in the `PATH` writes the exact line of the failed run on the terminal when the prompt hook calls it, then waits 0.5 s so that the line is laid out. The test checks the exit code of `false`, the pane state, that the line is the last block shown with exit code 0, and that a check for success of the failed `false` fails.
+  - Old exit-code check, new pane state: fails 3 of 3 with the message of the CI failure ("Expected non-zero exit code, but got 0. Block output: bash: child setpgid (82747 to 82747): Operation not permitted").
+  - New exit-code check, old pane state: fails 3 of 3 (`Normal`, expected `Errored`).
+  - Both new: passes 3 of 3.
+
+**Evidence (local, `/bin/bash` 3.2.57):** `test_pane_group_state_single_pane` 1000 iterations at `01fc3ace7` under 16 `yes` processes and 4 fork loops beside other builds (load 50 to 90): 975 passed, 25 failed, all 25 `Wait for bootstrapping` timeouts (20 s, the load failure recorded earlier in this file), none with an exit-code or `setpgid` message. 100 of 100 passed under 24 `yes` processes. Stress runs on the runner (shell `bash3`, 300 iterations, `--retries 0`): `4c12ac956` (equal to `01fc3ace7` for the app) 300 of 300 (run 37159413388); pre-R4 `3b6a0b78b` 300 of 300 (run 37159491244). The hosted runs do not show a rate for the natural line (none in 600 iterations); the injected line fails every time before the change.
+
+**Not changed:** `session_command_context` in `terminal/view.rs` and a few integration tests also read `last_non_hidden_block()`; they would take such a line for the last command too. No failure of them was seen.
+
+**User-visible impact:** after a failed command, shell output that comes before the next prompt no longer turns the pane back to its normal state.

@@ -2,12 +2,16 @@ use float_cmp::{approx_eq, assert_approx_eq};
 use warp_core::features::FeatureFlag;
 use warpui::App;
 use warpui::elements::DEFAULT_UI_LINE_HEIGHT_RATIO;
+use warpui::integration::AssertionOutcome;
 use warpui::units::IntoLines;
 
 use super::*;
 use crate::settings::TerminalSpacing;
 use crate::terminal::event::Event;
 use crate::terminal::model::ansi::Handler;
+use crate::terminal::model::exit_status_check::{
+    ExpectedExitStatus, check_exit_status_of_last_command,
+};
 use crate::terminal::model::test_utils;
 use crate::terminal::model::test_utils::TestBlockListBuilder;
 use crate::terminal::view::{InlineBannerItem, InlineBannerType};
@@ -43,6 +47,16 @@ pub fn new_bootstrapped_block_list(
 
 // Helper function to create dummy blocks
 pub fn insert_block(block_list: &mut BlockList, command: &str, output: &str) -> BlockIndex {
+    insert_block_with_exit_code(block_list, command, output, 0)
+}
+
+// Helper function to create dummy blocks, whose command finishes with the given exit code
+pub fn insert_block_with_exit_code(
+    block_list: &mut BlockList,
+    command: &str,
+    output: &str,
+    exit_code: i32,
+) -> BlockIndex {
     // Create a block.
     block_list.start_active_block();
 
@@ -74,7 +88,18 @@ pub fn insert_block(block_list: &mut BlockList, command: &str, output: &str) -> 
         block_list.linefeed();
         input_string(block_list, line);
     }
-    command_finished_and_precmd(block_list);
+    let completion_metadata = ansi::CompletionMetadata {
+        exit_code: exit_code.into(),
+        ..Default::default()
+    };
+    block_list.command_finished(CommandFinishedValue {
+        completion_metadata: completion_metadata.clone(),
+        ..Default::default()
+    });
+    block_list.precmd_with_completion_metadata(PrecmdValue {
+        completion_metadata,
+        prompt_metadata: PromptMetadata::default(),
+    });
 
     block_index
 }
@@ -1106,6 +1131,181 @@ fn test_matching_block_by_index() {
             ..Default::default()
         }),
         Some(0.into())
+    );
+}
+
+/// What bash 3.2 printed in CI run 37150427042, after `false` had finished and before the next
+/// prompt: a diagnostic of its own job control, on the terminal.
+const SETPGID_WARNING: &str = "bash: child setpgid (82747 to 82747): Operation not permitted";
+
+/// A command that ran and finished with `exit_code`, followed by output of the shell that reaches
+/// the terminal before the next prompt.
+fn insert_command_followed_by_stray_output(
+    block_list: &mut BlockList,
+    command: &str,
+    exit_code: i32,
+) {
+    insert_block_with_exit_code(block_list, &format!("{command}\n"), "", exit_code);
+    input_string(block_list, SETPGID_WARNING);
+}
+
+/// A block list whose lines are wide enough for the warning to stay on one line.
+fn wide_bootstrapped_block_list() -> BlockList {
+    let mut block_size = test_utils::block_size();
+    block_size.size = SizeInfo::new_without_font_metrics(10, 120);
+    new_bootstrapped_block_list(Some(block_size), None, ChannelEventListener::new_for_test())
+}
+
+fn is_immediate_failure(outcome: &AssertionOutcome) -> bool {
+    matches!(outcome, AssertionOutcome::ImmediateFailure { .. })
+}
+
+fn failure_message(outcome: AssertionOutcome) -> String {
+    match outcome {
+        AssertionOutcome::ImmediateFailure { message, .. }
+        | AssertionOutcome::Failure { message, .. } => message,
+        _ => panic!("expected a failure"),
+    }
+}
+
+#[test]
+fn exit_status_check_reads_the_command_block_when_stray_output_follows_it() {
+    let mut block_list = wide_bootstrapped_block_list();
+    insert_command_followed_by_stray_output(&mut block_list, "false", 1);
+
+    // The stray output is a background block, which the default filter counts and whose exit
+    // status is the default, 0: the block the check read before, in CI.
+    let last_block = block_list
+        .last_non_hidden_block()
+        .expect("the stray output has a block");
+    assert!(last_block.is_background());
+    assert_eq!(last_block.exit_code().value(), 0);
+    assert!(
+        last_block
+            .output_grid()
+            .contents_to_string_with_secrets_unobfuscated(false, None)
+            .contains(SETPGID_WARNING)
+    );
+
+    // The block of `false` kept its status, and the check finds that block.
+    let command_index = block_list
+        .last_matching_block_by_index(BlockFilter::commands())
+        .expect("the command has a block");
+    assert_eq!(
+        block_list
+            .block_at(command_index)
+            .expect("block should exist")
+            .exit_code()
+            .value(),
+        1
+    );
+    for expected in [
+        ExpectedExitStatus::Failure,
+        ExpectedExitStatus::ExactCode(1.into()),
+        ExpectedExitStatus::Any,
+    ] {
+        let outcome = check_exit_status_of_last_command(&block_list, "false", &expected);
+        assert!(
+            matches!(outcome, AssertionOutcome::Success),
+            "a failed command with stray output after it must pass an expected failure"
+        );
+    }
+}
+
+#[test]
+fn exit_status_check_does_not_pass_a_failed_command_because_stray_output_follows_it() {
+    // The other direction, which the old check would have passed: the command failed, a success
+    // was expected, and the block after it has the default status 0.
+    let mut block_list = wide_bootstrapped_block_list();
+    insert_command_followed_by_stray_output(&mut block_list, "false", 1);
+
+    for expected in [
+        ExpectedExitStatus::Success,
+        ExpectedExitStatus::ExactCode(0.into()),
+    ] {
+        let outcome = check_exit_status_of_last_command(&block_list, "false", &expected);
+        assert!(is_immediate_failure(&outcome));
+        let message = failure_message(outcome);
+        assert!(message.contains("exit code 1"), "{message}");
+        // The message lists the blocks, so a failure shows the stray block next to the command.
+        assert!(message.contains("background=true"), "{message}");
+        assert!(message.contains(SETPGID_WARNING), "{message}");
+    }
+}
+
+#[test]
+fn exit_status_check_fails_a_succeeded_command_when_a_failure_is_expected() {
+    let mut block_list = wide_bootstrapped_block_list();
+    insert_command_followed_by_stray_output(&mut block_list, "true", 0);
+
+    let outcome =
+        check_exit_status_of_last_command(&block_list, "true", &ExpectedExitStatus::Failure);
+    assert!(is_immediate_failure(&outcome));
+    for expected in [ExpectedExitStatus::Success, ExpectedExitStatus::Any] {
+        let outcome = check_exit_status_of_last_command(&block_list, "true", &expected);
+        assert!(matches!(outcome, AssertionOutcome::Success));
+    }
+}
+
+#[test]
+fn exit_status_check_names_the_command_it_checked() {
+    let mut block_list = wide_bootstrapped_block_list();
+    insert_block_with_exit_code(&mut block_list, "ls\n", "", 0);
+
+    // A status is only meaningful for the command it belongs to.
+    let outcome = check_exit_status_of_last_command(&block_list, "false", &ExpectedExitStatus::Any);
+    assert!(is_immediate_failure(&outcome));
+    assert!(failure_message(outcome).contains("not the block of \"false\""));
+
+    // A newline or space after the typed command does not matter.
+    let outcome =
+        check_exit_status_of_last_command(&block_list, "ls \n", &ExpectedExitStatus::Success);
+    assert!(matches!(outcome, AssertionOutcome::Success));
+}
+
+#[test]
+fn last_command_failure_is_not_changed_by_output_that_follows_the_command() {
+    let mut block_list = wide_bootstrapped_block_list();
+    assert!(
+        !block_list.last_command_block_has_failed(),
+        "no command has run"
+    );
+
+    insert_block_with_exit_code(&mut block_list, "false\n", "", 1);
+    assert!(block_list.last_command_block_has_failed());
+
+    // Stray output after it is a background block, which is the last block shown and has not
+    // failed: the answer this replaces, `last_non_hidden_block().has_failed()`, said "no".
+    input_string(&mut block_list, SETPGID_WARNING);
+    let last_shown = block_list
+        .last_non_hidden_block()
+        .expect("the stray output has a block");
+    assert!(last_shown.is_background());
+    assert!(!last_shown.has_failed());
+    assert!(
+        block_list.last_command_block_has_failed(),
+        "the command failed, whatever came after it"
+    );
+}
+
+#[test]
+fn last_command_success_is_not_changed_by_output_that_follows_the_command() {
+    let mut block_list = wide_bootstrapped_block_list();
+    insert_block_with_exit_code(&mut block_list, "false\n", "", 1);
+    // A later command that succeeded, and then output: the last command is the one that counts.
+    insert_block_with_exit_code(&mut block_list, "true\n", "", 0);
+    input_string(&mut block_list, SETPGID_WARNING);
+    assert!(!block_list.last_command_block_has_failed());
+}
+
+#[test]
+fn exit_status_check_waits_while_there_is_no_command_block() {
+    let block_list = wide_bootstrapped_block_list();
+    let outcome =
+        check_exit_status_of_last_command(&block_list, "false", &ExpectedExitStatus::Failure);
+    assert!(
+        matches!(outcome, AssertionOutcome::Failure { .. }),
+        "no command block yet is a failure that can still resolve"
     );
 }
 

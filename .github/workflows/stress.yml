@@ -85,6 +85,10 @@ jobs:
           if [ -n "$STRESS_RUST_LOG" ]; then
             export RUST_LOG="$STRESS_RUST_LOG"
           fi
+          # The bash hooks append the status they saw to this file (bash_body.sh); the next step
+          # prints it, so a wrong status in a failure can be told from a wrong reading of it.
+          export WARP_HOOK_TRACE_FILE="$RUNNER_TEMP/hook-trace.log"
+          : > "$WARP_HOOK_TRACE_FILE"
           cargo nextest run --locked --workspace --offline --no-fail-fast --retries 0 \
             --run-ignored "$RUN_IGNORED" --stress-count "$COUNT" -E "$FILTER" 2>&1 | tee "$RUNNER_TEMP/stress.log"
           status=${PIPESTATUS[0]}
@@ -96,3 +100,13 @@ jobs:
             exit 1
           fi
           exit "$status"
+
+      - name: Print what the bash hooks saw
+        if: ${{ always() }}
+        run: |
+          trace="$RUNNER_TEMP/hook-trace.log"
+          if [ -s "$trace" ]; then
+            echo "::group::hook trace ($(wc -l < "$trace") lines)"
+            cat "$trace"
+            echo "::endgroup::"
+          fi

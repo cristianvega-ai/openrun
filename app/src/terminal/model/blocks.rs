@@ -1445,6 +1445,15 @@ impl BlockList {
         None
     }
 
+    /// Whether the last command that is shown failed. Background output blocks are not commands,
+    /// and their exit code is always 0, so output that follows a command does not change the
+    /// answer.
+    pub fn last_command_block_has_failed(&self) -> bool {
+        self.last_matching_block_by_index(BlockFilter::commands())
+            .and_then(|index| self.block_at(index))
+            .is_some_and(Block::has_failed)
+    }
+
     /// Return the height of the last non hidden rich content block after a block index. If there is no non hidden rich content block, return None.
     pub fn last_non_hidden_rich_content_block_after_block(
         &self,

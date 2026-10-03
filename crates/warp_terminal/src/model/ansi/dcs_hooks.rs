@@ -181,6 +181,24 @@ impl DProtoHook {
         }
     }
 
+    /// The status the shell reported with a completion hook, as `exit_code=N next_block_id=ID`,
+    /// for the log. Only `CommandFinished` and a `Precmd` that carries completion metadata have
+    /// one. It holds a number and an ID the app made up, nothing of the command or its output.
+    pub fn completion_summary(&self) -> Option<String> {
+        let metadata = match self {
+            DProtoHook::CommandFinished { value } => &value.completion_metadata,
+            DProtoHook::Precmd {
+                value: PrecmdHookValue::WithCompletionMetadata(value),
+            } => &value.completion_metadata,
+            _ => return None,
+        };
+        Some(format!(
+            "exit_code={} next_block_id={}",
+            metadata.exit_code.value(),
+            metadata.next_block_id
+        ))
+    }
+
     /// Extracts the session_id from whichever variant carries it. Returns `None`
     /// for hook types that don't (yet) include a session_id field.
     pub fn session_id(&self) -> Option<SessionId> {

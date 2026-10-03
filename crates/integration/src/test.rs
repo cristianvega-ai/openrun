@@ -116,11 +116,12 @@ use warp::integration_testing::terminal::{
     assert_selected_block_index_is_last_renderable, assert_single_terminal_in_tab_bootstrapped,
     assert_snackbar_is_not_visible, assert_snackbar_is_visible, assert_terminal_bootstrapped,
     assert_terminal_bootstrapping, assert_view_has_text_selection,
-    assert_waterfall_gap_empty_background_rendered, clear_blocklist_to_remove_bootstrapped_blocks,
-    execute_command_for_single_terminal_in_tab, execute_echo, execute_long_running_command,
-    execute_long_running_command_for_pane, execute_python_interpreter_in_tab,
-    open_context_menu_for_selected_block, performance_test, run_alt_grid_program, run_completer,
-    validate_git_branch, wait_until_bootstrapped_pane, wait_until_bootstrapped_single_pane_for_tab,
+    assert_waterfall_gap_empty_background_rendered, check_exit_status_of_last_command,
+    clear_blocklist_to_remove_bootstrapped_blocks, execute_command_for_single_terminal_in_tab,
+    execute_echo, execute_long_running_command, execute_long_running_command_for_pane,
+    execute_python_interpreter_in_tab, open_context_menu_for_selected_block, performance_test,
+    report_last_blocks, run_alt_grid_program, run_completer, validate_git_branch,
+    wait_until_bootstrapped_pane, wait_until_bootstrapped_single_pane_for_tab,
 };
 use warp::integration_testing::view_getters::{
     single_input_suggestions_view_for_tab, single_input_view_for_tab,
@@ -3796,6 +3797,136 @@ pub fn test_histcontrol_env_var() -> Builder {
             "echo $HISTCONTROL".to_string(),
             ExpectedExitStatus::Success,
             histcontrol_val,
+        ))
+}
+
+/// A line the shell itself writes on the terminal after a command finished and before the next
+/// prompt is background output. It is not part of the command, and it changes neither the block of
+/// the command nor the exit status the command steps check.
+///
+/// CI run 37150427042 (bash 3.2) had `bash: child setpgid (82747 to 82747): Operation not
+/// permitted` arrive there, once: `false` finished with exit code 1, the line made a background
+/// block (exit code 0) after it, and the exit-code check of the step read that block. To make the
+/// same thing happen every time, a `git` first in the `PATH` writes the line on the terminal of the
+/// shell when the test asks it to, and then waits half a second, which is long enough for the line
+/// to be laid out as a block before the prompt: the prompt hook runs `git` after it has reported the
+/// end of the command and before it reports the prompt. Every other call goes to the real `git`.
+pub fn test_exit_status_ignores_stray_terminal_output_bash() -> Builder {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    const STRAY: &str = "bash: child setpgid (82747 to 82747): Operation not permitted";
+
+    new_builder()
+        .set_should_run_test(|| {
+            let (starter, _) = current_shell_starter_and_version();
+            matches!(starter.shell_type(), ShellType::Bash)
+        })
+        .with_setup(|utils| {
+            let bin = utils.test_dir().join("bin");
+            std::fs::create_dir_all(&bin).expect("could not create the bin directory");
+            let git = bin.join("git");
+            let flag = utils.test_dir().join("stray");
+            std::fs::write(
+                &git,
+                format!(
+                    "#!/bin/sh\n\
+                     # Only a call from the shell under test counts: the app runs `git` too.\n\
+                     case \"$(ps -o comm= -p $PPID)\" in\n\
+                     *bash)\n\
+                     \tif [ -e '{flag}' ]; then\n\
+                     \t\trm -f '{flag}'\n\
+                     \t\tprintf '%s\\n' '{STRAY}' > /dev/tty\n\
+                     \t\tsleep 0.5\n\
+                     \tfi;;\n\
+                     esac\n\
+                     exec /usr/bin/git \"$@\"\n",
+                    flag = flag.display()
+                ),
+            )
+            .expect("could not write the git stand-in");
+            std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755))
+                .expect("could not make the git stand-in executable");
+            // In the rc file: a login shell's /etc/profile puts the system directories first.
+            write_rc_files_for_test(
+                utils.test_dir(),
+                format!("export PATH='{}':\"$PATH\"", bin.display()),
+                [ShellRcType::Bash],
+            );
+        })
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
+        .with_step(
+            execute_command_for_single_terminal_in_tab(
+                0,
+                "false".to_string(),
+                ExpectedExitStatus::Failure,
+                (),
+            )
+            .with_setup(|utils| {
+                std::fs::write(utils.test_dir().join("stray"), "")
+                    .expect("could not write the flag the git stand-in looks for");
+            })
+            // The state of the pane follows the command, not the line after it.
+            .add_assertion(assert_pane_group_has_state(0, TerminalViewState::Errored)),
+        )
+        .with_step(
+            TestStep::new("The stray line is the last block shown, with exit code 0")
+                .add_assertion(move |app, window_id| {
+                    let terminal_view = single_terminal_view_for_tab(app, window_id, 0);
+                    terminal_view.read(app, |view, _ctx| {
+                        let model = view.model.lock();
+                        let block_list = model.block_list();
+                        // Waits until the line is a block that is shown. From then on the check
+                        // that read the last block shown reads that block: this is what failed
+                        // CI, and it is why the check has to name the block of the command.
+                        let Some(last_shown) = block_list.last_non_hidden_block() else {
+                            return AssertionOutcome::failure("No block is shown yet".to_string());
+                        };
+                        if !last_shown.is_background() {
+                            return AssertionOutcome::failure(format!(
+                                "The stray line is not a block that is shown yet.\n{}",
+                                report_last_blocks(block_list)
+                            ));
+                        }
+                        let report = report_last_blocks(block_list);
+                        if last_shown.exit_code().value() != 0
+                            || !last_shown.output_to_string().contains(STRAY)
+                        {
+                            return AssertionOutcome::failure(format!(
+                                "The last block shown is not the stray line with exit code 0.\n{report}"
+                            ));
+                        }
+                        // The block of `false` kept its exit code, and the check finds it.
+                        let right_status = check_exit_status_of_last_command(
+                            block_list,
+                            "false",
+                            &ExpectedExitStatus::Failure,
+                        );
+                        if !matches!(right_status, AssertionOutcome::Success) {
+                            return AssertionOutcome::immediate_failure(format!(
+                                "The exit code of `false` is not read from its block.\n{report}"
+                            ));
+                        }
+                        // Negative control: the check does not read the status of the block
+                        // after it, which is 0.
+                        let wrong_status = check_exit_status_of_last_command(
+                            block_list,
+                            "false",
+                            &ExpectedExitStatus::Success,
+                        );
+                        if !matches!(wrong_status, AssertionOutcome::ImmediateFailure { .. }) {
+                            return AssertionOutcome::immediate_failure(format!(
+                                "A check for success passed the failed `false`.\n{report}"
+                            ));
+                        }
+                        AssertionOutcome::Success
+                    })
+                }),
+        )
+        .with_step(execute_command_for_single_terminal_in_tab(
+            0,
+            "true".to_string(),
+            ExpectedExitStatus::Success,
+            (),
         ))
 }
 
