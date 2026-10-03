@@ -336,7 +336,6 @@ fn every_table_row_names_a_verification_test_that_exists() {
     }
 }
 
-#[cfg(unix)]
 mod real_shells {
     use command::blocking::Command;
 
@@ -468,7 +467,6 @@ mod real_shells {
 /// `LocalCommandExecutor`). Each test first runs the tool without the offline environment to
 /// show the fixture does reach the canary, then with it and asserts silence. The network sandbox
 /// is switched off here so that only the environment table is under test.
-#[cfg(unix)]
 mod real_tools {
     use super::*;
     use crate::terminal::model::session::LocalCommandExecutor;
@@ -794,7 +792,6 @@ print("PROMPTED" if re.search(rb"(^|\n)Username for", out) else "NO-PROMPT")
 ///   Linux runner, `dc.services.visualstudio.com` (telemetry); the session with a variable does
 ///   not contact that variable's host, and the session with both contacts nothing. Each variable
 ///   is verified for the hosts the plain session reached on the platform the test ran on.
-#[cfg(unix)]
 mod real_pwsh {
     use std::path::{Path, PathBuf};
     use std::time::Duration;

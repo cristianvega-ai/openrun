@@ -1,7 +1,6 @@
 use std::fmt;
 use std::time::Duration;
 
-#[cfg(not(target_family = "wasm"))]
 use async_compat::{Compat, CompatExt};
 use bytes::Bytes;
 use http::HeaderValue;
@@ -46,11 +45,9 @@ impl Default for Client {
 
 impl Client {
     pub fn new() -> Self {
-        #[cfg_attr(target_family = "wasm", expect(unused_mut))]
         let mut builder = reqwest::Client::builder();
 
         // Set some HTTP/2-related settings that aren't available on wasm.
-        #[cfg(not(target_family = "wasm"))]
         {
             builder = builder
                 .http2_keep_alive_interval(Duration::from_secs(60))
@@ -111,17 +108,11 @@ impl Client {
 
         let _guard = prevent_sleep_reason.map(prevent_sleep::prevent_sleep);
 
-        cfg_if::cfg_if! {
-            if #[cfg(target_family = "wasm")] {
-                let result = self.wrapped.execute(request).await?;
-            } else {
-                // Explicitly await the future before converting from tokio -> futures. This is because
-                // certain calls to tokio (such as tokio::time::sleep) will panic upon creation if they
-                // are not in a tokio runtime. Wrapping the call in an async block first makes sure that it
-                // is lazily evaluated, ensuring that it is created within a tokio runtime.
-                let result = Compat::new(async { self.wrapped.execute(request).await }).await?;
-            }
-        }
+        // Explicitly await the future before converting from tokio -> futures. This is because
+        // certain calls to tokio (such as tokio::time::sleep) will panic upon creation if they
+        // are not in a tokio runtime. Wrapping the call in an async block first makes sure that it
+        // is lazily evaluated, ensuring that it is created within a tokio runtime.
+        let result = Compat::new(async { self.wrapped.execute(request).await }).await?;
 
         Ok(Response(result))
     }
@@ -174,19 +165,10 @@ impl<'a> RequestBuilder<'a> {
     }
 
     // The `timeout` argument is unused on wasm.
-    #[cfg_attr(target_family = "wasm", allow(unused_variables))]
     pub fn timeout(self, timeout: Duration) -> RequestBuilder<'a> {
-        cfg_if::cfg_if! {
-            // reqwest provides no ability to configure a request timeout
-            // on wasm, so make this a no-op (it's the best we can do).
-            if #[cfg(target_family = "wasm")] {
-                self
-            } else {
-                Self {
-                    wrapped: self.wrapped.timeout(timeout),
-                    ..self
-                }
-            }
+        Self {
+            wrapped: self.wrapped.timeout(timeout),
+            ..self
         }
     }
 
@@ -245,13 +227,7 @@ impl std::error::Error for ResponseError {
 
 impl Response {
     pub async fn text(self) -> reqwest::Result<String> {
-        cfg_if::cfg_if! {
-            if #[cfg(target_family = "wasm")] {
-                self.0.text().await
-            } else {
-                Compat::new(async { self.0.text().compat().await }).await
-            }
-        }
+        Compat::new(async { self.0.text().compat().await }).await
     }
 
     pub fn status(&self) -> StatusCode {
@@ -259,13 +235,7 @@ impl Response {
     }
 
     pub async fn json<T: DeserializeOwned>(self) -> reqwest::Result<T> {
-        cfg_if::cfg_if! {
-            if #[cfg(target_family = "wasm")] {
-                self.0.json().await
-            } else {
-                Compat::new(async { self.0.json().compat().await }).await
-            }
-        }
+        Compat::new(async { self.0.json().compat().await }).await
     }
 
     /// Checks the response status and returns an error if it's not successful.

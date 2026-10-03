@@ -21,13 +21,9 @@
 //! authority, but it is not the authorization boundary. The broker and running
 //! app enforce authorization, and credentials must never be written to
 //! discovery records, logs, or command output.
-#[cfg(unix)]
 use std::io::{Read as _, Write as _};
-#[cfg(unix)]
 use std::net::Shutdown;
-#[cfg(unix)]
 use std::os::unix::net::UnixStream;
-#[cfg(unix)]
 use std::path::Path;
 
 use crate::auth::{CredentialRequest, ScopedCredential};
@@ -38,7 +34,6 @@ use crate::protocol::{
 };
 
 /// Requests an action-scoped credential and sends one authenticated control request.
-#[cfg(not(target_family = "wasm"))]
 pub fn send_request(
     instance: &InstanceRecord,
     request: &RequestEnvelope,
@@ -88,19 +83,6 @@ pub fn send_request(
     ))
 }
 
-/// Fails closed on platforms without a native local-control HTTP transport.
-#[cfg(target_family = "wasm")]
-pub fn send_request(
-    instance: &InstanceRecord,
-    request: &RequestEnvelope,
-) -> Result<ResponseEnvelope, ControlError> {
-    request_credential(instance, request.action.kind)?;
-    Err(ControlError::new(
-        ErrorCode::LocalControlDisabled,
-        "local control requires a native HTTP transport",
-    ))
-}
-#[cfg(unix)]
 /// Resolves the selected instance's validated broker path and requests a credential.
 fn request_credential_over_owner_ipc(
     instance: &InstanceRecord,
@@ -110,7 +92,6 @@ fn request_credential_over_owner_ipc(
     request_credential_over_socket(&path, request)
 }
 
-#[cfg(unix)]
 /// Exchanges one credential request and response over an owner-authenticated socket.
 ///
 /// Shutting down the write half delimits the JSON request so the broker can
@@ -157,18 +138,6 @@ fn request_credential_over_socket(
         )
     })?;
     Ok(response)
-}
-
-#[cfg(not(unix))]
-/// Fails closed on platforms without an owner-authenticated broker transport.
-fn request_credential_over_owner_ipc(
-    _instance: &InstanceRecord,
-    _request: &CredentialRequest,
-) -> Result<String, ControlError> {
-    Err(ControlError::new(
-        ErrorCode::LocalControlDisabled,
-        "local control requires an owner-authenticated credential broker",
-    ))
 }
 
 /// Requests and decodes a short-lived credential for one exact action.

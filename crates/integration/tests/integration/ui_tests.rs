@@ -37,8 +37,6 @@ integration_tests! {
     test_waterfall_input_after_command_execution,
     test_waterfall_input_alt_grid,
     test_undo_redo,
-    #[cfg(target_os="macos")]
-    // TODO(alokedesai): Add support for cascading windows when opening new windows via winit.
     test_add_windows_correct_position_and_cascade,
     test_find_within_block,
     test_case_sensitive_find,

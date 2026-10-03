@@ -37,16 +37,13 @@ struct RecordingContext {
     git_version_requests: std::sync::atomic::AtomicUsize,
     /// When set, `curl ...` commands are run through `sh` with a `PATH` that contains only this
     /// directory, so they can only ever reach the stub `curl` placed in it.
-    #[cfg(unix)]
     stub_curl_dir: Option<std::path::PathBuf>,
     /// The shell family the session reports; `None` is a POSIX session.
     family: Option<ShellFamily>,
     /// When set, every command is run in this shell, started as a local session starts it, with
     /// an empty `PATH` (shell builtins only), and its standard output and error are collected in
     /// `stdout`. The session reports this shell's family.
-    #[cfg(unix)]
     run_in_shell: Option<real_shells::RealShell>,
-    #[cfg(unix)]
     stdout: Mutex<String>,
 }
 
@@ -59,17 +56,13 @@ impl RecordingContext {
             git_version: Some(GitVersion::new(2, 54, 0)),
             git_version_requests: std::sync::atomic::AtomicUsize::new(0),
             family: None,
-            #[cfg(unix)]
             stub_curl_dir: None,
-            #[cfg(unix)]
             run_in_shell: None,
-            #[cfg(unix)]
             stdout: Mutex::new(String::new()),
         }
     }
 
     /// Runs the commands in `shell` and reports its family, as a session of that shell does.
-    #[cfg(unix)]
     fn in_shell(mut self, shell: &real_shells::RealShell) -> Self {
         self.family = Some(shell.kind.family());
         self.run_in_shell = Some(shell.clone());
@@ -127,7 +120,6 @@ impl GeneratorContext for RecordingContext {
         _session_env_vars: Option<HashMap<String, String>>,
     ) -> anyhow::Result<CommandOutput> {
         self.commands.lock().unwrap().push(shell_command.to_owned());
-        #[cfg(unix)]
         if let Some(shell) = &self.run_in_shell {
             let empty =
                 std::env::temp_dir().join(format!("openrun-empty-path-{}", std::process::id()));
@@ -148,7 +140,6 @@ impl GeneratorContext for RecordingContext {
                 exit_code: None,
             });
         }
-        #[cfg(unix)]
         if let Some(stub_dir) = &self.stub_curl_dir
             && shell_command.starts_with("curl ")
         {
@@ -703,7 +694,6 @@ fn an_isolated_context_runs_the_restored_generators_and_a_plain_one_does_not() {
 /// Actions sets it): there a missing fish or pwsh fails the test, because a run that silently
 /// skips them proves nothing about them. `OPENRUN_TEST_FISH` and `OPENRUN_TEST_PWSH` name an
 /// executable that is not on `PATH`.
-#[cfg(unix)]
 mod real_shells {
     use std::path::{Path, PathBuf};
 
@@ -910,13 +900,11 @@ mod real_shells {
     }
 }
 
-#[cfg(unix)]
 use real_shells::installed_shells;
 
 /// The exact input of the RV-01 report, through the production suggestions engine and real
 /// shells: the command that used to be generated for `docker run` printed a marker. Without the
 /// policy it still does (the reproduction); with it, nothing runs.
-#[cfg(unix)]
 #[test]
 fn typing_a_quoted_command_in_an_image_name_executes_nothing() {
     const MARKER: &str = "ASTRA_GENERATOR_INJECTION";
@@ -1559,7 +1547,6 @@ fn is_generator_allowed_matches_the_listed_pairs() {
 /// Types the package-manager commands that used to fetch from public registries, with a stub
 /// `curl` as the only `curl` the generator shell can find. The stub logs its arguments and
 /// fails; nothing in this test opens a socket.
-#[cfg(unix)]
 #[test]
 fn a_stub_curl_is_never_invoked_while_completing_package_names() {
     use std::os::unix::fs::PermissionsExt;
@@ -1613,7 +1600,6 @@ fn a_stub_curl_is_never_invoked_while_completing_package_names() {
 /// The payloads are shell syntax that creates a marker file with a builtin. A generator is
 /// injectable when a marker appears, because then the user's token was executed as shell code
 /// instead of being used as data.
-#[cfg(unix)]
 mod injection_corpus {
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
@@ -2580,7 +2566,6 @@ fn hostile_input_reaches_no_generator_through_the_engine() {
 /// that would print the marker if it were executed. Each must print it without the gate (the
 /// reproduction) and must run nothing with it, in bash, zsh, fish and PowerShell (written for
 /// POSIX shells here; `ShellKind::typed_line` adapts the print command).
-#[cfg(unix)]
 const ENGINE_INJECTION_INPUTS: &[&str] = &[
     r#"asdf uninstall "nodejs; printf ASTRA_MARK; #" "#,
     r#"asdf global "nodejs' ; printf ASTRA_MARK; #" "#,
@@ -2602,7 +2587,6 @@ const ENGINE_INJECTION_INPUTS: &[&str] = &[
     r#"asdf uninstall "nodejs$(printf ASTRA_MARK)" "#,
 ];
 
-#[cfg(unix)]
 #[test]
 fn typed_words_are_never_executed_by_a_real_shell_through_the_engine() {
     let mut reproduced_in: std::collections::BTreeMap<&str, BTreeSet<&str>> = Default::default();

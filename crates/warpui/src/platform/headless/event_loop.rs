@@ -1,12 +1,9 @@
 use std::mem::ManuallyDrop;
 use std::ops::ControlFlow;
-#[cfg(target_os = "macos")]
 use std::sync::Arc;
-#[cfg(target_os = "macos")]
 use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::{self, Receiver, SendError};
 
-#[cfg(target_os = "macos")]
 use objc2_core_foundation::{
     CFRetained, CFRunLoop, CFRunLoopSource, CFRunLoopSourceContext, kCFRunLoopDefaultMode,
 };
@@ -34,14 +31,12 @@ pub(super) enum AppEvent {
 #[derive(Clone)]
 pub(super) struct EventSender {
     sender: mpsc::Sender<AppEvent>,
-    #[cfg(target_os = "macos")]
     run_loop_signal: Arc<RunLoopSignal>,
 }
 
 impl EventSender {
     pub(super) fn send(&self, event: AppEvent) -> Result<(), SendError<AppEvent>> {
         self.sender.send(event)?;
-        #[cfg(target_os = "macos")]
         self.run_loop_signal.signal();
         Ok(())
     }
@@ -49,14 +44,12 @@ impl EventSender {
 
 pub(super) struct EventReceiver {
     receiver: Receiver<AppEvent>,
-    #[cfg(target_os = "macos")]
     _run_loop_signal: Arc<RunLoopSignal>,
 }
 
 pub(super) fn channel() -> (EventSender, EventReceiver) {
     let (sender, receiver) = mpsc::channel();
 
-    #[cfg(target_os = "macos")]
     {
         let run_loop_signal = Arc::new(RunLoopSignal::new());
         (
@@ -72,13 +65,11 @@ pub(super) fn channel() -> (EventSender, EventReceiver) {
     }
 }
 
-#[cfg(target_os = "macos")]
 struct RunLoopSignal {
     run_loop: CFRetained<CFRunLoop>,
     source: CFRetained<CFRunLoopSource>,
 }
 
-#[cfg(target_os = "macos")]
 impl RunLoopSignal {
     fn new() -> Self {
         objc2::MainThreadMarker::new()
@@ -116,14 +107,11 @@ impl RunLoopSignal {
 // SAFETY: `RunLoopSignal` only exposes the thread-safe `CFRunLoopSourceSignal` and
 // `CFRunLoopWakeUp` operations to other threads. The source is installed and serviced only by
 // the process main thread.
-#[cfg(target_os = "macos")]
 unsafe impl Send for RunLoopSignal {}
 
 // SAFETY: See the `Send` implementation. Concurrent calls only signal and wake the run loop.
-#[cfg(target_os = "macos")]
 unsafe impl Sync for RunLoopSignal {}
 
-#[cfg(target_os = "macos")]
 unsafe extern "C-unwind" fn stop_run_loop(_info: *mut std::ffi::c_void) {
     CFRunLoop::current()
         .expect("the run-loop source callback should be running on a thread with a run loop")
@@ -145,7 +133,6 @@ pub(super) fn run(
     callbacks.initialize_app(init_fn);
 
     // Process events until termination.
-    #[cfg(target_os = "macos")]
     {
         'event_loop: loop {
             CFRunLoop::run();

@@ -1,6 +1,5 @@
 //! Inline repo switcher menu showing known repos with git status.
 mod data_source;
-#[cfg(feature = "local_fs")]
 mod search_item;
 mod view;
 

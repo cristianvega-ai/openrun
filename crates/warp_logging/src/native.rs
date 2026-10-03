@@ -602,17 +602,11 @@ pub fn log_directory() -> Result<std::path::PathBuf> {
 }
 
 fn init_log_directory() -> Result<std::path::PathBuf> {
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            Ok(dirs::home_dir()
-                .ok_or_else(|| {
-                    anyhow::anyhow!("could not locate home directory in order to create a log file")
-                })?
-                .join("Library/Logs/"))
-        } else {
-            Err(anyhow::anyhow!("Have not configured file-based logging for the current platform!"))
-        }
-    }
+    Ok(dirs::home_dir()
+        .ok_or_else(|| {
+            anyhow::anyhow!("could not locate home directory in order to create a log file")
+        })?
+        .join("Library/Logs/"))
 }
 
 /// Initializes the logger before running tests.

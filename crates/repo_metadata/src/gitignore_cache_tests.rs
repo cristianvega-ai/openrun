@@ -65,7 +65,6 @@ fn rebuilds_when_content_changes_at_the_same_length() {
 /// A `.gitignore` first touched while transiently unreadable (e.g. a permissions race during
 /// checkout) must not cache the resulting empty matcher: a failed read must never be cached,
 /// regardless of the file's later content.
-#[cfg(unix)]
 #[test]
 fn recovers_after_a_transient_read_failure() {
     use std::os::unix::fs::PermissionsExt;

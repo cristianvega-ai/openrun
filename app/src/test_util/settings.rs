@@ -58,7 +58,6 @@ pub fn initialize_settings_for_tests(app: &mut App) {
     DebugSettings::register(app);
     AppIconSettings::register(app);
 
-    #[cfg(feature = "local_fs")]
     {
         crate::util::file::external_editor::EditorSettings::register(app);
     }

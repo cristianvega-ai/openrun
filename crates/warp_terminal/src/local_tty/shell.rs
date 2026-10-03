@@ -22,19 +22,13 @@ pub trait AvailableShell {
 /// * On macOS, this includes `$APP_PATH/Contents/Resources/bin`, in which we put a wrapper around the Warp CLI.
 /// * On all other platforms, this is empty.
 pub fn extra_path_entries() -> impl Iterator<Item = PathBuf> {
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            use itertools::Either;
+    use itertools::Either;
 
-            if let Some(resources_path) = warp_core::paths::bundled_resources_dir() {
-                let bin_path = resources_path.join("bin");
-                Either::Left(std::iter::once(bin_path))
-            } else {
-                Either::Right(std::iter::empty())
-            }
-        } else {
-            std::iter::empty()
-        }
+    if let Some(resources_path) = warp_core::paths::bundled_resources_dir() {
+        let bin_path = resources_path.join("bin");
+        Either::Left(std::iter::once(bin_path))
+    } else {
+        Either::Right(std::iter::empty())
     }
 }
 
@@ -93,60 +87,62 @@ impl ShellStarterSource {
     }
 
     fn compute_fallback_shell() -> Option<Self> {
-        cfg_if::cfg_if! {
-            if #[cfg(unix)] {
-                        let pw_shell_path = super::unix::resolve_current_user().map(|user| user.shell);
-                        if pw_shell_path.is_none() {
-                            report_error!(
-                                "could not resolve the current user (getpwuid, getent, and /etc/passwd all failed)",
-                                extra: { "uid" => %nix::unistd::getuid().as_raw() }
-                            );
-                        }
-                        if let Some((resolved_pw_shell_path, shell_type)) =
-                            pw_shell_path.as_deref().and_then(supported_shell_path_and_type)
-                        {
-                            let session_id = generate_session_id();
-                            let args = arguments_for_session_spawning_command(
-                                resolved_pw_shell_path.as_path().to_string_lossy().as_ref(),
-                                shell_type,
-                                session_id,
-                            );
-                            return Some(Self::UserDefault(DirectShellStarter {
-                                args,
-                                shell_path: resolved_pw_shell_path,
-                                shell_type,
-                                session_id,
-                            }));
-                        }
-                        let (resolved_default_shell_path, shell_type) = if let Some(shell_path_and_type) =
-                            supported_shell_path_and_type(ZSH_SHELL_PATH)
-                        {
-                            shell_path_and_type
-                        } else if let Some(shell_path_and_type) = supported_shell_path_and_type(BASH_SHELL_PATH) {
-                            shell_path_and_type
-                        } else if let Some(shell_path_and_type) = supported_shell_path_and_type(FISH_SHELL_PATH) {
-                            shell_path_and_type
-                        } else {
-                            log::warn!("Did not find valid binaries when attempting to load fallback shell (not bash, fish, or zsh).");
-                            return None;
-                        };
-
-                        let session_id = generate_session_id();
-                        let args = arguments_for_session_spawning_command(
-                            resolved_default_shell_path.as_path().to_string_lossy().as_ref(),
-                            shell_type,
-                            session_id,
-                        );
-                        Some(Self::Fallback {
-                            starter: DirectShellStarter {
-                                args,
-                                shell_path: resolved_default_shell_path,
-                                shell_type,
-                                session_id,
-                            },
-                        })
-            }
+        let pw_shell_path = super::unix::resolve_current_user().map(|user| user.shell);
+        if pw_shell_path.is_none() {
+            report_error!(
+                "could not resolve the current user (getpwuid, getent, and /etc/passwd all failed)",
+                extra: { "uid" => %nix::unistd::getuid().as_raw() }
+            );
         }
+        if let Some((resolved_pw_shell_path, shell_type)) = pw_shell_path
+            .as_deref()
+            .and_then(supported_shell_path_and_type)
+        {
+            let session_id = generate_session_id();
+            let args = arguments_for_session_spawning_command(
+                resolved_pw_shell_path.as_path().to_string_lossy().as_ref(),
+                shell_type,
+                session_id,
+            );
+            return Some(Self::UserDefault(DirectShellStarter {
+                args,
+                shell_path: resolved_pw_shell_path,
+                shell_type,
+                session_id,
+            }));
+        }
+        let (resolved_default_shell_path, shell_type) = if let Some(shell_path_and_type) =
+            supported_shell_path_and_type(ZSH_SHELL_PATH)
+        {
+            shell_path_and_type
+        } else if let Some(shell_path_and_type) = supported_shell_path_and_type(BASH_SHELL_PATH) {
+            shell_path_and_type
+        } else if let Some(shell_path_and_type) = supported_shell_path_and_type(FISH_SHELL_PATH) {
+            shell_path_and_type
+        } else {
+            log::warn!(
+                "Did not find valid binaries when attempting to load fallback shell (not bash, fish, or zsh)."
+            );
+            return None;
+        };
+
+        let session_id = generate_session_id();
+        let args = arguments_for_session_spawning_command(
+            resolved_default_shell_path
+                .as_path()
+                .to_string_lossy()
+                .as_ref(),
+            shell_type,
+            session_id,
+        );
+        Some(Self::Fallback {
+            starter: DirectShellStarter {
+                args,
+                shell_path: resolved_default_shell_path,
+                shell_type,
+                session_id,
+            },
+        })
     }
 }
 

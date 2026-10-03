@@ -27,7 +27,6 @@ use warpui::{
 
 pub use self::view::{PaneHeaderAction, PaneHeaderCustomAction, PaneView, PaneViewEvent};
 use super::{ActivationReason, LeafContents, PaneGroup, PaneGroupAction};
-#[cfg(feature = "local_fs")]
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::view::CodeView;
 use crate::menu::MenuItem;
@@ -792,7 +791,6 @@ pub enum PaneEvent {
     /// Repo for this pane's terminal has changed
     RepoChanged,
     ClearHoveredTabIndex,
-    #[cfg(feature = "local_fs")]
     ReplaceWithCodePane {
         path: LocalOrRemotePath,
         source: Option<crate::code::editor_management::CodeSource>,
@@ -801,7 +799,6 @@ pub enum PaneEvent {
         /// still derive `Eq`.
         scroll_fraction: Option<ordered_float::OrderedFloat<f32>>,
     },
-    #[cfg(feature = "local_fs")]
     ReplaceWithFilePane {
         path: LocalOrRemotePath,
         source: Option<crate::code::editor_management::CodeSource>,

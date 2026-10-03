@@ -211,7 +211,6 @@ fn language_server_downloads_are_disabled_by_default() {
     })
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn install_is_refused_while_language_server_downloads_are_disabled() {
     use std::cell::RefCell;

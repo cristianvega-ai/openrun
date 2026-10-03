@@ -1,13 +1,10 @@
 use std::path::Path;
 
-#[cfg(feature = "local_fs")]
 use anyhow::Context;
 use async_trait::async_trait;
-#[cfg(feature = "local_fs")]
 use command::r#async::Command;
 
 use crate::language_server_candidate::{LanguageServerCandidate, LanguageServerMetadata};
-#[cfg(feature = "local_fs")]
 use crate::supported_servers::CustomBinaryConfig;
 use crate::{CommandBuilder, Downloader};
 
@@ -15,11 +12,9 @@ pub struct TypeScriptLanguageServerCandidate;
 
 impl TypeScriptLanguageServerCandidate {
     /// Path to the new langserver JS file (v4.0.0+) relative to the install directory.
-    #[cfg(feature = "local_fs")]
     const NEW_SERVER_PATH: &str = "node_modules/typescript-language-server/lib/cli.mjs";
 
     /// Path to the old langserver JS file (pre-4.0.0) relative to the install directory.
-    #[cfg(feature = "local_fs")]
     const OLD_SERVER_PATH: &str = "node_modules/typescript-language-server/lib/cli.js";
 
     /// Finds the configuration for running typescript-language-server from our custom installation.
@@ -29,7 +24,6 @@ impl TypeScriptLanguageServerCandidate {
     ///
     /// # Arguments
     /// * `path_env_var` - The PATH environment variable to use when checking for system node.
-    #[cfg(feature = "local_fs")]
     pub async fn find_installed_binary_config(
         path_env_var: Option<&str>,
     ) -> Option<CustomBinaryConfig> {
@@ -97,7 +91,6 @@ impl TypeScriptLanguageServerCandidate {
 }
 
 #[async_trait]
-#[cfg(feature = "local_fs")]
 impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
     async fn should_suggest_for_repo(&self, path: &Path, _executor: &CommandBuilder) -> bool {
         // Check for common JavaScript/TypeScript project indicators
@@ -210,37 +203,5 @@ impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
             url: None, // npm packages don't have direct download URLs
             digest: None,
         })
-    }
-}
-
-#[async_trait]
-#[cfg(not(feature = "local_fs"))]
-impl LanguageServerCandidate for TypeScriptLanguageServerCandidate {
-    async fn should_suggest_for_repo(&self, _path: &Path, _executor: &CommandBuilder) -> bool {
-        false
-    }
-
-    async fn is_installed_in_data_dir(&self, _executor: &CommandBuilder) -> bool {
-        false
-    }
-
-    async fn is_installed_on_path(&self, _executor: &CommandBuilder) -> bool {
-        false
-    }
-
-    async fn install(
-        &self,
-        _metadata: LanguageServerMetadata,
-        _executor: &CommandBuilder,
-        _downloader: &Downloader,
-    ) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    async fn fetch_latest_server_metadata(
-        &self,
-        _downloader: &Downloader,
-    ) -> anyhow::Result<LanguageServerMetadata> {
-        todo!()
     }
 }

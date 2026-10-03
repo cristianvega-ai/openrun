@@ -1,15 +1,11 @@
 //! Settings UI for local scripting and Warp control permissions.
 
 use settings::Setting as _;
-#[cfg(target_os = "macos")]
 use warp_core::channel::ChannelState;
 use warp_errors::report_if_error;
-#[cfg(target_os = "macos")]
 use warpui::elements::MouseStateHandle;
 use warpui::elements::{ChildView, Element};
-#[cfg(target_os = "macos")]
 use warpui::ui_components::button::ButtonVariant;
-#[cfg(target_os = "macos")]
 use warpui::ui_components::components::UiComponent;
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle};
 
@@ -20,23 +16,19 @@ use super::settings_page::{
 use super::{SettingsSection, ToggleState};
 use crate::appearance::Appearance;
 use crate::settings::{LocalControlMode, LocalControlSettings};
-#[cfg(target_os = "macos")]
 use crate::view_components::DismissibleToast;
 use crate::view_components::{Dropdown, DropdownItem};
-#[cfg(target_os = "macos")]
 use crate::workspace::{ToastStack, cli_install};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ScriptingSettingsPageAction {
     SetLocalControlMode(LocalControlMode),
-    #[cfg(target_os = "macos")]
     InstallWarpControlCli,
 }
 
 pub struct ScriptingSettingsPageView {
     page: PageType<Self>,
     local_control_mode_dropdown: ViewHandle<Dropdown<ScriptingSettingsPageAction>>,
-    #[cfg(target_os = "macos")]
     warpctrl_installing: bool,
 }
 
@@ -54,19 +46,14 @@ impl ScriptingSettingsPageView {
             ctx.notify();
         });
 
-        #[cfg(target_os = "macos")]
         let widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
             Box::new(WarpControlCliInstallWidget::default()),
             Box::new(LocalControlModeWidget),
         ];
-        #[cfg(not(target_os = "macos"))]
-        let widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
-            vec![Box::new(LocalControlModeWidget)];
 
         Self {
             page: PageType::new_uncategorized(widgets, Some(PageTitle::new("Scripting"))),
             local_control_mode_dropdown,
-            #[cfg(target_os = "macos")]
             warpctrl_installing: false,
         }
     }
@@ -96,7 +83,6 @@ impl ScriptingSettingsPageView {
         });
     }
 
-    #[cfg(target_os = "macos")]
     fn install_warpctrl(&mut self, ctx: &mut ViewContext<Self>) {
         if self.warpctrl_installing || cli_install::is_warpctrl_installed() {
             return;
@@ -156,7 +142,6 @@ impl TypedActionView for ScriptingSettingsPageView {
                 });
                 ctx.notify();
             }
-            #[cfg(target_os = "macos")]
             ScriptingSettingsPageAction::InstallWarpControlCli => self.install_warpctrl(ctx),
         }
     }
@@ -178,7 +163,7 @@ impl SettingsPageMeta for ScriptingSettingsPageView {
     }
 
     fn should_render(&self, _ctx: &AppContext) -> bool {
-        cfg!(not(target_family = "wasm"))
+        true
     }
 
     fn update_filter(&mut self, query: &str, ctx: &mut ViewContext<Self>) -> MatchData {
@@ -200,13 +185,11 @@ impl From<ViewHandle<ScriptingSettingsPageView>> for SettingsPageViewHandle {
     }
 }
 
-#[cfg(target_os = "macos")]
 #[derive(Default)]
 struct WarpControlCliInstallWidget {
     install_button_mouse_state: MouseStateHandle,
 }
 
-#[cfg(target_os = "macos")]
 impl SettingsWidget for WarpControlCliInstallWidget {
     type View = ScriptingSettingsPageView;
 

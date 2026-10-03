@@ -486,7 +486,6 @@ fn test_settings_widget_deeplink_target() {
         settings_widget_deeplink_target("global_hotkey").map(|(section, _)| section),
         Some(SettingsSection::Features),
     );
-    #[cfg(not(target_family = "wasm"))]
     assert_eq!(
         settings_widget_deeplink_target("cli_agents").map(|(section, _)| section),
         Some(SettingsSection::ThirdPartyCLIAgents),
@@ -510,7 +509,6 @@ fn test_settings_section_for_simple_subpage() {
 // up a full `AppContext`.
 
 #[test]
-#[cfg(unix)]
 fn test_open_file_executable_sh_routes_to_execute() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -522,7 +520,6 @@ fn test_open_file_executable_sh_routes_to_execute() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_open_file_non_executable_sh_routes_to_editor() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -533,7 +530,6 @@ fn test_open_file_non_executable_sh_routes_to_editor() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_open_file_executable_bash_zsh_fish_route_to_execute() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -582,7 +578,6 @@ fn test_open_file_ipynb_routes_to_notebook() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_open_file_rust_source_still_opens_in_editor() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("main.rs");
@@ -591,7 +586,6 @@ fn test_open_file_rust_source_still_opens_in_editor() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_open_file_editor_executable_sh_opens_in_editor() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -602,7 +596,6 @@ fn test_open_file_editor_executable_sh_opens_in_editor() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_open_file_editor_rust_source_opens_in_editor() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("main.rs");
@@ -611,7 +604,6 @@ fn test_open_file_editor_rust_source_opens_in_editor() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_open_file_editor_binary_file_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("image.png");
@@ -629,7 +621,6 @@ fn test_open_file_directory_routes_to_session() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_open_file_non_runnable_shebang_routes_to_editor() {
     // Extensionless `#!/bin/sh` file without the user-execute bit. Without the
     // shebang fall-through this would hit `ExecuteInSession` and the shell would

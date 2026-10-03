@@ -1,6 +1,5 @@
 use warpui::App;
 use warpui::keymap::{EditableBinding, Keystroke, Trigger};
-use warpui::platform::OperatingSystem;
 
 use crate::terminal;
 use crate::util::bindings::{
@@ -26,11 +25,7 @@ fn test_keybinding_name_to_display_string() {
                 ),
             ]);
 
-            let displayed_keybinding = if OperatingSystem::get().is_mac() {
-                "⌘,"
-            } else {
-                "Logo ,"
-            };
+            let displayed_keybinding = "⌘,";
             assert_eq!(
                 Some(displayed_keybinding),
                 keybinding_name_to_display_string("workspace:show_settings", ctx).as_deref()
@@ -46,11 +41,7 @@ fn test_keybinding_name_to_display_string() {
                 Trigger::Keystrokes(vec![Keystroke::parse("cmd-shift-<").unwrap()]),
             );
 
-            let displayed_keybinding = if OperatingSystem::get().is_mac() {
-                "⇧⌘<"
-            } else {
-                "Shift Logo <"
-            };
+            let displayed_keybinding = "⇧⌘<";
             assert_eq!(
                 Some(displayed_keybinding),
                 keybinding_name_to_display_string("workspace:show_settings", ctx).as_deref()
@@ -61,11 +52,7 @@ fn test_keybinding_name_to_display_string() {
                 Trigger::Keystrokes(vec![Keystroke::parse("cmd-alt-/").unwrap()]),
             );
 
-            let expected_keybinding = if OperatingSystem::get().is_mac() {
-                "⌥⌘/"
-            } else {
-                "Alt Logo /"
-            };
+            let expected_keybinding = "⌥⌘/";
             assert_eq!(
                 Some(expected_keybinding),
                 keybinding_name_to_display_string("workspace:toggle_keybindings_page", ctx)
@@ -95,11 +82,7 @@ fn test_toggle_maximize_pane_binding_is_editable() {
             // action; other platforms have no default until the user assigns one. Either
             // way, whatever resolves here is what the pane header menu item surfaces.
             let default = keybinding_name_to_display_string(TOGGLE_MAXIMIZE_PANE_BINDING_NAME, ctx);
-            if OperatingSystem::get().is_mac() {
-                assert_eq!(Some("⇧⌘⏎"), default.as_deref());
-            } else {
-                assert_eq!(None, default);
-            }
+            assert_eq!(Some("⇧⌘⏎"), default.as_deref());
 
             // A reassigned shortcut resolves to its display string on every platform.
             ctx.set_custom_trigger(
@@ -107,11 +90,7 @@ fn test_toggle_maximize_pane_binding_is_editable() {
                 Trigger::Keystrokes(vec![Keystroke::parse("cmd-shift-M").unwrap()]),
             );
 
-            let displayed_keybinding = if OperatingSystem::get().is_mac() {
-                "⇧⌘M"
-            } else {
-                "Shift Logo M"
-            };
+            let displayed_keybinding = "⇧⌘M";
             assert_eq!(
                 Some(displayed_keybinding),
                 keybinding_name_to_display_string(TOGGLE_MAXIMIZE_PANE_BINDING_NAME, ctx)
@@ -145,11 +124,7 @@ fn test_terminal_page_scroll_bindings_are_editable() {
 #[test]
 fn test_toggle_keybindings_page_defaults_to_cmd_slash_on_mac_only() {
     // `ctrl-/` is reserved for the PTY on Linux and Windows, so only macOS has a default.
-    let expected = if OperatingSystem::get().is_mac() {
-        Keystroke::parse("cmd-/").ok()
-    } else {
-        None
-    };
+    let expected = Keystroke::parse("cmd-/").ok();
     assert_eq!(
         custom_tag_to_keystroke(CustomAction::ToggleKeybindingsPage.into()),
         expected

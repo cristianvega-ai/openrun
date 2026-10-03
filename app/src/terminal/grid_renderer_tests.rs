@@ -15,10 +15,6 @@ fn rect_from_points(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> RectF {
 
 // TODO: Make test non-Mac specific by switching to using bundled Roboto font.
 #[test]
-#[cfg_attr(
-    not(target_os = "macos"),
-    ignore = "Assumes existence of Arial font, which is only guaranteed on macOS"
-)]
 fn test_calculate_grid_baseline_position() {
     let font_db = warpui::platform::test::FontDB::new();
     let mut font_cache = FontCache::new(Box::new(font_db));

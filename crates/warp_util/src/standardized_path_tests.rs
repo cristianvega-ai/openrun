@@ -30,7 +30,6 @@ fn try_new_rejects_relative() {
 #[test]
 fn try_from_local_absolute() {
     // Use a platform-appropriate absolute path.
-    #[cfg(unix)]
     let (input, expected) = (Path::new("/tmp/test"), "/tmp/test");
 
     let p = StandardizedPath::try_from_local(input).unwrap();
@@ -49,13 +48,11 @@ fn from_local_canonicalized_existing_path() {
     let p = StandardizedPath::from_local_canonicalized(&existing).unwrap();
     assert!(!p.as_str().is_empty());
     // Encoding should match the local OS.
-    #[cfg(unix)]
     assert!(p.is_unix());
 }
 
 #[test]
 fn from_local_canonicalized_nonexistent() {
-    #[cfg(unix)]
     let path = Path::new("/nonexistent_path_xyz_123");
 
     assert!(StandardizedPath::from_local_canonicalized(path).is_err());
@@ -68,7 +65,6 @@ fn from_local_absolute_unchecked_accepts_absolute() {
     // panic in debug wasm builds. The guard now checks absoluteness via the
     // encoding-aware `typed_path` path, so a genuinely-absolute path must be
     // accepted (and not panic) on every target.
-    #[cfg(unix)]
     let (input, expected) = (Path::new("/Users/david/src/warp"), "/Users/david/src/warp");
 
     let p = StandardizedPath::from_local_absolute_unchecked(input);
@@ -77,7 +73,6 @@ fn from_local_absolute_unchecked_accepts_absolute() {
 
 #[test]
 fn from_local_absolute_unchecked_normalizes() {
-    #[cfg(unix)]
     let (input, expected) = (
         Path::new("/home/user/./project/../project"),
         "/home/user/project",
@@ -163,7 +158,6 @@ fn to_local_path() {
 }
 
 #[test]
-#[cfg(unix)]
 fn to_local_path_unix_on_unix() {
     let p = StandardizedPath::try_new("/home/user").unwrap();
     assert_eq!(p.to_local_path().unwrap(), Path::new("/home/user"));

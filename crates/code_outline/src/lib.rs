@@ -1,12 +1,6 @@
 //! Code-symbol outlines of repositories, built by parsing source files with tree-sitter.
-#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
-
-cfg_if::cfg_if! {
-    if #[cfg(not(target_arch = "wasm32"))] {
-        mod native;
-        pub use native::build_outline;
-    }
-}
+mod native;
+pub use native::build_outline;
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -22,7 +16,6 @@ lazy_static::lazy_static! {
     static ref THREADPOOL: Option<rayon::ThreadPool> = create_thread_pool();
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn create_thread_pool() -> Option<rayon::ThreadPool> {
     const MAX_PARALLEL_THREADS: usize = 2;
 
@@ -35,11 +28,6 @@ fn create_thread_pool() -> Option<rayon::ThreadPool> {
         .num_threads(num_threads)
         .build()
         .ok()
-}
-
-#[cfg(target_arch = "wasm32")]
-fn create_thread_pool() -> Option<rayon::ThreadPool> {
-    None
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

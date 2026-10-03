@@ -1,14 +1,9 @@
 use anyhow::{Context, Result};
-#[cfg(all(feature = "local_fs", unix))]
 use async_fs::unix::PermissionsExt;
 use serde::Deserialize;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "local_fs")] {
-        use sha2::{Digest, Sha256};
-        use std::path::PathBuf;
-    }
-}
+use sha2::{Digest, Sha256};
+use std::path::PathBuf;
 
 use crate::Downloader;
 use crate::language_server_candidate::LanguageServerMetadata;
@@ -142,7 +137,6 @@ where
 }
 
 /// The type of archive for a GitHub release asset.
-#[cfg(feature = "local_fs")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssetKind {
     /// A gzip-compressed file (e.g., `rust-analyzer-aarch64-apple-darwin.gz`)
@@ -151,7 +145,6 @@ pub enum AssetKind {
     Zip,
 }
 
-#[cfg(feature = "local_fs")]
 impl AssetKind {
     /// Determines the asset kind from a file name based on its extension.
     pub fn from_filename(filename: &str) -> Option<Self> {
@@ -185,7 +178,6 @@ impl AssetKind {
 ///
 /// # Returns
 /// The path to the installed binary on success.
-#[cfg(feature = "local_fs")]
 pub async fn install_from_github(
     downloader: &Downloader,
     metadata: &LanguageServerMetadata,
@@ -292,7 +284,6 @@ pub async fn install_from_github(
     };
 
     // Make the binary executable on Unix systems
-    #[cfg(unix)]
     {
         let mut perms = async_fs::metadata(&binary_path)
             .await

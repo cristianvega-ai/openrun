@@ -7,7 +7,6 @@ pub use warp_util::file_type::{
     is_binary_file, is_file_content_binary, is_jupyter_notebook_file, is_markdown_file,
 };
 
-#[cfg(feature = "local_fs")]
 use crate::util::file::external_editor::{Editor, EditorSettings, settings::EditorChoice};
 
 #[derive(
@@ -50,7 +49,6 @@ pub enum FileTarget {
     /// Open in Warp's Code Editor.
     CodeEditor(EditorLayout),
     /// Open in an external editor (e.g. VS Code, Emacs).
-    #[cfg(feature = "local_fs")]
     ExternalEditor(Editor),
     /// Open in the environment editor ($EDITOR).
     EnvEditor,
@@ -61,14 +59,8 @@ pub enum FileTarget {
 }
 
 /// Checks if a file is a code file with language support.
-#[cfg(feature = "local_fs")]
 pub fn is_supported_code_file(path: impl AsRef<Path>) -> bool {
     languages::language_by_local_filename(path.as_ref()).is_some()
-}
-
-#[cfg(not(feature = "local_fs"))]
-pub fn is_supported_code_file(_path: impl AsRef<Path>) -> bool {
-    false
 }
 
 /// Whether `path` renders in Warp's notebook viewer (with a Rendered/Raw
@@ -112,7 +104,6 @@ pub(crate) fn starts_with_shebang(path: &Path) -> bool {
     }
 }
 
-#[cfg(unix)]
 pub fn is_runnable_shell_script(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
 
@@ -132,11 +123,6 @@ pub fn is_runnable_shell_script(path: &Path) -> bool {
         return matches!(ext, "sh" | "bash" | "zsh" | "fish" | "ksh" | "command");
     }
     starts_with_shebang(path)
-}
-
-#[cfg(not(unix))]
-pub fn is_runnable_shell_script(_path: &Path) -> bool {
-    false
 }
 
 /// Determines if a file can be opened in Warp and returns its type.
@@ -161,7 +147,6 @@ pub fn is_file_openable_in_warp(path: &Path) -> Option<OpenableFileType> {
 /// Prefer `resolve_file_target` for all other cases to respect users' preferences.
 /// This would also force any binary file to be opened in Warp's Code Editor, so you should likely check
 /// `is_file_openable_in_warp` before rendering any such UI Elements.
-#[cfg(feature = "local_fs")]
 pub fn resolve_file_target_to_open_in_warp(
     path: &Path,
     settings: &EditorSettings,
@@ -183,7 +168,6 @@ pub fn resolve_file_target_to_open_in_warp(
 }
 
 /// Resolves the target application or viewer for opening a file based on its path and editor settings.
-#[cfg(feature = "local_fs")]
 pub fn resolve_file_target(
     path: &Path,
     settings: &EditorSettings,
@@ -198,7 +182,6 @@ pub fn resolve_file_target(
     )
 }
 
-#[cfg(feature = "local_fs")]
 pub fn resolve_file_target_with_editor_choice(
     path: &Path,
     editor_choice: EditorChoice,

@@ -13,12 +13,10 @@ use warp_editor::render::model::{
     BrokenLinkStyle, CheckBoxStyle, HorizontalRuleStyle, InlineCodeStyle, ParagraphStyles,
     RenderLayoutOptions, RichTextStyles, TableStyle,
 };
-#[cfg(target_os = "macos")]
 use warpui::platform::mac::FontDB as MacFontDB;
 use warpui_core::App;
 use warpui_core::color::ColorU;
 use warpui_core::elements::{Border, Fill};
-#[cfg(target_os = "macos")]
 use warpui_core::fonts::Cache as FontCache;
 use warpui_core::fonts::{FamilyId, Weight};
 use warpui_core::units::IntoPixels;
@@ -151,7 +149,6 @@ fn text_layout_benchmarks(criterion: &mut Criterion) {
     );
     let test_styles = benchmark_styles(FamilyId(0));
     let layout_options = RenderLayoutOptions::default();
-    #[cfg(target_os = "macos")]
     let (core_text_font_cache, core_text_styles, core_text_delta, core_text_chars) = {
         let mut font_cache = FontCache::new(Box::new(MacFontDB::new()));
         let font_family = font_cache
@@ -172,7 +169,6 @@ fn text_layout_benchmarks(criterion: &mut Criterion) {
                 f32::MAX,
             );
             layout_delta(&test_delta, &test_text_layout, &layout_options, ctx);
-            #[cfg(target_os = "macos")]
             {
                 let core_text_layout = TextLayout::new(
                     core_text_font_cache.text_layout_system(),
@@ -196,7 +192,6 @@ fn text_layout_benchmarks(criterion: &mut Criterion) {
                 });
                 group.finish();
             }
-            #[cfg(target_os = "macos")]
             {
                 let mut group = criterion.benchmark_group("editor_text_layout/core_text");
                 group.throughput(Throughput::Elements(core_text_chars as u64));

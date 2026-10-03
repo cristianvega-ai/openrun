@@ -1,8 +1,6 @@
 use anyhow::Result;
-#[cfg(unix)]
 use warp_errors::report_error;
 use warpui_core::{Entity, SingletonEntity};
-#[cfg(unix)]
 use {
     crate::local_tty::server::TerminalServer, anyhow::bail, std::cmp::Reverse,
     std::collections::HashMap, std::ffi::OsString, std::process::Child,
@@ -26,12 +24,10 @@ pub trait PtyHandle: Send + Sync {
 }
 
 /// A handle for a pty that is a direct child of the current process.
-#[cfg(unix)]
 struct DirectPtyHandle {
     child: Child,
 }
 
-#[cfg(unix)]
 impl PtyHandle for DirectPtyHandle {
     fn pid(&self) -> u32 {
         self.child.id()
@@ -56,7 +52,6 @@ impl PtyHandle for DirectPtyHandle {
 
 pub(super) struct PtySpawnInfo {
     pub result: PtySpawnResult,
-    #[cfg(unix)]
     pub child: Child,
 }
 
@@ -67,7 +62,6 @@ pub(super) struct PtySpawnInfo {
 /// current process, or it may be spawned by a subprocess that is responsible
 /// for owning and managing ptys.
 pub struct PtySpawner {
-    #[cfg(unix)]
     server: Option<TerminalServer>,
 }
 
@@ -78,27 +72,15 @@ impl PtySpawner {
     /// process - we want to minimize the number of already-obtained resources
     /// that could leak into forked subprocesses (e.g.: file descriptors).
     pub fn new() -> Result<Self> {
-        cfg_if::cfg_if! {
-            if #[cfg(unix)] {
-                        let server = super::server::TerminalServer::new()?;
-                        Ok(Self {
-                            server: Some(server),
-                        })
-            } else {
-                        unreachable!("Spawning a PTY is not supported on this platform.");
-            }
-        }
+        let server = super::server::TerminalServer::new()?;
+        Ok(Self {
+            server: Some(server),
+        })
     }
 
     /// Creates a new PtySpanwer that is configured for unit test purposes.
     pub fn new_for_test() -> Self {
-        cfg_if::cfg_if! {
-            if #[cfg(unix)] {
-                        Self{ server: None }
-            } else {
-                        unreachable!("Spawning a PTY for tests is not supported on this platform.");
-            }
-        }
+        Self { server: None }
     }
 
     /// Does any work necessary to clean up state in advance of the app
@@ -106,7 +88,6 @@ impl PtySpawner {
     pub fn prepare_for_app_termination(&mut self) {
         // Drop the backing `TerminalServer`, if one exists, killing the child
         // process.
-        #[cfg(unix)]
         if let Some(server) = self.server.take() {
             log::info!("Tearing down terminal server...");
             drop(server);
@@ -119,7 +100,6 @@ impl PtySpawner {
         &self,
         options: PtyOptions,
     ) -> Result<(PtySpawnResult, Box<dyn PtyHandle>)> {
-        #[cfg(unix)]
         if let Some(server) = &self.server {
             let result = Self::spawn_pty_via_server(server, options.clone());
             if let Err(err) = result {
@@ -155,7 +135,6 @@ impl PtySpawner {
         Ok((pty_spawn_info.result, direct_pty_handle))
     }
 
-    #[cfg(unix)]
     fn spawn_pty_via_server(
         server: &TerminalServer,
         options: PtyOptions,
@@ -184,7 +163,6 @@ impl SingletonEntity for PtySpawner {}
 /// The terminal-server IPC path stringifies the raw `io::Error`, so we cannot
 /// reliably downcast; instead we check the formatted error message as a
 /// fallback.
-#[cfg(unix)]
 fn is_e2big(err: &anyhow::Error) -> bool {
     // Try the "real" io::Error in the chain first (direct-spawn path).
     if err.chain().any(|e| {
@@ -203,7 +181,6 @@ fn is_e2big(err: &anyhow::Error) -> bool {
 /// Logs the names and byte-lengths (not values) of env vars passed to the
 /// shell. Called on any terminal server failure to aid diagnosis of oversized
 /// env var / secret configurations (E2BIG on Linux, socket overflow on macOS).
-#[cfg(unix)]
 fn log_env_var_diagnostics(extra_env_vars: &HashMap<OsString, OsString>) {
     log::error!("Shell spawn env var diagnostics (names and sizes only, no values):");
 

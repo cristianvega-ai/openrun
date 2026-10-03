@@ -55,7 +55,6 @@ const DOWNLOADS_DESCRIPTION: &str = "When off, only language servers already ins
 #[derive(Clone, Default)]
 struct LspServerRowMouseStates {
     restart: MouseStateHandle,
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     view_logs: MouseStateHandle,
     toggle: SwitchStateHandle,
     install: MouseStateHandle,
@@ -101,7 +100,6 @@ impl ProjectsPageView {
                     servers,
                 } => {
                     for &server_type in servers {
-                        #[cfg(feature = "local_fs")]
                         let status = PersistedWorkspace::handle(ctx).update(ctx, |model, ctx| {
                             model.detect_lsp_workspace_status(
                                 workspace_path.clone(),
@@ -109,8 +107,6 @@ impl ProjectsPageView {
                                 ctx,
                             )
                         });
-                        #[cfg(not(feature = "local_fs"))]
-                        let status = LspRepoStatus::CheckingForInstallation;
                         me.suggested_server_statuses
                             .insert((workspace_path.clone(), server_type), status);
                     }
@@ -238,7 +234,6 @@ impl TypedActionView for ProjectsPageView {
                     let workspace_path = workspace_path.clone();
                     PersistedWorkspace::handle(ctx).update(ctx, |workspace, _ctx| {
                         workspace.enable_lsp_server_for_path(&workspace_path, *server_type);
-                        #[cfg(feature = "local_fs")]
                         workspace.execute_lsp_task(
                             crate::workspace_metadata::LspTask::Spawn {
                                 file_path: workspace_path,
@@ -263,7 +258,6 @@ impl TypedActionView for ProjectsPageView {
                 workspace_path,
                 server_type,
             } => {
-                #[cfg(feature = "local_fs")]
                 {
                     let workspace_path = workspace_path.clone();
                     let server_type = *server_type;
@@ -278,8 +272,6 @@ impl TypedActionView for ProjectsPageView {
                         );
                     });
                 }
-                #[cfg(not(feature = "local_fs"))]
-                let _ = workspace_path;
                 ctx.notify();
             }
             ProjectsPageAction::EnableSuggestedLspServer {
@@ -290,7 +282,6 @@ impl TypedActionView for ProjectsPageView {
                 let server_type = *server_type;
                 PersistedWorkspace::handle(ctx).update(ctx, |workspace, _ctx| {
                     workspace.enable_lsp_server_for_path(&workspace_path, server_type);
-                    #[cfg(feature = "local_fs")]
                     workspace.execute_lsp_task(
                         crate::workspace_metadata::LspTask::Spawn {
                             file_path: workspace_path,
@@ -911,7 +902,6 @@ impl ProjectsWidget {
         }
 
         // Show "View logs" when the server has been started (Available, Starting/Busy, or Failed)
-        #[cfg(not(target_family = "wasm"))]
         {
             let has_logs = server_model.is_some_and(|model| {
                 matches!(

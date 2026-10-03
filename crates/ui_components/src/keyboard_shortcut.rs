@@ -3,7 +3,6 @@ use std::borrow::Cow;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::icons::Icon;
 use warpui_core::keymap::Keystroke;
-use warpui_core::platform::OperatingSystem;
 use warpui_core::prelude::*;
 
 use crate::Component;
@@ -108,12 +107,11 @@ enum Key {
 
 impl Key {
     fn text(&self, is_lowercase_modifier: bool) -> Cow<'static, str> {
-        let is_mac = OperatingSystem::get().is_mac();
         let mut text: Cow<'static, str> = match self {
-            Key::Command => if is_mac { "⌘" } else { "Logo" }.into(),
-            Key::Option => if is_mac { "⌥" } else { "Alt" }.into(),
-            Key::Control => if is_mac { "⌃" } else { "Ctrl" }.into(),
-            Key::Shift => if is_mac { "⇧" } else { "Shift" }.into(),
+            Key::Command => "⌘".into(),
+            Key::Option => "⌥".into(),
+            Key::Control => "⌃".into(),
+            Key::Shift => "⇧".into(),
             Key::Meta => "Meta".into(),
             Key::Other(key) => match key.as_ref() {
                 "up" => "↑".into(),

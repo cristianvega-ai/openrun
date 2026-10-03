@@ -75,7 +75,6 @@ use warp_core::semantic_selection::SemanticSelection;
 use warp_core::user_preferences::GetUserPreferences as _;
 use warp_errors::{report_error, report_if_error};
 use warp_util::local_or_remote_path::LocalOrRemotePath;
-#[cfg(feature = "local_fs")]
 use warp_util::path::LineAndColumnArg;
 use warp_util::path::ShellFamily;
 use warpui::accessibility::{AccessibilityContent, ActionAccessibilityContent, WarpA11yRole};
@@ -134,7 +133,6 @@ use crate::banner::{
     Banner, BannerAction, BannerEvent, BannerState, BannerTextButton, BannerTextContent,
     DismissalType,
 };
-#[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
 use crate::code_review::comments::AgentReviewCommentBatch;
 use crate::code_review::diff_state::GitDeltaPreference;
@@ -158,7 +156,6 @@ use crate::resource_center::{
     Tip, TipHint, TipsCompleted, mark_feature_used_and_write_to_user_defaults,
 };
 use crate::session_management::{CommandContext, SessionNavigationPromptElements};
-#[cfg(feature = "local_fs")]
 use crate::settings::import::model::ImportedConfigModel;
 use crate::settings::import::view::{SettingsImportEvent, SettingsImportView};
 use crate::settings::{
@@ -205,7 +202,6 @@ use crate::terminal::grid_size_util::grid_cell_dimensions;
 use crate::terminal::input::decorations::InputBackgroundJobOptions;
 use crate::terminal::input::inline_menu::InlineMenuPositioner;
 use crate::terminal::input::pending_attachments::{PendingAttachment, PendingAttachmentsModel};
-#[cfg(not(target_family = "wasm"))]
 use crate::terminal::input::{
     InputAction, InputState, MenuPositioning, MenuPositioningProvider, ShellWidgetApplyMode,
 };
@@ -278,9 +274,7 @@ use crate::util::bindings::{
 };
 use crate::util::clipboard::clipboard_content_with_escaped_paths;
 use crate::util::color::darken;
-#[cfg(feature = "local_fs")]
 use crate::util::file::external_editor::{EditorSettings, settings::EditorLayout};
-#[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::{
     FileTarget, renders_in_warp_notebook_viewer, resolve_file_target,
 };
@@ -289,7 +283,6 @@ use crate::view_components::find::{Event as FindEvent, Find, FindDirection, Find
 use crate::view_components::{DismissibleToast, ToastFlavor};
 use crate::workspace::sync_inputs::SyncedInputState;
 use crate::workspace::{CommandSearchOptions, ToastStack, WorkspaceAction, WorkspaceRegistry};
-#[cfg(feature = "local_fs")]
 use crate::workspace_metadata::PersistedWorkspace;
 use crate::{ActiveSession as WindowActiveSession, safe_warn};
 
@@ -1103,12 +1096,10 @@ pub enum Event {
         /// The session that the file belongs to.
         session: Arc<Session>,
     },
-    #[cfg(feature = "local_fs")]
     OpenCodeInWarp {
         source: CodeSource,
         layout: EditorLayout,
     },
-    #[cfg(feature = "local_fs")]
     PreviewCodeInWarp {
         source: CodeSource,
     },
@@ -1154,20 +1145,17 @@ pub enum Event {
     OpenFilesPalette {
         source: PaletteSource,
     },
-    #[cfg(feature = "local_fs")]
     OpenFileWithTarget {
         path: PathBuf,
         target: FileTarget,
         line_col: Option<LineAndColumnArg>,
     },
     /// Emitted when a file in the file tree is renamed.
-    #[cfg(feature = "local_fs")]
     FileRenamed {
         old_path: PathBuf,
         new_path: PathBuf,
     },
     /// Emitted when a file in the file tree is deleted.
-    #[cfg(feature = "local_fs")]
     FileDeleted {
         path: PathBuf,
     },
@@ -1325,9 +1313,7 @@ struct TerminalViewMouseStates {
     toggle_secrets_tooltip: MouseStateHandle,
     copy_secrets_tooltip: MouseStateHandle,
 
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     open_in_warp_tooltip: MouseStateHandle,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     show_in_file_explorer_tooltip: MouseStateHandle,
     jump_to_bottom_of_block_button: MouseStateHandle,
 }
@@ -1534,7 +1520,6 @@ pub struct TerminalView {
     /// Set of block indexes that are bookmarked, including the mouse states for their indicators
     bookmarked_blocks: HashMap<BlockIndex, MouseStateHandle>,
 
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     file_link_scanning_join_handle: Option<JoinHandle<()>>,
 
     last_focus_ts: Option<NaiveDateTime>,
@@ -2633,7 +2618,6 @@ impl TerminalView {
     /// These commands don't touch `.git/` so the filesystem watcher won't
     /// catch them; we refresh explicitly while a PR-info subscription is
     /// active for this terminal.
-    #[cfg(feature = "local_fs")]
     fn refresh_pr_info_after_gh_or_gt_command(&mut self, ctx: &mut ViewContext<Self>) {
         // Ensure we have a subscription to the per-repo status model and the
         // per-repo PR-info model. `should_subscribe_to_git_status` already
@@ -2751,7 +2735,6 @@ impl TerminalView {
                     ctx.emit(event_constructor(arg));
                 } else {
                     // Check if repo has uncommitted changes via the per-repo sub-model.
-                    #[cfg(feature = "local_fs")]
                     {
                         let is_dirty = self
                             .git_status_metadata(ctx)
@@ -2808,7 +2791,6 @@ impl TerminalView {
         _event: &InputModeEvent,
         ctx: &mut ViewContext<Self>,
     ) {
-        #[cfg(feature = "local_fs")]
         self.update_git_status_subscription(ctx);
 
         // Emit AppStateChanged when the input mode changes to trigger pane state saving
@@ -3977,10 +3959,6 @@ impl TerminalView {
         ctx: &mut ViewContext<Self>,
     ) {
         // Desktop notifications discovery isn't meaningful on the web surface.
-        if cfg!(target_family = "wasm") {
-            return;
-        }
-
         // Don't show if the user has dismissed the banner in this session.
         if matches!(
             self.inline_banners_state.notifications_discovery_banner,
@@ -4230,7 +4208,6 @@ impl TerminalView {
     fn refresh_warp_prompt(&mut self, ctx: &mut ViewContext<Self>) {
         // Ask the per-repo sub-model to re-fetch metadata so the chip values
         // reflect the latest git state (branch, diff stats, etc.).
-        #[cfg(feature = "local_fs")]
         if let Some(handle) = &self.git_repo_status {
             handle.update(ctx, |model, ctx| {
                 model.refresh_metadata(ctx);
@@ -4452,53 +4429,43 @@ impl TerminalView {
 
                             match &repo_path_opt {
                                 Some(LocalOrRemotePath::Local(repo_path)) => {
-                                    #[cfg(feature = "local_fs")]
-                                    {
-                                        let Some(active_directory) =
-                                            me.active_session_path_if_local(ctx)
-                                        else {
-                                            me.clear_git_repo_status(ctx);
-                                            return;
-                                        };
+                                    let Some(active_directory) =
+                                        me.active_session_path_if_local(ctx)
+                                    else {
+                                        me.clear_git_repo_status(ctx);
+                                        return;
+                                    };
 
-                                        let Ok(active_directory) =
-                                            CanonicalizedPath::try_from(active_directory)
-                                        else {
-                                            return;
-                                        };
+                                    let Ok(active_directory) =
+                                        CanonicalizedPath::try_from(active_directory)
+                                    else {
+                                        return;
+                                    };
 
-                                        let is_ancestor = active_directory
-                                            .as_path_buf()
-                                            .ancestors()
-                                            .any(|ancestor| ancestor == repo_path.as_path());
-                                        if !is_ancestor {
-                                            return;
-                                        }
-
-                                        PersistedWorkspace::handle(ctx).update(
-                                            ctx,
-                                            |manager, _| {
-                                                manager.navigated_to_path(
-                                                    active_directory.as_path_buf(),
-                                                );
-                                            },
-                                        );
-
-                                        if old_repo_path.as_ref().and_then(|p| p.to_local_path())
-                                            != Some(repo_path.as_path())
-                                        {
-                                            me.clear_git_repo_status_subscription(ctx);
-                                            me.update_git_status_subscription(ctx);
-                                        }
-
-                                        me.input.update(ctx, |input, ctx| {
-                                            input.update_repo_path(Some(repo_path.clone()), ctx);
-                                        });
-
-                                        me.start_lsp_server_in_active_pwd(ctx);
+                                    let is_ancestor = active_directory
+                                        .as_path_buf()
+                                        .ancestors()
+                                        .any(|ancestor| ancestor == repo_path.as_path());
+                                    if !is_ancestor {
+                                        return;
                                     }
-                                    #[cfg(not(feature = "local_fs"))]
-                                    let _ = repo_path;
+
+                                    PersistedWorkspace::handle(ctx).update(ctx, |manager, _| {
+                                        manager.navigated_to_path(active_directory.as_path_buf());
+                                    });
+
+                                    if old_repo_path.as_ref().and_then(|p| p.to_local_path())
+                                        != Some(repo_path.as_path())
+                                    {
+                                        me.clear_git_repo_status_subscription(ctx);
+                                        me.update_git_status_subscription(ctx);
+                                    }
+
+                                    me.input.update(ctx, |input, ctx| {
+                                        input.update_repo_path(Some(repo_path.clone()), ctx);
+                                    });
+
+                                    me.start_lsp_server_in_active_pwd(ctx);
                                 }
                                 Some(LocalOrRemotePath::Remote(_)) | None => {
                                     me.clear_git_repo_status(ctx);
@@ -4974,7 +4941,6 @@ impl TerminalView {
 
                     // If the completed command was a `gh` or `gt` invocation, eagerly refresh PR
                     // info since these don't touch .git/ and won't be caught by the filesystem watcher.
-                    #[cfg(feature = "local_fs")]
                     if match &block_type {
                         BlockType::User(user_block_completed) => {
                             let command = user_block_completed.command.get_with(|compute| {
@@ -5177,7 +5143,6 @@ impl TerminalView {
             }
 
             ModelEvent::TerminalModeSwapped(mode) => {
-                #[cfg(feature = "local_tty")]
                 {
                     let active_command = self
                         .model
@@ -5830,7 +5795,6 @@ impl TerminalView {
         vi_mode_in_plugins || vi_mode_in_opts
     }
 
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     fn get_ps1_grid_info(&mut self) -> Option<(BlockGrid, SizeInfo)> {
         let model = self.model.lock();
 
@@ -5840,7 +5804,6 @@ impl TerminalView {
             .zip(Some(*model.block_list().size()))
     }
 
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     fn add_settings_import_block(&mut self, ctx: &mut ViewContext<Self>) {
         self.block_onboarding_active = true;
         let current_block_view_handle = ctx.add_typed_action_view(SettingsImportView::new);
@@ -5879,7 +5842,6 @@ impl TerminalView {
         );
     }
 
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     fn add_prompt_block(&mut self, ctx: &mut ViewContext<Self>) {
         let ps1_grid_info = self.get_ps1_grid_info();
         let current_block_view_handle =
@@ -5964,7 +5926,6 @@ impl TerminalView {
     // padding that the alt-screen doesn't. So we do this to avoid a race condition between
     // (1) resizing right after swapping terminal modes, and
     // (2) the alt-screen app registering its resize handler
-    #[cfg(feature = "local_tty")]
     fn resize_alt_screen_redundantly(&mut self, ctx: &mut ViewContext<Self>) {
         use futures_lite::StreamExt;
 
@@ -6851,14 +6812,9 @@ impl TerminalView {
                             })
                             .unwrap_or_default()
                     }
-                    #[cfg(feature = "local_fs")]
                     GridHighlightedLink::File(file_link) => {
                         let path = file_link.get_inner().absolute_path();
-                        let show_in_file_explorer_menu_item_label = if cfg!(target_os = "macos") {
-                            "Show in Finder"
-                        } else {
-                            "Show containing folder"
-                        };
+                        let show_in_file_explorer_menu_item_label = "Show in Finder";
                         path.map(|path| {
                             let mut items = vec![
                                 MenuItemFields::new("Copy path")
@@ -7813,9 +7769,9 @@ impl TerminalView {
             }
             BlockSelectAction::MouseUp {
                 block_index,
-                is_ctrl_down,
                 is_cmd_down,
                 is_shift_down,
+                ..
             } => {
                 if let Some(mouse_down_block_index) = self.mouse_down_block_index.take() {
                     // There is a highlighted url and cmd key is held -- don't process this as a block selection.
@@ -7837,11 +7793,7 @@ impl TerminalView {
                             )
                             .is_none()
                     {
-                        let should_toggle_block_selected = if cfg!(target_os = "macos") {
-                            *is_cmd_down
-                        } else {
-                            *is_ctrl_down
-                        };
+                        let should_toggle_block_selected = *is_cmd_down;
 
                         if should_toggle_block_selected {
                             // We need to use the next and prev non-hidden indices to
@@ -7978,7 +7930,6 @@ impl TerminalView {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     fn open_file_path(
         &mut self,
         path: PathBuf,
@@ -7997,7 +7948,6 @@ impl TerminalView {
         });
     }
 
-    #[cfg(feature = "local_fs")]
     fn open_code_in_warp(
         &mut self,
         source: CodeSource,
@@ -8013,7 +7963,6 @@ impl TerminalView {
         };
 
         match link {
-            #[cfg(feature = "local_fs")]
             GridHighlightedLink::File(link) if link.contains(position) => {
                 let link = link.get_inner();
                 if let Some(path) = link.absolute_path() {
@@ -9381,7 +9330,6 @@ impl TerminalView {
             InputEvent::OpenSettings(section) => {
                 ctx.emit(Event::OpenSettings(*section));
             }
-            #[cfg(feature = "local_fs")]
             InputEvent::OpenCodeInWarp { source, layout } => {
                 ctx.emit(Event::OpenCodeInWarp {
                     source: source.clone(),
@@ -10134,7 +10082,6 @@ impl TerminalView {
 
     /// Sends diff file context hunks to a running CLI agent, routing to the
     /// rich input when open or the PTY when closed.
-    #[cfg(feature = "local_fs")]
     pub fn send_diff_context_to_cli_agent_or_rich_input(
         &mut self,
         file_diffs: &std::collections::HashMap<
@@ -11853,7 +11800,6 @@ impl TerminalView {
         }
     }
 
-    #[cfg(unix)]
     fn shell_family_for_password_prompt_polling(&self, ctx: &AppContext) -> ShellFamily {
         self.active_block_session_id()
             .and_then(|session_id| self.sessions.as_ref(ctx).get(session_id))
@@ -11870,7 +11816,6 @@ impl TerminalView {
             })
     }
 
-    #[cfg(unix)]
     fn would_emit_block_started_for_password_prompt_polling(
         &self,
         command: &str,
@@ -11910,7 +11855,6 @@ impl TerminalView {
     }
 
     /// Starts all enabled LSP servers for the current working directory.
-    #[cfg(feature = "local_fs")]
     fn start_lsp_server_in_active_pwd(&self, ctx: &mut ViewContext<Self>) {
         use crate::workspace_metadata::LspTask;
 
@@ -11957,14 +11901,12 @@ impl PtyIntentEvent for Event {
 }
 
 impl TerminalSurface for TerminalView {
-    #[cfg(feature = "local_tty")]
     fn on_shell_determined(&mut self, ctx: &mut ViewContext<Self>) {
         // Start a timer for the initial session bootstrapping, so that we can log and show a
         // banner to the user if the bootstrapping takes too long
         self.start_bootstrap_timer(BOOTSTRAP_FAILED_DURATION, ctx);
     }
 
-    #[cfg(feature = "local_tty")]
     fn on_pty_spawn_failed(&mut self, error: anyhow::Error, ctx: &mut ViewContext<Self>) {
         self.pty_spawn_failed = true;
         // Emit before the banner so the terminal driver can cancel its
@@ -11980,7 +11922,6 @@ impl TerminalSurface for TerminalView {
         ctx.notify();
     }
 
-    #[cfg(unix)]
     fn should_start_password_prompt_polling(&self, command: &str, ctx: &AppContext) -> bool {
         if !self.would_emit_block_started_for_password_prompt_polling(command, ctx) {
             return false;
@@ -11992,7 +11933,6 @@ impl TerminalSurface for TerminalView {
                     && notification_settings.is_needs_attention_enabled);
         password_notification_setting_on || self.is_ssh_uploader()
     }
-    #[cfg(unix)]
     fn should_stop_password_prompt_polling(&self, completed: &AfterBlockCompletedEvent) -> bool {
         matches!(
             &completed.block_type,
@@ -12000,7 +11940,6 @@ impl TerminalSurface for TerminalView {
         )
     }
 
-    #[cfg(unix)]
     fn on_possible_password_prompt(
         &mut self,
         block_index: Option<BlockIndex>,
@@ -12025,7 +11964,6 @@ impl TerminalSurface for TerminalView {
         }
     }
 
-    #[cfg(unix)]
     fn on_polled_block_completed(
         &mut self,
         completed: &AfterBlockCompletedEvent,
@@ -12260,7 +12198,6 @@ impl TypedActionView for TerminalView {
             | SetMarkedText { .. }
             | ClearMarkedText
             | StartLspServer => ActionAccessibilityContent::from_debug(),
-            #[cfg(feature = "local_fs")]
             OpenCodeInWarp { .. } => ActionAccessibilityContent::from_debug(),
             OpenInWarpBanner(action) => self.open_in_warp_banner_accessibility_content(*action),
             PickRepoToOpen => Custom(AccessibilityContent::new_without_help(
@@ -12506,7 +12443,6 @@ impl TypedActionView for TerminalView {
             OpenFileInWarp(path) => {
                 self.open_file_in_warp(path.clone(), ctx);
             }
-            #[cfg(feature = "local_fs")]
             OpenCodeInWarp {
                 path,
                 layout,
@@ -12530,10 +12466,7 @@ impl TypedActionView for TerminalView {
             OpenBlockFilterEditor(block_index) => self.open_block_filter_editor(*block_index, ctx),
             VimModeBanner(action) => self.handle_vim_banner_action(*action, ctx),
             ImportSettings => {
-                #[cfg(feature = "local_fs")]
-                {
-                    self.add_settings_import_block(ctx);
-                }
+                self.add_settings_import_block(ctx);
             }
             ToggleBlockFilterOnSelectedOrLastBlock => {
                 self.toggle_block_filter_on_selected_or_last_block(ctx);
@@ -12678,7 +12611,6 @@ impl TypedActionView for TerminalView {
                 ctx.notify();
             }
             StartLspServer => {
-                #[cfg(feature = "local_fs")]
                 self.start_lsp_server_in_active_pwd(ctx);
             }
             OpenInlineHistoryMenu => {
@@ -13122,7 +13054,6 @@ impl View for TerminalView {
             context.set.insert("InsideRepository");
         }
 
-        #[cfg(feature = "local_fs")]
         {
             let imported_config_model = ImportedConfigModel::as_ref(app);
             if !imported_config_model.finished_searching_for_settings()

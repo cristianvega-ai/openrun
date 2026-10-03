@@ -56,7 +56,7 @@ impl HeaderToolbarItemKind {
         match self {
             Self::TabsPanel => *TabSettings::as_ref(app).use_vertical_tabs,
             Self::ToolsPanel => true,
-            Self::CodeReview => cfg!(feature = "local_fs"),
+            Self::CodeReview => true,
             Self::NotificationsMailbox => true,
         }
     }

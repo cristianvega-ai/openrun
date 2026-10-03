@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::Path;
 
-#[cfg(unix)]
 use command::blocking::Command;
 
 use super::*;
@@ -107,7 +106,6 @@ fn abandoned_temp_records_are_pruned_after_grace_period() {
 
     assert!(!temp_path.exists());
 }
-#[cfg(unix)]
 #[test]
 fn stale_process_record_is_pruned() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -133,7 +131,6 @@ fn stale_process_record_is_pruned() {
     assert!(!registered.path.exists());
     assert!(!socket_path.exists());
 }
-#[cfg(unix)]
 #[test]
 fn multiple_live_process_records_are_discovered() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -260,7 +257,6 @@ fn rejects_unsafe_or_divergent_discovery_authority() {
     assert_eq!(err.code, ErrorCode::UnauthorizedLocalClient);
 }
 
-#[cfg(unix)]
 #[test]
 fn discovery_directory_is_owner_only_on_unix() {
     use std::os::unix::fs::PermissionsExt as _;
@@ -283,7 +279,6 @@ fn discovery_directory_is_owner_only_on_unix() {
     assert_eq!(mode, 0o700);
 }
 
-#[cfg(unix)]
 #[test]
 fn discovery_record_is_owner_only_on_unix() {
     use std::os::unix::fs::PermissionsExt as _;
@@ -309,7 +304,6 @@ fn discovery_record_is_owner_only_on_unix() {
 impl RegisteredInstance {
     fn register_in_dir_for_test(record: InstanceRecord, dir: &Path) -> Result<Self, ControlError> {
         fs::create_dir_all(dir).expect("create dir");
-        #[cfg(unix)]
         set_private_dir_permissions(dir)?;
         let path = record_path(dir, &record.instance_id);
         let bytes = serde_json::to_vec_pretty(&record).map_err(|err| {
@@ -326,7 +320,6 @@ impl RegisteredInstance {
                 err.to_string(),
             )
         })?;
-        #[cfg(unix)]
         set_private_permissions(&path)?;
         Ok(Self {
             record,

@@ -83,7 +83,6 @@ pub fn register_all_settings(ctx: &mut AppContext) {
     SemanticSelection::register(ctx);
     LocalControlSettings::register(ctx);
 
-    #[cfg(feature = "local_fs")]
     crate::util::file::external_editor::EditorSettings::register(ctx);
 }
 
@@ -180,7 +179,6 @@ pub fn init(
     // Set up hot-reload for the settings file. When the WarpConfig watcher
     // detects a change to settings.toml, reload preferences from disk and
     // push changed values into setting models.
-    #[cfg(feature = "local_fs")]
     {
         let prefs = <settings::PublicPreferences as warpui::SingletonEntity>::as_ref(ctx);
         if prefs.is_settings_file() {
@@ -196,7 +194,6 @@ pub fn init(
 
 /// Handles a `WarpConfig` change event, reloading settings from disk when
 /// the settings file is modified, created, or deleted.
-#[cfg(feature = "local_fs")]
 fn handle_warp_config_change(
     _: warpui::ModelHandle<crate::user_config::WarpConfig>,
     event: &crate::user_config::WarpConfigUpdateEvent,
@@ -244,14 +241,10 @@ fn init_platform_native_preferences() -> user_preferences::Model {
                     Box::<user_preferences::in_memory::InMemoryPreferences>::default()
                 }
             }
-        } else if #[cfg(target_os = "macos")] {
+        } else {
             Box::new(user_preferences::user_defaults::UserDefaultsPreferencesStorage::new(
                 warp_core::channel::ChannelState::data_domain_if_not_default()
             ))
-        } else if #[cfg(target_family = "wasm")] {
-            Box::<user_preferences::local_storage::LocalStoragePreferences>::default()
-        } else {
-            unreachable!("Unspecified user preferences implementation for current platform!");
         }
     }
 }
@@ -276,8 +269,6 @@ pub fn init_public_user_preferences() -> (user_preferences::Model, Option<user_p
     cfg_if::cfg_if! {
         if #[cfg(test)] {
             (Box::<user_preferences::in_memory::InMemoryPreferences>::default(), None)
-        } else if #[cfg(target_family = "wasm")] {
-            (Box::<user_preferences::local_storage::LocalStoragePreferences>::default(), None)
         } else {
                             let (prefs, parse_error) =
                     user_preferences::toml_backed::TomlBackedUserPreferences::new(
@@ -287,7 +278,6 @@ pub fn init_public_user_preferences() -> (user_preferences::Model, Option<user_p
                     log::warn!("Settings file has syntax errors and could not be parsed: {err}");
                 }
                 (Box::new(prefs) as user_preferences::Model, parse_error)
-
         }
     }
 }

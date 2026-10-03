@@ -1,15 +1,8 @@
-#![cfg_attr(not(feature = "local_fs"), allow(dead_code))]
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "local_fs")] {
-        mod block_list;
-        mod sqlite;
-        pub mod commands;
-    }
-}
+mod block_list;
+pub mod commands;
+mod sqlite;
 
 pub use persistence::model;
-#[cfg_attr(not(feature = "local_fs"), expect(unused_imports))]
 pub use persistence::schema;
 
 #[cfg(feature = "integration_tests")]
@@ -25,16 +18,13 @@ use std::thread::JoinHandle;
 use chrono::{DateTime, Local};
 use instant::Instant;
 use lsp::supported_servers::LSPServerType;
-#[cfg(any(feature = "local_fs", feature = "integration_tests"))]
 pub use sqlite::database_file_path_for_current_scope;
 // Only re-exported for integration tests (via `integration_testing::persistence`);
 // in-crate code should resolve paths through `database_file_path_for_current_scope`.
-#[cfg(any(feature = "local_fs", feature = "integration_tests"))]
 #[cfg_attr(not(feature = "integration_tests"), expect(unused_imports))]
 pub use sqlite::database_file_path_for_scope;
-#[cfg(any(feature = "local_fs", feature = "integration_tests"))]
 pub use sqlite::establish_ro_connection;
-#[cfg(all(test, feature = "local_fs"))]
+#[cfg(test)]
 pub(crate) use sqlite::persist_events_for_test;
 use warp_core::command::ExitCode;
 use warp_errors::report_error;
@@ -144,7 +134,6 @@ impl HistoryPersistence {
 /// Returns the previously-persisted data, if any, and handles for
 /// writing updated data to persist, if the persistence subsystem is
 /// available.
-#[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
 pub fn initialize(
     scope: PersistenceScope,
     data_scope: PersistedDataScope,
@@ -153,13 +142,7 @@ pub fn initialize(
     // Record the scope for ad-hoc read-only connections; keep the first value
     // if this is ever called more than once in a process (e.g. tests).
     let _ = CURRENT_SCOPE.set(scope.clone());
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "local_fs")] {
-            sqlite::initialize(scope, data_scope, history)
-        } else {
-            (None, None)
-        }
-    }
+    sqlite::initialize(scope, data_scope, history)
 }
 
 /// Holds interfaces to the writer thread.

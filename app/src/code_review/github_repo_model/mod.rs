@@ -2,14 +2,12 @@ use std::time::Duration;
 
 use warpui::{AppContext, Entity, ModelContext, ModelHandle};
 
-#[cfg(feature = "local_fs")]
 mod local;
-#[cfg(all(test, feature = "local_fs"))]
+#[cfg(test)]
 pub(crate) use local::GitHubCli;
-#[cfg(feature = "local_fs")]
 pub use local::LocalGitHubRepoModel;
 
-#[cfg(all(test, feature = "local_fs"))]
+#[cfg(test)]
 use crate::code_review::git_repo_model::GitRepoStatusModel;
 use crate::util::git::{PrInfo, RepositoryInfo};
 
@@ -26,7 +24,6 @@ pub(crate) const HIDDEN_CONSUMER_GRACE_PERIOD: Duration = Duration::from_secs(30
 /// the two calls a minute that polling would make.
 pub(crate) const RUNNING_COMMAND_GRACE_PERIOD: Duration = Duration::from_secs(180);
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 #[derive(Debug)]
 pub enum GitHubRepoEvent {
     /// Emitted when `pr_info` changes value (fetch result differs from
@@ -45,7 +42,6 @@ pub enum GitHubRepoEvent {
 /// `ModelHandle<GitHubRepoModel>` and subscribe to its [`GitHubRepoEvent`]s.
 /// The model is only constructible where a local filesystem is available.
 pub enum GitHubRepoModel {
-    #[cfg(feature = "local_fs")]
     Local(ModelHandle<LocalGitHubRepoModel>),
 }
 impl Entity for GitHubRepoModel {
@@ -66,7 +62,6 @@ impl GitHubRepoModel {
     /// PR info for the current branch.
     pub fn pr_info<'a>(&self, ctx: &'a AppContext) -> Option<&'a PrInfo> {
         match *self {
-            #[cfg(feature = "local_fs")]
             Self::Local(ref m) => m.as_ref(ctx).pr_info(),
         }
     }
@@ -74,7 +69,6 @@ impl GitHubRepoModel {
     /// Repository info (name/owner) returned by `gh repo view`.
     pub fn repository_info<'a>(&self, ctx: &'a AppContext) -> Option<&'a RepositoryInfo> {
         match *self {
-            #[cfg(feature = "local_fs")]
             Self::Local(ref m) => m.as_ref(ctx).repository_info(),
         }
     }
@@ -82,7 +76,6 @@ impl GitHubRepoModel {
     /// Whether a `gh pr view` fetch is currently in flight.
     pub fn is_refreshing_pr_info(&self, ctx: &AppContext) -> bool {
         match *self {
-            #[cfg(feature = "local_fs")]
             Self::Local(ref m) => m.as_ref(ctx).is_refreshing_pr_info(),
         }
     }
@@ -90,7 +83,6 @@ impl GitHubRepoModel {
     /// Force a PR info refresh (e.g. after a `gh`/`gt` command completes).
     pub fn refresh_pr_info(&self, ctx: &mut ModelContext<Self>) {
         match *self {
-            #[cfg(feature = "local_fs")]
             Self::Local(ref m) => m.update(ctx, |m, ctx| m.refresh_pr_info(ctx)),
         }
     }
@@ -98,13 +90,12 @@ impl GitHubRepoModel {
     /// Force a repository-info refresh.
     pub fn refresh_repository_info(&self, ctx: &mut ModelContext<Self>) {
         match *self {
-            #[cfg(feature = "local_fs")]
             Self::Local(ref m) => m.update(ctx, |m, ctx| m.refresh_repository_info(ctx)),
         }
     }
 }
 
-#[cfg(all(test, feature = "local_fs"))]
+#[cfg(test)]
 impl GitHubRepoModel {
     /// Wraps an inert local-backend test model in the unified enum.
     pub(crate) fn new_local_for_test(

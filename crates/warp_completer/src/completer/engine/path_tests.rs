@@ -3,12 +3,10 @@ use warp_command_signatures::IconType;
 use super::*;
 use crate::completer::testing::MockPathCompletionContext;
 
-#[cfg(unix)]
 mod unix_constants {
     pub(super) const TEST_HOME_DIR: &str = "/users/test";
 }
 
-#[cfg(unix)]
 use unix_constants::*;
 
 #[test]
@@ -455,7 +453,6 @@ pub fn test_path_completions_home_env_var_special_characters() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_no_cdpath_matches_existing_behavior() {
     let ctx = MockPathCompletionContext::default()
@@ -474,7 +471,6 @@ pub fn test_sorted_cd_directories_no_cdpath_matches_existing_behavior() {
     assert_eq!(from_cd, from_default);
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_includes_cdpath_entries() {
     let ctx = MockPathCompletionContext::default()
@@ -504,7 +500,6 @@ pub fn test_sorted_cd_directories_includes_cdpath_entries() {
     assert_eq!(displays, vec!["extra-dir/", "shared/", "local-only/"]);
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_ignores_cdpath_for_absolute_token() {
     let ctx = MockPathCompletionContext::default()
@@ -529,7 +524,6 @@ pub fn test_sorted_cd_directories_ignores_cdpath_for_absolute_token() {
     assert!(displays.contains(&"absdir/".to_owned()));
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_skips_dot_entry_in_cdpath() {
     // `.` in CDPATH is handled by the pwd-relative pass; skip it on overlay
@@ -549,7 +543,6 @@ pub fn test_sorted_cd_directories_skips_dot_entry_in_cdpath() {
     assert_eq!(displays, vec!["local-only/"]);
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_resolves_relative_cdpath_against_pwd() {
     // CDPATH=src must resolve to <pwd>/src, not be passed raw.
@@ -572,7 +565,6 @@ pub fn test_sorted_cd_directories_resolves_relative_cdpath_against_pwd() {
     assert_eq!(displays, vec!["inner-mod/", "local-only/"]);
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_resolves_parent_relative_cdpath() {
     // CDPATH=.. must resolve to <pwd>/.. so siblings of pwd are reachable.
@@ -595,7 +587,6 @@ pub fn test_sorted_cd_directories_resolves_parent_relative_cdpath() {
     assert_eq!(displays, vec!["sibling-dir/", "local-only/"]);
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_expands_tilde_in_cdpath() {
     // Tilde-prefixed CDPATH=~/code must expand to the shell's home dir.
@@ -619,7 +610,6 @@ pub fn test_sorted_cd_directories_expands_tilde_in_cdpath() {
     assert_eq!(displays, vec!["from-home/", "local-only/"]);
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_pwd_at_dot_position_is_first() {
     // CDPATH=":/srv/projects": the empty leading entry means pwd is searched
@@ -643,7 +633,6 @@ pub fn test_sorted_cd_directories_pwd_at_dot_position_is_first() {
     assert_eq!(displays, vec!["local-only/", "shared/", "extra-dir/"]);
 }
 
-#[cfg(unix)]
 #[test]
 pub fn test_sorted_cd_directories_pwd_at_dot_in_middle() {
     // CDPATH="/srv/a:.:/srv/b": pwd appears between the two CDPATH entries.

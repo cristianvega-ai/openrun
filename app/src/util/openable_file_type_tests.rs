@@ -1,6 +1,5 @@
 use std::path::Path;
 
-#[cfg(feature = "local_fs")]
 use settings::Setting as _;
 
 use super::*;
@@ -14,7 +13,6 @@ fn test_binary_files_not_openable() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_open_code_panels_file_editor_default_is_warp() {
     use crate::util::file::external_editor::settings::OpenCodePanelsFileEditor;
 
@@ -25,7 +23,6 @@ fn test_open_code_panels_file_editor_default_is_warp() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_resolve_file_target_markdown_viewer_precedence() {
     let target = resolve_file_target_with_editor_choice(
         Path::new("README.md"),
@@ -39,7 +36,6 @@ fn test_resolve_file_target_markdown_viewer_precedence() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_resolve_file_target_warp_uses_default_layout() {
     let target = resolve_file_target_with_editor_choice(
         Path::new("data.txt"),
@@ -55,7 +51,6 @@ fn test_resolve_file_target_warp_uses_default_layout() {
 /// `file.open` from local control relies on this resolver never routing to an
 /// external editor or the system default app, even when user settings prefer one.
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_resolve_file_target_to_open_in_warp_never_leaves_warp() {
     use crate::util::file::external_editor::settings::{
         OpenCodePanelsFileEditor, OpenFileEditor, OpenFileLayout, PreferMarkdownViewer,
@@ -84,7 +79,6 @@ fn test_resolve_file_target_to_open_in_warp_never_leaves_warp() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_resolve_file_target_binary_is_system_generic() {
     let target = resolve_file_target_with_editor_choice(
         Path::new("image.png"),
@@ -98,7 +92,6 @@ fn test_resolve_file_target_binary_is_system_generic() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_resolve_file_target_binary_uses_env_editor() {
     let target = resolve_file_target_with_editor_choice(
         Path::new("image.png"),
@@ -118,7 +111,6 @@ fn test_renders_in_warp_notebook_viewer() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_resolve_file_target_jupyter_notebook() {
     // Even with prefer_markdown_viewer off and an explicit Warp editor choice,
     // a Jupyter notebook routes to the notebook viewer (not the JSON editor).
@@ -153,7 +145,6 @@ fn test_markdown_files() {
 }
 
 #[test]
-#[cfg(feature = "local_fs")]
 fn test_code_files() {
     assert_eq!(
         is_file_openable_in_warp(Path::new("main.rs")),
@@ -170,27 +161,6 @@ fn test_code_files() {
     assert_eq!(
         is_file_openable_in_warp(Path::new("config.json")),
         Some(OpenableFileType::Code)
-    );
-}
-
-#[test]
-#[cfg(not(feature = "local_fs"))]
-fn test_code_files() {
-    assert_eq!(
-        is_file_openable_in_warp(Path::new("main.rs")),
-        Some(OpenableFileType::Text)
-    );
-    assert_eq!(
-        is_file_openable_in_warp(Path::new("app.js")),
-        Some(OpenableFileType::Text)
-    );
-    assert_eq!(
-        is_file_openable_in_warp(Path::new("script.py")),
-        Some(OpenableFileType::Text)
-    );
-    assert_eq!(
-        is_file_openable_in_warp(Path::new("config.json")),
-        Some(OpenableFileType::Text)
     );
 }
 
@@ -221,7 +191,6 @@ fn test_is_supported_code_file() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_executable_sh() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -234,7 +203,6 @@ fn test_is_runnable_shell_script_executable_sh() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_non_executable_sh() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -247,7 +215,6 @@ fn test_is_runnable_shell_script_non_executable_sh() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_group_only_executable_rejected() {
     // Mode 0o070: group-x and group-r/w only, no user-execute. Must NOT classify
     // as runnable — only the owner's execute bit drives the routing decision.
@@ -260,7 +227,6 @@ fn test_is_runnable_shell_script_group_only_executable_rejected() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_other_shell_extensions() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -273,7 +239,6 @@ fn test_is_runnable_shell_script_other_shell_extensions() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_shebang_no_extension() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -284,7 +249,6 @@ fn test_is_runnable_shell_script_shebang_no_extension() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_shebang_no_extension_no_x_bit() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -295,7 +259,6 @@ fn test_is_runnable_shell_script_shebang_no_extension_no_x_bit() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_plain_text_rejected() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -306,7 +269,6 @@ fn test_is_runnable_shell_script_plain_text_rejected() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_is_runnable_shell_script_symlink_to_executable() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();

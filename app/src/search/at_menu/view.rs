@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use async_channel::Sender;
 use itertools::Itertools;
-#[cfg(not(target_family = "wasm"))]
 use repo_metadata::repositories::DetectedRepositories;
 use settings::Setting as _;
 use warpui::elements::{
@@ -24,22 +23,17 @@ use warpui::{
 use super::styles;
 use crate::appearance::Appearance;
 use crate::debounce;
-#[cfg(not(target_family = "wasm"))]
 use crate::search::at_menu::code::data_source::{CodeSymbolCache, code_data_source};
-#[cfg(not(target_family = "wasm"))]
 use crate::search::at_menu::code::is_code_symbols_indexing;
-#[cfg(not(target_family = "wasm"))]
 use crate::search::at_menu::files::data_source::{
     file_data_source_for_current_repo, file_data_source_for_pwd,
 };
 use crate::search::at_menu::mixer::{AtMenuMixer, AtMenuSearchableAction};
 use crate::search::data_source::{Query, QueryFilter, QueryResult};
-#[cfg(not(target_family = "wasm"))]
 use crate::search::mixer::AddAsyncSourceOptions;
 use crate::search::result_renderer::{QueryResultRenderer, QueryResultRendererStyles};
 use crate::search::search_bar::{SearchBar, SearchBarEvent, SearchBarState, SearchResultOrdering};
 use crate::settings::InputSettings;
-#[cfg(not(target_family = "wasm"))]
 use crate::workspace::ActiveSession;
 
 const CORNER_RADIUS: f32 = 8.0;
@@ -136,7 +130,6 @@ pub struct AtMenu {
     /// a lot of helpful logic for managing the search state.
     search_bar: ViewHandle<SearchBar<AtMenuSearchableAction>>,
     search_bar_state: ModelHandle<SearchBarState<AtMenuSearchableAction>>,
-    #[cfg(not(target_family = "wasm"))]
     code_symbol_cache: ModelHandle<CodeSymbolCache>,
     state: AtMenuState,
     /// Debounce channel for search queries
@@ -247,12 +240,6 @@ impl AtMenu {
     /// inside a repository.
     pub(crate) fn get_categories(app: &AppContext) -> Vec<AtMenuCategory> {
         let is_active_dir_in_git_repo = {
-            #[cfg(target_family = "wasm")]
-            {
-                false
-            }
-
-            #[cfg(not(target_family = "wasm"))]
             {
                 let active_window_id = app.windows().state().active_window;
                 active_window_id
@@ -345,7 +332,6 @@ impl AtMenu {
         });
 
         // Subscribe to repository detection so categories (Files/Code) update when a git repo is found.
-        #[cfg(not(target_family = "wasm"))]
         ctx.subscribe_to_model(
             &DetectedRepositories::handle(ctx),
             |me, _handle, _event, ctx| {
@@ -358,7 +344,6 @@ impl AtMenu {
             me.refresh_categories_state(ctx);
         });
 
-        #[cfg(not(target_family = "wasm"))]
         ctx.observe(
             &ActiveSession::handle(ctx),
             Self::handle_active_session_change,
@@ -375,12 +360,10 @@ impl AtMenu {
         // Get initial categories for proper initialization
         let initial_categories = Self::get_categories(ctx);
 
-        #[cfg(not(target_family = "wasm"))]
         let code_symbol_cache = ctx.add_model(CodeSymbolCache::new);
 
         // When the outline updates (e.g. indexing finishes), re-run the current
         // mixer query so the Code results refresh automatically.
-        #[cfg(not(target_family = "wasm"))]
         ctx.subscribe_to_model(&code_symbol_cache, |me, _handle, _event, ctx| {
             let code_active = matches!(
                 me.state.navigation_state,
@@ -399,7 +382,6 @@ impl AtMenu {
             mixer,
             search_bar,
             search_bar_state,
-            #[cfg(not(target_family = "wasm"))]
             code_symbol_cache,
             state: AtMenuState {
                 navigation_state: if initial_categories.len() > 1 {
@@ -425,7 +407,6 @@ impl AtMenu {
         result
     }
 
-    #[cfg(not(target_family = "wasm"))]
     fn handle_active_session_change(
         &mut self,
         _handle: ModelHandle<ActiveSession>,
@@ -561,7 +542,6 @@ impl AtMenu {
 
         match self.state.navigation_state {
             NavigationState::MainMenu => {}
-            #[cfg(not(target_family = "wasm"))]
             NavigationState::Category(AtMenuCategory::CurrentFolderFiles) => {
                 self.mixer.update(ctx, |mixer, ctx| {
                     mixer.add_async_source(
@@ -583,7 +563,6 @@ impl AtMenu {
                     );
                 });
             }
-            #[cfg(not(target_family = "wasm"))]
             NavigationState::Category(AtMenuCategory::RepoFiles) => {
                 self.mixer.update(ctx, |mixer, ctx| {
                     mixer.add_async_source(
@@ -605,7 +584,6 @@ impl AtMenu {
                     );
                 });
             }
-            #[cfg(not(target_family = "wasm"))]
             NavigationState::Category(AtMenuCategory::Code) => {
                 self.mixer.update(ctx, |mixer, ctx| {
                     mixer.add_async_source(
@@ -658,7 +636,6 @@ impl AtMenu {
     }
 
     /// Set up data sources for all available categories
-    #[cfg(not(target_family = "wasm"))]
     fn setup_data_sources_for_all_categories(&mut self, query: &str, ctx: &mut ViewContext<Self>) {
         // Reset mixer first
         self.mixer.update(ctx, |mixer, ctx| {
@@ -703,20 +680,6 @@ impl AtMenu {
 
         // Run the query with all data sources
         self.mixer.update(ctx, |mixer, ctx| {
-            mixer.run_query(
-                Query {
-                    text: query.into(),
-                    filters: HashSet::new(),
-                },
-                ctx,
-            );
-        });
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn setup_data_sources_for_all_categories(&mut self, query: &str, ctx: &mut ViewContext<Self>) {
-        self.mixer.update(ctx, |mixer, ctx| {
-            mixer.reset(ctx);
             mixer.run_query(
                 Query {
                     text: query.into(),
@@ -908,7 +871,6 @@ impl AtMenu {
         .finish()
     }
 
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     fn render_code_symbols_indexing(&self, app: &AppContext) -> Box<dyn Element> {
         let appearance = Appearance::as_ref(app);
         let theme = appearance.theme();
@@ -996,14 +958,8 @@ impl AtMenu {
     }
 
     /// Whether the @ menu should render.
-    #[cfg(not(target_family = "wasm"))]
     pub fn should_render(&self, app: &AppContext) -> bool {
         !Self::get_categories(app).is_empty()
-    }
-
-    #[cfg(target_family = "wasm")]
-    pub fn should_render(&self, _app: &AppContext) -> bool {
-        false
     }
 
     /// Returns the selected result renderer, if any.
@@ -1110,14 +1066,12 @@ impl AtMenu {
 
     /// Renders the appropriate empty-state element: code-symbols-indexing
     /// indicator (when applicable), loading spinner, or the provided fallback.
-    #[cfg_attr(target_family = "wasm", allow(unused_variables))]
     fn render_empty_state(
         &self,
         category: Option<&AtMenuCategory>,
         fallback: Box<dyn Element>,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        #[cfg(not(target_family = "wasm"))]
         if let Some(cat) = category
             && *cat == AtMenuCategory::Code
             && is_code_symbols_indexing(app)

@@ -1,6 +1,5 @@
 use std::cmp::min;
 use std::io::Read;
-#[cfg(feature = "local_fs")]
 use std::{env, fs, str};
 
 use anyhow::Result;
@@ -101,32 +100,10 @@ impl TryFrom<KittyMessage> for KittyImage {
 
         let decoded_data = match message.control_data.transmission_medium {
             KittyTransmissionMedium::Direct => decoded_data,
-            KittyTransmissionMedium::SimpleFile => {
-                cfg_if::cfg_if! {
-                    if #[cfg(feature = "local_fs")] {
-                        read_file(decoded_data, false)?
-                    } else {
-                        return Err(InvalidKittyPayload::FileError(FileError::UnsupportedPlatform));
-                    }
-                }
-            }
-            KittyTransmissionMedium::TemporaryFile => {
-                cfg_if::cfg_if! {
-                    if #[cfg(feature = "local_fs")] {
-                        read_file(decoded_data, true)?
-                    } else {
-                        return Err(InvalidKittyPayload::FileError(FileError::UnsupportedPlatform));
-                    }
-                }
-            }
+            KittyTransmissionMedium::SimpleFile => read_file(decoded_data, false)?,
+            KittyTransmissionMedium::TemporaryFile => read_file(decoded_data, true)?,
             KittyTransmissionMedium::SharedMemoryObject => {
-                cfg_if::cfg_if! {
-                    if #[cfg(all(feature = "local_fs", unix))] {
-                        read_shared_memory(message.control_data.clone(), decoded_data)?
-                    } else {
-                        return Err(InvalidKittyPayload::ShmError(ShmError::UnsupportedPlatform));
-                    }
-                }
+                read_shared_memory(message.control_data.clone(), decoded_data)?
             }
         };
 
@@ -735,7 +712,6 @@ pub fn parse_kitty_chunk(chunk: Vec<u8>) -> KittyChunk {
     }
 }
 
-#[cfg(feature = "local_fs")]
 fn read_file(decoded_payload: Vec<u8>, is_temp: bool) -> Result<Vec<u8>, InvalidKittyPayload> {
     let path = match str::from_utf8(&decoded_payload[..]) {
         Ok(path) => path,
@@ -758,7 +734,6 @@ fn read_file(decoded_payload: Vec<u8>, is_temp: bool) -> Result<Vec<u8>, Invalid
     Ok(data)
 }
 
-#[cfg(feature = "local_fs")]
 fn safe_delete_temp_file(path: &str) {
     if is_path_in_temp_dir(path)
         && path.contains("tty-graphics-protocol")
@@ -768,7 +743,6 @@ fn safe_delete_temp_file(path: &str) {
     }
 }
 
-#[cfg(feature = "local_fs")]
 fn is_path_in_temp_dir(path: &str) -> bool {
     let temp_dirs = vec!["/tmp", "/var/tmp", "/dev/shm"];
 
@@ -787,7 +761,6 @@ fn is_path_in_temp_dir(path: &str) -> bool {
     false
 }
 
-#[cfg(all(feature = "local_fs", unix))]
 fn read_shared_memory(
     control_data: KittyControlData,
     decoded_payload: Vec<u8>,
@@ -831,7 +804,6 @@ fn read_shared_memory(
     data
 }
 
-#[cfg(all(feature = "local_fs", unix))]
 fn read_from_shared_memory_fd(
     fd: i32,
     size: Option<usize>,

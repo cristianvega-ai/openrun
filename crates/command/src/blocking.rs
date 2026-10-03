@@ -679,7 +679,6 @@ impl Command {
     /// [POSIX fork() specification]:
     ///     https://pubs.opengroup.org/onlinepubs/9699919799/functions/fork.html
     /// [`std::env`]: mod@crate::env
-    #[cfg(unix)]
     pub unsafe fn pre_exec<F>(&mut self, f: F) -> &mut Self
     where
         F: FnMut() -> io::Result<()> + Send + Sync + 'static,

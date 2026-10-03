@@ -16,7 +16,6 @@
 
 use std::path::{Path, PathBuf};
 
-use cfg_if::cfg_if;
 use directories::BaseDirs;
 
 use crate::AppId;
@@ -74,7 +73,6 @@ pub fn warp_home_config_dir() -> Option<PathBuf> {
 ///
 /// These suffixes are persisted on disk as directory names and must not be
 /// changed once established, or existing user data will be orphaned.
-#[cfg(target_os = "macos")]
 fn macos_config_dir_name() -> String {
     macos_config_dir_name_for(
         ChannelState::channel(),
@@ -82,7 +80,6 @@ fn macos_config_dir_name() -> String {
     )
 }
 
-#[cfg(target_os = "macos")]
 fn macos_config_dir_name_for(channel: Channel, data_profile: Option<&str>) -> String {
     let base_dir_name = match channel {
         Channel::Oss => format!("{WARP_CONFIG_DIR}-oss"),
@@ -99,31 +96,21 @@ fn macos_config_dir_name_for(channel: Channel, data_profile: Option<&str>) -> St
 ///
 /// This is the appropriate home for things like custom themes and workflows.
 pub fn data_dir() -> PathBuf {
-    cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            // TODO(vorporeal): We should do something better than return a
-            // relative path.
-            dirs::home_dir().unwrap_or_default().join(macos_config_dir_name())
-        } else {
-            project_dirs().map(|dirs| dirs.data_dir().to_owned()).unwrap_or_default()
-        }
-    }
+    // TODO(vorporeal): We should do something better than return a
+    // relative path.
+    dirs::home_dir()
+        .unwrap_or_default()
+        .join(macos_config_dir_name())
 }
 
 /// Returns the path to the directory where non-portable configuration files
 /// should be stored.
 pub fn config_local_dir() -> PathBuf {
-    cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            // TODO(vorporeal): We should do something better than return a
-            // relative path.
-            dirs::home_dir().unwrap_or_default().join(macos_config_dir_name())
-        } else {
-            project_dirs()
-                .map(|dirs| dirs.config_local_dir().to_owned())
-                .unwrap_or_default()
-        }
-    }
+    // TODO(vorporeal): We should do something better than return a
+    // relative path.
+    dirs::home_dir()
+        .unwrap_or_default()
+        .join(macos_config_dir_name())
 }
 
 /// Returns the base directory for general config files. Useful for accessing the config files for
@@ -163,7 +150,6 @@ pub fn secure_state_dir() -> Option<PathBuf> {
         return None;
     }
 
-    #[cfg(target_os = "macos")]
     if let Some(app_group_root) = app_group_container_path() {
         // The macOS project_path is the bundle ID (i.e. `dev.warp.WarpOss`).
         let project_dirs = project_dirs()?;
@@ -192,21 +178,14 @@ pub fn cache_dir() -> PathBuf {
     let Some(project_dirs) = project_dirs() else {
         return PathBuf::new();
     };
-    cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            // TODO(vorporeal): Given that this is just cache data; do we want
-            // change the path we use on macOS?
-            project_dirs.data_dir().to_owned()
-        } else {
-            project_dirs.cache_dir().to_owned()
-        }
-    }
+    // TODO(vorporeal): Given that this is just cache data; do we want
+    // change the path we use on macOS?
+    project_dirs.data_dir().to_owned()
 }
 
 /// Returns a display-ready version of the path that is formatted in a
 /// home-dir-relative manner, if appropriate.
 pub fn home_relative_path(path: &Path) -> String {
-    #[cfg(unix)]
     if let Some(base_dirs) = directories::BaseDirs::new()
         && let Ok(relative_path) = path.strip_prefix(base_dirs.home_dir())
     {
@@ -253,7 +232,6 @@ fn project_dirs_for_app_id(
 /// * [Configuring app groups](https://developer.apple.com/documentation/Xcode/configuring-app-groups)
 /// * The [App Groups entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.application-groups?language=objc)
 /// * [`containerURLForSecurityApplicationGroupIdentifier`](https://developer.apple.com/documentation/foundation/filemanager/containerurl(forsecurityapplicationgroupidentifier:)?language=objc)
-#[cfg(target_os = "macos")]
 pub fn app_group_container_path() -> Option<PathBuf> {
     use std::sync::LazyLock;
     static CONTAINER_PATH: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
@@ -289,18 +267,14 @@ pub fn app_group_container_path() -> Option<PathBuf> {
 /// For the `.app` bundle, the resources directory is `$APP_DIR/Contents/Resources`
 /// (e.g. `/Applications/Warp.app/Contents/Resources`).
 pub fn bundled_resources_dir() -> Option<PathBuf> {
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            // Resources live in the `.app` bundle's `Contents/Resources`.
-            crate::macos::get_bundle_path()
-                .ok()
-                .map(|bundle_path| PathBuf::from(bundle_path).join("Contents").join("Resources"))
-        } else {
-            None
-        }
-    }
+    // Resources live in the `.app` bundle's `Contents/Resources`.
+    crate::macos::get_bundle_path().ok().map(|bundle_path| {
+        PathBuf::from(bundle_path)
+            .join("Contents")
+            .join("Resources")
+    })
 }
 
-#[cfg(all(test, feature = "local_fs"))]
+#[cfg(test)]
 #[path = "paths_tests.rs"]
 mod tests;

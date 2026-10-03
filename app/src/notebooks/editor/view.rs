@@ -33,9 +33,8 @@ use warpui::elements::{
 use warpui::event::ModifiersState;
 use warpui::image_cache::ImageType;
 use warpui::keymap::{EditableBinding, FixedBinding};
-use warpui::platform::{Cursor, OperatingSystem};
+use warpui::platform::Cursor;
 use warpui::presenter::ChildView;
-#[cfg(feature = "local_fs")]
 use warpui::text::word_boundaries::WordBoundariesPolicy;
 use warpui::ui_components::button::ButtonVariant;
 use warpui::ui_components::components::{Coords, UiComponent, UiComponentStyles};
@@ -66,7 +65,6 @@ use crate::terminal::grid_renderer::URL_COLOR;
 use crate::terminal::links::directly_open_link_keybinding_string;
 use crate::ui_components::icons::ICON_DIMENSIONS;
 use crate::util::bindings::CustomAction;
-#[cfg(feature = "local_fs")]
 use crate::util::link_detection::{detect_file_paths, get_word_range_at_offset};
 use crate::util::tooltips::{TooltipLink, render_tooltip, should_show_open_in_warp_link};
 use crate::view_components::DismissibleToast;
@@ -536,17 +534,15 @@ pub fn init(app: &mut AppContext) {
     ]);
 
     // Register mac-only `FixedBinding`s.
-    if OperatingSystem::get().is_mac() {
-        app.register_fixed_bindings([
-            // A native character palette isn't supported on all platforms. The `ctrl-cmd-space`
-            // binding is unique to Mac.
-            FixedBinding::new(
-                "ctrl-cmd-space",
-                EditorViewAction::ShowCharacterPalette,
-                text_entry.clone(),
-            ),
-        ]);
-    }
+    app.register_fixed_bindings([
+        // A native character palette isn't supported on all platforms. The `ctrl-cmd-space`
+        // binding is unique to Mac.
+        FixedBinding::new(
+            "ctrl-cmd-space",
+            EditorViewAction::ShowCharacterPalette,
+            text_entry.clone(),
+        ),
+    ]);
 
     // Editable text-manipulation bindings
     app.register_editable_bindings([
@@ -2064,7 +2060,6 @@ impl RichTextEditorView {
 
         self.hovered_file_path = None;
 
-        #[cfg(feature = "local_fs")]
         {
             // Check for file paths at the hovered word, expanding to include the previous word
             // to detect line ranges like "file.rs (16-30)" when hovering over "(16-30)"

@@ -8,15 +8,12 @@
 
 use std::future::Future;
 
-#[cfg(not(target_family = "wasm"))]
 use futures::future::Either;
 use futures::future::ready;
-#[cfg(not(target_family = "wasm"))]
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::repositories::RepoDetectionSource;
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::AppContext;
-#[cfg(not(target_family = "wasm"))]
 use warpui::SingletonEntity;
 
 /// Describes whether the active session is local or remote.
@@ -32,7 +29,6 @@ pub enum RepoDetectionSessionType {
 /// Callers that only need the `DetectedGitRepo` event side effect may drop the
 /// returned future: detection runs on a task spawned inside
 /// [`DetectedRepositories`], so it completes regardless.
-#[cfg(not(target_family = "wasm"))]
 pub fn detect_possible_git_repo(
     session_type: RepoDetectionSessionType,
     active_directory: &str,
@@ -48,16 +44,4 @@ pub fn detect_possible_git_repo(
         }
         RepoDetectionSessionType::Remote => Either::Right(ready(None)),
     }
-}
-
-/// Repository detection is not available in WASM builds because
-/// `DetectedRepositories` is not registered there.
-#[cfg(target_family = "wasm")]
-pub fn detect_possible_git_repo(
-    _session_type: RepoDetectionSessionType,
-    _active_directory: &str,
-    _source: RepoDetectionSource,
-    _ctx: &mut AppContext,
-) -> impl Future<Output = Option<LocalOrRemotePath>> + use<> {
-    ready(None)
 }

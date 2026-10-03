@@ -76,7 +76,6 @@ pub(crate) fn layout_mermaid_block_for_test(
 /// before any path is canonicalized, stat'ed or read.
 ///
 /// Note: Path canonicalization is not available on WASM targets.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn resolve_asset_source_relative_to_directory(
     source: &str,
     base_directory: Option<&Path>,
@@ -164,23 +163,6 @@ fn resolve_asset_source(source: &str, base_path: Option<&Path>) -> Option<AssetS
     let base_directory = base_path.map(|base| base.parent().unwrap_or(base));
     resolve_asset_source_relative_to_directory(source, base_directory)
         .map(AssetSource::with_local_file_content_version)
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn resolve_asset_source_relative_to_directory(
-    source: &str,
-    _base_directory: Option<&Path>,
-) -> Option<AssetSource> {
-    if let Some(data_uri_source) = asset_cache::data_uri_source(source) {
-        Some(data_uri_source)
-    } else if is_blocked_image_source(source) {
-        None
-    } else {
-        Some(AssetSource::LocalFile {
-            path: source.to_string(),
-            content_version: None,
-        })
-    }
 }
 
 /// Default height multiplier for images when no dimensions are specified.

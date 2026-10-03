@@ -16,15 +16,7 @@ pub fn main() -> Result<()> {
     ChannelState::set(ChannelState::new(
         Channel::Integration,
         ChannelConfig {
-            app_id: AppId::new(
-                "dev",
-                "warp",
-                if cfg!(target_os = "macos") {
-                    "Warp-Integration"
-                } else {
-                    "WarpIntegration"
-                },
-            ),
+            app_id: AppId::new("dev", "warp", "Warp-Integration"),
             logfile_name: "warp_integration.log".into(),
         },
     ));
@@ -33,7 +25,6 @@ pub fn main() -> Result<()> {
 
     if let Some(command) = &args.command {
         match command {
-            #[cfg(unix)]
             WorkerCommand::TerminalServer(args) => {
                 // If we were asked to run as a terminal server (as opposed to the main
                 // GUI application), do so.  This must occur before init_logging, as the

@@ -158,19 +158,13 @@ pub fn session_shell(name: &str, override_variable: &str) -> Option<PathBuf> {
 /// evidence for the generator policy, and a skipped test is no evidence.
 const REQUIRED_ON_CI: &[&str] = &["git", "npm", "corepack", "rustup", "docker", "python3"];
 
-/// Tools the Linux runners ship and the macOS runners do not.
-const REQUIRED_ON_LINUX_CI: &[&str] = &["go", "gcloud"];
-
 /// The tool's path, or `None` after saying why the test is skipped. On CI (`CI=true`), a tool in
-/// [`REQUIRED_ON_CI`] (or, on Linux, [`REQUIRED_ON_LINUX_CI`]) that is missing fails the test
-/// instead.
+/// [`REQUIRED_ON_CI`] that is missing fails the test instead.
 pub fn require_tool(name: &str) -> Option<PathBuf> {
     let tool = find_tool(name);
     if tool.is_none() {
         assert!(
-            !(std::env::var("CI").is_ok_and(|ci| ci == "true")
-                && (REQUIRED_ON_CI.contains(&name)
-                    || (cfg!(target_os = "linux") && REQUIRED_ON_LINUX_CI.contains(&name)))),
+            !(std::env::var("CI").is_ok_and(|ci| ci == "true") && REQUIRED_ON_CI.contains(&name)),
             "{name} is not installed on this CI runner, so the real-tool tests that need it \
              would pass without testing anything"
         );

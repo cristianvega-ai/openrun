@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use warp_util::path::ShellFamily;
 use warp_workflows::workflows as global_workflows;
-#[cfg(not(target_family = "wasm"))]
 use warpui::platform::OperatingSystem;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
 
@@ -12,7 +11,6 @@ use super::WorkflowSource;
 use super::workflow::Workflow;
 use crate::terminal::model::session::Session;
 use crate::user_config::WarpConfig;
-#[cfg(feature = "local_fs")]
 use crate::user_config::load_workflows;
 
 pub fn workflows_dir(base_dir: impl AsRef<Path>) -> PathBuf {
@@ -91,7 +89,6 @@ impl LocalWorkflows {
     ///
     /// If `use_cache` is `UseCache::No`, reads the workflows from disk regardless of whether or
     /// not there is an existing cached vector and updates the cached vector.
-    #[cfg(feature = "local_fs")]
     pub fn project_workflows(
         &mut self,
         working_directory: &Path,
@@ -159,22 +156,16 @@ impl SingletonEntity for LocalWorkflows {}
 
 /// Returns all app workflows.
 fn app_workflows() -> Vec<Workflow> {
-    #[cfg(not(target_family = "wasm"))]
     {
         let shell_family = OperatingSystem::get().default_shell_family();
         self::prompt_chip_logging_workflow(shell_family)
             .into_iter()
             .collect()
     }
-    #[cfg(target_family = "wasm")]
-    {
-        Vec::new()
-    }
 }
 
 /// Loads project-level workflows (if any) from the warp config directory in the current working
 /// directory.
-#[cfg(feature = "local_fs")]
 pub(super) fn load_project_workflows(path: &Path) -> Vec<Workflow> {
     match git2::Repository::discover(path) {
         Ok(repository) => repository.workdir().map_or(Vec::new(), |workdir| {
@@ -203,7 +194,6 @@ pub fn tail_command_for_shell(shell_family: ShellFamily, path: &PathBuf) -> Stri
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 pub fn prompt_chip_logging_workflow(shell_family: ShellFamily) -> Option<Workflow> {
     if !warp_core::channel::ChannelState::enable_debug_features() {
         return None;

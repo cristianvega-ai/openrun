@@ -254,7 +254,6 @@ pub enum WorkspaceAction {
         source: PaletteSource,
     },
     /// Open the log directory in the system file explorer with the current log file selected.
-    #[cfg(not(target_family = "wasm"))]
     ViewLogs,
     ChangeCursor(Cursor),
     ToggleBlockSnackbar,
@@ -399,23 +398,19 @@ pub enum WorkspaceAction {
         widget_id: &'static str,
     },
     /// Install the Warp Control CLI command to /usr/local/bin
-    #[cfg(target_os = "macos")]
     InstallWarpctrl,
     /// Uninstall the Warp Control CLI command from /usr/local/bin
-    #[cfg(target_os = "macos")]
     UninstallWarpctrl,
     UndoRevertInCodeReviewPane {
         window_id: WindowId,
         view_id: EntityId,
     },
     /// Handle a file being renamed in the file tree
-    #[cfg(feature = "local_fs")]
     FileRenamed {
         old_path: PathBuf,
         new_path: PathBuf,
     },
     /// Handle a file being deleted in the file tree
-    #[cfg(feature = "local_fs")]
     FileDeleted {
         path: PathBuf,
     },
@@ -440,7 +435,6 @@ pub enum WorkspaceAction {
     ToggleHiddenFiles,
     OpenGlobalSearch,
     /// Take a process sample of the app (equivalent to Activity Monitor > Sample Process).
-    #[cfg(target_os = "macos")]
     SampleProcess,
     ToggleNotificationMailbox {
         select_first: bool,
@@ -692,20 +686,15 @@ impl WorkspaceAction {
             | TabConfigSidecarEditConfig { .. }
             | TabConfigSidecarRemoveConfig { .. }
             | OpenSettingsFile => false,
-            #[cfg(not(target_family = "wasm"))]
             ViewLogs => false,
-            #[cfg(target_os = "macos")]
             SampleProcess => false,
-            #[cfg(target_os = "macos")]
             InstallWarpctrl | UninstallWarpctrl => false,
-            #[cfg(feature = "local_fs")]
             FileRenamed { .. } => false, // File rename doesn't change workspace state
-            #[cfg(feature = "local_fs")]
             FileDeleted { .. } => false, // File deletion doesn't change workspace state
-                                         // actions that are related to updating user settings or
-                                         // managing some ui elements (like closing/opening modals)
-                                         // that don't reflect on actual workspace and don't need to
-                                         // be preserved between restarts.
+                                          // actions that are related to updating user settings or
+                                          // managing some ui elements (like closing/opening modals)
+                                          // that don't reflect on actual workspace and don't need to
+                                          // be preserved between restarts.
         }
     }
 }

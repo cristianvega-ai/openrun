@@ -14,14 +14,12 @@ use super::{CommandExecutor, CommandOutput, offline_environment};
 use crate::safe_warn;
 use crate::terminal::shell::{Shell, ShellType};
 
-#[cfg(unix)]
 fn kill_all_processes_in_process_group(pid: u32) -> Result<(), nix::Error> {
     use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
     // Killing a negative PID kills all processes in this process group
     kill(Pid::from_raw(-(pid as i32)), Signal::SIGKILL)
 }
-#[cfg(unix)]
 fn terminate_process_group(process_group_id: u32) {
     // A pgid of 0 targets the caller's own process group, and 1 negates to
     // -1, which SIGKILLs every process this user is allowed to signal.
@@ -45,8 +43,6 @@ fn terminate_process_group(process_group_id: u32) {
         }
     }
 }
-#[cfg(not(unix))]
-fn terminate_process_group(_: u32) {}
 
 #[derive(Debug, Default)]
 struct ActiveProcessGroups {

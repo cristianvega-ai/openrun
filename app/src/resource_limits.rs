@@ -1,9 +1,7 @@
-#[cfg(target_os = "macos")]
 use warp_errors::report_error;
 /// Adjusts resource limits applied to the Warp process (e.g.: the limit on open
 /// file descriptors) to ensure proper behavior.
 pub fn adjust_resource_limits() {
-    #[cfg(target_os = "macos")]
     {
         /// Our desired limit on the maximum number of file descriptors we can open.
         ///

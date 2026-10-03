@@ -73,7 +73,6 @@ mod settings_file_footer;
 pub(crate) mod settings_page;
 mod warpify_page;
 
-#[cfg(not(target_family = "wasm"))]
 pub use cli_agents_page::cli_agent_settings_widget_id;
 pub use features_page::FeaturesPageAction;
 pub use privacy_page::PrivacyPageAction;
@@ -249,7 +248,6 @@ pub fn settings_widget_deeplink_target(slug: &str) -> Option<(SettingsSection, &
             SettingsSection::Projects,
             language_server_downloads_widget_id(),
         )),
-        #[cfg(not(target_family = "wasm"))]
         "cli_agents" => Some((
             SettingsSection::ThirdPartyCLIAgents,
             cli_agent_settings_widget_id(),

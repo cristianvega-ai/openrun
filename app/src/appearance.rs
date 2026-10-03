@@ -2,7 +2,6 @@ use settings::Setting as _;
 use warpui::fonts::FamilyId;
 use warpui::{AddSingletonModel, AppContext, AssetProvider, Entity, ModelContext, SingletonEntity};
 
-#[cfg(target_os = "macos")]
 mod macos_app_icon {
     pub use objc2::rc::autoreleasepool;
     pub use objc2::{AnyThread, MainThreadMarker};
@@ -12,7 +11,6 @@ mod macos_app_icon {
     pub use crate::settings::app_icon::{AppIcon, AppIconSettings, AppIconSettingsChangedEvent};
 }
 use anyhow::anyhow;
-#[cfg(target_os = "macos")]
 use macos_app_icon::*;
 pub use warp_core::ui::appearance::{Appearance, AppearanceEvent};
 
@@ -32,7 +30,6 @@ pub struct AppearanceManager {
     // as a setting. It is used when the user is actively choosing a theme.
     transient_theme: Option<WarpTheme>,
 
-    #[cfg(target_os = "macos")]
     app_icon_at_startup: AppIcon,
 }
 
@@ -42,7 +39,6 @@ impl AppearanceManager {
             me.refresh_theme_state(ctx);
         });
 
-        #[cfg(target_os = "macos")]
         {
             ctx.subscribe_to_model(&AppIconSettings::handle(ctx), move |me, _, event, ctx| {
                 match event {
@@ -98,7 +94,6 @@ impl AppearanceManager {
 
         Self {
             transient_theme: None,
-            #[cfg(target_os = "macos")]
             app_icon_at_startup: *AppIconSettings::handle(ctx).as_ref(ctx).app_icon.value(),
         }
     }
@@ -121,12 +116,10 @@ impl AppearanceManager {
         self.refresh_theme_state(ctx);
     }
 
-    #[cfg(target_os = "macos")]
     pub fn app_icon_at_startup(&self) -> AppIcon {
         self.app_icon_at_startup
     }
 
-    #[cfg(target_os = "macos")]
     pub fn apply_dock_icon_visibility(&self, app: &AppContext) {
         app.set_dock_icon_visible(*AppIconSettings::as_ref(app).show_dock_icon.value());
     }
@@ -144,7 +137,6 @@ impl AppearanceManager {
     ///
     /// Also see the README.md file in app/DockTilePlugin for more information on how best to test
     /// changes to the dock tile plugin.
-    #[cfg(target_os = "macos")]
     pub fn set_app_icon(&self, app: &AppContext) {
         let icon = *AppIconSettings::as_ref(app).app_icon.value();
 
@@ -306,13 +298,6 @@ fn load_password_font_family(ctx: &mut AppContext) -> anyhow::Result<FamilyId> {
     })
 }
 
-#[cfg(target_family = "wasm")]
-/// On wasm we don't support loading fonts, so we just use the default.
-fn get_or_load_font_family(_font_name: &str, _ctx: &mut AppContext) -> Option<FamilyId> {
-    None
-}
-
-#[cfg(not(target_family = "wasm"))]
 /// If we're running on a native platform (where we support font loading),
 /// make sure we load the user's selected monospace font. We first check
 /// the font cache in case we are using a pre-bundled font like Hack.

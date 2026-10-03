@@ -27,15 +27,7 @@ pub fn main() -> Result<()> {
     ChannelState::set(ChannelState::new(
         Channel::Integration,
         ChannelConfig {
-            app_id: AppId::new(
-                "dev",
-                "warp",
-                if cfg!(target_os = "macos") {
-                    "Warp-Integration"
-                } else {
-                    "WarpIntegration"
-                },
-            ),
+            app_id: AppId::new("dev", "warp", "Warp-Integration"),
             logfile_name: "warp_integration.log".into(),
         },
     ));
@@ -44,7 +36,6 @@ pub fn main() -> Result<()> {
 
     if let Some(command) = &args.command {
         match command {
-            #[cfg(unix)]
             WorkerCommand::TerminalServer(args) => {
                 // If we were asked to run as a terminal server (as opposed to the main
                 // GUI application), do so.  This must occur before init_logging, as the
@@ -68,25 +59,19 @@ pub fn main() -> Result<()> {
     let Some(builder) = tests.get(test_name).map(|func| func()) else {
         panic!("test not found for args: {:#?}", env::args());
     };
-    #[cfg_attr(not(unix), allow(unused_variables))]
     let driver = builder.build(test_name, true);
 
     // Before actually running the test, make sure we won't accidentally stop
     // on any of the real user's configuration or rcfiles.
-    cfg_if::cfg_if! {
-        if #[cfg(unix)] {
-            let home =
-                std::env::var("HOME").expect("Should have a value for the HOME environment variable");
-            let original_home = std::env::var("ORIGINAL_HOME").expect(
-                "Integration test binary should have set an ORIGINAL_HOME environment variable",
-            );
-            assert_ne!(home, original_home, "HOME should not be the same as ORIGINAL_HOME!");
-        } else {
-            unimplemented!("Need to add support for hermetic integration tests for the current platform!");
-        }
-    }
+    let home =
+        std::env::var("HOME").expect("Should have a value for the HOME environment variable");
+    let original_home = std::env::var("ORIGINAL_HOME")
+        .expect("Integration test binary should have set an ORIGINAL_HOME environment variable");
+    assert_ne!(
+        home, original_home,
+        "HOME should not be the same as ORIGINAL_HOME!"
+    );
 
-    #[cfg_attr(not(unix), allow(unreachable_code))]
     warp::run_integration_test(driver)
 }
 

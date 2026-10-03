@@ -1395,7 +1395,6 @@ pub mod testing {
         pub fn new_for_test() -> Self {
             let path = std::env::var_os("PATH").unwrap().into_string().ok();
 
-            #[cfg(unix)]
             let shell_type = ShellType::Bash;
 
             Self {

@@ -51,7 +51,6 @@ use crate::view_components::action_button::{
     ActionButton, ActionButtonTheme, ButtonSize, KeystrokeSource, TooltipAlignment,
 };
 use crate::workspace::ToastStack;
-#[cfg(not(target_family = "wasm"))]
 use crate::workspace::WorkspaceAction;
 use crate::workspace::view::TOGGLE_PROJECT_EXPLORER_BINDING_NAME;
 
@@ -442,7 +441,6 @@ impl TypedActionView for CLIAgentFooter {
                 }
             }
             CLIAgentFooterAction::OpenCodingAgentSettings => {
-                #[cfg(not(target_family = "wasm"))]
                 ctx.dispatch_typed_action_deferred(WorkspaceAction::ScrollToSettingsWidget {
                     page: SettingsSection::ThirdPartyCLIAgents,
                     widget_id: crate::settings_view::cli_agent_settings_widget_id(),

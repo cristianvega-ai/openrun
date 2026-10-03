@@ -57,7 +57,6 @@ fn test_possible_file_paths_in_word() {
     );
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn test_detect_file_paths_stops_at_fullwidth_punctuation() {
     let dir = tempfile::tempdir().unwrap();
@@ -74,7 +73,6 @@ fn test_detect_file_paths_stops_at_fullwidth_punctuation() {
     assert!(!link_ranges.contains(&(30..51)));
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn test_detect_file_paths_keeps_fullwidth_punctuation_when_it_is_the_filename() {
     let dir = tempfile::tempdir().unwrap();

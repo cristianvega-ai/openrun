@@ -464,7 +464,6 @@ pub struct ShellProcessInfo {
     /// The pty owns this descriptor, so it is only valid while the pty is alive.
     /// It is cleared when the shell exits, but readers must still treat any
     /// failure as "unknown" rather than trusting a possibly recycled descriptor.
-    #[cfg(unix)]
     pub pty_leader_fd: Option<std::os::fd::RawFd>,
 }
 

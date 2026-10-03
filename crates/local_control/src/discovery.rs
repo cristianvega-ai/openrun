@@ -26,7 +26,6 @@
 //! trusted Warp code from arbitrary software already running as that user.
 use std::collections::HashSet;
 use std::fs;
-#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -428,14 +427,8 @@ fn sweep_abandoned_temp_records(dir: &Path, grace_period: Duration) {
     }
 }
 
-#[cfg(unix)]
 fn is_pid_alive(pid: u32) -> bool {
     unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
-}
-
-#[cfg(not(unix))]
-fn is_pid_alive(_: u32) -> bool {
-    false
 }
 
 fn record_path(dir: &Path, instance_id: &InstanceId) -> PathBuf {
@@ -445,7 +438,6 @@ fn broker_socket_filename(instance_id: &InstanceId) -> PathBuf {
     PathBuf::from(format!("{}{BROKER_SOCKET_SUFFIX}", instance_id.0))
 }
 
-#[cfg(unix)]
 fn set_private_dir_permissions(path: &Path) -> Result<(), ControlError> {
     let mut permissions = fs::metadata(path)
         .map_err(|err| permissions_error("read local-control discovery directory", err))?
@@ -455,15 +447,6 @@ fn set_private_dir_permissions(path: &Path) -> Result<(), ControlError> {
         .map_err(|err| permissions_error("protect local-control discovery directory", err))
 }
 
-#[cfg(not(unix))]
-fn set_private_dir_permissions(_path: &Path) -> Result<(), ControlError> {
-    Err(ControlError::new(
-        ErrorCode::LocalControlDisabled,
-        "local-control discovery publication is disabled until this platform enforces record ACLs",
-    ))
-}
-
-#[cfg(unix)]
 fn set_private_permissions(path: &Path) -> Result<(), ControlError> {
     let mut permissions = fs::metadata(path)
         .map_err(|err| permissions_error("read local-control discovery record", err))?
@@ -473,15 +456,6 @@ fn set_private_permissions(path: &Path) -> Result<(), ControlError> {
         .map_err(|err| permissions_error("protect local-control discovery record", err))
 }
 
-#[cfg(not(unix))]
-fn set_private_permissions(_path: &Path) -> Result<(), ControlError> {
-    Err(ControlError::new(
-        ErrorCode::LocalControlDisabled,
-        "local-control discovery publication is disabled until this platform enforces record ACLs",
-    ))
-}
-
-#[cfg(unix)]
 fn permissions_error(operation: &str, error: std::io::Error) -> ControlError {
     ControlError::with_details(
         ErrorCode::Internal,

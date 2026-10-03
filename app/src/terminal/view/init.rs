@@ -1,6 +1,5 @@
 use warpui::AppContext;
 use warpui::keymap::{EditableBinding, FixedBinding};
-use warpui::platform::OperatingSystem;
 use warpui::units::IntoLines;
 
 use super::TerminalAction;
@@ -109,12 +108,6 @@ pub fn init(app: &mut AppContext) {
             id!("Terminal") & !id!("IMEOpen"),
         ),
         // On the web, we get pastes from system paste events.
-        #[cfg(target_family = "wasm")]
-        FixedBinding::standard(
-            warpui::actions::StandardAction::Paste,
-            TerminalAction::Paste,
-            id!("Terminal") & !id!("IMEOpen"),
-        ),
     ]);
     if ChannelState::channel() == Channel::Integration {
         app.register_fixed_bindings([
@@ -236,7 +229,6 @@ pub fn init(app: &mut AppContext) {
         .with_custom_action(CustomAction::FocusInput)
         .with_context_predicate(id!("Terminal")),
         // Paste is not rebindable on the web.
-        #[cfg(not(target_family = "wasm"))]
         EditableBinding::new("terminal:paste", "Paste", TerminalAction::Paste)
             .with_custom_action(CustomAction::Paste)
             .with_context_predicate(id!("Terminal") & !id!("IMEOpen")),
@@ -512,40 +504,29 @@ pub fn init(app: &mut AppContext) {
     // item. We don't want this registered on Linux/Windows since this would mean the binding needs
     // to be "PTY compliant", which would end up making select all have a binding of `ctrl-shift-a`
     // instead of `ctrl-a` within the editor view.
-    if OperatingSystem::get().is_mac() {
-        app.register_editable_bindings([
-            // Note that we register a separate action for SelectAll blocks
-            // that always works, regardless of context - this one is triggered
-            // from the menus and doesn't conflict with cmd-A in the editor.
-            EditableBinding::new(
-                "terminal:select_all_blocks",
-                "Select all blocks",
-                TerminalAction::SelectAllBlocks,
-            )
-            .with_context_predicate(
-                id!("Terminal") & !id!("IMEOpen") & id!("TerminalView_NonEmptyBlockList"),
-            )
-            .with_custom_action(CustomAction::SelectAll),
-            EditableBinding::new(
-                "terminal:select_all_blocks",
-                "Select all blocks",
-                TerminalAction::SelectAllBlocks,
-            )
-            .with_context_predicate(
-                id!("Terminal") & !id!("IMEOpen") & id!("TerminalView_NonEmptyBlockList"),
-            )
-            .with_custom_action(CustomAction::SelectAllBlocks),
-        ]);
-    } else {
-        app.register_editable_bindings([EditableBinding::new(
+    app.register_editable_bindings([
+        // Note that we register a separate action for SelectAll blocks
+        // that always works, regardless of context - this one is triggered
+        // from the menus and doesn't conflict with cmd-A in the editor.
+        EditableBinding::new(
             "terminal:select_all_blocks",
             "Select all blocks",
             TerminalAction::SelectAllBlocks,
         )
         .with_context_predicate(
             id!("Terminal") & !id!("IMEOpen") & id!("TerminalView_NonEmptyBlockList"),
-        )])
-    }
+        )
+        .with_custom_action(CustomAction::SelectAll),
+        EditableBinding::new(
+            "terminal:select_all_blocks",
+            "Select all blocks",
+            TerminalAction::SelectAllBlocks,
+        )
+        .with_context_predicate(
+            id!("Terminal") & !id!("IMEOpen") & id!("TerminalView_NonEmptyBlockList"),
+        )
+        .with_custom_action(CustomAction::SelectAllBlocks),
+    ]);
 
     app.register_editable_bindings([
         EditableBinding::new(
@@ -620,6 +601,6 @@ pub fn init(app: &mut AppContext) {
         "Toggle PTY Recording for Session",
         TerminalAction::ToggleSessionRecording,
     )
-    .with_enabled(|| cfg!(feature = "local_fs") && ChannelState::enable_debug_features())
+    .with_enabled(ChannelState::enable_debug_features)
     .with_context_predicate(id!("Terminal"))]);
 }

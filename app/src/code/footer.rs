@@ -9,13 +9,11 @@ use lsp::{
 };
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
-#[cfg(feature = "local_fs")]
 use repo_metadata::repositories::DetectedRepositories;
 use warp_core::ui::Icon;
 use warp_core::ui::appearance::Appearance;
 use warp_core::ui::theme::color::internal_colors;
 use warp_core::ui::theme::{AnsiColorIdentifier, Fill as ThemeFill, WarpTheme};
-#[cfg(feature = "local_fs")]
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warpui::elements::{
     Border, ChildAnchor, ChildView, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment,
@@ -33,7 +31,6 @@ use warpui::{
 use crate::settings::CodeSettings;
 use crate::ui_components::blended_colors;
 use crate::view_components::action_button::{ActionButton, ButtonSize, NakedTheme};
-#[cfg(feature = "local_fs")]
 use crate::workspace_metadata::PersistedWorkspaceEvent;
 use crate::workspace_metadata::{LSPEnablementResultForFile, LspRepoStatus, PersistedWorkspace};
 
@@ -143,28 +140,18 @@ enum FooterCta {
 #[derive(Debug, Clone, PartialEq)]
 pub enum CodeFooterViewAction {
     CloseMenu,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     ToggleMenu,
     EnableLSP,
     OpenLanguageServerDownloadSettings,
     RecheckInstallation,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     OpenLogs,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     RestartServer,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     StopServer,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     StartServer,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     RemoveServer,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     RestartAllServers,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     StopAllServers,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     StartAllServers,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     ManageServers,
 }
 
@@ -296,7 +283,6 @@ impl LspRepoStatuses {
         self.inner.is_empty()
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn contains_key(&self, server_type: &LSPServerType) -> bool {
         self.inner.contains_key(server_type)
     }
@@ -326,7 +312,6 @@ impl CodeFooterView {
         })
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub fn new(path: PathBuf, ctx: &mut ViewContext<Self>) -> Self {
         let lsp_status_button = Self::create_lsp_status_button(true, ctx);
         let server_type = LanguageId::from_path(&path).map(|id| id.server_type());
@@ -345,7 +330,6 @@ impl CodeFooterView {
         });
 
         // Kick off detection via PersistedWorkspace and subscribe for updates
-        #[cfg(feature = "local_fs")]
         let initial_status = {
             let status = Self::detect_installation_status(&path, ctx);
 
@@ -404,8 +388,6 @@ impl CodeFooterView {
 
             status
         };
-        #[cfg(not(feature = "local_fs"))]
-        let initial_status = LspRepoStatus::CheckingForInstallation;
 
         let footer = Self {
             mode: FooterMode::SingleFile {
@@ -430,7 +412,6 @@ impl CodeFooterView {
 
     /// Creates a footer in workspace mode that tracks all LSP servers for a repo root.
     /// Used by code review to show a single aggregated footer.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub fn new_for_workspace(root_path: PathBuf, ctx: &mut ViewContext<Self>) -> Self {
         let lsp_status_button = Self::create_lsp_status_button(true, ctx);
 
@@ -456,7 +437,6 @@ impl CodeFooterView {
         );
 
         // Kick off async detection of available servers for this workspace
-        #[cfg(feature = "local_fs")]
         {
             let persisted = PersistedWorkspace::handle(ctx);
             persisted.update(ctx, |model, ctx| {
@@ -576,7 +556,6 @@ impl CodeFooterView {
     }
 
     /// Refreshes the server list from the LspManagerModel for workspace mode.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn refresh_workspace_servers(&mut self, ctx: &mut ViewContext<Self>) {
         let FooterMode::Workspace { root_path, .. } = &self.mode else {
             return;
@@ -634,7 +613,6 @@ impl CodeFooterView {
     }
 
     /// Returns the appropriate button label for the given LSP repo status.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn button_label_for_status(status: &LspRepoStatus, downloads_allowed: bool) -> Option<String> {
         match status {
             LspRepoStatus::DisabledAndNotInstalled { server_type } if downloads_allowed => {
@@ -650,7 +628,6 @@ impl CodeFooterView {
     /// Returns the appropriate button label for a set of CTA-worthy statuses.
     /// When multiple servers need action, uses plural labels
     /// ("Enable servers" / "Install servers").
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn button_label_for_cta_statuses(
         statuses: &[&LspRepoStatus],
         downloads_allowed: bool,
@@ -673,7 +650,6 @@ impl CodeFooterView {
 
     /// Detects LSP installation status for the given file path and returns the initial status.
     /// This is shared between `new` and `clear_server_subscription`. Only used in SingleFile mode.
-    #[cfg(feature = "local_fs")]
     fn detect_installation_status(
         file_path: &std::path::Path,
         ctx: &mut ViewContext<Self>,
@@ -700,7 +676,6 @@ impl CodeFooterView {
 
     /// Updates the enable button label based on the current CTA-worthy repo statuses.
     /// Hides the button when no CTAs remain.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn update_enable_button_label(&mut self, ctx: &mut ViewContext<Self>) {
         let downloads_allowed = *CodeSettings::as_ref(ctx).allow_language_server_downloads;
         let cta_statuses = self.mode.cta_lsp_repo_statuses(downloads_allowed);
@@ -727,7 +702,6 @@ impl CodeFooterView {
     }
 
     /// Subscribes to a single server's events and adds it. Used in SingleFile mode.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub fn subscribe_to_server_events(
         &mut self,
         lsp_server: &ModelHandle<LspServerModel>,
@@ -755,7 +729,6 @@ impl CodeFooterView {
     /// Clears the server subscription when a server is removed from the manager.
     /// This resets the footer to the "no server" state and kicks off installation detection.
     /// Used in SingleFile mode.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub fn clear_server_subscription(&mut self, ctx: &mut ViewContext<Self>) {
         self.lsp_servers.clear();
         self.subscribed_server_ids.clear();
@@ -766,7 +739,6 @@ impl CodeFooterView {
         });
 
         // Set initial status and kick off installation status detection
-        #[cfg(feature = "local_fs")]
         if let FooterMode::SingleFile {
             path,
             lsp_repo_status,
@@ -775,13 +747,6 @@ impl CodeFooterView {
         {
             *lsp_repo_status = Self::detect_installation_status(path, ctx);
             self.update_enable_button_label(ctx);
-        }
-        #[cfg(not(feature = "local_fs"))]
-        if let FooterMode::SingleFile {
-            lsp_repo_status, ..
-        } = &mut self.mode
-        {
-            *lsp_repo_status = LspRepoStatus::CheckingForInstallation;
         }
 
         ctx.notify();
@@ -1080,7 +1045,6 @@ impl CodeFooterView {
         Self::wrap_menu_in_dismiss(col, appearance)
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     /// Generic rendering function for each action row in the menu. Note that we need to take in a closure here
     /// as Hoverable needs to dynamically construct its inner element.
     fn render_menu_item<F: 'static + Fn() -> Box<dyn Element>>(
@@ -1145,7 +1109,6 @@ impl CodeFooterView {
         .finish()
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_open_logs_menu_item(
         mouse_states: &SingleFileMouseStates,
         appearance: &Appearance,
@@ -1167,7 +1130,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_restart_server_menu_item(
         mouse_states: &SingleFileMouseStates,
         appearance: &Appearance,
@@ -1189,7 +1151,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_stop_server_menu_item(
         mouse_states: &SingleFileMouseStates,
         appearance: &Appearance,
@@ -1212,7 +1173,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_start_server_menu_item(
         mouse_states: &SingleFileMouseStates,
         appearance: &Appearance,
@@ -1234,7 +1194,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_remove_server_menu_item(
         mouse_states: &SingleFileMouseStates,
         appearance: &Appearance,
@@ -1256,7 +1215,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_restart_all_servers_menu_item(
         mouse_states: &WorkspaceMouseStates,
         is_plural: bool,
@@ -1283,7 +1241,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_stop_all_servers_menu_item(
         mouse_states: &WorkspaceMouseStates,
         is_plural: bool,
@@ -1311,7 +1268,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_start_all_servers_menu_item(
         mouse_states: &WorkspaceMouseStates,
         has_running: bool,
@@ -1341,7 +1297,6 @@ impl CodeFooterView {
         )
     }
 
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn render_manage_servers_menu_item(
         mouse_states: &WorkspaceMouseStates,
         appearance: &Appearance,
@@ -1713,7 +1668,6 @@ impl CodeFooterView {
 }
 
 #[derive(Clone)]
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 pub enum CodeFooterViewEvent {
     EnableLSP {
         path: PathBuf,
@@ -1842,15 +1796,12 @@ impl TypedActionView for CodeFooterView {
                 );
             }
             CodeFooterViewAction::RecheckInstallation => {
-                #[cfg(feature = "local_fs")]
-                {
-                    let missing = self.mode.missing_server_types(false);
-                    PersistedWorkspace::handle(ctx).update(ctx, |workspace, ctx| {
-                        for server_type in missing {
-                            workspace.recheck_lsp_installation(server_type, ctx);
-                        }
-                    });
-                }
+                let missing = self.mode.missing_server_types(false);
+                PersistedWorkspace::handle(ctx).update(ctx, |workspace, ctx| {
+                    for server_type in missing {
+                        workspace.recheck_lsp_installation(server_type, ctx);
+                    }
+                });
             }
             CodeFooterViewAction::EnableLSP => {
                 let path = self.mode.path().to_path_buf();

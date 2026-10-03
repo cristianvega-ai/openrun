@@ -1,14 +1,5 @@
-#[cfg(target_family = "wasm")]
-use std::collections::HashMap;
-#[cfg(target_family = "wasm")]
-use std::sync::Arc;
-
-#[cfg(target_family = "wasm")]
-use fuzzy_match::match_indices_case_insensitive;
 use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity};
 
-#[cfg(target_family = "wasm")]
-use crate::launch_configs::launch_config::LaunchConfig;
 use crate::search::command_palette::launch_config::search_item::SearchItem;
 use crate::search::command_palette::mixer::CommandPaletteItemAction;
 use crate::search::data_source::{DataSourceSearchError, Query, QueryResult};
@@ -21,25 +12,10 @@ pub struct DataSource {
 }
 
 impl DataSource {
-    #[cfg(not(target_family = "wasm"))]
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         Self::new_full_text(ctx)
     }
 
-    #[cfg(target_family = "wasm")]
-    pub fn new(ctx: &mut ModelContext<Self>) -> Self {
-        Self::new_fuzzy(ctx)
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn new_fuzzy(ctx: &mut ModelContext<Self>) -> Self {
-        ctx.subscribe_to_model(&WarpConfig::handle(ctx), Self::handle_config_event);
-        let mut searcher = Box::new(FuzzyLaunchConfigSearcher::default());
-        searcher.refresh_search_index(ctx);
-        Self { searcher }
-    }
-
-    #[cfg(not(target_family = "wasm"))]
     fn new_full_text(ctx: &mut ModelContext<Self>) -> Self {
         ctx.subscribe_to_model(&WarpConfig::handle(ctx), Self::handle_config_event);
         let mut searcher = Box::new(full_text_searcher::FullTextLaunchConfigSearcher::new(
@@ -90,40 +66,6 @@ trait LaunchConfigSearcher {
     fn refresh_search_index(&mut self, app: &AppContext);
 }
 
-#[cfg(target_family = "wasm")]
-#[derive(Default)]
-struct FuzzyLaunchConfigSearcher {
-    configs: HashMap<String, LaunchConfig>,
-}
-
-#[cfg(target_family = "wasm")]
-impl LaunchConfigSearcher for FuzzyLaunchConfigSearcher {
-    fn search(&self, search_term: &str) -> anyhow::Result<Vec<SearchItem>> {
-        Ok(self
-            .configs
-            .values()
-            .filter_map(|launch_config| {
-                let match_result =
-                    match_indices_case_insensitive(&launch_config.name, search_term)?;
-
-                Some(SearchItem::new(
-                    Arc::new(launch_config.clone()),
-                    match_result,
-                ))
-            })
-            .collect())
-    }
-
-    fn refresh_search_index(&mut self, app: &AppContext) {
-        self.configs = WarpConfig::as_ref(app)
-            .launch_configs()
-            .iter()
-            .map(|config| (config.name.to_lowercase(), config.clone()))
-            .collect();
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
 mod full_text_searcher {
     use std::collections::HashMap;
     use std::sync::Arc;

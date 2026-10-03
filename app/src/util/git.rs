@@ -4,7 +4,6 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use warp_core::safe_warn;
 use warp_util::git::run_git_command;
-#[cfg(feature = "local_fs")]
 use warp_util::git::run_git_command_with_env;
 
 #[cfg(test)]
@@ -15,7 +14,6 @@ mod tests;
 /// Uses a synchronous subprocess call — suitable for call sites in
 /// synchronous view handlers where the result is needed immediately.
 /// Returns an empty set on any failure (not a git repo, git not found, etc.).
-#[cfg(feature = "local_fs")]
 pub fn list_local_branches_sync(repo_path: &Path) -> HashSet<String> {
     let output = command::blocking::Command::new("git")
         .args(["branch", "--list", "--format=%(refname:short)"])
@@ -34,20 +32,8 @@ pub fn list_local_branches_sync(repo_path: &Path) -> HashSet<String> {
     }
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub fn list_local_branches_sync(_repo_path: &Path) -> HashSet<String> {
-    HashSet::new()
-}
-
-/// Fetches the current git branch.
-#[cfg(not(feature = "local_fs"))]
-pub async fn detect_current_branch(_repo_path: &Path) -> Result<String> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
 /// Fetches the current git branch.
 /// In detached HEAD state this returns the literal string "HEAD".
-#[cfg(feature = "local_fs")]
 pub async fn detect_current_branch(repo_path: &Path) -> Result<String> {
     log::debug!("[GIT OPERATION] git.rs detect_current_branch git rev-parse --abbrev-ref HEAD");
     let result = run_git_command(repo_path, &["rev-parse", "--abbrev-ref", "HEAD"]).await;
@@ -64,7 +50,6 @@ pub async fn detect_current_branch(repo_path: &Path) -> Result<String> {
 /// Like [`detect_current_branch`], but in detached HEAD state returns the short
 /// commit SHA instead of the literal "HEAD".
 /// (Matches the shell command `git symbolic-ref --short HEAD || git rev-parse --short HEAD`.)
-#[cfg(feature = "local_fs")]
 pub async fn detect_current_branch_display(repo_path: &Path) -> Result<String> {
     let branch = detect_current_branch(repo_path).await?;
     if branch == "HEAD" {
@@ -76,19 +61,7 @@ pub async fn detect_current_branch_display(repo_path: &Path) -> Result<String> {
     }
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn detect_current_branch_display(_repo_path: &Path) -> Result<String> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
 /// Detects the main branch using git-branchless style heuristics.
-#[cfg(not(feature = "local_fs"))]
-pub async fn detect_main_branch(_repo_path: &Path) -> Result<String> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
-/// Detects the main branch using git-branchless style heuristics.
-#[cfg(feature = "local_fs")]
 pub async fn detect_main_branch(repo_path: &Path) -> Result<String> {
     // First try to get the default branch from origin
     log::debug!(
@@ -129,18 +102,7 @@ pub async fn detect_main_branch(repo_path: &Path) -> Result<String> {
     run_git_command(repo_path, &["branch", "--show-current"]).await
 }
 
-/// Returns the SHA where `HEAD` forked from any other ref. Use
-/// `<fork>..HEAD` for "commits unique to this branch".
-#[cfg(not(feature = "local_fs"))]
-pub async fn detect_fork_point(
-    _repo_path: &Path,
-    _current_branch_name: Option<&str>,
-) -> Result<Option<String>> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
 /// See the no-`local_fs` stub above for documentation.
-#[cfg(feature = "local_fs")]
 pub async fn detect_fork_point(
     repo_path: &Path,
     current_branch_name: Option<&str>,
@@ -182,7 +144,6 @@ pub async fn detect_fork_point(
 
 /// Git summary for a repo: current branch + uncommitted diff stats.
 #[derive(Debug, Clone)]
-#[cfg(feature = "local_fs")]
 pub struct RepoGitSummary {
     pub branch: String,
     pub lines_added: u32,
@@ -191,7 +152,6 @@ pub struct RepoGitSummary {
 
 /// Runs git commands in `repo_root` to get current branch + diff stats.
 /// Returns None if not a git repo or git is unavailable.
-#[cfg(feature = "local_fs")]
 pub async fn get_repo_git_summary(repo_root: &Path) -> Option<RepoGitSummary> {
     use crate::context_chips::display_chip::GitLineChanges;
 
@@ -267,7 +227,6 @@ pub struct FileChangeEntry {
 
 /// Returns per-file change entries. When `include_unstaged` is true, returns all
 /// uncommitted changes (staged + unstaged + untracked) vs HEAD; otherwise only staged changes.
-#[cfg(feature = "local_fs")]
 pub async fn get_file_change_entries(
     repo_path: &Path,
     include_unstaged: bool,
@@ -314,14 +273,6 @@ pub async fn get_file_change_entries(
     Ok(entries)
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn get_file_change_entries(
-    _repo_path: &Path,
-    _include_unstaged: bool,
-) -> Result<Vec<FileChangeEntry>> {
-    Err(anyhow!("Not supported on wasm"))
-}
-
 /// Returns per-file change entries for the **committed** branch diff
 /// (`merge_base(HEAD, main)..HEAD`) — exactly what an opened PR would contain.
 ///
@@ -332,7 +283,6 @@ pub async fn get_file_change_entries(
 ///
 /// Returns an empty list when the merge base can't be resolved (e.g. no commits
 /// yet, or the branch shares no history with main).
-#[cfg(feature = "local_fs")]
 pub async fn get_committed_branch_file_entries(repo_path: &Path) -> Result<Vec<FileChangeEntry>> {
     let main_branch = detect_main_branch(repo_path).await?;
     let merge_base =
@@ -369,13 +319,7 @@ pub async fn get_committed_branch_file_entries(repo_path: &Path) -> Result<Vec<F
     Ok(entries)
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn get_committed_branch_file_entries(_repo_path: &Path) -> Result<Vec<FileChangeEntry>> {
-    Err(anyhow!("Not supported on wasm"))
-}
-
 /// Unpushed commits: `<upstream>..HEAD`, or `<fork_point>..HEAD` if no upstream.
-#[cfg(feature = "local_fs")]
 pub async fn get_unpushed_commits(
     repo_path: &Path,
     current_branch_name: Option<&str>,
@@ -412,7 +356,6 @@ pub async fn get_unpushed_commits(
     parse_commit_log(&output)
 }
 
-#[cfg(feature = "local_fs")]
 fn parse_commit_log(output: &str) -> Result<Vec<Commit>> {
     let mut commits = Vec::new();
     let mut current: Option<Commit> = None;
@@ -460,21 +403,11 @@ fn parse_commit_log(output: &str) -> Result<Vec<Commit>> {
     Ok(commits)
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn get_unpushed_commits(
-    _repo_path: &Path,
-    _current_branch_name: Option<&str>,
-    _upstream_ref: Option<&str>,
-) -> Result<Vec<Commit>> {
-    Err(anyhow!("Not supported on wasm"))
-}
-
 /// Computes the branch's unpushed commits together with its upstream
 /// tracking ref, so callers that need both (metadata refresh, the remote
 /// git-operation delta returned to the client) don't repeat the work.
 /// Returns `(Vec::new(), None)` on failure rather than erroring, since the
 /// caller treats "no upstream" and "detection failed" the same way.
-#[cfg(feature = "local_fs")]
 pub async fn compute_unpushed_state(repo_path: &Path) -> (Vec<Commit>, Option<String>) {
     let current_branch = detect_current_branch(repo_path).await.ok();
     let upstream_ref = run_git_command(
@@ -495,11 +428,6 @@ pub async fn compute_unpushed_state(repo_path: &Path) -> (Vec<Commit>, Option<St
     (unpushed, upstream_ref)
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn compute_unpushed_state(_repo_path: &Path) -> (Vec<Commit>, Option<String>) {
-    (Vec::new(), None)
-}
-
 /// Returns `true` if the repository is mid-operation (merge / cherry-pick /
 /// revert / rebase) or another process holds the index lock, detected by
 /// probing the sentinel files git writes under `.git/`. Code-review git
@@ -507,7 +435,6 @@ pub async fn compute_unpushed_state(_repo_path: &Path) -> (Vec<Commit>, Option<S
 /// surprisingly (e.g. a commit would complete an in-progress merge) or fail.
 /// Shared by the local pre-emptive guard (`is_git_operation_blocked`) and the
 /// daemon-side execution-time check.
-#[cfg(feature = "local_fs")]
 pub fn git_operation_in_progress(repo_path: &Path) -> bool {
     let git_dir = repo_path.join(".git");
     git_dir.join("MERGE_HEAD").exists()
@@ -520,7 +447,6 @@ pub fn git_operation_in_progress(repo_path: &Path) -> bool {
 
 /// Commits changes. If `include_unstaged` is true, stages all changes first via `git add -A`.
 /// `path_env` is forwarded so commit hooks can find tools on the user's `PATH`.
-#[cfg(feature = "local_fs")]
 pub async fn run_commit(
     repo_path: &Path,
     message: &str,
@@ -551,19 +477,8 @@ pub async fn run_commit(
     run_git_command_with_env(repo_path, &["commit", "-m", message], path_env).await
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn run_commit(
-    _repo_path: &Path,
-    _message: &str,
-    _include_unstaged: bool,
-    _path_env: Option<&str>,
-) -> Result<String> {
-    Err(anyhow!("Not supported on wasm"))
-}
-
 /// Pushes the given branch to origin, setting upstream tracking if not already configured.
 /// `path_env` is forwarded so the LFS `pre-push` hook can find `git-lfs`.
-#[cfg(feature = "local_fs")]
 pub async fn run_push(repo_path: &Path, branch: &str, path_env: Option<&str>) -> Result<String> {
     run_git_command_with_env(
         repo_path,
@@ -571,11 +486,6 @@ pub async fn run_push(repo_path: &Path, branch: &str, path_env: Option<&str>) ->
         path_env,
     )
     .await
-}
-
-#[cfg(not(feature = "local_fs"))]
-pub async fn run_push(_repo_path: &Path, _branch: &str, _path_env: Option<&str>) -> Result<String> {
-    Err(anyhow!("Not supported on wasm"))
 }
 
 // ── gh CLI helpers ───────────────────────────────────────────────────────────
@@ -598,7 +508,6 @@ pub struct RepositoryInfo {
     pub host: Option<String>,
 }
 
-#[cfg(feature = "local_fs")]
 fn repository_info_from_gh_output(output: &str) -> Result<RepositoryInfo> {
     let parsed: serde_json::Value = serde_json::from_str(output.trim())
         .map_err(|e| anyhow!("Failed to parse gh output: {e}"))?;
@@ -624,7 +533,6 @@ fn repository_info_from_gh_output(output: &str) -> Result<RepositoryInfo> {
     })
 }
 
-#[cfg(feature = "local_fs")]
 pub async fn get_repository_info(
     repo_path: &Path,
     path_env: Option<&str>,
@@ -655,18 +563,9 @@ pub async fn get_repository_info(
     }
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn get_repository_info(
-    _repo_path: &Path,
-    _path_env: Option<&str>,
-) -> Result<Option<RepositoryInfo>> {
-    Err(anyhow!("Not supported without local_fs"))
-}
-
 /// Runs a `gh` CLI command and returns stdout on success. `path_env`, when
 /// `Some`, is set as the child's `PATH` so a Homebrew-installed `gh` is
 /// findable from macOS GUI launches (launchd's minimal `PATH` excludes it).
-#[cfg(feature = "local_fs")]
 async fn run_gh_command(repo_path: &Path, args: &[&str], path_env: Option<&str>) -> Result<String> {
     use command::Stdio;
     use command::r#async::Command;
@@ -706,7 +605,6 @@ async fn run_gh_command(repo_path: &Path, args: &[&str], path_env: Option<&str>)
 /// Returns `Ok(None)` when the repo context is not eligible for a PR lookup or
 /// there is simply no PR for this branch. Returns `Err` for real failures
 /// (auth, network, gh not installed).
-#[cfg(feature = "local_fs")]
 pub async fn get_pr_for_branch(repo_path: &Path, path_env: Option<&str>) -> Result<Option<PrInfo>> {
     if run_git_command(repo_path, &["rev-parse", "--is-inside-work-tree"])
         .await
@@ -773,22 +671,12 @@ pub async fn get_pr_for_branch(repo_path: &Path, path_env: Option<&str>) -> Resu
     }
 }
 
-#[cfg(not(feature = "local_fs"))]
-pub async fn get_pr_for_branch(
-    _repo_path: &Path,
-    _path_env: Option<&str>,
-) -> Result<Option<PrInfo>> {
-    Err(anyhow!("Not supported on wasm"))
-}
-
-#[cfg(feature = "local_fs")]
 fn is_no_pr_for_branch_error(error_msg: &str) -> bool {
     let lower = error_msg.to_lowercase();
     lower.contains("no pull requests found for branch")
         || lower.contains("no open pull requests found for branch")
 }
 
-#[cfg(feature = "local_fs")]
 fn is_pr_lookup_not_applicable_error(error_msg: &str) -> bool {
     let lower = error_msg.to_lowercase();
     is_no_pr_for_branch_error(error_msg)
@@ -803,7 +691,6 @@ fn is_pr_lookup_not_applicable_error(error_msg: &str) -> bool {
 /// Classifies `gh repo view` failures that authoritatively mean the current
 /// repository has no GitHub repository info, rather than a transient fetch
 /// failure.
-#[cfg(feature = "local_fs")]
 fn is_repository_lookup_not_applicable_error(error_msg: &str) -> bool {
     let lower = error_msg.to_lowercase();
     lower.contains(
@@ -833,7 +720,6 @@ pub fn is_gh_missing_error(error_msg: &str) -> bool {
 
 /// Creates a PR for the current branch (must already be pushed) with
 /// `gh pr create --fill`. Always targets the detected default branch.
-#[cfg(feature = "local_fs")]
 pub async fn create_pr(repo_path: &Path, path_env: Option<&str>) -> Result<PrInfo> {
     let base = detect_main_branch(repo_path).await?;
     let base = base.trim();
@@ -855,11 +741,6 @@ pub async fn create_pr(repo_path: &Path, path_env: Option<&str>) -> Result<PrInf
         draft: false,
         base_branch: base.to_string(),
     })
-}
-
-#[cfg(not(feature = "local_fs"))]
-pub async fn create_pr(_repo_path: &Path, _path_env: Option<&str>) -> Result<PrInfo> {
-    Err(anyhow!("Not supported on wasm"))
 }
 
 /// A single branch entry returned by [`get_all_branches`].
@@ -1027,7 +908,6 @@ pub(crate) fn parse_unified_diff_header(header_line: &str) -> Result<UnifiedDiff
 }
 
 /// Counts newlines in a file, returning 0 for binary or oversized files.
-#[cfg(feature = "local_fs")]
 fn count_lines_if_text_file(path: &Path) -> u32 {
     const MAX_FILE_SIZE: u64 = 20_000_000;
     const BINARY_CHECK_SIZE: usize = 1024;

@@ -294,7 +294,6 @@ fn custom_base16_theme_kind_uses_custom_theme_settings_value_path_rules() {
 }
 
 #[test]
-#[cfg(not(target_family = "wasm"))]
 fn in_memory_theme_generation_test() {
     let mountains_bg_path: PathBuf = [
         env!("CARGO_MANIFEST_DIR"),

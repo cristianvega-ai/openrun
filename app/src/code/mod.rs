@@ -7,26 +7,19 @@ use warp_util::file::FileSaveError;
 use warpui::AppContext;
 use warpui::elements::DropTargetData;
 
-#[cfg(not(target_family = "wasm"))]
 pub mod find_references_view;
-#[cfg(not(target_family = "wasm"))]
 pub mod language_server_extension;
-#[cfg_attr(not(target_family = "wasm"), path = "local_code_editor.rs")]
-#[cfg_attr(target_family = "wasm", path = "local_code_editor_wasm.rs")]
+#[path = "local_code_editor.rs"]
 pub mod local_code_editor;
-#[cfg(not(target_family = "wasm"))]
 pub use local_code_editor::ShowFindReferencesCard;
 pub mod buffer_location;
 pub mod editor;
 pub mod editor_management;
 pub mod global_buffer_model;
-#[cfg(feature = "local_fs")]
 pub mod language_server_shutdown_manager;
-#[cfg(not(target_family = "wasm"))]
 pub mod lsp_logs;
 
 #[derive(Debug, thiserror::Error)]
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub enum ImmediateSaveError {
     #[error("No FileId")]
     NoFileId,
@@ -51,7 +44,6 @@ register_error!(ImmediateSaveError);
 pub trait ShowCommentEditorProvider: Debug + 'static {
     /// Returns whether the comment editor should be shown given the location of the line where
     /// the editor would be shown.
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     fn should_show_comment_editor(&self, editor_line_location: RectF, app: &AppContext) -> bool;
 }
 
@@ -69,7 +61,6 @@ impl ShowCommentEditorProvider for NoopCommentEditorProvider {
 pub trait ShowFindReferencesCardProvider: Debug + 'static {
     /// Returns whether the find references card should be shown given the location of the anchor
     /// point where the card would be positioned.
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     fn should_show_find_references_card(
         &self,
         card_anchor_location: RectF,
@@ -90,7 +81,6 @@ impl ShowFindReferencesCardProvider for NoopFindReferencesCardProvider {
     }
 }
 
-#[cfg_attr(target_family = "wasm", expect(dead_code))]
 #[derive(Debug)]
 pub enum SaveStatus {
     /// Save completed immediately and successfully.
@@ -102,7 +92,6 @@ pub enum SaveStatus {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-#[cfg_attr(target_family = "wasm", expect(dead_code))]
 pub enum SaveOutcome {
     Canceled,
     Failed,
@@ -118,19 +107,16 @@ pub mod opened_files;
 pub mod outline;
 pub use icon::icon_from_file_path;
 
-#[cfg_attr(not(target_family = "wasm"), path = "view.rs")]
-#[cfg_attr(target_family = "wasm", path = "wasm.rs")]
+#[path = "view.rs"]
 pub mod view;
 
 pub fn init(app: &mut AppContext) {
     self::view::init(app);
     self::file_tree::init(app);
-    #[cfg(not(target_family = "wasm"))]
     self::find_references_view::init(app);
 }
 
 #[derive(Debug)]
-#[cfg_attr(target_family = "wasm", expect(dead_code))]
 pub struct EditorTabBarDropTargetData {
     index: usize,
 }

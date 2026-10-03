@@ -428,7 +428,6 @@ where
                                 if token == self.pty.read_token()
                                     || token == self.pty.write_token() =>
                             {
-                                #[cfg(unix)]
                                 if event.is_read_closed() || event.is_write_closed() {
                                     // Don't try to do I/O on a dead PTY.
                                     continue;

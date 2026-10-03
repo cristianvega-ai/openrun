@@ -19,7 +19,6 @@ use warpui::{
 
 use crate::appearance::Appearance;
 use crate::code::buffer_location::LocalOrRemotePath;
-#[cfg(feature = "local_fs")]
 use crate::code::file_tree::FileTreeEvent;
 use crate::code::file_tree::FileTreeView;
 use crate::coding_panel_enablement_state::CodingPanelEnablementState;
@@ -34,10 +33,8 @@ use crate::terminal::resizable_data::{ModalType, ResizableData};
 use crate::ui_components::buttons::{icon_button, icon_button_with_color};
 use crate::ui_components::icons;
 use crate::util::bindings::keybinding_name_to_display_string;
-#[cfg(feature = "local_fs")]
 use crate::util::file::external_editor::EditorSettings;
 use crate::util::openable_file_type::FileTarget;
-#[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::{
     EditorLayout, is_markdown_file, resolve_file_target_with_editor_choice,
 };
@@ -67,9 +64,7 @@ pub enum LeftPanelAction {
 
 #[allow(clippy::large_enum_variant)]
 pub enum LeftPanelEvent {
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     FileTree(pane_group::Event),
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     OpenFileWithTarget {
         location: LocalOrRemotePath,
         target: FileTarget,
@@ -140,7 +135,6 @@ pub struct LeftPanelView {
     active_view: active_view_state::ActiveViewState,
     toolbelt_buttons: Vec<ToolbeltButtonConfig>,
     active_pane_group: Option<WeakViewHandle<PaneGroup>>,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     working_directories_model: ModelHandle<WorkingDirectoriesModel>,
     panel_position: super::PanelPosition,
 }
@@ -393,7 +387,6 @@ impl LeftPanelView {
 
         let file_tree_view = ctx.add_typed_action_view(FileTreeView::new);
 
-        #[cfg(feature = "local_fs")]
         ctx.subscribe_to_view(&file_tree_view, |me, _, event, ctx| {
             me.handle_file_tree_event(event, ctx);
         });
@@ -533,7 +526,6 @@ impl LeftPanelView {
         enablement: CodingPanelEnablementState,
         ctx: &mut ViewContext<Self>,
     ) {
-        #[cfg(feature = "local_fs")]
         {
             if let Some(file_tree_view) = self.active_file_tree_view(ctx) {
                 file_tree_view.update(ctx, |view, ctx| {
@@ -577,15 +569,6 @@ impl LeftPanelView {
         }
     }
 
-    #[cfg(not(feature = "local_fs"))]
-    fn handle_global_search_event(
-        &mut self,
-        _event: &GlobalSearchViewEvent,
-        _ctx: &mut ViewContext<Self>,
-    ) {
-    }
-
-    #[cfg(feature = "local_fs")]
     fn handle_global_search_event(
         &mut self,
         event: &GlobalSearchViewEvent,
@@ -634,7 +617,6 @@ impl LeftPanelView {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     fn handle_file_tree_event(&mut self, event: &FileTreeEvent, ctx: &mut ViewContext<Self>) {
         match event {
             FileTreeEvent::FileRenamed { old_path, new_path } => {

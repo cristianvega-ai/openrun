@@ -2,7 +2,6 @@ mod code;
 mod files;
 pub mod mixer;
 pub mod search;
-#[cfg(not(target_family = "wasm"))]
 mod styles;
 pub mod view;
 

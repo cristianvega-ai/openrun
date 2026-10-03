@@ -13,14 +13,10 @@ use warp_util::path::app_target_dir;
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_OS");
-    println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_FAMILY");
 
     let target_os = env::var("CARGO_CFG_TARGET_OS")?;
-    let target_family = env::var("CARGO_CFG_TARGET_FAMILY")?;
 
-    add_features(&target_family);
-
-    if target_os == "macos" && target_family != "wasm" {
+    if target_os == "macos" {
         println!("cargo:rustc-link-lib=framework=MetalKit");
         println!("cargo:rustc-link-lib=framework=UserNotifications");
 
@@ -98,11 +94,4 @@ fn get_build_profile_name() -> String {
         .expect("could not get profile name")
         .to_string_lossy()
         .into_owned()
-}
-
-fn add_features(target_family: &str) {
-    if target_family != "wasm" {
-        println!("cargo:rustc-cfg=feature=\"local_fs\"");
-        println!("cargo:rustc-cfg=feature=\"local_tty\"");
-    }
 }

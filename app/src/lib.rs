@@ -2,7 +2,6 @@
 
 mod agent_notifications;
 mod alloc;
-#[cfg(target_os = "macos")]
 mod app_menus;
 mod app_services;
 mod app_state;
@@ -20,9 +19,7 @@ mod default_terminal;
 mod global_resource_handles;
 mod gpu_state;
 mod interval_timer;
-#[cfg(feature = "local_fs")]
 mod local_control;
-#[cfg(target_os = "macos")]
 mod login_item;
 mod menu;
 mod modal;
@@ -97,20 +94,16 @@ use code::opened_files::OpenedFilesModel;
 use code_review::GlobalCodeReviewModel;
 use code_review::git_repo_model::GitRepoModels;
 use quit_warning::UnsavedStateSummary;
-#[cfg(feature = "local_fs")]
 use repo_metadata::{
     RepoMetadataModel, repositories::DetectedRepositories, watcher::DirectoryWatcher,
 };
-#[cfg(feature = "local_fs")]
 use settings::import::model::ImportedConfigModel;
 use settings::initializer::SettingsInitializer;
 use settings_view::pane_manager::SettingsPaneManager;
 use terminal::general_settings::GeneralSettings;
 use terminal::keys_settings::KeysSettings;
-#[cfg(all(not(target_family = "wasm"), feature = "local_tty"))]
 use terminal::local_shell::LocalShellState;
 pub use util::bindings::cmd_or_ctrl_shift;
-#[cfg(feature = "local_fs")]
 use watcher::HomeDirectoryWatcher;
 use workspace_metadata::PersistedWorkspace;
 
@@ -120,7 +113,6 @@ pub mod workspace;
 use std::borrow::Cow;
 
 use ::settings::{Setting, ToggleableSetting};
-#[cfg(feature = "local_tty")]
 use anyhow::Context;
 use anyhow::{Result, anyhow};
 use appearance::{Appearance, AppearanceManager};
@@ -139,7 +131,6 @@ use warp_core::execution_mode::{AppExecutionMode, ExecutionMode};
 // Re-export the safe logging macros at the crate root level for backwards compatibility
 pub use warp_core::{safe_debug, safe_error, safe_info, safe_warn};
 use warp_errors::report_if_error;
-#[cfg(feature = "local_fs")]
 use warp_files::FileModel;
 use warpui::integration::TestDriver;
 use warpui::platform::TerminationMode;
@@ -151,7 +142,6 @@ use workspace::sync_inputs::SyncedInputState;
 
 use crate::app_state::AppState;
 use crate::code::global_buffer_model::GlobalBufferModel;
-#[cfg(feature = "local_fs")]
 use crate::code::language_server_shutdown_manager::LanguageServerShutdownManager;
 use crate::code::outline::RepoOutlines;
 use crate::context_chips::prompt::Prompt;
@@ -179,7 +169,6 @@ use crate::terminal::resizable_data::ResizableData;
 use crate::terminal::{AudibleBell, CustomSecretRegexUpdater, History};
 use crate::undo_close::UndoCloseStack;
 use crate::user_config::WarpConfig;
-use crate::util::bindings::is_binding_cross_platform;
 use crate::vim_registers::VimRegisters;
 use crate::warp_managed_paths_watcher::{WarpManagedPathsWatcher, ensure_warp_watch_roots_exist};
 use crate::workflows::local_workflows::LocalWorkflows;
@@ -286,7 +275,6 @@ pub fn run() -> Result<()> {
             warp_cli::Command::DumpDebugInfo => {
                 return debug_dump::run();
             }
-            #[cfg(not(target_family = "wasm"))]
             warp_cli::Command::DumpSettingsSchema { output_path } => {
                 return settings::schema_generation::dump_settings_schema(output_path.as_deref());
             }
@@ -301,12 +289,10 @@ pub fn run() -> Result<()> {
 /// Runs a parsed Warp worker command.
 fn run_worker_command(worker: &warp_cli::WorkerCommand) -> Result<()> {
     match worker {
-        #[cfg(all(feature = "local_tty", unix))]
         warp_cli::WorkerCommand::TerminalServer(args) => {
             crate::terminal::local_tty::run_terminal_server(args);
             Ok(())
         }
-        #[cfg(not(target_family = "wasm"))]
         warp_cli::WorkerCommand::RipgrepSearch {
             parent,
             ignore_case,
@@ -323,12 +309,6 @@ fn run_worker_command(worker: &warp_cli::WorkerCommand) -> Result<()> {
             )
             .map_err(|err| anyhow!(err.to_string()))?;
             Ok(())
-        }
-        #[cfg(all(target_family = "wasm", not(feature = "local_tty")))]
-        worker => {
-            // On wasm, specifically, we should fail spectacularly if we get here.
-            #[cfg(target_family = "wasm")]
-            panic!("Worker process not supported on WASM: {worker:?}")
         }
     }
 }
@@ -378,7 +358,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     let (public_preferences, startup_toml_parse_error) = settings::init_public_user_preferences();
 
     // Public settings live in the TOML-backed store. Use it for pre-app reads.
-    #[cfg_attr(not(target_os = "macos"), expect(unused))]
     let prefs_for_public_settings: &dyn warpui_extras::user_preferences::UserPreferences =
         public_preferences.as_ref();
 
@@ -387,7 +366,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // files, modified signal handlers, etc.) to avoid unexpected effects on
     // spawned ptys.
     //
-    #[cfg(feature = "local_tty")]
     let pty_spawner =
         terminal::local_tty::spawner::PtySpawner::new().context("Failed to create pty spawner")?;
 
@@ -398,7 +376,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         launch_mode.take_test_driver(),
     );
 
-    #[cfg(target_os = "macos")]
     {
         use warpui::AssetProvider as _;
         use warpui::platform::mac::AppExt;
@@ -423,18 +400,12 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
     // this should be a noop on Mac (since the keystrokes registered via the  Mac menus first
     // intercept the binding), but just to be safe we only enable this in cases where we don't
     // include mac menus.
-    #[cfg(not(target_os = "macos"))]
-    app_builder.convert_custom_triggers_to_keystroke_triggers(
-        crate::util::bindings::custom_tag_to_keystroke,
-    );
 
-    #[cfg(target_os = "macos")]
     app_builder.register_default_keystroke_triggers_for_custom_actions(
         crate::util::bindings::custom_tag_to_keystroke,
     );
 
     app_builder.run(move |ctx| {
-        #[cfg(not(target_family = "wasm"))]
         // Rotate the log files in the background.
         ctx.background_executor()
             .spawn(warp_logging::rotate_log_files())
@@ -443,7 +414,6 @@ fn run_internal(mut launch_mode: LaunchMode) -> Result<()> {
         ctx.add_singleton_model(|ctx| AppExecutionMode::new(ExecutionMode::App, ctx));
 
         // Add the terminal server singleton to the application.
-        #[cfg(feature = "local_tty")]
         ctx.add_singleton_model(move |_ctx| pty_spawner);
 
         // Register user preferences.  This must be done before initializing
@@ -559,17 +529,13 @@ pub(crate) fn initialize_app(
             )
         });
 
-    ctx.set_default_binding_validator(is_binding_cross_platform);
-
     // Initialize timestamp for session id and last active event
     App::record_last_active_timestamp();
 
     ctx.add_singleton_model(|_| SettingsPaneManager::new());
 
-    #[cfg(target_os = "macos")]
     AppearanceManager::as_ref(ctx).set_app_icon(ctx);
 
-    #[cfg(feature = "local_tty")]
     terminal::available_shells::register(ctx);
 
     // Add truly global actions that don't depend on the existence of any view here
@@ -607,7 +573,6 @@ pub(crate) fn initialize_app(
         });
     });
 
-    #[cfg(not(target_family = "wasm"))]
     {
         ctx.add_singleton_model(DirectoryWatcher::new);
         ctx.add_singleton_model(|_| DetectedRepositories::default());
@@ -618,7 +583,6 @@ pub(crate) fn initialize_app(
         }
     }
 
-    #[cfg(feature = "local_fs")]
     {
         let imported_config_model = ctx.add_singleton_model(ImportedConfigModel::new);
 
@@ -645,7 +609,6 @@ pub(crate) fn initialize_app(
     agent_notifications::init(ctx);
     app_services::init(ctx);
     // // TODO: Temporarily disabling keybindings for WASM builds. Will be implemented in future WASM support.
-    #[cfg(not(target_family = "wasm"))]
     code::editor::find::view::init(ctx);
     workspace::init(ctx);
     pane_group::init(ctx);
@@ -684,10 +647,8 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(UndoCloseStack::new);
     ctx.add_singleton_model(|_| ToastStack);
     ctx.add_singleton_model(|_| GlobalCodeReviewModel);
-    #[cfg(feature = "local_fs")]
     ctx.add_singleton_model(FileModel::new);
     ctx.add_singleton_model(GlobalBufferModel::new);
-    #[cfg(feature = "local_fs")]
     ctx.add_singleton_model(|_| LanguageServerShutdownManager::new());
 
     ctx.add_singleton_model(|_| CLIAgentSessionsModel::new());
@@ -705,7 +666,6 @@ pub(crate) fn initialize_app(
     ctx.add_singleton_model(NotebookKeybindings::new);
     ctx.add_singleton_model(|_| ActiveSession::default());
 
-    #[cfg(all(not(target_family = "wasm"), feature = "local_tty"))]
     {
         ctx.add_singleton_model(LocalShellState::new);
         ctx.add_singleton_model(system::SystemInfo::new);
@@ -741,7 +701,6 @@ pub(crate) fn initialize_app(
 
     ctx.add_singleton_model(move |_| IgnoredSuggestionsModel::new(persisted_ignored_suggestions));
 
-    #[cfg(feature = "local_fs")]
     {
         ctx.add_singleton_model(local_control::LocalControlBridge::new);
         ctx.add_singleton_model(local_control::LocalControlServer::new);
@@ -797,7 +756,6 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
 
             // This must occur after terminating the persistence writer, so we don't keep track
             // of the fact that the shell sessions terminated.
-            #[cfg(feature = "local_tty")]
             terminal::local_tty::spawner::PtySpawner::handle(ctx).update(ctx, |pty_spawner, _| {
                 pty_spawner.prepare_for_app_termination();
             });
@@ -822,7 +780,7 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
 
             // Don't show dialog on integration test. Machine can't press buttons.
             if !is_integration_test && summary.save_unsaved_code_and_should_warn(ctx) {
-                let shown = summary
+                summary
                     .dialog()
                     .on_confirm(move |ctx| {
                         ctx.windows()
@@ -835,11 +793,7 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
                         on_close_window_cancelled(window_id, true, ctx);
                     })
                     .show(ctx);
-                if shown {
-                    ApproveTerminateResult::Cancel
-                } else {
-                    ApproveTerminateResult::Terminate
-                }
+                ApproveTerminateResult::Cancel
             } else {
                 ApproveTerminateResult::Terminate
             }
@@ -858,15 +812,13 @@ pub(crate) fn app_callbacks(is_integration_test: bool) -> warpui::platform::AppC
             let summary = UnsavedStateSummary::for_app(ctx);
             // Don't show dialog on integration test. Machine can't press buttons.
             if !is_integration_test && summary.save_unsaved_code_and_should_warn(ctx) {
-                let shown = summary
+                summary
                     .dialog()
                     .on_confirm(|ctx| ctx.terminate_app(TerminationMode::ForceTerminate, None))
                     .on_show_processes(|ctx| on_close_app_cancelled(true, ctx))
                     .on_cancel(|ctx| on_close_app_cancelled(false, ctx))
                     .show(ctx);
-                if shown {
-                    return ApproveTerminateResult::Cancel;
-                }
+                return ApproveTerminateResult::Cancel;
             }
 
             ApproveTerminateResult::Terminate
@@ -1079,7 +1031,6 @@ fn launch(ctx: &mut warpui::AppContext, app_state: Option<AppState>, launch_mode
     });
 
     // TODO(ben): We should skip this for LaunchMode::Test.
-    #[cfg(target_os = "macos")]
     {
         use crate::login_item::maybe_register_app_as_login_item;
         use crate::terminal::general_settings::GeneralSettingsChangedEvent;

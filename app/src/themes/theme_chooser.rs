@@ -612,7 +612,7 @@ impl ThemeChooser {
             );
 
         // Custom themes are only supported on desktop platforms currently.
-        if cfg!(not(target_family = "wasm")) {
+        {
             let create_theme_button = SavePosition::new(
                 icon_button(
                     appearance,

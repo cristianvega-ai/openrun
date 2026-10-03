@@ -1,5 +1,3 @@
-#![cfg_attr(target_family = "wasm", allow(dead_code))]
-
 use std::path::Path;
 use std::{env, fmt};
 
@@ -56,20 +54,14 @@ impl Args {
     /// Parses command-line arguments from the operating environment. May exit early if arguments
     /// are incorrectly specified.
     pub fn from_env() -> Self {
-        cfg_if::cfg_if! {
-            // wasm doesn't have any concept of an environment, so skip parsing and return defaults
-            if #[cfg(target_family = "wasm")] {
-                Args::default()
-            } else {
-                use clap::FromArgMatches as _;
+        use clap::FromArgMatches as _;
 
-                let command = Self::clap_command();
+        let command = Self::clap_command();
 
-                command.try_get_matches()
-                    .and_then(|matches| Self::from_arg_matches(&matches))
-                    .unwrap_or_else(|err| err.exit())
-            }
-        }
+        command
+            .try_get_matches()
+            .and_then(|matches| Self::from_arg_matches(&matches))
+            .unwrap_or_else(|err| err.exit())
     }
 
     /// Construct the [`clap::Command`] that backs `Args`.
@@ -104,11 +96,9 @@ impl Args {
 pub enum WorkerCommand {
     /// Run the terminal server.
     #[clap(hide = true)]
-    #[cfg(unix)]
     TerminalServer(TerminalServerArgs),
 
     /// Run a headless ripgrep search worker.
-    #[cfg(not(target_family = "wasm"))]
     #[clap(hide = true)]
     RipgrepSearch {
         #[clap(flatten)]
@@ -157,7 +147,6 @@ pub enum Command {
     #[clap(long_flag = "dump-debug-info")]
     DumpDebugInfo,
     /// Print the JSON schema for the current Warp channel's settings and exit.
-    #[cfg(not(target_family = "wasm"))]
     DumpSettingsSchema {
         /// Write the schema to this path instead of standard output.
         output_path: Option<std::path::PathBuf>,
@@ -171,7 +160,6 @@ impl Command {
             Command::Worker(_) => false,
             Command::DumpDebugInfo => true,
             Command::Completions { .. } => true,
-            #[cfg(not(target_family = "wasm"))]
             Command::DumpSettingsSchema { output_path } => output_path.is_none(),
         }
     }
@@ -211,7 +199,6 @@ pub fn terminal_server_subcommand() -> String {
 }
 
 /// Returns the subcommand name to use for starting the ripgrep search worker.
-#[cfg(not(target_family = "wasm"))]
 pub fn ripgrep_search_subcommand() -> String {
     <Args as CommandFactory>::command()
         .find_subcommand("ripgrep-search")

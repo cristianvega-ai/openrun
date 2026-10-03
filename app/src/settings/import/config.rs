@@ -13,7 +13,6 @@ use warpui::fonts::FontInfo;
 use warpui::keymap::Keystroke;
 
 use super::alacritty_parser::AlacrittyConfig;
-#[cfg(target_os = "macos")]
 use super::iterm_parser::ITermProfile;
 use super::model::TerminalType;
 use crate::interval_timer::IntervalTimer;
@@ -21,7 +20,6 @@ use crate::root_view::QuakeModePinPosition;
 use crate::settings::ExtraMetaKeys;
 use crate::terminal::session_settings::{StartupShell, WorkingDirectoryConfig};
 use crate::themes::theme_creator::pick_accent_color_from_options;
-#[cfg(feature = "local_fs")]
 use crate::{themes::theme_creator_body::ThemeCreatorBody, user_config};
 
 #[derive(Debug)]
@@ -174,7 +172,6 @@ impl Config {
     }
 
     pub(super) fn write_theme(&self) -> Option<ThemeType> {
-        #[cfg(feature = "local_fs")]
         {
             if !self.theme.should_import {
                 return None;
@@ -221,11 +218,6 @@ impl Config {
                 }
             }
         }
-        #[cfg(not(feature = "local_fs"))]
-        {
-            log::warn!("Tried to save theme without a local filesystem.");
-            None
-        }
     }
 
     /// Generates a Config from the given TerminalType.
@@ -237,7 +229,6 @@ impl Config {
             TerminalType::Alacritty => {
                 Config::create_from_external_configs::<AlacrittyConfig>(fonts).await
             }
-            #[cfg(target_os = "macos")]
             TerminalType::ITerm => {
                 Config::create_from_external_configs::<ITermProfile>(fonts).await
             }

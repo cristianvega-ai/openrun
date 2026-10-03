@@ -64,7 +64,6 @@ impl platform::Delegate for AppDelegate {
     }
 
     fn open_url(&self, url: &str) -> bool {
-        #[cfg(target_os = "macos")]
         {
             // Use macOS platform implementation
             crate::platform::mac::Window::open_url(url)

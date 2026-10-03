@@ -25,7 +25,6 @@ use warpui::{
 };
 
 use super::keybindings::KeyBindingModifyingState;
-#[cfg(feature = "local_tty")]
 use super::settings_page::render_sub_sub_header;
 use super::settings_page::{
     AdditionalInfo, CONTENT_FONT_SIZE, Category, HEADER_PADDING, MatchData, PageType,
@@ -48,9 +47,9 @@ use crate::search::command_search::settings::CommandSearchSettings;
 use crate::settings::{
     AliasExpansionSettings, AppEditorSettings, CLIAgentSettings, CodeSettings, CtrlTabBehavior,
     DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES, ExtraMetaKeys, GPUSettings, GlobalHotkeyMode,
-    InputSettings, InputSettingsChangedEvent, QUAKE_WINDOW_AUTOHIDE_SUPPORTED, QuakeModeSettings,
-    RightClickBehavior, ScrollSettings, ScrollSettingsChangedEvent, SelectionSettings,
-    SelectionSettingsChangedEvent, SshSettings, TabBehavior,
+    InputSettings, InputSettingsChangedEvent, QuakeModeSettings, RightClickBehavior,
+    ScrollSettings, ScrollSettingsChangedEvent, SelectionSettings, SelectionSettingsChangedEvent,
+    SshSettings, TabBehavior,
 };
 use crate::terminal::BlockListSettings;
 use crate::terminal::alt_screen_reporting::AltScreenReporting;
@@ -76,15 +75,8 @@ use crate::workspace::WorkspaceAction;
 use crate::workspace::tab_settings::{NewTabPlacement, TabSettings, TabSettingsChangedEvent};
 use crate::{GlobalResourceHandles, themes};
 
-cfg_if::cfg_if! {
-    if #[cfg(target_os = "macos")] {
-        static EXTRA_META_KEYS_LEFT_TEXT: &str = "Left Option key is Meta";
-        static EXTRA_META_KEYS_RIGHT_TEXT: &str = "Right Option key is Meta";
-    } else {
-        static EXTRA_META_KEYS_LEFT_TEXT: &str = "Left Alt key is Meta";
-        static EXTRA_META_KEYS_RIGHT_TEXT: &str = "Right Alt key is Meta";
-    }
-}
+static EXTRA_META_KEYS_LEFT_TEXT: &str = "Left Option key is Meta";
+static EXTRA_META_KEYS_RIGHT_TEXT: &str = "Right Option key is Meta";
 
 pub fn init_actions_from_parent_view<T: Action + Clone>(
     app: &mut AppContext,
@@ -332,7 +324,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 .is_supported_on_current_platform(),
         ),
     );
-    #[cfg(target_os = "macos")]
     toggle_binding_pairs.push(
         ToggleSettingActionPair::new(
             "notification sounds",
@@ -769,7 +760,6 @@ struct MouseStateHandles {
     agent_task_completed_notifications_checkbox: MouseStateHandle,
     agent_needs_attention_notifications_checkbox: MouseStateHandle,
     agent_in_app_notifications_switch: SwitchStateHandle,
-    #[cfg(target_os = "macos")]
     notification_sound_checkbox: MouseStateHandle,
     change_keybinding: MouseStateHandle,
 }
@@ -804,9 +794,7 @@ pub struct FeaturesPageView {
     notifications_long_running_threshold_editor: ViewHandle<EditorView>,
     notification_toast_duration_editor: ViewHandle<EditorView>,
 
-    #[cfg(feature = "local_tty")]
     working_directory_view: ViewHandle<features::WorkingDirectoryView>,
-    #[cfg(feature = "local_tty")]
     startup_shell_view: ViewHandle<features::StartupShellView>,
     undo_close_view: ViewHandle<features::UndoCloseView>,
 
@@ -1595,22 +1583,17 @@ impl FeaturesPageView {
                         });
                 }
                 SessionSettingsChangedEvent::NewSessionShellOverride { .. } => {
-                    #[cfg(feature = "local_tty")]
-                    {
-                        use super::features::startup_shell::NewSessionShellAction;
-                        use crate::terminal::session_settings::StartupShell;
-                        me.startup_shell_view.update(ctx, |_, ctx| {
-                            if matches!(
-                                *SessionSettings::as_ref(ctx).startup_shell_override.value(),
-                                StartupShell::Custom(_),
-                            ) {
-                                ctx.dispatch_typed_action(
-                                    &NewSessionShellAction::ShowCustomPathInput,
-                                );
-                            }
-                            ctx.notify();
-                        });
-                    }
+                    use super::features::startup_shell::NewSessionShellAction;
+                    use crate::terminal::session_settings::StartupShell;
+                    me.startup_shell_view.update(ctx, |_, ctx| {
+                        if matches!(
+                            *SessionSettings::as_ref(ctx).startup_shell_override.value(),
+                            StartupShell::Custom(_),
+                        ) {
+                            ctx.dispatch_typed_action(&NewSessionShellAction::ShowCustomPathInput);
+                        }
+                        ctx.notify();
+                    });
                 }
                 _ => {}
             }
@@ -1775,10 +1758,8 @@ impl FeaturesPageView {
             ctx.notify();
         });
 
-        #[cfg(feature = "local_tty")]
         let working_directory_view = ctx.add_typed_action_view(features::WorkingDirectoryView::new);
 
-        #[cfg(feature = "local_tty")]
         let startup_shell_view = ctx.add_typed_action_view(features::StartupShellView::new);
 
         let undo_close_view = ctx.add_typed_action_view(features::UndoCloseView::new);
@@ -1982,9 +1963,7 @@ impl FeaturesPageView {
             notifications_long_running_threshold_editor,
             notification_toast_duration_editor,
 
-            #[cfg(feature = "local_tty")]
             working_directory_view,
-            #[cfg(feature = "local_tty")]
             startup_shell_view,
             undo_close_view,
 
@@ -2072,7 +2051,6 @@ impl FeaturesPageView {
 
         let session_settings = SessionSettings::as_ref(ctx);
 
-        #[cfg(feature = "local_tty")]
         {
             if session_settings
                 .startup_shell_override
@@ -3867,10 +3845,7 @@ impl SettingsWidget for LoginItemWidget {
     ) -> Box<dyn Element> {
         let general_settings = GeneralSettings::as_ref(app);
         let ui_builder = appearance.ui_builder();
-        #[cfg(target_os = "macos")]
         let label = "Start Warp at login (requires macOS 13+)";
-        #[cfg(not(target_os = "macos"))]
-        let label = "Start Warp at login";
         render_body_item(
             label.into(),
             None,
@@ -4165,17 +4140,13 @@ impl SettingsWidget for DesktopNotificationsWidget {
                         .clone(),
                     appearance,
                 ),
-                // Add notification sound toggle only on macOS
-                #[cfg(target_os = "macos")]
-                {
-                    view.render_notification_toggle(
-                        session_settings.notifications.play_notification_sound,
-                        "Play notification sounds",
-                        FeaturesPageAction::ToggleNotificationSound,
-                        view.button_mouse_states.notification_sound_checkbox.clone(),
-                        appearance,
-                    )
-                },
+                view.render_notification_toggle(
+                    session_settings.notifications.play_notification_sound,
+                    "Play notification sounds",
+                    FeaturesPageAction::ToggleNotificationSound,
+                    view.button_mouse_states.notification_sound_checkbox.clone(),
+                    appearance,
+                ),
             ];
 
             column.add_child(render_group(toggles, appearance));
@@ -4261,11 +4232,9 @@ impl SettingsWidget for DesktopNotificationsWidget {
     }
 }
 
-#[cfg(feature = "local_tty")]
 #[derive(Default)]
 struct StartupShellWidget {}
 
-#[cfg(feature = "local_tty")]
 impl SettingsWidget for StartupShellWidget {
     type View = FeaturesPageView;
 
@@ -4288,11 +4257,9 @@ impl SettingsWidget for StartupShellWidget {
     }
 }
 
-#[cfg(feature = "local_tty")]
 #[derive(Default)]
 struct WorkingDirectoryWidget {}
 
-#[cfg(feature = "local_tty")]
 impl SettingsWidget for WorkingDirectoryWidget {
     type View = FeaturesPageView;
 
@@ -4458,15 +4425,10 @@ impl SettingsWidget for GlobalHotkeyWidget {
                             KeysSettings::as_ref(app).quake_mode_settings.value(),
                             appearance,
                         ),
-                        // This feature is only supported on MacOS.
-                        if QUAKE_WINDOW_AUTOHIDE_SUPPORTED {
-                            view.render_quake_mode_pin_window_toggle_row(
-                                KeysSettings::as_ref(app).quake_mode_settings.value(),
-                                appearance,
-                            )
-                        } else {
-                            Empty::new().finish()
-                        },
+                        view.render_quake_mode_pin_window_toggle_row(
+                            KeysSettings::as_ref(app).quake_mode_settings.value(),
+                            appearance,
+                        ),
                     ],
                     appearance,
                 ));

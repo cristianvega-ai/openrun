@@ -103,7 +103,6 @@ pub enum GlobalSearchAction {
     ToggleCaseSensitivity,
 }
 
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub enum GlobalSearchEvent {
     Started {
         search_id: u32,
@@ -126,7 +125,6 @@ pub enum GlobalSearchEvent {
     },
 }
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 pub enum Event {
     OpenMatch {
         location: LocalOrRemotePath,

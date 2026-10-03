@@ -1,9 +1,7 @@
-#[cfg(unix)]
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
-#[cfg(unix)]
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{SendError, SyncSender};
@@ -11,7 +9,6 @@ use std::thread::JoinHandle;
 
 use anyhow::Context as _;
 use async_broadcast::InactiveReceiver;
-#[cfg(unix)]
 use nix::sys::termios::LocalFlags;
 use parking_lot::{FairMutex, Mutex};
 use pathfinder_geometry::vector::Vector2F;
@@ -23,7 +20,6 @@ use warpui::{AppContext, Entity, ModelContext, ModelHandle, SingletonEntity, Vie
 use super::event_loop::EventLoop;
 use super::mio_channel;
 use super::shell::{DirectShellStarter, ShellStarterSource};
-#[cfg(unix)]
 use super::terminal_attributes::TerminalAttributesPoller;
 use crate::banner::BannerState;
 use crate::context_chips::ContextChipKind;
@@ -33,15 +29,12 @@ use crate::settings::{DebugSettings, SshSettings};
 use crate::terminal::available_shells::{AvailableShell, AvailableShells};
 use crate::terminal::color::List as ColorList;
 use crate::terminal::event_listener::ChannelEventListener;
-#[cfg(unix)]
 use crate::terminal::local_tty::terminal_attributes::Event as TerminalAttributesPollerEvent;
 use crate::terminal::local_tty::{Pty, PtyOptions};
 use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::session::Sessions;
-#[cfg(unix)]
 use crate::terminal::model::terminal_model::BlockIndex;
 use crate::terminal::model::terminal_model::{ExitReason, ShellProcessInfo};
-#[cfg(unix)]
 use crate::terminal::model_events::ModelEvent as TerminalModelEvent;
 use crate::terminal::model_events::ModelEventDispatcher;
 use crate::terminal::session_settings::{SessionSettings, ToolbarChipSelection};
@@ -75,7 +68,6 @@ pub struct TerminalManager<S> {
 
     /// The manager is responsible for managing the lifetime
     /// of the terminal attributes poller. None if the event loop has not yet started.
-    #[cfg(unix)]
     #[allow(dead_code)]
     terminal_attributes_poller: Option<ModelHandle<TerminalAttributesPoller>>,
 
@@ -143,7 +135,6 @@ pub struct TerminalSurfaceResult<S, PostWire> {
 struct ShellStartupResources {
     event_loop_rx: mio_channel::Receiver<Message>,
     channel_event_proxy: ChannelEventListener,
-    #[cfg(unix)]
     model_events: ModelHandle<ModelEventDispatcher>,
 }
 
@@ -269,7 +260,6 @@ impl<S> TerminalManager<S> {
             model,
             event_loop_handle: None,
             view: surface.clone(),
-            #[cfg(unix)]
             terminal_attributes_poller: None,
             pty_controller,
             #[cfg(feature = "integration_tests")]
@@ -285,7 +275,6 @@ impl<S> TerminalManager<S> {
         let shell_startup_resources = ShellStartupResources {
             event_loop_rx,
             channel_event_proxy,
-            #[cfg(unix)]
             model_events,
         };
 
@@ -436,7 +425,6 @@ fn on_shell_determined<S: TerminalSurface>(
     let ShellStartupResources {
         event_loop_rx,
         channel_event_proxy,
-        #[cfg(unix)]
         model_events,
     } = shell_startup_resources;
     let model = manager.model();
@@ -464,12 +452,10 @@ fn on_shell_determined<S: TerminalSurface>(
     };
 
     let pid = pty.get_pid();
-    #[cfg(unix)]
     let fd = pty.get_fd();
 
     model.lock().set_shell_process_info(ShellProcessInfo {
         pid,
-        #[cfg(unix)]
         pty_leader_fd: Some(fd),
     });
 
@@ -492,7 +478,6 @@ fn on_shell_determined<S: TerminalSurface>(
     });
 
     // Initialize the terminal attributes poller.
-    #[cfg(unix)]
     {
         let terminal_attributes_poller = ctx.add_model(|_| TerminalAttributesPoller::new(fd));
         wire_up_terminal_attribute_poller_with_surface(
@@ -632,7 +617,6 @@ impl<S> TerminalManager<S> {
 /// NOTE: we cannot simply use the strong references (the handle arguments to this
 /// wire_up fn) in the subscription callbacks because that will create a reference
 /// cycle. Instead, we use weak handles and upgrade them lazily.
-#[cfg(unix)]
 fn wire_up_terminal_attribute_poller_with_surface<S: TerminalSurface>(
     terminal_attributes_poller: &ModelHandle<TerminalAttributesPoller>,
     surface: &ViewHandle<S>,

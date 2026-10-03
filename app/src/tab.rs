@@ -13,8 +13,8 @@ use warp_core::ui::theme::color::internal_colors;
 use warpui::r#async::{SpawnedFutureHandle, Timer};
 use warpui::elements::{
     Align, Border, ChildAnchor, Clipped, ConstrainedBox, Container, CornerRadius,
-    CrossAxisAlignment, DragAxis, Draggable, DraggableState, DropTarget, Element, Empty, Fill,
-    Flex, Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle, OffsetPositioning, Padding,
+    CrossAxisAlignment, Draggable, DraggableState, DropTarget, Element, Empty, Fill, Flex,
+    Hoverable, MainAxisAlignment, MainAxisSize, MouseStateHandle, OffsetPositioning, Padding,
     ParentAnchor, ParentElement, ParentOffsetBounds, PositionedElementAnchor,
     PositionedElementOffsetBounds, Radius, Rect, SavePosition, Shrinkable, SizeConstraintCondition,
     SizeConstraintSwitch, Stack, Text,
@@ -1876,11 +1876,6 @@ impl UiComponent for TabComponent<'_> {
                     });
                 })
                 .on_drop(|ctx, _, _, _| ctx.dispatch_typed_action(WorkspaceAction::DropTab));
-            let draggable = if crate::workspace::cross_window_tab_drag::IS_SUPPORTED {
-                draggable
-            } else {
-                draggable.with_drag_axis(DragAxis::HorizontalOnly)
-            };
             let tab_with_drag: Box<dyn Element> = draggable.finish();
             SavePosition::new(tab_with_drag, &tab_position_id(tab_index)).finish()
         };

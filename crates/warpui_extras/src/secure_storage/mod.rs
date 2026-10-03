@@ -4,14 +4,9 @@
 //! system, implementations of the API for various platforms, testing
 //! utilities, and extension traits to improve ergonomics of using the APIs.
 
-#[cfg(not(target_family = "wasm"))]
-#[cfg_attr(target_os = "macos", path = "mac.rs")]
+#[path = "mac.rs"]
 mod imp;
 mod noop;
-
-// Treat this as a noop on web, as there is no backing storage which is "secure".
-#[cfg(target_family = "wasm")]
-use noop as imp;
 
 /// A type alias for the concrete type stored within a warpui
 /// app context, enabling usage such as:

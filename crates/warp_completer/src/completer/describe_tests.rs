@@ -16,12 +16,10 @@ use crate::signatures::testing::{
     add_content_signature, create_test_command_registry, git_signature, test_signature,
 };
 
-#[cfg(unix)]
 mod unix_constants {
     pub(super) const TEST_WORK_DIR: &str = "/home/";
 }
 
-#[cfg(unix)]
 use unix_constants::*;
 
 /// Given a line and position in the line, runs the completer at the position and returns

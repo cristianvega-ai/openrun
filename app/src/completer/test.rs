@@ -18,10 +18,7 @@ fn test_session_context(session: Session, cwd: TypedPathBuf) -> SessionContext {
 }
 
 fn working_directory() -> TypedPathBuf {
-    #[cfg(unix)]
-    let cwd = TypedPathBuf::from("/test/home/");
-
-    cwd
+    TypedPathBuf::from("/test/home/")
 }
 
 #[test]
@@ -230,7 +227,6 @@ pub fn test_session_context_lists_directory_entries_remotely() {
 /// Regression test: in a remote/Warpified session a symlink pointing at a
 /// directory is classified as a directory (so it completes with a trailing separator and is
 /// offered for `cd`), while a symlink to a file completes as a file.
-#[cfg(unix)]
 #[test]
 pub fn test_session_context_follows_symlinked_directories_remotely() {
     App::test((), |_app| async move {
@@ -316,7 +312,6 @@ fn perform_special_characters_in_path_test(session: Session, file_names: Vec<&st
 
 #[test]
 pub fn test_session_context_lists_directory_entries_locally_with_special_characters_in_path() {
-    #[cfg(unix)]
     let file_names = vec!["a.txt", "b file.txt", "c's.txt", "\"d\".txt", "e\nfile.txt"];
 
     // Windows filenames are more restrictive than UNIX. Notably,
@@ -330,7 +325,6 @@ pub fn test_session_context_lists_directory_entries_locally_with_special_charact
 /// Regression test.
 #[test]
 pub fn test_session_context_lists_directory_entries_remotely_with_special_characters_in_path() {
-    #[cfg(unix)]
     let file_names = vec!["a.txt", "b file.txt", "c's.txt", "\"d\".txt", "e\nfile.txt"];
 
     // Windows filenames are more restrictive than UNIX. Notably,

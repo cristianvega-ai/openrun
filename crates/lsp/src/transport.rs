@@ -166,9 +166,7 @@ impl Transport for ProcessTransport {
         futures::select! {
             _ = shutdown.fuse() => {},
             _ = timeout_future.fuse() => {
-                // On *nix platforms, send a SIGTERM with a 2s grace period
-                // before killing the process.
-                #[cfg(unix)]
+                // Send a SIGTERM with a 2s grace period before killing the process.
                 {
                     use nix::sys::signal::{kill, Signal};
                     use nix::unistd::Pid;

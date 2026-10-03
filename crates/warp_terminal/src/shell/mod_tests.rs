@@ -408,7 +408,6 @@ fn command_injection_via_embedded_quotes_is_neutralized() {
     assert_eq!(ps.matches("''").count(), 2);
 }
 
-#[cfg(unix)]
 mod bash_executables {
     use std::collections::BTreeMap;
     use std::os::unix::fs::PermissionsExt;

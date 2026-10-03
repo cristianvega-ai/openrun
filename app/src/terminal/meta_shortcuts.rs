@@ -21,9 +21,6 @@ use warpui::keymap::Keystroke;
 /// Note that this is only relevant with [`crate::settings::ExtraMetaKeys`] enabled.
 pub(super) fn handle_keystroke_despite_composing(keystroke: &Keystroke) -> bool {
     // This conflict only occurs on MacOS.
-    if !cfg!(target_os = "macos") {
-        return false;
-    }
     if keystroke.cmd || keystroke.ctrl || keystroke.shift || keystroke.alt || !keystroke.meta {
         return false;
     }
@@ -33,6 +30,6 @@ pub(super) fn handle_keystroke_despite_composing(keystroke: &Keystroke) -> bool 
     true
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
 #[path = "meta_shortcuts_tests.rs"]
 mod tests;

@@ -2,9 +2,7 @@ pub mod bindings;
 pub mod clipboard;
 pub mod color;
 pub mod extensions;
-#[cfg(feature = "local_fs")]
 pub mod file;
-#[cfg(feature = "local_fs")]
 pub mod filename;
 pub mod git;
 pub mod image;

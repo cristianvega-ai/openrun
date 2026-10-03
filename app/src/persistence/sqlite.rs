@@ -886,12 +886,8 @@ fn encode_path(path: PathBuf) -> Vec<u8> {
         return Vec::new();
     }
 
-    cfg_if::cfg_if! {
-        if #[cfg(unix)] {
-            use std::os::unix::ffi::OsStringExt;
-            path.into_os_string().into_vec()
-        }
-    }
+    use std::os::unix::ffi::OsStringExt;
+    path.into_os_string().into_vec()
 }
 
 /// Decode a path from its platform-specific byte representation.
@@ -902,12 +898,8 @@ fn decode_path(bytes: Vec<u8>) -> PathBuf {
         return PathBuf::new();
     }
 
-    cfg_if::cfg_if! {
-        if #[cfg(unix)] {
-            use std::os::unix::ffi::OsStringExt;
-            OsString::from_vec(bytes).into()
-        }
-    }
+    use std::os::unix::ffi::OsStringExt;
+    OsString::from_vec(bytes).into()
 }
 
 fn save_workspace_metadata(
@@ -1439,7 +1431,7 @@ fn read_sqlite_data(
                         window.origin_x,
                         window.origin_y,
                     ) {
-                        (Some(mut width), Some(mut height), Some(x), Some(y))
+                        (Some(width), Some(height), Some(x), Some(y))
                             if width >= MIN_WINDOW_WIDTH && height >= MIN_WINDOW_HEIGHT =>
                         {
                             // When fullscreen or maximized, the `inner_size` we snapshotted will be the
@@ -1449,12 +1441,6 @@ fn read_sqlite_data(
                             // don't want to set the size to take the full screen because the window will
                             // appear to remain in maximized/fullscreen. We multiply each dimension by 0.8
                             // to prevent taking the full screen while choosing a reasonable size.
-                            if !cfg!(target_os = "macos")
-                                && fullscreen_state_val != FullscreenState::Normal
-                            {
-                                width *= 0.8;
-                                height *= 0.8;
-                            }
                             Some(RectF::new(
                                 Vector2F::new(x, y),
                                 Vector2F::new(width, height),

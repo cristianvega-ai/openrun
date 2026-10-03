@@ -10,7 +10,7 @@ use crate::elements::{
     Flex, Icon, MinSize, ParentElement,
 };
 use crate::keymap::Keystroke;
-use crate::platform::OperatingSystem;
+
 use crate::scene::Border;
 
 type IconForKeystrokeFn = Arc<dyn Fn(&str) -> Option<Icon>>;
@@ -76,11 +76,7 @@ impl UiComponent for KeyboardShortcut {
         let keys = if self.is_text_only {
             // On Mac, we use symbols for modifiers so we don't need a separator.
             // On other OS, we spell out modifiers so they need to be separated by space
-            let sep = if OperatingSystem::get().is_mac() {
-                ""
-            } else {
-                " "
-            };
+            let sep = "";
             let combined_text = self
                 .keys
                 .iter()
@@ -185,34 +181,10 @@ pub enum Key {
 impl Key {
     pub fn text(&self, is_lowercase_modifier: bool) -> Cow<'static, str> {
         let mut text: Cow<'static, str> = match self {
-            Key::Command => {
-                if OperatingSystem::get().is_mac() {
-                    "⌘".into()
-                } else {
-                    "Logo".into()
-                }
-            }
-            Key::Option => {
-                if OperatingSystem::get().is_mac() {
-                    "⌥".into()
-                } else {
-                    "Alt".into()
-                }
-            }
-            Key::Control => {
-                if OperatingSystem::get().is_mac() {
-                    "⌃".into()
-                } else {
-                    "Ctrl".into()
-                }
-            }
-            Key::Shift => {
-                if OperatingSystem::get().is_mac() {
-                    "⇧".into()
-                } else {
-                    "Shift".into()
-                }
-            }
+            Key::Command => "⌘".into(),
+            Key::Option => "⌥".into(),
+            Key::Control => "⌃".into(),
+            Key::Shift => "⇧".into(),
             Key::Meta => "Meta".into(),
             Key::Other(key) => match key.as_str() {
                 "up" => "↑".into(),

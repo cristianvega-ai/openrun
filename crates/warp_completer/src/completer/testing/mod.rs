@@ -201,7 +201,6 @@ impl MockPathCompletionContext {
 
 impl Default for MockPathCompletionContext {
     fn default() -> Self {
-        #[cfg(unix)]
         let pwd = "/home/";
         Self::new(TypedPathBuf::from(pwd))
     }

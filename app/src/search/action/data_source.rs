@@ -2,11 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use fuzzy_match::FuzzyMatchResult;
-#[cfg(target_family = "wasm")]
-use fuzzy_match::match_indices_case_insensitive;
 use warpui::keymap::BindingId;
-#[cfg(target_family = "wasm")]
-use warpui::keymap::DescriptionContext;
 use warpui::{AppContext, Entity, ModelContext, ModelHandle};
 
 use crate::search::action::search_item::MatchedBinding;
@@ -23,17 +19,10 @@ pub struct CommandBindingDataSource {
 }
 
 impl CommandBindingDataSource {
-    #[cfg(not(target_family = "wasm"))]
     pub fn new(binding_source: ModelHandle<BindingSource>, ctx: &mut ModelContext<Self>) -> Self {
         Self::new_full_text(binding_source, ctx)
     }
 
-    #[cfg(target_family = "wasm")]
-    pub fn new(binding_source: ModelHandle<BindingSource>, ctx: &mut ModelContext<Self>) -> Self {
-        Self::new_fuzzy(binding_source, ctx)
-    }
-
-    #[cfg(not(target_family = "wasm"))]
     fn new_full_text(
         binding_source: ModelHandle<BindingSource>,
         ctx: &mut ModelContext<Self>,
@@ -41,16 +30,6 @@ impl CommandBindingDataSource {
         ctx.observe(&binding_source, Self::on_binding_source_changed);
 
         let searcher = Box::new(full_text_searcher::FullTextActionSearcher::new());
-        Self { searcher }
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn new_fuzzy(binding_source: ModelHandle<BindingSource>, ctx: &mut ModelContext<Self>) -> Self {
-        ctx.observe(&binding_source, Self::on_binding_source_changed);
-
-        let searcher = Box::new(FuzzyActionSearcher {
-            all_bindings: Default::default(),
-        });
         Self { searcher }
     }
 
@@ -133,51 +112,6 @@ trait ActionSearcher {
     fn bindings_mut(&mut self) -> &mut HashMap<BindingId, Arc<CommandBinding>>;
 }
 
-#[cfg(target_family = "wasm")]
-struct FuzzyActionSearcher {
-    all_bindings: HashMap<BindingId, Arc<CommandBinding>>,
-}
-
-#[cfg(target_family = "wasm")]
-impl ActionSearcher for FuzzyActionSearcher {
-    fn search(&self, search_term: &str) -> anyhow::Result<Vec<QueryResult<SearcherAction>>> {
-        Ok(self
-            .all_bindings
-            .values()
-            .filter_map(move |binding| {
-                // Binding descriptions are almost always upper case. If a user searches with
-                // lowercase text, the fuzzy matcher will weight this match lower because the case
-                // between the search term and the description differ. As a result, we lowercase
-                // both the search term and the description to ensure that we are matching the two
-                // with the same casing.
-                match_indices_case_insensitive(
-                    binding
-                        .description
-                        .in_context(DescriptionContext::Default)
-                        .to_lowercase()
-                        .as_str(),
-                    search_term.to_lowercase().as_str(),
-                )
-                .map(|result| (result, binding))
-            })
-            .map(|(match_result, binding)| {
-                MatchedBinding::new(match_result, binding.clone()).into()
-            })
-            .collect())
-    }
-
-    fn build_index(&mut self) {}
-
-    fn bindings(&self) -> &HashMap<BindingId, Arc<CommandBinding>> {
-        &self.all_bindings
-    }
-
-    fn bindings_mut(&mut self) -> &mut HashMap<BindingId, Arc<CommandBinding>> {
-        &mut self.all_bindings
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
 mod full_text_searcher {
     use std::collections::HashMap;
     use std::sync::Arc;

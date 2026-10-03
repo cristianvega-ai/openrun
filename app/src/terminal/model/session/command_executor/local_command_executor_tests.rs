@@ -1,4 +1,3 @@
-#[cfg(unix)]
 mod unix {
     use std::collections::HashMap;
     use std::fs::{self, File, OpenOptions};

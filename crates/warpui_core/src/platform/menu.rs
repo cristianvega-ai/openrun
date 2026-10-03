@@ -8,7 +8,6 @@ pub enum MenuItem {
     Standard(StandardAction),
 
     /// Services is a system-defined standard menu on macOS.
-    #[cfg(target_os = "macos")]
     Services,
 }
 

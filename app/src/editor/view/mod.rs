@@ -57,7 +57,7 @@ use warpui::clipboard::ClipboardContent;
 use warpui::elements::{ChildView, DEFAULT_UI_LINE_HEIGHT_RATIO, Hoverable, MouseStateHandle};
 use warpui::fonts::{Cache as FontCache, FamilyId, Properties};
 use warpui::keymap::{EditableBinding, FixedBinding, Keystroke};
-use warpui::platform::{Cursor, FilePickerConfiguration, OperatingSystem};
+use warpui::platform::{Cursor, FilePickerConfiguration};
 use warpui::text::TextBuffer;
 use warpui::text::word_boundaries::WordBoundariesPolicy;
 use warpui::text_layout::TextStyle;
@@ -388,17 +388,15 @@ pub fn init(ctx: &mut AppContext) {
     ]);
 
     // Register mac-only `FixedBinding`s.
-    if OperatingSystem::get().is_mac() {
-        ctx.register_fixed_bindings([
-            // A native character palette isn't supported on all platforms. The `ctrl-cmd-space`
-            // binding is unique to Mac.
-            FixedBinding::new(
-                "ctrl-cmd-space",
-                EditorAction::ShowCharacterPalette,
-                id!("EditorView") & !id!("IMEOpen"),
-            ),
-        ]);
-    }
+    ctx.register_fixed_bindings([
+        // A native character palette isn't supported on all platforms. The `ctrl-cmd-space`
+        // binding is unique to Mac.
+        FixedBinding::new(
+            "ctrl-cmd-space",
+            EditorAction::ShowCharacterPalette,
+            id!("EditorView") & !id!("IMEOpen"),
+        ),
+    ]);
 
     if ChannelState::channel() == Channel::Integration {
         ctx.register_fixed_bindings([

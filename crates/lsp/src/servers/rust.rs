@@ -2,7 +2,6 @@ use std::path::Path;
 
 use async_trait::async_trait;
 
-#[cfg(feature = "local_fs")]
 use crate::install::{AssetKind, fetch_latest_metadata_from_github, install_from_github};
 use crate::language_server_candidate::{LanguageServerCandidate, LanguageServerMetadata};
 use crate::{CommandBuilder, Downloader};
@@ -13,26 +12,23 @@ pub struct RustAnalyzerCandidate;
 ///
 /// Asset names follow the pattern: rust-analyzer-{arch}-{vendor}-{os}.{ext}
 /// e.g. rust-analyzer-aarch64-apple-darwin.gz
-#[cfg(feature = "local_fs")]
 fn asset_name() -> &'static str {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[cfg(target_arch = "aarch64")]
     {
         "rust-analyzer-aarch64-apple-darwin.gz"
     }
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    #[cfg(target_arch = "x86_64")]
     {
         "rust-analyzer-x86_64-apple-darwin.gz"
     }
 }
 
-#[cfg(feature = "local_fs")]
 const SERVER_NAME: &str = "rust-analyzer";
 
 impl RustAnalyzerCandidate {
     /// Finds the path to an installed rust-analyzer binary in the data directory.
     ///
     /// Returns the path to the first working binary found (verified by running `--help`).
-    #[cfg(feature = "local_fs")]
     pub async fn find_installed_binary_in_data_dir() -> Option<std::path::PathBuf> {
         use tokio::process::Command;
 
@@ -73,7 +69,6 @@ impl RustAnalyzerCandidate {
 }
 
 #[async_trait]
-#[cfg(feature = "local_fs")]
 impl LanguageServerCandidate for RustAnalyzerCandidate {
     async fn should_suggest_for_repo(&self, path: &Path, _executor: &CommandBuilder) -> bool {
         path.join("Cargo.toml").exists()
@@ -117,37 +112,5 @@ impl LanguageServerCandidate for RustAnalyzerCandidate {
             Some(asset_name()),
         )
         .await
-    }
-}
-
-#[async_trait]
-#[cfg(not(feature = "local_fs"))]
-impl LanguageServerCandidate for RustAnalyzerCandidate {
-    async fn should_suggest_for_repo(&self, _path: &Path, _executor: &CommandBuilder) -> bool {
-        false
-    }
-
-    async fn is_installed_in_data_dir(&self, _executor: &CommandBuilder) -> bool {
-        false
-    }
-
-    async fn is_installed_on_path(&self, _executor: &CommandBuilder) -> bool {
-        false
-    }
-
-    async fn install(
-        &self,
-        _metadata: LanguageServerMetadata,
-        _executor: &CommandBuilder,
-        _downloader: &Downloader,
-    ) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    async fn fetch_latest_server_metadata(
-        &self,
-        _downloader: &Downloader,
-    ) -> anyhow::Result<LanguageServerMetadata> {
-        todo!()
     }
 }

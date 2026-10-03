@@ -32,11 +32,8 @@ impl LocalRepoMetadataModel {
             repositories: HashMap::new(),
             lazy_loaded_paths: Default::default(),
             build_tasks: Default::default(),
-            #[cfg(feature = "local_fs")]
             watcher_update_tasks: Default::default(),
-            #[cfg(feature = "local_fs")]
             watcher: Default::default(),
-            #[cfg(feature = "local_fs")]
             watched_roots: Default::default(),
         }
     }
@@ -346,7 +343,6 @@ fn remove_repository_keeps_nested_repo_build_tasks() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn remove_repository_aborts_and_drops_watcher_update_tasks() {
     let repo_path = StandardizedPath::try_new("/watcher_update_removed_repo").unwrap();
@@ -414,7 +410,6 @@ fn remove_repository_aborts_and_drops_watcher_update_tasks() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn remove_repository_keeps_nested_repo_watcher_update_tasks() {
     let parent_repo_path = StandardizedPath::try_new("/parent_watcher_repo").unwrap();
@@ -705,7 +700,6 @@ fn test_get_repo_contents_filter_applies_before_cap() {
     ));
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn test_lazy_loaded_path_registrations_are_refcounted() {
     VirtualFS::test("lazy_loaded_path_refcount", |dirs, mut vfs| {
@@ -768,7 +762,6 @@ fn test_lazy_loaded_path_registrations_are_refcounted() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn test_index_directory_path_upgrades_lazy_loaded_non_git_path() {
     VirtualFS::test("lazy_loaded_non_git_path_upgrade", |dirs, mut vfs| {
@@ -857,7 +850,6 @@ fn test_index_directory_path_upgrades_lazy_loaded_non_git_path() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn test_index_directory_path_upgrades_pending_lazy_loaded_non_git_path() {
     VirtualFS::test(
@@ -1715,7 +1707,6 @@ fn test_canonicalized_path_functionality() {
         let relative_path = repo_path.join("./real_dir");
 
         // Create a symlink to real_dir
-        #[cfg(unix)]
         let symlink_created = std::os::unix::fs::symlink(&real_dir, &symlink_dir).is_ok();
 
         if symlink_created {
@@ -1782,7 +1773,6 @@ fn test_repository_operations_with_standardized_paths() {
         let relative_repo = test_root.join("./real_repo");
 
         // Create symlink to the repo
-        #[cfg(unix)]
         let symlink_created = std::os::unix::fs::symlink(&real_repo, &symlink_repo).is_ok();
 
         if symlink_created {
@@ -1911,7 +1901,6 @@ fn test_standardized_path_edge_cases() {
 /// On Linux, a lazy (non-git) root is watched non-recursively, so only the root
 /// itself should be tracked initially. On other platforms the root is watched
 /// recursively and nothing is tracked for per-directory teardown.
-#[cfg(feature = "local_fs")]
 #[test]
 fn index_lazy_loaded_path_tracks_only_root() {
     VirtualFS::test("lazy_root_tracking", |dirs, mut vfs| {
@@ -1938,7 +1927,6 @@ fn index_lazy_loaded_path_tracks_only_root() {
 }
 
 /// Expanding a subdirectory of a lazy root keeps the single recursive watch on the root.
-#[cfg(feature = "local_fs")]
 #[test]
 fn load_directory_keeps_the_single_root_watch_for_lazy_root() {
     VirtualFS::test("lazy_load_subdir_tracking", |dirs, mut vfs| {
@@ -1971,7 +1959,6 @@ fn load_directory_keeps_the_single_root_watch_for_lazy_root() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn load_directory_completion_resolves_after_tree_update() {
     VirtualFS::test("lazy_load_completion_updates_tree", |dirs, mut vfs| {
@@ -2015,7 +2002,6 @@ fn load_directory_completion_resolves_after_tree_update() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn load_directory_with_completion_coalesces_duplicate_inflight_load() {
     VirtualFS::test("lazy_load_duplicate_completion", |dirs, mut vfs| {
@@ -2148,7 +2134,6 @@ fn directory_load_coalescing_is_scoped_by_owner_and_kind() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn load_directory_completion_skips_removed_tree_entry() {
     VirtualFS::test("lazy_load_removed_subdir", |dirs, mut vfs| {
@@ -2200,7 +2185,6 @@ fn load_directory_completion_skips_removed_tree_entry() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn load_directory_completion_skips_replaced_tree_entry() {
     VirtualFS::test("lazy_load_replaced_subdir", |dirs, mut vfs| {
@@ -2261,7 +2245,6 @@ fn load_directory_completion_skips_replaced_tree_entry() {
     });
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn load_directory_completion_skips_recreated_unloaded_tree_entry() {
     VirtualFS::test("lazy_load_recreated_subdir", |dirs, mut vfs| {
@@ -2329,7 +2312,6 @@ fn load_directory_completion_skips_recreated_unloaded_tree_entry() {
 
 /// Indexing a git repo records a recursive watch mode (not a lazy one) and is
 /// not tracked as a lazy-loaded path, on any platform.
-#[cfg(feature = "local_fs")]
 #[test]
 fn recursive_repo_uses_recursive_watch_mode() {
     VirtualFS::test("recursive_repo_watch_mode", |dirs, mut vfs| {
@@ -2502,7 +2484,6 @@ fn incremental_event_under_expanded_ignored_dir_keeps_it_loaded() {
 /// Expanding a gitignored directory inside a git repo registers an on-demand
 /// non-recursive watch for it on Linux (where the recursive root watch prunes
 /// gitignored dirs), while other platforms rely on the recursive root watch.
-#[cfg(feature = "local_fs")]
 #[test]
 fn load_directory_watches_expanded_gitignored_dir_for_git_repo() {
     VirtualFS::test("git_repo_gitignored_expand", |dirs, mut vfs| {
@@ -2546,7 +2527,6 @@ fn load_directory_watches_expanded_gitignored_dir_for_git_repo() {
 }
 
 /// Removing a git repo clears its tracked watch entry.
-#[cfg(feature = "local_fs")]
 #[test]
 fn remove_repository_clears_its_watch_entry() {
     VirtualFS::test("git_repo_remove_clears_extra", |dirs, mut vfs| {
@@ -2589,7 +2569,6 @@ fn remove_repository_clears_its_watch_entry() {
 }
 
 /// Tearing down a lazy root clears its tracked watch entry and removes the repository state.
-#[cfg(feature = "local_fs")]
 #[test]
 fn remove_lazy_loaded_path_clears_its_watch_entry() {
     VirtualFS::test("lazy_remove_clears_tracking", |dirs, mut vfs| {

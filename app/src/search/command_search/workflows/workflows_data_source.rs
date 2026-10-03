@@ -12,7 +12,6 @@ use crate::search::mixer::{DataSourceRunErrorWrapper, SyncDataSource};
 use crate::search::workflows::fuzzy_match::FuzzyMatchWorkflowResult;
 use crate::user_config::WarpConfig;
 use crate::workflows::local_workflows::LocalWorkflows;
-#[cfg(feature = "local_fs")]
 use crate::workflows::local_workflows::UseCache;
 use crate::workflows::workflow::Workflow;
 use crate::workflows::{WorkflowSource, WorkflowType};
@@ -37,7 +36,6 @@ impl WorkflowsDataSource {
         let user_workflows = WarpConfig::as_ref(app).local_user_workflows().clone();
         workflows_by_source.insert(WorkflowSource::Local, user_workflows);
 
-        #[cfg(feature = "local_fs")]
         if let Some(session_context) = session_context
             && session_context.session.is_local()
         {

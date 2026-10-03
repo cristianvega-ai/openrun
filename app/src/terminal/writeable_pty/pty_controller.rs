@@ -6,7 +6,6 @@ use async_channel::{Receiver, Sender};
 use parking_lot::FairMutex;
 use thiserror::Error;
 use warp_completer::meta::Span;
-#[cfg(feature = "local_fs")]
 use warp_errors::report_error;
 use warp_util::path::ShellFamily;
 use warpui::r#async::block_on;
@@ -24,7 +23,6 @@ use crate::terminal::model::{StartCommandOutcome, escape_sequences};
 use crate::terminal::model_events::{AnsiHandlerEvent, ModelEvent, ModelEventDispatcher};
 use crate::terminal::shell::ShellType;
 use crate::terminal::view::LINEFEED_REGEX;
-#[cfg(not(target_family = "wasm"))]
 use crate::terminal::writeable_pty::bootstrap_file::{TempBootstrapFile, permanent_bootstrap_file};
 use crate::terminal::{SizeUpdate, TerminalModel, bootstrap};
 
@@ -76,7 +74,6 @@ pub struct PtyController<T: EventLoopSender> {
     /// If we're bootstrapping the shell by sourcing a file with the bootstrap
     /// script, this will hold the handle to the file.  Once bootstrapping is
     /// complete, it will be dropped to clean up the temporary file.
-    #[cfg(not(target_family = "wasm"))]
     bootstrap_file: Option<TempBootstrapFile>,
     in_flight_native_completions_results_tx:
         Option<async_channel::Sender<(Vec<ShellCompletion>, Option<Span>)>>,
@@ -175,7 +172,6 @@ impl<T: EventLoopSender> PtyController<T> {
             pending_writes: VecDeque::new(),
             is_user_command_executing: false,
             is_bracketed_paste_enabled: false,
-            #[cfg(not(target_family = "wasm"))]
             bootstrap_file: None,
             in_flight_native_completions_results_tx: None,
         }
@@ -321,7 +317,6 @@ impl<T: EventLoopSender> PtyController<T> {
     ) {
         let shell_type = pending_session_info.shell.shell_type();
 
-        #[cfg(feature = "local_fs")]
         if let Some(path) = permanent_bootstrap_file(shell_type, pending_session_info) {
             // If there is a permanent bootstrap file, source it directly. We
             // currently only do this for local PowerShell sessions on Windows.
@@ -334,16 +329,10 @@ impl<T: EventLoopSender> PtyController<T> {
     }
 
     /// Writes the bytes to to terminate and run the bootstrap script.
-    #[cfg(feature = "local_fs")]
     fn write_terminating_bootstrap_bytes(&mut self, ctx: &mut ModelContext<PtyController<T>>) {
-        cfg_if::cfg_if! {
-            if #[cfg(unix)] {
-                        self.write_bytes(&b"\n"[..], ctx);
-            }
-        }
+        self.write_bytes(&b"\n"[..], ctx);
     }
 
-    #[cfg(feature = "local_fs")]
     fn write_bootstrap_script_to_shell(
         &mut self,
         pending_session_info: &SessionInfo,
@@ -396,7 +385,6 @@ impl<T: EventLoopSender> PtyController<T> {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     /// Sources the bootstrap script at the given path. Assumes that the path
     /// contains a valid file.
     fn source_bootstrap_script(
@@ -424,17 +412,6 @@ impl<T: EventLoopSender> PtyController<T> {
         self.write_terminating_bootstrap_bytes(ctx);
     }
 
-    #[cfg(not(feature = "local_fs"))]
-    fn write_bootstrap_script_to_shell(
-        &mut self,
-        _pending_session_info: &SessionInfo,
-        ctx: &mut ModelContext<PtyController<T>>,
-        _shell_type: ShellType,
-        bootstrap: Cow<'static, [u8]>,
-    ) {
-        self.write_bytes(bootstrap, ctx);
-    }
-
     /// Handles the shell having finished bootstrapping.
     fn shell_bootstrapped(&mut self, is_subshell: bool) {
         if is_subshell {
@@ -443,7 +420,6 @@ impl<T: EventLoopSender> PtyController<T> {
 
         // Now that we have bootstrapped, we can be sure that the bootstrap
         // file is no longer needed.
-        #[cfg(not(target_family = "wasm"))]
         self.bootstrap_file.take();
     }
 

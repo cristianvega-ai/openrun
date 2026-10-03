@@ -26,7 +26,6 @@ use crate::test::{TestStep, new_step_with_default_assertions, toggle_setting};
 // TODO: Block count / index Failed b/c of in-band generators
 pub fn test_block_filtering_keybinding() -> Builder {
     new_builder()
-        .set_should_run_test(|| cfg!(target_os = "macos"))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(clear_blocklist_to_remove_bootstrapped_blocks())
         .with_step(SimpleTestCase::execute_command())
@@ -36,7 +35,6 @@ pub fn test_block_filtering_keybinding() -> Builder {
 
 pub fn test_block_filtering_keybinding_with_long_running_command() -> Builder {
     new_builder()
-        .set_should_run_test(|| cfg!(target_os = "macos"))
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(clear_blocklist_to_remove_bootstrapped_blocks())
         .with_steps(LongRunningCommandTestCase::enter_input_into_cat())

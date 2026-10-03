@@ -1,8 +1,6 @@
-#[cfg(feature = "local_fs")]
 pub use crate::persistence::{PersistenceScope, database_file_path_for_scope};
 
 /// Helpers for tests that inspect what the app wrote to its SQLite database.
-#[cfg(feature = "local_fs")]
 pub mod written_data {
     use diesel::prelude::*;
     use warpui::{App, AppContext, SingletonEntity as _};

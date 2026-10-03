@@ -3,7 +3,6 @@
 use warp_core::settings::{Setting as _, ToggleableSetting as _};
 use warp_errors::report_if_error;
 use warpui::elements::Element;
-#[cfg(feature = "local_fs")]
 use warpui::elements::{ChildView, Empty};
 use warpui::keymap::ContextPredicate;
 use warpui::ui_components::components::UiComponent;
@@ -12,7 +11,6 @@ use warpui::{
     Action, AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext, ViewHandle,
 };
 
-#[cfg(feature = "local_fs")]
 use super::features::external_editor::ExternalEditorView;
 use super::settings_page::{
     MatchData, PageTitle, PageType, SettingsPageMeta, SettingsPageViewHandle, SettingsWidget,
@@ -28,14 +26,12 @@ const PAGE_TITLE: &str = "Editor and Code Review";
 
 pub struct EditorAndCodeReviewPageView {
     page: PageType<Self>,
-    #[cfg(feature = "local_fs")]
     external_editor_view: Option<ViewHandle<ExternalEditorView>>,
     code_editor_line_number_mode_dropdown: ViewHandle<Dropdown<EditorAndCodeReviewPageAction>>,
 }
 
 impl EditorAndCodeReviewPageView {
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
-        #[cfg(feature = "local_fs")]
         let external_editor_view = Some(ctx.add_typed_action_view(ExternalEditorView::new));
 
         let code_editor_line_number_mode_dropdown = ctx.add_typed_action_view(Dropdown::new);
@@ -54,18 +50,14 @@ impl EditorAndCodeReviewPageView {
 
         Self {
             page: Self::build_page(ctx),
-            #[cfg(feature = "local_fs")]
             external_editor_view,
             code_editor_line_number_mode_dropdown,
         }
     }
 
     fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
-        #[cfg(feature = "local_fs")]
         let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
             vec![Box::new(ExternalEditorCodeWidget)];
-        #[cfg(not(feature = "local_fs"))]
-        let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
 
         if AppEditorSettings::as_ref(ctx)
             .code_editor_line_number_mode
@@ -296,10 +288,8 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     );
 }
 
-#[cfg(feature = "local_fs")]
 struct ExternalEditorCodeWidget;
 
-#[cfg(feature = "local_fs")]
 impl SettingsWidget for ExternalEditorCodeWidget {
     type View = EditorAndCodeReviewPageView;
 

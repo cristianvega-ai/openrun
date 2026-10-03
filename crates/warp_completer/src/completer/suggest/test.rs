@@ -20,14 +20,12 @@ use crate::signatures::testing::{
     npm_signature, signature_with_empty_positional, test_signature,
 };
 
-#[cfg(unix)]
 mod unix_constants {
     pub(super) const TEST_WORK_DIR: &str = "/home/";
     #[allow(dead_code)]
     pub(super) const TEST_ROOT_DIR: &str = "/";
 }
 
-#[cfg(unix)]
 use unix_constants::*;
 
 /// Same API as `suggestions` but not async because this is a test :)
@@ -1627,7 +1625,6 @@ pub fn test_completions() {
         vec!["debug/"]
     );
 
-    #[cfg(unix)]
     assert!(complete_at_end_of_line("cd /", &ctx).contains(&TEST_ROOT_DIR.to_owned()));
 
     let git_subcommands = vec!["add", "branch", "checkout", "clone"];

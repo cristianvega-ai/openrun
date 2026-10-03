@@ -1,6 +1,5 @@
 mod action;
 mod active_session;
-#[cfg(target_os = "macos")]
 pub(crate) mod cli_install;
 pub(crate) mod cross_window_tab_drag;
 mod global_actions;
@@ -117,7 +116,6 @@ pub fn init(app: &mut AppContext) {
         }
     }
 
-    #[cfg(target_os = "macos")]
     app.register_editable_bindings([EditableBinding::new(
         "workspace:sample_process",
         "Sample Process",
@@ -428,7 +426,6 @@ pub fn init(app: &mut AppContext) {
                 .with_custom_description(bindings::MAC_MENUS_CONTEXT, "Toggle Code Review"),
             WorkspaceAction::ToggleRightPanel,
         )
-        .with_enabled(|| cfg!(feature = "local_fs"))
         .with_context_predicate(id!("Workspace"))
         .with_mac_key_binding("cmd-shift-+"),
         EditableBinding::new(
@@ -556,24 +553,22 @@ pub fn init(app: &mut AppContext) {
     ]);
 
     // TODO: Support a11y on non-MacOS platforms
-    if cfg!(target_os = "macos") {
-        app.register_editable_bindings([
-            EditableBinding::new(
-                "workspace:set_a11y_concise_verbosity_level",
-                "[a11y] Set concise accessibility announcements",
-                WorkspaceAction::SetA11yVerbosityLevel(AccessibilityVerbosity::Concise),
-            )
-            .with_context_predicate(id!("Workspace"))
-            .with_key_binding("cmdorctrl-alt-c"),
-            EditableBinding::new(
-                "workspace:set_a11y_verbose_verbosity_level",
-                "[a11y] Set verbose accessibility announcements",
-                WorkspaceAction::SetA11yVerbosityLevel(AccessibilityVerbosity::Verbose),
-            )
-            .with_context_predicate(id!("Workspace"))
-            .with_key_binding("cmdorctrl-alt-v"),
-        ]);
-    }
+    app.register_editable_bindings([
+        EditableBinding::new(
+            "workspace:set_a11y_concise_verbosity_level",
+            "[a11y] Set concise accessibility announcements",
+            WorkspaceAction::SetA11yVerbosityLevel(AccessibilityVerbosity::Concise),
+        )
+        .with_context_predicate(id!("Workspace"))
+        .with_key_binding("cmdorctrl-alt-c"),
+        EditableBinding::new(
+            "workspace:set_a11y_verbose_verbosity_level",
+            "[a11y] Set verbose accessibility announcements",
+            WorkspaceAction::SetA11yVerbosityLevel(AccessibilityVerbosity::Verbose),
+        )
+        .with_context_predicate(id!("Workspace"))
+        .with_key_binding("cmdorctrl-alt-v"),
+    ]);
 
     app.register_editable_bindings([EditableBinding::new(
         "workspace:rename_active_tab",
@@ -795,7 +790,6 @@ pub fn init(app: &mut AppContext) {
     ]);
 
     // Warp Control CLI install/uninstall actions (macOS only)
-    #[cfg(target_os = "macos")]
     app.register_editable_bindings([
         EditableBinding::new(
             "workspace:install_warpctrl",
@@ -948,7 +942,6 @@ fn add_open_setting_pages_as_editable_binding(app: &mut AppContext) {
             "Open settings file",
             WorkspaceAction::OpenSettingsFile,
         )
-        .with_enabled(|| cfg!(feature = "local_fs"))
         .with_group(bindings::BindingGroup::Settings.as_str())
         .with_context_predicate(id!("Workspace")),
     ]);
@@ -958,15 +951,12 @@ fn add_overflow_menu_items_as_editable_binding(app: &mut AppContext) {
     use warpui::keymap::macros::*;
 
     // Add the ability to open all overflow menu items to the command palette.
-    app.register_editable_bindings([
-        #[cfg(not(target_family = "wasm"))]
-        EditableBinding::new(
-            "workspace:view_logs",
-            "View Warp logs",
-            WorkspaceAction::ViewLogs,
-        )
-        .with_context_predicate(id!("Workspace")),
-    ]);
+    app.register_editable_bindings([EditableBinding::new(
+        "workspace:view_logs",
+        "View Warp logs",
+        WorkspaceAction::ViewLogs,
+    )
+    .with_context_predicate(id!("Workspace"))]);
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]

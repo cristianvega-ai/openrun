@@ -156,7 +156,6 @@ pub enum TerminalAction {
     CopyGridSecret(WithinModel<SecretHandle>),
     ShowInFileExplorer(PathBuf),
     OpenFileInWarp(PathBuf),
-    #[cfg(feature = "local_fs")]
     OpenCodeInWarp {
         path: PathBuf,
         layout: crate::util::file::external_editor::settings::EditorLayout,
@@ -335,7 +334,6 @@ impl fmt::Debug for TerminalAction {
             CopyGridSecret(_) => f.write_str("CopyGridSecret"),
             ShowInFileExplorer(_) => f.write_str("ShowInFileExplorer"),
             OpenFileInWarp(_) => f.write_str("OpenFileInWarp"),
-            #[cfg(feature = "local_fs")]
             OpenCodeInWarp { .. } => f.write_str("OpenCodeInWarp"),
             OpenBlockListContextMenu => f.write_str("OpenBlockListContextMenu"),
             TriggerSubshellBootstrap => f.write_str("TriggerSubshellBootstrap"),

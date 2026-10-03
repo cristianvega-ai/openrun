@@ -439,11 +439,7 @@ impl<T: Action + Clone> SearchBar<T> {
                     return;
                 }
 
-                let modified_enter = match event {
-                    EditorEvent::CmdEnter if cfg!(target_os = "macos") => true,
-                    EditorEvent::ShiftEnter if false => true,
-                    _ => false,
-                };
+                let modified_enter = matches!(event, EditorEvent::CmdEnter);
 
                 if !self.should_run_query(ctx) {
                     ctx.emit(SearchBarEvent::EnterInZeroState { modified_enter });

@@ -1,5 +1,4 @@
 use warpui_core::keymap::Keystroke;
-use warpui_core::platform::OperatingSystem;
 
 use super::*;
 use crate::model::TermMode;
@@ -515,11 +514,7 @@ fn test_fn_keystroke_with_modifier_to_escape_sequence() {
 #[test]
 fn test_meta_keystroke_to_escape_sequence() {
     fn metaify(keystroke: &str) -> String {
-        if OperatingSystem::get().is_mac() {
-            format!("meta-{keystroke}")
-        } else {
-            format!("alt-{keystroke}")
-        }
+        format!("meta-{keystroke}")
     }
 
     let test_cases: &[(Keystroke, Vec<u8>)] = &[
@@ -828,10 +823,6 @@ fn test_keyboard_enhancement_unshifted_keycode_for_shifted_printables() {
 
 #[test]
 fn test_keyboard_enhancement_mac_option_without_meta_mapping_is_not_disambiguated() {
-    if !OperatingSystem::get().is_mac() {
-        return;
-    }
-
     let terminal_model_mock = mock_with_disambiguate_only();
     // On macOS with Option-as-Meta disabled, Alt should not force CSI u in disambiguate-only mode.
     let alt_a = Keystroke::parse("alt-a").unwrap();
@@ -1146,10 +1137,6 @@ fn test_kitty_protocol_cmd_and_option_editing_keys() {
 /// from the OS-provided `chars`.
 #[test]
 fn test_kitty_protocol_mac_option_space_composition_is_not_disambiguated() {
-    if !warpui_core::platform::OperatingSystem::get().is_mac() {
-        return;
-    }
-
     let mock = mock_with_disambiguate_only();
     let option_space = Keystroke {
         ctrl: false,

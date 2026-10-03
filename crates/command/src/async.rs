@@ -49,7 +49,6 @@ impl Command {
     /// This ensures the process does not inherit the controlling terminal.
     ///
     /// See [`setsid(2)`](https://man7.org/linux/man-pages/man2/setsid.2.html).
-    #[cfg(unix)]
     pub fn new_with_session<S: AsRef<OsStr>>(program: S) -> Command {
         let mut command = std::process::Command::new(program);
 
@@ -84,7 +83,6 @@ impl Command {
         // spawned by this process when we kill this process.
         //
         // TODO(roland): handle for windows
-        #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut command, 0);
 
         let inner: async_process::Command = command.into();
@@ -99,7 +97,6 @@ impl Command {
     /// `pre_exec` runs in a forked child of a possibly multi-threaded process, so it must only
     /// call async-signal-safe functions: no allocation, no locks. See
     /// [`std::os::unix::process::CommandExt::pre_exec`].
-    #[cfg(unix)]
     pub unsafe fn new_with_process_group_and_pre_exec<S, F>(program: S, pre_exec: F) -> Command
     where
         S: AsRef<OsStr>,

@@ -1,4 +1,3 @@
-#[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
@@ -48,7 +47,6 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
     app.add_singleton_model(|_| ActiveSession::default());
     app.add_singleton_model(DirectoryWatcher::new);
     app.add_singleton_model(|_| DetectedRepositories::default());
-    #[cfg(feature = "local_fs")]
     app.add_singleton_model(RepoMetadataModel::new);
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(|_| GitRepoModels::new());
@@ -56,7 +54,6 @@ pub fn initialize_app_for_terminal_view(app: &mut App) {
     app.add_singleton_model(HomeDirectoryWatcher::new_for_test);
     app.add_singleton_model(WarpManagedPathsWatcher::new_for_testing);
 
-    #[cfg(not(target_family = "wasm"))]
     app.add_singleton_model(SystemInfo::new);
 
     app.add_singleton_model(|_| WorkspaceRegistry::new());

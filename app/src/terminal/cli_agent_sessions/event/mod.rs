@@ -6,7 +6,6 @@ use warp_errors::report_error;
 
 use crate::terminal::CLIAgent;
 
-#[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
 type EventParser = fn(&str) -> Option<CLIAgentEvent>;
 
 /// The event type encoded in the `"event"` field of the JSON body.
@@ -64,7 +63,6 @@ pub struct CLIAgentEvent {
 
 /// Version-specific parsers, indexed by (version - 1).
 /// Adding a new version means appending a parser here.
-#[cfg_attr(not(feature = "local_tty"), allow(dead_code))]
 const VERSIONED_PARSERS: &[EventParser] = &[v1::parse];
 
 /// Attempts to parse an OSC 777 `PluggableNotification` into a typed `CLIAgentEvent`.

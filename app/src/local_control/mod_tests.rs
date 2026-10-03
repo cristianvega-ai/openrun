@@ -14,7 +14,6 @@ use chrono::Duration;
 use settings::Setting as _;
 use warpui::SingletonEntity as _;
 
-#[cfg(unix)]
 use super::ensure_peer_uid;
 use super::resolver::validate_action_target;
 use super::{
@@ -31,7 +30,6 @@ fn settings_with_mode(mode: LocalControlMode) -> LocalControlSettings {
         local_control_mode: LocalControlModeSetting::new(Some(mode)),
     }
 }
-#[cfg(unix)]
 #[tokio::test]
 async fn credential_broker_rejects_peer_from_different_user() {
     let (stream, _peer) = tokio::net::UnixStream::pair().expect("socket pair");
@@ -45,7 +43,6 @@ async fn credential_broker_rejects_peer_from_different_user() {
     let err = ensure_peer_uid(&stream, different_uid).expect_err("different user is rejected");
     assert_eq!(err.code, ErrorCode::UnauthorizedLocalClient);
 }
-#[cfg(unix)]
 #[tokio::test]
 async fn credential_broker_accepts_peer_from_same_user() {
     let (stream, _peer) = tokio::net::UnixStream::pair().expect("socket pair");

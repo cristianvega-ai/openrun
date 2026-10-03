@@ -1,12 +1,10 @@
 use anyhow::Result;
 
 pub fn init() -> Result<()> {
-    #[cfg(target_os = "macos")]
     mac::init()?;
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
 mod mac {
     #![allow(clippy::let_unit_value)]
 

@@ -983,7 +983,6 @@ impl AppearanceSettingsPageView {
         if ChannelState::channel() != Channel::Integration {
             // There's no such thing as a "system font" on the web, so the
             // `all_system_fonts` API doesn't exist.
-            #[cfg(not(target_family = "wasm"))]
             {
                 let all_system_fonts = warpui::fonts::Cache::handle(ctx)
                     .update(ctx, |font_cache, ctx| font_cache.all_system_fonts(ctx));
@@ -1284,16 +1283,11 @@ impl AppearanceSettingsPageView {
         // Each toggle is gated only on compile-time availability
         // of the corresponding tab (not on transient state), so the
         // section stays stable regardless of when the page is built.
-        let mut tools_panel_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
-        if cfg!(feature = "local_fs") {
-            tools_panel_widgets.push(Box::new(ToolsPanelProjectExplorerWidget::default()));
-        }
-        if cfg!(feature = "local_fs") {
-            tools_panel_widgets.push(Box::new(ToolsPanelGlobalSearchWidget::default()));
-        }
-        if !tools_panel_widgets.is_empty() {
-            categories.push(Category::new("Tools panel", tools_panel_widgets));
-        }
+        let tools_panel_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(ToolsPanelProjectExplorerWidget::default()),
+            Box::new(ToolsPanelGlobalSearchWidget::default()),
+        ];
+        categories.push(Category::new("Tools panel", tools_panel_widgets));
 
         // Create the Input category with all widgets
         // The PromptWidget and InputModeWidget will handle their own visibility
@@ -1884,7 +1878,6 @@ impl AppearanceSettingsPageView {
         ctx.notify();
     }
 
-    #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub fn set_system_fonts(
         &mut self,
         available_families: Vec<(Option<FamilyId>, FontInfo)>,
@@ -2557,16 +2550,11 @@ impl SettingsWidget for CustomAppIconWidget {
     ) -> Box<dyn Element> {
         #[allow(unused_mut)]
         let show_bundle_warning = {
-            #[cfg(target_os = "macos")]
             {
                 use objc2_app_kit::NSRunningApplication;
                 NSRunningApplication::currentApplication()
                     .bundleIdentifier()
                     .is_none()
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                false
             }
         };
 
@@ -2599,7 +2587,6 @@ impl SettingsWidget for CustomAppIconWidget {
             .show_dock_icon
             .is_supported_on_current_platform();
 
-        #[cfg(target_os = "macos")]
         {
             use crate::appearance::AppearanceManager;
 

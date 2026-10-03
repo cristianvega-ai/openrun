@@ -63,15 +63,12 @@ mod permissions;
 mod resolver;
 
 use std::collections::HashMap;
-#[cfg(unix)]
 use std::fs::Permissions;
 use std::net::SocketAddr;
-#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt as _;
 use std::sync::{Arc, Mutex};
 
 use ::local_control::auth::CredentialGrant;
-#[cfg(any(unix, test))]
 use ::local_control::auth::{CredentialRequest, ScopedCredential};
 use ::local_control::{
     ActionKind, AuthToken, ControlEndpoint, ControlError, ControlResponse, ErrorCode,
@@ -86,16 +83,12 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
 pub use bridge::LocalControlBridge;
-#[cfg(any(unix, test))]
 use chrono::Duration;
-#[cfg(any(unix, test))]
 use permissions::{ensure_action_allowed, ensure_protocol_version};
-#[cfg(unix)]
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use warp_core::channel::ChannelState;
 use warpui::{Entity, ModelContext, ModelSpawner, SingletonEntity};
 
-#[cfg(any(unix, test))]
 const MAX_ACTIVE_CREDENTIALS: usize = 128;
 
 /// App-owned authority shared by one instance's broker and HTTP listener.
@@ -230,7 +223,6 @@ impl LocalControlServer {
             ctx.spawner()
         });
         let registered_instance = RegisteredInstance::register(record)?;
-        #[cfg(unix)]
         let broker_listener = {
             let runtime_guard = runtime.enter();
             let listener = bind_credential_broker(registered_instance.record())?;
@@ -251,7 +243,6 @@ impl LocalControlServer {
                 log::warn!("local-control listener stopped: {err:#}");
             }
         });
-        #[cfg(unix)]
         runtime.spawn(run_credential_broker(broker_listener, state));
         let endpoint_url = control_endpoint.url();
         self._runtime = Some(runtime);
@@ -304,7 +295,6 @@ fn discovery_record_for_settings(
 /// the new socket is set to owner-only permissions before it accepts clients.
 /// The path came from a validated instance-derived discovery reference, so a
 /// record cannot redirect credential requests to an arbitrary socket.
-#[cfg(unix)]
 fn bind_credential_broker(
     record: &InstanceRecord,
 ) -> Result<tokio::net::UnixListener, ControlError> {
@@ -335,7 +325,6 @@ fn bind_credential_broker(
     Ok(listener)
 }
 
-#[cfg(unix)]
 /// Accepts same-user credential requests independently from the HTTP listener.
 async fn run_credential_broker(listener: tokio::net::UnixListener, state: ControlServerState) {
     loop {
@@ -351,7 +340,6 @@ async fn run_credential_broker(listener: tokio::net::UnixListener, state: Contro
     }
 }
 
-#[cfg(unix)]
 /// Authenticates the socket peer before decoding and evaluating its request.
 ///
 /// This ordering makes the kernel-reported OS user, rather than any field in
@@ -396,7 +384,6 @@ async fn handle_credential_broker_connection(
     })
 }
 
-#[cfg(unix)]
 /// Requires the kernel-reported peer UID to match Warp's effective UID.
 ///
 /// This excludes other OS users but does not distinguish trusted Warp code from
@@ -405,7 +392,6 @@ fn ensure_same_user_peer(stream: &tokio::net::UnixStream) -> Result<(), ControlE
     ensure_peer_uid(stream, unsafe { libc::geteuid() })
 }
 
-#[cfg(unix)]
 /// Verifies a socket peer against an expected UID obtained outside request data.
 fn ensure_peer_uid(stream: &tokio::net::UnixStream, expected_uid: u32) -> Result<(), ControlError> {
     let peer = stream.peer_cred().map_err(|err| {
@@ -424,7 +410,6 @@ fn ensure_peer_uid(stream: &tokio::net::UnixStream, expected_uid: u32) -> Result
     Ok(())
 }
 
-#[cfg(unix)]
 fn serialize_credential_broker_response(
     response: &impl serde::Serialize,
 ) -> Result<Vec<u8>, ControlError> {
@@ -441,7 +426,6 @@ fn serialize_credential_broker_response(
 ///
 /// The bearer secret and its grant are retained only in the running instance's
 /// process-local map; neither is written back into the discovery registry.
-#[cfg(any(unix, test))]
 async fn issue_credential(
     state: &ControlServerState,
     request: CredentialRequest,
@@ -582,7 +566,6 @@ async fn handle_control_request(
     (status, Json(response)).into_response()
 }
 
-#[cfg(any(unix, test))]
 fn insert_credential(
     credentials: &mut HashMap<String, CredentialGrant>,
     secret: String,

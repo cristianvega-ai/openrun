@@ -5,7 +5,6 @@ use pathfinder_color::ColorU;
 
 use crate::elements::DEFAULT_UI_LINE_HEIGHT_RATIO;
 use crate::fonts::{FamilyId, Properties, Style, Weight};
-#[cfg(target_os = "macos")]
 use crate::platform::mac::fonts::FontDB;
 use crate::platform::{FontDB as _, LineStyle};
 use crate::text_layout::{
@@ -516,7 +515,6 @@ fn test_caret_positions() -> Result<()> {
     );
 
     // On MacOS, there should be a caret position for each character.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_line_caret_position_starts(&line),
         (0..16).collect::<Vec<usize>>()
@@ -526,7 +524,6 @@ fn test_caret_positions() -> Result<()> {
 
     // On MacOS, there is a caret for the 3rd character at the 3rd position, even though
     // the first 2 characters ("fl") are represented with 1 glyph.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         line.caret_position_for_index(3),
         line.caret_positions[3].position_in_line
@@ -648,7 +645,6 @@ fn test_layout_text_large_first_line_head_indent() -> Result<()> {
     assert_eq!(frame.lines().len(), 4);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&frame),
         vec![
@@ -743,7 +739,6 @@ fn test_layout_text_first_line_indent_small() -> Result<()> {
     assert_eq!(no_indent_frame.lines().len(), 4);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&no_indent_frame),
         vec![
@@ -775,7 +770,6 @@ fn test_layout_text_first_line_indent_small() -> Result<()> {
     assert_eq!(small_indent_frame.lines().len(), 4);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&small_indent_frame),
         vec![
@@ -807,7 +801,6 @@ fn test_layout_text_first_line_indent_small() -> Result<()> {
     assert_eq!(half_indent_frame.lines().len(), 5);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&half_indent_frame),
         vec![
@@ -865,7 +858,6 @@ fn test_layout_text_first_line_indent_medium() -> Result<()> {
     assert_eq!(no_indent_frame.lines().len(), 4);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&no_indent_frame),
         vec![
@@ -898,7 +890,6 @@ fn test_layout_text_first_line_indent_medium() -> Result<()> {
     assert_eq!(overflow_indent_frame.lines().len(), 5);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&overflow_indent_frame),
         vec![
@@ -955,7 +946,6 @@ fn test_layout_text_first_line_indent_large() -> Result<()> {
     assert_eq!(no_indent_frame.lines().len(), 4);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&no_indent_frame),
         vec![
@@ -984,7 +974,6 @@ fn test_layout_text_first_line_indent_large() -> Result<()> {
     // The first line is left entirely blank since no glyphs fit on it.
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&overflow_indent_frame),
         vec![
@@ -1020,7 +1009,6 @@ fn test_layout_text_first_line_indent_large() -> Result<()> {
     assert_eq!(big_indent_frame.lines().len(), 5);
 
     // CoreText leaves newline glyphs in the laid-out lines.
-    #[cfg(target_os = "macos")]
     assert_eq!(
         collect_glyph_indices(&big_indent_frame),
         vec![

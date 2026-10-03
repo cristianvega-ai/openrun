@@ -3,13 +3,10 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 use anyhow::{Result, anyhow};
-#[cfg(feature = "local_tty")]
 use command::r#async::Command;
-#[cfg(feature = "local_tty")]
 use futures::future::{BoxFuture, FutureExt};
 use warpui::{Entity, ModelContext, SingletonEntity};
 
-#[cfg(feature = "local_tty")]
 use super::model::session::LocalCommandExecutor;
 use super::shell::ShellType;
 use crate::terminal::available_shells::AvailableShells;
@@ -25,7 +22,6 @@ pub enum LocalShellState {
 
 /// State of the interactive shell environment capture.
 /// This is used for LSP operations that need the full interactive PATH.
-#[cfg(feature = "local_tty")]
 #[derive(Debug, Default)]
 pub enum InteractiveEnvState {
     /// Interactive PATH has not been requested yet.
@@ -48,7 +44,6 @@ pub struct LocalShell {
     /// The PATH sourced from the user's shell (non-interactive, fast)
     path_env_var: Option<String>,
     /// The PATH sourced from an interactive login shell (lazy, for LSP)
-    #[cfg(feature = "local_tty")]
     interactive_env_state: InteractiveEnvState,
 }
 
@@ -73,7 +68,6 @@ pub enum LocalShellStateEvent {}
 /// which asynchronously collects information about the user's default
 /// shell/corresponding path environment variable. It's useful in
 /// executing commands locally without having to initiate a session.
-#[cfg(feature = "local_tty")]
 impl LocalShellState {
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         let preferred_shell = AvailableShells::handle(ctx)
@@ -180,7 +174,6 @@ impl LocalShellState {
     }
 }
 
-#[cfg(feature = "local_tty")]
 pub async fn execute_command(
     shell_type: ShellType,
     shell_path: PathBuf,
@@ -223,13 +216,10 @@ pub async fn execute_command(
 
 // PATH is emitted between these sentinels so startup stdout from rc files
 // (fastfetch, MOTD banners, etc.) can't be mistaken for PATH content.
-#[cfg(feature = "local_tty")]
 const PATH_CAPTURE_START: &str = "__WARP_PATH_CAPTURE_START__";
-#[cfg(feature = "local_tty")]
 const PATH_CAPTURE_END: &str = "__WARP_PATH_CAPTURE_END__";
 
 /// Returns the text between the capture sentinels, or `None` if absent.
-#[cfg(feature = "local_tty")]
 fn extract_captured_path(output: &str) -> Option<&str> {
     let start = output.find(PATH_CAPTURE_START)? + PATH_CAPTURE_START.len();
     let after_start = &output[start..];
@@ -240,7 +230,6 @@ fn extract_captured_path(output: &str) -> Option<&str> {
 /// Captures the PATH environment variable from an interactive login shell.
 /// This uses setsid() to start a new session (fully detaching from the terminal)
 /// and stdin(null) to prevent interactive prompts from blocking.
-#[cfg(feature = "local_tty")]
 async fn capture_interactive_shell_env(
     shell_type: ShellType,
     shell_path: PathBuf,
@@ -266,10 +255,7 @@ async fn capture_interactive_shell_env(
     //
     // [1]: https://pubs.opengroup.org/onlinepubs/007904975/functions/tcsetpgrp.html
     // [2]: https://man7.org/linux/man-pages/man2/setsid.2.html
-    #[cfg(unix)]
     let mut command = Command::new_with_session(&shell_path);
-    #[cfg(not(unix))]
-    let mut command = Command::new(&shell_path);
 
     // Add shell-specific flags for interactive login shell
     match shell_type {
@@ -335,6 +321,6 @@ impl Entity for LocalShellState {
 
 impl SingletonEntity for LocalShellState {}
 
-#[cfg(all(test, feature = "local_tty"))]
+#[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;

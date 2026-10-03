@@ -20,15 +20,11 @@ pub fn traffic_light_data(ctx: &AppContext, window_id: WindowId) -> Option<Traff
         return None;
     }
 
-    if cfg!(target_os = "macos") {
-        Some(TrafficLightData {
-            width: 64.,
-            side: TrafficLightSide::Left,
-            scales_with_zoom: false,
-        })
-    } else {
-        None
-    }
+    Some(TrafficLightData {
+        width: 64.,
+        side: TrafficLightSide::Left,
+        scales_with_zoom: false,
+    })
 }
 
 /// Are they in the upper-right or upper-left corner?
@@ -40,7 +36,7 @@ pub enum TrafficLightSide {
 
 /// Mouse state handles that the containing View must manage.
 #[derive(Default)]
-#[cfg_attr(any(target_family = "wasm", target_os = "macos"), allow(dead_code))]
+#[allow(dead_code)]
 pub struct TrafficLightMouseStates {
     pub minimize_window_button: MouseStateHandle,
     pub maximize_window_button: MouseStateHandle,

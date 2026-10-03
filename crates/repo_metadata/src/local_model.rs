@@ -1,4 +1,3 @@
-#![cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 //! Repository metadata model singleton.
 //!
 //! This module provides a singleton model that manages repository metadata across
@@ -6,7 +5,6 @@
 
 use std::cell::Cell;
 use std::collections::HashMap;
-#[cfg(feature = "local_fs")]
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -42,24 +40,19 @@ pub struct RepoContents<'a> {
 
 use warp_util::standardized_path::StandardizedPath;
 
-#[cfg(feature = "local_fs")]
 use crate::entry::LAZY_LOAD_FILE_LIMIT;
+use crate::entry::repo_watch_filter;
 use crate::entry::{BuildTreeError, BuildTreeOptions, Entry, FileId, IgnoredPathStrategy};
+use crate::repositories::{DetectedRepositories, DetectedRepositoriesEvent};
 use crate::repository::Repository;
+use crate::watcher::DirectoryWatcher;
 use crate::{RepoMetadataError, gitignores_for_directory, matches_gitignores};
-cfg_if::cfg_if! {
-    if #[cfg(feature = "local_fs")] {
-        use notify_debouncer_full::notify::RecursiveMode;
-        use crate::entry::repo_watch_filter;
-        use crate::repositories::{DetectedRepositories, DetectedRepositoriesEvent};
-        use crate::watcher::DirectoryWatcher;
-        use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
-        use warpui_core::SingletonEntity as _;
+use notify_debouncer_full::notify::RecursiveMode;
+use warpui_core::SingletonEntity as _;
+use watcher::{BulkFilesystemWatcher, BulkFilesystemWatcherEvent};
 
-        /// Duration between filesystem watch events in seconds
-        const FILESYSTEM_WATCHER_DEBOUNCE_SECS: u64 = 1;
-    }
-}
+/// Duration between filesystem watch events in seconds
+const FILESYSTEM_WATCHER_DEBOUNCE_SECS: u64 = 1;
 
 use ignore::gitignore::Gitignore;
 use warpui_core::ModelContext;
@@ -191,15 +184,12 @@ pub struct LocalRepoMetadataModel {
     /// Spawned filesystem tree build tasks keyed by owning repo and target directory.
     build_tasks: HashMap<BuildTaskKey, BuildTask>,
     /// Spawned watcher update tasks keyed by repository root, then spawned future.
-    #[cfg(feature = "local_fs")]
     watcher_update_tasks: HashMap<StandardizedPath, HashMap<FutureId, SpawnedFutureHandle>>,
     /// File system watcher for monitoring changes.
-    #[cfg(feature = "local_fs")]
     watcher: Option<ModelHandle<BulkFilesystemWatcher>>,
     /// How each tracked repository is registered with the filesystem watcher,
     /// including any on-demand per-directory watches recorded for teardown. See
     /// [`RepoWatch`].
-    #[cfg(feature = "local_fs")]
     /// Repositories whose root is registered with the filesystem watcher.
     watched_roots: HashSet<StandardizedPath>,
 }
@@ -280,47 +270,38 @@ impl GetContentsArgs {
 
 impl LocalRepoMetadataModel {
     /// Creates a new LocalRepoMetadataModel.
-    #[cfg_attr(not(feature = "local_fs"), allow(unused_variables), allow(unused_mut))]
     pub fn new(ctx: &mut ModelContext<Self>) -> Self {
         let mut model = Self {
             repositories: HashMap::new(),
             lazy_loaded_paths: HashMap::new(),
             build_tasks: HashMap::new(),
-            #[cfg(feature = "local_fs")]
             watcher_update_tasks: HashMap::new(),
-            #[cfg(feature = "local_fs")]
             watcher: None,
-            #[cfg(feature = "local_fs")]
             watched_roots: HashSet::new(),
         };
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "local_fs")] {
-                let watcher = ctx.add_model(|ctx| {
-                    BulkFilesystemWatcher::new(
-                        std::time::Duration::from_secs(FILESYSTEM_WATCHER_DEBOUNCE_SECS),
-                        ctx,
-                    )
-                });
-                ctx.subscribe_to_model(&watcher, |me, _, event, ctx| me.handle_watcher_event(event, ctx));
-                model.watcher = Some(watcher);
+        let watcher = ctx.add_model(|ctx| {
+            BulkFilesystemWatcher::new(
+                std::time::Duration::from_secs(FILESYSTEM_WATCHER_DEBOUNCE_SECS),
+                ctx,
+            )
+        });
+        ctx.subscribe_to_model(&watcher, |me, _, event, ctx| {
+            me.handle_watcher_event(event, ctx)
+        });
+        model.watcher = Some(watcher);
 
-                ctx.subscribe_to_model(&DetectedRepositories::handle(ctx), |me, _, event, ctx| {
-                    let DetectedRepositoriesEvent::DetectedGitRepo { repository, .. } = event;
-                    let repo_path = repository.as_ref(ctx).root_dir().clone();
-                    if let Err(e) = me.index_directory(repository.clone(), ctx) {
-                        log::warn!(
-                            "Failed to index directory {repo_path}: {e}"
-                        );
-                    }
-                });
+        ctx.subscribe_to_model(&DetectedRepositories::handle(ctx), |me, _, event, ctx| {
+            let DetectedRepositoriesEvent::DetectedGitRepo { repository, .. } = event;
+            let repo_path = repository.as_ref(ctx).root_dir().clone();
+            if let Err(e) = me.index_directory(repository.clone(), ctx) {
+                log::warn!("Failed to index directory {repo_path}: {e}");
             }
-        }
+        });
 
         model
     }
 
     /// Handles events from the BulkFilesystemWatcher.
-    #[cfg(feature = "local_fs")]
     fn handle_watcher_event(
         &mut self,
         event: &BulkFilesystemWatcherEvent,
@@ -411,7 +392,6 @@ impl LocalRepoMetadataModel {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     fn find_repository_for_path_string(&self, path_str: &str) -> Option<StandardizedPath> {
         self.repositories
             .iter()
@@ -423,7 +403,6 @@ impl LocalRepoMetadataModel {
             .map(|(repo_path, _)| repo_path.clone())
     }
 
-    #[cfg(feature = "local_fs")]
     fn find_repository_for_standardized_path(
         &self,
         path: &StandardizedPath,
@@ -437,7 +416,6 @@ impl LocalRepoMetadataModel {
             .map(|(repo_path, _)| repo_path.clone())
     }
 
-    #[cfg(feature = "local_fs")]
     fn find_repository_for_watcher_entry_path(&self, path: &Path) -> Option<StandardizedPath> {
         StandardizedPath::try_from_local(path)
             .ok()
@@ -445,7 +423,6 @@ impl LocalRepoMetadataModel {
             .or_else(|| self.find_repository_for_path(path))
     }
 
-    #[cfg(feature = "local_fs")]
     pub fn find_repository_for_path(&self, path: &Path) -> Option<StandardizedPath> {
         match StandardizedPath::from_local_canonicalized(path) {
             Ok(std_path) => self.find_repository_for_standardized_path(&std_path),
@@ -526,7 +503,6 @@ impl LocalRepoMetadataModel {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     fn track_watcher_update_task(
         &mut self,
         repo_path: StandardizedPath,
@@ -543,7 +519,6 @@ impl LocalRepoMetadataModel {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     fn finish_watcher_update_task(
         &mut self,
         repo_path: &StandardizedPath,
@@ -561,7 +536,6 @@ impl LocalRepoMetadataModel {
         Some(handle)
     }
 
-    #[cfg(feature = "local_fs")]
     fn abort_watcher_update_tasks_for_repo(&mut self, repo_path: &StandardizedPath) {
         if let Some(tasks) = self.watcher_update_tasks.remove(repo_path) {
             for handle in tasks.into_values() {
@@ -586,13 +560,11 @@ impl LocalRepoMetadataModel {
                 );
             }
         }
-        #[cfg(feature = "local_fs")]
         self.abort_watcher_update_tasks_for_repo(repo_path);
     }
 
     /// Adds or updates a repository's file tree state, registering its root with the filesystem
     /// watcher (if any) as a single recursive watch.
-    #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
     fn add_repository_internal(
         &mut self,
         repo_path: StandardizedPath,
@@ -614,7 +586,6 @@ impl LocalRepoMetadataModel {
             ));
         }
 
-        #[cfg(feature = "local_fs")]
         {
             // Replace any prior registration before re-registering.
             let had_previous = !self.watched_roots.insert(repo_path.clone());
@@ -658,7 +629,6 @@ impl LocalRepoMetadataModel {
         }
         if self.remove_repository_state(repo_path).is_some() {
             // Drop the recorded watch entry and unregister from the watcher.
-            #[cfg(feature = "local_fs")]
             {
                 self.watched_roots.remove(repo_path);
                 if let (Some(watcher), Some(root)) = (&self.watcher, repo_path.to_local_path()) {
@@ -708,7 +678,6 @@ impl LocalRepoMetadataModel {
     /// Lazily indexes a standalone path with only the first level of children.
     /// Registers the path with the file watcher for live updates.
     /// No-ops if the path is already tracked.
-    #[cfg(feature = "local_fs")]
     pub fn index_lazy_loaded_path(
         &mut self,
         path: &StandardizedPath,
@@ -812,7 +781,6 @@ impl LocalRepoMetadataModel {
     }
 
     /// Removes a lazily-loaded standalone path from tracking and unregisters the file watcher.
-    #[cfg(feature = "local_fs")]
     pub fn remove_lazy_loaded_path(
         &mut self,
         path: &StandardizedPath,
@@ -832,7 +800,6 @@ impl LocalRepoMetadataModel {
 
     /// Loads a specific directory inside an already-tracked tree.
     /// Emits `FileTreeEntryUpdated` so subscribers can sync.
-    #[cfg(feature = "local_fs")]
     pub fn load_directory(
         &mut self,
         repo_root: &StandardizedPath,
@@ -850,7 +817,6 @@ impl LocalRepoMetadataModel {
     }
 
     /// Loads a specific directory and resolves once the async load has been applied or rejected.
-    #[cfg(feature = "local_fs")]
     pub fn load_directory_with_completion(
         &mut self,
         repo_root: &StandardizedPath,
@@ -1219,7 +1185,6 @@ impl LocalRepoMetadataModel {
     }
 
     /// Fully indexes a local directory after registering it with the directory watcher.
-    #[cfg(feature = "local_fs")]
     pub fn index_directory_path(
         &mut self,
         path: &StandardizedPath,

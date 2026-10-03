@@ -1,5 +1,4 @@
 use warpui_core::keymap::Keystroke;
-use warpui_core::platform::OperatingSystem;
 use warpui_core::platform::keyboard::KeyCode;
 
 use super::{ModeProvider, TermMode};
@@ -42,8 +41,7 @@ pub(super) fn maybe_convert_keystroke_to_csi_u(
         // single-character key name for frontends that don't populate `chars` (e.g. tests).
         let composed_printable_text =
             chars.is_some_and(|text| !text.is_empty() && !text.chars().any(|c| c.is_control()));
-        let composes_via_ime = OperatingSystem::get().is_mac()
-            && (composed_printable_text || keystroke.key.chars().count() == 1);
+        let composes_via_ime = composed_printable_text || keystroke.key.chars().count() == 1;
         is_ambiguous = is_ambiguous || !composes_via_ime;
     }
     // Shift alone is NOT ambiguous for printable keys — Shift changes the

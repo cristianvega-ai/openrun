@@ -1,4 +1,3 @@
-#![cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -17,15 +16,11 @@ use warp_util::content_version::ContentVersion;
 use warp_util::file::{FileId, FileLoadError, FileSaveError};
 use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity, WeakModelHandle};
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "local_fs")] {
-        use lsp::LspManagerModelEvent;
-        use warp_files::{FileModelEvent, FileModel};
-        use warp_editor::content::text::IndentBehavior;
-        use warp_editor::content::text::IndentUnit;
-        use warp_editor::content::buffer::EditOrigin;
-    }
-}
+use lsp::LspManagerModelEvent;
+use warp_editor::content::buffer::EditOrigin;
+use warp_editor::content::text::IndentBehavior;
+use warp_editor::content::text::IndentUnit;
+use warp_files::{FileModel, FileModelEvent};
 
 /// State for a shared buffer including the file ID and buffer handle.
 #[derive(Debug, Clone)]
@@ -129,10 +124,8 @@ pub struct GlobalBufferModel {
 
 impl GlobalBufferModel {
     pub fn new(_ctx: &mut ModelContext<Self>) -> Self {
-        #[cfg(feature = "local_fs")]
         _ctx.subscribe_to_model(&FileModel::handle(_ctx), Self::handle_file_model_events);
 
-        #[cfg(feature = "local_fs")]
         _ctx.subscribe_to_model(
             &LspManagerModel::handle(_ctx),
             Self::handle_lsp_manager_events,
@@ -179,7 +172,6 @@ impl GlobalBufferModel {
         for id in ids_to_remove {
             self.buffers.remove(&id);
 
-            #[cfg(feature = "local_fs")]
             {
                 let file_model = FileModel::handle(ctx);
                 file_model.update(ctx, |file_model, ctx| {
@@ -205,7 +197,6 @@ impl GlobalBufferModel {
 
         self.buffers.remove(&file_id);
 
-        #[cfg(feature = "local_fs")]
         {
             let file_model = FileModel::handle(_ctx);
             file_model.update(_ctx, |file_model, ctx| {
@@ -375,7 +366,6 @@ impl GlobalBufferModel {
         });
     }
 
-    #[cfg(feature = "local_fs")]
     fn handle_file_model_events(
         &mut self,
         _: ModelHandle<FileModel>,
@@ -497,7 +487,6 @@ impl GlobalBufferModel {
     }
 
     /// Save the content of a tracked buffer to disk via `FileModel`.
-    #[cfg(feature = "local_fs")]
     pub fn save(
         &mut self,
         file_id: FileId,
@@ -528,7 +517,6 @@ impl GlobalBufferModel {
     }
 
     /// Discard any in progress changes and reload the buffer with the canonical version from the file system.
-    #[cfg(feature = "local_fs")]
     pub fn discard_unsaved_changes(&mut self, path: &Path, ctx: &mut ModelContext<Self>) {
         if let Some(id) = self.location_to_id.get_by_left(path).cloned() {
             let path_clone = path.to_path_buf();
@@ -573,7 +561,6 @@ impl GlobalBufferModel {
     /// new path with FileModel and LSP.
     ///
     /// Used for file rename.
-    #[cfg(feature = "local_fs")]
     pub fn rename(
         &mut self,
         old_file_id: FileId,
@@ -609,7 +596,6 @@ impl GlobalBufferModel {
 
     /// Adopt an existing buffer under a new path without reading from disk.
     /// Used by `save_as` to register a newly-created file with GlobalBufferModel.
-    #[cfg(feature = "local_fs")]
     pub fn register(
         &mut self,
         path: PathBuf,
@@ -628,7 +614,6 @@ impl GlobalBufferModel {
 
     /// Shared helper: register `buffer` under `path` with FileModel, subscribe to
     /// buffer events for LSP sync, store internal state, and open the document with LSP.
-    #[cfg(feature = "local_fs")]
     fn register_buffer_for_path(
         &mut self,
         path: PathBuf,
@@ -728,7 +713,6 @@ impl GlobalBufferModel {
     /// If a buffer already exists for this path and is loaded, returns the existing BufferState.
     /// If no buffer exists, creates a new Buffer and BufferState using FileModel.
     /// File system updates are automatically subscribed to for all buffers.
-    #[cfg(feature = "local_fs")]
     pub fn open(&mut self, path: PathBuf, ctx: &mut ModelContext<Self>) -> BufferState {
         if let Some(id) = self.location_to_id.get_by_left(&path).cloned() {
             debug_assert!(self.buffers.contains_key(&id));
@@ -749,7 +733,6 @@ impl GlobalBufferModel {
         self.create_new_buffer(&path, ctx)
     }
 
-    #[cfg(feature = "local_fs")]
     fn create_new_buffer(&mut self, path: &Path, ctx: &mut ModelContext<Self>) -> BufferState {
         // Open file through FileModel to get FileId
         // Always subscribe to updates for GlobalBufferModel created buffers
@@ -1041,7 +1024,6 @@ impl GlobalBufferModel {
     }
 
     /// When an LSP server starts, open all loaded buffers that match its workspace path.
-    #[cfg(feature = "local_fs")]
     fn handle_lsp_manager_events(
         &mut self,
         _: ModelHandle<LspManagerModel>,

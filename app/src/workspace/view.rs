@@ -11,23 +11,17 @@ mod vertical_tabs;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-#[cfg(feature = "local_fs")]
 use std::convert::TryFrom;
-#[cfg(target_os = "macos")]
 use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "macos")]
 use std::process;
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
-#[cfg(target_os = "macos")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ::settings::{Setting, ToggleableSetting};
-#[cfg(target_os = "macos")]
 use anyhow::Result;
-#[cfg(target_os = "macos")]
 use command::blocking::Command;
 use instant::Instant;
 use itertools::Itertools;
@@ -35,7 +29,6 @@ use lazy_static::lazy_static;
 use parking_lot::FairMutex;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::rect::RectF;
-#[cfg(feature = "local_fs")]
 use repo_metadata::repositories::DetectedRepositories;
 use serde_json;
 use warp_core::context_flag::ContextFlag;
@@ -52,8 +45,6 @@ use warpui::accessibility::{
     AccessibilityContent, AccessibilityVerbosity, ActionAccessibilityContent, WarpA11yRole,
 };
 use warpui::clipboard::ClipboardContent;
-#[cfg(target_family = "wasm")]
-use warpui::elements::Percentage;
 use warpui::elements::{
     Align, Border, CacheOption, ChildAnchor, ChildView, Clipped, ConstrainedBox, Container,
     CornerRadius, CrossAxisAlignment, Dismiss, DispatchEventResult, DragAxis, Draggable,
@@ -116,7 +107,6 @@ use crate::banner::BannerState;
 use crate::channel::ChannelState;
 use crate::code::buffer_location::LocalOrRemotePath;
 use crate::code::editor::{add_color, remove_color};
-#[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeManager;
 use crate::code::editor_management::CodeSource;
 use crate::code_review::GlobalCodeReviewModel;
@@ -137,7 +127,6 @@ use crate::menu::{
 use crate::modal::{Modal, ModalEvent, ModalViewState};
 use crate::notification::NotificationContext;
 use crate::palette::{PaletteMode, PaletteSource};
-#[cfg(feature = "local_fs")]
 use crate::pane_group::FilePane;
 use crate::pane_group::focus_state::PrBadgeScope;
 use crate::pane_group::pane::ActionOrigin;
@@ -195,14 +184,12 @@ use crate::terminal::alt_screen_reporting::AltScreenReporting;
 use crate::terminal::available_shells::AvailableShell;
 use crate::terminal::cli_agent_sessions::{CLIAgentSessionsModel, CLIAgentSessionsModelEvent};
 use crate::terminal::general_settings::{DefaultSessionMode, GeneralSettings};
-#[cfg(not(target_family = "wasm"))]
 use crate::terminal::input::{EXTERNAL_ALT_C_BINDING_CONTEXT, Input, MenuPositioning};
 use crate::terminal::keys_settings::KeysSettings;
 use crate::terminal::ligature_settings::should_use_ligature_rendering;
 use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::blockgrid::BlockGrid;
 use crate::terminal::model::escape_sequences::C0;
-#[cfg(feature = "local_fs")]
 use crate::terminal::model::session::Session;
 use crate::terminal::model::session::SessionId;
 use crate::terminal::resizable_data::{
@@ -233,20 +220,15 @@ use crate::ui_components::icons;
 use crate::ui_components::window_focus_dimming::WindowFocusDimming;
 use crate::undo_close::UndoCloseStack;
 use crate::user_config::{WarpConfig, WarpConfigUpdateEvent};
-#[cfg(feature = "local_fs")]
 use crate::user_config::{
     ensure_default_worktree_config, find_unused_tab_config_path, find_unused_toml_path,
     find_unused_worktree_config_path, materialize_default_worktree_config, sanitize_toml_base_name,
     tab_configs_dir,
 };
 use crate::util::bindings::{keybinding_name_to_display_string, keybinding_name_to_keystroke};
-#[cfg(feature = "local_fs")]
 use crate::util::file::external_editor::Editor;
-#[cfg(feature = "local_fs")]
 use crate::util::file::external_editor::EditorSettings;
-#[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::FileTarget;
-#[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::{EditorLayout, resolve_file_target_with_editor_choice};
 use crate::util::traffic_lights::{TrafficLightMouseStates, TrafficLightSide, traffic_light_data};
 use crate::util::truncation::truncate_from_end;
@@ -254,7 +236,6 @@ use crate::view_components::{DismissibleToast, DismissibleToastStack, ToastLink}
 use crate::window_settings::{WindowSettings, WindowSettingsChangedEvent, ZoomLevel};
 use crate::workflows::{WorkflowSource, WorkflowType};
 use crate::workspace::action::CommandSearchOptions;
-#[cfg(target_os = "macos")]
 use crate::workspace::cli_install;
 use crate::workspace::cross_window_tab_drag::{
     AttachTarget, CrossWindowTabDrag, DragResult, DropResult, GhostState,
@@ -274,13 +255,6 @@ use crate::workspace::view::right_panel::{RightPanelEvent, RightPanelView};
 use crate::workspace_metadata::PersistedWorkspace;
 use crate::{AgentNotificationsModel, GlobalResourceHandles};
 
-/// The padding that should be applied to the workspace as a whole.
-///
-/// Zero on web: browsers that round the viewport's corners clip this padding into a stray
-/// line along the top and left edges, so we rely on the browser's own edge there instead.
-#[cfg(target_family = "wasm")]
-pub const WORKSPACE_PADDING: f32 = 0.0;
-#[cfg(not(target_family = "wasm"))]
 pub const WORKSPACE_PADDING: f32 = 1.0;
 
 /// The minimum font size at which terminal text will be rendered.
@@ -308,7 +282,6 @@ pub const TOTAL_TAB_BAR_HEIGHT: f32 = TAB_BAR_HEIGHT + TAB_BAR_BORDER_HEIGHT;
 
 const TAB_BAR_ICON_PADDING: f32 = 4.;
 
-#[cfg(not(target_family = "wasm"))]
 const RESOURCE_CENTER_WIDTH: f32 = 361.;
 
 // Ratio of terminal : theme chooser when theme chooser is active
@@ -380,11 +353,6 @@ const KEYBINDINGS_TO_CACHE: [&str; 2] = [
     SHOW_SETTINGS_KEYBINDING_NAME,
     TOGGLE_COMMAND_PALETTE_KEYBINDING_NAME,
 ];
-
-#[cfg(target_family = "wasm")]
-const MOBILE_OVERLAY_PANEL_WIDTH_RATIO: f32 = 0.9;
-#[cfg(target_family = "wasm")]
-const MOBILE_OVERLAY_SCRIM_ALPHA: u8 = 128;
 
 pub const NEW_TAB_BUTTON_POSITION_ID: &str = "new_tab_button";
 pub const NEW_SESSION_MENU_BUTTON_POSITION_ID: &str = "new_session_menu_button";
@@ -517,14 +485,12 @@ struct WorkspaceBannerFields {
     button: Option<WorkspaceBannerButtonDetails>,
 }
 
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 struct CodeReviewPaneContext {
     repo_path: Option<LocalOrRemotePath>,
     diff_state_model: ModelHandle<DiffStateModel>,
 }
 
 /// Parameters for updating the right panel's 'state.
-#[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
 struct RightPanelUpdateParams<'a> {
     pane_group: &'a ViewHandle<PaneGroup>,
     target_open_state: bool,
@@ -1360,7 +1326,6 @@ impl Workspace {
         dialog
     }
 
-    #[cfg(feature = "local_fs")]
     fn handle_remove_tab_config_confirmation_event(
         &mut self,
         event: &RemoveTabConfigConfirmationEvent,
@@ -1412,15 +1377,6 @@ impl Workspace {
         }
     }
 
-    #[cfg(not(feature = "local_fs"))]
-    fn handle_remove_tab_config_confirmation_event(
-        &mut self,
-        _event: &RemoveTabConfigConfirmationEvent,
-        _ctx: &mut ViewContext<Self>,
-    ) {
-        report_error!("Cannot delete a tab config from the web");
-    }
-
     fn handle_session_config_modal_event(
         &mut self,
         event: &SessionConfigModalEvent,
@@ -1437,7 +1393,6 @@ impl Workspace {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     fn handle_session_config_completed(
         &mut self,
         selection: &crate::tab_configs::session_config::SessionConfigSelection,
@@ -1482,14 +1437,6 @@ impl Workspace {
             );
             self.remove_tab_by_pane_group_id(old_pane_group_id, ctx);
         }
-    }
-
-    #[cfg(not(feature = "local_fs"))]
-    fn handle_session_config_completed(
-        &mut self,
-        _selection: &crate::tab_configs::session_config::SessionConfigSelection,
-        _ctx: &mut ViewContext<Self>,
-    ) {
     }
 
     /// Opens the vertical tabs panel if the setting was enabled.
@@ -2464,7 +2411,6 @@ impl Workspace {
             NewWorkspaceSource::NotebookFromFilePath { file_path } => {
                 self.add_tab_for_file_notebook(file_path, ctx);
             }
-            #[cfg(feature = "local_fs")]
             NewWorkspaceSource::TransferredTab {
                 tab_color,
                 custom_title,
@@ -2492,29 +2438,6 @@ impl Workspace {
                         rp.set_maximized(is_right_panel_maximized, ctx);
                     });
                     self.setup_code_review_panel(None, ctx);
-                }
-                self.pending_pane_group_transfer = true;
-            }
-            #[cfg(not(feature = "local_fs"))]
-            NewWorkspaceSource::TransferredTab {
-                tab_color,
-                custom_title,
-                left_panel_open,
-                is_tab_drag_preview,
-                ..
-            } => {
-                self.set_is_tab_drag_preview(is_tab_drag_preview);
-                self.add_tab_with_pane_layout(
-                    Default::default(),
-                    Arc::new(HashMap::new()),
-                    custom_title,
-                    ctx,
-                );
-                if let (Some(color), Some(tab)) = (tab_color, self.tabs.last_mut()) {
-                    tab.selected_color = SelectedTabColor::Color(color);
-                }
-                if self.left_panel_visibility_across_tabs_enabled(ctx) {
-                    self.left_panel_open = left_panel_open;
                 }
                 self.pending_pane_group_transfer = true;
             }
@@ -3743,7 +3666,6 @@ impl Workspace {
         ctx.focus(&self.header_toolbar_editor_modal);
     }
 
-    #[cfg(feature = "local_fs")]
     fn get_active_session(&self, ctx: &mut ViewContext<Self>) -> Option<Arc<Session>> {
         let pane_group = self.active_tab_pane_group();
         pane_group
@@ -3761,18 +3683,6 @@ impl Workspace {
             })
     }
 
-    #[cfg(not(feature = "local_fs"))]
-    pub fn open_file_with_target(
-        &mut self,
-        _path: PathBuf,
-        _target: FileTarget,
-        _line_col: Option<LineAndColumnArg>,
-        _code_source: CodeSource,
-        _ctx: &mut ViewContext<Self>,
-    ) {
-    }
-
-    #[cfg(feature = "local_fs")]
     pub fn open_file_with_target(
         &mut self,
         path: PathBuf,
@@ -3909,7 +3819,6 @@ impl Workspace {
                         );
                     }
                     LocalOrRemotePath::Remote(_) => {
-                        #[cfg(feature = "local_fs")]
                         {
                             // Honor a notebook-viewer target (e.g. a remote
                             // Jupyter notebook) instead of always opening remote
@@ -3940,7 +3849,6 @@ impl Workspace {
     }
 
     fn handle_right_panel_event(&mut self, event: RightPanelEvent, ctx: &mut ViewContext<Self>) {
-        #[cfg(feature = "local_fs")]
         match event {
             RightPanelEvent::ToggleMaximize => {
                 self.toggle_right_panel_maximized(ctx);
@@ -3989,16 +3897,12 @@ impl Workspace {
                     );
                 }
             },
-            #[cfg(not(target_family = "wasm"))]
             RightPanelEvent::OpenLspLogs { log_path } => {
                 self.open_lsp_logs(&log_path, ctx);
             }
         }
-        #[cfg(not(feature = "local_fs"))]
-        let _ = (event, ctx);
     }
 
-    #[cfg(not(target_family = "wasm"))]
     fn view_logs(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.spawn(
             async { tokio::task::spawn_blocking(warp_logging::create_log_bundle_zip).await },
@@ -4282,12 +4186,9 @@ impl Workspace {
                     open_in_active_window: false,
                 },
             ),
-            #[cfg(feature = "local_fs")]
             NewSessionMenuItem::CreateNewTabConfig => {
                 self.create_and_open_new_tab_config(ctx);
             }
-            #[cfg(not(feature = "local_fs"))]
-            NewSessionMenuItem::CreateNewTabConfig => {}
             NewSessionMenuItem::CreateNewTabGroup => {
                 self.create_new_tab_group(ctx);
             }
@@ -4357,7 +4258,6 @@ impl Workspace {
 
     /// Writes the default tab config template to an unused path in `~/.warp/tab_configs/`
     /// and opens it respecting the user's configured editor setting.
-    #[cfg(feature = "local_fs")]
     fn create_and_open_new_tab_config(&mut self, ctx: &mut ViewContext<Self>) {
         let dir = tab_configs_dir();
         if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -4394,7 +4294,6 @@ impl Workspace {
 
     /// Snapshots the given tab's pane layout and writes it as a new tab config
     /// TOML to `~/.warp/tab_configs/`, then opens the file in the user's editor.
-    #[cfg(feature = "local_fs")]
     fn save_current_tab_as_new_config(&mut self, tab_index: usize, ctx: &mut ViewContext<Self>) {
         use crate::tab_configs::session_config::{tab_config_from_pane_snapshot, write_tab_config};
 
@@ -4432,9 +4331,6 @@ impl Workspace {
             Err(e) => log::warn!("Failed to save tab config: {e:?}"),
         }
     }
-
-    #[cfg(not(feature = "local_fs"))]
-    fn save_current_tab_as_new_config(&mut self, _tab_index: usize, _ctx: &mut ViewContext<Self>) {}
 
     /// Creates a new tab group containing a single new tab.
     fn create_new_tab_group(&mut self, ctx: &mut ViewContext<Self>) {
@@ -5271,7 +5167,6 @@ impl Workspace {
     }
 
     /// Open a file from the given session as a notebook pane.
-    #[cfg(feature = "local_fs")]
     fn open_file_notebook(
         &mut self,
         path: LocalOrRemotePath,
@@ -5301,13 +5196,7 @@ impl Workspace {
         // The notebook viewer renders markdown rather than raw lines, but it
         // hands this source back when the user toggles to the raw code view, so
         // keeping it preserves the requested line for that view.
-        let pane = FilePane::new(
-            Some(path),
-            session,
-            #[cfg(feature = "local_fs")]
-            code_source,
-            ctx,
-        );
+        let pane = FilePane::new(Some(path), session, code_source, ctx);
 
         match layout {
             EditorLayout::NewTab => {
@@ -5367,7 +5256,6 @@ impl Workspace {
         );
     }
 
-    #[cfg(feature = "local_fs")]
     fn open_code(
         &mut self,
         source: CodeSource,
@@ -5593,7 +5481,6 @@ impl Workspace {
     }
 
     /// Show an ephemeral success toast or persistent failure toast for a CLI command operation.
-    #[cfg(target_os = "macos")]
     fn handle_cli_command_result(
         &mut self,
         result: Result<()>,
@@ -5619,7 +5506,6 @@ impl Workspace {
     }
 
     /// Install the Warp Control CLI by creating a symlink in /usr/local/bin
-    #[cfg(target_os = "macos")]
     fn install_warpctrl(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.spawn(
             async { cli_install::install_warpctrl() },
@@ -5638,7 +5524,6 @@ impl Workspace {
     }
 
     /// Uninstall the Warp Control CLI by removing the symlink from /usr/local/bin
-    #[cfg(target_os = "macos")]
     fn uninstall_warpctrl(&mut self, ctx: &mut ViewContext<Self>) {
         ctx.spawn(
             async { cli_install::uninstall_warpctrl() },
@@ -5789,7 +5674,6 @@ impl Workspace {
         ctx.notify();
     }
 
-    #[cfg(feature = "local_fs")]
     fn setup_code_review_panel(
         &mut self,
         context: Option<&CodeReviewPaneContext>,
@@ -5866,7 +5750,6 @@ impl Workspace {
 
     fn update_right_panel_open_state(
         &mut self,
-        #[cfg_attr(target_family = "wasm", allow(unused_variables))]
         panel_update_params: RightPanelUpdateParams,
         ctx: &mut ViewContext<Self>,
     ) {
@@ -5886,7 +5769,6 @@ impl Workspace {
         });
 
         if should_open {
-            #[cfg(feature = "local_fs")]
             {
                 let window_id = ctx.window_id();
                 let resizable_data = ResizableData::handle(ctx);
@@ -5957,7 +5839,6 @@ impl Workspace {
         );
     }
 
-    #[cfg(feature = "local_fs")]
     fn open_right_panel(
         &mut self,
         context: &CodeReviewPaneContext,
@@ -5988,15 +5869,6 @@ impl Workspace {
         }
     }
 
-    #[cfg(not(feature = "local_fs"))]
-    fn open_right_panel(
-        &mut self,
-        _context: &CodeReviewPaneContext,
-        _pane_group_handle: &ViewHandle<PaneGroup>,
-        _ctx: &mut ViewContext<Self>,
-    ) {
-    }
-
     pub fn close_right_panel(
         &mut self,
         pane_group_handle: &ViewHandle<PaneGroup>,
@@ -6012,7 +5884,6 @@ impl Workspace {
         );
     }
 
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     fn toggle_right_panel_maximized(&mut self, ctx: &mut ViewContext<Self>) {
         let pane_group = self.active_tab_pane_group().clone();
         let is_maximized = pane_group.update(ctx, |pane_group, _| {
@@ -6044,7 +5915,6 @@ impl Workspace {
                 .into_item(),
         ]);
 
-        #[cfg(not(target_family = "wasm"))]
         items.push(
             MenuItemFields::new("View Warp logs")
                 .with_on_select_action(WorkspaceAction::ViewLogs)
@@ -6462,13 +6332,6 @@ impl Workspace {
     }
 
     fn should_include_worktree_sidecar_repo(repo_path: &Path, ctx: &AppContext) -> bool {
-        #[cfg(not(feature = "local_fs"))]
-        {
-            let _ = (repo_path, ctx);
-            true
-        }
-
-        #[cfg(feature = "local_fs")]
         {
             // This performs one repo-metadata lookup per persisted workspace while the
             // sidecar items are rebuilt. That's acceptable for now given the expected
@@ -6837,7 +6700,6 @@ impl Workspace {
                 });
                 ctx.notify();
             }
-            #[cfg(feature = "local_fs")]
             LaunchConfigModalEvent::OpenFileWithTarget {
                 path,
                 target,
@@ -7048,7 +6910,6 @@ impl Workspace {
     /// substituted with a fresh name on every open.
     /// When `Some(name)` (manual naming), the commands are baked in and a
     /// `worktree_branch_name` param is added so re-opens show the params modal.
-    #[cfg(feature = "local_fs")]
     fn handle_new_worktree_submit(
         &mut self,
         repo: &str,
@@ -7121,16 +6982,6 @@ impl Workspace {
         }
     }
 
-    #[cfg(not(feature = "local_fs"))]
-    fn handle_new_worktree_submit(
-        &mut self,
-        _repo: &str,
-        _base_branch: &str,
-        _worktree_branch_name: Option<&str>,
-        _ctx: &mut ViewContext<Self>,
-    ) {
-    }
-
     fn open_repo_picker_for_new_worktree_modal(&mut self, ctx: &mut ViewContext<Self>) {
         let modal_view = self.new_worktree_modal.view.clone();
         ctx.open_file_picker(
@@ -7156,7 +7007,6 @@ impl Workspace {
     /// Opens a worktree in the given repo using the default worktree tab config,
     /// saving the materialized config to `~/.warp/tab_configs/` first.
     /// The branch name is auto-generated.
-    #[cfg(feature = "local_fs")]
     fn open_worktree_in_repo(&mut self, repo_path: String, ctx: &mut ViewContext<Self>) {
         log::info!("open_worktree_in_repo requested: repo_path={repo_path:?}");
         let config_path = ensure_default_worktree_config();
@@ -7213,9 +7063,6 @@ impl Workspace {
         log::info!("Opening tab from saved worktree config");
         self.open_tab_config_with_params(tab_config, param_values, Some(&branch_name), ctx);
     }
-
-    #[cfg(not(feature = "local_fs"))]
-    fn open_worktree_in_repo(&mut self, _repo_path: String, _ctx: &mut ViewContext<Self>) {}
 
     /// Opens a native folder picker to add a new repo to PersistedWorkspace,
     /// triggered from the "+ Add new repo..." item in the New worktree config submenu.
@@ -7859,7 +7706,7 @@ impl Workspace {
                     })
                     .build();
 
-                if cfg!(all(not(target_family = "wasm"), target_os = "macos")) {
+                {
                     AppContext::show_native_platform_modal(ctx, dialog);
                     return false;
                 }
@@ -7935,7 +7782,6 @@ impl Workspace {
 
     /// Closes all tabs that have code panes with the specified file path open.
     /// This is used when a file is renamed or deleted in the file tree
-    #[cfg(feature = "local_fs")]
     fn close_tabs_with_file_path(&mut self, old_path: &Path, ctx: &mut ViewContext<Self>) {
         // Find all code panes across all tabs that have this file open
         for tab_data in &self.tabs {
@@ -7956,7 +7802,6 @@ impl Workspace {
 
     /// Renames all open code tabs that point to `old_path` to now point to `new_path`,
     /// updating their contents in-place rather than closing them.
-    #[cfg(feature = "local_fs")]
     fn rename_tabs_with_file_path(
         &mut self,
         old_path: &Path,
@@ -8312,7 +8157,6 @@ impl Workspace {
     }
 
     pub fn add_tab_for_new_code_file(&mut self, ctx: &mut ViewContext<Self>) {
-        #[cfg(feature = "local_fs")]
         {
             let default_directory = self
                 .active_session_view(ctx)
@@ -8372,13 +8216,6 @@ impl Workspace {
                     });
                 }
             }
-        }
-
-        #[cfg(not(feature = "local_fs"))]
-        {
-            let _ = ctx;
-            // Code file functionality is not available without local_fs feature
-            log::warn!("NewCodeFile action called but local_fs feature is not enabled");
         }
     }
 
@@ -8574,7 +8411,6 @@ impl Workspace {
         }
     }
 
-    #[cfg(target_os = "macos")]
     pub fn sync_window_button_visibility(&self, ctx: &mut ViewContext<Self>) {
         use warpui::platform::mac::WindowExt;
         let show = if TabSettings::as_ref(ctx)
@@ -8591,11 +8427,6 @@ impl Workspace {
         if let Some(platform_window) = ctx.windows().platform_window(ctx.window_id()) {
             platform_window.as_ref().set_window_buttons(show);
         }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub fn sync_window_button_visibility(&self, _: &mut ViewContext<Self>) {
-        // Only macOS uses native window buttons.
     }
 
     /// Updates the titlebar height to match the scaled tab bar height.
@@ -8978,7 +8809,6 @@ impl Workspace {
                 path,
                 line_and_column_arg,
             } => {
-                #[cfg(feature = "local_fs")]
                 {
                     // Build a LocalOrRemotePath for the file. For remote sessions
                     // the host_id comes from the active working directory.
@@ -9221,15 +9051,10 @@ impl Workspace {
             pane_group::Event::OpenCLIAgentToolbarEditor => {
                 self.open_cli_agent_toolbar_editor(ctx);
             }
-            #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
             pane_group::Event::OpenFileInWarp { path, session } => {
-                #[cfg(feature = "local_fs")]
-                {
-                    let layout = *EditorSettings::as_ref(ctx).open_file_layout.value();
-                    self.open_file_notebook(path.clone(), Some(session.clone()), layout, None, ctx);
-                }
+                let layout = *EditorSettings::as_ref(ctx).open_file_layout.value();
+                self.open_file_notebook(path.clone(), Some(session.clone()), layout, None, ctx);
             }
-            #[cfg(feature = "local_fs")]
             pane_group::Event::OpenCodeInWarp {
                 source,
                 layout,
@@ -9237,7 +9062,6 @@ impl Workspace {
             } => {
                 self.open_code(source.clone(), *layout, *line_col, false, &[], ctx);
             }
-            #[cfg(feature = "local_fs")]
             pane_group::Event::PreviewCodeInWarp { source } => {
                 self.open_code(
                     source.clone(),
@@ -9397,9 +9221,7 @@ impl Workspace {
                                 }
                             }
                         }
-                        #[cfg_attr(target_family = "wasm", allow(unused_variables))]
                         TabBarHoverIndex::OverTab(workspace_tab_index) => {
-                            #[cfg(not(target_family = "wasm"))]
                             {
                                 let prefers_tabbed_editor_view = *EditorSettings::as_ref(ctx)
                                     .prefer_tabbed_editor_view
@@ -9545,13 +9367,9 @@ impl Workspace {
                 pane_id,
                 hidden_pane_preview_direction,
             } => {
-                #[cfg(feature = "local_fs")]
                 let prefers_tabbed_editor_view = *EditorSettings::as_ref(ctx)
                     .prefer_tabbed_editor_view
                     .value();
-
-                #[cfg(not(feature = "local_fs"))]
-                let prefers_tabbed_editor_view = false;
 
                 // If a code pane is being dragged over a workspace tab with an existing code pane,
                 // we don't allow it to be placed freely. Instead, it should be merged into the existing
@@ -9774,7 +9592,6 @@ impl Workspace {
                     });
                 }
             }
-            #[cfg(feature = "local_fs")]
             pane_group::Event::OpenFileWithTarget {
                 path,
                 target,
@@ -9796,11 +9613,9 @@ impl Workspace {
                     ctx,
                 );
             }
-            #[cfg(feature = "local_fs")]
             pane_group::Event::FileRenamed { old_path, new_path } => {
                 self.rename_tabs_with_file_path(old_path, new_path, ctx);
             }
-            #[cfg(feature = "local_fs")]
             pane_group::Event::FileDeleted { path } => {
                 self.close_tabs_with_file_path(path, ctx);
             }
@@ -10032,16 +9847,10 @@ impl Workspace {
     fn update_active_session(&mut self, ctx: &mut ViewContext<Self>) {
         let pane_group_handle = self.active_tab_pane_group();
         let file_tree_and_global_search_are_enabled = {
-            #[cfg(feature = "local_fs")]
             {
                 Self::should_enable_file_tree_and_global_search_for_pane_group(
                     self.active_tab_pane_group().as_ref(ctx),
                 )
-            }
-
-            #[cfg(not(feature = "local_fs"))]
-            {
-                false
             }
         };
 
@@ -10051,7 +9860,6 @@ impl Workspace {
 
         match pane_group_handle.as_ref(ctx).active_session_view(ctx) {
             Some(terminal_handle) => {
-                #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
                 let (session, pwd_location, is_local, has_pending_ssh) =
                     terminal_handle.read(ctx, |terminal, ctx| {
                         let active_session_id = terminal.active_block_session_id();
@@ -10097,7 +9905,6 @@ impl Workspace {
                     left_panel.update_coding_panel_enablement(enablement, ctx);
                 });
 
-                #[cfg(feature = "local_fs")]
                 {
                     self.right_panel_view.update(ctx, |right_panel, ctx| {
                         right_panel.update_session_env(is_remote, ctx);
@@ -10119,7 +9926,6 @@ impl Workspace {
                     left_panel.update_coding_panel_enablement(enablement, ctx);
                 });
 
-                #[cfg(feature = "local_fs")]
                 {
                     self.right_panel_view.update(ctx, |right_panel, ctx| {
                         right_panel.update_session_env(false, ctx);
@@ -12166,7 +11972,7 @@ impl Workspace {
             .platform_window(self.window_id)
             .map(|window| window.fullscreen_state() == FullscreenState::Fullscreen)
             .unwrap_or(false);
-        if is_window_fullscreen && cfg!(target_os = "macos") {
+        if is_window_fullscreen {
             // Full-screen mode on MacOS does not need as much padding (traffic lights are hidden).
             TAB_BAR_PADDING_LEFT
         } else {
@@ -12596,7 +12402,6 @@ impl Workspace {
             .finish()
     }
 
-    #[cfg(not(target_family = "wasm"))]
     fn render_resource_center(&self) -> Box<dyn Element> {
         ConstrainedBox::new(ChildView::new(&self.resource_center_view).finish())
             .with_width(RESOURCE_CENTER_WIDTH)
@@ -12996,7 +12801,6 @@ impl Workspace {
         }
 
         // The resource center is a workspace-level panel, not configurable.
-        #[cfg(not(target_family = "wasm"))]
         if self.current_workspace_state.is_right_panel_open() {
             panels_view = panels_view.with_child(self.render_panel(
                 app,
@@ -13580,10 +13384,10 @@ impl Workspace {
     /// Computes the list of available left panel views based on current settings.
     fn compute_left_panel_views(ctx: &AppContext) -> Vec<ToolPanelView> {
         let mut views = vec![];
-        if cfg!(feature = "local_fs") && *CodeSettings::as_ref(ctx).show_project_explorer.value() {
+        if *CodeSettings::as_ref(ctx).show_project_explorer.value() {
             views.push(ToolPanelView::ProjectExplorer);
         }
-        if cfg!(feature = "local_fs") && *CodeSettings::as_ref(ctx).show_global_search.value() {
+        if *CodeSettings::as_ref(ctx).show_global_search.value() {
             views.push(ToolPanelView::GlobalSearch {
                 entry_focus: GlobalSearchEntryFocus::Results,
             });
@@ -13867,11 +13671,9 @@ impl TypedActionView for Workspace {
                 self.open_repo_picker_for_new_worktree_modal(ctx);
             }
             OpenTabConfigErrorFile {
-                #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
                 path,
                 toast_object_id,
             } => {
-                #[cfg(feature = "local_fs")]
                 {
                     let settings = EditorSettings::as_ref(ctx);
                     let target = resolve_file_target_with_editor_choice(
@@ -13898,7 +13700,6 @@ impl TypedActionView for Workspace {
             TabConfigSidecarMakeDefault {
                 mode,
                 tab_config_path,
-                #[cfg_attr(not(feature = "local_tty"), allow(unused_variables))]
                 shell,
             } => {
                 if let Some(path) = tab_config_path {
@@ -13913,7 +13714,6 @@ impl TypedActionView for Workspace {
                 GeneralSettings::handle(ctx).update(ctx, |settings, ctx| {
                     report_if_error!(settings.default_session_mode_internal.set_value(*mode, ctx));
                 });
-                #[cfg(feature = "local_tty")]
                 if let Some(shell) = shell {
                     use crate::terminal::available_shells::AvailableShells;
                     AvailableShells::handle(ctx).update(ctx, |model, ctx| {
@@ -13922,11 +13722,7 @@ impl TypedActionView for Workspace {
                 }
                 self.close_new_session_dropdown_menu(ctx);
             }
-            TabConfigSidecarEditConfig {
-                #[cfg_attr(not(feature = "local_fs"), allow(unused_variables))]
-                path,
-            } => {
-                #[cfg(feature = "local_fs")]
+            TabConfigSidecarEditConfig { path } => {
                 {
                     let settings = EditorSettings::as_ref(ctx);
                     let target = resolve_file_target_with_editor_choice(
@@ -14000,7 +13796,6 @@ impl TypedActionView for Workspace {
                 mode: palette_mode,
                 source,
             } => self.toggle_palette(*palette_mode, *source, ctx),
-            #[cfg(not(target_family = "wasm"))]
             ViewLogs => self.view_logs(ctx),
             ChangeCursor(cursor) => self.change_cursor(*cursor, ctx),
             ToggleErrorUnderlining => self.toggle_error_underlining(ctx),
@@ -14022,9 +13817,7 @@ impl TypedActionView for Workspace {
                     right_panel_view.log_review_comment_send_status_for_active_tab(ctx);
                 });
             }
-            #[cfg(target_os = "macos")]
             InstallWarpctrl => self.install_warpctrl(ctx),
-            #[cfg(target_os = "macos")]
             UninstallWarpctrl => self.uninstall_warpctrl(ctx),
             UndoRevertInCodeReviewPane { window_id, view_id } => {
                 self.undo_revert_in_code_review_pane(*window_id, *view_id, ctx)
@@ -14087,7 +13880,6 @@ impl TypedActionView for Workspace {
                 let pane_group_handle = self.active_tab_pane_group().clone();
                 self.toggle_right_panel(&pane_group_handle, ctx);
             }
-            #[cfg(feature = "local_fs")]
             OpenCodeReviewPanel(locator) => {
                 let pane_group_handle = self
                     .tabs
@@ -14118,8 +13910,6 @@ impl TypedActionView for Workspace {
                     }
                 }
             }
-            #[cfg(not(feature = "local_fs"))]
-            OpenCodeReviewPanel(_) => {}
             ToggleVerticalTabsPanel => {
                 self.toggle_vertical_tabs_panel(ctx);
             }
@@ -14499,15 +14289,12 @@ impl TypedActionView for Workspace {
                 TerminalSessionFallbackBehavior::default(),
                 ctx,
             ),
-            #[cfg(feature = "local_fs")]
             FileRenamed { old_path, new_path } => {
                 self.rename_tabs_with_file_path(old_path, new_path, ctx);
             }
-            #[cfg(feature = "local_fs")]
             FileDeleted { path } => {
                 self.close_tabs_with_file_path(path, ctx);
             }
-            #[cfg(target_os = "macos")]
             SampleProcess => {
                 let pid = process::id();
                 let timestamp = SystemTime::now()
@@ -14859,52 +14646,6 @@ impl View for Workspace {
             .with_background(util::get_terminal_background_fill(app))
             .finish();
         let mut stack = Stack::new();
-
-        #[cfg(target_family = "wasm")]
-        {
-            let pane_group = self.active_tab_pane_group().as_ref(app);
-            if warpui::platform::wasm::is_mobile_device() && pane_group.left_panel_open {
-                let scrim = Rect::new()
-                    .with_background(Fill::Solid(ColorU::new(
-                        0,
-                        0,
-                        0,
-                        MOBILE_OVERLAY_SCRIM_ALPHA,
-                    )))
-                    .finish();
-                let clickable_scrim = EventHandler::new(scrim)
-                    .on_left_mouse_down(|ctx, _, _| {
-                        ctx.dispatch_typed_action(WorkspaceAction::ToggleLeftPanel);
-                        DispatchEventResult::StopPropagation
-                    })
-                    .finish();
-                stack.add_positioned_overlay_child(
-                    Percentage::width(1.0 - MOBILE_OVERLAY_PANEL_WIDTH_RATIO, clickable_scrim)
-                        .finish(),
-                    OffsetPositioning::offset_from_save_position_element(
-                        TAB_BAR_POSITION_ID,
-                        vec2f(0., 0.),
-                        PositionedElementOffsetBounds::WindowBySize,
-                        PositionedElementAnchor::BottomRight,
-                        ChildAnchor::TopRight,
-                    ),
-                );
-
-                let panel_content = Container::new(ChildView::new(&self.left_panel_view).finish())
-                    .with_background(appearance.theme().surface_1())
-                    .finish();
-                stack.add_positioned_overlay_child(
-                    Percentage::width(MOBILE_OVERLAY_PANEL_WIDTH_RATIO, panel_content).finish(),
-                    OffsetPositioning::offset_from_save_position_element(
-                        TAB_BAR_POSITION_ID,
-                        vec2f(0., 0.),
-                        PositionedElementOffsetBounds::WindowBySize,
-                        PositionedElementAnchor::BottomLeft,
-                        ChildAnchor::TopLeft,
-                    ),
-                );
-            }
-        }
 
         stack.add_child(
             Container::new(panels)
@@ -15477,9 +15218,7 @@ impl View for Workspace {
 
         // Cross-window ghost drag: floating chip that follows the cursor in the target window.
         // Added last so it renders on top of all other content.
-        if crate::workspace::cross_window_tab_drag::IS_SUPPORTED
-            && let Some(ghost) =
-                CrossWindowTabDrag::as_ref(app).ghost_state_for_window(self.window_id)
+        if let Some(ghost) = CrossWindowTabDrag::as_ref(app).ghost_state_for_window(self.window_id)
         {
             // Place the chip so its top-left is at cursor - cursor_offset_in_element.
             // This makes the cursor appear at the same position inside the chip as
@@ -16272,9 +16011,7 @@ impl Workspace {
         }
 
         let source_is_single_tab = self.tabs.len() == 1;
-        if (is_drag_outside_tab_bar || source_is_single_tab)
-            && crate::workspace::cross_window_tab_drag::IS_SUPPORTED
-        {
+        if is_drag_outside_tab_bar || source_is_single_tab {
             let source_was_single_tab = source_is_single_tab;
             if !source_was_single_tab && let Some(tab_data) = self.tabs.get_mut(current_index) {
                 tab_data.detached = true;

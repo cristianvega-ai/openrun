@@ -5,7 +5,6 @@ fn main() {
     // This test must run on the process main thread to service the macOS run loop.
     args.test_threads = Some(1);
 
-    #[cfg(target_os = "macos")]
     let tests = vec![Trial::test("services_main_dispatch_queue", || {
         macos::services_main_dispatch_queue().map_err(|error| format!("{error:#}").into())
     })];
@@ -13,7 +12,6 @@ fn main() {
     libtest_mimic::run(&args, tests).exit();
 }
 
-#[cfg(target_os = "macos")]
 mod macos {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};

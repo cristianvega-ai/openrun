@@ -26,7 +26,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_channel::Sender;
-#[cfg(feature = "local_fs")]
 use diesel::SqliteConnection;
 use futures::FutureExt as _;
 use futures::stream::AbortHandle;
@@ -34,7 +33,6 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use ordered_float::Float;
 use parking_lot::FairMutex;
-#[cfg(feature = "local_fs")]
 use parking_lot::Mutex;
 use regex::Regex;
 use settings::Setting as _;
@@ -58,7 +56,6 @@ use warp_errors::{report_error, report_if_error};
 use warp_util::path::ShellFamily;
 pub use warpui::WindowId;
 use warpui::accessibility::{AccessibilityContent, ActionAccessibilityContent, WarpA11yRole};
-#[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
 use warpui::r#async::SpawnedFutureHandle;
 use warpui::clipboard::{ClipboardContent, ImageData};
 use warpui::clipboard_utils::CLIPBOARD_IMAGE_MIME_TYPES;
@@ -110,7 +107,6 @@ use super::{
 use crate::ASSETS;
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::channel::{Channel, ChannelState};
-#[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
 use crate::completer::SessionContext;
 use crate::context_chips::display::{PromptDisplay, PromptDisplayEvent};
@@ -133,7 +129,6 @@ use crate::input_suggestions::{
 use crate::palette::PaletteSource;
 use crate::pane_group::PaneGroupAction;
 use crate::pane_group::focus_state::PaneFocusHandle;
-#[cfg(feature = "local_fs")]
 use crate::persistence::{database_file_path_for_current_scope, establish_ro_connection};
 use crate::prefix::longest_common_prefix;
 use crate::resource_center::{
@@ -180,7 +175,6 @@ use crate::ui_components::blended_colors;
 use crate::ui_components::icons::Icon;
 use crate::user_config::WarpConfig;
 use crate::util::bindings::{self, CustomAction, keybinding_name_to_normalized_string};
-#[cfg(feature = "local_fs")]
 use crate::util::file::external_editor;
 use crate::util::image::MAX_IMAGE_COUNT_FOR_QUERY;
 use crate::util::truncation::truncate_from_end;
@@ -262,14 +256,7 @@ const MIN_BUFFER_LEN_TO_SHOW_COMPLETIONS_WHILE_TYPING: usize = 2;
 /// If the editor buffer matches this prefix, terminal input is enabled and locked.
 const TERMINAL_INPUT_PREFIX: &str = "!";
 
-cfg_if::cfg_if! {
-    if #[cfg(target_os = "macos")] {
-        const CMD_ENTER_KEYBINDING: &str = "cmd-enter";
-    } else {
-        // On linux and windows, the CmdEnter EditorAction is bound to ctrl-shift-enter.
-        const CMD_ENTER_KEYBINDING: &str =  "ctrl-shift-enter";
-    }
-}
+const CMD_ENTER_KEYBINDING: &str = "cmd-enter";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum HistorySearchMode {
@@ -464,7 +451,6 @@ pub enum Event {
     InputFocusedFromMiddleClick,
     EditorFocused,
     OpenSettings(SettingsSection),
-    #[cfg(feature = "local_fs")]
     OpenCodeInWarp {
         source: CodeSource,
         layout: external_editor::settings::EditorLayout,
@@ -659,7 +645,6 @@ pub struct CompleterData {
     pub sessions: ModelHandle<Sessions>,
     pub active_block_metadata: Option<BlockMetadata>,
     command_registry: Arc<CommandRegistry>,
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     last_user_block_completed: Option<UserBlockCompleted>,
 }
 
@@ -991,12 +976,10 @@ pub struct Input {
     buffer_block_id: BlockId,
 
     /// The last block that the user ran. This is used for generating autosuggestions.
-    #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
     last_user_block_completed: Option<UserBlockCompleted>,
 
     hoverable_handle: MouseStateHandle,
 
-    #[cfg(feature = "local_fs")]
     conn: Option<Arc<Mutex<SqliteConnection>>>,
 
     attachment_chips: Vec<AttachmentChip>,
@@ -1568,10 +1551,7 @@ impl Input {
                     // and we don't want to double-paste.
                     middle_click_paste: false,
                     allow_user_cursor_preference: true,
-                    #[cfg(not(target_family = "wasm"))]
                     include_at_menu: true,
-                    #[cfg(target_family = "wasm")]
-                    include_at_menu: false,
                     delegate_paste_handling: true,
                     keymap_context_modifier: Some(Box::new(move |context, app| {
                         context
@@ -1901,7 +1881,6 @@ impl Input {
             last_user_block_completed: None,
             hoverable_handle: Default::default(),
             terminal_view_id,
-            #[cfg(feature = "local_fs")]
             conn: None,
             attachment_chips: Default::default(),
             is_processing_attached_images: false,
@@ -1918,7 +1897,6 @@ impl Input {
             pending_shell_widget_handoff: None,
         };
 
-        #[cfg(feature = "local_fs")]
         if let Some(db_url) = database_file_path_for_current_scope().to_str()
             && let Ok(conn) = establish_ro_connection(db_url)
         {
@@ -2387,7 +2365,6 @@ impl Input {
             return Err("Tried to open file in code editor for a remote session".to_string());
         }
 
-        #[cfg(feature = "local_fs")]
         {
             // Get the current working directory from the active terminal session
             let current_dir = self
@@ -4071,11 +4048,9 @@ impl Input {
         // Get current ignored shell commands to filter during generation
         let ignored_suggestions = IgnoredSuggestionsModel::as_ref(ctx)
             .get_ignored_suggestions_for_type(SuggestionType::ShellCommand);
-        #[cfg(feature = "local_fs")]
         let conn = self.conn.clone();
         // Resolve the last completed block's lazily-computed fields now, synchronously, since the
         // spawned future below doesn't have access to the terminal model to resolve them later.
-        #[cfg(feature = "local_fs")]
         let last_user_block_completed_data =
             completer_data
                 .last_user_block_completed
@@ -4101,7 +4076,6 @@ impl Input {
         let abort_handle = ctx
             .spawn_abortable(
                 async move {
-                    #[cfg(feature = "local_fs")]
                     // First, use rich history to find commands with a matching prefix that were run
                     // in a similar context, taking into account the most recent block run.
                     if let Some(conn) = conn
@@ -5123,7 +5097,6 @@ impl Input {
                         let file_path = if is_ai_mode {
                             file_path.to_string()
                         } else {
-                            #[cfg(feature = "local_fs")]
                             {
                                 // Try to get current working directory and process the file path
                                 let processed_path = self
@@ -5160,9 +5133,6 @@ impl Input {
 
                                 processed_path.unwrap_or_else(|| file_path.to_string())
                             }
-
-                            #[cfg(not(feature = "local_fs"))]
-                            file_path.to_string()
                         };
                         self.replace_at_symbol_with_text(&file_path, ctx);
                     }
@@ -5729,13 +5699,6 @@ impl Input {
 
     /// Whether the @ menu cannot be opened in the current session or input mode.
     fn is_at_menu_disabled(&self, app: &AppContext) -> bool {
-        #[cfg(target_family = "wasm")]
-        {
-            let _ = app;
-            true
-        }
-
-        #[cfg(not(target_family = "wasm"))]
         {
             // The @ menu requires repo metadata, which is only available for local sessions.
             let (is_ssh_session, is_subshell) = self

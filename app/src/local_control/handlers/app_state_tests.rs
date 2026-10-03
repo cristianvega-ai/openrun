@@ -1,6 +1,5 @@
 use ::local_control::{ActionKind, ErrorCode};
 
-#[cfg(feature = "local_fs")]
 use super::resolve_against_working_directory;
 use super::{ensure_surface_available, validate_staged_input_text};
 use crate::local_control::handlers::metadata::SurfaceDestination;
@@ -15,7 +14,6 @@ fn staged_input_rejects_line_breaks_and_control_sequences() {
     }
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn file_open_resolves_relative_paths_against_the_session_working_directory() {
     use std::path::{Path, PathBuf};

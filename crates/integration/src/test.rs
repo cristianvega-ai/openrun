@@ -163,8 +163,8 @@ use warp::workspace::{NEW_TAB_BUTTON_POSITION_ID, Workspace};
 use warpui_core::event::KeyState;
 use warpui_core::integration::{AssertionOutcome, StepData, TestStep};
 use warpui_core::keymap::{Keystroke, Trigger};
+use warpui_core::platform::TerminationMode;
 use warpui_core::platform::keyboard::KeyCode;
-use warpui_core::platform::{OperatingSystem, TerminationMode};
 use warpui_core::units::Lines;
 use warpui_core::windowing::WindowManager;
 use warpui_core::{
@@ -6321,11 +6321,7 @@ pub fn test_tab_behavior_setting() -> Builder {
     let completions_binding_name = "input:open_completion_suggestions";
     let autosuggestions_binding_name = "editor_view:insert_autosuggestion";
 
-    let expected_completion_binding_name = if OperatingSystem::get().is_mac() {
-        "⌃Space"
-    } else {
-        "Ctrl Space"
-    };
+    let expected_completion_binding_name = "⌃Space";
 
     new_builder()
         .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
@@ -6402,8 +6398,6 @@ pub fn test_pass_control_sequences_to_long_running_block() -> Builder {
 /// 5. Verify cleanup handles missing window gracefully
 pub fn test_undo_close_stack_timeout_cleanup() -> Builder {
     new_builder()
-        // This test is Mac-only due to differences in window management on Linux
-        .set_should_run_test(|| cfg!(target_os = "macos"))
         // Set a 5-second grace period to give time to close the window before it expires
         .with_user_defaults(HashMap::from([(
             "UndoCloseGracePeriod".to_owned(),

@@ -43,9 +43,8 @@ pub fn run_search_subprocess(
     paths: Vec<PathBuf>,
     ignore_case: bool,
     multiline: bool,
-    #[cfg_attr(not(unix), allow(unused_variables))] parent_pid: Option<u32>,
+    parent_pid: Option<u32>,
 ) -> anyhow::Result<()> {
-    #[cfg(unix)]
     crate::monitor_parent_and_exit_on_change(parent_pid);
 
     if patterns.is_empty() {
@@ -134,7 +133,6 @@ pub fn run_search_subprocess(
     Ok(())
 }
 
-#[cfg(not(target_family = "wasm"))]
 mod process_impl {
     use std::path::PathBuf;
     use std::process::Stdio;
@@ -261,5 +259,4 @@ mod process_impl {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 pub use process_impl::{search, search_streaming};

@@ -1,4 +1,3 @@
-#[cfg(target_os = "macos")]
 mod mac;
 pub mod settings;
 
@@ -26,29 +25,16 @@ pub const SUPPORTED_EDITORS: &[Editor] = &[
     Editor::WebStorm,
     Editor::PhpStorm,
     Editor::RubyMine,
-    #[cfg(not(target_os = "macos"))]
-    // On Linux, all versions of sublime use the same app-ids, so
-    // we only have one entry
-    Editor::Sublime,
-    #[cfg(target_os = "macos")]
     Editor::Sublime2,
-    #[cfg(target_os = "macos")]
     Editor::Sublime3,
-    #[cfg(target_os = "macos")]
     Editor::Sublime4,
-    #[cfg(target_os = "macos")]
-    // Zed is available on macos and linux
     Editor::Zed,
-    #[cfg(target_os = "macos")]
-    // Zed Preview is available on macos and linux
     Editor::ZedPreview,
     Editor::GoLand,
     Editor::Rider,
     Editor::DataSpell,
     Editor::DataGrip,
     Editor::AndroidStudio,
-    #[cfg(target_os = "macos")]
-    // Cursor *can* run on linux, but does not have a .desktop file
     Editor::Cursor,
     Editor::Windsurf,
 ];
@@ -78,13 +64,8 @@ pub enum Editor {
     CLionCE,
     RustRoverPreview,
     RustRover,
-    #[cfg(not(target_os = "macos"))]
-    Sublime,
-    #[cfg(target_os = "macos")]
     Sublime4,
-    #[cfg(target_os = "macos")]
     Sublime3,
-    #[cfg(target_os = "macos")]
     Sublime2,
     Atom,
     WebStorm,
@@ -115,13 +96,8 @@ impl std::fmt::Display for Editor {
                 Editor::IntelliJCE => "IntelliJ Community Edition",
                 Editor::CLion => "CLion",
                 Editor::CLionCE => "CLion Community Edition",
-                #[cfg(not(target_os = "macos"))]
-                Editor::Sublime => "Sublime",
-                #[cfg(target_os = "macos")]
                 Editor::Sublime4 => "Sublime 4",
-                #[cfg(target_os = "macos")]
                 Editor::Sublime3 => "Sublime 3",
-                #[cfg(target_os = "macos")]
                 Editor::Sublime2 => "Sublime 2",
                 Editor::Atom => "Atom",
                 Editor::WebStorm => "WebStorm",
@@ -178,9 +154,6 @@ impl TryFrom<&str> for Editor {
             "rustrover" => Ok(Editor::RustRover),
             "rustrover-preview" => Ok(Editor::RustRoverPreview),
             "atom" => Ok(Editor::Atom),
-            #[cfg(not(target_os = "macos"))]
-            "sublime" | "subl" => Ok(Editor::Sublime),
-            #[cfg(target_os = "macos")]
             "sublime" | "subl" => Ok(Editor::Sublime4), // Default to latest on macOS
             _ => Err(()),
         }
@@ -304,13 +277,7 @@ pub fn open_file_path_with_editor(
     editor: Option<Editor>,
     ctx: &mut AppContext,
 ) {
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            mac::open_file_path_with_line_and_col(line_column_number, editor, &full_path, ctx);
-        } else {
-            ctx.open_file_path(&full_path);
-        }
-    }
+    mac::open_file_path_with_line_and_col(line_column_number, editor, &full_path, ctx);
 }
 
 #[cfg(test)]

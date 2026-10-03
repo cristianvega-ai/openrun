@@ -3,7 +3,6 @@
 #[path = "app_state_tests.rs"]
 mod tests;
 
-#[cfg(feature = "local_fs")]
 use std::path::{Path, PathBuf};
 
 use ::local_control::protocol::{
@@ -13,14 +12,11 @@ use ::local_control::protocol::{
 };
 use ::local_control::{ActionKind, ControlError, ErrorCode, InstanceId};
 use serde_json::json;
-#[cfg(feature = "local_fs")]
 use warp_util::local_or_remote_path::LocalOrRemotePath;
 use warp_util::path::LineAndColumnArg;
-#[cfg(feature = "local_fs")]
 use warpui::SingletonEntity;
 use warpui::{AppContext, ModelContext, TypedActionView};
 
-#[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
 use crate::local_control::LocalControlBridge;
 use crate::local_control::handlers::ack;
@@ -34,11 +30,8 @@ use crate::local_control::resolver::{
 use crate::palette::{PaletteMode, PaletteSource};
 use crate::pane_group::{ActivationReason, Direction, PaneGroupAction};
 use crate::settings_view::SettingsSection;
-#[cfg(feature = "local_fs")]
 use crate::util::file::external_editor::EditorSettings;
-#[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::{EditorLayout, resolve_file_target_to_open_in_warp};
-#[cfg(feature = "local_fs")]
 use crate::workspace::PaneViewLocator;
 use crate::workspace::{CommandSearchOptions, InitContent, WorkspaceAction};
 
@@ -256,7 +249,6 @@ fn surface_code_review_open(
     ensure_surface_available(action, SurfaceDestination::CodeReview, ctx)?;
     let workspace = target_workspace(action, target, ctx)?;
     activate_target(&workspace, action, target, ctx)?;
-    #[cfg(feature = "local_fs")]
     {
         let pane_group = target_pane_group(action, target, ctx)?;
         let pane_id = target_pane_id(action, target, &pane_group, ctx)?;
@@ -282,11 +274,6 @@ fn surface_code_review_open(
         });
         Ok(ack(instance_id, action))
     }
-    #[cfg(not(feature = "local_fs"))]
-    Err(ControlError::new(
-        ErrorCode::UnsupportedAction,
-        "surface.code_review.open is unavailable without local filesystem support",
-    ))
 }
 
 fn ensure_surface_available(
@@ -701,10 +688,8 @@ fn file_open(
     }
     let line_and_column = line_and_column(&params)?;
     let workspace = target_workspace(ActionKind::FileOpen, target, ctx)?;
-    #[cfg(feature = "local_fs")]
     let path = resolve_file_open_path(&params.path, target, ctx)?;
     activate_target(&workspace, ActionKind::FileOpen, target, ctx)?;
-    #[cfg(feature = "local_fs")]
     {
         let layout = params.new_tab.then_some(EditorLayout::NewTab);
         let file_target =
@@ -724,17 +709,11 @@ fn file_open(
         });
         Ok(ack(instance_id, ActionKind::FileOpen))
     }
-    #[cfg(not(feature = "local_fs"))]
-    Err(ControlError::new(
-        ErrorCode::UnsupportedAction,
-        "file.open is unavailable without local filesystem support",
-    ))
 }
 
 /// Resolves the path for `file.open` against the targeted terminal session's working
 /// directory, so a caller running `warpctrl file open README.md` from a session gets the
 /// file the shell would resolve rather than one relative to Warp's own process directory.
-#[cfg(feature = "local_fs")]
 fn resolve_file_open_path(
     path: &str,
     target: &TargetSelector,
@@ -769,7 +748,6 @@ fn resolve_file_open_path(
 
 /// Joins a relative path onto `working_directory`, normalizing the result when it exists on
 /// disk so `./README.md` and `../README.md` display and compare like any other opened file.
-#[cfg(feature = "local_fs")]
 fn resolve_against_working_directory(path: &Path, working_directory: &Path) -> PathBuf {
     if path.is_absolute() {
         return path.to_path_buf();

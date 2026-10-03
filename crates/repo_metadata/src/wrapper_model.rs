@@ -4,7 +4,6 @@
 //! queries. It holds a handle to [`LocalRepoMetadataModel`] and dispatches
 //! operations based on [`RepositoryIdentifier`].
 
-#[cfg(feature = "local_fs")]
 use std::path::Path;
 
 use warp_util::standardized_path::StandardizedPath;
@@ -164,7 +163,6 @@ impl RepoMetadataModel {
     }
 
     /// Finds the repository root that contains the given local path.
-    #[cfg(feature = "local_fs")]
     pub fn find_repository_for_path(
         &self,
         path: &Path,
@@ -177,7 +175,6 @@ impl RepoMetadataModel {
     // These delegate to the local sub-model.
 
     /// Fully indexes a local directory identified by a standardized path.
-    #[cfg(feature = "local_fs")]
     pub fn index_local_directory_path(
         &self,
         path: &StandardizedPath,
@@ -189,7 +186,6 @@ impl RepoMetadataModel {
     }
 
     /// Indexes a local repository from the given repository handle.
-    #[cfg(feature = "local_fs")]
     pub fn index_directory(
         &self,
         repository: ModelHandle<crate::repository::Repository>,
@@ -200,7 +196,6 @@ impl RepoMetadataModel {
     }
 
     /// Lazily indexes a local standalone path with only the first level of children.
-    #[cfg(feature = "local_fs")]
     pub fn index_lazy_loaded_path(
         &self,
         path: &StandardizedPath,
@@ -212,7 +207,6 @@ impl RepoMetadataModel {
     }
 
     /// Loads a specific directory inside an already-tracked local tree.
-    #[cfg(feature = "local_fs")]
     pub fn load_directory(
         &self,
         repo_root: &StandardizedPath,
@@ -228,7 +222,6 @@ impl RepoMetadataModel {
 
     /// Loads a specific directory inside an already-tracked local tree and returns a future that
     /// resolves once the async load has been applied or rejected.
-    #[cfg(feature = "local_fs")]
     pub fn load_directory_with_completion(
         &self,
         repo_root: &StandardizedPath,
@@ -244,7 +237,6 @@ impl RepoMetadataModel {
     }
 
     /// Removes a lazily-loaded local standalone path from tracking.
-    #[cfg(feature = "local_fs")]
     pub fn remove_lazy_loaded_path(&self, path: &StandardizedPath, ctx: &mut ModelContext<Self>) {
         let path = path.clone();
         self.local

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 use warpui_core::keymap::Keystroke;
-use warpui_core::platform::OperatingSystem;
 
 use super::TermMode;
 use super::indexing::Point;
@@ -563,15 +562,8 @@ fn meta_keystroke_to_escape_sequence(
 ) -> Option<Vec<u8>> {
     // On mac, we have a setting that allows users to map the Option keys to
     // meta.
-    if OperatingSystem::get().is_mac() {
-        if !keystroke.meta {
-            return None;
-        }
-    } else {
-        // On other platforms, interpret the alt key as the meta modifier.
-        if !keystroke.alt {
-            return None;
-        }
+    if !keystroke.meta {
+        return None;
     }
 
     let key = &keystroke.key;

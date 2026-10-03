@@ -6,29 +6,16 @@ use super::*;
 fn test_data_dir_path() {
     let home_dir = home_dir().expect("Should be able to compute home directory");
     // ChannelState, by default, is configured for Channel::Oss.
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            assert_eq!(data_dir(), home_dir.join(".warp-oss"));
-        } else {
-            unimplemented!("Need to update tests for current platform!");
-        }
-    }
+    assert_eq!(data_dir(), home_dir.join(".warp-oss"));
 }
 
 #[test]
 fn test_config_local_dir_path() {
     let home_dir = home_dir().expect("Should be able to compute home directory");
     // ChannelState, by default, is configured for Channel::Oss.
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            assert_eq!(config_local_dir(), home_dir.join(".warp-oss"));
-        } else {
-            unimplemented!("Need to update tests for current platform!");
-        }
-    }
+    assert_eq!(config_local_dir(), home_dir.join(".warp-oss"));
 }
 
-#[cfg(target_os = "macos")]
 #[test]
 fn test_macos_config_dir_name_scopes_to_data_profile() {
     assert_eq!(macos_config_dir_name_for(Channel::Oss, None), ".warp-oss");
@@ -63,62 +50,38 @@ fn test_warp_home_config_dir_path() {
 fn test_cache_dir_path() {
     let home_dir = home_dir().expect("Should be able to compute home directory");
     // ChannelState, by default, is configured for Channel::Oss.
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            assert_eq!(cache_dir(), home_dir.join("Library/Application Support/dev.warp.WarpOss"));
-        } else {
-            unimplemented!("Need to update tests for current platform!");
-        }
-    }
+    assert_eq!(
+        cache_dir(),
+        home_dir.join("Library/Application Support/dev.warp.WarpOss")
+    );
 }
 
 #[test]
 fn test_state_dir_path() {
     let home_dir = home_dir().expect("Should be able to compute home directory");
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            assert_eq!(state_dir(), home_dir.join("Library/Application Support/dev.warp.WarpOss"));
-        } else {
-            unimplemented!("Need to update tests for current platform!");
-        }
-    }
+    assert_eq!(
+        state_dir(),
+        home_dir.join("Library/Application Support/dev.warp.WarpOss")
+    );
 }
 
 #[test]
 fn test_project_path_for_warp_app_id() {
     let project_dirs = project_dirs_for_app_id(AppId::new("dev", "warp", "Warp"), None)
         .expect("should be able to compute project dirs");
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            assert_eq!(project_dirs.project_path(), "dev.warp.Warp");
-        } else {
-            unimplemented!("Need to update tests for current platform!");
-        }
-    }
+    assert_eq!(project_dirs.project_path(), "dev.warp.Warp");
 }
 
 #[test]
 fn test_project_path_for_warp_dev_app_id() {
     let project_dirs = project_dirs_for_app_id(AppId::new("dev", "warp", "WarpDev"), None)
         .expect("should be able to compute project dirs");
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            assert_eq!(project_dirs.project_path(), "dev.warp.WarpDev");
-        } else {
-            unimplemented!("Need to update tests for current platform!");
-        }
-    }
+    assert_eq!(project_dirs.project_path(), "dev.warp.WarpDev");
 }
 
 #[test]
 fn test_project_path_for_oss_app_id() {
     let project_dirs = project_dirs_for_app_id(AppId::new("dev", "warp", "WarpOss"), None)
         .expect("should be able to compute project dirs");
-    cfg_if::cfg_if! {
-        if #[cfg(target_os = "macos")] {
-            assert_eq!(project_dirs.project_path(), "dev.warp.WarpOss");
-        } else {
-            unimplemented!("Need to update tests for current platform!");
-        }
-    }
+    assert_eq!(project_dirs.project_path(), "dev.warp.WarpOss");
 }

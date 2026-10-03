@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 use warp_util::standardized_path::StandardizedPath;
-#[cfg(not(target_family = "wasm"))]
 use warpui_core::SingletonEntity;
 
 /// Errors that can occur when working with repository metadata.
@@ -52,7 +51,6 @@ pub use local_model::RepositoryMetadataEvent;
 pub use repository::{Repository, RepositoryWatchMode};
 pub use watcher::{DirectoryWatcher, RepositoryUpdate, TargetFile};
 
-#[cfg(not(target_family = "wasm"))]
 pub fn is_in_repo(path: &str, app: &warpui_core::AppContext) -> bool {
     use warp_util::local_or_remote_path::LocalOrRemotePath;
 
@@ -63,10 +61,6 @@ pub fn is_in_repo(path: &str, app: &warpui_core::AppContext) -> bool {
         .is_some()
 }
 
-#[cfg(target_family = "wasm")]
-pub fn is_in_repo(_path: &str, _app: &warpui_core::AppContext) -> bool {
-    false
-}
 pub use file_tree_store::FileTreeEntry;
 pub use local_model::{LocalRepoMetadataModel, RepoContent, RepoContents};
 pub use repository_identifier::RepositoryIdentifier;

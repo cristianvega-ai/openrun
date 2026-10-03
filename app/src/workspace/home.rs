@@ -20,13 +20,7 @@ Warp on Web can also be used by your teammates and peers who don't have Warp dow
 
 /// Create a static "home page" pane.
 pub fn create_home_pane(ctx: &mut ViewContext<Workspace>) -> Box<dyn AnyPaneContent> {
-    let pane = FilePane::new(
-        None,
-        None,
-        #[cfg(feature = "local_fs")]
-        None,
-        ctx,
-    );
+    let pane = FilePane::new(None, None, None, ctx);
     pane.file_view(ctx).update(ctx, |pane, ctx| {
         pane.open_static(WARP_HOME_TITLE, WARP_HOME_CONTENT, ctx);
     });

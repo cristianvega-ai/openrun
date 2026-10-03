@@ -2,15 +2,12 @@ use std::borrow::Cow;
 
 use async_channel::Sender;
 use warp_completer::meta::Span;
-#[cfg(unix)]
 use warpui::AppContext;
 use warpui::{Entity, ViewContext};
 
 use crate::terminal::SizeUpdate;
-#[cfg(unix)]
 use crate::terminal::event::AfterBlockCompletedEvent;
 use crate::terminal::model::completions::ShellCompletion;
-#[cfg(unix)]
 use crate::terminal::model::terminal_model::BlockIndex;
 use crate::terminal::view::ExecuteCommandEvent;
 
@@ -48,28 +45,23 @@ where
 {
     /// Whether the local manager should start polling termios for a password prompt
     /// after the given block starts.
-    #[cfg(unix)]
     fn should_start_password_prompt_polling(&self, _command: &str, _ctx: &AppContext) -> bool {
         false
     }
 
     /// Whether the local manager should stop password-prompt polling for this completed block.
-    #[cfg(unix)]
     fn should_stop_password_prompt_polling(&self, _completed: &AfterBlockCompletedEvent) -> bool {
         false
     }
 
     /// Called once the shell starter has been determined and the PTY event loop
     /// has started, so the surface can react to shell launch metadata.
-    #[cfg(feature = "local_tty")]
     fn on_shell_determined(&mut self, _ctx: &mut ViewContext<Self>) {}
 
     /// Called when the PTY fails to spawn so the surface can surface the error.
-    #[cfg(feature = "local_tty")]
     fn on_pty_spawn_failed(&mut self, error: anyhow::Error, ctx: &mut ViewContext<Self>);
 
     /// Called when termios indicates a likely password prompt is blocking the active block.
-    #[cfg(unix)]
     fn on_possible_password_prompt(
         &mut self,
         _block_index: Option<BlockIndex>,
@@ -78,7 +70,6 @@ where
     }
 
     /// Called when the block the poller was tracking completes.
-    #[cfg(unix)]
     fn on_polled_block_completed(
         &mut self,
         _completed: &AfterBlockCompletedEvent,

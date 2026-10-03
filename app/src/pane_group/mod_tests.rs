@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use pathfinder_geometry::rect::RectF;
-#[cfg(feature = "local_fs")]
 use repo_metadata::RepoMetadataModel;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::watcher::DirectoryWatcher;
@@ -61,7 +60,6 @@ fn initialize_app(app: &mut App) {
     app.add_singleton_model(NotebookKeybindings::new);
     app.add_singleton_model(|_| CLIAgentSessionsModel::new());
     app.add_singleton_model(AgentNotificationsModel::new);
-    #[cfg(feature = "local_fs")]
     app.add_singleton_model(RepoMetadataModel::new);
     app.add_singleton_model(FileSearchModel::new);
     app.add_singleton_model(|_| crate::code_review::git_repo_model::GitRepoModels::new());
@@ -130,13 +128,7 @@ fn is_active_session(panes: &PaneGroup, pane_id: PaneId, ctx: &AppContext) -> bo
 }
 
 fn new_file_pane(ctx: &mut ViewContext<PaneGroup>) -> FilePane {
-    FilePane::new(
-        None,
-        None,
-        #[cfg(feature = "local_fs")]
-        None,
-        ctx,
-    )
+    FilePane::new(None, None, None, ctx)
 }
 
 struct PreAttachReturnsFalsePane {
@@ -1061,7 +1053,6 @@ fn test_focused_pane_is_synchronized_with_application_focus() {
 /// reattached without reopening its file. Releasing the file on close would therefore leave a
 /// restored pane rendering content that can never update again. The file is released only once the
 /// pane is permanently discarded.
-#[cfg(feature = "local_fs")]
 #[test]
 fn test_undo_close_keeps_a_file_pane_watching_its_file() {
     use warp_files::FileModel;

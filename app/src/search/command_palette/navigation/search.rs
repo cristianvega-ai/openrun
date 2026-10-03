@@ -231,9 +231,7 @@ impl SessionSearcher for FuzzySessionSearcher {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 pub use full_text_searcher::FullTextSessionSearcher;
-#[cfg(not(target_family = "wasm"))]
 mod full_text_searcher {
     use std::collections::HashMap;
 
@@ -371,6 +369,6 @@ mod full_text_searcher {
     struct SessionSearchId(usize);
 }
 
-#[cfg(all(test, not(target_family = "wasm")))]
+#[cfg(test)]
 #[path = "search_tests.rs"]
 mod tests;

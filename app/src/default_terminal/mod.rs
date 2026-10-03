@@ -1,32 +1,10 @@
 use warpui::windowing::{StateEvent, WindowManager};
 use warpui::{Entity, ModelContext, ModelHandle, SingletonEntity};
 
-#[cfg(target_os = "macos")]
 mod mac;
 
-#[cfg(target_os = "macos")]
 use mac::*;
 
-#[allow(dead_code)]
-#[cfg(not(target_os = "macos"))]
-mod non_mac {
-    pub fn can_become_default_terminal() -> bool {
-        false
-    }
-
-    pub fn is_warp_default_terminal() -> bool {
-        false
-    }
-
-    /// Sets Warp as the default terminal
-    pub fn set_warp_as_default_terminal() -> Result<(), String> {
-        Err("Not implemented".to_string())
-    }
-}
-
-#[allow(unused_imports)]
-#[cfg(not(target_os = "macos"))]
-use non_mac::*;
 use warp_errors::report_error;
 
 pub struct DefaultTerminal {

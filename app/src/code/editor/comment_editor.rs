@@ -37,7 +37,6 @@ pub enum CommentEditorEvent {
     CommentSaved {
         id: Option<CommentId>,
         comment_text: String,
-        #[cfg_attr(not(feature = "local_fs"), allow(dead_code))]
         line: Option<EditorLineLocation>,
     },
     CloseEditor,
@@ -134,12 +133,10 @@ impl CommentEditor {
         me
     }
 
-    #[cfg_attr(not(feature = "local_fs"), allow(unused))]
     pub fn comment_text(&self, app: &AppContext) -> String {
         self.editor.as_ref(app).model().as_ref(app).markdown(app)
     }
 
-    #[cfg_attr(not(feature = "local_fs"), allow(unused))]
     pub fn get_laid_out_size(&self) -> Option<Vector2F> {
         self.laid_out_size.borrow().as_ref().cloned()
     }

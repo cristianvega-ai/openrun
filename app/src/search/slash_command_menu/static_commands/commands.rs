@@ -140,13 +140,9 @@ impl Registry {
 fn all_commands() -> Vec<StaticCommand> {
     let mut commands = vec![RENAME_TAB.clone(), SET_TAB_COLOR.clone(), OPEN_CODE_REVIEW];
 
-    if !cfg!(target_family = "wasm") {
-        commands.extend([EDIT.clone(), OPEN_REPO]);
-    }
+    commands.extend([EDIT.clone(), OPEN_REPO]);
 
-    if cfg!(feature = "local_fs") {
-        commands.push(OPEN_SETTINGS_FILE);
-    }
+    commands.push(OPEN_SETTINGS_FILE);
 
     commands
 }

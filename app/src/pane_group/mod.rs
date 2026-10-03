@@ -18,7 +18,6 @@ use warp_core::command::ExitCode;
 use warp_core::context_flag::ContextFlag;
 use warp_errors::report_if_error;
 use warp_terminal::focus_env::add_session_focus_env_vars;
-#[cfg(feature = "local_fs")]
 use warp_util::path::LineAndColumnArg;
 use warpui::elements::{
     ChildView, CrossAxisAlignment, DispatchEventResult, Element, EventHandler, Flex, MainAxisSize,
@@ -32,7 +31,6 @@ use warpui::{
     ViewHandle, WindowId,
 };
 
-#[cfg(feature = "local_fs")]
 use crate::app_state::CodePaneSnapShot;
 use crate::app_state::{
     self, BranchSnapshot, LeafContents, LeafSnapshot, NotebookPaneSnapshot, PaneNodeSnapshot,
@@ -44,7 +42,6 @@ use crate::channel::{Channel, ChannelState};
 use crate::cmd_or_ctrl_shift;
 use crate::code::active_file::ActiveFileModel;
 use crate::code::buffer_location::LocalOrRemotePath;
-#[cfg(feature = "local_fs")]
 use crate::code::editor_management::CodeSource;
 use crate::code::view::{CodeView, CodeViewAction};
 use crate::launch_configs::launch_config::{self, PaneTemplateType};
@@ -63,9 +60,7 @@ use crate::settings_view::SettingsSection;
 use crate::terminal::available_shells::{AvailableShell, AvailableShells};
 use crate::terminal::general_settings::{GeneralSettings, GeneralSettingsChangedEvent};
 use crate::terminal::input::{InputConfig, InputType};
-#[cfg(feature = "local_tty")]
 use crate::terminal::local_tty::TerminalManager as LocalTtyTerminalManager;
-#[cfg(feature = "local_tty")]
 use crate::terminal::local_tty::{TerminalViewSurfaceConfig, create_terminal_view_surface};
 use crate::terminal::model::block::SerializedBlock;
 use crate::terminal::model::session::Session;
@@ -75,7 +70,6 @@ use crate::terminal::view::{BlockNotification, LeftPanelTargetView, SyncEvent, T
 use crate::terminal::{TerminalManager, TerminalModel, TerminalView};
 use crate::undo_close::{UndoCloseStack, UndoCloseStackEvent};
 use crate::util::bindings::{CustomAction, is_binding_pty_compliant};
-#[cfg(feature = "local_fs")]
 use crate::util::openable_file_type::FileTarget;
 use crate::view_components::ToastFlavor;
 use crate::workflows::{WorkflowSource, WorkflowType};
@@ -144,7 +138,6 @@ fn get_minimum_pane_size(app: &AppContext) -> f32 {
 /// 3. As a final fallback, perform a plain `PATH` lookup via
 ///    [`AvailableShell::try_from`] in case the user put something exotic in
 ///    `shell`.
-#[cfg(feature = "local_tty")]
 fn resolve_tab_config_shell(name: &str, ctx: &AppContext) -> Option<AvailableShell> {
     if name.contains(std::path::MAIN_SEPARATOR) {
         return AvailableShell::try_from(name).ok();
@@ -404,13 +397,11 @@ pub enum Event {
         /// The session that the path was opened from.
         session: Arc<Session>,
     },
-    #[cfg(feature = "local_fs")]
     OpenCodeInWarp {
         source: CodeSource,
         layout: crate::util::file::external_editor::settings::EditorLayout,
         line_col: Option<LineAndColumnArg>,
     },
-    #[cfg(feature = "local_fs")]
     PreviewCodeInWarp {
         source: CodeSource,
     },
@@ -502,20 +493,17 @@ pub enum Event {
         target_view: LeftPanelTargetView,
         force_open: bool,
     },
-    #[cfg(feature = "local_fs")]
     OpenFileWithTarget {
         path: PathBuf,
         target: FileTarget,
         line_col: Option<LineAndColumnArg>,
     },
     /// File was renamed in the file tree
-    #[cfg(feature = "local_fs")]
     FileRenamed {
         old_path: PathBuf,
         new_path: PathBuf,
     },
     /// File was deleted in the file tree
-    #[cfg(feature = "local_fs")]
     FileDeleted {
         path: PathBuf,
     },
@@ -1019,15 +1007,9 @@ impl PaneGroup {
             } => {
                 let uuid = Uuid::new_v4();
 
-                #[cfg(feature = "local_tty")]
                 let chosen_shell: Option<AvailableShell> = shell
                     .as_deref()
                     .and_then(|name| resolve_tab_config_shell(name, ctx));
-                #[cfg(not(feature = "local_tty"))]
-                let chosen_shell: Option<AvailableShell> = {
-                    let _ = shell;
-                    None
-                };
 
                 let (view, terminal_manager) = PaneGroup::create_session(
                     // Use cwd from the template iff such path exists, otherwise None
@@ -1273,7 +1255,6 @@ impl PaneGroup {
                 let pane: Box<dyn AnyPaneContent + 'static> = Box::new(FilePane::new(
                     path.map(LocalOrRemotePath::Local),
                     None,
-                    #[cfg(feature = "local_fs")]
                     None,
                     ctx,
                 ));
@@ -1287,7 +1268,6 @@ impl PaneGroup {
 
                 Ok((PaneData::new(pane_id), focus))
             }
-            #[cfg(feature = "local_fs")]
             LeafContents::Code(snapshot) => {
                 let CodePaneSnapShot::Local {
                     tabs,
@@ -1313,10 +1293,6 @@ impl PaneGroup {
                 };
                 Ok((PaneData::new(pane_id), focus))
             }
-            #[cfg(not(feature = "local_fs"))]
-            LeafContents::Code(_) => Err(anyhow::anyhow!(
-                "Code pane restoration not supported on this platform"
-            )),
             LeafContents::Settings(snapshot) => {
                 let pane: Box<dyn AnyPaneContent + 'static> = match snapshot {
                     SettingsPaneSnapshot::Local {
@@ -1549,7 +1525,6 @@ impl PaneGroup {
     pub fn selected_text_from_focused_pane(&self, ctx: &AppContext) -> Option<String> {
         let focused_pane_id = self.focused_pane_id(ctx);
 
-        #[cfg(feature = "local_fs")]
         {
             // If the focused pane is a code pane, return the selected text from the code view.
             if focused_pane_id.is_code_pane() {
@@ -1624,7 +1599,6 @@ impl PaneGroup {
 
     /// Send prompt change bindkey events to all terminal sessions in this pane group. This
     /// is used for intra-session prompt switching between Warp prompt and PS1.
-    #[cfg_attr(not(feature = "local_tty"), allow(unused_variables))]
     pub fn send_prompt_change_bindkey_to_all_sessions(
         &self,
         honor_ps1: bool,
@@ -1632,7 +1606,6 @@ impl PaneGroup {
     ) {
         self.panes_of::<TerminalPane>()
             .for_each(move |session_data| {
-                #[cfg(feature = "local_tty")]
                 {
                     session_data
                         .terminal_manager(app)
@@ -1796,9 +1769,7 @@ impl PaneGroup {
 
         // Notify any restored panes that they belong to this pane group.
         pane_group.reattach_panes(ctx);
-        if crate::workspace::cross_window_tab_drag::IS_SUPPORTED {
-            pane_group.focus(ctx);
-        }
+        pane_group.focus(ctx);
         ctx.notify();
 
         pane_group
@@ -2265,9 +2236,8 @@ impl PaneGroup {
                 })
                 .on_cancel(|_ctx| {});
 
-            if dialog.show(ctx) {
-                return;
-            }
+            dialog.show(ctx);
+            return;
         }
 
         self.close_pane(pane_id, ctx);
@@ -2474,7 +2444,6 @@ impl PaneGroup {
         original_pane_id
     }
 
-    #[cfg(feature = "local_fs")]
     fn replace_file_pane_with_code_pane(
         &mut self,
         file_pane_id: PaneId,
@@ -2508,7 +2477,6 @@ impl PaneGroup {
         }
     }
 
-    #[cfg(feature = "local_fs")]
     fn replace_code_pane_with_file_pane(
         &mut self,
         code_pane_id: PaneId,
@@ -2588,7 +2556,6 @@ impl PaneGroup {
                 ctx.emit(Event::AppStateChanged);
             }
             PaneEvent::ClearHoveredTabIndex => ctx.emit(Event::ClearHoveredTabIndex),
-            #[cfg(feature = "local_fs")]
             PaneEvent::ReplaceWithCodePane {
                 path,
                 source,
@@ -2602,7 +2569,6 @@ impl PaneGroup {
                     ctx,
                 );
             }
-            #[cfg(feature = "local_fs")]
             PaneEvent::ReplaceWithFilePane {
                 path,
                 source,
@@ -3080,7 +3046,6 @@ impl PaneGroup {
                 return;
             }
 
-            #[cfg(target_os = "macos")]
             {
                 // if the app is active, but the window is not active, activate the target window.
                 let current_window_id: WindowId = ctx.window_id();
@@ -3308,58 +3273,37 @@ impl PaneGroup {
     ) {
         add_session_focus_env_vars(&mut env_vars, terminal_session_uuid);
 
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "local_tty")] {
-                let all_restored_blocks = restored_blocks
-                    .filter(|blocks| !blocks.is_empty())
-                    .cloned();
-                let has_restored_command_blocks = all_restored_blocks
-                    .as_ref()
-                    .is_some_and(|blocks| !blocks.is_empty());
-                let model_event_sender_for_surface = model_event_sender.clone();
-                let window_id = ctx.window_id();
-                let terminal_init = LocalTtyTerminalManager::<TerminalView>::create_model(
-                    startup_directory,
-                    env_vars,
-                    all_restored_blocks.as_ref(),
-                    user_default_shell_unsupported_banner_model_handle,
-                    initial_size,
-                    model_event_sender,
-                    chosen_shell,
-                    ctx,
-                    |surface_init, ctx| {
-                        create_terminal_view_surface(
-                            TerminalViewSurfaceConfig {
-                                resources,
-                                model_event_sender: model_event_sender_for_surface,
-                                window_id,
-                                initial_input_config,
-                                has_restored_command_blocks,
-                            },
-                            surface_init,
-                            ctx,
-                        )
+        let all_restored_blocks = restored_blocks.filter(|blocks| !blocks.is_empty()).cloned();
+        let has_restored_command_blocks = all_restored_blocks
+            .as_ref()
+            .is_some_and(|blocks| !blocks.is_empty());
+        let model_event_sender_for_surface = model_event_sender.clone();
+        let window_id = ctx.window_id();
+        let terminal_init = LocalTtyTerminalManager::<TerminalView>::create_model(
+            startup_directory,
+            env_vars,
+            all_restored_blocks.as_ref(),
+            user_default_shell_unsupported_banner_model_handle,
+            initial_size,
+            model_event_sender,
+            chosen_shell,
+            ctx,
+            |surface_init, ctx| {
+                create_terminal_view_surface(
+                    TerminalViewSurfaceConfig {
+                        resources,
+                        model_event_sender: model_event_sender_for_surface,
+                        window_id,
+                        initial_input_config,
+                        has_restored_command_blocks,
                     },
-                );
-                let terminal_manager = terminal_init.manager;
-                let terminal_view = terminal_init.surface;
-            } else {
-                use crate::terminal::{ShellLaunchState, shell::{ShellName, ShellType}};
-
-                let (terminal_manager, terminal_view) = MockTerminalManager::create_model(
-                    ShellLaunchState::ShellSpawned {
-                        available_shell: chosen_shell,
-                        display_name: ShellName::blank(),
-                        shell_type: ShellType::Zsh
-                    },
-                    resources,
-                    None,
-                    initial_size,
-                    ctx.window_id(),
+                    surface_init,
                     ctx,
-                );
-            }
-        }
+                )
+            },
+        );
+        let terminal_manager = terminal_init.manager;
+        let terminal_view = terminal_init.surface;
 
         (terminal_view, terminal_manager)
     }

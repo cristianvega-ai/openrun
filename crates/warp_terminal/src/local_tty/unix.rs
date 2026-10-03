@@ -399,7 +399,6 @@ fn spawn_command_in_pty(
     // We need to keep it alive long enough for fork().
     let _file = unsafe { File::from_raw_fd(follower) };
 
-    #[cfg(target_os = "macos")]
     if let Ok(mut termios) = termios::tcgetattr(leader) {
         // Set character encoding to UTF-8.
         termios.input_flags.set(InputFlags::IUTF8, true);

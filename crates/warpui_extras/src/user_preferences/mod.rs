@@ -4,7 +4,6 @@ pub mod file_backed;
 pub mod in_memory;
 #[cfg(feature = "user_preferences-toml")]
 pub mod toml_backed;
-#[cfg(target_os = "macos")]
 pub mod user_defaults;
 
 /// A type alias for a boxed user preferences backend.

@@ -2,8 +2,6 @@ use warpui::{AppContext, Entity, ModelHandle};
 
 use crate::search::SyncDataSource;
 use crate::search::command_palette::mixer::CommandPaletteItemAction;
-#[cfg(target_family = "wasm")]
-use crate::search::command_palette::navigation::search::FuzzySessionSearcher;
 use crate::search::command_palette::navigation::search::{
     MatchedSession, SessionMatchResult, SessionSearcher,
 };
@@ -19,28 +17,13 @@ pub struct DataSource {
 }
 
 impl DataSource {
-    #[cfg(not(target_family = "wasm"))]
     pub fn new(active_session_handle: ModelHandle<SessionSource>) -> Self {
         Self::new_full_text(active_session_handle)
     }
 
-    #[cfg(target_family = "wasm")]
-    pub fn new(active_session_handle: ModelHandle<SessionSource>) -> Self {
-        Self::new_fuzzy(active_session_handle)
-    }
-
-    #[cfg(not(target_family = "wasm"))]
     fn new_full_text(active_session_handle: ModelHandle<SessionSource>) -> Self {
         use crate::search::command_palette::navigation::search::FullTextSessionSearcher;
         let searcher = Box::new(FullTextSessionSearcher::new(active_session_handle));
-        Self { searcher }
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn new_fuzzy(active_session_handle: ModelHandle<SessionSource>) -> Self {
-        let searcher = Box::new(FuzzySessionSearcher {
-            session_source_handle: active_session_handle,
-        });
         Self { searcher }
     }
 }

@@ -1,19 +1,17 @@
-#[cfg(all(test, feature = "local_tty"))]
+#[cfg(test)]
 mod git_completion_tests;
-#[cfg(all(test, unix, feature = "local_tty"))]
+#[cfg(test)]
 mod git_version_gate_tests;
 mod in_band_command_executor;
-#[cfg(feature = "local_tty")]
 mod local_command_executor;
 mod network_sandbox;
 mod offline_environment;
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod restored_generators_tests;
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod test_support;
 use std::collections::HashMap;
 mod noop_command_executor;
-#[cfg(feature = "local_tty")]
 mod remote_command_executor;
 mod shared;
 
@@ -28,10 +26,8 @@ pub use in_band_command_executor::{
     InBandCommand, InBandCommandCancelledEvent, InBandCommandExecutor, InBandCommandOutputReceiver,
     is_in_band_command,
 };
-#[cfg(feature = "local_tty")]
 pub use local_command_executor::LocalCommandExecutor;
 pub use noop_command_executor::NoOpCommandExecutor;
-#[cfg(feature = "local_tty")]
 pub use remote_command_executor::RemoteCommandExecutor;
 pub use shared::{
     ExecutorCommandEvent, serialize_variables_for_shell, shell_escape_single_quotes,
@@ -89,16 +85,14 @@ pub fn new_command_executor_for_session(
     in_band_command_output_rx: Receiver<ExecutedExecutorCommandEvent>,
     ctx: &mut ModelContext<Sessions>,
 ) -> Arc<dyn CommandExecutor> {
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "local_tty")] {
-            new_command_executor_for_local_tty_session(session_info, executor_command_tx, in_band_command_output_rx, ctx)
-        } else {
-            Arc::new(NoOpCommandExecutor::default())
-        }
-    }
+    new_command_executor_for_local_tty_session(
+        session_info,
+        executor_command_tx,
+        in_band_command_output_rx,
+        ctx,
+    )
 }
 
-#[cfg(feature = "local_tty")]
 fn new_command_executor_for_local_tty_session(
     session_info: &SessionInfo,
     executor_command_tx: &Sender<ExecutorCommandEvent>,

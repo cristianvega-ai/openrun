@@ -209,7 +209,6 @@ fn should_watch_prunes_gitignored_directory() {
     ));
 }
 
-#[cfg(unix)]
 #[test]
 fn should_watch_prunes_directory_symlinks_and_their_descendants() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -231,7 +230,6 @@ fn should_watch_prunes_directory_symlinks_and_their_descendants() {
     ));
 }
 
-#[cfg(unix)]
 #[test]
 fn should_watch_ignores_symlinks_above_repo_root() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -248,7 +246,6 @@ fn should_watch_ignores_symlinks_above_repo_root() {
     ));
 }
 
-#[cfg(unix)]
 #[test]
 fn should_watch_allows_symlinked_repo_root() {
     let temp_dir = tempfile::tempdir().unwrap();

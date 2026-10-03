@@ -10,10 +10,8 @@ use warpui::{
 use super::{
     DetachType, PaneConfiguration, PaneContent, PaneId, PaneStackEvent, PaneView, TerminalPaneId,
 };
-#[cfg(feature = "local_fs")]
 use crate::app_state::{LeafContents, TerminalPaneSnapshot};
 use crate::code::buffer_location::LocalOrRemotePath;
-#[cfg(feature = "local_fs")]
 use crate::pane_group::CodeSource;
 use crate::pane_group::{self, Direction, PaneGroup};
 use crate::persistence::{BlockCompleted, ModelEvent};
@@ -427,13 +425,11 @@ fn handle_terminal_view_event(
                     session: session.clone(),
                 });
             }
-            #[cfg(feature = "local_fs")]
             Event::PreviewCodeInWarp { source } => {
                 ctx.emit(pane_group::Event::PreviewCodeInWarp {
                     source: source.clone(),
                 });
             }
-            #[cfg(feature = "local_fs")]
             Event::OpenCodeInWarp { source, layout } => {
                 ctx.emit(pane_group::Event::OpenCodeInWarp {
                     source: source.clone(),
@@ -455,7 +451,6 @@ fn handle_terminal_view_event(
                 group.focus_pane(terminal_pane_id.into(), true, ctx);
                 ctx.emit(pane_group::Event::FocusPaneGroup);
             }
-            #[cfg(feature = "local_fs")]
             Event::OpenFileWithTarget {
                 path,
                 target,
@@ -534,14 +529,12 @@ fn handle_terminal_view_event(
             Event::OpenFilesPalette { source } => {
                 ctx.emit(pane_group::Event::OpenFilesPalette { source: *source })
             }
-            #[cfg(feature = "local_fs")]
             Event::FileRenamed { old_path, new_path } => {
                 ctx.emit(pane_group::Event::FileRenamed {
                     old_path: old_path.clone(),
                     new_path: new_path.clone(),
                 });
             }
-            #[cfg(feature = "local_fs")]
             Event::FileDeleted { path } => {
                 ctx.emit(pane_group::Event::FileDeleted { path: path.clone() });
             }

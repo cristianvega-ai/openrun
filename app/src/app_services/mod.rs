@@ -5,7 +5,6 @@
 //! Finder such that the user can open a new Warp tab or window
 //! in a given directory.
 
-#[cfg(target_os = "macos")]
 mod mac;
 
 use warpui::AppContext;
@@ -13,7 +12,6 @@ use warpui::AppContext;
 pub fn init(_ctx: &mut AppContext) {
     log::info!("Initializing app services");
 
-    #[cfg(target_os = "macos")]
     mac::init();
 }
 

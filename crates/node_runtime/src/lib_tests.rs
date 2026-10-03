@@ -11,7 +11,6 @@ fn manual_install_hint_is_not_empty() {
     assert!(!manual_install_hint().trim().is_empty());
 }
 
-#[cfg(feature = "local_fs")]
 #[test]
 fn manual_install_hint_names_the_minimum_node_version() {
     let major = super::MIN_NODE_VERSION.major.to_string();

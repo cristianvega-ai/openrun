@@ -298,22 +298,15 @@ pub(crate) fn surface_unavailable_reason(
         | SurfaceDestination::ThemePicker
         | SurfaceDestination::Keybindings
         | SurfaceDestination::ResourceCenter => None,
-        SurfaceDestination::CodeReview | SurfaceDestination::RightPanel
-            if !cfg!(feature = "local_fs") =>
-        {
-            Some("code review is unavailable without local filesystem support")
-        }
         SurfaceDestination::CodeReview | SurfaceDestination::RightPanel => None,
         SurfaceDestination::ProjectExplorer
-            if !cfg!(feature = "local_fs")
-                || !*CodeSettings::as_ref(ctx).show_project_explorer.value() =>
+            if !*CodeSettings::as_ref(ctx).show_project_explorer.value() =>
         {
             Some("project explorer is unavailable or disabled")
         }
         SurfaceDestination::ProjectExplorer => None,
         SurfaceDestination::GlobalSearch
-            if !cfg!(feature = "local_fs")
-                || !*CodeSettings::as_ref(ctx).show_global_search.value() =>
+            if !*CodeSettings::as_ref(ctx).show_global_search.value() =>
         {
             Some("global search is unavailable or disabled")
         }

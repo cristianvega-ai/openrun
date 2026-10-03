@@ -3,9 +3,8 @@
 use anyhow::Result;
 use warpui::{Entity, SingletonEntity};
 
-#[cfg_attr(target_os = "macos", path = "macos.rs")]
+#[path = "macos.rs"]
 // TODO(WASM): Replace this with a functional implementation for the web.
-#[cfg_attr(target_family = "wasm", path = "noop.rs")]
 mod imp;
 
 /// A singleton model that provides a way convenient way to make a "beep" when rung (via a call to

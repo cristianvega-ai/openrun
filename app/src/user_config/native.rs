@@ -132,7 +132,6 @@ impl super::WarpConfig {
 
     /// This method takes a file name candidate (appends .yaml if missing) and a LaunchConfig as
     /// arguments. It saves the file and returns the filename used if successful.
-    #[cfg(feature = "local_fs")]
     pub fn save_new_launch_config(
         file_name: String,
         launch_config: LaunchConfig,

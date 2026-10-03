@@ -6,7 +6,6 @@ use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use std::str;
 
-#[cfg(not(target_family = "wasm"))]
 use itertools::Itertools as _;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -535,7 +534,6 @@ pub fn group_roots_by_common_ancestor<P: RootPath>(roots: &[P]) -> RootGrouping<
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 pub fn file_exists_and_is_executable(path: &Path) -> bool {
     use is_executable::IsExecutable as _;
 
@@ -551,7 +549,6 @@ pub fn file_exists_and_is_executable(path: &Path) -> bool {
 /// Callers that need to resolve against a different PATH (e.g. one
 /// captured from the user's interactive login shell) should use
 /// [`resolve_executable_in_path`] directly.
-#[cfg(not(target_family = "wasm"))]
 pub fn resolve_executable(command: &str) -> Option<Cow<'_, Path>> {
     let path_var = env::var_os("PATH").unwrap_or_default();
     resolve_executable_in_path(command, &path_var)
@@ -564,7 +561,6 @@ pub fn resolve_executable(command: &str) -> Option<Cow<'_, Path>> {
 /// captured from the user's interactive login shell, matching how
 /// LSP finds binaries). Callers that want the process's PATH should
 /// use [`resolve_executable`] instead.
-#[cfg(not(target_family = "wasm"))]
 pub fn resolve_executable_in_path<'a>(
     command: &'a str,
     path_env: &std::ffi::OsStr,
@@ -581,7 +577,6 @@ pub fn resolve_executable_in_path<'a>(
     None
 }
 
-#[cfg(not(target_family = "wasm"))]
 fn resolve_executable_in_dir(path_dir: &Path, command: &str) -> Option<PathBuf> {
     let resolved = path_dir.join(command);
     if file_exists_and_is_executable(&resolved) {

@@ -350,9 +350,7 @@ impl ShellType {
     }
 
     /// Returns the syntax to use to run a second command only if the first one succeeds.
-    /// NOTE: Guarded with `cfg(unix)` b/c PowerShell didn't have the `&&` operator until v7. On
-    /// Unix, we can safely assume v7, but Windows comes with PowerShell v5 out of the box.
-    #[cfg(unix)]
+    /// NOTE: PowerShell didn't have the `&&` operator until v7; local sessions assume v7.
     pub fn and_combiner(self) -> &'static str {
         match self {
             ShellType::Bash | ShellType::Zsh | ShellType::PowerShell => " && ",

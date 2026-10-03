@@ -30,7 +30,6 @@ fn dump_debug_info_parses_as_flag() {
     assert!(matches!(args.command(), Some(Command::DumpDebugInfo)));
 }
 
-#[cfg(not(target_family = "wasm"))]
 #[test]
 fn dump_settings_schema_parses_output_path() {
     let args = Args::try_parse_from(["warp", "dump-settings-schema", "schema.json"]).unwrap();

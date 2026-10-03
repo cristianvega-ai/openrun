@@ -21,7 +21,6 @@ mod onboarding;
 mod pane;
 mod privacy;
 mod same_line_prompt_block;
-#[cfg(not(target_family = "wasm"))]
 pub(crate) mod schema_generation;
 mod scroll;
 mod select;
@@ -51,7 +50,6 @@ pub(crate) use onboarding::*;
 pub use pane::*;
 pub use privacy::*;
 pub use same_line_prompt_block::*;
-#[cfg(not(target_family = "wasm"))]
 pub use schema_generation::dump_settings_schema;
 pub use scroll::*;
 pub use select::*;
@@ -133,7 +131,6 @@ pub const ACTIVATION_HOTKEY_ENABLED: &str = "ActivationHotkeyEnabled";
 pub const ACTIVATION_HOTKEY_KEYBINDING: &str = "ActivationHotkeyKeybinding";
 
 pub const TIMES_TO_SHOW_AUTOSUGGESTION_HINT: i8 = 2;
-pub const QUAKE_WINDOW_AUTOHIDE_SUPPORTED: bool = cfg!(target_os = "macos");
 
 lazy_static! {
     pub static ref DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES: HashMap<QuakeModePinPosition, SizePercentages> =
@@ -342,8 +339,7 @@ impl Default for QuakeModeSettings {
             active_pin_position: Default::default(),
             pin_position_to_size_percentages: DEFAULT_QUAKE_MODE_SIZE_PERCENTAGES.clone(),
             pin_screen: Default::default(),
-            // Defaults to `true` only when it's supported on this platform.
-            hide_window_when_unfocused: QUAKE_WINDOW_AUTOHIDE_SUPPORTED,
+            hide_window_when_unfocused: true,
         }
     }
 }

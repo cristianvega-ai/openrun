@@ -191,7 +191,6 @@ pub struct FontInfo {
     /// The family name of the font, which is displayed to users.
     pub family_name: String,
     /// A list of all Apple font names for fonts in this family.
-    #[cfg(target_os = "macos")]
     pub font_names: Vec<String>,
     pub is_monospace: bool,
 }

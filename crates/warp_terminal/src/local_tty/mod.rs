@@ -5,13 +5,10 @@
 
 pub mod event_loop;
 pub mod mio_channel;
-#[cfg(unix)]
 pub mod server;
 pub mod shell;
 pub mod spawner;
-#[cfg(unix)]
 pub mod terminal_attributes;
-#[cfg(unix)]
 mod unix;
 
 use std::collections::HashMap;
@@ -23,7 +20,6 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shell::DirectShellStarter;
 
-#[cfg(unix)]
 pub use self::unix::*;
 use crate::SizeInfo;
 

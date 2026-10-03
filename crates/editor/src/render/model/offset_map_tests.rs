@@ -73,7 +73,6 @@ fn test_offset_map_placeholders() {
 /// This test only runs on macOS because it needs a text-layout implementation for [`EditDelta`]
 /// that creates non-empty text frames.
 #[test]
-#[cfg(target_os = "macos")]
 fn test_end_to_end() {
     // Group imports here so they don't cause "unused import" warnings on other targets.
 

@@ -19,8 +19,6 @@ mod matcher;
 pub use context::{Context, ContextPredicate, macros};
 pub use matcher::{IsBindingValid, MatchResult, Matcher};
 
-use crate::platform::OperatingSystem;
-
 #[derive(Default)]
 pub struct Keymap {
     fixed_bindings: Vec<FixedBinding>,
@@ -661,17 +659,12 @@ impl EditableBinding {
         self
     }
 
-    /// Sets the binding to that of `binding` if the current operating system is
-    /// [`OperatingSystem::Mac`]. Noops otherwise.
+    /// Sets the binding to that of `binding`.
     pub fn with_mac_key_binding<K>(self, binding: K) -> Self
     where
         K: AsRef<str>,
     {
-        if OperatingSystem::get() == OperatingSystem::Mac {
-            self.with_key_binding(binding)
-        } else {
-            self
-        }
+        self.with_key_binding(binding)
     }
 
     pub fn with_key_binding<K>(mut self, binding: K) -> Self
@@ -873,13 +866,7 @@ impl Keystroke {
                 "shift" => shift = true,
                 "cmd" => cmd = true,
                 "meta" => meta = true,
-                "cmdorctrl" => {
-                    if OperatingSystem::get() == OperatingSystem::Mac {
-                        cmd = true
-                    } else {
-                        ctrl = true
-                    }
-                }
+                "cmdorctrl" => cmd = true,
                 "space" => key = Some(String::from(" ")),
                 _ => {
                     if let Some(component) = components.peek() {
@@ -960,35 +947,19 @@ impl Keystroke {
     pub fn displayed(&self) -> String {
         let mut s = Vec::new();
         if self.ctrl {
-            let character = if OperatingSystem::get().is_mac() {
-                "⌃"
-            } else {
-                "Ctrl"
-            };
+            let character = "⌃";
             s.push(character.into());
         }
         if self.alt {
-            let character = if OperatingSystem::get().is_mac() {
-                "⌥"
-            } else {
-                "Alt"
-            };
+            let character = "⌥";
             s.push(character.into());
         }
         if self.shift {
-            let character = if OperatingSystem::get().is_mac() {
-                "⇧"
-            } else {
-                "Shift"
-            };
+            let character = "⇧";
             s.push(character.into());
         }
         if self.cmd {
-            let character = if OperatingSystem::get().is_mac() {
-                "⌘"
-            } else {
-                "Logo"
-            };
+            let character = "⌘";
             s.push(character.into());
         }
         if self.meta {
@@ -997,13 +968,8 @@ impl Keystroke {
 
         s.push(self.displayed_key());
 
-        if OperatingSystem::get().is_mac() {
-            // On mac, we want to display compactly as "⌘I"
-            s.join("")
-        } else {
-            // On windows and linux, we want to display "Ctrl Shift I" instead of "CtrlShiftI"
-            s.join(" ")
-        }
+        // On mac, we want to display compactly as "⌘I"
+        s.join("")
     }
 
     fn displayed_key(&self) -> String {
