@@ -1,5 +1,5 @@
+use settings::Setting;
 use settings::macros::define_settings_group;
-use settings::{Setting, SupportedPlatforms};
 use warpui::{AppContext, SingletonEntity};
 
 use crate::terminal::model::ObfuscateSecrets;
@@ -73,7 +73,6 @@ define_settings_group!(SafeModeSettings, settings: [
     safe_mode_enabled: SafeModeEnabled {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "privacy.secret_redaction.enabled",
         description: "Whether secret redaction is enabled to detect and obscure secrets in terminal output.",
@@ -81,7 +80,6 @@ define_settings_group!(SafeModeSettings, settings: [
     secret_display_mode: SecretDisplayModeSetting {
         type: SecretDisplayMode,
         default: SecretDisplayMode::Strikethrough,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "privacy.secret_redaction.secret_display_mode_setting",
         description: "Controls how detected secrets are visually displayed in the terminal.",
@@ -90,7 +88,6 @@ define_settings_group!(SafeModeSettings, settings: [
     hide_secrets_in_block_list: HideSecretsInBlockList {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "privacy.secret_redaction.hide_secrets_in_block_list",
         description: "Whether to hide detected secrets in the block list using asterisks.",

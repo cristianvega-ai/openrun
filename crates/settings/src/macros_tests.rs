@@ -2,27 +2,24 @@ use anyhow::Result;
 use warpui_core::{AppContext, SingletonEntity};
 
 use crate::manager::SettingsManager;
-use crate::{Setting, SupportedPlatforms, *};
+use crate::{Setting, *};
 
 define_settings_group!(TestSettings, settings: [
     simple_setting: SimpleSetting {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "test.simple_setting",
     },
     key_override_setting: KeyOverrideSetting {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
         storage_key: "KeyIsOverridden",
     },
     hierarchy_flag: HierarchyFlag {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "test_section.hierarchy_flag",
     },

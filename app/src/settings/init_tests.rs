@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use settings::{PrivatePreferences, PublicPreferences, Setting, SettingsManager};
 use settings_value::SettingsValue;
-use warp_core::settings::SupportedPlatforms;
 use warp_core::settings::macros::define_settings_group;
 use warp_core::user_preferences::GetUserPreferences as _;
 use warpui::SingletonEntity;
@@ -20,21 +19,18 @@ define_settings_group!(MigrationTestSettings, settings: [
     public_setting: PublicSetting {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "migration_test.public_setting",
     },
     public_string_setting: PublicStringSetting {
         type: String,
         default: String::new(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "migration_test.public_string_setting",
     },
     private_setting: PrivateSetting {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
 ]);
@@ -366,7 +362,6 @@ fn test_migration_with_multiple_setting_types() {
 
 mod notifications_migration {
     use settings::{PrivatePreferences, PublicPreferences, SettingsManager};
-    use warp_core::settings::SupportedPlatforms;
     use warp_core::settings::macros::define_settings_group;
     use warpui_extras::user_preferences;
 
@@ -376,7 +371,6 @@ mod notifications_migration {
         notifications: MigrationTestNotifications {
             type: NotificationsSettings,
             default: NotificationsSettings::default(),
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             toml_path: "migration_test.notifications",
             max_table_depth: 1,

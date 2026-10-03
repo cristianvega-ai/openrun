@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use settings::SupportedPlatforms;
 use settings::macros::define_settings_group;
 use warpui::units::Pixels;
 use warpui::{AppContext, SingletonEntity};
@@ -124,7 +123,6 @@ define_settings_group!(TerminalSettings, settings: [
     use_audible_bell: UseAudibleBell {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::DESKTOP, /* Audible bell is not supported on web */
         private: false,
         toml_path: "terminal.use_audible_bell",
         description: "Whether to play an audible bell sound on terminal bell events.",
@@ -132,7 +130,6 @@ define_settings_group!(TerminalSettings, settings: [
     spacing_mode: Spacing {
         type: SpacingMode,
         default: SpacingMode::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.spacing",
         description: "Controls the spacing between terminal blocks.",
@@ -140,7 +137,6 @@ define_settings_group!(TerminalSettings, settings: [
     maximum_grid_size: MaximumGridSize {
         type: usize,
         default: 50_000,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "terminal.maximum_grid_size",
         description: "The maximum number of rows in the terminal grid.",
@@ -148,7 +144,6 @@ define_settings_group!(TerminalSettings, settings: [
     alt_screen_padding: AltScreenPadding {
         type: AltScreenPaddingMode,
         default: AltScreenPaddingMode::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.full_screen_apps.alt_screen_padding",
         max_table_depth: 0,
@@ -157,7 +152,6 @@ define_settings_group!(TerminalSettings, settings: [
     osc52_clipboard_access: Osc52ClipboardAccessSetting {
         type: Osc52ClipboardAccess,
         default: Osc52ClipboardAccess::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "terminal.osc52_clipboard_access",
         description: "Controls whether terminal programs can access the system clipboard via OSC 52 escape sequences. Options: deny (default), write_only, read_write.",

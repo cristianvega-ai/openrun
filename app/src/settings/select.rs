@@ -2,8 +2,8 @@ use std::ops::Not;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use settings::Setting;
 use settings::macros::define_settings_group;
-use settings::{Setting, SupportedPlatforms};
 use warpui::AppContext;
 use warpui::clipboard::ClipboardContent;
 
@@ -44,7 +44,6 @@ define_settings_group!(SelectionSettings, settings: [
     copy_on_select: CopyOnSelect {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "terminal.copy_on_select",
         description: "Whether text is automatically copied to the clipboard when selected.",
@@ -52,7 +51,6 @@ define_settings_group!(SelectionSettings, settings: [
     middle_click_paste_enabled: MiddleClickPasteEnabled {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::MAC,
         private: false,
         toml_path: "terminal.input.middle_click_paste_enabled",
         description: "Whether middle-click pastes from the clipboard.",
@@ -60,7 +58,6 @@ define_settings_group!(SelectionSettings, settings: [
     right_click_behavior: RightClickBehaviorSetting {
         type: RightClickBehavior,
         default: RightClickBehavior::ContextMenu,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "terminal.input.right_click_behavior",
         description: "What a bare right-click does in the terminal.",
@@ -83,17 +80,11 @@ impl SelectionSettings {
         }
     }
 
-    /// Implements the correct middle-click paste behavior for the current platform.
-    ///
-    /// Linux has the "primary clipboard" to which it maps the middle mouse button. Other platforms
-    /// lack this separate clipboard, and so we map middle-click to the normal clipboard on those
-    /// platforms.
+    /// Reads the clipboard for a middle-click paste, if middle-click paste is enabled. macOS has
+    /// no separate selection clipboard, so middle-click pastes from the normal clipboard.
     pub fn read_for_middle_click_paste(&self, ctx: &mut AppContext) -> Option<ClipboardContent> {
-        (self
-            .middle_click_paste_enabled
-            .is_supported_on_current_platform()
-            && *self.middle_click_paste_enabled.value())
-        .then(|| ctx.clipboard().read())
-        .filter(|content| content.is_empty().not())
+        (*self.middle_click_paste_enabled.value())
+            .then(|| ctx.clipboard().read())
+            .filter(|content| content.is_empty().not())
     }
 }

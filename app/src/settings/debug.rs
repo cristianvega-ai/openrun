@@ -1,5 +1,5 @@
+use settings::Setting;
 use settings::macros::define_settings_group;
-use settings::{Setting, SupportedPlatforms};
 
 // Debug mode settings.
 //
@@ -23,32 +23,27 @@ define_settings_group!(DebugSettings, settings: [
     is_shell_debug_mode_enabled: IsShellDebugModeEnabled {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     are_in_band_generators_for_all_sessions_enabled: AreInBandGeneratorsForAllSessionsEnabled {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     force_disable_in_band_generators: ForceDisableInBandGenerators {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
         storage_key: "DisableInBandCommands",
     },
     recording_mode: RecordingModeEnabled {
         type: bool,
         default: cfg!(feature = "recording_mode"),
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     show_memory_stats: ShowMemoryStats {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     }
 ]);

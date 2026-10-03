@@ -1,6 +1,5 @@
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
-use warp_core::settings::SupportedPlatforms;
 use warp_core::settings::macros::define_settings_group;
 
 /// The app icon to use (mac-only).
@@ -119,7 +118,6 @@ define_settings_group!(AppIconSettings, settings: [
     app_icon: AppIconState {
         type: AppIcon,
         default: AppIcon::Default,
-        supported_platforms: SupportedPlatforms::MAC,
         private: false,
         storage_key: "AppIcon",
         toml_path: "appearance.icon.app_icon",
@@ -128,7 +126,6 @@ define_settings_group!(AppIconSettings, settings: [
     show_dock_icon: ShowDockIconState {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::MAC,
         private: false,
         storage_key: "ShowDockIcon",
         toml_path: "appearance.icon.show_dock_icon",

@@ -1,11 +1,9 @@
-use settings::SupportedPlatforms;
 use settings::macros::define_settings_group;
 
 define_settings_group!(WindowSettings, settings: [
     background_blur_radius: BackgroundBlurRadius {
         type: u8,
         default: 1,
-        supported_platforms: SupportedPlatforms::MAC,
         private: false,
         storage_key: "OverrideBlur",
         toml_path: "appearance.window.override_blur",
@@ -14,7 +12,6 @@ define_settings_group!(WindowSettings, settings: [
     background_opacity: BackgroundOpacity {
         type: u8,
         default: 100,
-        supported_platforms: SupportedPlatforms::DESKTOP,
         private: false,
         storage_key: "OverrideOpacity",
         toml_path: "appearance.window.override_opacity",
@@ -23,7 +20,6 @@ define_settings_group!(WindowSettings, settings: [
     open_windows_at_custom_size: OpenWindowsAtCustomSize {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::DESKTOP,
         private: false,
         toml_path: "appearance.window.open_windows_at_custom_size",
         description: "Whether to open new windows at a custom size instead of the default.",
@@ -31,7 +27,6 @@ define_settings_group!(WindowSettings, settings: [
     new_windows_num_columns: NewWindowsNumColumns {
         type: u16,
         default: 80,
-        supported_platforms: SupportedPlatforms::DESKTOP,
         private: false,
         toml_path: "appearance.window.new_windows_num_columns",
         description: "The number of columns for new windows when using a custom size.",
@@ -39,7 +34,6 @@ define_settings_group!(WindowSettings, settings: [
     new_windows_num_rows: NewWindowsNumRows {
         type: u16,
         default: 40,
-        supported_platforms: SupportedPlatforms::DESKTOP,
         private: false,
         toml_path: "appearance.window.new_windows_num_rows",
         description: "The number of rows for new windows when using a custom size.",
@@ -47,7 +41,6 @@ define_settings_group!(WindowSettings, settings: [
     left_panel_visibility_across_tabs: LeftPanelVisibilityAcrossTabs {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::DESKTOP,
         private: false,
         toml_path: "appearance.window.left_panel_visibility_across_tabs",
         description: "Whether the left panel visibility is shared across all tabs.",
@@ -55,7 +48,6 @@ define_settings_group!(WindowSettings, settings: [
     zoom_level: ZoomLevel {
         type: u16,
         default: 100,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.window.zoom_level",
         description: "The zoom level for the window, as a percentage.",

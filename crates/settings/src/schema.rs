@@ -2,8 +2,6 @@
 
 use schemars::{Schema, SchemaGenerator};
 
-use crate::SupportedPlatforms;
-
 /// Metadata about a single setting, collected via `inventory` for schema generation.
 ///
 /// Each setting registered with `define_setting!` or `implement_setting_for_enum!`
@@ -21,9 +19,6 @@ pub struct SettingSchemaEntry {
 
     /// Whether this setting is private (excluded from user-facing schema).
     pub is_private: bool,
-
-    /// Returns which platforms this setting applies to.
-    pub supported_platforms_fn: fn() -> SupportedPlatforms,
 
     /// Returns the default value serialized as JSON.
     pub default_value_fn: fn() -> String,
@@ -50,7 +45,6 @@ macro_rules! submit_schema_entry {
         description: $desc:expr,
         toml_path_value: $toml_path:expr,
         fallback_storage_key: $fallback_key:expr,
-        supported_platforms: $plat:expr,
         max_table_depth: $mtd:expr,
         default: $default:tt,
         value_type: $type:ty $(,)?
@@ -73,7 +67,6 @@ macro_rules! submit_schema_entry {
                     HIER
                 },
                 is_private: $private,
-                supported_platforms_fn: || $plat,
                 default_value_fn: || {
                     let val: $type = $default;
                     serde_json::to_string(&val).expect("default value should serialize")

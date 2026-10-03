@@ -1,5 +1,5 @@
+use settings::Setting;
 use settings::macros::define_settings_group;
-use settings::{Setting, SupportedPlatforms};
 use warpui::AppContext;
 use warpui::platform::SystemTheme;
 
@@ -17,7 +17,6 @@ define_settings_group!(ThemeSettings, settings: [
         // Note that for new users, we now override this default value in SettingsInitializer
         // to set the default theme to Phenomenon.
         default: ThemeKind::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.themes.theme",
         max_table_depth: 0,
@@ -26,7 +25,6 @@ define_settings_group!(ThemeSettings, settings: [
     use_system_theme: UseSystemTheme {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "SystemTheme",
         toml_path: "appearance.themes.system_theme",
@@ -35,7 +33,6 @@ define_settings_group!(ThemeSettings, settings: [
     selected_system_themes: SystemThemes {
         type: SelectedSystemThemes,
         default: SelectedSystemThemes::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "SelectedSystemThemes",
         toml_path: "appearance.themes.selected_system_themes",

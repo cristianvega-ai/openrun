@@ -1,5 +1,5 @@
+use settings::Setting;
 use settings::macros::define_settings_group;
-use settings::{Setting, SupportedPlatforms};
 use warp_core::ui::builder::MIN_FONT_SIZE;
 use warpui::elements::DEFAULT_UI_LINE_HEIGHT_RATIO;
 use warpui::fonts::Weight;
@@ -17,7 +17,6 @@ define_settings_group!(FontSettings,
         monospace_font_name: MonospaceFontName {
             type: String,
             default: DEFAULT_MONOSPACE_FONT_NAME.to_string(),
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             storage_key: "FontName",
             toml_path: "appearance.text.font_name",
@@ -26,7 +25,6 @@ define_settings_group!(FontSettings,
         monospace_font_size: MonospaceFontSize {
             type: f32,
             default: DEFAULT_MONOSPACE_FONT_SIZE,
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             storage_key: "FontSize",
             toml_path: "appearance.text.font_size",
@@ -35,7 +33,6 @@ define_settings_group!(FontSettings,
         monospace_font_weight: MonospaceFontWeight {
             type: Weight,
             default: DEFAULT_MONOSPACE_FONT_WEIGHT,
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             storage_key: "FontWeight",
             toml_path: "appearance.text.font_weight",
@@ -44,7 +41,6 @@ define_settings_group!(FontSettings,
         line_height_ratio: LineHeightRatio {
             type: f32,
             default: DEFAULT_UI_LINE_HEIGHT_RATIO,
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             toml_path: "appearance.text.line_height_ratio",
             description: "The line height ratio for terminal text.",
@@ -52,7 +48,6 @@ define_settings_group!(FontSettings,
         notebook_font_size: NotebookFontSize {
             type: f32,
             default: 14.0,
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             toml_path: "appearance.text.notebook_font_size",
             description: "The font size used in notebooks.",
@@ -60,7 +55,6 @@ define_settings_group!(FontSettings,
         match_notebook_to_monospace_font_size: MatchNotebookToMonospaceFontSize {
             type: bool,
             default: true,
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             toml_path: "appearance.text.match_notebook_to_monospace_font_size",
             description: "Whether the notebook font size matches the terminal font size.",
@@ -68,7 +62,6 @@ define_settings_group!(FontSettings,
         enforce_minimum_contrast: EnforceMinimumContrast {
             type: EnforceMinimumContrastEnum,
             default: EnforceMinimumContrastEnum::default(),
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             toml_path: "appearance.text.enforce_minimum_contrast",
             description: "Whether to enforce minimum contrast for text readability.",
@@ -76,7 +69,6 @@ define_settings_group!(FontSettings,
         use_thin_strokes: UseThinStrokes {
             type: ThinStrokes,
             default: ThinStrokes::default(),
-            supported_platforms: SupportedPlatforms::MAC,
             private: false,
             toml_path: "appearance.text.use_thin_strokes",
             description: "Whether to use thin font strokes on macOS.",

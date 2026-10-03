@@ -3,7 +3,7 @@ use std::fmt::Display;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use settings::macros::{maybe_define_setting, register_settings_events};
-use settings::{ChangeEventReason, Setting, SupportedPlatforms};
+use settings::{ChangeEventReason, Setting};
 use warp_errors::report_error;
 pub use warp_terminal::model::secrets::RegexDisplayInfo;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
@@ -55,7 +55,6 @@ impl settings_value::SettingsValue for CustomSecretRegex {}
 maybe_define_setting!(CustomSecretRegexList, group: PrivacySettings, {
     type: Vec<CustomSecretRegex>,
     default: Vec::new(),
-    supported_platforms: SupportedPlatforms::ALL,
     private: false,
     toml_path: "privacy.custom_secret_regex_list",
     description: "Custom regex patterns for detecting and redacting secrets.",
@@ -64,7 +63,6 @@ maybe_define_setting!(CustomSecretRegexList, group: PrivacySettings, {
 maybe_define_setting!(HasInitializedDefaultSecretRegexes, group: PrivacySettings, {
     type: bool,
     default: false,
-    supported_platforms: SupportedPlatforms::ALL,
     private: true,
 });
 

@@ -11,7 +11,6 @@ use std::ops::Deref;
 // Re-export crates used by macro expansions in downstream crates.
 #[doc(hidden)]
 pub use inventory as _inventory;
-pub use macros::SettingSection;
 pub use manager::SettingsManager;
 #[doc(hidden)]
 pub use schemars as _schemars;
@@ -136,20 +135,6 @@ impl warpui_core::Entity for PrivatePreferences {
 
 impl warpui_core::SingletonEntity for PrivatePreferences {}
 
-/// An enum representing the different platforms a setting could apply to.
-#[derive(Debug, Clone)]
-pub enum SupportedPlatforms {
-    ALL,
-    DESKTOP,
-    MAC,
-}
-
-impl SupportedPlatforms {
-    pub fn matches_current_platform(&self) -> bool {
-        true
-    }
-}
-
 /// An enum representing the reason for a change event.
 #[derive(Debug, Clone, Copy)]
 pub enum ChangeEventReason {
@@ -222,9 +207,6 @@ pub trait Setting {
     fn max_table_depth() -> Option<u32> {
         None
     }
-
-    /// Returns the platforms that this setting is supported on.
-    fn supported_platforms() -> SupportedPlatforms;
 
     /// Returns whether this setting is private (not shown in the user-visible settings file).
     ///
@@ -445,10 +427,6 @@ pub trait Setting {
         preferences.remove_value_with_hierarchy(key, Self::hierarchy())?;
         Ok(())
     }
-
-    /// Returns true if this setting is supported on the current platform (e.g., Web, Linux, Mac). For example,
-    /// Background opacity is supported on Mac and Linux, not Web.
-    fn is_supported_on_current_platform(&self) -> bool;
 
     /// Returns true if this setting was explicitly set by the user (i.e., not using the default value).
     fn is_value_explicitly_set(&self) -> bool;

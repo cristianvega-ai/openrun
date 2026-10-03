@@ -1,5 +1,4 @@
 use serde::{Deserialize, Deserializer, Serialize};
-use settings::SupportedPlatforms;
 use settings::macros::define_settings_group;
 
 pub use crate::util::openable_file_type::EditorLayout;
@@ -71,7 +70,6 @@ define_settings_group!(EditorSettings, settings: [
     open_file_editor: OpenFileEditor {
         type: EditorChoice,
         default: EditorChoice::SystemDefault,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "code.editor.open_file_editor",
         max_table_depth: 0,
@@ -80,7 +78,6 @@ define_settings_group!(EditorSettings, settings: [
     open_code_panels_file_editor: OpenCodePanelsFileEditor {
         type: EditorChoice,
         default: EditorChoice::Warp,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "code.editor.open_code_panels_file_editor",
         max_table_depth: 0,
@@ -89,7 +86,6 @@ define_settings_group!(EditorSettings, settings: [
     open_file_layout: OpenFileLayout {
         type: EditorLayout,
         default: EditorLayout::SplitPane,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "code.editor.open_file_layout",
         description: "The layout used when opening files in the editor.",
@@ -97,7 +93,6 @@ define_settings_group!(EditorSettings, settings: [
     prefer_markdown_viewer: PreferMarkdownViewer {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "code.editor.prefer_markdown_viewer",
         description: "Whether to use the Markdown viewer when opening Markdown files.",
@@ -105,7 +100,6 @@ define_settings_group!(EditorSettings, settings: [
     prefer_tabbed_editor_view: PreferTabbedEditorView {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "code.editor.prefer_tabbed_editor_view",
         description: "Whether to prefer opening files in a tabbed editor view.",

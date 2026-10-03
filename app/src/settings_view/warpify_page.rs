@@ -15,7 +15,7 @@ use warpui::{
 
 use super::settings_page::{
     Category, CategoryHeader, HEADER_FONT_SIZE, MatchData, PageType, SettingsPageEvent,
-    SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, ToggleState, add_setting,
+    SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, ToggleState,
     render_alternating_color_list, render_body_item, render_page_title,
 };
 use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, flags};
@@ -31,20 +31,14 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     builder: fn(SettingsAction) -> T,
 ) {
     // Add all of the toggle settings from the Warpify Page that you want to show up on the Command Palette here.
-    let mut toggle_binding_pairs = vec![];
-    if WarpifySettings::as_ref(app)
-        .enable_ssh_warpification
-        .is_supported_on_current_platform()
-    {
-        toggle_binding_pairs.push(ToggleSettingActionPair::new(
-            "SSH Warpification",
-            builder(SettingsAction::WarpifyPageToggle(
-                WarpifyPageAction::ToggleSshWarpification,
-            )),
-            context,
-            flags::SSH_WARPIFICATION_CONTEXT_FLAG,
-        ));
-    }
+    let toggle_binding_pairs = vec![ToggleSettingActionPair::new(
+        "SSH Warpification",
+        builder(SettingsAction::WarpifyPageToggle(
+            WarpifyPageAction::ToggleSshWarpification,
+        )),
+        context,
+        flags::SSH_WARPIFICATION_CONTEXT_FLAG,
+    )];
 
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(toggle_binding_pairs, app);
 }
@@ -108,7 +102,7 @@ impl WarpifyPageView {
         );
 
         let mut instance = Self {
-            page: Self::build_page(ctx),
+            page: Self::build_page(),
             remove_added_command_button_states: Default::default(),
             add_added_commands_editor,
             remove_denylisted_command_button_states: Default::default(),
@@ -119,7 +113,7 @@ impl WarpifyPageView {
         instance
     }
 
-    fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
+    fn build_page() -> PageType<Self> {
         let mut categories = vec![
             Category::new("", vec![Box::new(TitleWidget::default())]),
             Category::with_header(
@@ -129,16 +123,10 @@ impl WarpifyPageView {
             ),
         ];
 
-        let warpify_settings = WarpifySettings::as_ref(ctx);
-        if warpify_settings
-            .enable_ssh_warpification
-            .is_supported_on_current_platform()
-        {
-            categories.push(Category::with_header(
-                CategoryHeader::new("SSH").with_subtitle("Warpify your interactive SSH sessions."),
-                vec![Box::new(SSHWidget::default())],
-            ));
-        }
+        categories.push(Category::with_header(
+            CategoryHeader::new("SSH").with_subtitle("Warpify your interactive SSH sessions."),
+            vec![Box::new(SSHWidget::default())],
+        ));
         PageType::new_categorized(categories, None)
     }
 
@@ -487,75 +475,65 @@ impl SettingsWidget for SSHWidget {
             .enable_ssh_warpification
             .value();
 
-        add_setting(
-            &mut column,
-            &WarpifySettings::as_ref(app).enable_ssh_warpification,
-            move || {
-                render_body_item(
-                    "Warpify SSH Sessions".into(),
-                    None,
-                    ToggleState::Enabled,
-                    appearance,
-                    ui_builder
-                        .switch(self.enable_ssh_warpification_switch_state.clone())
-                        .check(enable_ssh_warpification)
-                        .build()
-                        .on_click(move |ctx, _, _| {
-                            ctx.dispatch_typed_action(WarpifyPageAction::ToggleSshWarpification);
-                        })
-                        .finish(),
-                    None,
-                )
-            },
-        );
+        column.add_child({
+            render_body_item(
+                "Warpify SSH Sessions".into(),
+                None,
+                ToggleState::Enabled,
+                appearance,
+                ui_builder
+                    .switch(self.enable_ssh_warpification_switch_state.clone())
+                    .check(enable_ssh_warpification)
+                    .build()
+                    .on_click(move |ctx, _, _| {
+                        ctx.dispatch_typed_action(WarpifyPageAction::ToggleSshWarpification);
+                    })
+                    .finish(),
+                None,
+            )
+        });
 
         let reuse_existing_control_master = *SshSettings::as_ref(app)
             .reuse_existing_control_master
             .value();
-        add_setting(
-            &mut column,
-            &SshSettings::as_ref(app).reuse_existing_control_master,
-            move || {
-                let mut column = Flex::column();
-                column.add_child(render_body_item(
-                    "Reuse existing SSH ControlMaster".into(),
-                    None,
-                    enable_ssh_warpification.into(),
-                    appearance,
-                    ui_builder
-                        .switch(self.reuse_control_master_switch_state.clone())
-                        .check(reuse_existing_control_master)
-                        .with_disabled(!enable_ssh_warpification)
-                        .build()
-                        .on_click(move |ctx, _, _| {
-                            if !enable_ssh_warpification {
-                                return;
-                            }
-                            ctx.dispatch_typed_action(
-                                WarpifyPageAction::ToggleReuseSshControlMaster,
-                            );
-                        })
-                        .finish(),
-                    None,
-                ));
-                column.add_child(
-                    ui_builder
-                        .paragraph(SSH_REUSE_CONTROL_MASTER_DESCRIPTION.to_owned())
-                        .with_style(UiComponentStyles {
-                            font_color: Some(description_text_color.into_solid()),
-                            margin: Some(
-                                Coords::default()
-                                    .top(styles::DESCRIPTION_NEGATIVE_MARGIN_OFFSET)
-                                    .bottom(styles::DESCRIPTION_LINE_MARGIN_BOTTOM),
-                            ),
-                            ..Default::default()
-                        })
-                        .build()
-                        .finish(),
-                );
-                column.finish()
-            },
-        );
+        column.add_child({
+            let mut column = Flex::column();
+            column.add_child(render_body_item(
+                "Reuse existing SSH ControlMaster".into(),
+                None,
+                enable_ssh_warpification.into(),
+                appearance,
+                ui_builder
+                    .switch(self.reuse_control_master_switch_state.clone())
+                    .check(reuse_existing_control_master)
+                    .with_disabled(!enable_ssh_warpification)
+                    .build()
+                    .on_click(move |ctx, _, _| {
+                        if !enable_ssh_warpification {
+                            return;
+                        }
+                        ctx.dispatch_typed_action(WarpifyPageAction::ToggleReuseSshControlMaster);
+                    })
+                    .finish(),
+                None,
+            ));
+            column.add_child(
+                ui_builder
+                    .paragraph(SSH_REUSE_CONTROL_MASTER_DESCRIPTION.to_owned())
+                    .with_style(UiComponentStyles {
+                        font_color: Some(description_text_color.into_solid()),
+                        margin: Some(
+                            Coords::default()
+                                .top(styles::DESCRIPTION_NEGATIVE_MARGIN_OFFSET)
+                                .bottom(styles::DESCRIPTION_LINE_MARGIN_BOTTOM),
+                        ),
+                        ..Default::default()
+                    })
+                    .build()
+                    .finish(),
+            );
+            column.finish()
+        });
 
         column.finish()
     }

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use settings::SupportedPlatforms;
 use settings::macros::define_settings_group;
 use warp_core::ui::theme::AnsiColorIdentifier;
 
@@ -29,7 +28,6 @@ pub enum NewTabPlacement {
 settings::macros::implement_setting_for_enum!(
     NewTabPlacement,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "general.new_tab_placement",
     description: "Where new tabs are placed in the tab bar.",
@@ -59,7 +57,6 @@ pub enum TabCloseButtonPosition {
 settings::macros::implement_setting_for_enum!(
     TabCloseButtonPosition,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.tabs.tab_close_button_position",
     description: "Position of the close button on tabs.",
@@ -95,7 +92,6 @@ pub enum WorkspaceDecorationVisibility {
 settings::macros::implement_setting_for_enum!(
     WorkspaceDecorationVisibility,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.tabs.workspace_decoration_visibility",
     description: "When workspace decorations such as the tab bar are visible.",
@@ -186,7 +182,6 @@ pub struct DirectoryTabColors(pub(crate) HashMap<String, DirectoryTabColor>);
 settings::macros::implement_setting_for_enum!(
     DirectoryTabColors,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.tabs.directory_tab_colors",
     max_table_depth: 0,
@@ -277,7 +272,6 @@ impl HeaderToolbarChipSelection {
 settings::macros::implement_setting_for_enum!(
     HeaderToolbarChipSelection,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.tabs.header_toolbar_chip_selection",
     description: "Configuration for the header toolbar chips in the vertical tab panel header.",
@@ -307,7 +301,6 @@ pub enum VerticalTabsViewMode {
 settings::macros::implement_setting_for_enum!(
     VerticalTabsViewMode,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.vertical_tabs.view_mode",
     description: "Display mode for the vertical tab bar.",
@@ -337,7 +330,6 @@ pub enum VerticalTabsDisplayGranularity {
 settings::macros::implement_setting_for_enum!(
     VerticalTabsDisplayGranularity,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.vertical_tabs.display_granularity",
     description: "Granularity of rows displayed in the vertical tabs panel.",
@@ -367,7 +359,6 @@ pub enum VerticalTabsTabItemMode {
 settings::macros::implement_setting_for_enum!(
     VerticalTabsTabItemMode,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.vertical_tabs.tab_item_mode",
     description: "Tab item display mode in vertical tabs.",
@@ -398,7 +389,6 @@ pub enum VerticalTabsPrimaryInfo {
 settings::macros::implement_setting_for_enum!(
     VerticalTabsPrimaryInfo,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.vertical_tabs.primary_info",
     description: "The primary information displayed on vertical tabs.",
@@ -429,7 +419,6 @@ pub enum VerticalTabsCompactSubtitle {
 settings::macros::implement_setting_for_enum!(
     VerticalTabsCompactSubtitle,
     TabSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "appearance.vertical_tabs.compact_subtitle",
     description: "Subtitle shown on compact vertical tabs.",
@@ -439,7 +428,6 @@ define_settings_group!(TabSettings, settings: [
     show_indicators: ShowIndicatorsButton {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.tabs.show_indicators_button",
         description: "Whether to show activity indicators on tabs.",
@@ -447,7 +435,6 @@ define_settings_group!(TabSettings, settings: [
     show_code_review_button: ShowCodeReviewButton {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "code.editor.show_code_review_button",
         description: "Whether to show the code review button on tabs.",
@@ -455,7 +442,6 @@ define_settings_group!(TabSettings, settings: [
     show_code_review_diff_stats: ShowCodeReviewDiffStats {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "code.editor.show_code_review_diff_stats",
         description: "Whether to show lines added/removed counts on the code review button.",
@@ -463,7 +449,6 @@ define_settings_group!(TabSettings, settings: [
     preserve_active_tab_color: PreserveActiveTabColor {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.tabs.preserve_active_tab_color",
         description: "Whether to preserve the active tab's color when switching tabs.",
@@ -471,7 +456,6 @@ define_settings_group!(TabSettings, settings: [
     use_vertical_tabs: UseVerticalTabs {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.vertical_tabs.enabled",
         description: "Whether to display tabs vertically instead of horizontally.",
@@ -479,7 +463,6 @@ define_settings_group!(TabSettings, settings: [
     show_vertical_tab_panel_in_restored_windows: ShowVerticalTabPanelInRestoredWindows {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.vertical_tabs.show_panel_in_restored_windows",
         description: "When restoring a window, open the vertical tabs panel even if it was closed when the session was saved.",
@@ -487,7 +470,6 @@ define_settings_group!(TabSettings, settings: [
     hide_title_bar_search_bar_in_vertical_tabs: HideTitleBarSearchBarInVerticalTabs {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.vertical_tabs.hide_title_bar_search_bar",
         description: "When using the vertical tab layout, hide the search bar in the title bar. Search stays available via the command palette and keyboard shortcuts.",
@@ -495,7 +477,6 @@ define_settings_group!(TabSettings, settings: [
     use_latest_user_prompt_as_conversation_title_in_tab_names: UseLatestUserPromptAsConversationTitleInTabNames {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.vertical_tabs.use_latest_prompt_as_title",
         description: "Whether vertical tab names for agent conversations use the latest user prompt.",
@@ -508,7 +489,6 @@ define_settings_group!(TabSettings, settings: [
     vertical_tabs_show_pr_link: VerticalTabsShowPrLink {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.vertical_tabs.show_pr_link",
         description: "Whether to show PR links on vertical tabs.",
@@ -516,7 +496,6 @@ define_settings_group!(TabSettings, settings: [
     vertical_tabs_show_diff_stats: VerticalTabsShowDiffStats {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.vertical_tabs.show_diff_stats",
         description: "Whether to show diff stats on vertical tabs.",
@@ -524,7 +503,6 @@ define_settings_group!(TabSettings, settings: [
     vertical_tabs_show_details_on_hover: VerticalTabsShowDetailsOnHover {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.vertical_tabs.show_details_on_hover",
         description: "Whether to show a details sidecar when hovering over a vertical tab.",

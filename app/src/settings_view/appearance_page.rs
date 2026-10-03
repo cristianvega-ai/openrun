@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use ::settings::{Setting, SettingSection, ToggleableSetting};
+use ::settings::{Setting, ToggleableSetting};
 use enum_iterator::all;
 use warp_core::ui::theme::color::internal_colors;
 use warp_errors::{report_error, report_if_error};
@@ -126,53 +126,32 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         ),
     ];
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "cursor blink",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleCursorBlink,
-            )),
-            context,
-            flags::CURSOR_BLINK_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            AppEditorSettings::as_ref(app)
-                .cursor_blink
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "cursor blink",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleCursorBlink,
+        )),
+        context,
+        flags::CURSOR_BLINK_CONTEXT_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "jump to bottom of block button",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleJumpToBottomOfBlockButton,
-            )),
-            context,
-            flags::JUMP_TO_BOTTOM_OF_BLOCK_BUTTON_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            BlockListSettings::as_ref(app)
-                .show_jump_to_bottom_of_block_button
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "jump to bottom of block button",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleJumpToBottomOfBlockButton,
+        )),
+        context,
+        flags::JUMP_TO_BOTTOM_OF_BLOCK_BUTTON_CONTEXT_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "block dividers",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleShowBlockDividers,
-            )),
-            context,
-            flags::BLOCK_DIVIDERS_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            BlockListSettings::as_ref(app)
-                .show_block_dividers
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "block dividers",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleShowBlockDividers,
+        )),
+        context,
+        flags::BLOCK_DIVIDERS_CONTEXT_FLAG,
+    ));
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "dim inactive panes",
@@ -260,37 +239,23 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         flags::MATCH_NOTEBOOK_FONT_SIZE_TO_TERMINAL_FONT_SIZE_FLAG,
     ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "tab indicators",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleTabIndicators,
-            )),
-            context,
-            flags::TAB_INDICATORS_FLAG,
-        )
-        .is_supported_on_current_platform(
-            TabSettings::as_ref(app)
-                .show_indicators
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "tab indicators",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleTabIndicators,
+        )),
+        context,
+        flags::TAB_INDICATORS_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "focus follows mouse",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleFocusPaneOnHover,
-            )),
-            context,
-            flags::FOCUS_PANES_ON_HOVER_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            PaneSettings::as_ref(app)
-                .focus_panes_on_hover
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "focus follows mouse",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleFocusPaneOnHover,
+        )),
+        context,
+        flags::FOCUS_PANES_ON_HOVER_CONTEXT_FLAG,
+    ));
 
     // Add bindings for each visibility option.
     app.register_fixed_bindings([
@@ -327,21 +292,14 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
     ]);
 
     // Add a toggle alias for "Zen mode".
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "zen mode",
-            builder(SettingsAction::AppearancePageToggle(
-                AppearancePageAction::ToggleWorkspaceDecorationVisibility,
-            )),
-            context,
-            flags::HIDE_WORKSPACE_DECORATIONS_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            TabSettings::as_ref(app)
-                .workspace_decoration_visibility
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "zen mode",
+        builder(SettingsAction::AppearancePageToggle(
+            AppearancePageAction::ToggleWorkspaceDecorationVisibility,
+        )),
+        context,
+        flags::HIDE_WORKSPACE_DECORATIONS_CONTEXT_FLAG,
+    ));
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "vertical tab layout",
@@ -1233,46 +1191,19 @@ impl AppearanceSettingsPageView {
             vec![Box::new(ThemeSelectWidget::default())],
         )];
 
-        if AppIconSettings::as_ref(ctx).is_supported_on_current_platform() {
-            categories.push(Category::new(
-                "Icon",
-                vec![Box::new(CustomAppIconWidget::default())],
-            ));
-        }
+        categories.push(Category::new(
+            "Icon",
+            vec![Box::new(CustomAppIconWidget::default())],
+        ));
 
-        let window_settings = WindowSettings::as_ref(ctx);
-        let mut window_settings_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
-        if window_settings
-            .open_windows_at_custom_size
-            .is_supported_on_current_platform()
-        {
-            window_settings_widgets.push(Box::new(CustomWindowSizeWidget::default()));
-        }
-        if window_settings
-            .background_opacity
-            .is_supported_on_current_platform()
-        {
-            window_settings_widgets.push(Box::new(WindowOpacityWidget::default()));
-        }
-        if window_settings
-            .background_blur_radius
-            .is_supported_on_current_platform()
-        {
-            window_settings_widgets.push(Box::new(WindowBlurWidget::default()));
-        }
-
-        window_settings_widgets.push(Box::new(ZoomLevelWidget));
-
-        if window_settings
-            .left_panel_visibility_across_tabs
-            .is_supported_on_current_platform()
-        {
-            window_settings_widgets.push(Box::new(ToolsPanelStateScopeWidget::default()));
-        }
-
-        if !window_settings_widgets.is_empty() {
-            categories.push(Category::new("Window", window_settings_widgets));
-        }
+        let window_settings_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(CustomWindowSizeWidget::default()),
+            Box::new(WindowOpacityWidget::default()),
+            Box::new(WindowBlurWidget::default()),
+            Box::new(ZoomLevelWidget),
+            Box::new(ToolsPanelStateScopeWidget::default()),
+        ];
+        categories.push(Category::new("Window", window_settings_widgets));
 
         // Tools panel tab visibility toggles. These control which of the four
         // tabs appear in the tools panel and mirror the onboarding "Customize
@@ -1316,30 +1247,13 @@ impl AppearanceSettingsPageView {
 
         categories.push(Category::new("Blocks", block_settings_widgets));
 
-        let font_settings = FontSettings::as_ref(ctx);
         let mut text_settings_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
             Box::new(TerminalFontWidget::default()),
             Box::new(NotebookFontSizeWidget::default()),
         ];
-        if font_settings
-            .use_thin_strokes
-            .is_supported_on_current_platform()
-        {
-            text_settings_widgets.push(Box::new(ThinStrokesWidget::default()));
-        }
-        if font_settings
-            .enforce_minimum_contrast
-            .is_supported_on_current_platform()
-        {
-            text_settings_widgets.push(Box::new(MinimumContrastWidget::default()));
-        }
-        let ligature_settings = LigatureSettings::as_ref(ctx);
-        if ligature_settings
-            .ligature_rendering_enabled
-            .is_supported_on_current_platform()
-        {
-            text_settings_widgets.push(Box::new(LigaturesWidget::default()));
-        }
+        text_settings_widgets.push(Box::new(ThinStrokesWidget::default()));
+        text_settings_widgets.push(Box::new(MinimumContrastWidget::default()));
+        text_settings_widgets.push(Box::new(LigaturesWidget::default()));
 
         categories.push(Category::new("Text", text_settings_widgets));
 
@@ -1351,15 +1265,9 @@ impl AppearanceSettingsPageView {
             ],
         ));
 
-        let tab_settings = TabSettings::as_ref(ctx);
         let mut tab_settings_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
             vec![Box::new(TabIndicatorWidget::default())];
-        if tab_settings
-            .workspace_decoration_visibility
-            .is_supported_on_current_platform()
-        {
-            tab_settings_widgets.push(Box::new(ZenModeWidget::default()));
-        }
+        tab_settings_widgets.push(Box::new(ZenModeWidget::default()));
         tab_settings_widgets.push(Box::new(TabCloseButtonPositionWidget::default()));
 
         tab_settings_widgets.push(Box::new(PreserveActiveTabColorWidget::default()));
@@ -2583,9 +2491,6 @@ impl SettingsWidget for CustomAppIconWidget {
                 .finish(),
             None,
         );
-        let show_dock_icon_is_supported = AppIconSettings::as_ref(app)
-            .show_dock_icon
-            .is_supported_on_current_platform();
 
         {
             use crate::appearance::AppearanceManager;
@@ -2611,22 +2516,14 @@ impl SettingsWidget for CustomAppIconWidget {
                         .build()
                         .finish(),
                 );
-                let column = if show_dock_icon_is_supported {
-                    column.with_child(show_dock_icon_toggle)
-                } else {
-                    column
-                };
-                return column.finish();
+                return column.with_child(show_dock_icon_toggle).finish();
             }
         }
 
-        let column = Flex::column().with_child(dropdown);
-        let column = if show_dock_icon_is_supported {
-            column.with_child(show_dock_icon_toggle)
-        } else {
-            column
-        };
-        column.finish()
+        Flex::column()
+            .with_child(dropdown)
+            .with_child(show_dock_icon_toggle)
+            .finish()
     }
 }
 

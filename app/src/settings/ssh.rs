@@ -1,4 +1,3 @@
-use settings::SupportedPlatforms;
 use settings::macros::define_settings_group;
 
 define_settings_group!(SshSettings,
@@ -6,7 +5,6 @@ define_settings_group!(SshSettings,
         reuse_existing_control_master: ReuseExistingSshControlMaster {
             type: bool,
             default: false,
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             storage_key: "ReuseExistingSshControlMaster",
             toml_path: "warpify.ssh.reuse_existing_control_master",

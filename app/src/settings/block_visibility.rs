@@ -1,4 +1,3 @@
-use settings::SupportedPlatforms;
 use settings::macros::define_settings_group;
 
 // Settings for visibility of non-user command blocks like the bootstrap block
@@ -7,7 +6,6 @@ define_settings_group!(BlockVisibilitySettings, settings: [
    should_show_bootstrap_block: ShouldShowBootstrapBlock {
        type: bool,
        default: false,
-       supported_platforms: SupportedPlatforms::ALL,
        private: false,
        toml_path: "appearance.blocks.should_show_bootstrap_block",
        description: "Whether the bootstrap block is visible in the terminal.",
@@ -15,7 +13,6 @@ define_settings_group!(BlockVisibilitySettings, settings: [
    should_show_in_band_command_blocks: ShouldShowInBandCommandBlocks {
        type: bool,
        default: false,
-       supported_platforms: SupportedPlatforms::ALL,
        private: false,
        toml_path: "appearance.blocks.should_show_in_band_command_blocks",
        description: "Whether in-band command blocks are visible in the terminal.",
@@ -23,7 +20,6 @@ define_settings_group!(BlockVisibilitySettings, settings: [
    should_show_ssh_block: ShouldShowSSHBlock {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "appearance.blocks.should_show_ssh_block",
         description: "Whether the SSH connection block is visible in the terminal.",

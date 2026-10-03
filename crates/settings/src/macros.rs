@@ -22,14 +22,12 @@
 //!     bool_setting: BoolSetting {
 //!         type: bool,
 //!         default: false,
-//!         supported_platforms: SupportedPlatforms::ALL,
 //!         private: false,
 //!         toml_path: "example.bool_setting",
 //!     },
 //!     float_setting: FloatSetting {
 //!         type: f32,
 //!         default: 3.14,
-//!         supported_platforms: SupportedPlatforms::ALL,
 //!         private: false,
 //!         toml_path: "example.float_setting",
 //!     },
@@ -72,7 +70,7 @@
 //!
 //! impl settings_value::SettingsValue for MyEnum {}
 //!
-//! implement_setting_for_enum!(MyEnum, EnumSettingsGroup, SupportedPlatforms::ALL, private: false, toml_path: "example.my_enum");
+//! implement_setting_for_enum!(MyEnum, EnumSettingsGroup, private: false, toml_path: "example.my_enum");
 //!
 //! define_settings_group!(EnumSettingsGroup, settings: [
 //!     my_enum: MyEnum,
@@ -94,7 +92,6 @@
 //!     bool_setting: BoolSetting {
 //!         type: bool,
 //!         default: false,
-//!         supported_platforms: SupportedPlatforms::ALL,
 //!         private: false,
 //!         toml_path: "example.bool_setting",
 //!     },
@@ -176,31 +173,31 @@ pub use ::concat_idents::concat_idents;
 #[macro_export]
 macro_rules! define_setting {
     // Convenience arm: with storage_key + toml_path + max_table_depth
-    ($name:ident: $type:ty, default: $default:tt, supported_platforms: $supported_platforms: expr, group: $group:path, storage_key: $storage_key:expr, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)?) => {
-        $crate::macros::define_setting!(@base $name: $type, default: $default, supported_platforms: $supported_platforms, group: $group, private: $private, storage_key: $storage_key, toml_path_value: Some($toml_path), max_table_depth_value: $mtd $(, description: $desc)?);
+    ($name:ident: $type:ty, default: $default:tt, group: $group:path, storage_key: $storage_key:expr, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)?) => {
+        $crate::macros::define_setting!(@base $name: $type, default: $default, group: $group, private: $private, storage_key: $storage_key, toml_path_value: Some($toml_path), max_table_depth_value: $mtd $(, description: $desc)?);
     };
     // Convenience arm: with toml_path + max_table_depth (no explicit storage_key)
-    ($name:ident: $type:ty, default: $default:tt, supported_platforms: $supported_platforms: expr, group: $group:path, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)?) => {
-        $crate::macros::define_setting!(@base $name: $type, default: $default, supported_platforms: $supported_platforms, group: $group, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path), max_table_depth_value: $mtd $(, description: $desc)?);
+    ($name:ident: $type:ty, default: $default:tt, group: $group:path, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)?) => {
+        $crate::macros::define_setting!(@base $name: $type, default: $default, group: $group, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path), max_table_depth_value: $mtd $(, description: $desc)?);
     };
     // Convenience arm: with storage_key + toml_path
-    ($name:ident: $type:ty, default: $default:tt, supported_platforms: $supported_platforms: expr, group: $group:path, storage_key: $storage_key:expr, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)?) => {
-        $crate::macros::define_setting!(@base $name: $type, default: $default, supported_platforms: $supported_platforms, group: $group, private: $private, storage_key: $storage_key, toml_path_value: Some($toml_path) $(, description: $desc)?);
+    ($name:ident: $type:ty, default: $default:tt, group: $group:path, storage_key: $storage_key:expr, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)?) => {
+        $crate::macros::define_setting!(@base $name: $type, default: $default, group: $group, private: $private, storage_key: $storage_key, toml_path_value: Some($toml_path) $(, description: $desc)?);
     };
     // Convenience arm: with toml_path (no explicit storage_key)
-    ($name:ident: $type:ty, default: $default:tt, supported_platforms: $supported_platforms: expr, group: $group:path, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)?) => {
-        $crate::macros::define_setting!(@base $name: $type, default: $default, supported_platforms: $supported_platforms, group: $group, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path) $(, description: $desc)?);
+    ($name:ident: $type:ty, default: $default:tt, group: $group:path, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)?) => {
+        $crate::macros::define_setting!(@base $name: $type, default: $default, group: $group, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path) $(, description: $desc)?);
     };
     // Convenience arm: without toml_path (private settings with explicit storage_key)
-    ($name:ident: $type:ty, default: $default:tt, supported_platforms: $supported_platforms: expr, group: $group:path, storage_key: $storage_key:expr, private: $private:expr $(, description: $desc:literal)?) => {
-        $crate::macros::define_setting!(@base $name: $type, default: $default, supported_platforms: $supported_platforms, group: $group, private: $private, storage_key: $storage_key, toml_path_value: None::<&str> $(, description: $desc)?);
+    ($name:ident: $type:ty, default: $default:tt, group: $group:path, storage_key: $storage_key:expr, private: $private:expr $(, description: $desc:literal)?) => {
+        $crate::macros::define_setting!(@base $name: $type, default: $default, group: $group, private: $private, storage_key: $storage_key, toml_path_value: None::<&str> $(, description: $desc)?);
     };
     // Convenience arm: without toml_path (private settings with default storage_key)
-    ($name:ident: $type:ty, default: $default:tt, supported_platforms: $supported_platforms: expr, group: $group:path, private: $private:expr $(, description: $desc:literal)?) => {
-        $crate::macros::define_setting!(@base $name: $type, default: $default, supported_platforms: $supported_platforms, group: $group, private: $private, storage_key: stringify!($name), toml_path_value: None::<&str> $(, description: $desc)?);
+    ($name:ident: $type:ty, default: $default:tt, group: $group:path, private: $private:expr $(, description: $desc:literal)?) => {
+        $crate::macros::define_setting!(@base $name: $type, default: $default, group: $group, private: $private, storage_key: stringify!($name), toml_path_value: None::<&str> $(, description: $desc)?);
     };
     // Base arm: generates the struct and Setting impl
-    (@base $name:ident: $type:ty, default: $default:tt, supported_platforms: $supported_platforms: expr, group: $group:path, private: $private:expr, storage_key: $storage_key:expr, toml_path_value: $toml_path_value:expr $(, max_table_depth_value: $mtd:literal)? $(, description: $desc:literal)?) => {
+    (@base $name:ident: $type:ty, default: $default:tt, group: $group:path, private: $private:expr, storage_key: $storage_key:expr, toml_path_value: $toml_path_value:expr $(, max_table_depth_value: $mtd:literal)? $(, description: $desc:literal)?) => {
         pub struct $name {
             inner: $type,
             is_explicitly_set: bool,
@@ -273,10 +270,6 @@ macro_rules! define_setting {
                 $private
             }
 
-            fn supported_platforms() -> SupportedPlatforms {
-                $supported_platforms
-            }
-
             fn value(&self) -> &Self::Value {
                 &self.inner
             }
@@ -332,10 +325,6 @@ macro_rules! define_setting {
                 $default
             }
 
-            fn is_supported_on_current_platform(&self) -> bool {
-                $supported_platforms.matches_current_platform()
-            }
-
             fn is_value_explicitly_set(&self) -> bool {
                 self.is_explicitly_set
             }
@@ -371,7 +360,6 @@ macro_rules! define_setting {
             description: $crate::_schema_default_description!($($desc)?),
             toml_path_value: $toml_path_value,
             fallback_storage_key: $storage_key,
-            supported_platforms: $supported_platforms,
             max_table_depth: $crate::_schema_default_max_table_depth!($($mtd)?),
             default: $default,
             value_type: $type
@@ -383,11 +371,10 @@ pub use define_setting;
 #[macro_export]
 macro_rules! maybe_define_setting {
     // storage_key + toml_path + max_table_depth
-    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, supported_platforms: $supported_platforms:expr, private: $private:expr, storage_key: $key:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)? $(,)? }) => {
+    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, private: $private:expr, storage_key: $key:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)? $(,)? }) => {
         $crate::macros::define_setting!(
             $setting: $value_type,
             default: $default,
-            supported_platforms: $supported_platforms,
             group: $group,
             storage_key: $key,
                         private: $private,
@@ -398,11 +385,10 @@ macro_rules! maybe_define_setting {
         );
     };
     // toml_path + max_table_depth (no explicit storage_key)
-    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, supported_platforms: $supported_platforms:expr, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)? $(,)? }) => {
+    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)? $(,)? }) => {
         $crate::macros::define_setting!(
             $setting: $value_type,
             default: $default,
-            supported_platforms: $supported_platforms,
             group: $group,
                         private: $private,
             toml_path: $toml_path,
@@ -412,11 +398,10 @@ macro_rules! maybe_define_setting {
         );
     };
     // storage_key + toml_path
-    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, supported_platforms: $supported_platforms:expr, private: $private:expr, storage_key: $key:expr, toml_path: $toml_path:expr $(, description: $desc:literal)? $(,)? }) => {
+    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, private: $private:expr, storage_key: $key:expr, toml_path: $toml_path:expr $(, description: $desc:literal)? $(,)? }) => {
         $crate::macros::define_setting!(
             $setting: $value_type,
             default: $default,
-            supported_platforms: $supported_platforms,
             group: $group,
             storage_key: $key,
                         private: $private,
@@ -426,11 +411,10 @@ macro_rules! maybe_define_setting {
         );
     };
     // toml_path only (no explicit storage_key)
-    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, supported_platforms: $supported_platforms:expr, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)? $(,)? }) => {
+    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)? $(,)? }) => {
         $crate::macros::define_setting!(
             $setting: $value_type,
             default: $default,
-            supported_platforms: $supported_platforms,
             group: $group,
                         private: $private,
             toml_path: $toml_path
@@ -439,11 +423,10 @@ macro_rules! maybe_define_setting {
         );
     };
     // storage_key only, no toml_path (private settings with custom key)
-    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, supported_platforms: $supported_platforms:expr, private: $private:expr, storage_key: $key:expr $(, description: $desc:literal)? $(,)? }) => {
+    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, private: $private:expr, storage_key: $key:expr $(, description: $desc:literal)? $(,)? }) => {
         $crate::macros::define_setting!(
             $setting: $value_type,
             default: $default,
-            supported_platforms: $supported_platforms,
             group: $group,
             storage_key: $key,
                         private: $private
@@ -452,11 +435,10 @@ macro_rules! maybe_define_setting {
         );
     };
     // neither toml_path nor storage_key (private settings with default key)
-    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, supported_platforms: $supported_platforms:expr, private: $private:expr $(, description: $desc:literal)? $(,)? }) => {
+    ($setting:ident, group: $group:path, { type: $value_type:ty, default: $default:expr, private: $private:expr $(, description: $desc:literal)? $(,)? }) => {
         $crate::macros::define_setting!(
             $setting: $value_type,
             default: $default,
-            supported_platforms: $supported_platforms,
             group: $group,
                         private: $private
             $(, description: $desc)?
@@ -470,7 +452,7 @@ pub use maybe_define_setting;
 #[macro_export]
 macro_rules! implement_setting_for_enum {
     // Base arm with all parameters
-    (@base $name:ident, $group:path, $supported_platforms:expr, private: $private:expr, storage_key: $storage_key:expr, toml_path_value: $toml_path_value:expr $(, max_table_depth_value: $mtd:literal)? $(, description: $desc:literal)?) => {
+    (@base $name:ident, $group:path, private: $private:expr, storage_key: $storage_key:expr, toml_path_value: $toml_path_value:expr $(, max_table_depth_value: $mtd:literal)? $(, description: $desc:literal)?) => {
         const _: () = {
             let toml_path: Option<&str> = $toml_path_value;
             if !$private && toml_path.is_none() {
@@ -519,10 +501,6 @@ macro_rules! implement_setting_for_enum {
 
             fn is_private() -> bool {
                 $private
-            }
-
-            fn supported_platforms() -> SupportedPlatforms {
-                $supported_platforms
             }
 
             fn value(&self) -> &Self::Value {
@@ -577,10 +555,6 @@ macro_rules! implement_setting_for_enum {
                 Self::default()
             }
 
-            fn is_supported_on_current_platform(&self) -> bool {
-                $supported_platforms.matches_current_platform()
-            }
-
             fn is_value_explicitly_set(&self) -> bool {
                 // For enums using implement_setting_for_enum, we don't track explicit setting
                 // TODO(advait): deprecate this in favour of struct settings in a follow-up PR.
@@ -609,39 +583,31 @@ macro_rules! implement_setting_for_enum {
             description: $crate::_schema_default_description!($($desc)?),
             toml_path_value: $toml_path_value,
             fallback_storage_key: $storage_key,
-            supported_platforms: $supported_platforms,
             max_table_depth: $crate::_schema_default_max_table_depth!($($mtd)?),
             default: { <$name as Default>::default() },
             value_type: $name
         );
     };
     // toml_path + max_table_depth
-    ($name:ident, $group:path, $supported_platforms:expr, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)? $(,)?) => {
-        $crate::macros::implement_setting_for_enum!(@base $name, $group, $supported_platforms, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path), max_table_depth_value: $mtd $(, description: $desc)?);
+    ($name:ident, $group:path, private: $private:expr, toml_path: $toml_path:expr, max_table_depth: $mtd:literal $(, description: $desc:literal)? $(,)?) => {
+        $crate::macros::implement_setting_for_enum!(@base $name, $group, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path), max_table_depth_value: $mtd $(, description: $desc)?);
     };
     // toml_path only
-    ($name:ident, $group:path, $supported_platforms:expr, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)? $(,)?) => {
-        $crate::macros::implement_setting_for_enum!(@base $name, $group, $supported_platforms, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path) $(, description: $desc)?);
+    ($name:ident, $group:path, private: $private:expr, toml_path: $toml_path:expr $(, description: $desc:literal)? $(,)?) => {
+        $crate::macros::implement_setting_for_enum!(@base $name, $group, private: $private, storage_key: stringify!($name), toml_path_value: Some($toml_path) $(, description: $desc)?);
     };
     // neither (private settings)
-    ($name:ident, $group:path, $supported_platforms:expr, private: $private:expr $(, description: $desc:literal)? $(,)?) => {
-        $crate::macros::implement_setting_for_enum!(@base $name, $group, $supported_platforms, private: $private, storage_key: stringify!($name), toml_path_value: None::<&str> $(, description: $desc)?);
+    ($name:ident, $group:path, private: $private:expr $(, description: $desc:literal)? $(,)?) => {
+        $crate::macros::implement_setting_for_enum!(@base $name, $group, private: $private, storage_key: stringify!($name), toml_path_value: None::<&str> $(, description: $desc)?);
     };
 }
 pub use implement_setting_for_enum;
 
-/// By defining a trait that the settings groups implement, we're able to call
-/// methods like `is_supported_on_current_platform()` without knowing the exact settings
-/// group we're operating on at compile time.
-pub trait SettingSection {
-    fn is_supported_on_current_platform(&self) -> bool;
-}
-
 #[macro_export]
 macro_rules! define_settings_group {
-    ($group:ident, settings: [$($var:ident: $setting:ident $({ type: $value_type:ty, default: $default:expr, supported_platforms: $supported_platforms:expr, private: $private:expr $(, storage_key: $storage_key:literal)? $(, toml_path: $toml_path:literal)? $(, max_table_depth: $mtd:literal)? $(, description: $desc:literal)? $(,)? })? $(,)? )*]) => {
+    ($group:ident, settings: [$($var:ident: $setting:ident $({ type: $value_type:ty, default: $default:expr, private: $private:expr $(, storage_key: $storage_key:literal)? $(, toml_path: $toml_path:literal)? $(, max_table_depth: $mtd:literal)? $(, description: $desc:literal)? $(,)? })? $(,)? )*]) => {
         $(
-            $crate::macros::maybe_define_setting!($setting, group: $group $(, { type: $value_type, default: $default, supported_platforms: $supported_platforms, private: $private $(, storage_key: $storage_key)? $(, toml_path: $toml_path)? $(, max_table_depth: $mtd)? $(, description: $desc)? })?);
+            $crate::macros::maybe_define_setting!($setting, group: $group $(, { type: $value_type, default: $default, private: $private $(, storage_key: $storage_key)? $(, toml_path: $toml_path)? $(, max_table_depth: $mtd)? $(, description: $desc)? })?);
         )*
 
         pub struct $group {
@@ -689,20 +655,6 @@ macro_rules! define_settings_group {
                     );
                 )*
                 settings_group
-            }
-        }
-
-        impl $crate::macros::SettingSection for $group {
-            /// If any of the settings in the setting group are supported, then the group is supported.
-            /// If none of the settings in the group are supported, then the group is not supported.
-            fn is_supported_on_current_platform(&self) -> bool {
-                use $crate::Setting;
-                $(
-                    if self.$var.is_supported_on_current_platform() {
-                        return true;
-                    }
-                )*
-                false
             }
         }
 

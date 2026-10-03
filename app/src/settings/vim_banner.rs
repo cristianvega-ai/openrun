@@ -1,4 +1,3 @@
-use settings::SupportedPlatforms;
 use warp_core::define_settings_group;
 
 use crate::banner::BannerState;
@@ -14,7 +13,6 @@ define_settings_group!(VimBannerSettings, settings: [
     vim_keybindings_banner_state: VimKeybindingsBannerState {
         type: BannerState,
         default: BannerState::NotDismissed,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
 ]);

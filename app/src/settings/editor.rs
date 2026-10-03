@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 
 use enum_iterator::{Sequence, all};
 use serde::{Deserialize, Serialize};
+use settings::Setting as _;
 use settings::macros::define_settings_group;
-use settings::{Setting as _, SupportedPlatforms};
 use warpui::ModelContext;
 
 #[derive(
@@ -182,7 +182,6 @@ define_settings_group!(AppEditorSettings, settings: [
     cursor_blink: CursorBlinkEnabled {
         type: CursorBlink,
         default: CursorBlink::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "CursorBlink",
         toml_path: "appearance.cursor.cursor_blink",
@@ -191,7 +190,6 @@ define_settings_group!(AppEditorSettings, settings: [
     cursor_display_type: CursorDisplayState {
         type: CursorDisplayType,
         default: CursorDisplayType::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "CursorDisplayType",
         toml_path: "appearance.cursor.cursor_display_type",
@@ -200,7 +198,6 @@ define_settings_group!(AppEditorSettings, settings: [
     vim_mode: VimModeEnabled {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "text_editing.vim_mode_enabled",
         description: "Whether Vim keybindings are enabled.",
@@ -208,7 +205,6 @@ define_settings_group!(AppEditorSettings, settings: [
     vim_unnamed_system_clipboard: VimUnnamedSystemClipboard {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "text_editing.vim_unnamed_system_clipboard",
         description: "Whether the Vim unnamed register uses the system clipboard.",
@@ -216,7 +212,6 @@ define_settings_group!(AppEditorSettings, settings: [
     vim_status_bar: VimStatusBar {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "text_editing.vim_status_bar",
         description: "Whether the Vim status bar is displayed.",
@@ -224,7 +219,6 @@ define_settings_group!(AppEditorSettings, settings: [
     code_editor_line_number_mode: CodeEditorLineNumberModeSetting {
         type: CodeEditorLineNumberMode,
         default: CodeEditorLineNumberMode::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "text_editing.code_editor_line_number_mode",
         description: "How line numbers are displayed in code editors.",
@@ -232,7 +226,6 @@ define_settings_group!(AppEditorSettings, settings: [
     autocomplete_symbols: AutocompleteSymbols {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "text_editing.autocomplete_symbols",
         description: "Whether matching symbols like brackets and quotes are auto-completed.",
@@ -240,7 +233,6 @@ define_settings_group!(AppEditorSettings, settings: [
     enable_autosuggestions: EnableAutosuggestions {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "Autosuggestions",
         toml_path: "terminal.input.autosuggestions.enabled",
@@ -249,7 +241,6 @@ define_settings_group!(AppEditorSettings, settings: [
     autosuggestion_keybinding_hint: AutosuggestionKeybindingHint {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "terminal.input.autosuggestions.keybinding_hint",
         description: "Whether autosuggestion keybinding hints are displayed.",
@@ -257,7 +248,6 @@ define_settings_group!(AppEditorSettings, settings: [
     show_autosuggestion_ignore_button: ShowAutosuggestionIgnoreButton {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "terminal.input.autosuggestions.show_ignore_button",
         description: "Whether the ignore button is shown for autosuggestions.",

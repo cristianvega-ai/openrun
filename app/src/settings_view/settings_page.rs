@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use itertools::Itertools as _;
 use pathfinder_color::ColorU;
 use pathfinder_geometry::vector::vec2f;
-use settings::Setting;
 use warp_core::ui::theme::color::internal_colors;
 use warpui::elements::new_scrollable::{
     ClippedAxisConfiguration, DualAxisConfig, SingleAxisConfig,
@@ -750,27 +749,6 @@ fn render_alternating_color_list_item<SettingsPageAction: Action + Clone>(
     // than below. This visually balances that to make it look vertically centered.
     .with_padding_bottom(ALTERNATING_LIST_ITEM_PADDING + 2.)
     .finish()
-}
-
-/// Adds a setting (e.g., "Background opacity") to the parent flex if it is supported on the current platform. Returns
-/// true if the setting was added to the flex, false if not.
-///
-/// This is the default method to use when rendering a setting in the settings menu, across all pages
-/// (Appearance, Features, etc).
-pub fn add_setting<F>(
-    parent_flex: &mut Flex,
-    setting_model: &impl Setting,
-    setting_element: F,
-) -> bool
-where
-    F: FnOnce() -> Box<dyn Element>,
-{
-    if setting_model.is_supported_on_current_platform() {
-        parent_flex.add_child(setting_element());
-        true
-    } else {
-        false
-    }
 }
 
 pub(super) struct PageTitle<V: warpui::View> {

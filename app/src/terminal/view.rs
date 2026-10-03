@@ -6138,16 +6138,12 @@ impl TerminalView {
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or(false);
         let alias_expansion_settings = AliasExpansionSettings::as_ref(ctx);
-        let supported_on_current_platform = alias_expansion_settings
-            .alias_expansion_enabled
-            .is_supported_on_current_platform();
         let is_fish_shell = self
             .active_block_session_id()
             .and_then(|id| self.sessions.as_ref(ctx).get(id))
             .is_some_and(|s| s.shell().shell_type() == ShellType::Fish);
 
-        supported_on_current_platform
-            && !*alias_expansion_settings.alias_expansion_enabled
+        !*alias_expansion_settings.alias_expansion_enabled
             && !has_user_seen_banner
             // We don't suggest alias expansions for fish since we already expand
             // abbreviations by default.
@@ -6202,12 +6198,6 @@ impl TerminalView {
 
         // If notifications are not enabled on this platform, we don't want to
         // send notifications or show any of the notification-related banners.
-        if !session_settings_handle
-            .notifications
-            .is_supported_on_current_platform()
-        {
-            return;
-        }
 
         let notification_settings = session_settings_handle.notifications.value().clone();
         let long_running_trigger = NotificationsTrigger::LongRunningCommand(
@@ -6608,12 +6598,6 @@ impl TerminalView {
     ) {
         // If notifications are not enabled on this platform, we don't want to
         // show the notification error banner.
-        if !SessionSettings::as_ref(ctx)
-            .notifications
-            .is_supported_on_current_platform()
-        {
-            return;
-        }
 
         self.inline_banners_state.notifications_error_banner.error = Some(error);
 

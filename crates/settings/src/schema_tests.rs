@@ -84,14 +84,6 @@ fn no_duplicate_storage_keys() {
 }
 
 #[test]
-fn all_supported_platforms_fn_succeed() {
-    for entry in entries() {
-        // Just call it to ensure it doesn't panic.
-        let _ = (entry.supported_platforms_fn)();
-    }
-}
-
-#[test]
 fn hierarchy_values_are_well_formed() {
     for entry in entries() {
         if let Some(h) = entry.hierarchy {

@@ -1,7 +1,6 @@
 use settings::Setting as _;
 use settings_value::LenientSet;
 use strum_macros::EnumIter;
-use warp_core::settings::SupportedPlatforms;
 use warp_core::settings::macros::define_settings_group;
 use warpui::{AppContext, SingletonEntity as _};
 
@@ -30,7 +29,6 @@ pub enum DefaultSessionMode {
 settings::macros::implement_setting_for_enum!(
     DefaultSessionMode,
     GeneralSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "general.default_session_mode",
     description: "The default mode for new terminal sessions.",
@@ -106,7 +104,6 @@ define_settings_group!(GeneralSettings, settings: [
     show_warning_before_quitting: ShowWarningBeforeQuitting {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::DESKTOP,
         private: false,
         toml_path: "general.show_warning_before_quitting",
         description: "Whether to show a warning dialog before quitting Warp.",
@@ -114,7 +111,6 @@ define_settings_group!(GeneralSettings, settings: [
     quit_on_last_window_closed: QuitOnLastWindowClosed {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::MAC,
         private: false,
         toml_path: "general.quit_on_last_window_closed",
         description: "Whether to quit Warp when the last window is closed.",
@@ -122,7 +118,6 @@ define_settings_group!(GeneralSettings, settings: [
     restore_session: RestoreSession {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::DESKTOP,
         private: false,
         toml_path: "general.restore_session",
         description: "Whether to restore the previous session when Warp starts up.",
@@ -130,7 +125,6 @@ define_settings_group!(GeneralSettings, settings: [
     add_app_as_login_item: LoginItem {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::MAC,
         private: false,
         toml_path: "general.login_item",
         description: "Whether to launch Warp automatically when you log in.",
@@ -143,13 +137,11 @@ define_settings_group!(GeneralSettings, settings: [
     app_added_as_login_item: AppAddedAsLoginItem {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::MAC,
         private: true,
     },
     link_tooltip: LinkTooltip {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "general.link_tooltip",
         description: "Whether to show a tooltip when hovering over links.",
@@ -157,31 +149,26 @@ define_settings_group!(GeneralSettings, settings: [
     welcome_tips_features_used: WelcomeTipsFeaturesUsed {
         type: LenientSet<Tip>,
         default: LenientSet::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     welcome_tips_skipped_or_completed: WelcomeTipsCompleted {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     user_default_shell_unsupported_banner_state: UserDefaultShellUnsupportedBannerState {
         type: BannerState,
         default: BannerState::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     open_in_warp_banner_dismissed_for_markdown: OpenInWarpBannerDismissedMarkdown {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     open_in_warp_banner_dismissed_for_code_and_text: OpenInWarpBannerDismissedCode {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     // The file path of the tab config used when the default session mode is TabConfig.
@@ -189,7 +176,6 @@ define_settings_group!(GeneralSettings, settings: [
     default_tab_config_path: DefaultTabConfigPath {
         type: String,
         default: String::new(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "general.default_tab_config_path",
     },

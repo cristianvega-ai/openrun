@@ -2,20 +2,18 @@ mod reload_all_public_settings_tests {
     use warpui_core::SingletonEntity;
 
     use crate::manager::SettingsManager;
-    use crate::{Setting, SupportedPlatforms, *};
+    use crate::{Setting, *};
 
     define_settings_group!(ReloadTestSettings, settings: [
         public_flag: PublicFlag {
             type: bool,
             default: false,
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             toml_path: "test.public_flag",
         },
         private_flag: PrivateFlag {
             type: bool,
             default: false,
-            supported_platforms: SupportedPlatforms::ALL,
             private: true,
         },
     ]);
@@ -332,7 +330,6 @@ mod write_to_preferences_tests {
         struct_setting: StructSetting {
             type: StructWithOptionals,
             default: StructWithOptionals::default(),
-            supported_platforms: SupportedPlatforms::ALL,
             private: false,
             toml_path: "test.struct_setting",
         },
@@ -413,7 +410,6 @@ mod write_to_preferences_tests {
             quake_setting: QuakeLikeSetting {
                 type: QuakeLike,
                 default: QuakeLike::default(),
-                supported_platforms: SupportedPlatforms::ALL,
                 private: false,
                 toml_path: "test.quake_like_setting",
             },

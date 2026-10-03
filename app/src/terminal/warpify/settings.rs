@@ -2,7 +2,7 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use regex::Regex;
 use settings::macros::{maybe_define_setting, register_settings_events};
-use settings::{ChangeEventReason, Setting, SupportedPlatforms};
+use settings::{ChangeEventReason, Setting};
 use warp_errors::report_error;
 use warp_util::path::ShellFamily;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
@@ -13,7 +13,6 @@ use crate::terminal::ssh::util::{SshWarpifyCommand, parse_interactive_ssh_comman
 maybe_define_setting!(AddedSubshellCommands, group: WarpifySettings, {
     type: Vec<String>,
     default: Vec::new(),
-    supported_platforms: SupportedPlatforms::ALL,
     private: false,
     toml_path: "warpify.subshells.added_subshell_commands",
     description: "Additional regex patterns for commands that should be recognized as subshells.",
@@ -22,7 +21,6 @@ maybe_define_setting!(AddedSubshellCommands, group: WarpifySettings, {
 maybe_define_setting!(SubshellCommandsDenylist, group: WarpifySettings, {
     type: Vec<String>,
     default: Vec::new(),
-    supported_platforms: SupportedPlatforms::ALL,
     private: false,
     toml_path: "warpify.subshells.subshell_commands_denylist",
     description: "Commands that should not trigger the subshell warpification prompt.",
@@ -31,7 +29,6 @@ maybe_define_setting!(SubshellCommandsDenylist, group: WarpifySettings, {
 maybe_define_setting!(SshHostsDenylist, group: WarpifySettings, {
     type: Vec<String>,
     default: Vec::new(),
-    supported_platforms: SupportedPlatforms::ALL,
     private: false,
     toml_path: "warpify.ssh.ssh_hosts_denylist",
     description: "SSH hosts that should not trigger the warpification prompt.",
@@ -40,7 +37,6 @@ maybe_define_setting!(SshHostsDenylist, group: WarpifySettings, {
 maybe_define_setting!(EnableSshWarpification, group: WarpifySettings, {
     type: bool,
     default: true,
-    supported_platforms: SupportedPlatforms::ALL,
     private: false,
     toml_path: "warpify.ssh.enable_ssh_warpification",
     description: "Whether to enable Warp features in SSH sessions.",
@@ -60,7 +56,6 @@ maybe_define_setting!(EnableSshWarpification, group: WarpifySettings, {
 maybe_define_setting!(EnableSshWrapper, group: WarpifySettings, {
     type: bool,
     default: true,
-    supported_platforms: SupportedPlatforms::ALL,
     private: false,
     storage_key: "EnableSSHWrapper",
     toml_path: "warpify.ssh.enable_legacy_ssh_wrapper",
@@ -77,7 +72,6 @@ maybe_define_setting!(EnableSshWrapper, group: WarpifySettings, {
 maybe_define_setting!(UseSshTmuxWrapper, group: WarpifySettings, {
     type: bool,
     default: false,
-    supported_platforms: SupportedPlatforms::MAC,
     private: false,
     toml_path: "warpify.ssh.use_ssh_tmux_wrapper",
     description: "Deprecated: whether to use a tmux-based wrapper for SSH warpification.",
@@ -90,7 +84,6 @@ maybe_define_setting!(UseSshTmuxWrapper, group: WarpifySettings, {
 maybe_define_setting!(SshTmuxDeprecationNoticePending, group: WarpifySettings, {
     type: bool,
     default: false,
-    supported_platforms: SupportedPlatforms::MAC,
     private: false,
     toml_path: "warpify.ssh.ssh_tmux_deprecation_notice_pending",
     description: "Internal: whether to show the one-time tmux SSH deprecation notice.",

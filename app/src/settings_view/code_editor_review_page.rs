@@ -48,22 +48,17 @@ impl EditorAndCodeReviewPageView {
         });
 
         Self {
-            page: Self::build_page(ctx),
+            page: Self::build_page(),
             external_editor_view,
             code_editor_line_number_mode_dropdown,
         }
     }
 
-    fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
+    fn build_page() -> PageType<Self> {
         let mut widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
             vec![Box::new(ExternalEditorCodeWidget)];
 
-        if AppEditorSettings::as_ref(ctx)
-            .code_editor_line_number_mode
-            .is_supported_on_current_platform()
-        {
-            widgets.push(Box::new(CodeEditorLineNumberModeWidget::default()));
-        }
+        widgets.push(Box::new(CodeEditorLineNumberModeWidget::default()));
 
         widgets.extend([
             Box::new(CodeReviewPanelToggleWidget::default())

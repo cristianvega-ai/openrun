@@ -3,8 +3,8 @@ use std::ops::Range;
 
 use lazy_static::lazy_static;
 use regex::Regex;
+use settings::Setting;
 use settings::macros::define_settings_group;
-use settings::{Setting, SupportedPlatforms};
 use string_offset::ByteOffset;
 use warpui_core::elements::SmartSelectFn;
 use warpui_core::text::word_boundaries::WordBoundariesPolicy;
@@ -101,7 +101,6 @@ define_settings_group!(SemanticSelection, settings: [
     smart_select_enabled: SmartSelectEnabled {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "SmartSelect",
         toml_path: "terminal.smart_select.enabled",
@@ -110,7 +109,6 @@ define_settings_group!(SemanticSelection, settings: [
     word_char_allowlist: WordCharAllowlist {
         type: String,
         default: DEFAULT_WORD_CHAR_ALLOWLIST.to_owned(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "WordCharAllowlist",
         toml_path: "terminal.smart_select.word_char_allowlist",

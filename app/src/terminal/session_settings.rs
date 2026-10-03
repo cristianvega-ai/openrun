@@ -8,7 +8,6 @@ use lazy_static::lazy_static;
 pub use new_session_shell::*;
 use serde::{Deserialize, Serialize};
 pub use startup_shell::*;
-use warp_core::settings::SupportedPlatforms;
 use warp_core::settings::macros::define_settings_group;
 pub use working_directory_config::*;
 
@@ -204,7 +203,6 @@ define_settings_group!(SessionSettings, settings: [
     startup_shell_override: StartupShellOverride {
         type: StartupShell,
         default: StartupShell::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "session.startup_shell_override",
         description: "The shell to use when Warp starts up.",
@@ -212,7 +210,6 @@ define_settings_group!(SessionSettings, settings: [
     new_session_shell_override: NewSessionShellOverride {
         type: Option<NewSessionShell>,
         default: None,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "session.new_session_shell_override",
         description: "The shell to use when opening a new session.",
@@ -220,7 +217,6 @@ define_settings_group!(SessionSettings, settings: [
     honor_ps1: HonorPS1 {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "terminal.input.honor_ps1",
         description: "Whether to use your shell's PS1 prompt instead of the Warp prompt.",
@@ -228,13 +224,11 @@ define_settings_group!(SessionSettings, settings: [
     saved_prompt: SavedPrompt {
         type: PromptSelection,
         default: PromptSelection::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
     notifications: Notifications {
         type: NotificationsSettings,
         default: NotificationsSettings::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "notifications.preferences",
         max_table_depth: 1,
@@ -246,14 +240,12 @@ define_settings_group!(SessionSettings, settings: [
     git_prompt_dirty_indicator: LegacyGitPromptDirtyIndicator {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
         storage_key: "GitPromptDirtyIndicator",
     },
     cli_agent_footer_chip_selection: CLIAgentToolbarChipSelectionSetting {
         type: CLIAgentToolbarChipSelection,
         default: CLIAgentToolbarChipSelection::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.third_party.cli_agent_toolbar_chip_selection_setting",
         description: "Controls the layout of context chips in the CLI Agent toolbar.",
@@ -261,7 +253,6 @@ define_settings_group!(SessionSettings, settings: [
     notification_toast_duration_secs: NotificationToastDurationSecs {
         type: u64,
         default: 8,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "notifications.toast_duration_secs",
         description: "How long notification toasts are displayed, in seconds.",
@@ -271,7 +262,6 @@ define_settings_group!(SessionSettings, settings: [
 settings::macros::implement_setting_for_enum!(
     WorkingDirectoryConfig,
     SessionSettings,
-    SupportedPlatforms::ALL,
     private: false,
     toml_path: "session.working_directory_config",
     max_table_depth: 1,

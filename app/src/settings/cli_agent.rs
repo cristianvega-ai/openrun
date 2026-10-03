@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use regex::Regex;
 use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
-use settings::{Setting, SupportedPlatforms};
+use settings::Setting;
 use warp_core::settings::macros::define_settings_group;
 use warp_errors::report_if_error;
 use warpui::{AppContext, Entity, ModelContext, SingletonEntity};
@@ -100,7 +100,6 @@ define_settings_group!(CLIAgentSettings, settings: [
     should_render_cli_agent_footer: ShouldRenderCLIAgentToolbar {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.third_party.should_render_cli_agent_toolbar",
         description: "Whether to show the CLI agent footer for coding agent commands.",
@@ -112,7 +111,6 @@ define_settings_group!(CLIAgentSettings, settings: [
     auto_toggle_rich_input: AutoToggleRichInput {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.third_party.auto_toggle_composer",
         description: "Whether CLI agent Rich Input automatically closes and reopens based on the agent's blocked state.",
@@ -123,7 +121,6 @@ define_settings_group!(CLIAgentSettings, settings: [
     auto_open_rich_input_on_cli_agent_start: AutoOpenRichInputOnCLIAgentStart {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.third_party.auto_open_composer_on_cli_agent_start",
         description: "Whether CLI agent Rich Input automatically opens when a CLI agent session starts.",
@@ -136,7 +133,6 @@ define_settings_group!(CLIAgentSettings, settings: [
     auto_dismiss_rich_input_after_submit: AutoDismissRichInputAfterSubmit {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.third_party.auto_dismiss_composer_after_submit",
         description: "Whether CLI agent Rich Input automatically closes after the user submits a prompt.",
@@ -147,7 +143,6 @@ define_settings_group!(CLIAgentSettings, settings: [
     submit_on_ctrl_enter: SubmitRichInputOnCtrlEnter {
         type: bool,
         default: false,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.third_party.submit_on_ctrl_enter",
         description: "When enabled, the Rich Input editor submits on Ctrl+Enter instead of Enter. Enter inserts a newline.",
@@ -160,7 +155,6 @@ define_settings_group!(CLIAgentSettings, settings: [
     cli_agent_footer_enabled_commands: CLIAgentToolbarEnabledCommands {
         type: ToolbarCommandMap,
         default: ToolbarCommandMap::default(),
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.third_party.cli_agent_toolbar_enabled_commands",
         max_table_depth: 1,
@@ -171,7 +165,6 @@ define_settings_group!(CLIAgentSettings, settings: [
     show_agent_notifications: ShowAgentNotifications {
         type: bool,
         default: true,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         toml_path: "agents.warp_agent.other.show_agent_notifications",
         description: "Whether agent notifications are shown.",

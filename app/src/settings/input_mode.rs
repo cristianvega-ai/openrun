@@ -1,5 +1,5 @@
+use settings::Setting;
 use settings::macros::define_settings_group;
-use settings::{Setting, SupportedPlatforms};
 
 use crate::terminal::block_list_viewport::InputMode;
 
@@ -9,7 +9,6 @@ define_settings_group!(InputModeSettings, settings: [
         // Note that for new users, we now override this default value in SettingsInitializer
         // to set it to InputMode::Waterfall.
         default: InputMode::PinnedToBottom,
-        supported_platforms: SupportedPlatforms::ALL,
         private: false,
         storage_key: "InputMode",
         toml_path: "appearance.input.input_mode",

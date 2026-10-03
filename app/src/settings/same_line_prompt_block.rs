@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use settings::SupportedPlatforms;
 use warp_core::define_settings_group;
 
 #[derive(
@@ -39,7 +38,6 @@ define_settings_group!(SameLinePromptBlockSettings, settings: [
     same_line_prompt_block_state: SameLinePromptBlockState {
         type: SLPBlockState,
         default: SLPBlockState::NotShown,
-        supported_platforms: SupportedPlatforms::ALL,
         private: true,
     },
 ]);

@@ -28,7 +28,7 @@ use super::keybindings::KeyBindingModifyingState;
 use super::settings_page::{
     AdditionalInfo, CONTENT_FONT_SIZE, Category, HEADER_PADDING, MatchData, PageType,
     SettingsPageMeta, SettingsPageViewHandle, SettingsWidget, TOGGLE_BUTTON_RIGHT_PADDING,
-    ToggleState, add_setting, build_reset_button, render_body_item, render_body_item_label,
+    ToggleState, build_reset_button, render_body_item, render_body_item_label,
     render_dropdown_item, render_dropdown_item_label, render_sub_sub_header,
 };
 use super::{
@@ -101,11 +101,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::AUTOCOMPLETE_SYMBOLS_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            AppEditorSettings::as_ref(app)
-                .autocomplete_symbols
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "restore windows, tabs, and panes on startup",
@@ -122,11 +117,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::EXTRA_META_KEYS_LEFT_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            KeysSettings::as_ref(app)
-                .extra_meta_keys
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             EXTRA_META_KEYS_RIGHT_TEXT,
@@ -135,11 +125,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::EXTRA_META_KEYS_RIGHT_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            KeysSettings::as_ref(app)
-                .extra_meta_keys
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "scroll reporting",
@@ -148,11 +133,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::SCROLL_REPORTING_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            AltScreenReporting::as_ref(app)
-                .scroll_reporting_enabled
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "completions while typing",
@@ -161,11 +141,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::COMPLETIONS_OPEN_WHILE_TYPING_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .completions_open_while_typing
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "warp completions",
@@ -190,11 +165,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::COMMAND_CORRECTIONS_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .command_corrections
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "error underlining",
@@ -203,11 +173,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::ERROR_UNDERLINING_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .error_underlining
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "syntax highlighting",
@@ -216,11 +181,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::SYNTAX_HIGHLIGHTING_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .syntax_highlighting
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "audible terminal bell",
@@ -229,11 +189,6 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
             )),
             context,
             flags::USE_AUDIBLE_BELL_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            TerminalSettings::as_ref(app)
-                .use_audible_bell
-                .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
             "autosuggestions",
@@ -278,66 +233,38 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         context,
         flags::LINK_TOOLTIP_CONTEXT_FLAG,
     ));
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "long-running command notifications",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleLongRunningNotifications,
-            )),
-            &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
-            flags::LONG_RUNNING_NOTIFICATIONS_FLAG,
-        )
-        .is_supported_on_current_platform(
-            SessionSettings::as_ref(app)
-                .notifications
-                .is_supported_on_current_platform(),
-        ),
-    );
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "agent task completion notifications",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleAgentTaskCompletedNotifications,
-            )),
-            &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
-            flags::AGENT_TASK_COMPLETED_NOTIFICATIONS_FLAG,
-        )
-        .is_supported_on_current_platform(
-            SessionSettings::as_ref(app)
-                .notifications
-                .is_supported_on_current_platform(),
-        ),
-    );
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "needs-attention notifications",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleNeedsAttentionNotifications,
-            )),
-            &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
-            flags::NEEDS_ATTENTION_NOTIFICATIONS_FLAG,
-        )
-        .is_supported_on_current_platform(
-            SessionSettings::as_ref(app)
-                .notifications
-                .is_supported_on_current_platform(),
-        ),
-    );
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "notification sounds",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleNotificationSound,
-            )),
-            &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
-            flags::NOTIFICATION_SOUND_FLAG,
-        )
-        .is_supported_on_current_platform(
-            SessionSettings::as_ref(app)
-                .notifications
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "long-running command notifications",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleLongRunningNotifications,
+        )),
+        &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
+        flags::LONG_RUNNING_NOTIFICATIONS_FLAG,
+    ));
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "agent task completion notifications",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleAgentTaskCompletedNotifications,
+        )),
+        &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
+        flags::AGENT_TASK_COMPLETED_NOTIFICATIONS_FLAG,
+    ));
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "needs-attention notifications",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleNeedsAttentionNotifications,
+        )),
+        &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
+        flags::NEEDS_ATTENTION_NOTIFICATIONS_FLAG,
+    ));
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "notification sounds",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleNotificationSound,
+        )),
+        &(context.to_owned() & id!(flags::NOTIFICATIONS_CONTEXT_FLAG)),
+        flags::NOTIFICATION_SOUND_FLAG,
+    ));
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "in-app agent notifications",
         builder(SettingsAction::FeaturesPageToggle(
@@ -347,148 +274,85 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         flags::AGENT_IN_APP_NOTIFICATIONS_FLAG,
     ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "quit warning modal",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleShowWarningBeforeQuitting,
-            )),
-            context,
-            flags::QUIT_WARNING_MODAL,
-        )
-        .is_supported_on_current_platform(
-            GeneralSettings::as_ref(app)
-                .show_warning_before_quitting
-                .is_supported_on_current_platform(),
-        ),
-    );
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "mouse reporting",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleMouseReporting,
-            )),
-            context,
-            flags::MOUSE_REPORTING_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            AltScreenReporting::as_ref(app)
-                .mouse_reporting_enabled
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "quit warning modal",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleShowWarningBeforeQuitting,
+        )),
+        context,
+        flags::QUIT_WARNING_MODAL,
+    ));
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "mouse reporting",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleMouseReporting,
+        )),
+        context,
+        flags::MOUSE_REPORTING_CONTEXT_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "alias expansion",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleAliasExpansion,
-            )),
-            context,
-            flags::ALIAS_EXPANSION_FLAG,
-        )
-        .is_supported_on_current_platform(
-            AliasExpansionSettings::as_ref(app)
-                .alias_expansion_enabled
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "alias expansion",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleAliasExpansion,
+        )),
+        context,
+        flags::ALIAS_EXPANSION_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "middle-click paste",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleMiddleClickPaste,
-            )),
-            context,
-            flags::MIDDLE_CLICK_PASTE_FLAG,
-        )
-        .is_supported_on_current_platform(
-            SelectionSettings::as_ref(app)
-                .middle_click_paste_enabled
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "middle-click paste",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleMiddleClickPaste,
+        )),
+        context,
+        flags::MIDDLE_CLICK_PASTE_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "code as default editor",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleCodeAsDefaultEditor,
-            )),
-            context,
-            flags::CODE_AS_DEFAULT_EDITOR,
-        )
-        .is_supported_on_current_platform(
-            CodeSettings::as_ref(app)
-                .code_as_default_editor
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "code as default editor",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleCodeAsDefaultEditor,
+        )),
+        context,
+        flags::CODE_AS_DEFAULT_EDITOR,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "editing commands with Vim keybindings",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleVimMode,
-            )),
-            context,
-            flags::VIM_MODE_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            AppEditorSettings::as_ref(app)
-                .vim_mode
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "editing commands with Vim keybindings",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleVimMode,
+        )),
+        context,
+        flags::VIM_MODE_CONTEXT_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "Vim unnamed register as system clipboard",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleVimUnnamedSystemClipboard,
-            )),
-            &(context.to_owned() & id!(flags::VIM_MODE_CONTEXT_FLAG)),
-            flags::VIM_UNNAMED_SYSTEM_CLIPBOARD,
-        )
-        .is_supported_on_current_platform(
-            AppEditorSettings::as_ref(app)
-                .vim_unnamed_system_clipboard
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "Vim unnamed register as system clipboard",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleVimUnnamedSystemClipboard,
+        )),
+        &(context.to_owned() & id!(flags::VIM_MODE_CONTEXT_FLAG)),
+        flags::VIM_UNNAMED_SYSTEM_CLIPBOARD,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "Vim status bar",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleVimStatusBar,
-            )),
-            &(context.to_owned() & id!(flags::VIM_MODE_CONTEXT_FLAG)),
-            flags::VIM_SHOW_STATUS_BAR,
-        )
-        .is_supported_on_current_platform(
-            AppEditorSettings::as_ref(app)
-                .vim_status_bar
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "Vim status bar",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleVimStatusBar,
+        )),
+        &(context.to_owned() & id!(flags::VIM_MODE_CONTEXT_FLAG)),
+        flags::VIM_SHOW_STATUS_BAR,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "focus reporting",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleFocusReporting,
-            )),
-            context,
-            flags::FOCUS_REPORTING_CONTEXT_FLAG,
-        )
-        .is_supported_on_current_platform(
-            AltScreenReporting::as_ref(app)
-                .focus_reporting_enabled
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "focus reporting",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleFocusReporting,
+        )),
+        context,
+        flags::FOCUS_REPORTING_CONTEXT_FLAG,
+    ));
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "smart select",
@@ -498,21 +362,14 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         context,
         flags::SMART_SELECT_FLAG,
     ));
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "'@' files and code menu in terminal mode",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleAtContextMenuInTerminalMode,
-            )),
-            context,
-            flags::AT_CONTEXT_MENU_IN_TERMINAL_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .at_context_menu_in_terminal_mode
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "'@' files and code menu in terminal mode",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleAtContextMenuInTerminalMode,
+        )),
+        context,
+        flags::AT_CONTEXT_MENU_IN_TERMINAL_FLAG,
+    ));
 
     toggle_binding_pairs.push(ToggleSettingActionPair::new(
         "preserve input focus on block selection",
@@ -523,69 +380,41 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
         flags::PRESERVE_INPUT_FOCUS_ON_BLOCK_SELECTION_FLAG,
     ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "slash commands in terminal mode",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleSlashCommandsInTerminalMode,
-            )),
-            context,
-            flags::SLASH_COMMANDS_IN_TERMINAL_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .enable_slash_commands_in_terminal
-                .is_supported_on_current_platform(),
-        ),
-    );
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "codebase symbols in the '@' context menu",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleOutlineCodebaseSymbolsForAtContextMenu,
-            )),
-            context,
-            flags::OUTLINE_CODEBASE_SYMBOLS_FOR_AT_CONTEXT_MENU_FLAG,
-        )
-        .is_supported_on_current_platform(
-            InputSettings::as_ref(app)
-                .outline_codebase_symbols_for_at_context_menu
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "slash commands in terminal mode",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleSlashCommandsInTerminalMode,
+        )),
+        context,
+        flags::SLASH_COMMANDS_IN_TERMINAL_FLAG,
+    ));
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "codebase symbols in the '@' context menu",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleOutlineCodebaseSymbolsForAtContextMenu,
+        )),
+        context,
+        flags::OUTLINE_CODEBASE_SYMBOLS_FOR_AT_CONTEXT_MENU_FLAG,
+    ));
 
-    toggle_binding_pairs.push(
-        ToggleSettingActionPair::new(
-            "global workflows in Command Search",
-            builder(SettingsAction::FeaturesPageToggle(
-                FeaturesPageAction::ToggleGlobalWorkflowsInUniversalSearch,
-            )),
-            context,
-            flags::GLOBAL_WORKFLOWS_IN_COMMAND_SEARCH_FLAG,
-        )
-        .is_supported_on_current_platform(
-            CommandSearchSettings::as_ref(app)
-                .show_global_workflows_in_universal_search
-                .is_supported_on_current_platform(),
-        ),
-    );
+    toggle_binding_pairs.push(ToggleSettingActionPair::new(
+        "global workflows in Command Search",
+        builder(SettingsAction::FeaturesPageToggle(
+            FeaturesPageAction::ToggleGlobalWorkflowsInUniversalSearch,
+        )),
+        context,
+        flags::GLOBAL_WORKFLOWS_IN_COMMAND_SEARCH_FLAG,
+    ));
 
     if GPUState::as_ref(app).is_low_power_gpu_available() {
-        toggle_binding_pairs.push(
-            ToggleSettingActionPair::new(
-                "integrated GPU rendering (low power)",
-                builder(SettingsAction::FeaturesPageToggle(
-                    FeaturesPageAction::TogglePreferLowPowerGPU,
-                )),
-                context,
-                flags::PREFER_LOW_POWER_GPU_FLAG,
-            )
-            .is_supported_on_current_platform(
-                GPUSettings::as_ref(app)
-                    .prefer_low_power_gpu
-                    .is_supported_on_current_platform(),
-            ),
-        );
+        toggle_binding_pairs.push(ToggleSettingActionPair::new(
+            "integrated GPU rendering (low power)",
+            builder(SettingsAction::FeaturesPageToggle(
+                FeaturesPageAction::TogglePreferLowPowerGPU,
+            )),
+            context,
+            flags::PREFER_LOW_POWER_GPU_FLAG,
+        ));
     }
 
     ToggleSettingActionPair::add_toggle_setting_action_pairs_as_bindings(toggle_binding_pairs, app);
@@ -1992,246 +1821,73 @@ impl FeaturesPageView {
     }
 
     fn build_page(ctx: &mut ViewContext<Self>) -> PageType<Self> {
-        let mut general_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
-            vec![Box::new(DefaultSessionModeWidget::default())];
-
-        let general_settings = &GeneralSettings::as_ref(ctx);
-        if general_settings
-            .restore_session
-            .is_supported_on_current_platform()
-        {
-            general_widgets.push(Box::new(SessionRestorationWidget::default()))
-        }
-
-        general_widgets.push(Box::new(SnackbarHeaderWidget::default()));
-        general_widgets.push(Box::new(LinkTooltipWidget::default()));
-
-        if general_settings
-            .show_warning_before_quitting
-            .is_supported_on_current_platform()
-        {
-            general_widgets.push(Box::new(QuitWarningModalWidget::default()));
-        }
-
-        if general_settings
-            .quit_on_last_window_closed
-            .is_supported_on_current_platform()
-        {
-            general_widgets.push(Box::new(QuitWhenAllWindowsClosedWidget::default()));
-        }
-
-        if general_settings
-            .add_app_as_login_item
-            .is_supported_on_current_platform()
-        {
-            general_widgets.push(Box::new(LoginItemWidget::default()));
-        }
-
-        let scroll_settings = ScrollSettings::as_ref(ctx);
-        if scroll_settings
-            .mouse_scroll_multiplier
-            .is_supported_on_current_platform()
-        {
-            general_widgets.push(Box::new(MouseScrollMultiplierWidget::default()));
-        }
+        let mut general_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(DefaultSessionModeWidget::default()),
+            Box::new(SessionRestorationWidget::default()),
+            Box::new(SnackbarHeaderWidget::default()),
+            Box::new(LinkTooltipWidget::default()),
+            Box::new(QuitWarningModalWidget::default()),
+            Box::new(QuitWhenAllWindowsClosedWidget::default()),
+            Box::new(LoginItemWidget::default()),
+            Box::new(MouseScrollMultiplierWidget::default()),
+        ];
 
         if DefaultTerminal::can_warp_become_default() {
             general_widgets.push(Box::new(DefaultTerminalWidget::default()));
         }
 
-        let app_editor_settings = AppEditorSettings::as_ref(ctx);
-
         let notifications_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
             vec![Box::new(DesktopNotificationsWidget::default())];
 
-        let mut session_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
+        let session_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(BlockLimitWidget::default()),
+            Box::new(StartupShellWidget::default()),
+            Box::new(WorkingDirectoryWidget::default()),
+            Box::new(UndoCloseWidget::default()),
+        ];
 
-        session_widgets.push(Box::new(BlockLimitWidget::default()));
+        let keys_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(ExtraMetaKeysWidget::default()),
+            Box::new(CtrlTabBehaviorWidget::default()),
+            Box::new(GlobalHotkeyWidget::default()),
+        ];
 
-        let session_settings = SessionSettings::as_ref(ctx);
+        let text_editing_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(AutocompleteSymbolsWidget::default()),
+            Box::new(VimModeWidget::default()),
+        ];
 
-        {
-            if session_settings
-                .startup_shell_override
-                .is_supported_on_current_platform()
-            {
-                session_widgets.push(Box::new(StartupShellWidget::default()));
-            }
-            if session_settings
-                .working_directory_config
-                .is_supported_on_current_platform()
-            {
-                session_widgets.push(Box::new(WorkingDirectoryWidget::default()));
-            }
-        }
+        let editor_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(ErrorUnderliningWidget::default()),
+            Box::new(SyntaxHighlightingWidget::default()),
+            Box::new(WarpCompletionsWidget::default()),
+            Box::new(NativeShellCompletionsWidget::default()),
+            Box::new(CommandCorrectionsWidget::default()),
+            Box::new(AliasExpansionWidget::default()),
+            Box::new(MiddleClickPasteWidget::default()),
+            Box::new(RightClickBehaviorWidget::default()),
+            Box::new(AutosuggestionKeybindingHintWidget::default()),
+            Box::new(AutosuggestionIgnoreButtonWidget::default()),
+            Box::new(AtContextMenuInTerminalModeWidget::default()),
+            Box::new(SlashCommandsInTerminalModeWidget::default()),
+            Box::new(OutlineCodebaseSymbolsForAtContextMenuWidget::default()),
+            Box::new(TabKeyBehaviorWidget::default()),
+            Box::new(PreserveInputFocusOnBlockSelectionWidget::default()),
+        ];
 
-        let undo_close_settings = UndoCloseSettings::as_ref(ctx);
-        if undo_close_settings
-            .enabled
-            .is_supported_on_current_platform()
-        {
-            session_widgets.push(Box::new(UndoCloseWidget::default()));
-        }
-
-        let mut keys_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
-        let keys_settings = KeysSettings::as_ref(ctx);
-        if keys_settings
-            .extra_meta_keys
-            .is_supported_on_current_platform()
-        {
-            keys_widgets.push(Box::new(ExtraMetaKeysWidget::default()))
-        }
-
-        if keys_settings
-            .ctrl_tab_behavior
-            .is_supported_on_current_platform()
-        {
-            keys_widgets.push(Box::new(CtrlTabBehaviorWidget::default()));
-        }
-
-        if keys_settings
-            .activation_hotkey_enabled
-            .is_supported_on_current_platform()
-        {
-            keys_widgets.push(Box::new(GlobalHotkeyWidget::default()));
-        }
-
-        let mut text_editing_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> =
-            vec![Box::new(AutocompleteSymbolsWidget::default())];
-        if app_editor_settings
-            .vim_mode
-            .is_supported_on_current_platform()
-        {
-            text_editing_widgets.push(Box::new(VimModeWidget::default()));
-        }
-
-        let mut editor_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
-
-        let input_settings = InputSettings::as_ref(ctx);
-        if input_settings
-            .error_underlining
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(ErrorUnderliningWidget::default()))
-        }
-        if input_settings
-            .syntax_highlighting
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(SyntaxHighlightingWidget::default()))
-        }
-        editor_widgets.push(Box::new(WarpCompletionsWidget::default()));
-        editor_widgets.push(Box::new(NativeShellCompletionsWidget::default()));
-
-        if input_settings
-            .command_corrections
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(CommandCorrectionsWidget::default()));
-        }
-
-        let alias_expansion_settings = AliasExpansionSettings::as_ref(ctx);
-        if alias_expansion_settings
-            .alias_expansion_enabled
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(AliasExpansionWidget::default()));
-        }
-
-        let selection_settings = SelectionSettings::as_ref(ctx);
-        if selection_settings
-            .middle_click_paste_enabled
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(MiddleClickPasteWidget::default()));
-        }
-
-        if selection_settings
-            .right_click_behavior
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(RightClickBehaviorWidget::default()));
-        }
-
-        editor_widgets.push(Box::new(AutosuggestionKeybindingHintWidget::default()));
-
-        editor_widgets.push(Box::new(AutosuggestionIgnoreButtonWidget::default()));
-
-        if input_settings
-            .at_context_menu_in_terminal_mode
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(AtContextMenuInTerminalModeWidget::default()));
-        }
-
-        if input_settings
-            .enable_slash_commands_in_terminal
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(SlashCommandsInTerminalModeWidget::default()));
-        }
-
-        if input_settings
-            .outline_codebase_symbols_for_at_context_menu
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(
-                OutlineCodebaseSymbolsForAtContextMenuWidget::default(),
-            ));
-        }
-
-        editor_widgets.push(Box::new(TabKeyBehaviorWidget::default()));
-
-        let blocklist_settings = BlockListSettings::as_ref(ctx);
-        if blocklist_settings
-            .preserve_input_focus_on_block_selection
-            .is_supported_on_current_platform()
-        {
-            editor_widgets.push(Box::new(PreserveInputFocusOnBlockSelectionWidget::default()));
-        }
-
-        let mut terminal_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
-
-        let reporting_settings = AltScreenReporting::as_ref(ctx);
-        if reporting_settings
-            .mouse_reporting_enabled
-            .is_supported_on_current_platform()
-        {
-            terminal_widgets.push(Box::new(MouseReportingWidget::default()));
-        }
-        if reporting_settings
-            .scroll_reporting_enabled
-            .is_supported_on_current_platform()
-        {
-            terminal_widgets.push(Box::new(ScrollReportingWidget::default()));
-        }
-        if reporting_settings
-            .focus_reporting_enabled
-            .is_supported_on_current_platform()
-        {
-            terminal_widgets.push(Box::new(FocusReportingWidget::default()));
-        }
-
-        let terminal_settings = TerminalSettings::as_ref(ctx);
-        if terminal_settings
-            .use_audible_bell
-            .is_supported_on_current_platform()
-        {
-            terminal_widgets.push(Box::new(AudibleBellWidget::default()));
-        }
-
-        terminal_widgets.push(Box::new(SmartSelectWidget::default()));
-        terminal_widgets.push(Box::new(CopyOnSelectWidget::default()));
-        terminal_widgets.push(Box::new(Osc52ClipboardAccessWidget::default()));
-        terminal_widgets.push(Box::new(NewTabPlacementWidget::default()));
+        let terminal_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![
+            Box::new(MouseReportingWidget::default()),
+            Box::new(ScrollReportingWidget::default()),
+            Box::new(FocusReportingWidget::default()),
+            Box::new(AudibleBellWidget::default()),
+            Box::new(SmartSelectWidget::default()),
+            Box::new(CopyOnSelectWidget::default()),
+            Box::new(Osc52ClipboardAccessWidget::default()),
+            Box::new(NewTabPlacementWidget::default()),
+        ];
 
         let mut system_widgets: Vec<Box<dyn SettingsWidget<View = Self>>> = vec![];
-        let gpu_settings = GPUSettings::as_ref(ctx);
-        if gpu_settings
-            .prefer_low_power_gpu
-            .is_supported_on_current_platform()
-            && GPUState::as_ref(ctx).is_low_power_gpu_available()
-        {
+        if GPUState::as_ref(ctx).is_low_power_gpu_available() {
             system_widgets.push(Box::new(GPUWidget::default()));
         }
 
@@ -4381,20 +4037,16 @@ impl SettingsWidget for GlobalHotkeyWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let mut column = Flex::column();
-        add_setting(
-            &mut column,
-            &KeysSettings::as_ref(app).activation_hotkey_enabled,
-            || {
-                render_dropdown_item(
-                    appearance,
-                    "Global hotkey:",
-                    None,
-                    None,
-                    None,
-                    &view.global_hotkey_dropdown,
-                )
-            },
-        );
+        column.add_child({
+            render_dropdown_item(
+                appearance,
+                "Global hotkey:",
+                None,
+                None,
+                None,
+                &view.global_hotkey_dropdown,
+            )
+        });
 
         let global_hotkey_mode =
             KeysSettings::handle(app).read(app, |settings, _| settings.global_hotkey_mode());
@@ -4816,22 +4468,18 @@ impl SettingsWidget for RightClickBehaviorWidget {
     ) -> Box<dyn Element> {
         let mut column = Flex::column();
         let selection_settings = SelectionSettings::as_ref(app);
-        add_setting(
-            &mut column,
-            &selection_settings.right_click_behavior,
-            || {
-                render_dropdown_item(
-                    appearance,
-                    "Right-click:",
-                    selection_settings
-                        .right_click_pastes()
-                        .then_some("Shift+right-click to open the context menu."),
-                    None,
-                    None,
-                    &view.right_click_behavior_dropdown,
-                )
-            },
-        );
+        column.add_child({
+            render_dropdown_item(
+                appearance,
+                "Right-click:",
+                selection_settings
+                    .right_click_pastes()
+                    .then_some("Shift+right-click to open the context menu."),
+                None,
+                None,
+                &view.right_click_behavior_dropdown,
+            )
+        });
         column.finish()
     }
 }
@@ -5320,23 +4968,19 @@ impl SettingsWidget for CtrlTabBehaviorWidget {
         &self,
         view: &Self::View,
         appearance: &Appearance,
-        app: &AppContext,
+        _app: &AppContext,
     ) -> Box<dyn Element> {
         let mut column = Flex::column();
-        add_setting(
-            &mut column,
-            &KeysSettings::as_ref(app).ctrl_tab_behavior,
-            || {
-                render_dropdown_item(
-                    appearance,
-                    "Ctrl+Tab behavior:",
-                    None,
-                    None,
-                    None,
-                    &view.ctrl_tab_behavior_dropdown,
-                )
-            },
-        );
+        column.add_child({
+            render_dropdown_item(
+                appearance,
+                "Ctrl+Tab behavior:",
+                None,
+                None,
+                None,
+                &view.ctrl_tab_behavior_dropdown,
+            )
+        });
         column.finish()
     }
 }

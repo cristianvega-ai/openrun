@@ -522,9 +522,6 @@ pub struct ToggleSettingActionPair<T: Action + Clone> {
 
     /// Predicate that determines if bindings corresponding to this pair are enabled.
     enabled_predicate: Option<EnabledPredicate>,
-
-    /// Whether or not this pairing applies to the current platform (Mac, Linux, Web, etc.)
-    supported_on_current_platform: bool,
 }
 
 impl<T: Action + Clone> ToggleSettingActionPair<T> {
@@ -559,7 +556,6 @@ impl<T: Action + Clone> ToggleSettingActionPair<T> {
             toggle_action,
             custom_action: None,
             binding_group: BindingGroup::Settings,
-            supported_on_current_platform: true,
             enabled_predicate: None,
         }
     }
@@ -576,7 +572,6 @@ impl<T: Action + Clone> ToggleSettingActionPair<T> {
             descriptions,
             custom_action,
             binding_group: BindingGroup::Settings,
-            supported_on_current_platform: true,
             enabled_predicate: None,
         }
     }
@@ -591,11 +586,6 @@ impl<T: Action + Clone> ToggleSettingActionPair<T> {
         self
     }
 
-    pub fn is_supported_on_current_platform(mut self, value: bool) -> Self {
-        self.supported_on_current_platform = value;
-        self
-    }
-
     /// Creates enable/disable bindings for a toggle feature, given a list of `ToggleSettingActionPair`'s.
     pub fn add_toggle_setting_action_pairs_as_bindings(
         action_pairs: Vec<ToggleSettingActionPair<T>>,
@@ -604,69 +594,53 @@ impl<T: Action + Clone> ToggleSettingActionPair<T> {
         let (enable_bindings, disable_bindings): (Vec<FixedBinding>, Vec<FixedBinding>) =
             action_pairs
                 .into_iter()
-                .filter_map(|action_pair| {
+                .map(|action_pair| {
                     let ToggleSettingActionPair {
                         toggle_action,
                         contexts,
                         descriptions,
                         custom_action,
                         binding_group,
-                        supported_on_current_platform,
                         enabled_predicate,
                     } = action_pair;
 
-                    if !supported_on_current_platform {
-                        None
-                    } else {
-                        match custom_action {
-                            Some(custom_action) => {
-                                let mut enable_binding = FixedBinding::custom(
-                                    custom_action,
-                                    toggle_action.clone(),
-                                    descriptions.enable,
-                                    contexts.enable_predicate,
-                                )
-                                .with_group(binding_group.as_str());
-                                let mut disable_binding = FixedBinding::custom(
-                                    custom_action,
-                                    toggle_action,
-                                    descriptions.disable,
-                                    contexts.disable_predicate,
-                                )
-                                .with_group(binding_group.as_str());
+                    let (mut enable_binding, mut disable_binding) = match custom_action {
+                        Some(custom_action) => (
+                            FixedBinding::custom(
+                                custom_action,
+                                toggle_action.clone(),
+                                descriptions.enable,
+                                contexts.enable_predicate,
+                            ),
+                            FixedBinding::custom(
+                                custom_action,
+                                toggle_action,
+                                descriptions.disable,
+                                contexts.disable_predicate,
+                            ),
+                        ),
+                        None => (
+                            FixedBinding::empty(
+                                descriptions.enable,
+                                toggle_action.clone(),
+                                contexts.enable_predicate,
+                            ),
+                            FixedBinding::empty(
+                                descriptions.disable,
+                                toggle_action,
+                                contexts.disable_predicate,
+                            ),
+                        ),
+                    };
+                    enable_binding = enable_binding.with_group(binding_group.as_str());
+                    disable_binding = disable_binding.with_group(binding_group.as_str());
 
-                                if let Some(enabled_predicate) = enabled_predicate {
-                                    enable_binding = enable_binding.with_enabled(enabled_predicate);
-                                    disable_binding =
-                                        disable_binding.with_enabled(enabled_predicate);
-                                }
-
-                                Some((enable_binding, disable_binding))
-                            }
-                            None => {
-                                let mut enable_binding = FixedBinding::empty(
-                                    descriptions.enable,
-                                    toggle_action.clone(),
-                                    contexts.enable_predicate,
-                                )
-                                .with_group(binding_group.as_str());
-                                let mut disable_binding = FixedBinding::empty(
-                                    descriptions.disable,
-                                    toggle_action,
-                                    contexts.disable_predicate,
-                                )
-                                .with_group(binding_group.as_str());
-
-                                if let Some(enabled_predicate) = enabled_predicate {
-                                    enable_binding = enable_binding.with_enabled(enabled_predicate);
-                                    disable_binding =
-                                        disable_binding.with_enabled(enabled_predicate);
-                                }
-
-                                Some((enable_binding, disable_binding))
-                            }
-                        }
+                    if let Some(enabled_predicate) = enabled_predicate {
+                        enable_binding = enable_binding.with_enabled(enabled_predicate);
+                        disable_binding = disable_binding.with_enabled(enabled_predicate);
                     }
+
+                    (enable_binding, disable_binding)
                 })
                 .unzip();
 
