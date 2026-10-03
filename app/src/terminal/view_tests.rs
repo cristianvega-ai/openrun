@@ -4881,7 +4881,7 @@ fn init_git_repo_on_branch(path: &Path) {
 /// canonical path, so `GitRepoModels` can build models for it.
 fn register_watched_repo(app: &mut App) -> (tempfile::TempDir, PathBuf) {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
-    let repo = dunce::canonicalize(temp_dir.path()).expect("canonical repo path");
+    let repo = std::fs::canonicalize(temp_dir.path()).expect("canonical repo path");
     init_git_repo_on_branch(&repo);
     let standardized =
         StandardizedPath::from_local_canonicalized(repo.as_path()).expect("standardized path");

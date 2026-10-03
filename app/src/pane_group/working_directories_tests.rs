@@ -30,9 +30,9 @@ fn refresh_working_directories_collapses_subroots_to_nearest_repo_root() {
         fs::create_dir_all(&repo_a).expect("create repo/a");
         fs::create_dir_all(&repo_b).expect("create repo/b");
 
-        // Use dunce::canonicalize to match the behavior of warp_util::standardized_path::StandardizedPath and normalize_cwd,
-        // which strip the Windows extended-length path prefix (\\?\) for consistent comparison.
-        let canonical_repo_root = dunce::canonicalize(&repo_root).expect("canonical repo root");
+        // Canonicalize to match the behavior of warp_util::standardized_path::StandardizedPath and
+        // normalize_cwd, which resolve symlinks (such as /var -> /private/var) for consistent comparison.
+        let canonical_repo_root = std::fs::canonicalize(&repo_root).expect("canonical repo root");
 
         // Seed DetectedRepositories so get_root_for_path resolves to this repo.
         detected_repos_handle.update(&mut app, |repos, _ctx| {
@@ -85,10 +85,10 @@ fn refresh_working_directories_preserves_non_repo_paths_and_dedupes() {
         fs::create_dir_all(&dir_1).expect("create dir-1");
         fs::create_dir_all(&dir_2).expect("create dir-2");
 
-        // Use dunce::canonicalize to match the behavior of normalize_cwd,
-        // which strips the Windows extended-length path prefix (\\?\) for consistent comparison.
-        let canonical_1 = dunce::canonicalize(&dir_1).expect("canonical dir-1");
-        let canonical_2 = dunce::canonicalize(&dir_2).expect("canonical dir-2");
+        // Canonicalize to match the behavior of normalize_cwd, which resolves symlinks
+        // (such as /var -> /private/var) for consistent comparison.
+        let canonical_1 = std::fs::canonicalize(&dir_1).expect("canonical dir-1");
+        let canonical_2 = std::fs::canonicalize(&dir_2).expect("canonical dir-2");
 
         let pane_group_id = EntityId::new();
         let terminal_1 = EntityId::new();
@@ -366,7 +366,7 @@ fn setup_repo(
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let repo_path = temp_dir.path().join("repo");
     fs::create_dir_all(&repo_path).expect("create repo dir");
-    let canonical_repo = dunce::canonicalize(&repo_path).expect("canonical repo");
+    let canonical_repo = std::fs::canonicalize(&repo_path).expect("canonical repo");
 
     detected_repos.update(app, |repos, _ctx| {
         let canonical = warp_util::standardized_path::StandardizedPath::from_local_canonicalized(

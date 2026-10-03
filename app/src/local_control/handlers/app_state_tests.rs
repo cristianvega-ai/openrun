@@ -20,7 +20,7 @@ fn file_open_resolves_relative_paths_against_the_session_working_directory() {
     use std::path::{Path, PathBuf};
 
     let temp_dir = tempfile::tempdir().expect("temp dir");
-    let working_directory = dunce::canonicalize(temp_dir.path()).expect("canonical temp dir");
+    let working_directory = std::fs::canonicalize(temp_dir.path()).expect("canonical temp dir");
     let nested = working_directory.join("docs");
     std::fs::create_dir(&nested).expect("nested dir");
     std::fs::write(working_directory.join("README.md"), "# hi").expect("readme");

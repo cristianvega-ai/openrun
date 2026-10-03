@@ -751,7 +751,7 @@ fn resolve_against_working_directory(path: &Path, working_directory: &Path) -> P
         return path.to_path_buf();
     }
     let joined = working_directory.join(path);
-    dunce::canonicalize(&joined).unwrap_or(joined)
+    std::fs::canonicalize(&joined).unwrap_or(joined)
 }
 
 fn direction_param(params: &serde_json::Value) -> Result<ControlDirection, ControlError> {

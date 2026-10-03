@@ -53,7 +53,6 @@ deltae = "0.3.1"
 dhat = { version = "0.3.2", optional = true }
 diesel = { workspace = true, features = ["sqlite", "chrono"] }
 dirs.workspace = true
-dunce.workspace = true
 embed_plist = "1.2"
 enclose = "1.1.8"
 enum-iterator.workspace = true

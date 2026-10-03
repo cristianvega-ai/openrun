@@ -46,7 +46,7 @@ impl VirtualFS {
 
         std::fs::create_dir(PathBuf::from(&warpbox_dir)).expect("can not create directory");
 
-        let tests = dunce::canonicalize(&warpbox_dir).unwrap_or_else(|e| {
+        let tests = std::fs::canonicalize(&warpbox_dir).unwrap_or_else(|e| {
             panic!(
                 "Couldn't canonicalize test path {}: {:?}",
                 warpbox_dir.display(),

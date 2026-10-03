@@ -252,7 +252,7 @@ impl Entry {
                                 Some(entry_path)
                             }
                         } else {
-                            dunce::canonicalize(entry_path).ok()
+                            std::fs::canonicalize(entry_path).ok()
                         };
                         let Some(child_path) = canonical_path else {
                             continue;

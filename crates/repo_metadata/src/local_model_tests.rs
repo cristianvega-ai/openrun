@@ -1741,8 +1741,8 @@ fn test_canonicalized_path_functionality() {
         let canonical = StandardizedPath::from_local_canonicalized(&real_dir).unwrap();
         let local_path = canonical.to_local_path().unwrap();
 
-        // Test internal consistency - compare with dunce-canonicalized version
-        let expected_canonical = dunce::canonicalize(&real_dir).unwrap();
+        // Test internal consistency - compare with the canonicalized version
+        let expected_canonical = std::fs::canonicalize(&real_dir).unwrap();
         assert_eq!(local_path, expected_canonical);
 
         // Test error handling for non-existent paths

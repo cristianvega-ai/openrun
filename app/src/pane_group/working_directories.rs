@@ -808,9 +808,9 @@ fn normalize_cwd(raw_cwd: &str) -> Option<PathBuf> {
     }
 
     let path = PathBuf::from(raw_cwd.to_string());
-    // Use dunce::canonicalize to avoid Windows extended-length path prefix (\\?\)
-    // which would cause path comparison mismatches with CanonicalizedPath.
-    dunce::canonicalize(&path).ok()
+    // Canonicalize so that symlinks are resolved the same way as for CanonicalizedPath, which
+    // avoids path comparison mismatches.
+    std::fs::canonicalize(&path).ok()
 }
 
 #[cfg(test)]

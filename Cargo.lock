@@ -6413,7 +6413,6 @@ dependencies = [
  "anyhow",
  "async-fs",
  "dirs",
- "dunce",
  "env_logger",
  "futures",
  "futures-lite 1.13.0",
@@ -8722,7 +8721,6 @@ dependencies = [
 name = "virtual-fs"
 version = "0.1.0"
 dependencies = [
- "dunce",
  "getset",
  "tempfile",
 ]
@@ -8819,7 +8817,6 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "dirs",
- "dunce",
  "embed_plist",
  "enclose",
  "enum-iterator",
@@ -9310,7 +9307,6 @@ dependencies = [
  "command",
  "content_inspector",
  "dirs",
- "dunce",
  "event-listener",
  "futures-lite 1.13.0",
  "futures-util",

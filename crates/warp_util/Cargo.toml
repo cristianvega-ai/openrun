@@ -22,7 +22,6 @@ mime_guess.workspace = true
 regex.workspace = true
 thiserror.workspace = true
 typed-path.workspace = true
-dunce.workspace = true
 event-listener.workspace = true
 itertools.workspace = true
 serde.workspace = true

@@ -2900,7 +2900,7 @@ impl TerminalView {
         }
     }
 
-    /// Returns the active local session's CWD, canonicalized via `dunce::canonicalize` to resolve
+    /// Returns the active local session's CWD, canonicalized via `std::fs::canonicalize` to resolve
     /// symlinks and normalize the path.
     ///
     /// The canonicalization is memoized in `canonical_session_pwd_cache`, keyed on the
@@ -10260,7 +10260,7 @@ impl TerminalView {
 
     /// Returns the active session's CWD as a `LocalOrRemotePath`.
     ///
-    /// For local sessions the CWD is canonicalized via `dunce::canonicalize`
+    /// For local sessions the CWD is canonicalized via `std::fs::canonicalize`
     /// and wrapped as `Local`. Returns `None` when no CWD is available or the
     /// session is remote.
     pub fn pwd_as_local_or_remote(&self, ctx: &AppContext) -> Option<LocalOrRemotePath> {
@@ -10277,7 +10277,7 @@ impl TerminalView {
                 .launch_data()
                 .and_then(|data| data.maybe_convert_absolute_path(cwd_str))
                 .unwrap_or_else(|| PathBuf::from(cwd_str));
-            let canonical = dunce::canonicalize(&path).ok()?;
+            let canonical = std::fs::canonicalize(&path).ok()?;
             Some(LocalOrRemotePath::Local(canonical))
         } else {
             None

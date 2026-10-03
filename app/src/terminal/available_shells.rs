@@ -465,7 +465,7 @@ impl AvailableShells {
         paths_to_search
             .filter_map(|single_path| {
                 let joined = single_path.join(command);
-                let canonicalized = dunce::canonicalize(&joined).unwrap_or(joined);
+                let canonicalized = std::fs::canonicalize(&joined).unwrap_or(joined);
                 file_exists_and_is_executable(&canonicalized).then_some(canonicalized)
             })
             .unique()
@@ -497,7 +497,7 @@ impl AvailableShells {
             //
             // If all of those are true, then we add it to the set of paths associated with that shell
             if !line.trim_start().starts_with('#') && !line.trim().is_empty() {
-                let Ok(path) = dunce::canonicalize(line) else {
+                let Ok(path) = std::fs::canonicalize(line) else {
                     continue;
                 };
                 if let Some(file_name) = path.file_name().and_then(|name| name.to_str())

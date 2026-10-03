@@ -97,10 +97,8 @@ impl StandardizedPath {
     /// equivalent of `CanonicalizedPath::try_from`.
     /// Use at shell boundaries when receiving paths from the OS.
     pub fn from_local_canonicalized(path: &Path) -> io::Result<Self> {
-        let canonical = dunce::canonicalize(path)?;
-        // dunce::simplified strips the UNC prefix when safe.
-        let simplified = dunce::simplified(&canonical);
-        let path_str = simplified.to_str().ok_or_else(|| {
+        let canonical = std::fs::canonicalize(path)?;
+        let path_str = canonical.to_str().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "canonicalized path is not valid UTF-8",

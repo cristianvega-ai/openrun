@@ -1,7 +1,7 @@
+use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dunce::canonicalize;
 use itertools::Itertools;
 use pathfinder_color::ColorU;
 use warp_core::ui::Icon;

@@ -5384,7 +5384,7 @@ fn compute_tab_group_color_mode(
                                 .local_path(app)
                                 .as_deref()
                                 // TODO(andy): avoid canonicalizing on a render code path
-                                .and_then(|file_path| dunce::canonicalize(file_path).ok())
+                                .and_then(|file_path| std::fs::canonicalize(file_path).ok())
                                 .and_then(|file_path| {
                                     dir_colors
                                         .color_for_directory(&file_path)

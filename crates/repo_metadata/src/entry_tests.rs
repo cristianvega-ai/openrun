@@ -179,7 +179,7 @@ fn gitignore_rooted(root: &std::path::Path, content: &str) -> Arc<Gitignore> {
 #[test]
 fn should_watch_prunes_gitignored_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::create_dir(root.join("node_modules")).unwrap();
     fs::create_dir(root.join("src")).unwrap();
     let gitignores = vec![gitignore_rooted(&root, "node_modules/\n")];
@@ -212,7 +212,7 @@ fn should_watch_prunes_gitignored_directory() {
 #[test]
 fn should_watch_prunes_directory_symlinks_and_their_descendants() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::create_dir_all(root.join("target/tree")).unwrap();
     std::os::unix::fs::symlink(root.join("target"), root.join("result")).unwrap();
 
@@ -269,7 +269,7 @@ fn should_watch_allows_symlinked_repo_root() {
 #[test]
 fn should_watch_descends_dir_only_reinclude_negation() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::create_dir_all(root.join("parentdir/sub")).unwrap();
     fs::write(root.join("parentdir/loose.txt"), "").unwrap();
     // Ignore the loose files in `parentdir` but re-include its subdirectories.
@@ -303,7 +303,7 @@ fn should_watch_preserves_git_internal_allowlist() {
     // No gitignores needed: `.git` handling is
     // path-based, mirroring `should_watch_directory_in_git_path`.
     let temp_dir = tempfile::tempdir().unwrap();
-    let repo = dunce::canonicalize(temp_dir.path()).unwrap();
+    let repo = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::create_dir_all(repo.join(".git/refs/heads")).unwrap();
     fs::create_dir_all(repo.join(".git/objects")).unwrap();
     assert!(super::should_watch_repo_directory(
@@ -365,7 +365,7 @@ fn ignored_directory_stays_lazy() {
 #[test]
 fn build_tree_marks_descendants_of_ignored_directory_as_ignored() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root_path = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root_path = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::write(root_path.join(".gitignore"), "ignored-dir/\n").unwrap();
     fs::create_dir(root_path.join("ignored-dir")).unwrap();
     fs::write(root_path.join("ignored-dir").join("ignored-file.txt"), "").unwrap();
@@ -407,7 +407,7 @@ fn build_tree_marks_descendants_of_ignored_directory_as_ignored() {
 #[test]
 fn lazy_loaded_ignored_directory_marks_loaded_children_as_ignored() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root_path = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root_path = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::write(root_path.join(".gitignore"), "ignored-dir/\n").unwrap();
     fs::create_dir(root_path.join("ignored-dir")).unwrap();
     fs::write(root_path.join("ignored-dir").join("ignored-file.txt"), "").unwrap();
@@ -512,7 +512,7 @@ fn gitignore_affects_descend_predicate_but_not_emitted_events() {
     use super::{gitignores_for_directory, should_ignore_git_path, should_watch_repo_directory};
 
     let temp_dir = tempfile::tempdir().unwrap();
-    let root_path = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root_path = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::write(root_path.join(".gitignore"), "node_modules/\n").unwrap();
     fs::create_dir(root_path.join("node_modules")).unwrap();
     fs::create_dir(root_path.join("src")).unwrap();
@@ -637,7 +637,7 @@ fn build_with_budget(root: &std::path::Path, budget: usize) -> super::Entry {
 #[test]
 fn build_tree_budget_covers_breadth_first_and_leaves_remainder_unloaded() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root = std::fs::canonicalize(temp_dir.path()).unwrap();
 
     // 5 top-level dirs, each with 2 direct files and a `sub` dir of 3 files.
     for i in 0..5 {
@@ -681,7 +681,7 @@ fn build_tree_budget_covers_breadth_first_and_leaves_remainder_unloaded() {
 #[test]
 fn build_tree_full_coverage_reaches_full_depth_within_budget() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root = std::fs::canonicalize(temp_dir.path()).unwrap();
 
     // Nested chain a/b/c/d with a file at the deepest level.
     let deep = root.join("a").join("b").join("c").join("d");
@@ -711,7 +711,7 @@ fn build_tree_full_coverage_reaches_full_depth_within_budget() {
 #[test]
 fn build_tree_directories_do_not_consume_budget() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root = std::fs::canonicalize(temp_dir.path()).unwrap();
 
     // A deep chain of empty directories (no files at all).
     let deep = root.join("l1").join("l2").join("l3").join("l4");
@@ -730,7 +730,7 @@ fn build_tree_directories_do_not_consume_budget() {
 #[test]
 fn build_tree_gitignored_files_do_not_consume_budget() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let root = dunce::canonicalize(temp_dir.path()).unwrap();
+    let root = std::fs::canonicalize(temp_dir.path()).unwrap();
     fs::write(root.join(".gitignore"), "ignored/\n").unwrap();
 
     // A gitignored directory with many files (e.g. node_modules/target).

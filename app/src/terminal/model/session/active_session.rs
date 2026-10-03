@@ -101,7 +101,7 @@ impl ActiveSession {
             Some(SessionType::WarpifiedRemote) => None,
             Some(SessionType::Local) | None => {
                 let path =
-                    dunce::canonicalize(Path::new(path)).unwrap_or_else(|_| PathBuf::from(path));
+                    std::fs::canonicalize(Path::new(path)).unwrap_or_else(|_| PathBuf::from(path));
                 Some(LocalOrRemotePath::Local(path))
             }
         }

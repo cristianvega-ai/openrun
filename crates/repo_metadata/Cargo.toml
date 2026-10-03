@@ -15,7 +15,6 @@ test-util = []
 
 [dependencies]
 anyhow.workspace = true
-dunce.workspace = true
 thiserror.workspace = true
 itertools.workspace = true
 warpui_core.workspace = true

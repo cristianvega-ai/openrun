@@ -257,7 +257,7 @@ impl Repository {
     }
 
     fn path_for_comparison(path: &Path) -> PathBuf {
-        dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+        std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
     }
 
     pub(crate) async fn resolve_tracked_remote_ref(root_dir: PathBuf) -> Option<TrackedRemoteRef> {

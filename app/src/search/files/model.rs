@@ -228,7 +228,7 @@ impl FileSearchModel {
 
         match repo_root {
             LocalOrRemotePath::Local(local_path) => {
-                let Ok(canonical_repo_path) = dunce::canonicalize(local_path) else {
+                let Ok(canonical_repo_path) = std::fs::canonicalize(local_path) else {
                     return Vec::new();
                 };
                 let Some(id) = RepositoryIdentifier::try_local(local_path) else {

@@ -217,7 +217,7 @@ impl DirectoryTabColors {
 
 /// Canonicalizes `path` into the string key used in [`DirectoryTabColors`].
 pub fn canonical_directory_key(path: &Path) -> String {
-    dunce::canonicalize(path)
+    std::fs::canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
         .to_string()

@@ -100,7 +100,7 @@ impl TryFrom<PathBuf> for CanonicalizedPath {
     type Error = std::io::Error;
 
     fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
-        let canonical = dunce::canonicalize(&value)?;
+        let canonical = std::fs::canonicalize(&value)?;
         Ok(CanonicalizedPath(canonical))
     }
 }
@@ -109,7 +109,7 @@ impl TryFrom<&Path> for CanonicalizedPath {
     type Error = std::io::Error;
 
     fn try_from(value: &Path) -> Result<Self, Self::Error> {
-        let canonical = dunce::canonicalize(value)?;
+        let canonical = std::fs::canonicalize(value)?;
         Ok(CanonicalizedPath(canonical))
     }
 }
@@ -118,7 +118,7 @@ impl TryFrom<&PathBuf> for CanonicalizedPath {
     type Error = std::io::Error;
 
     fn try_from(value: &PathBuf) -> Result<Self, Self::Error> {
-        let canonical = dunce::canonicalize(value)?;
+        let canonical = std::fs::canonicalize(value)?;
         Ok(CanonicalizedPath(canonical))
     }
 }
@@ -128,7 +128,7 @@ impl TryFrom<&str> for CanonicalizedPath {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let path = PathBuf::from(value);
-        let canonical = dunce::canonicalize(&path)?;
+        let canonical = std::fs::canonicalize(&path)?;
         Ok(CanonicalizedPath(canonical))
     }
 }

@@ -232,7 +232,7 @@ fn test_load_before_session() {
             .await;
 
         handle.read(&app, |view, _| {
-            let expected_path = dunce::canonicalize("../README.md").expect("Path exists");
+            let expected_path = std::fs::canonicalize("../README.md").expect("Path exists");
 
             assert_eq!(view.title(), expected_path.display().to_string());
             assert!(view.location.is_none());

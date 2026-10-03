@@ -802,7 +802,7 @@ fn gh_lookups_run_only_while_the_panel_is_open() {
         });
 
         let temp_dir = tempfile::TempDir::new().expect("temp dir");
-        let repo_path = dunce::canonicalize(temp_dir.path()).expect("canonical repo path");
+        let repo_path = std::fs::canonicalize(temp_dir.path()).expect("canonical repo path");
         let standardized =
             warp_util::standardized_path::StandardizedPath::from_local_canonicalized(&repo_path)
                 .expect("standardized path");
@@ -867,7 +867,7 @@ fn gh_lookups_pause_while_the_panel_is_open_but_its_tab_is_hidden() {
         });
 
         let temp_dir = tempfile::TempDir::new().expect("temp dir");
-        let repo_path = dunce::canonicalize(temp_dir.path()).expect("canonical repo path");
+        let repo_path = std::fs::canonicalize(temp_dir.path()).expect("canonical repo path");
         let standardized =
             warp_util::standardized_path::StandardizedPath::from_local_canonicalized(&repo_path)
                 .expect("standardized path");
