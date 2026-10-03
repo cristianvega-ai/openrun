@@ -176,6 +176,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [CI-TUNE: runs on main do not queue, grouped Dependabot updates](#ci-tune-runs-on-main-do-not-queue-grouped-dependabot-updates) — a push to `main`, the nightly run and a manual run each have a concurrency group of their own; GitHub Actions updates come as one grouped pull request per week, at most two open; Cargo stays security-updates-only (CI-SPEED, ENG-232)
 - [macOS only](#macos-only) — removed Windows, Linux and wasm support and the winit/wgpu UI layer: about 50 000 lines, 212 fewer packages in `Cargo.lock`; SSH sessions to Linux hosts still work
 - [macOS only: remaining residue](#macos-only-remaining-residue) — the platform scaffolding PLAT-4 left (`SupportedPlatforms`, `OperatingSystem`, the key binding and path wrappers, traffic light sides, `instant`, `dunce`, `ContextFlag`, the Linux quit modal), the Windows, Linux and web remarks in code, comments, docs and tooling, and a cargo-deny and license list that cover the macOS targets only (PLAT-6)
+- [Tracking work in Linear (AGENTS.md)](#tracking-work-in-linear-agentsmd) — AGENTS.md now says how issues, closing comments, deferrals, CI evidence and `#[ignore]` reasons are recorded
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -4354,3 +4355,10 @@ OpenRun now builds and runs on macOS only (PLAT-4, under PLAT-RM). Windows, Linu
 **Offline impact:** none. The macOS sandbox, the offline environment table and the generator allow-list are unchanged; the git completion test now describes what it checks (the environment table alone, with the sandbox off).
 
 **User-visible impact:** a toast link reads "Show in Finder"; the settings pages show the same rows as before.
+
+## Tracking work in Linear (AGENTS.md)
+**Why:** the rules for how work is tracked lived only in private planning notes, so agents working from the repository alone could not follow them (duplicate issues, deferrals written only in `CHANGES.md`, closing comments without CI evidence).
+
+**Added:** an AGENTS.md section "Tracking work (Linear)": where work is tracked (team, label, projects, task prefixes), find the existing issue before creating one, `DEFERRED:` entries that become their own issues, the closing-comment contents (commits, acceptance-criteria table, exact-commit CI runs on attempt 1, DEFERRED list), agents never set Done and a separate verifier closes, `#[ignore]` reasons carry an issue reference, and `CHANGES.md` plus the closing comment go together. The section names no workspace, URL or person.
+
+**User-visible impact:** none (documentation only).

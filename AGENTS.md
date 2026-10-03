@@ -203,3 +203,25 @@ if FeatureFlag::YourNewFeature.is_enabled() {
 ### Exhaustive Matching
 
 When adding/editing match statements, avoid using the wildcard _ when at all possible. Exhaustive matching is helpful for ensuring that all variants are handled, especially when adding new variants to enums in the future.
+
+## Tracking work (Linear)
+
+All planned work, bugs and follow-ups are tracked in Linear: team **Engineering**, label **OpenRun**, grouped into projects such as "macOS-only". A title may carry a task prefix (`PLAT-6: …`, `R4-COMP: …`); commits and `CHANGES.md` sections name the task, and the closing comment names the commits. Planning documents are private: never commit planning files, paste their content into the repo or link a Linear workspace from it (this repository is public).
+
+**Before starting:**
+- Find the existing issue instead of creating a duplicate, and move it to In Progress.
+- Create an issue only when none exists, with the team, the label and a precise title.
+
+**No silent deferrals:** anything not done goes in the closing comment under `DEFERRED:` with a reason and a proposed owner, and becomes its own Linear issue. Never record a deferral only in `CHANGES.md` or a code comment.
+
+**Closing comment** (post it when the work is pushed):
+- The commits.
+- A table of every acceptance criterion with its evidence (test name, command and output, or `file:line`).
+- The exact-commit CI run URLs with the result of each job. Both the push run and a dispatched run (started once the push run is in progress) must be green on attempt 1, and their logs must contain no FLAKY, LEAK, "TRY 1 FAIL" or "TRY 2 PASS". A CI failure after the push is fixed as a new revision, and the runs that count are those that contain the fix.
+- The `DEFERRED:` list.
+
+**Who closes issues:** agents never set an issue to Done. Leave it In Progress, or In Review if that state exists. A separate verifier checks each criterion and closes the issue; implementers do not self-certify.
+
+**Records go together:** each change gets a `CHANGES.md` section (with a Contents entry, in body order, see Pull Request Workflow) and a Linear closing comment.
+
+**Ignored tests:** every `#[ignore]` carries a reason with a Linear issue reference, for example `#[ignore = "ENG-107: …"]`. A bare `#[ignore]` is not accepted.
