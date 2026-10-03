@@ -175,6 +175,7 @@ Each section below covers one removal (a single commit or a small group of relat
 - [CI: tests built once, build cache, sharded network-sandbox jobs](#ci-tests-built-once-build-cache-sharded-network-sandbox-jobs) — one build job makes a nextest archive that every test job runs from; `target/` is cached with the workspace crates and `script/ci_restore_mtimes`; the sandboxed unit, integration (3 shards) and idle runs are jobs of their own with their own canaries and net-logs; a final job checks that every test ran (CI-SPEED)
 - [CI-TUNE: runs on main do not queue, grouped Dependabot updates](#ci-tune-runs-on-main-do-not-queue-grouped-dependabot-updates) — a push to `main`, the nightly run and a manual run each have a concurrency group of their own; GitHub Actions updates come as one grouped pull request per week, at most two open; Cargo stays security-updates-only (CI-SPEED, ENG-232)
 - [macOS only](#macos-only) — removed Windows, Linux and wasm support and the winit/wgpu UI layer: about 50 000 lines, 212 fewer packages in `Cargo.lock`; SSH sessions to Linux hosts still work
+- [macOS only: remaining residue](#macos-only-remaining-residue) — the platform scaffolding PLAT-4 left (`SupportedPlatforms`, `OperatingSystem`, the key binding and path wrappers, traffic light sides, `instant`, `dunce`, `ContextFlag`, the Linux quit modal), the Windows, Linux and web remarks in code, comments, docs and tooling, and a cargo-deny and license list that cover the macOS targets only (PLAT-6)
 <!-- Section template (copy for each removal, append new sections at the end of the file):
 
 ## <Area>
@@ -3033,6 +3034,8 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 - Comments in code that still say dogfood or preview (for example in `settings_view/mod.rs` and `warp_features`) were left alone because this task changed no code.
 
 ## WASM-2 skipped: dormant cfg(wasm) branches stay
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** WASM-2 was the optional task that would delete the `cfg(target_family = "wasm")` branches, about 2,000 of them in 352 files. On 2026-09-29 the user chose to keep them. WASM-1 already removed the web artifacts and the ties to `app.warp.dev` (see "Web client crates, scripts and build profiles"), so what remains cannot reach a Warp server or be built into a web client by any script in the repository.
 
 **Removed:** nothing.
@@ -3174,6 +3177,8 @@ Not persisted anywhere (runtime, telemetry or protocol only): `PaletteMode`, `IP
 **Notes:** Clippy on `warp`, including its build script, passes with `-D warnings`; the earlier build-script failure came from a lint in `crates/persistence` that has since been fixed.
 
 ## Linux and Windows compile fixes
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** `cargo check` on macOS never compiles `cfg(windows)` and `cfg(linux)` code, so earlier removal tasks edited it by search. Cross-checking with `x86_64-unknown-linux-gnu` and `x86_64-pc-windows-gnu` found one real error and several warnings.
 
 **Modified:**
@@ -3785,6 +3790,8 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 - No migration or schema change. A leftover `-wal` file is truncated by the delete; the freed pages of an existing database that never went through a delete are not scrubbed.
 - Not done, by decision: redacting before persisting, encrypting the database, changing the shell's own history file, and `ignored_suggestions` (dismissed alias suggestions, a preference rather than history) is not cleared by the delete.
 ## CI: no retry-only passes, strict lint on three platforms, faster bash executable listing
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** run 36775523354 (commit `ae46d5b77`) failed in the `Offline audit` job: `shell_integration_tests::test_executable_completions` waited 30 s for the session's external commands and timed out on both tries. The two runs before it (36771068536, 36767361747) were green only because the single retry passed; in all five sandboxed bash runs the first try of this test had failed (34 s each), and the retry took 14 to 28 s. With zsh (run 36760663716) it passed first time in 3.9 s. A retry-only pass is not a pass, and the lint ran on the Linux host only, so `cfg(windows)` and `cfg(target_os = "macos")` code was never linted in CI.
 
 **Root cause (bash executable listing):** `ShellType::Bash.shell_command_to_get_executables` ran `compgen -c` (one scan of every `PATH` directory) and then `type -t` on every name it returned (a second scan, one `PATH` search per name). The strace logs of the CI runs (artifact `net-logs`) show what that costs on the runner: the `compgen` subshell used 0.07 s user and 0.83 s system CPU, the `type -t` subshell 0.11 s user and 1.32 s system (pid 59322 in run 36767361747), against about 0.1 s for 1,900 commands on a Mac. Several tests share the 4 vCPUs of the runner with software rendering and one `strace`, so the listing stayed running for more than the 30 s the test waited. Of 275 listings in the integration log of run 36771068536, 140 ended with `SIGKILL` and 124 with `SIGPIPE` (the app killed them or went away first) and one exited normally. The other bash tests do not wait for the listing, so only this one failed.
@@ -3805,6 +3812,8 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 **Notes:** the runner timings come from the strace logs of earlier runs; there is no Linux machine to reproduce them on, and the effect on the wall-clock time of the listing is read off the exact-commit CI run recorded in the Linear issue. The Windows and macOS jobs overlap with REL-02 (ENG-166), which adds build and test jobs for both. `cancel_active_commands` (run when a command is executed or an autosuggestion is aborted) kills every running command of the session, including the one-shot external-commands listing; killed, it returns a failure status and the set is stored empty for the rest of the session (by reading the code, not seen in CI); listed as a follow-up in the issue.
 
 ## Completion generators: OS network sandbox
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** ENG-197, the second layer after the offline environment table. The table switches off the implicit network use of the tools it knows; anything else a generator starts could still go online. The OS can deny the network to whatever the command (and its children) run.
 
 **Added:**
@@ -3854,6 +3863,8 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 - Allowed external CLIs other than `rustup`, `npm`, `corepack`, `git`, `docker` were reviewed from their commands and documentation, not run against a canary.
 
 ## Completion generators: restore the isolated tier
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** SEC-STOP (ENG-195) denied every generator whose tool could reach a network or run repository code in the environment alone. With the offline environment table (ENG-196) and the OS network sandbox (ENG-197) in place, the ones for which the real tool was shown to be quiet under both can run again. Anything without that evidence stays denied.
 
 **Modified:**
@@ -3997,6 +4008,8 @@ Every run used `env -i`, an isolated `HOME` and a private `WARP_DATA_PROFILE`. T
 - The echoed `^[i` is a visible glitch in the command text of a typeahead block in this narrow window. Preventing it needs a product change (for instance sending ESC-i only once the line editor reads), which this does not make.
 
 ## Completion generators: local git on Windows
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** WIN-GIT (ENG-219). User decision: on Windows the local git completion generators run (`git checkout <Tab>`, `git branch -d <Tab>`, `git push <Tab>`, tags, stashes, ...). Until now only file-read generators ran there, because Windows has no network sandbox, so a generator that starts a program stays off. The constraints that stay: nothing that can fetch, nothing that runs code a repository names, the strict token gate on PowerShell and cmd.
 
 **Classified** (every generator whose command is a `git` invocation, from the bundled `warp-command-signatures` 48fd7aa, each command checked in the POSIX, PowerShell and cmd.exe form):
@@ -4075,6 +4088,8 @@ No bundled git-family generator runs `fetch`, `pull`, `push`, `clone`, `ls-remot
 **Notes:** the gcloud row shows that the tool honours the variable, not that a request was prevented; the label says so. `pwsh` is not available on the development machine for this change; the PowerShell row is FLAKE-3's.
 
 ## Completion generators: git version gate, Windows variable-name case, codex git generators
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** ENG-220 (GIT-VER). Three leftovers of the offline environment table. (1) Its git protections (`core.fsmonitor`, `core.hooksPath`, `log.showSignature`) are `GIT_CONFIG_COUNT` variables, which git older than 2.31 ignores, so with an old git a repository's program still ran. (2) Windows variable names are case-insensitive, but the table looked `GIT_CONFIG_COUNT` up and wrote its entries case-sensitively. (3) `codex/commits` and `codex/local_branches` were denied as `env-network-likely` because of their spec, although they are the same `git log --oneline` and `git branch` commands as `gt/commits` and `gt/local_branches` (the `codex` spec reuses their generator functions).
 
 **Changed:**
@@ -4100,6 +4115,8 @@ No bundled git-family generator runs `fetch`, `pull`, `push`, `clone`, `ls-remot
 - CI: run 36964054921 on `6b3a5b241`, attempt 1, all 8 jobs green (Clippy, Clippy (macOS), Clippy (Windows), Formatting, Unit tests, Offline audit, Security tests (macOS), Security tests (Windows)); no `FLAKY` and no `TRY 1 FAIL` in any job log. The Windows job ran `harden_ignores_case_on_windows`, `the_environment_block_of_a_spawned_process_holds_one_git_config_count` and `a_session_pair_in_any_spelling_is_counted_and_the_table_still_applies` with the lower-case and mixed-case spellings.
 
 ## CI: waterfall sandbox step cannot hang the audit; test_waterfall_input_scrolling on Linux
+*Windows, Linux and wasm are no longer supported (see [macOS only](#macos-only)); this section is history.*
+
 **Why:** run 36966258710 (ENG-225): the non-blocking waterfall step hung to its 10-minute limit after the test failed, so `net-waterfall.log` was never written and "Check the recorded connections" crashed; `test_waterfall_input_scrolling` (ENG-194) has failed on the Linux runner since it was first run there.
 
 **`script/offline_sandbox` can no longer wait for ever:** `strace` exits only when every process it traces has exited, so one process left behind by the command (a display server, a shell, a helper) leaves the sandbox, the step and the writing of its log hanging. The command now runs in a small wrapper that records its exit status in a file. If `strace` is still there 30 seconds (`OFFLINE_SANDBOX_GRACE`) after the command ended, the processes it traces (found through `TracerPid` in /proc) are listed in a warning annotation and ended; if it is still there 10 seconds later it is ended too, and the command's status is the result. The log is written in every case, and the next hang names its cause in the step log. The cause of the hang in run 36966258710 is not proven: the step printed `error: test run failed` (nextest had ended) and then nothing for 10 minutes, with no `strace` message, no log and no per-run log in the uploaded artifact (the pattern did not match it), and 20 sandboxed runs of failing integration tests (run 36971603835) all ended normally; what is certain is that `strace` waits for all traced processes and that nothing else in the step could wait. Whatever process lingers is now listed with its state and command line. Checked with a fake tracer that crashes, exits and lingers. The artifact upload takes `net-*.log*`, so a step that was killed leaves its per-run logs.
@@ -4306,3 +4323,32 @@ OpenRun now builds and runs on macOS only (PLAT-4, under PLAT-RM). Windows, Linu
 **Test fix found by the CI of this change:** `test_launch_config_restores_pinned_tab_group_into_pinned_prefix` failed once in the PowerShell matrix (run 37113782636, step "Open a pinned-group launch config into that window", assertion "no block executing", 25.6 s). It is not caused by the removal: the test took 24.6 s in the PowerShell job of run 37100578498 on the base commit 28eb739f1, with a 10 s step limit. The restore moves the pinned tab "api" to index 0, so the default assertions of the step look at a restored tab whose shell is still bootstrapping, and that bootstrap counts as a running block; a PowerShell that needs more than 10 s to start (three at once on a busy runner) fails the step. Reproduced locally with a `pwsh` wrapper that delays every interactive session start after the third by 12 s (the unchanged test fails with the same message), and fixed in the test: the step has no default assertions and the next step waits for the bootstrap of tab 0 with the 20 s timeout made for that (`wait_until_bootstrapped_single_pane_for_tab`). With the same 12 s delay the fixed test passes. No retry, no ignore.
 
 **Left for later:** the `SupportedPlatforms` concept in the `settings` crate (now `matches_current_platform` is always true), `OperatingSystem` as a one-variant enum, the one-line `with_mac_key_binding` wrapper and `mac_only_keystroke`, the right-side traffic-light branch in `util/traffic_lights.rs`, the `Windows`/`Xkb` variants of `NativeKeyCode`, stale Linux/Windows remarks in comments of the shell-integration tests, and the third-party `windows`, `winapi` and `wasm-bindgen` crates that stay in `Cargo.lock` because the crates that depend on them list them for other targets.
+
+## macOS only: remaining residue
+**Why:** PLAT-6 (after PLAT-4, the "macOS only" section above). A search of the whole repository for what Windows, Linux and web support left behind: Rust, Cargo, scripts, workflows, docs, skills and tests.
+
+**Removed:**
+- The `SupportedPlatforms` concept (`ALL`, `DESKTOP`, `MAC`): the field of `define_setting!`, `define_settings_group!` and `implement_setting_for_enum!` (164 uses), `Setting::supported_platforms`, `Setting::is_supported_on_current_platform`, `SettingSection`, the schema entry's `supported_platforms_fn`, and the checks and the action pair flag in the settings pages.
+- The one-variant `OperatingSystem` enum, `with_mac_key_binding`, `mac_only_keystroke` and `cmd_or_ctrl_shift` (106 call sites use `"cmd-..."`), the right-side traffic light branch (`util/traffic_lights.rs` is one width), `uses_native_window_decorations`, `NativeKeyCode::{Windows, Xkb}`.
+- `ContextFlag` (seven flags that were always on, the web build switched them off) and the "Welcome to Warp on Web" pane, `is_mobile_device` and the soft keyboard request, `GPUBackend` variants other than Metal, the `warpui::platform::current` alias, the `RecoveryMechanism` GPU flags of `warp_cli`.
+- The Linux-only Warp quit modal (`NativeModal`), the web-only "Set permissions" notification banner button and `PermissionsNotYetGranted`, `Message::ChildExited`, the `getent` and `/etc/passwd` user lookups, `DESKTOP_STARTUP_ID`, the 32-bit `Point` ordering.
+- Windows path handling that had become identity functions: the `ShellLaunchData` path conversions and `ShellPathType`, `PathSeparators` (now `PATH_SEPARATORS`), `TargetOS::Windows` (never constructed), the `.exe` shell names, the Windows exit codes, the Kaspersky and Parallels stubs, the `windows_subsystem` attribute, `WARP_LOGS_DIR`, the dummy Linux `IntegrationTestDelegate`.
+- Dependencies: `instant` (a wasm shim; 53 files use `std::time`) and `dunce` (strips the Windows `\\?\` prefix; 45 uses call `std::fs::canonicalize`), `enum-iterator` from `warp_core`, the `local_fs` feature, the wasm rustflags, the `send_blocking` and `from_current_platform` clippy bans, the Windows nextest override, 78 bare `{ }` blocks that stood where cfg attributes used to be.
+
+**Modified:**
+- `about.toml` has `targets` for the two Apple triples, so `THIRD_PARTY_LICENSES` no longer lists the 89 crates that only the Windows, Linux, Android or wasm builds of third-party dependencies pull in (727 entries before, 636 after with `dunce` and `instant`; checked against `cargo tree` of both targets: every normal dependency listed before is still listed).
+- `deny.toml` checks the same two targets (`instant` is still in `Cargo.lock`, as a wasm32-only dependency of fastrand 1.x, so its RUSTSEC-2024-0384 ignore is not needed), and `CDLA-Permissive-2.0` left the license lists of `deny.toml` and `about.toml` because only the webpki roots of non-macOS targets used it.
+- `ci.yml` says why `Changed paths` and `CI result` stay on Linux runners (they only run Python and a path diff; macOS runners are scarce; nothing of OpenRun is built or run on Linux). The README, AGENTS.md, the skills and the issue template no longer describe Windows or Linux behavior; a note at the top of the old sections about Windows, Linux and wasm says they are history.
+- `rc_file_paths` returns the macOS and Linux PowerShell profile (it was only reached for shells with a success block, which PowerShell has none of); "Show in file explorer" reads "Show in Finder".
+
+**Kept on purpose:**
+- Remote hosts: `TargetOS::{MacOS, Linux}`, the Linux branches of the bash, zsh, fish and PowerShell bootstrap scripts, the `os_category` and `linux_distribution` fields, `ForwardX11=no` of the SSH executor, the SSH test container (`app/tests/ssh`).
+- Stored data: `NewSessionShell` and `ShellLaunchData` still read `WSL` and `MSYS2` values (tests in `new_session_shell_tests.rs` and `sqlite_tests.rs`), the settings file keys of removed Windows and Linux settings are ignored (`history_tests.rs`), `StandardizedPath` still reads a stored Windows-style path (its `Deserialize` infers the encoding), custom theme paths from other systems are preserved (`theme_tests.rs`), `ExitCode` stays an `i32`, and `cmdorctrl-` remains a valid modifier in a keybinding string.
+- Text that names other systems as data: file type names such as `wasm` and `zig`, the OSC 9;9 sequence ("also adopted by Windows Terminal"), terminal recordings and the version strings `git version ...windows...` in tests, the network share check for markdown images, the PowerShell script-analyzer profiles that match the bootstrap script, the `serve-wasm` entry of the banned workspace packages in `script/offline_audit`.
+- Third-party crates that list `windows`, `winapi`, `wasm-bindgen`, `inotify` and others for other targets stay in `Cargo.lock`.
+
+**Persisted state:** nothing a macOS user could have stored fails to read. `NativeKeyCode`, `PhysicalKey` and `KeyCode` had `Serialize` and `Deserialize` derives that nothing used (the whole workspace builds without them, with default and with all features), so no stored value can name `Windows` or `Xkb`. The settings, shell launch data and path compatibility tests above pass.
+
+**Offline impact:** none. The macOS sandbox, the offline environment table and the generator allow-list are unchanged; the git completion test now describes what it checks (the environment table alone, with the sandbox off).
+
+**User-visible impact:** a toast link reads "Show in Finder"; the settings pages show the same rows as before.
