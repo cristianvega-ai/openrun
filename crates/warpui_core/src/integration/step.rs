@@ -654,9 +654,24 @@ pub(super) async fn run_step(
                         unreachable!("already handled WithEvent variants")
                     }
                 };
-                let bounds = {
-                    let presenter_ref = presenter.borrow();
-                    presenter_ref.position_cache().get_position(&position_id)
+                // The position is cached when the element is painted, which can be a frame after
+                // the state that shows it (a menu that just opened) was asserted, and an element
+                // that is not laid out yet is cached as an empty rectangle at the origin (a
+                // right-click on it opened a menu at 0,0, which has no "Copy prompt"). Wait for a
+                // position with an area until the step's timeout instead of using the frame before.
+                let bounds = loop {
+                    let bounds = presenter
+                        .borrow()
+                        .position_cache()
+                        .get_position(&position_id);
+                    let laid_out = bounds.is_some_and(|b| b.width() > 0. && b.height() > 0.);
+                    if laid_out || Instant::now() >= deadline {
+                        break bounds;
+                    }
+                    if sigint_received.load(Ordering::Relaxed) {
+                        return AssertionOutcome::Canceled;
+                    }
+                    Timer::at(Instant::now() + THROTTLE_PERIOD).await;
                 };
 
                 // Note we are not using unwrap_or_else here because async closures
