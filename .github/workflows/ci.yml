@@ -263,6 +263,7 @@ jobs:
         with:
           metal: "false"
       - uses: ./.github/actions/macos-test-tools
+      - uses: ./.github/actions/old-git
       - uses: ./.github/actions/test-archive
       - uses: ./.github/actions/offline-canary
 
@@ -403,7 +404,7 @@ jobs:
       - uses: ./.github/actions/macos-test-tools
       # git 2.31.0 (the oldest the completion gate accepts), 2.43.0 and 2.44.0 (they ignore
       # GIT_NO_LAZY_FETCH) and 2.43.4 (a patched backport) for `git_local_promisor_tests.rs`, which
-      # also tests the runner's own git. The other jobs test the runner's git only.
+      # also tests the runner's own git. The unit job runs the same required matrix.
       - uses: ./.github/actions/old-git
       - uses: ./.github/actions/test-archive
 
