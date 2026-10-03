@@ -782,9 +782,15 @@ pub fn test_launch_config_restores_pinned_tab_group_into_pinned_prefix() -> Buil
                 .add_assertion(assert_tab_count(2))
                 .add_assertion(assert_focused_tab_index(0)),
         )
+        // The default assertions of a step look at the terminal in tab 0, and after this action
+        // tab 0 is a restored tab ("api" moves to the front) whose shell is still bootstrapping:
+        // its bootstrap command counts as a block that is executing. A shell with a slow start
+        // (PowerShell, three of them starting at once on a busy runner) needs more than the 10
+        // seconds of a step, so the step carries no default assertions and the next one waits for
+        // the bootstrap of that tab with the timeout made for it.
         .with_step(
-            new_step_with_default_assertions("Open a pinned-group launch config into that window")
-                .with_action(move |app, _, _| {
+            TestStep::new("Open a pinned-group launch config into that window").with_action(
+                move |app, _, _| {
                     app.dispatch_global_action(
                         "root_view:open_launch_config",
                         warp::root_view::OpenLaunchConfigArg {
@@ -792,9 +798,10 @@ pub fn test_launch_config_restores_pinned_tab_group_into_pinned_prefix() -> Buil
                             open_in_active_window: true,
                         },
                     );
-                })
-                .set_post_step_pause(Duration::from_secs(1)),
+                },
+            ),
         )
+        .with_step(wait_until_bootstrapped_single_pane_for_tab(0))
         .with_step(
             new_step_with_default_assertions("Assert the pinned group leads the tab list")
                 .add_assertion(assert_tab_count(5))
