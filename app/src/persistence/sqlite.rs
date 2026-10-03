@@ -1435,8 +1435,8 @@ fn read_sqlite_data(
                             if width >= MIN_WINDOW_WIDTH && height >= MIN_WINDOW_HEIGHT =>
                         {
                             // When fullscreen or maximized, the `inner_size` we snapshotted will be the
-                            // size of the full screen. This will cause problems with winit. When you set
-                            // maximized/fullscreen, setting the inner_size will by the size the window
+                            // size of the full screen. When you set maximized/fullscreen, setting the
+                            // inner_size will by the size the window
                             // takes _after_ the user toggles _out_ of fullscreen/maximized. Therefore, we
                             // don't want to set the size to take the full screen because the window will
                             // appear to remain in maximized/fullscreen. We multiply each dimension by 0.8

@@ -1,7 +1,7 @@
+use std::env;
 use std::path::Path;
-use std::{env, fmt};
 
-use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand};
 use url::Url;
 use warp_core::channel::ChannelState;
 
@@ -170,23 +170,6 @@ impl Command {
 pub struct TerminalServerArgs {
     #[clap(flatten)]
     pub parent: ParentOpts,
-}
-
-#[derive(Debug, Copy, Clone, clap::ValueEnum)]
-pub enum RecoveryMechanism {
-    #[value(name = "force-dedicated-gpu")]
-    DedicatedGpu,
-    #[value(name = "disable-opengl")]
-    DisableOpenGL,
-    #[value(name = "force-vulkan")]
-    ForceVulkan,
-}
-
-impl fmt::Display for RecoveryMechanism {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let value = self.to_possible_value().expect("no values are skipped");
-        f.write_str(value.get_name())
-    }
 }
 
 /// Returns the subcommand name to use for starting the terminal server.

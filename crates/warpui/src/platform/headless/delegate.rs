@@ -193,7 +193,8 @@ impl platform::DispatchDelegate for DispatchDelegate {
     }
 
     fn run_on_main_thread(&self, task: async_task::Runnable) {
-        // See crate::windowing::winit::delegate::DispatchDelegate for why we use ManuallyDrop.
+        // The task must only be dropped on the main thread; ManuallyDrop keeps a task whose send
+        // failed from being dropped on this thread.
         if self
             .event_sender
             .send(AppEvent::RunTask(ManuallyDrop::new(task)))
