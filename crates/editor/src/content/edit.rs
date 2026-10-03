@@ -74,8 +74,6 @@ pub(crate) fn layout_mermaid_block_for_test(
 ///
 /// Blocked sources (see [`is_blocked_image_source`]) are never loaded, so they resolve to `None`
 /// before any path is canonicalized, stat'ed or read.
-///
-/// Note: Path canonicalization is not available on WASM targets.
 pub fn resolve_asset_source_relative_to_directory(
     source: &str,
     base_directory: Option<&Path>,

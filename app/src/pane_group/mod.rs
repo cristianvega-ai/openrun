@@ -131,9 +131,9 @@ fn get_minimum_pane_size(app: &AppContext) -> f32 {
 ///    still point at arbitrary binaries.
 /// 2. Otherwise look up by command name in the already-discovered
 ///    [`AvailableShells`]. Its shell discovery supplements the process `PATH`
-///    with well-known install locations (e.g. `/opt/homebrew/bin` on macOS,
-///    MSYS2/WSL on Windows) that a raw `PATH` lookup would miss when Warp is
-///    launched outside an interactive shell.
+///    with well-known install locations (e.g. `/opt/homebrew/bin`) that a raw
+///    `PATH` lookup would miss when OpenRun is launched outside an interactive
+///    shell.
 /// 3. As a final fallback, perform a plain `PATH` lookup via
 ///    [`AvailableShell::try_from`] in case the user put something exotic in
 ///    `shell`.
@@ -281,9 +281,7 @@ pub fn init(app: &mut AppContext) {
         .with_key_binding("cmdorctrl-alt-down"),
     ]);
 
-    // Register bindings to resize a pane. We only set bindings on Mac because there isn't an
-    // equivalent binding on Linux/Windows that makes sense here. This matches the behavior of
-    // VSCode.
+    // Register bindings to resize a pane. This matches the behavior of VSCode.
     app.register_editable_bindings([
         EditableBinding::new(
             "pane_group:resize_left",
@@ -1008,7 +1006,6 @@ impl PaneGroup {
 
                 let (view, terminal_manager) = PaneGroup::create_session(
                     // Use cwd from the template iff such path exists, otherwise None
-                    // TODO: On Windows, support WSL directory restoration.
                     Some(cwd).filter(|p| p.exists()),
                     HashMap::new(),
                     uuid.as_bytes(),
@@ -3578,8 +3575,6 @@ impl PaneGroup {
     }
 
     /// Returns the path of the directory in which a newly created session should start, if any.
-    /// On Windows, this path will be in native Windows format (including the WSL prefix and
-    /// distribution, if applicable).
     ///
     /// This returns the active (parent) session's current directory if the active session is local
     /// (not an SSH session) and if the active session is done bootstrapping. Else, it returns the

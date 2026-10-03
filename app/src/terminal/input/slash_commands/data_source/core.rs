@@ -227,22 +227,7 @@ pub trait SlashCommandDataSource {
             return false;
         };
 
-        // Repo detection converts the shell-native CWD (e.g. Git Bash/MSYS2/WSL
-        // "/c/Users/...") to an OS-native path via `ShellLaunchData` before
-        // caching the repo root (see the `detect_possible_git_repo` call site in
-        // `terminal/view.rs`). The live CWD must go through the same conversion
-        // so it can match those cached roots; otherwise repo-gated commands
-        // would be hidden inside a repo on Windows shell variants. Fall back to
-        // the raw path when no session/launch-data conversion applies (the
-        // common native-shell case, where the conversion is already a no-op).
-        let path = active_session
-            .session(ctx)
-            .and_then(|session| {
-                session
-                    .launch_data()
-                    .and_then(|data| data.maybe_convert_absolute_path(cwd))
-            })
-            .unwrap_or_else(|| PathBuf::from(cwd));
+        let path = PathBuf::from(cwd);
 
         DetectedRepositories::as_ref(ctx)
             .get_root_for_path(&LocalOrRemotePath::Local(path))

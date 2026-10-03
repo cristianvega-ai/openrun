@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use string_offset::ByteOffset;
 use warp_util::path::CleanPathResult;
 
-use crate::terminal::ShellLaunchData;
 use crate::terminal::model::grid::grid_handler::is_file_link_separator;
 
 /// A file path detected in text, with the line and column it points at if any.
@@ -20,9 +19,7 @@ fn addr_of(s: &str) -> usize {
 }
 
 /// Maximum byte length of a token to search for file paths in. Used as a guard against scanning huge non-path tokens.
-/// - Linux PATH_MAX: 4096 bytes.
-/// - macOS PATH_MAX: 1024 bytes.
-/// - Windows long-path cap: 32,767 UTF-16 units = 98,301 bytes.
+/// macOS PATH_MAX is 1024 bytes; remote hosts allow longer paths (Linux PATH_MAX: 4096 bytes).
 const MAX_WORD_LEN_FOR_FILE_PATH: usize = 96 * 1024;
 /// Maximum [`is_file_link_separator`] characters per token, to bound candidate substrings.
 /// 256 keeps per-token allocations under ~1 MiB and is far above any real path.
@@ -101,9 +98,8 @@ fn compute_valid_file_path(
     working_directory: &Path,
     expanded_path: &str,
     files_and_folders_in_working_directory: &HashSet<PathBuf>,
-    shell_launch_data: Option<&crate::terminal::ShellLaunchData>,
 ) -> Option<DetectedLinkType> {
-    use crate::util::file::{ShellPathType, absolute_path_if_valid};
+    use crate::util::file::absolute_path_if_valid;
     // Scan for line and column number in the current word (left + right).
     let cleaned_path = CleanPathResult::with_line_and_column_number(expanded_path);
 
@@ -122,11 +118,7 @@ fn compute_valid_file_path(
     }
 
     // This does a file system lookup.
-    let absolute_path = absolute_path_if_valid(
-        &cleaned_path,
-        ShellPathType::PlatformNative(working_directory.to_owned()),
-        shell_launch_data,
-    );
+    let absolute_path = absolute_path_if_valid(&cleaned_path, working_directory);
 
     absolute_path.map(|absolute_path| DetectedLinkType {
         absolute_path,
@@ -153,16 +145,10 @@ fn get_files_and_folders_in_directory(directory: &Path) -> HashSet<PathBuf> {
 pub(crate) fn detect_file_paths(
     working_directory: &str,
     text: &str,
-    shell_launch_data: Option<&ShellLaunchData>,
 ) -> HashMap<Range<usize>, DetectedLinkType> {
     let mut file_paths = HashMap::new();
     // List files in this working_directory
-    let working_directory = shell_launch_data
-        .and_then(|launch_data| launch_data.maybe_convert_absolute_path(working_directory))
-        .unwrap_or_else(|| {
-            // Naively attempt to make a pathbuf from this.
-            PathBuf::from(working_directory)
-        });
+    let working_directory = PathBuf::from(working_directory);
     let files_and_folders_in_working_directory =
         get_files_and_folders_in_directory(working_directory.as_path());
     for word in text.split_whitespace() {
@@ -176,7 +162,6 @@ pub(crate) fn detect_file_paths(
                 working_directory.as_path(),
                 &expanded_path,
                 &files_and_folders_in_working_directory,
-                shell_launch_data,
             ) {
                 let byte_start = addr_of(possible_path) - addr_of(text);
                 let byte_end = byte_start + possible_path.len();

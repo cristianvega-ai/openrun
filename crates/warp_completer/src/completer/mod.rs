@@ -11,7 +11,8 @@ pub mod testing;
 
 pub use context::{
     CommandExitStatus, CommandOutput, CompletionContext, Containment, GIT_VERSION_COMMAND,
-    GeneratorContext, GitVersion, MINIMUM_GIT_VERSION, PathCompletionContext, PathSeparators,
+    GeneratorContext, GitVersion, MAIN_PATH_SEPARATOR, MINIMUM_GIT_VERSION, PATH_SEPARATORS,
+    PathCompletionContext,
 };
 pub use describe::{Description, TopLevelCommandCaseSensitivity, describe, describe_given_token};
 pub use engine::{EngineDirEntry, EngineFileType, LocationType};
@@ -21,9 +22,3 @@ pub use suggest::{
     PreparedSuggestion, Priority, Suggestion, SuggestionResults, SuggestionType,
     SuggestionTypeName, suggestions,
 };
-
-fn get_path_separators(ctx: &dyn CompletionContext) -> PathSeparators {
-    ctx.path_completion_context()
-        .map(|ctx| ctx.path_separators())
-        .unwrap_or(PathSeparators::for_os())
-}

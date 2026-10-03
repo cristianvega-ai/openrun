@@ -107,18 +107,10 @@ fn test_from_name() {
         Some(ShellType::Fish),
         ShellType::from_name("/usr/local/bin/fish")
     );
-    assert_eq!(
-        Some(ShellType::PowerShell),
-        ShellType::from_name("pwsh.exe")
-    );
     assert_eq!(None, ShellType::from_name("pwsh.bat"));
     assert_eq!(
         Some(ShellType::PowerShell),
         ShellType::from_name("/usr/bin/env/powershell")
-    );
-    assert_eq!(
-        Some(ShellType::PowerShell),
-        ShellType::from_name("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
     );
     assert_eq!(None, ShellType::from_name("psh"));
 }
@@ -285,12 +277,7 @@ fn test_should_add_command_to_history() {
 ///
 /// `rc_file_paths` is rendered into a shell command that runs on the *target*
 /// (e.g. an SSH remote, or a subshell during Auto-Warpify). The path separator
-/// must therefore depend on the target OS, not the host that built Warp.
-/// Previously this used `PathBuf::join`, which uses the host's separator and
-/// produced strings like `~\.zshrc` on a Windows host targeting a Unix shell —
-/// the remote zsh then errored with "no such user or named directory".
-/// `rc_file_paths` now returns `TypedPathBuf`s encoded for the target OS, so the
-/// separator is enforced by the encoding rather than the host.
+/// must therefore be Unix-encoded, so a remote zsh resolves them.
 #[test]
 fn test_rc_file_paths_use_target_os_separator() {
     for os in [TargetOS::Linux, TargetOS::MacOS] {
@@ -309,28 +296,11 @@ fn test_rc_file_paths_use_target_os_separator() {
         );
         assert_eq!(
             ShellType::PowerShell.rc_file_paths(os),
-            vec![
-                TypedPathBuf::from_unix("~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"),
-                TypedPathBuf::from_unix(
-                    "~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"
-                ),
-            ],
+            vec![TypedPathBuf::from_unix(
+                "~/.config/powershell/Microsoft.PowerShell_profile.ps1"
+            )],
         );
     }
-
-    // On Windows the only Auto-Warpify-supported shell is PowerShell; Unix
-    // shells deliberately return no rc paths.
-    // The leading separator follows target OS; the literal interior slashes
-    // are left as-is (PowerShell accepts forward slashes on Windows).
-    assert_eq!(
-        ShellType::PowerShell.rc_file_paths(TargetOS::Windows),
-        vec![TypedPathBuf::from_windows(
-            "$HOME\\.config/powershell/Microsoft.PowerShell_profile.ps1"
-        )],
-    );
-    assert!(ShellType::Zsh.rc_file_paths(TargetOS::Windows).is_empty());
-    assert!(ShellType::Bash.rc_file_paths(TargetOS::Windows).is_empty());
-    assert!(ShellType::Fish.rc_file_paths(TargetOS::Windows).is_empty());
 }
 
 #[test]

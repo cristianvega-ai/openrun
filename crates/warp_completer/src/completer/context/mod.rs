@@ -93,49 +93,11 @@ pub trait CompletionContext: Send + Sync {
     }
 }
 
-/// Keeps track of which separators characters are relevant in file paths.
-///
-/// There is a [`std::path::MAIN_SEPARATOR`], but we usually can't read that. We need to be dynamic
-/// in order to accommodate for sessions using a different separator from the system the app is
-/// running on, e.g. WSL or MSYS2.
-#[derive(Clone, Debug)]
-pub struct PathSeparators {
-    /// Analogous to [`std::path::MAIN_SEPARATOR`].
-    pub main: char,
-    /// Set of all valid separators, e.g. Windows recognizes both "/" and "\".
-    pub all: &'static [char],
-}
+/// The characters that separate the components of a path in a session: sessions use POSIX paths.
+pub const PATH_SEPARATORS: &[char] = &['/'];
 
-impl PathSeparators {
-    const WINDOWS_SEPARATORS: &[char] = &['/', '\\'];
-    const UNIX_SEPARATORS: &[char] = &['/'];
-
-    pub fn for_os() -> Self {
-        let main_separator = std::path::MAIN_SEPARATOR;
-        Self {
-            main: main_separator,
-            all: match main_separator {
-                '/' => Self::UNIX_SEPARATORS,
-                '\\' => Self::WINDOWS_SEPARATORS,
-                _ => panic!("unknown main path separator: {main_separator}"),
-            },
-        }
-    }
-
-    pub fn for_unix() -> Self {
-        Self {
-            main: '/',
-            all: Self::UNIX_SEPARATORS,
-        }
-    }
-
-    pub fn for_windows() -> Self {
-        Self {
-            main: '\\',
-            all: Self::WINDOWS_SEPARATORS,
-        }
-    }
-}
+/// The separator that is appended to a directory name in a path completion.
+pub const MAIN_PATH_SEPARATOR: char = '/';
 
 #[async_trait]
 pub trait PathCompletionContext: Send + Sync {
@@ -158,8 +120,6 @@ pub trait PathCompletionContext: Send + Sync {
     /// The current working directory, which is used to determine how relative path suggestions
     /// should be computed.
     fn pwd(&self) -> TypedPath<'_>;
-
-    fn path_separators(&self) -> PathSeparators;
 }
 
 #[async_trait]

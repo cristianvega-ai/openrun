@@ -237,11 +237,9 @@ pub fn init(ctx: &mut AppContext) {
             id!("EditorView") & !id!("IMEOpen"),
         ),
         // NOTE: physical `home`/`end` keys are bound via the editable
-        // `editor_view:home`/`editor_view:end` bindings below (linux/windows
-        // map them to the visual-line action; macOS maps them to document
-        // start/end). We intentionally do not register cross-platform
-        // `home`/`end` FixedBindings here, as they would conflict with the
-        // macOS document-navigation bindings.
+        // `editor_view:home`/`editor_view:end` bindings below (they map to the
+        // document start/end). We intentionally do not register `home`/`end`
+        // FixedBindings here, as they would conflict with those bindings.
         FixedBinding::new(
             "shift-up",
             EditorAction::SelectUp,
@@ -387,10 +385,8 @@ pub fn init(ctx: &mut AppContext) {
         ),
     ]);
 
-    // Register mac-only `FixedBinding`s.
     ctx.register_fixed_bindings([
-        // A native character palette isn't supported on all platforms. The `ctrl-cmd-space`
-        // binding is unique to Mac.
+        // The `ctrl-cmd-space` binding opens the macOS character palette.
         FixedBinding::new(
             "ctrl-cmd-space",
             EditorAction::ShowCharacterPalette,
@@ -453,11 +449,11 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::SelectLeft,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        // Make this mac only so it is symmetric with the emacs keybinding for `SelectRight`,
-        // which is Mac-only because it would otherwise conflict with the find bar.
+        // Symmetric with the emacs keybinding for `SelectRight`, which would otherwise conflict
+        // with the find bar.
         .with_key_binding("shift-ctrl-B"),
-        // Mac only to prevent conflicts with the opening the find bar.
-        // NOTE "shift-right" exists a cross-platform keybinding for this action.
+        // Avoids a conflict with opening the find bar.
+        // NOTE "shift-right" also exists as a keybinding for this action.
         EditableBinding::new(
             "editor_view:select_right",
             "Select one character to the right",
@@ -467,8 +463,8 @@ pub fn init(ctx: &mut AppContext) {
         .with_key_binding("shift-ctrl-F"),
         EditableBinding::new(SELECT_UP_ACTION_NAME, "Select up", EditorAction::SelectUp)
             .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-            // Set this to Mac only since otherwise it could conflict with opening the command
-            // palette. NOTE `shift-up` still exists as a cross platform keybinding for this action.
+            // Avoids a conflict with opening the command palette. NOTE `shift-up` also exists as a
+            // keybinding for this action.
             .with_key_binding("shift-ctrl-P"),
         EditableBinding::new(
             SELECT_DOWN_ACTION_NAME,
@@ -553,8 +549,7 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::MoveToLineStart,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        // Mac only so it doesn't conflict with "SelectAll" on Linux / Windows.
-        // VSCode does not have a default binding for this on non-Mac.
+        // VSCode has a default binding for this only on Mac.
         .with_key_binding("ctrl-a"),
         EditableBinding::new(
             "editor_view:move_to_line_end",
@@ -562,12 +557,10 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::MoveToLineEnd,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        // Make this Mac-only so it is symmetric with ctrl-a for `MoveToLineStart`, which is Mac
-        // only because it would otherwise conflict with `SelectAll`. VSCode does not have a default
-        // binding for this on non-Mac.
+        // Symmetric with ctrl-a for `MoveToLineStart`. VSCode has a default binding for this only
+        // on Mac.
         .with_key_binding("ctrl-e"),
-        // Match the behavior of both VSCode and Intellij by using `cmd-left/right` on Mac and
-        // `home/end` on Windows and Linux. See https://www.jetbrains.com/help/idea/reference-keymap-win-default.html#caret_navigation.
+        // Match the behavior of both VSCode and Intellij by using `cmd-left/right`.
         EditableBinding::new(
             "editor_view:home",
             "Home",
@@ -650,10 +643,9 @@ pub fn init(ctx: &mut AppContext) {
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
         .with_key_binding("meta-shift->"),
-        // On macOS, the physical Home/End keys jump to the start/end of the
-        // document (matching the macOS convention), distinct from `cmd-left`/
-        // `cmd-right` which move to the visual-line start/end. On Linux/Windows
-        // the Home/End keys remain bound to the visual-line action above.
+        // The physical Home/End keys jump to the start/end of the document (matching the macOS
+        // convention), distinct from `cmd-left`/`cmd-right` which move to the visual-line
+        // start/end.
         EditableBinding::new(
             "editor_view:move_to_buffer_start",
             "Move to the start of the buffer",
@@ -713,8 +705,8 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::ClearAndCopyLines,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen") & !id!("Vim"))
-        // Mac only because otherwise this would conflict with the keybinding to clear all blocks.
-        // NOTE ctrl-u exists as a default binding for this action that works across all platforms.
+        // Avoids a conflict with the keybinding to clear all blocks.
+        // NOTE ctrl-u exists as another default binding for this action.
         .with_key_binding("cmd-shift-K"),
         EditableBinding::new(
             "editor_view:cut_all_right",
@@ -737,9 +729,8 @@ pub fn init(ctx: &mut AppContext) {
             EditorAction::DeleteAllLeft,
         )
         .with_context_predicate(id!("EditorView") & !id!("IMEOpen"))
-        // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
-        // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
-        // to clear all blocks within the blocklist.
+        // VSCode uses `ctrl-shift-k` to delete a line, which would interfere with the binding to
+        // clear all blocks within the blocklist.
         .with_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:insert_newline",
@@ -7527,8 +7518,7 @@ pub enum Event {
     /// Signifies that something has been pasted into the view
     Paste,
     MiddleClickPaste,
-    /// Emitted when the 'delete all left' keybinding is triggered (cmd-delete on mac, ctrl-y on
-    /// linux).
+    /// Emitted when the 'delete all left' keybinding is triggered (cmd-delete).
     DeleteAllLeft,
     UpdatePeers {
         operations: Rc<Vec<CrdtOperation>>,

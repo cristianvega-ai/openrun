@@ -296,7 +296,7 @@ lazy_static! {
         regex::Regex::new(r"(?m)^channel (\d)+: open failed:")
         .expect("The regex should compile");
 
-    /// A regex to detect Unix- or Windows-style line feeds in text.
+    /// A regex to detect `\n` and `\r\n` line feeds in text.
     pub static ref LINEFEED_REGEX: Regex = Regex::new("\r?\n").expect("should not fail to compile regex");
 
     /// Show the jump to bottom of block button if more than this height of the block is in view.
@@ -2886,11 +2886,7 @@ impl TerminalView {
                         .and_then(|active_session_id| {
                             self.sessions.as_ref(ctx).get(active_session_id)
                         })
-                        .and_then(|active_session| {
-                            active_session
-                                .launch_data()
-                                .and_then(|data| data.maybe_convert_absolute_path(cwd))
-                        })
+                        .map(|_| PathBuf::from(cwd))
                 })
                 // Checking if the pwd from the active session actually exists
                 // and if not (ie. directory was removed) - return None.
@@ -3050,8 +3046,7 @@ impl TerminalView {
         self.write_user_bytes_to_pty(vec![escape_sequences::C0::ETX], ctx);
     }
 
-    /// Windows users expect ctrl-c to copy if there is selected text. Otherwise,
-    /// we perform the normal ctrl-c action.
+    /// Ctrl-c copies if there is selected text. Otherwise, we perform the normal ctrl-c action.
     fn ctrl_c(&mut self, ctx: &mut ViewContext<Self>) {
         let (has_block_list_selection, has_alt_screen_selection, active_block_state) = {
             let model = self.model.lock();
@@ -3956,7 +3951,6 @@ impl TerminalView {
         trigger: NotificationsTrigger,
         ctx: &mut ViewContext<Self>,
     ) {
-        // Desktop notifications discovery isn't meaningful on the web surface.
         // Don't show if the user has dismissed the banner in this session.
         if matches!(
             self.inline_banners_state.notifications_discovery_banner,
@@ -4377,29 +4371,9 @@ impl TerminalView {
                         }
                     });
                     if let Some(session_type) = session_type {
-                        let is_local = matches!(session_type, RepoDetectionSessionType::Local);
-
-                        // For local sessions, convert the shell-native CWD
-                        // (e.g. "/c/Users/..." for Git Bash/MSYS2) to a
-                        // Windows-native path before repo detection.
-                        let directory_for_detection = if is_local {
-                            block_metadata
-                                .session_id()
-                                .and_then(|sid| self.sessions.as_ref(ctx).get(sid))
-                                .and_then(|session| {
-                                    session.launch_data().and_then(|data| {
-                                        data.maybe_convert_absolute_path(active_directory)
-                                    })
-                                })
-                                .map(|path| path.to_string_lossy().into_owned())
-                                .unwrap_or_else(|| active_directory.to_string())
-                        } else {
-                            active_directory.to_string()
-                        };
-
                         let fut = detect_possible_git_repo(
                             session_type,
-                            &directory_for_detection,
+                            active_directory,
                             RepoDetectionSource::TerminalNavigation,
                             ctx,
                         );
@@ -10265,7 +10239,7 @@ impl TerminalView {
     /// session is remote.
     pub fn pwd_as_local_or_remote(&self, ctx: &AppContext) -> Option<LocalOrRemotePath> {
         let session_id = self.active_block_session_id()?;
-        let session = self.sessions.as_ref(ctx).get(session_id)?;
+        self.sessions.as_ref(ctx).get(session_id)?;
         let cwd_str = self
             .active_block_metadata
             .as_ref()
@@ -10273,10 +10247,7 @@ impl TerminalView {
 
         if self.session_is_local(session_id, ctx) {
             // Local session: canonicalize to resolve symlinks / normalize.
-            let path = session
-                .launch_data()
-                .and_then(|data| data.maybe_convert_absolute_path(cwd_str))
-                .unwrap_or_else(|| PathBuf::from(cwd_str));
+            let path = PathBuf::from(cwd_str);
             let canonical = std::fs::canonicalize(&path).ok()?;
             Some(LocalOrRemotePath::Local(canonical))
         } else {
@@ -11493,9 +11464,6 @@ impl TerminalView {
                         log::warn!("Error persisting notifications setting: {e:#}");
                     }
                 });
-
-                // On Linux, immediately mark the request permission status as accepted since there's no concept of
-                // requesting desktop notification permissions.
 
                 ctx.request_desktop_notification_permissions(move |view, outcome, ctx| {
                     if let NotificationsDiscoveryBanner::Open {

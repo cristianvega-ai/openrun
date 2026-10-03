@@ -5,7 +5,6 @@ use std::{fs, io};
 use warp_util::path::{CleanPathResult, LineAndColumnArg};
 
 pub use self::external_editor::{open_file_path_in_external_editor, open_file_path_with_editor};
-use crate::terminal::ShellLaunchData;
 use crate::terminal::model::grid::grid_handler::{ContainsPoint, Link};
 use crate::terminal::model::index::Point;
 
@@ -16,59 +15,20 @@ pub enum FilePathType {
     Relative(PathBuf),
 }
 
-#[derive(Debug)]
-pub enum ShellPathType {
-    /// The path comes from the shell and may need to be converted in a shell-aware way.
-    ShellNative(String),
-    /// The path has already been converted to a OS-native path.
-    PlatformNative(PathBuf),
-}
-
-/// Checks if a file path exists and is valid for a file link.
+/// Checks if a file path exists and is valid for a file link. The path is tried relative to
+/// `working_directory` first, then as an absolute path.
 pub fn absolute_path_if_valid(
     clean_path_result: &CleanPathResult,
-    working_directory: ShellPathType,
-    shell_launch_data: Option<&ShellLaunchData>,
+    working_directory: &Path,
 ) -> Option<PathBuf> {
-    let (maybe_absolute_path, relative_path) = match shell_launch_data {
-        Some(shell_launch_data) => {
-            // Attempt to parse the clean path result as an absolute path.
-            let maybe_absolute_path =
-                shell_launch_data.maybe_convert_absolute_path(&clean_path_result.path);
-            let relative_path = match working_directory {
-                ShellPathType::ShellNative(base_path_str) => shell_launch_data
-                    .maybe_convert_relative_path(&base_path_str, &clean_path_result.path),
-                ShellPathType::PlatformNative(base_path) => {
-                    shell_launch_data.join_to_native_path(&base_path, &clean_path_result.path)
-                }
-            };
-            (maybe_absolute_path, relative_path)
-        }
-        None => {
-            // We naively attempt to treat the given paths as platform-native.
-            let maybe_absolute_path = PathBuf::from(&clean_path_result.path);
-            let relative_path = match working_directory {
-                ShellPathType::ShellNative(path_str) => {
-                    let mut path_buf = PathBuf::from(path_str);
-                    path_buf.push(&clean_path_result.path);
-                    path_buf
-                }
-                ShellPathType::PlatformNative(path_buf) => path_buf.join(&clean_path_result.path),
-            };
-            (Some(maybe_absolute_path), Some(relative_path))
-        }
-    };
+    let relative_path = working_directory.join(&clean_path_result.path);
+    if is_path_valid(&relative_path, clean_path_result) {
+        return Some(relative_path);
+    }
 
-    if relative_path
-        .as_ref()
-        .is_some_and(|path| is_path_valid(path, clean_path_result))
-    {
-        return relative_path;
-    } else if maybe_absolute_path
-        .as_ref()
-        .is_some_and(|path| is_path_valid(path, clean_path_result))
-    {
-        return maybe_absolute_path;
+    let absolute_path = PathBuf::from(&clean_path_result.path);
+    if is_path_valid(&absolute_path, clean_path_result) {
+        return Some(absolute_path);
     }
 
     None
@@ -100,7 +60,6 @@ impl FilePathType {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileLink {
     pub link: Link,
-    /// This path has been converted (if needed) into a native path from the shell.
     pub absolute_path: PathBuf,
     pub line_and_column_num: Option<LineAndColumnArg>,
 }

@@ -332,7 +332,6 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::MoveToLineStart,
         )
         .with_context_predicate(text_entry.clone())
-        // Mac-only to not conflict with SelectAll on Linux and Windows.
         .with_key_binding("ctrl-a"),
         EditableBinding::new(
             "editor_view:home",
@@ -407,8 +406,8 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::SelectUp,
         )
         .with_context_predicate(text_entry.clone())
-        // Set this to Mac only since otherwise it could conflict with opening the command
-        // palette. NOTE `shift-up` still exists as a cross platform keybinding for this action.
+        // Avoids a conflict with opening the command palette. NOTE `shift-up` also exists as a
+        // keybinding for this action.
         .with_key_binding("shift-ctrl-P"),
         EditableBinding::new(
             "editor_view:select_down",
@@ -531,9 +530,8 @@ pub fn init(app: &mut AppContext) {
             CodeEditorViewAction::DeleteLineLeft,
         )
         .with_context_predicate(text_entry.clone())
-        // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
-        // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
-        // to clear all blocks within the blocklist.
+        // VSCode uses `ctrl-shift-k` to delete a line, which would interfere with the binding to
+        // clear all blocks within the blocklist.
         .with_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:cut_all_right",

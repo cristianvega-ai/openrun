@@ -8,15 +8,10 @@ use serde::{Deserialize, Serialize};
 /// - 0 is the standard success exit code
 /// - 130 is the exit code for when a process is quit by Ctrl-C
 /// - 141 is for when a process is closed while piping output to a pager (e.g. `git log`)
-/// - -1073741510 is exit code for when a process is aborted with `STATUS_CONTROL_C_EXIT` on
-///   Windows. We don't gate this on OS because it's impossible to get a negative exit code in
-///   Unix environments.
-const SUCCESSFUL_EXIT_CODES: &[i32] = &[0, 130, 141, -1073741510];
+const SUCCESSFUL_EXIT_CODES: &[i32] = &[0, 130, 141];
 
-/// This is a newtype for i32.
-/// It is meant to cover
-/// - POSIX systems where exit codes are u8
-/// - Windows systems where exit codes are i32
+/// This is a newtype for i32. POSIX exit codes are u8; the i32 keeps persisted values and the
+/// exit codes of other tools readable.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ExitCode(i32);
 
@@ -31,10 +26,9 @@ impl ExitCode {
     }
 
     /// Returns true if the exit code indicates "command not found".
-    /// - 127: Unix/Linux/macOS
-    /// - 9009: Windows CMD
+    /// - 127: POSIX shells
     pub fn was_command_not_found(&self) -> bool {
-        self.0 == 127 || self.0 == 9009
+        self.0 == 127
     }
 
     /// Returns true if the error code indicates that the error code

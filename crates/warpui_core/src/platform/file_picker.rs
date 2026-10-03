@@ -51,14 +51,8 @@ impl fmt::Display for FileType {
     }
 }
 
-/// Configuration for the file picker.
-///
-/// Not all configurations are supported on all platforms:
-/// * Linux can only show a single-file picker, a multi-file picker, or a single-directory picker.
-///   If choosing a folder is allowed ([`Self::allow_folder`] or [`Self::folders_only`]), a
-///   single-directory picker is shown, regardless of the other settings.
-/// * macOS supports any combination of allowing files, allowing folders, and allowing
-///   multi-select.
+/// Configuration for the file picker. Any combination of allowing files, allowing folders, and
+/// allowing multi-select is supported.
 pub struct FilePickerConfiguration {
     allows_files: bool,
     allows_folder: bool,
@@ -103,8 +97,6 @@ impl FilePickerConfiguration {
     pub fn allows_files(&self) -> bool {
         self.allows_files
     }
-
-    // TODO: open file picker on Windows
 
     pub fn allows_folder(&self) -> bool {
         self.allows_folder

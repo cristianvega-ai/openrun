@@ -333,7 +333,7 @@ pub fn to_relative_path(absolute_path: &Path, cwd: &Path) -> Option<String> {
 /// Converts a workspace-relative path into a normalized string for matching against glob patterns.
 ///
 /// This joins path components with forward slashes (`/`) so the resulting string is comparable
-/// across platforms (especially Windows).
+/// regardless of the path separator.
 ///
 /// Note: This drops any non-normal components (e.g. `.` and `..`).
 pub fn normalize_relative_path_for_glob(path: &Path) -> String {
@@ -537,8 +537,7 @@ pub fn group_roots_by_common_ancestor<P: RootPath>(roots: &[P]) -> RootGrouping<
 pub fn file_exists_and_is_executable(path: &Path) -> bool {
     use is_executable::IsExecutable as _;
 
-    // We need to check that the file exists, as the `is_executable` crate doesn't validate this on
-    // Windows.
+    // We need to check that the file exists, as the `is_executable` crate doesn't validate this.
     path.is_file() && path.is_executable()
 }
 

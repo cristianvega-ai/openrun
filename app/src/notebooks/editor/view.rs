@@ -426,7 +426,6 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::MoveToParagraphStart,
         )
         .with_context_predicate(text_entry.clone())
-        // Mac-only to not conflict with SelectAll on Linux and Windows.
         .with_key_binding("ctrl-a"),
         EditableBinding::new(
             "editor_view:home",
@@ -483,8 +482,8 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::SelectUp,
         )
         .with_context_predicate(text_entry.clone())
-        // Set this to Mac only since otherwise it could conflict with opening the command
-        // palette. NOTE `shift-up` still exists as a cross platform keybinding for this action.
+        // Avoids a conflict with opening the command palette. NOTE `shift-up` also exists as a
+        // keybinding for this action.
         .with_key_binding("shift-ctrl-P"),
         EditableBinding::new(
             "editor_view:select_down",
@@ -532,10 +531,8 @@ pub fn init(app: &mut AppContext) {
         .with_key_binding("cmd-shift-left"),
     ]);
 
-    // Register mac-only `FixedBinding`s.
     app.register_fixed_bindings([
-        // A native character palette isn't supported on all platforms. The `ctrl-cmd-space`
-        // binding is unique to Mac.
+        // The `ctrl-cmd-space` binding opens the macOS character palette.
         FixedBinding::new(
             "ctrl-cmd-space",
             EditorViewAction::ShowCharacterPalette,
@@ -595,9 +592,8 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::DeleteLineLeft,
         )
         .with_context_predicate(text_entry.clone())
-        // Intellij uses `ctrl-Y` to delete a line on Windows/Linux whereas VSCode uses
-        // `ctrl-shift-k`. We use the former because `ctrl-shift-k` would interfere with the binding
-        // to clear all blocks within the blocklist.
+        // VSCode uses `ctrl-shift-k` to delete a line, which would interfere with the binding to
+        // clear all blocks within the blocklist.
         .with_key_binding("cmd-backspace"),
         EditableBinding::new(
             "editor_view:cut_all_right",
@@ -633,10 +629,7 @@ pub fn init(app: &mut AppContext) {
             EditorViewAction::InlineCode,
         )
         .with_context_predicate(text_entry.clone())
-        // Slack and other apps use cmd-shift-C on Mac and ctrl-shift-C on Linux/Windows.
-        // However, we use ctrl-shift-C for copying, to not conflict with ctrl-c in the
-        // terminal. For consistency with the rest of the app, ctrl-shift-C still copies in a
-        // notebook, and we leave code styling unbound.
+        // Slack and other apps use cmd-shift-C for inline code.
         .with_key_binding("cmd-shift-C"),
         EditableBinding::new(
             "editor_view:strikethrough",
@@ -2099,7 +2092,6 @@ impl RichTextEditorView {
             let detected_links = detect_file_paths(
                 &file_link_resolution_context.working_directory,
                 buffer.text_in_range(context_range.clone()).as_str(),
-                file_link_resolution_context.shell_launch_data.as_ref(),
             );
 
             // Find which detected link (if any) contains the hovered char_offset

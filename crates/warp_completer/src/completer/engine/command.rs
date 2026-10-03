@@ -4,7 +4,7 @@ use super::path::{sorted_directories_relative_to, sorted_paths_relative_to};
 use crate::completer::context::CompletionContext;
 use crate::completer::matchers::MatchStrategy;
 use crate::completer::suggest::{MatchedSuggestion, Priority, Suggestion, SuggestionType};
-use crate::completer::{TopLevelCommandCaseSensitivity, engine, get_path_separators};
+use crate::completer::{PATH_SEPARATORS, TopLevelCommandCaseSensitivity, engine};
 use crate::parsers::ParsedToken;
 
 /// Generates top-level completion results based on the fragment of text that is entered into the
@@ -21,10 +21,7 @@ pub async fn complete(
 ) -> Vec<MatchedSuggestion> {
     // If the command trying to be matched contains "/", we're actually in a place where we need
     // to be suggesting paths instead of trying to read the command registry at all.
-    if parsed_token
-        .as_str()
-        .contains(get_path_separators(context).all)
-    {
+    if parsed_token.as_str().contains(PATH_SEPARATORS) {
         return match context.path_completion_context() {
             Some(path_completion_context) => {
                 sorted_paths_relative_to(parsed_token, matcher, path_completion_context)

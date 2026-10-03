@@ -113,9 +113,6 @@ impl AppCallbackDispatcher {
         }
     }
 
-    // This is not called on Linux or wasm, as there isn't any generic way to
-    // click on/interact with a notification.
-    // TODO: implement desktop notifications on Windows
     pub fn notification_clicked(&mut self, response: notification::NotificationResponse) {
         if let Some(callback) = &mut self.callbacks.on_notification_clicked {
             self.ui_app.update(|ctx| callback(response, ctx));
@@ -275,10 +272,6 @@ impl AppCallbackDispatcher {
 }
 
 // Functions in AppCallbackDispatcher that relate to application menus.
-//
-// This is marked as `allow(dead_code)` on Linux, as it doesn't support
-// application menus, so these never get called.
-// TODO: implement native Windows OS app menus
 impl AppCallbackDispatcher {
     pub fn menu_item_triggered(&mut self, callback: impl FnOnce(&mut AppContext)) {
         self.ui_app.update(callback);
@@ -293,10 +286,6 @@ impl AppCallbackDispatcher {
 }
 
 // Functions in AppCallbackDispatcher that relate to native platform modals.
-//
-// This is marked as `allow(dead_code)` on Linux and WASM, as we do not support
-// native platform modals on these platforms, so these never get called.
-// TODO: implement native Windows OS modal
 impl AppCallbackDispatcher {
     pub fn process_platform_modal_response(
         &mut self,

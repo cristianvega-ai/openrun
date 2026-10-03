@@ -18,7 +18,7 @@ use smol_str::SmolStr;
 use typed_path::{TypedPath, TypedPathBuf};
 use version_compare::Version;
 use warp_completer::completer::{
-    CommandExitStatus, CommandOutput, GIT_VERSION_COMMAND, GitVersion, PathSeparators,
+    CommandExitStatus, CommandOutput, GIT_VERSION_COMMAND, GitVersion,
     TopLevelCommandCaseSensitivity,
 };
 use warp_errors::{ErrorExt, register_error};
@@ -792,13 +792,6 @@ impl Session {
         self.info.maybe_convert_to_native_path(path)
     }
 
-    pub fn path_separators(&self) -> PathSeparators {
-        match self.shell().shell_type() {
-            ShellType::Zsh | ShellType::Bash | ShellType::Fish => PathSeparators::for_unix(),
-            ShellType::PowerShell => PathSeparators::for_os(),
-        }
-    }
-
     pub fn home_dir(&self) -> Option<&str> {
         if cfg!(test) {
             return warp_util::path::TEST_SESSION_HOME_DIR.as_deref();
@@ -1095,7 +1088,7 @@ impl Session {
         self.session_type() == SessionType::Local
     }
 
-    async fn read_history_for_local_session(&self, is_kaspersky_running: bool) -> Vec<String> {
+    async fn read_history_for_local_session(&self) -> Vec<String> {
         let histfile = &self.info.histfile;
         let shell_type = &self.info.shell.shell_type();
         let history_files = histfile.as_ref().map_or_else(
@@ -1115,13 +1108,7 @@ impl Session {
                     shell_type.name()
                 );
 
-                let contents = match Self::read_history_contents(
-                    history_file.as_path(),
-                    *shell_type,
-                    is_kaspersky_running,
-                )
-                .await
-                {
+                let contents = match Self::read_history_contents(history_file.as_path()).await {
                     Ok(contents) => contents,
                     Err(e) => {
                         report_error!(e);
@@ -1140,11 +1127,8 @@ impl Session {
         Vec::new()
     }
 
-    #[allow(unused_variables)]
     async fn read_history_contents(
         history_file: &Path,
-        shell_type: ShellType,
-        is_kaspersky_running: bool,
     ) -> Result<Vec<u8>, ReadHistoryContentsError> {
         async_fs::read(history_file)
             .await
@@ -1209,12 +1193,9 @@ impl Session {
         }
     }
 
-    pub async fn read_history(&self, is_kaspersky_running: bool) -> Vec<String> {
+    pub async fn read_history(&self) -> Vec<String> {
         match self.info.session_type {
-            BootstrapSessionType::Local => {
-                self.read_history_for_local_session(is_kaspersky_running)
-                    .await
-            }
+            BootstrapSessionType::Local => self.read_history_for_local_session().await,
             BootstrapSessionType::WarpifiedRemote => self.read_history_for_remote_session().await,
         }
     }

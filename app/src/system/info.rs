@@ -35,11 +35,7 @@ impl SystemInfo {
     /// Returns the [`sysinfo::ProcessRefreshKind`] that should be used when enumerating the entire
     /// process table.
     ///
-    /// This samples neither CPU nor memory: on Windows each per-process CPU sample issues an
-    /// `NtQueryInformationProcess(ProcessCycleTime)` call, which forces a
-    /// `KeFlushProcessWriteBuffers` inter-processor interrupt across every logical core. Across the
-    /// whole process table that can pin all cores at `DISPATCH_LEVEL` long enough to trip the DPC
-    /// watchdog and bugcheck high-core-count machines.
+    /// This samples neither CPU nor memory, which keeps enumerating the process table cheap.
     #[allow(dead_code)]
     fn all_processes_refresh_kind() -> sysinfo::ProcessRefreshKind {
         sysinfo::ProcessRefreshKind::nothing()

@@ -11,7 +11,7 @@ use typed_path::{TypedPath, TypedPathBuf};
 use warp_command_signatures::{IconType, PathSuggestionType};
 use warp_util::path::{HOME_DIR_ENV_VAR_PREFIX, ShellFamily};
 
-use crate::completer::context::{PathCompletionContext, PathSeparators};
+use crate::completer::context::{MAIN_PATH_SEPARATOR, PATH_SEPARATORS, PathCompletionContext};
 use crate::completer::matchers::MatchStrategy;
 use crate::completer::suggest::{MatchedSuggestion, Priority, Suggestion, SuggestionType};
 use crate::parsers::ParsedToken;
@@ -251,10 +251,6 @@ impl<'a> PathCompletionContext for CdpathOverrideContext<'a> {
     fn pwd(&self) -> TypedPath<'_> {
         self.cdpath_pwd.to_path()
     }
-
-    fn path_separators(&self) -> PathSeparators {
-        self.inner.path_separators()
-    }
 }
 
 pub async fn sorted_paths_relative_to(
@@ -288,13 +284,7 @@ async fn list_directory_contents(
 ) -> Vec<MatchedSuggestion> {
     let home_dir = ctx.home_directory();
 
-    let path_separators = ctx.path_separators();
-    let split_path = SplitPath::new(
-        ctx.pwd(),
-        relative_to.as_str(),
-        home_dir,
-        path_separators.all,
-    );
+    let split_path = SplitPath::new(ctx.pwd(), relative_to.as_str(), home_dir, PATH_SEPARATORS);
 
     let dir_entries = ctx
         .list_directory_entries(split_path.directory_absolute_path.clone())
@@ -321,7 +311,7 @@ async fn list_directory_contents(
                 ROOT_DIR_STR.to_owned()
             } else {
                 if entry.is_dir() {
-                    file_name.push(path_separators.main);
+                    file_name.push(MAIN_PATH_SEPARATOR);
                 }
                 // We use `shell_escape()` instead of `escape()` on the relative path name to allow
                 // home directory expansion if needed.

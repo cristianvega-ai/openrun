@@ -615,12 +615,8 @@ impl View for BlockFilterEditor {
                 .finish(),
         );
 
-        // On Windows, we need an extra 2 pixels of height to prevent tooltip text
-        // from being clipped due to insufficient vertical space.
-        let block_filter_bar_height = editor_height
-            + (2. * BLOCK_FILTER_EDITOR_PADDING)
-            + (2. * BLOCK_FILTER_BAR_PADDING)
-            + 0.;
+        let block_filter_bar_height =
+            editor_height + (2. * BLOCK_FILTER_EDITOR_PADDING) + (2. * BLOCK_FILTER_BAR_PADDING);
 
         let block_filter_bar = Container::new(
             ConstrainedBox::new(

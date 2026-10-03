@@ -157,28 +157,18 @@ impl NotebookLinks {
         // At this point, we can only resolve file targets, which require a session.
         match self.session_source.session(ctx) {
             Some(session) if session.launch_data().is_some() => {
-                let launch_data = session
-                    .launch_data()
-                    .expect("Session launch data should exist");
                 let clean_path = CleanPathResult::with_line_and_column_number(link);
                 let path = match self.session_source.base_directory(ctx) {
                     Some(base_directory) => {
-                        let Some(path) = crate::util::file::absolute_path_if_valid(
-                            &clean_path,
-                            crate::util::file::ShellPathType::PlatformNative(
-                                base_directory.to_path_buf(),
-                            ),
-                            Some(launch_data),
-                        ) else {
+                        let Some(path) =
+                            crate::util::file::absolute_path_if_valid(&clean_path, base_directory)
+                        else {
                             return Either::Right(future::ready(Err(ResolveError::FileNotFound)));
                         };
                         path
                     }
                     None => {
-                        let Some(path) = launch_data.maybe_convert_absolute_path(&clean_path.path)
-                        else {
-                            return Either::Right(future::ready(Err(ResolveError::MissingContext)));
-                        };
+                        let path = PathBuf::from(&clean_path.path);
                         // To open a relative path, we must have a base directory. Otherwise, we don't know for
                         // sure how the path will be resolved.
                         if path.is_relative() {

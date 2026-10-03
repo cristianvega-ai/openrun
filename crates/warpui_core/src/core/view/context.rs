@@ -465,9 +465,6 @@ impl<'a, T: Entity> ViewContext<'a, T> {
 
     /// Requests permissions to send desktop notifications. The `on_completion callback` can be invoked to
     /// propagate the outcome of the request (accepted/denied/other) back to the app.
-    ///
-    /// ## Platform-Specific
-    /// * Linux: Always calls the `on_completion_callback` with a value of [`RequestPermissionsOutcome::Accepted`].
     pub fn request_desktop_notification_permissions<F>(&mut self, on_completion_callback: F)
     where
         F: 'static + Send + Sync + FnOnce(&mut T, RequestPermissionsOutcome, &mut ViewContext<T>),

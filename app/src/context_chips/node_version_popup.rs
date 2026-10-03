@@ -429,9 +429,7 @@ fn detect_nvm_installed() -> bool {
         false
     }
 
-    // 1) Windows nvm-windows
-
-    // 2) POSIX shells: nvm is typically a shell function; detect via standard install locations
+    // nvm is typically a shell function; detect via standard install locations
     {
         use std::path::Path;
 

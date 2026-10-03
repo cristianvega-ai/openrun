@@ -541,7 +541,6 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace")),
     ]);
 
-    // TODO: Support a11y on non-MacOS platforms
     app.register_editable_bindings([
         EditableBinding::new(
             "workspace:set_a11y_concise_verbosity_level",

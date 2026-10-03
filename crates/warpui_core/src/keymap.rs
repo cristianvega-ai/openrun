@@ -815,7 +815,7 @@ impl Keystroke {
     /// ## Supported Modifiers
     /// The following modifiers are supported:
     /// * `cmd`: The command key on Mac.
-    /// * `cmdorctrl`: Represents "cmd" on Mac and "ctrl" on Linux and Windows.
+    /// * `cmdorctrl`: Represents "cmd".
     /// * `ctrl`
     /// * `shift`
     /// * `alt`

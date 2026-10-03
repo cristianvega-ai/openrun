@@ -2258,9 +2258,6 @@ impl AppContext {
     }
 
     /// Delegates to the OS to request permissions for sending desktop notifications.
-    ///
-    /// ## Platform-Specific
-    /// * Linux: Always calls the `on_completion_callback` with a value of [`RequestPermissionsOutcome::Accepted`].
     pub(super) fn request_desktop_notification_permissions<F, T>(
         &mut self,
         view_id: EntityId,
@@ -2593,11 +2590,6 @@ impl AppContext {
                     .insert(window_id, Some(RectF::new(origin, size)));
 
                 window.request_redraw();
-
-                // On Linux and Windows, we don't have a direct way to react to
-                // window fullscreen state changes, so instead we're using a
-                // resize event as a signal that the fullscreen state _may_ have
-                // changed.
 
                 ctx.report_active_cursor_position_update();
             }),

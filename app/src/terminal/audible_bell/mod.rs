@@ -4,7 +4,6 @@ use anyhow::Result;
 use warpui::{Entity, SingletonEntity};
 
 #[path = "macos.rs"]
-// TODO(WASM): Replace this with a functional implementation for the web.
 mod imp;
 
 /// A singleton model that provides a way convenient way to make a "beep" when rung (via a call to

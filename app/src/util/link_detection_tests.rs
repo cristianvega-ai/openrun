@@ -64,7 +64,7 @@ fn test_detect_file_paths_stops_at_fullwidth_punctuation() {
     std::fs::write(&file, "# Hello\n").unwrap();
 
     let text = "see warp-rich-content.md， and warp-rich-content.md。";
-    let detected_paths = detect_file_paths(dir.path().to_str().unwrap(), text, None);
+    let detected_paths = detect_file_paths(dir.path().to_str().unwrap(), text);
 
     let link_ranges = detected_paths.keys().cloned().collect_vec();
     assert!(link_ranges.contains(&(4..24)));
@@ -80,7 +80,7 @@ fn test_detect_file_paths_keeps_fullwidth_punctuation_when_it_is_the_filename() 
     std::fs::write(&file, "# Hello\n").unwrap();
 
     let text = "see warp-rich-content.md，";
-    let detected_paths = detect_file_paths(dir.path().to_str().unwrap(), text, None);
+    let detected_paths = detect_file_paths(dir.path().to_str().unwrap(), text);
 
     assert!(detected_paths.contains_key(&(4..25)));
 }

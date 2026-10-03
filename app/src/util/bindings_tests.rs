@@ -123,7 +123,7 @@ fn test_terminal_page_scroll_bindings_are_editable() {
 
 #[test]
 fn test_toggle_keybindings_page_defaults_to_cmd_slash_on_mac_only() {
-    // `ctrl-/` is reserved for the PTY on Linux and Windows, so only macOS has a default.
+    // `ctrl-/` is reserved for the PTY, so the default is cmd-/.
     let expected = Keystroke::parse("cmd-/").ok();
     assert_eq!(
         custom_tag_to_keystroke(CustomAction::ToggleKeybindingsPage.into()),

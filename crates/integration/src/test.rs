@@ -888,13 +888,11 @@ pub fn test_waterfall_input_scrolling() -> Builder {
                     .add_assertion(assert_gap_exists(true))
                     .add_assertion(assert_input_at_top_of_terminal()),
             )
-            // `cmdorctrl-up` is not the same action on every platform: on macOS (cmd-up) the
-            // input selects the most recent block, on Linux and Windows (ctrl-up) the terminal
-            // selects the block before the selected one. The second time through, the blocks
-            // selected by "Navigate to top" are still selected (focusing the input keeps the
-            // block selection), and ctrl-up then stays on the top block, which scrolls the view
-            // to its start and leaves the input at the bottom edge. Start from no selection, as
-            // the first time through.
+            // `cmdorctrl-up` (cmd-up) makes the input select the most recent block. The second
+            // time through, the blocks selected by "Navigate to top" are still selected (focusing
+            // the input keeps the block selection), and the key then stays on the top block, which
+            // scrolls the view to its start and leaves the input at the bottom edge. Start from no
+            // selection, as the first time through.
             .with_step(
                 new_step_with_default_assertions("Deselect all blocks").with_action(
                     |app, window_id, _| {
@@ -5777,7 +5775,7 @@ end
 /// subshells which are not bootstrapped.
 pub fn test_block_cursor_navigation_using_escape_codes() -> Builder {
     let (starter, _) = current_shell_starter_and_version();
-    // On Linux, bash will overwrite an inherited PS1 variable with its choice
+    // Bash can overwrite an inherited PS1 variable with its choice
     // of default value.  To work around this, we also set PROMPT_COMMAND
     // (which doesn't get clobbered) to set the PS1 variable, ensuring it has
     // the expected value after shell startup.
@@ -5837,8 +5835,7 @@ pub fn test_block_cursor_navigation_using_escape_codes() -> Builder {
                 .add_assertion(assert_active_block_output_for_single_terminal_in_tab(
                     // We use a regex here to ignore trailing whitespace, which
                     // can be present due to how backspace is typically implemented
-                    // (write a space over the cell).  There is differing behavior
-                    // here between Linux and macOS, hence the regex.
+                    // (write a space over the cell), hence the regex.
                     regex::Regex::new("> chohell worl *").expect("regex should compile"),
                     0,
                 )),

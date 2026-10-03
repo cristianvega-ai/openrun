@@ -42,8 +42,6 @@ pub fn is_container_subshell(session_info: &SessionInfo) -> bool {
 /// to spawn a subshell by `poetry shell` uses blocking PTY reads and writes, which results in a
 /// deadlock when attempting to write the whole bootstrap script to the PTY; RC file-based
 /// bootstrap is the only known way to bootstrap such subshells successfully.
-///
-/// We use RC-file based bootstrap for MSYS2 because it has slow PTY throughput.
 pub fn should_use_rc_file_bootstrap_method(
     shell_type: ShellType,
     session_info: &SessionInfo,

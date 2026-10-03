@@ -3,7 +3,7 @@ use string_offset::ByteOffset;
 
 use super::context::CompletionContext;
 use super::suggest::{CompleterOptions, CompletionsFallbackStrategy, SuggestionType, suggestions};
-use super::{Match, MatchStrategy, get_path_separators};
+use super::{Match, MatchStrategy, PATH_SEPARATORS};
 use crate::completer::suggest::MatchRequirement;
 use crate::meta::{HasSpan, Span, Spanned, SpannedItem};
 use crate::parsers::simple::command_at_cursor_position;
@@ -113,7 +113,7 @@ pub async fn describe_given_token<T: CompletionContext>(
     token: Spanned<String>,
     context: &T,
 ) -> Option<Description> {
-    let path_separators = get_path_separators(context).all;
+    let path_separators = PATH_SEPARATORS;
 
     // If the filepath ends with a separator, we need to run the completer with the
     // separator trimmed. Otherwise, the completer won't return suggestions for the

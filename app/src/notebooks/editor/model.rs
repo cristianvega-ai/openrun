@@ -46,7 +46,6 @@ use super::notebook_command::NotebookCommand;
 use crate::editor::InteractionState;
 use crate::notebooks::editor::interaction_state_model::InteractionStateModelEvent;
 use crate::notebooks::file::MarkdownDisplayMode;
-use crate::terminal::ShellLaunchData;
 
 const DEBOUNCED_RESIZE_PERIOD: Duration = Duration::from_millis(5);
 
@@ -110,8 +109,6 @@ pub struct NotebooksEditorModel {
 pub struct FileLinkResolutionContext {
     /// The working directory of the session that the editor is associated with.
     pub working_directory: String,
-    /// The shell launch data of the session that the editor is associated with.
-    pub shell_launch_data: Option<ShellLaunchData>,
 }
 
 #[derive(PartialEq)]

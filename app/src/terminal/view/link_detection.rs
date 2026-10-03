@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Serializer};
 use unicode_general_category::{GeneralCategory, get_general_category};
@@ -10,13 +10,13 @@ use warpui::ViewContext;
 use warpui::platform::Cursor;
 
 use super::{FindLinkArg, TerminalEditor};
+use crate::terminal::TerminalModel;
 use crate::terminal::model::RespectObfuscatedSecrets;
 use crate::terminal::model::grid::grid_handler;
 use crate::terminal::model::grid::grid_handler::Link;
 use crate::terminal::model::index::Point;
 use crate::terminal::model::terminal_model::{WithinBlock, WithinModel};
-use crate::terminal::{ShellLaunchData, TerminalModel};
-use crate::util::file::{FileLink, ShellPathType, absolute_path_if_valid};
+use crate::util::file::{FileLink, absolute_path_if_valid};
 
 // "a/" and "b/" are prefixes specific to Git Diff
 const PREFIXES_TO_REMOVE: [&str; 2] = ["a/", "b/"];
@@ -493,23 +493,13 @@ impl super::TerminalView {
             Some(path) if matches!(from_editor, TerminalEditor::No) => {
                 let possible_paths = self.model.lock().possible_file_paths_at_point(position);
                 let max_columns = self.size_info.columns;
-                let shell_launch_data = self
-                    .active_block_session_id()
-                    .and_then(|active_session_id| self.sessions.as_ref(ctx).get(active_session_id))
-                    .and_then(|active_session| active_session.launch_data().cloned());
-
                 // Using the thread builder instead of ctx.spawn here so that the previous
                 // scanning job will be dropped once there is a new scanning job created.
                 let (tx, rx) = futures::channel::oneshot::channel();
                 self.file_link_scanning_join_handle = std::thread::Builder::new()
                     .name("Compute file paths".into())
                     .spawn(move || {
-                        let paths = Self::compute_valid_paths(
-                            &path,
-                            possible_paths,
-                            max_columns,
-                            shell_launch_data,
-                        );
+                        let paths = Self::compute_valid_paths(&path, possible_paths, max_columns);
                         let _ = tx.send(paths);
                     })
                     .map_err(|e| {
@@ -534,7 +524,6 @@ impl super::TerminalView {
         working_directory: &str,
         possible_paths: impl Iterator<Item = WithinModel<grid_handler::PossiblePath>>,
         max_columns: usize,
-        shell_launch_data: Option<ShellLaunchData>,
     ) -> Option<GridHighlightedLink> {
         let mut link = None;
         'path_loop: for within_model_possible_path in possible_paths {
@@ -544,9 +533,8 @@ impl super::TerminalView {
             // punctuation (e.g. `notes/README.md.` or `notes/README.md，`). Try the
             // punctuation-trimmed candidate first so the resolved file, highlight
             // range, and extension-based classification all exclude it. This must
-            // run before the untrimmed lookup because on Windows the NT path
-            // normalizer strips trailing dots, so the untrimmed path would
-            // otherwise resolve and leave the period inside the captured link.
+            // run before the untrimmed lookup so that a trailing period is not left inside the
+            // captured link when the untrimmed path happens to resolve.
             if let Some(trimmed_path) =
                 path_without_trailing_sentence_punctuation(&possible_path.path.path)
             {
@@ -554,11 +542,9 @@ impl super::TerminalView {
                     path: trimmed_path.path.into(),
                     line_and_column_num: possible_path.path.line_and_column_num,
                 };
-                if let Some(absolute_path) = absolute_path_if_valid(
-                    &trimmed_cleaned_path,
-                    ShellPathType::ShellNative(working_directory.to_string()),
-                    shell_launch_data.as_ref(),
-                ) {
+                if let Some(absolute_path) =
+                    absolute_path_if_valid(&trimmed_cleaned_path, Path::new(working_directory))
+                {
                     let new_end_point = possible_path
                         .range
                         .end()
@@ -575,11 +561,8 @@ impl super::TerminalView {
 
             // We want to check if the clean path result is a valid path and get the canonical
             // absolute path back.
-            let absolute_path = absolute_path_if_valid(
-                &possible_path.path,
-                ShellPathType::ShellNative(working_directory.to_string()),
-                shell_launch_data.as_ref(),
-            );
+            let absolute_path =
+                absolute_path_if_valid(&possible_path.path, Path::new(working_directory));
 
             if let Some(absolute_path) = absolute_path {
                 link = Some(Self::create_valid_link(
@@ -599,8 +582,7 @@ impl super::TerminalView {
                     };
                     let absolute_path = absolute_path_if_valid(
                         &new_possible_cleaned_path,
-                        ShellPathType::ShellNative(working_directory.to_string()),
-                        shell_launch_data.as_ref(),
+                        Path::new(working_directory),
                     );
 
                     // check if new_possible_path is valid
@@ -631,8 +613,7 @@ impl super::TerminalView {
                     };
                     let absolute_path = absolute_path_if_valid(
                         &new_possible_cleaned_path,
-                        ShellPathType::ShellNative(working_directory.to_string()),
-                        shell_launch_data.as_ref(),
+                        Path::new(working_directory),
                     );
 
                     // check if new_possible_path is valid

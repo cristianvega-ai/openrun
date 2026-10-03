@@ -2897,10 +2897,8 @@ fn test_move_to_visual_line_start_non_wrapped_unchanged() -> Result<()> {
 }
 
 /// Regression guard for the keybinding wiring (including the removal of the
-/// cross-platform Home/End `FixedBinding`s): on Linux/Windows the physical
-/// Home/End keys resolve to the visual-line action, while on macOS they resolve
-/// to document start/end and cmd-left/cmd-right resolve to the visual-line
-/// action.
+/// Home/End `FixedBinding`s): the physical Home/End keys resolve to document
+/// start/end and cmd-left/cmd-right resolve to the visual-line action.
 #[test]
 fn test_home_end_keybinding_resolution() {
     use warpui::keymap::{Keystroke, Trigger};

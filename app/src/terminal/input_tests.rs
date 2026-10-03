@@ -12,7 +12,7 @@ use repo_metadata::watcher::DirectoryWatcher;
 use smol_str::SmolStr;
 use unindent::Unindent;
 use warp_completer::completer::{
-    EngineFileType, Match, MatchStrategy, MatchedSuggestion, PathSeparators, Priority, Suggestion,
+    EngineFileType, Match, MatchStrategy, MatchedSuggestion, PATH_SEPARATORS, Priority, Suggestion,
     SuggestionResults, SuggestionType,
 };
 use warp_completer::meta::Span;
@@ -462,7 +462,7 @@ fn argument_suggestion(name: impl Into<SmolStr>) -> MatchedSuggestion {
 fn file_suggestion(path: impl Into<SmolStr>) -> MatchedSuggestion {
     let replacement = path.into();
     let display = replacement
-        .rsplit(PathSeparators::for_os().all)
+        .rsplit(PATH_SEPARATORS)
         .next()
         .map(Into::into)
         .unwrap_or_else(|| replacement.clone());

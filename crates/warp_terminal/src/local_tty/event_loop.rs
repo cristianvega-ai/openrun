@@ -453,7 +453,7 @@ where
                             match self.pty_read(&mut state, &mut buf, &mut can_read) {
                                 Ok(_) => {}
                                 Err(err) => {
-                                    // On Linux, a `read` on the master side of a PTY can fail
+                                    // A `read` on the master side of a PTY can fail
                                     // with `EIO` if the client side hangs up.  In that case,
                                     // just loop back round for the inevitable `Exited` event.
                                     // This sucks, but checking the process is either racy or

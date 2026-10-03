@@ -45,8 +45,7 @@ impl ShellRcType {
                 vec![Path::new(
                     ".config/powershell/Microsoft.PowerShell_profile.ps1",
                 )]
-            } // We need to make sure this works for either editor of PowerShell (PowerShell Core or
-              // Windows PowerShell) so just write the file to both.
+            }
         };
         relative_paths
             .iter()
@@ -58,8 +57,8 @@ impl ShellRcType {
 /// Sets the location of the ZSH `HISTFILE` to the home directory.
 /// ZSH does not have a default location for the HISTFILE. However, MacOS has a custom `/etc/zshrc`
 /// file that sets the default location of the `HISTFILE` to be located within the home directory.
-/// To ensure we our tests are consistent across platforms, we set the value of `HISTFILE` to
-/// `HOME` in the same way MacOS does.
+/// To ensure our tests are consistent, we set the value of `HISTFILE` to `HOME` in the same way
+/// MacOS does.
 pub fn set_zsh_histfile_location(dir: impl AsRef<Path>) {
     let path = ShellRcType::Zsh
         .rc_file_paths(dir)

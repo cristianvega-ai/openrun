@@ -77,7 +77,6 @@ pub struct ModifiersState {
     pub ctrl: bool,
     /// The function key, often labeled as "fn" on keyboards.
     /// We use "func" to avoid clashing with the `fn` keyword.
-    /// Note this is NOT fully implemented for non-Mac platforms yet.
     pub func: bool,
 }
 

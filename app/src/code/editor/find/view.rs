@@ -111,8 +111,6 @@ pub fn init(app: &mut AppContext) {
             FindAction::CmdG,
         )
         .with_context_predicate(id!("CodeEditorFind"))
-        // Both Intellij and VSCode use f3/shift-f3 to navigate find occurrences on windows / linux.
-        // See https://www.jetbrains.com/help/idea/reference-keymap-win-default.html#find_everything.
         .with_key_binding("cmd-g"),
         EditableBinding::new(
             "find:find_prev_occurrence",

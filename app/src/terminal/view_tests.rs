@@ -2022,8 +2022,7 @@ fn test_block_select() {
                 .toggle(10.into(), Some(11.into()), Some(9.into()));
 
             let single_mouse_down = BlockSelectAction::MouseDown(Some(1.into()));
-            // On Mac, we use cmd-click to toggle block selections, but
-            // we use ctrl-click on non-Mac platforms.
+            // We use cmd-click to toggle block selections.
             let single_mouse_up = BlockSelectAction::MouseUp {
                 block_index: 1.into(),
                 is_ctrl_down: false,
@@ -3869,8 +3868,7 @@ fn drag_drop_image_in_cli_agent_long_running_command_pastes_via_clipboard() {
 
         // The paste flow is async (off-thread file read, then hop back to
         // the view to write the clipboard + paste keystroke). Wait for the
-        // single PTY write of the platform-appropriate paste byte: 0x16
-        // (Ctrl+V) on macOS/Linux, or `ESC v` on Windows. Without the fix
+        // single PTY write of the paste byte: 0x16 (Ctrl+V). Without the fix
         // a shell-escaped path string is written here instead.
         let expected_paste_bytes: Vec<u8> = vec![0x16];
         assert_eventually!(
@@ -5216,9 +5214,8 @@ fn workspace_with_pr_chip_terminal_in_repo(
 /// pane runs a real shell. When it has bootstrapped, repo detection replaces the terminal's
 /// `current_repo_path` with the repository of the shell's own directory, which is none here, and
 /// the PR model is dropped. That happens a second or more into the test on a loaded machine
-/// (85 of 100 runs in the middle of the checks of one test on the Linux runner, stress run
-/// 36954466501; the vertical tabs tests failed on the macOS runner in 5 of 25 stress iterations
-/// with `repo=None model=false`). Let it happen first, up to 10 s, then put the repository back.
+/// (the vertical tabs tests failed on the macOS runner in 5 of 25 stress iterations with
+/// `repo=None model=false`). Let it happen first, up to 10 s, then put the repository back.
 async fn settled_workspace_with_pr_chip_terminal_in_repo(
     app: &mut App,
 ) -> (

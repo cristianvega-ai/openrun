@@ -12,7 +12,7 @@ use warp_command_signatures::IconType;
 use warp_core::command::ExitCode;
 use warp_util::path::{EscapeChar, ShellFamily, TEST_SESSION_HOME_DIR};
 
-use super::{CommandExitStatus, MatchedSuggestion, PathSeparators};
+use super::{CommandExitStatus, MatchedSuggestion};
 use crate::completer::{
     CommandOutput, CompletionContext, Description, EngineDirEntry, EngineFileType,
     GeneratorContext, PathCompletionContext, Suggestion, TopLevelCommandCaseSensitivity,
@@ -236,10 +236,6 @@ impl PathCompletionContext for MockPathCompletionContext {
 
     fn pwd(&self) -> TypedPath<'_> {
         self.pwd.to_path()
-    }
-
-    fn path_separators(&self) -> PathSeparators {
-        PathSeparators::for_unix()
     }
 }
 

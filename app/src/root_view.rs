@@ -245,7 +245,7 @@ pub fn init(app: &mut AppContext) {
     ]);
 
     app.register_editable_bindings([
-        // Register a binding to toggle fullscreen on Linux and Windows.
+        // Register a binding to toggle fullscreen, for example from the command palette.
         EditableBinding::new(
             "root_view:toggle_fullscreen",
             "Toggle fullscreen",
@@ -448,9 +448,6 @@ fn open_from_restored(arg: &OpenFromRestoredArg, ctx: &mut AppContext) {
             for (idx, window) in app_state.windows.iter().enumerate() {
                 // If this window is a quake window, hide it by default.
                 if window.quake_mode {
-                    // If this is Windows, skip restoring the quake window. Creating a hidden window
-                    // is not supported on Windows. We can't have the quake window visible on
-                    // startup or else it will get mistaken for a normal window.
                     let frame_args = quake_mode_config(
                         &KeysSettings::as_ref(ctx)
                             .quake_mode_settings

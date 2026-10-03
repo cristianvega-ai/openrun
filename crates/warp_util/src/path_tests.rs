@@ -410,7 +410,6 @@ mod group_roots_by_common_ancestor_tests {
         );
     }
 }
-/// TODO: write an equivalent test with Windows paths.
 #[test]
 fn test_resolve_command() {
     use std::path::Path;

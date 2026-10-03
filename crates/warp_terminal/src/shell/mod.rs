@@ -2,7 +2,7 @@ mod unescape;
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use enum_iterator::Sequence;
@@ -10,7 +10,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
-use typed_path::{TypedPath, TypedPathBuf};
+use typed_path::TypedPathBuf;
 use version_compare::{Cmp, Version};
 use warp_completer::completer::{CommandExitStatus, CommandOutput};
 use warp_core::platform::TargetOS;
@@ -261,11 +261,7 @@ impl ShellType {
     // Returns a shell type from a shell executable name
     pub fn from_name(name: &str) -> Option<Self> {
         // Support (/usr/bin/zsh /bin/zsh -zsh or zsh)
-        if name == "bash"
-            || name == "-bash"
-            || name.ends_with("/bash")
-            || name.ends_with("bash.exe")
-        {
+        if name == "bash" || name == "-bash" || name.ends_with("/bash") {
             Some(ShellType::Bash)
         } else if name == "zsh" || name == "-zsh" || name.ends_with("/zsh") {
             Some(ShellType::Zsh)
@@ -273,10 +269,8 @@ impl ShellType {
             Some(ShellType::Fish)
         } else if name == "pwsh"
             || name.ends_with("/pwsh")
-            || name.ends_with("pwsh.exe")
             || name == "powershell"
             || name.ends_with("/powershell")
-            || name.ends_with("powershell.exe")
         {
             Some(ShellType::PowerShell)
         } else {
@@ -311,38 +305,22 @@ impl ShellType {
     ///
     /// The returned [`TypedPathBuf`]s are encoded for the target OS rather than the
     /// host OS, because the resulting path is rendered into a shell command executed
-    /// on the target (e.g. via SSH or Auto-Warpify). A plain `PathBuf` would pick the
-    /// host's separator and produce strings like `~\.zshrc` on a Windows host when
-    /// targeting a Unix shell, which the remote shell cannot resolve. Encoding for
-    /// the target OS lets `TypedPathBuf` enforce the correct separator.
+    /// on the target (e.g. via SSH or Auto-Warpify), so they are Unix-encoded for every
+    /// supported target OS.
     pub fn rc_file_paths(&self, os: TargetOS) -> Vec<TypedPathBuf> {
-        let is_windows = matches!(os, TargetOS::Windows);
-        let home_dir = if is_windows { "$HOME" } else { "~" };
-        let relative_paths: Vec<&str> = match (self, os) {
-            (ShellType::PowerShell, TargetOS::Windows) => {
-                vec![".config/powershell/Microsoft.PowerShell_profile.ps1"]
-            }
-            // We need to make sure this works for either editor of PowerShell (PowerShell Core or
-            // Windows PowerShell) so just write the file to both.
-            (ShellType::PowerShell, _) => vec![
-                "Documents/PowerShell/Microsoft.PowerShell_profile.ps1",
-                "Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1",
-            ],
-            (_, TargetOS::Windows) => vec![],
-            (ShellType::Bash, _) => vec![".bashrc"],
-            (ShellType::Zsh, _) => vec![".zshrc"],
-            (ShellType::Fish, _) => vec![".config/fish/config.fish"],
+        let home_dir = match os {
+            TargetOS::MacOS | TargetOS::Linux => "~",
+        };
+        let relative_paths: Vec<&str> = match self {
+            ShellType::PowerShell => vec![".config/powershell/Microsoft.PowerShell_profile.ps1"],
+            ShellType::Bash => vec![".bashrc"],
+            ShellType::Zsh => vec![".zshrc"],
+            ShellType::Fish => vec![".config/fish/config.fish"],
         };
         relative_paths
             .iter()
             .map(|relative_path| {
-                let mut path = if is_windows {
-                    TypedPathBuf::from_windows(home_dir)
-                } else {
-                    TypedPathBuf::from_unix(home_dir)
-                };
-                // `push` uses the separator of the encoding picked above, so the
-                // result follows the target OS regardless of the host.
+                let mut path = TypedPathBuf::from_unix(home_dir);
                 path.push(relative_path);
                 path
             })
@@ -719,57 +697,6 @@ pub enum ShellLaunchData {
         executable_path: PathBuf,
         shell_type: ShellType,
     },
-}
-
-impl ShellLaunchData {
-    /// Converts the given path string to a OS-native PathBuf.
-    pub fn maybe_convert_absolute_path(&self, path_str: &str) -> Option<PathBuf> {
-        match self {
-            ShellLaunchData::Executable { .. } => Some(PathBuf::from(path_str)),
-        }
-    }
-
-    /// Converts a shell-encoded [`typed_path::TypedPathBuf`] into an OS-native path.
-    fn maybe_convert_shell_encoded_path(
-        &self,
-        shell_encoded_path: TypedPathBuf,
-    ) -> Option<PathBuf> {
-        match self {
-            ShellLaunchData::Executable { .. } => PathBuf::try_from(shell_encoded_path).ok(),
-        }
-    }
-
-    /// Changes the path string to an OS-native encoding.
-    fn to_native_path_encoding(&self, path_str: &str) -> Option<PathBuf> {
-        match self {
-            ShellLaunchData::Executable { .. } => Some(PathBuf::from(path_str)),
-        }
-    }
-
-    /// Converts a path string to a shell's encoding.
-    fn to_shell_encoding<'a>(&self, path_str: &'a str) -> TypedPath<'a> {
-        match self {
-            ShellLaunchData::Executable { .. } => TypedPath::unix(path_str),
-        }
-    }
-
-    /// Attempts to append the relative path to the base path and convert it into a OS-native PathBuf.
-    pub fn maybe_convert_relative_path(
-        &self,
-        base_path_str: &str,
-        relative_path_str: &str,
-    ) -> Option<PathBuf> {
-        let base_path = self.to_shell_encoding(base_path_str);
-        let rest_of_path = self.to_shell_encoding(relative_path_str);
-        let absolute_typed_path = base_path.join(rest_of_path);
-        self.maybe_convert_shell_encoded_path(absolute_typed_path)
-    }
-
-    /// Joins the given path string to the base path, ensuring the given path string is encoded correctly.
-    pub fn join_to_native_path(&self, base_path: &Path, path_str: &str) -> Option<PathBuf> {
-        self.to_native_path_encoding(path_str)
-            .map(|rest_of_path| base_path.join(rest_of_path))
-    }
 }
 
 /// Unescape the key and value for an alias, returning None if either fails

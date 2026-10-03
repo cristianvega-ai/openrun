@@ -66,8 +66,7 @@ impl WarpifySuccessBlock {
             ctx.notify();
         });
 
-        // Mac + Linux have the same behavior. We'd need to handle
-        // getting the OS to write to the correct RC file.
+        // macOS and Linux hosts write the same RC files.
         let remote_os = TargetOS::Linux;
 
         let is_auto_warpify_configured = subshell_info

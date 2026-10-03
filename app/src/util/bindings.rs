@@ -171,12 +171,11 @@ lazy_static! {
     /// this allowlist to special case these legacy actions for the purposes of binding validation.
     pub static ref MAC_PTY_NON_COMPLIANT_ACTIONS: HashSet<&'static str> = HashSet::from_iter(["terminal:warpify_subshell", "terminal:open_block_list_context_menu_via_keybinding"]);
 
-    /// Set of keystrokes that should be considered valid bindings on all platforms even though
-    /// they aren't PTY compliant.
+    /// Set of keystrokes that should be considered valid bindings even though they aren't PTY
+    /// compliant.
     pub static ref PTY_NON_COMPLIANT_KEYSTROKES: HashSet<Keystroke> = HashSet::from_iter([
-        // Windows users expect ctrl-c to copy any selected text to the clipboard. To avoid
-        // introducing multiple codepaths for handling ctrl-c, we register ctrl-c as a binding
-        // on TerminalView on all platforms.
+        // Ctrl-c copies any selected text to the clipboard, so ctrl-c is registered as a binding
+        // on TerminalView.
         Keystroke::parse("ctrl-c").expect("should be able to construct ctrl-c keystroke"),
         // The resume conversation binding uses cmd-shift-R on Mac and should be allowed
         Keystroke::parse("cmd-shift-R").expect("should be able to construct cmd-shift-R keystroke")
@@ -268,14 +267,10 @@ pub fn custom_tag_to_keystroke(custom: CustomTag) -> Option<Keystroke> {
         CustomAction::SelectBlockBelow => Keystroke::parse("cmdorctrl-down").ok(),
         CustomAction::ToggleBookmarkBlock => Keystroke::parse("cmd-b").ok(),
         CustomAction::CopyBlockOutput => Keystroke::parse("cmdorctrl-alt-shift-C").ok(),
-        // Set this to mac-only. On Linux this conflicts with the general binding to copy.
         CustomAction::CopyBlockCommand => Keystroke::parse("cmd-shift-C").ok(),
-        // Set this to mac-only. On Linux this conflicts with the cmd-enter keybindings
-        // (used for actions on the input suggestions menu).
         CustomAction::ToggleMaximizePane => Keystroke::parse("cmd-shift-enter").ok(),
-        // Set this to mac-only. On Linux/Windows `cmdorctrl-/` resolves to `ctrl-/`, which is
-        // reserved for the PTY: keybindings are dispatched before terminal input, so this
-        // swallowed the keystroke before the terminal ever saw it.
+        // `ctrl-/` is reserved for the PTY: keybindings are dispatched before terminal input, so
+        // `cmdorctrl-/` would swallow the keystroke before the terminal ever saw it.
         CustomAction::ToggleKeybindingsPage => Keystroke::parse("cmd-/").ok(),
         CustomAction::ScrollToTopOfSelectedBlocks => Keystroke::parse("cmdorctrl-shift-up").ok(),
         CustomAction::ScrollToBottomOfSelectedBlocks => {

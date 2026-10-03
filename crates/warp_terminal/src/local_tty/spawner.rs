@@ -106,7 +106,7 @@ impl PtySpawner {
             let result = Self::spawn_pty_via_server(server, options.clone());
             if let Err(err) = result {
                 // Log env var names + sizes for any terminal server failure.
-                // Large env vars are the most common cause (E2BIG on Linux,
+                // Large env vars are the most common cause (E2BIG,
                 // socket overflow on macOS), so logging them on every failure
                 // makes both cases diagnosable from the logs.
                 log_env_var_diagnostics(&options.env_vars);

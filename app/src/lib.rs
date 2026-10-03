@@ -606,7 +606,6 @@ pub(crate) fn initialize_app(
     // Register initial keybindings prior to creating menus
     agent_notifications::init(ctx);
     app_services::init(ctx);
-    // // TODO: Temporarily disabling keybindings for WASM builds. Will be implemented in future WASM support.
     code::editor::find::view::init(ctx);
     workspace::init(ctx);
     pane_group::init(ctx);

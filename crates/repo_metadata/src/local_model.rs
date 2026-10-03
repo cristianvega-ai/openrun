@@ -187,9 +187,6 @@ pub struct LocalRepoMetadataModel {
     watcher_update_tasks: HashMap<StandardizedPath, HashMap<FutureId, SpawnedFutureHandle>>,
     /// File system watcher for monitoring changes.
     watcher: Option<ModelHandle<BulkFilesystemWatcher>>,
-    /// How each tracked repository is registered with the filesystem watcher,
-    /// including any on-demand per-directory watches recorded for teardown. See
-    /// [`RepoWatch`].
     /// Repositories whose root is registered with the filesystem watcher.
     watched_roots: HashSet<StandardizedPath>,
 }

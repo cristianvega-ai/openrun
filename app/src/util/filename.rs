@@ -8,9 +8,10 @@ lazy_static::lazy_static! {
 /// This is a helper for [`safe_filename`], which constructs a cached [`AhoCorasick`] matcher to
 /// replace forbidden filename characters.
 fn make_forbidden_filenames_matcher() -> AhoCorasick {
-    // NTFS (Windows) disallows ASCII control characters in path names.
+    // ASCII control characters are disallowed in path names (for example on NTFS volumes).
     let ascii_control = 0x00..0x1f;
-    // These characters are disallowed by UNIX filesystems, APFS or HFS+ (macOS), or NTFS.
+    // These characters are disallowed by UNIX filesystems, APFS or HFS+ (macOS), or NTFS volumes
+    // that macOS can mount.
     let forbidden = [b'/', b':', b'#', b'*', b'<', b'>', b'?', b'\\', b'|'];
 
     let patterns = ascii_control.chain(forbidden).map(|ch| [ch]);

@@ -1898,9 +1898,8 @@ fn test_standardized_path_edge_cases() {
     });
 }
 
-/// On Linux, a lazy (non-git) root is watched non-recursively, so only the root
-/// itself should be tracked initially. On other platforms the root is watched
-/// recursively and nothing is tracked for per-directory teardown.
+/// A lazy (non-git) root is watched recursively, so only the root itself is tracked and nothing
+/// is tracked for per-directory teardown.
 #[test]
 fn index_lazy_loaded_path_tracks_only_root() {
     VirtualFS::test("lazy_root_tracking", |dirs, mut vfs| {
@@ -2481,9 +2480,7 @@ fn incremental_event_under_expanded_ignored_dir_keeps_it_loaded() {
     );
 }
 
-/// Expanding a gitignored directory inside a git repo registers an on-demand
-/// non-recursive watch for it on Linux (where the recursive root watch prunes
-/// gitignored dirs), while other platforms rely on the recursive root watch.
+/// Expanding a gitignored directory inside a git repo relies on the recursive root watch.
 #[test]
 fn load_directory_watches_expanded_gitignored_dir_for_git_repo() {
     VirtualFS::test("git_repo_gitignored_expand", |dirs, mut vfs| {

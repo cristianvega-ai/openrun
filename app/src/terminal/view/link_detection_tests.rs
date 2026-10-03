@@ -95,7 +95,6 @@ fn compute_valid_paths_excludes_trailing_sentence_period() {
         dir.path().to_str().unwrap(),
         iter::once(candidate),
         1000,
-        None,
     )
     .expect("the markdown file should be detected as a link");
 
@@ -143,7 +142,6 @@ fn compute_valid_paths_excludes_trailing_fullwidth_sentence_punctuation() {
         dir.path().to_str().unwrap(),
         iter::once(candidate),
         1000,
-        None,
     )
     .expect("the markdown file should be detected as a link");
 
@@ -188,7 +186,6 @@ fn compute_valid_paths_keeps_trailing_fullwidth_punctuation_when_it_is_the_filen
         dir.path().to_str().unwrap(),
         iter::once(candidate),
         1000,
-        None,
     )
     .expect("the file with fullwidth punctuation should be detected as a link");
 

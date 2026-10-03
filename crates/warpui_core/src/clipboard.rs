@@ -14,8 +14,7 @@ pub struct ClipboardContent {
     // Clipboard contains plain string.
     pub plain_text: String,
     // Clipboard contains a list of file paths.
-    // Parsed direct from OS clipboard on Mac/Windows, from plain_text on Linux.
-    // On Mac/Linux, plain_text may also be populated.
+    // Parsed direct from the OS clipboard. plain_text may also be populated.
     pub paths: Option<Vec<String>>,
     // Clipboard contains HTML content.
     pub html: Option<String>,

@@ -163,8 +163,6 @@ fn test_git_path_filtering_allowlist() {
     assert!(!is_common_git_config(Path::new(
         "/repo/.git/worktrees/wt/config.worktree"
     )));
-
-    // Test Windows-style paths (only on Windows, as path parsing is platform-specific)
 }
 
 /// Writes a `.gitignore` with `content` at `root` and returns an

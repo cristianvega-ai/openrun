@@ -31,28 +31,11 @@ pub struct AppDelegate {
     cursor_shape: Mutex<Cursor>,
 }
 
-// Dummy IntegrationTestDelegate implementation so the integration test code
-// builds on non-mac platforms (even though running them there is a no-op for now).
-// This is relevant to build on Linux for GitHub Actions.
-pub struct IntegrationTestDelegate {
-    clipboard: InMemoryClipboard,
-    cursor_shape: Mutex<Cursor>,
-}
-
 pub struct Window {
     callbacks: WindowCallbacks,
 }
 
 impl AppDelegate {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            clipboard: InMemoryClipboard::default(),
-            cursor_shape: Mutex::new(Cursor::Arrow),
-        })
-    }
-}
-
-impl IntegrationTestDelegate {
     pub fn new() -> Result<Self> {
         Ok(Self {
             clipboard: InMemoryClipboard::default(),
@@ -167,117 +150,6 @@ impl platform::WindowManager for WindowManager {
 }
 
 impl platform::Delegate for AppDelegate {
-    #[cfg(feature = "test-util")]
-    fn get_cursor_shape(&self) -> Cursor {
-        *self.cursor_shape.lock()
-    }
-
-    fn set_cursor_shape(&self, cursor: Cursor) {
-        *self.cursor_shape.lock() = cursor;
-    }
-
-    fn open_url(&self, _: &str) -> bool {
-        true
-    }
-
-    fn close_ime_async(&self, _window_id: WindowId) {
-        // no-op for tests
-    }
-
-    fn open_character_palette(&self) {
-        // no-op for tests
-    }
-
-    fn open_file_path(&self, _: &Path) {
-        // no-op for tests
-    }
-
-    fn open_file_path_in_explorer(&self, _: &Path) {
-        // no-op for tests
-    }
-
-    fn open_file_picker(
-        &self,
-        _callback: FilePickerCallback,
-        _file_picker_config: FilePickerConfiguration,
-    ) {
-        // no-op for tests
-    }
-
-    fn open_save_file_picker(
-        &self,
-        _callback: platform::SaveFilePickerCallback,
-        _config: platform::SaveFilePickerConfiguration,
-    ) {
-        // no-op for tests
-    }
-
-    fn application_bundle_info(&self, _: &str) -> Option<ApplicationBundleInfo<'_>> {
-        None
-    }
-
-    fn is_ime_open(&self) -> bool {
-        false
-    }
-
-    fn set_accessibility_contents(&self, _: AccessibilityContent) {
-        // no-op for tests
-    }
-
-    fn request_user_attention(&self, _window_id: WindowId) {
-        // no-op for tests
-    }
-
-    fn request_desktop_notification_permissions(
-        &self,
-        _on_completion: RequestNotificationPermissionsCallback,
-    ) {
-        // no-op for tests
-    }
-
-    fn send_desktop_notification(
-        &self,
-        _notification_content: UserNotification,
-        _window_id: WindowId,
-        _on_error: SendNotificationErrorCallback,
-    ) {
-        // no-op for tests
-    }
-
-    fn clipboard(&mut self) -> &mut dyn crate::Clipboard {
-        &mut self.clipboard
-    }
-
-    fn system_theme(&self) -> platform::SystemTheme {
-        platform::SystemTheme::Light
-    }
-
-    fn dispatch_delegate(&self) -> Arc<dyn platform::DispatchDelegate> {
-        Arc::new(DispatchDelegate)
-    }
-
-    fn register_global_shortcut(&self, _: Keystroke) {
-        // no-op for tests
-    }
-
-    fn unregister_global_shortcut(&self, _: &Keystroke) {
-        // no-op for tests
-    }
-
-    fn terminate_app(&self, _termination_mode: TerminationMode) {
-        // no-op for tests
-    }
-
-    fn is_screen_reader_enabled(&self) -> Option<bool> {
-        None
-    }
-
-    fn show_native_platform_modal(&self, _id: ModalId, _modal: AlertDialog) {
-        // no-op
-    }
-}
-
-impl platform::Delegate for IntegrationTestDelegate {
     #[cfg(feature = "test-util")]
     fn get_cursor_shape(&self) -> Cursor {
         *self.cursor_shape.lock()

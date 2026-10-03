@@ -82,8 +82,7 @@ pub(crate) fn tab_activate_binding_name(
 }
 
 /// Modifier kinds relevant to revealing tab shortcut hints. The Super kind is
-/// the Cmd key on macOS and the Windows/Super key elsewhere; a `Keystroke`'s
-/// `cmd` and `meta` flags both correspond to it.
+/// the Cmd key; a `Keystroke`'s `cmd` and `meta` flags both correspond to it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ShortcutModifierKind {
     Super,

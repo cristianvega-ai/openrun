@@ -64,8 +64,8 @@ pub enum WarpConfigUpdateEvent {
 ///
 /// Emits events when entities are changed, which are detected via filesystem
 /// watchers on the user's `data_dir()` (themes, workflows, launch configs,
-/// tab configs, etc.) and, on platforms where it differs, `config_local_dir()`
-/// (`settings.toml`, `keybindings.yaml`, `user_preferences.json`).
+/// tab configs, etc.) and `config_local_dir()` (`settings.toml`, `keybindings.yaml`,
+/// `user_preferences.json`).
 #[derive(Default)]
 pub struct WarpConfig {
     launch_configs: Vec<LaunchConfig>,
@@ -75,10 +75,8 @@ pub struct WarpConfig {
     local_user_workflows: Vec<Workflow>,
 }
 
-/// Platform-independent parts of WarpConfig.
-///
-/// Additional platform-dependent functionality can be found in impl blocks
-/// in native.rs and wasm.rs.
+/// Loading and watching of the user's config files can be found in the impl blocks in
+/// native.rs.
 impl WarpConfig {
     #[cfg(test)]
     pub fn mock(_ctx: &mut ModelContext<Self>) -> Self {

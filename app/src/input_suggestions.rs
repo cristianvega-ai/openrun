@@ -10,7 +10,7 @@ use itertools::Itertools;
 use pathfinder_geometry::vector::vec2f;
 use warp_command_signatures::IconType;
 use warp_completer::completer::{
-    MatchType, PathSeparators, PreparedSuggestion, Suggestion, SuggestionResults, SuggestionType,
+    MatchType, PATH_SEPARATORS, PreparedSuggestion, Suggestion, SuggestionResults, SuggestionType,
 };
 use warpui::accessibility::{AccessibilityContent, WarpA11yRole};
 use warpui::elements::{
@@ -184,9 +184,6 @@ pub struct InputSuggestions {
     list_state: UniformListState,
     scroll_state: ScrollStateHandle,
     selected_index: Option<usize>,
-    /// Which characters to use as path separators. This can deviate from
-    /// [`std::path::MAIN_SEPARATOR`], e.g. for a WSL session on Windows.
-    path_separators: PathSeparators,
     /// Flag for whether we want to cycle through the items or not.
     cycle: bool,
 
@@ -308,7 +305,6 @@ impl InputSuggestions {
             selected_index: None,
             // Before bootstrap, we don't know what separators to use for sure. Start with the
             // platform default.
-            path_separators: PathSeparators::for_os(),
             cycle: false,
             visible_items: None,
             visible_items_tx,
@@ -375,7 +371,7 @@ impl InputSuggestions {
         preselect_option: TabCompletionsPreselectOption,
         ctx: &mut ViewContext<Self>,
     ) {
-        let results = filter_tab_suggestions(options, query, self.path_separators.all);
+        let results = filter_tab_suggestions(options, query, PATH_SEPARATORS);
         self.set_items(results);
 
         if self.items.is_empty() {
@@ -992,10 +988,6 @@ impl InputSuggestions {
         ConstrainedBox::new(flex.finish())
             .with_width(DESCRIPTION_PANEL_WIDTH)
             .finish()
-    }
-
-    pub fn set_path_separators(&mut self, path_separators: PathSeparators) {
-        self.path_separators = path_separators;
     }
 }
 

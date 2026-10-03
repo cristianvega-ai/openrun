@@ -1503,10 +1503,9 @@ impl CrossWindowTabDrag {
         if let Some(ws) = WorkspaceRegistry::as_ref(ctx).get(window_id, ctx) {
             ws.update(ctx, |_ws, ctx| {
                 ctx.spawn(async {}, move |view, _output, ctx| {
-                    // Re-issue the OS-level focus request on the next tick:
-                    // some Linux WMs silently drop the focus request when it
-                    // races with pending state changes (e.g. a preview window
-                    // becoming a normal window).
+                    // Re-issue the OS-level focus request on the next tick: the OS can drop
+                    // the focus request when it races with pending state changes (e.g. a
+                    // preview window becoming a normal window).
                     ctx.windows().show_window_and_focus_app(window_id);
                     view.focus_active_tab(ctx);
                 });

@@ -27,10 +27,6 @@ use crate::channel::{Channel, ChannelState};
 /// repository workflows would be stored (in "./.warp/workflows").
 pub const WARP_CONFIG_DIR: &str = ".warp";
 
-/// The name of the folder that stores Warp execution logs and network logs.
-/// This is currently only used on Windows to maintain backwards compatibility.
-pub const WARP_LOGS_DIR: &str = "logs";
-
 fn base_warp_config_dir_name() -> String {
     match ChannelState::channel() {
         Channel::Oss => format!("{WARP_CONFIG_DIR}-oss"),
@@ -54,9 +50,8 @@ pub fn warp_home_config_dir_name() -> String {
 
 /// Returns the home-relative Warp config directory for the current channel and data profile.
 ///
-/// Unlike [`data_dir`] and [`config_local_dir`] on non-macOS platforms, this intentionally keeps
-/// Warp-authored, user-facing config under a `.warp*` directory in the home directory instead of
-/// using the platform XDG/AppData project directories.
+/// This keeps Warp-authored, user-facing config under a `.warp*` directory in the home directory,
+/// like [`data_dir`] and [`config_local_dir`].
 pub fn warp_home_config_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home_dir| home_dir.join(warp_home_config_dir_name()))
 }
@@ -131,8 +126,7 @@ pub fn state_dir() -> PathBuf {
     let Some(project_dirs) = project_dirs() else {
         return PathBuf::new();
     };
-    // For platforms that don't have a notion of a "state" directory (e.g.:
-    // macOS and Windows), fall back to using the data directory.
+    // macOS has no notion of a "state" directory, so this is the data directory.
     project_dirs
         .state_dir()
         .unwrap_or_else(|| project_dirs.data_local_dir())

@@ -195,10 +195,6 @@ pub fn test_session_context_lists_directory_entries_remotely() {
                 let cwd = TypedPathBuf::from(dirs.tests().to_string_lossy().as_bytes());
 
                 // We assume all remotes are UNIX-based.
-                // The test directory we're using here is a local temp directory, which means
-                // it uses native path encoding.
-                // On Windows, we must convert the test directory to UNIX encoding
-                // before being able to run bash commands within it.
 
                 let ctx = test_session_context(Session::test_remote(), cwd.clone());
 
@@ -314,11 +310,6 @@ fn perform_special_characters_in_path_test(session: Session, file_names: Vec<&st
 pub fn test_session_context_lists_directory_entries_locally_with_special_characters_in_path() {
     let file_names = vec!["a.txt", "b file.txt", "c's.txt", "\"d\".txt", "e\nfile.txt"];
 
-    // Windows filenames are more restrictive than UNIX. Notably,
-    // Windows doesn't allow characters in the 1-31 range, which includes carriage returns (13, '\r')
-    // and newlines (10, '\n') and reserves certain characters.
-    // See https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions.
-
     perform_special_characters_in_path_test(Session::test(), file_names);
 }
 
@@ -326,11 +317,6 @@ pub fn test_session_context_lists_directory_entries_locally_with_special_charact
 #[test]
 pub fn test_session_context_lists_directory_entries_remotely_with_special_characters_in_path() {
     let file_names = vec!["a.txt", "b file.txt", "c's.txt", "\"d\".txt", "e\nfile.txt"];
-
-    // Windows filenames are more restrictive than UNIX. Notably,
-    // Windows doesn't allow characters in the 1-31 range, which includes carriage returns (13, '\r')
-    // and newlines (10, '\n') and reserves certain characters.
-    // See https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions.
 
     perform_special_characters_in_path_test(Session::test_remote(), file_names);
 }

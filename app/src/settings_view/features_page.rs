@@ -3209,11 +3209,6 @@ impl SettingsPageMeta for FeaturesPageView {
     }
 
     fn on_page_selected(&mut self, _: bool, ctx: &mut ViewContext<Self>) {
-        // On MacOS, we rely on [`warpui::platform::AppCallbacks::on_screen_changed`] to update and
-        // notify on the [`DisplayCount`] model. However, no mechanism exists on Linux to trigger
-        // that callback. As a workaround, we check for updates here where quake mode is
-        // configured.
-
         // Fetch the latest tab behavior state in case the user changed their keybindings
         // since we last loaded this page.
         self.refresh_tab_behavior_state(ctx);

@@ -307,7 +307,7 @@ impl BackingView for TerminalView {
 
 impl TerminalView {
     /// Render the indicator for the terminal.
-    /// Shows error indicator if terminal is in error state, otherwise shell indicator on Windows.
+    /// Shows the error indicator if the terminal is in an error state.
     fn render_terminal_mode_indicator(&self, app: &AppContext) -> Option<Box<dyn Element>> {
         let appearance = Appearance::as_ref(app);
         let font_size = appearance.ui_font_size();

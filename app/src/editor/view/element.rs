@@ -220,8 +220,6 @@ impl EditorElement {
             ctx.dispatch_typed_action(EditorAction::Focus);
             ctx.dispatch_typed_action(EditorAction::ClearParentSelections);
 
-            // On mobile WASM, request the soft keyboard when tapping on an editable editor.
-
             if is_first_mouse {
                 // If the editor is receiving the first mouse click on activation
                 // we want to focus the editor but avoid starting any selections.

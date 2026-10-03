@@ -165,7 +165,6 @@ fn blend_coloru_test() {
     );
 }
 
-/// TODO: write an equivalent test with Windows paths.
 #[test]
 fn test_deserialize_image() {
     // Paths that start with `~` should expand to include the home dir.

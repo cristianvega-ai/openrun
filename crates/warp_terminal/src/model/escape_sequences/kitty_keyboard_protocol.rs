@@ -24,7 +24,7 @@ pub(super) fn maybe_convert_keystroke_to_csi_u(
     // ambiguous in legacy terminal encoding. This includes:
     // - The Escape key (ESC byte 0x1B is also the start of all escape sequences)
     // - Modified keys where the modifier is lost in legacy encoding (e.g.,
-    //   Ctrl+A → C0 code 0x01, Alt+a → ESC a on non-macOS)
+    //   Ctrl+A → C0 code 0x01)
     // - Any Cmd/Super-modified key: legacy encoding has no representation for Super
     //   at all, so e.g. Cmd+Backspace must use CSI u (→ CSI 127;9u).
     //
@@ -148,7 +148,7 @@ fn keystroke_to_csi_u(
                 let base = base.to_ascii_lowercase();
                 base as u32
             } else {
-                // No platform info available (e.g., tests, WASM). Lowercase ASCII letters
+                // No platform info available (e.g., tests). Lowercase ASCII letters
                 // since that mapping is universal, but use the key as-is for symbols.
                 let c = key.chars().next()?;
                 if c.is_ascii_uppercase() {

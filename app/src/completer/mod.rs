@@ -10,8 +10,7 @@ use smol_str::SmolStr;
 use typed_path::{TypedPath, TypedPathBuf};
 use warp_completer::completer::{
     CommandExitStatus, CommandOutput, CompletionContext, EngineDirEntry, EngineFileType,
-    GeneratorContext, GitVersion, PathCompletionContext, PathSeparators,
-    TopLevelCommandCaseSensitivity,
+    GeneratorContext, GitVersion, PathCompletionContext, TopLevelCommandCaseSensitivity,
 };
 use warp_completer::signatures::CommandRegistry;
 use warp_util::path::{EscapeChar, ShellFamily};
@@ -168,10 +167,6 @@ impl PathCompletionContext for SessionContext {
         self.cached_directory_entries
             .insert(directory, result.clone());
         result
-    }
-
-    fn path_separators(&self) -> PathSeparators {
-        self.session.path_separators()
     }
 }
 

@@ -128,7 +128,7 @@ fn test_malicious_histfile_path_does_not_execute_injected_commands() {
 
         // read_history for a WarpifiedRemote session calls read_history_from_file,
         // which builds `cat '{escaped_path}'` and executes it via TestCommandExecutor
-        let _ = session.read_history(false).await;
+        let _ = session.read_history().await;
 
         assert!(
             !std::path::Path::new(marker).exists(),

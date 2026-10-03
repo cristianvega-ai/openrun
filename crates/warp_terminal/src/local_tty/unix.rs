@@ -386,7 +386,7 @@ fn build_host_shell_command(
 
 /// Wraps a fully-built `Command` in the PTY/`pre_exec` setup: creates the
 /// pty pair, applies termios, installs the child process setup hook
-/// (signals, stdio, controlling terminal, close_fds, Linux OOM rebias), and
+/// (signals, stdio, controlling terminal, close_fds), and
 /// spawns the command.
 fn spawn_command_in_pty(
     mut command: Command,

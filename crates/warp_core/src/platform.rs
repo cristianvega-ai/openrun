@@ -4,5 +4,4 @@
 pub enum TargetOS {
     MacOS,
     Linux,
-    Windows,
 }

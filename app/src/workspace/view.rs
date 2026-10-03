@@ -12223,7 +12223,7 @@ impl Workspace {
 
         let active_content = ChildView::new(&active_tab_data.pane_group).finish();
 
-        let terminal_content = match self.maybe_render_workspace_banner(app, appearance) {
+        let terminal_content = match self.maybe_render_workspace_banner(appearance) {
             Some(banner_element) => Flex::column()
                 .with_child(banner_element)
                 .with_child(Shrinkable::new(1., active_content).finish())
@@ -12328,18 +12328,6 @@ impl Workspace {
             .finish()
     }
 
-    // Allow let and return because of the conditional linux compilation (otherwise we get a clippy
-    // warning on mac)
-    #[allow(clippy::let_and_return)]
-    #[allow(unused_variables)]
-    fn banner_fields(&self, app: &AppContext) -> Option<WorkspaceBannerFields> {
-        // It's more important that users are notified their settings file is broken than that
-        // they continue to see the crash recovery banner.
-        let banner_fields = self.render_settings_error_banner();
-
-        banner_fields
-    }
-
     fn render_settings_error_banner(&self) -> Option<WorkspaceBannerFields> {
         if self.settings_error_banner_dismissed {
             return None;
@@ -12359,12 +12347,8 @@ impl Workspace {
         })
     }
 
-    fn maybe_render_workspace_banner(
-        &self,
-        app: &AppContext,
-        appearance: &Appearance,
-    ) -> Option<Box<dyn Element>> {
-        self.banner_fields(app)
+    fn maybe_render_workspace_banner(&self, appearance: &Appearance) -> Option<Box<dyn Element>> {
+        self.render_settings_error_banner()
             .map(|fields| self.render_workspace_banner(fields, appearance))
     }
 

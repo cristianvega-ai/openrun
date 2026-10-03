@@ -61,8 +61,7 @@ fn open_in_warp_tooltip(
     })
 }
 
-/// Returns a GridTooltipLink for revealing the file in the platform's file explorer
-/// (Finder on macOS, file manager on Linux/Windows).
+/// Returns a GridTooltipLink for revealing the file in Finder.
 fn show_in_file_explorer_tooltip(
     path: std::path::PathBuf,
     mouse_state: MouseStateHandle,

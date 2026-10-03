@@ -40,8 +40,8 @@ use vec1::Vec1;
 use vim::vim::{VimHandler, VimMode};
 use warp_completer::completer::{
     self, CompleterOptions, CompletionContext, CompletionsFallbackStrategy, Description,
-    ExplicitTabCompletion, MatchStrategy, MatchType, PathSeparators, PreparedSuggestion,
-    SuggestionResults,
+    ExplicitTabCompletion, MAIN_PATH_SEPARATOR, MatchStrategy, MatchType, PATH_SEPARATORS,
+    PreparedSuggestion, SuggestionResults,
 };
 use warp_completer::meta::{HasSpan, Span, Spanned};
 use warp_completer::parsers::LiteCommand;
@@ -775,7 +775,7 @@ lazy_static! {
     /// 3. "../": The last word starts with "../"
     /// 4. "{text}/": The last word contains a slash after some text
     /// We combine all the regex patterns for performance reasons (one string scan).
-    /// NOTE: this assumes Unix-style paths. When we expand to Windows, we'll want to update this!
+    /// NOTE: this assumes Unix-style paths.
     static ref FILEPATH_PATTERN: Regex = Regex::new(
         r"^(?:/|\.\/|\.\./|[^/]+/)"
     ).expect("Expect regex to be valid");
@@ -6055,12 +6055,6 @@ impl Input {
         self.completions_abort_handle = Some(abort_handle);
     }
 
-    fn path_separators(&self, ctx: &AppContext) -> PathSeparators {
-        self.active_session(ctx)
-            .map(|session| session.path_separators())
-            .unwrap_or(PathSeparators::for_os())
-    }
-
     /// Returns the buffer point that the tab completion menu should be positioned relative to.
     /// If None, the menu should be positioned relative to the cursor.
     ///
@@ -6100,7 +6094,7 @@ impl Input {
             // be "app/Documents".
             buffer_text_original
                 .get(0..end)
-                .and_then(|s| s.rfind(self.path_separators(ctx).all))
+                .and_then(|s| s.rfind(PATH_SEPARATORS))
                 .map(|i| i + 1)
                 .unwrap_or(start)
         } else {
@@ -6156,11 +6150,10 @@ impl Input {
                     [0..self.start_byte_index_of_last_selection(ctx).as_usize()]
                     .to_string();
                 let decision = if completions_trigger == CompletionsTrigger::Keybinding {
-                    results.explicit_tab_completion(query, self.path_separators(ctx).all)
+                    results.explicit_tab_completion(query, PATH_SEPARATORS)
                 } else {
                     ExplicitTabCompletion::Open {
-                        suggestions: results
-                            .prepare_for_query(query, self.path_separators(ctx).all),
+                        suggestions: results.prepare_for_query(query, PATH_SEPARATORS),
                         replacement_span: results.replacement_span,
                     }
                 };
@@ -6295,7 +6288,7 @@ impl Input {
             // value follows directly, as shells' own `-S '='` completions do.
             let replacement: Cow<str> = if cursor_end_offset.as_usize()
                 == input.buffer_text(ctx).len()
-                && !completion_result.ends_with(self.path_separators(ctx).main)
+                && !completion_result.ends_with(MAIN_PATH_SEPARATOR)
                 && !completion_result.ends_with('=')
                 && executing == Executing::No
             {
@@ -7310,9 +7303,6 @@ impl Input {
         if let Some(session) = active_session {
             self.editor.update(ctx, |editor, _| {
                 editor.set_shell_family(session.shell().shell_type().into());
-            });
-            self.input_suggestions.update(ctx, |input_suggestions, _| {
-                input_suggestions.set_path_separators(session.path_separators());
             });
         }
         self.active_block_metadata = Some(active_block_metadata);

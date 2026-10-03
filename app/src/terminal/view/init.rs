@@ -148,9 +148,6 @@ pub fn init(app: &mut AppContext) {
         ]);
     }
 
-    // By default, Windows Terminal recognizes both `ctrl-v` and `ctrl-shift-v` to paste into the
-    // terminal. It also allows users to disable it, so we also make this an EditableBinding.
-
     app.register_fixed_bindings([
         FixedBinding::new(
             "shift-left",
@@ -224,7 +221,6 @@ pub fn init(app: &mut AppContext) {
         )
         .with_custom_action(CustomAction::FocusInput)
         .with_context_predicate(id!("Terminal")),
-        // Paste is not rebindable on the web.
         EditableBinding::new("terminal:paste", "Paste", TerminalAction::Paste)
             .with_custom_action(CustomAction::Paste)
             .with_context_predicate(id!("Terminal") & !id!("IMEOpen")),
@@ -316,8 +312,8 @@ pub fn init(app: &mut AppContext) {
             "Move cursor home within an executing command",
             TerminalAction::ControlSequence(vec![escape_sequences::C0::SOH]),
         )
-        // We already have bindings for home/end (the keybindings for this on Linux and Mac) that
-        // send the correct control sequence to the PTY.
+        // We already have bindings for home/end that send the correct control sequence to the
+        // PTY.
         .with_key_binding("cmd-left")
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand")),
         EditableBinding::new(
@@ -340,8 +336,7 @@ pub fn init(app: &mut AppContext) {
             TerminalAction::ControlSequence(vec![escape_sequences::C0::NAK]),
         )
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand"))
-        // Set this for mac-only. The default binding for this on Linux / Windows is `ctrl-y`, which
-        // we can't hijack because it is already reserved for the PTY.
+        // `ctrl-y` is already reserved for the PTY, so this uses cmd-backspace.
         .with_key_binding("cmd-backspace"),
         EditableBinding::new(
             "terminal:executing_command_delete_line_end",
@@ -349,7 +344,6 @@ pub fn init(app: &mut AppContext) {
             TerminalAction::ControlSequence(vec![escape_sequences::C0::VT]),
         )
         .with_context_predicate(id!("Terminal") & !id!("IMEOpen") & id!("LongRunningCommand"))
-        // Set this for mac-only since the corresponding editor action is also Mac-only.
         .with_key_binding("cmd-delete"),
         EditableBinding::new(
             "terminal:backward_tabulation",
@@ -496,10 +490,7 @@ pub fn init(app: &mut AppContext) {
         id!("Terminal") & ne!("TerminalView_BlockSelectionCardinality", "None"),
     )]);
 
-    // Register a mac only keybinding for selecting all blocks that uses the "Select All" mac menu
-    // item. We don't want this registered on Linux/Windows since this would mean the binding needs
-    // to be "PTY compliant", which would end up making select all have a binding of `ctrl-shift-a`
-    // instead of `ctrl-a` within the editor view.
+    // Register a keybinding for selecting all blocks that uses the "Select All" mac menu item.
     app.register_editable_bindings([
         // Note that we register a separate action for SelectAll blocks
         // that always works, regardless of context - this one is triggered
