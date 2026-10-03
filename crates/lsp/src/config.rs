@@ -206,9 +206,7 @@ pub(crate) fn path_to_lsp_uri(path: &Path) -> Result<Uri> {
         return Err(anyhow::anyhow!("Path must be absolute: {}", path.display()));
     }
 
-    // url::Url::from_file_path handles percent-encoding internally but is not
-    // available on WASM. LSP is not supported on WASM either, so the fallback
-    // is a simple string concatenation.
+    // url::Url::from_file_path handles percent-encoding internally.
     let url = url::Url::from_file_path(path)
         .map_err(|()| anyhow::anyhow!("Failed to convert path to file URI: {}", path.display()))?;
 

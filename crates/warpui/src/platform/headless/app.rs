@@ -20,8 +20,7 @@ impl App {
         assets: Box<dyn AssetProvider>,
         test_driver: Option<&TestDriver>,
     ) -> Self {
-        // Other platforms use the test_driver parameter to enable an alternative platform delegate implementation
-        // in integration tests - that doesn't apply here.
+        // The headless backend has no alternative platform delegate for integration tests.
         let _ = test_driver;
         Self { callbacks, assets }
     }

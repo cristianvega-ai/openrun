@@ -47,7 +47,6 @@ impl Client {
     pub fn new() -> Self {
         let mut builder = reqwest::Client::builder();
 
-        // Set some HTTP/2-related settings that aren't available on wasm.
         builder = builder
             .http2_keep_alive_interval(Duration::from_secs(60))
             // If a pong is not received within 15s, consider the connection dead.
@@ -162,7 +161,6 @@ impl<'a> RequestBuilder<'a> {
         }
     }
 
-    // The `timeout` argument is unused on wasm.
     pub fn timeout(self, timeout: Duration) -> RequestBuilder<'a> {
         Self {
             wrapped: self.wrapped.timeout(timeout),

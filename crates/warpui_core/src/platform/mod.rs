@@ -496,7 +496,7 @@ pub enum WindowFocusBehavior {
     #[default]
     BringToFront,
     /// Retain the window's current position in the z-index when
-    /// focusing the app. May not be supported on all platforms.
+    /// focusing the app.
     RetainZIndex,
 }
 
@@ -534,7 +534,7 @@ pub trait WindowManager {
 
     /// Returns the window most recently passed to `show_window_and_focus_app`. The `test`
     /// platform is the only implementor that tracks this, since it otherwise has no way to
-    /// observe focus changes; other platforms report focus via `active_window_id` instead.
+    /// observe focus changes; the macOS platform reports focus via `active_window_id` instead.
     fn last_window_shown_and_focused_for_test(&self) -> Option<WindowId> {
         None
     }

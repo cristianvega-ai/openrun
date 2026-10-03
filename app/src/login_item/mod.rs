@@ -3,8 +3,7 @@
 //!
 //! The user-facing toggle and "already registered" bookkeeping live on
 //! [`crate::terminal::general_settings::GeneralSettings`]. This module owns
-//! the platform-specific register/unregister logic for each OS where the
-//! feature is supported.
+//! the macOS register/unregister logic.
 
 mod macos;
 
@@ -16,11 +15,11 @@ use warpui::AppContext;
 ///
 /// Respects the existing `app_added_as_login_item` bookkeeping so a user who
 /// removed Warp from their OS's startup UI isn't silently re-added — the
-/// platform backends only run the registration flow when the setting was
+/// macOS backend only runs the registration flow when the setting was
 /// explicitly re-toggled.
 ///
 /// Skipped entirely when the `WARP_INTEGRATION` env var is set, so integration
-/// tests never touch the user's real login items / registry. Also skipped for
+/// tests never touch the user's real login items. Also skipped for
 /// non-release-bundle builds (e.g. `cargo run`), so developer machines don't
 /// auto-launch `target/debug/{warp,openwarp,...}` at sign-in.
 pub fn maybe_register_app_as_login_item(ctx: &mut AppContext) {

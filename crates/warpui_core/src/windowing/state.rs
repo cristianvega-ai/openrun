@@ -148,8 +148,8 @@ impl WindowManager {
     }
 
     /// Test-only helper: returns the window most recently passed to
-    /// `show_window_and_focus_app`. Only the `test` platform tracks this; other platforms
-    /// report focus via `active_window` instead.
+    /// `show_window_and_focus_app`. Only the `test` platform tracks this; the macOS platform
+    /// reports focus via `active_window` instead.
     #[cfg(any(test, feature = "test-util"))]
     pub fn last_window_shown_and_focused_for_test(&self) -> Option<WindowId> {
         self.platform.last_window_shown_and_focused_for_test()

@@ -4,8 +4,7 @@ use command::r#async::Command;
 ///
 /// This follows the same wrapping pattern as `command::r#async::Command`:
 /// callers construct commands through the executor, which transparently sets
-/// the PATH environment variable. On wasm, a dummy implementation is provided
-/// so that consumer code doesn't need cfg gating.
+/// the PATH environment variable.
 #[derive(Clone)]
 pub struct CommandBuilder {
     path_env_var: Option<String>,

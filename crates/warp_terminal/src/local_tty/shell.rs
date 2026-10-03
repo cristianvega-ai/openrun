@@ -19,8 +19,8 @@ pub trait AvailableShell {
 }
 
 /// Returns an iterator of additional PATH entries to append to the shell's PATH.
-/// * On macOS, this includes `$APP_PATH/Contents/Resources/bin`, in which we put a wrapper around the Warp CLI.
-/// * On all other platforms, this is empty.
+/// This includes `$APP_PATH/Contents/Resources/bin`, in which we put a wrapper around the Warp CLI,
+/// and is empty when the app is not running from a bundle.
 pub fn extra_path_entries() -> impl Iterator<Item = PathBuf> {
     use itertools::Either;
 

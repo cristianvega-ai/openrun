@@ -81,7 +81,7 @@ impl AppBuilder {
     ///
     /// This can be useful in the cases where an application registers a binding with a
     /// [`crate::keymap::Trigger::Custom`] for use in a Mac menu, but still wants to register the
-    /// binding with its corresponding `Keystroke` on other platforms that don't support menus.
+    /// binding with its corresponding `Keystroke` as well.
     pub fn convert_custom_triggers_to_keystroke_triggers(
         &mut self,
         custom_tag_to_keystroke: impl Fn(CustomTag) -> Option<Keystroke> + 'static,
