@@ -3,6 +3,7 @@
 
   script/ci_check_coverage --list tests-list.json --reports DIR [--plain-only REGEX]
                            [--must-run-ignored NAME ...]
+                           [--shell-matrix ran|skipped] [--matrix-must-run-ignored NAME ...]
 
 LIST is `cargo nextest list --message-format json` of the build (every test of the workspace).
 DIR holds the JUnit reports the jobs kept (`script/ci_nextest`), named KIND-whatever.xml where KIND
@@ -17,6 +18,13 @@ It fails when
   - a report records a failure or an error (the job already failed; this keeps the summary honest);
   - an ignored test named by --must-run-ignored (the idle session) has no report;
   - a report names a test that the build does not have.
+
+--shell-matrix says whether this run was supposed to include the shell matrix (bash 3.2, bash 5,
+fish, PowerShell 7; see script/ci_shell_matrix_paths). With `ran`, a report of the suite of each of
+the four shells must exist and the --matrix-must-run-ignored tests (the shell-only scenarios) must
+have run. With `skipped` the matrix legs are left out of the check, and the summary says so in so
+many words: the tests that exist only in the matrix are not covered by this run, and nothing
+stands in for them.
 
 The summary lists what ran where, so a reviewer can read the coverage from the job log.
 """
@@ -37,6 +45,8 @@ def main():
     parser.add_argument("--reports", required=True)
     parser.add_argument("--plain-only", default=r"(?!)", help="regex for the tests allowed to run only outside the sandbox")
     parser.add_argument("--must-run-ignored", nargs="*", default=[])
+    parser.add_argument("--shell-matrix", choices=["ran", "skipped"], default="ran")
+    parser.add_argument("--matrix-must-run-ignored", nargs="*", default=[])
     args = parser.parse_args()
     plain_only = re.compile(args.plain_only)
 
@@ -90,7 +100,13 @@ def main():
         kinds = {kind_of[r] for r in reports_of_key}
         if kinds == {"plain"} and not plain_only.search(key[1]):
             problems.append(f"ran only outside the network sandbox: {key[0]} {key[1]}")
-    for name in args.must_run_ignored:
+    must_run = list(args.must_run_ignored)
+    if args.shell_matrix == "ran":
+        must_run += args.matrix_must_run_ignored
+        for shell in ("bash3", "bash5", "fish", "pwsh"):
+            if not any(r.startswith(f"plain-shell-{shell}-suite") for r in per_report):
+                problems.append(f"the shell matrix ran, but there is no report of its {shell} suite")
+    for name in must_run:
         hits = [key for key in expected if key[1].endswith(name) and expected[key]]
         if not hits:
             problems.append(f"ignored test {name} is not in the build")
@@ -110,6 +126,18 @@ def main():
     print(f"  ran only outside it (allowed by --plain-only): {plain_only_count}")
     print(f"  never ran: {len(missing)}")
     print(f"  ignored, not run by any job: {len(ignored - {k for k in ran})} of {len(ignored)}")
+    if args.shell_matrix == "skipped":
+        note = (
+            "The shell matrix (bash 3.2, bash 5, fish, PowerShell 7) did NOT run for this commit: it touches "
+            "nothing the shells reach (script/ci_shell_matrix_paths). Its legs are excluded from this "
+            "check, and the scenarios that exist only in the matrix (bash_only, pwsh_only) are not "
+            "covered by this run, and nothing stands in for them. The matrix runs in the nightly run on main and in any push that touches the paths in that script."
+        )
+        print("\n" + note)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as handle:
+                handle.write("### Shell matrix not run\n" + note + "\n")
     if problems:
         print("\nCoverage problems:")
         for problem in problems:

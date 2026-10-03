@@ -7,9 +7,11 @@ name: CI
 #   checks, clippy          start together with `build` (neither needs the tests)
 #   build                   compiles every test once and makes one nextest archive
 #   after the build         sandboxed (unit tests and the idle session), integration 1-3 (all in the
-#                           network sandbox), plain (security and zsh completion tests, outside it)
-#                           and shells (the whole suite under bash 3.2, bash 5, fish and PowerShell
-#                           7, outside it) start from the archive
+#                           network sandbox) and plain (security and zsh completion tests, outside
+#                           it) start from the archive on every run; shells (the whole suite under
+#                           bash 3.2, bash 5, fish and PowerShell 7, outside the sandbox) only when
+#                           the push touches what the shells reach (script/ci_shell_matrix_paths),
+#                           in the nightly run and on a manual run
 #   result                  checks that the jobs together ran every test (no macOS runner needed)
 #
 # The tests run from the archive (script/ci_nextest) in the checkout the archive was built in.
@@ -19,6 +21,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Every night on `main`, with the shell matrix. A failing scheduled run shows on the Actions page.
+  # Scheduled workflows are paused by GitHub after 60 days without repository activity.
+  schedule:
+    - cron: "23 5 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -38,6 +44,42 @@ env:
   INTEGRATION_SHARDS: "3"
 
 jobs:
+  # Decides whether the shell matrix runs: always for the nightly run and a manual run, for a push
+  # or pull request only if it touches what the shells reach (script/ci_shell_matrix_paths, which
+  # lists the paths and why). No build, so no macOS runner.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      shells: ${{ steps.diff.outputs.shells }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Decide on the shell matrix
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          case "$EVENT" in
+            push) base=$BEFORE ;;
+            pull_request) base=$PR_BASE ;;
+            *) base= ;;
+          esac
+          if [ -z "$base" ]; then
+            echo "A $EVENT run: the shell matrix runs."
+            result=true
+          else
+            ./script/ci_shell_matrix_paths "$base" "$(git rev-parse HEAD)" | tee paths.txt
+            result=$(head -n 1 paths.txt)
+          fi
+          echo "shells=$result" >> "$GITHUB_OUTPUT"
+          echo "### Shell matrix: $result" >> "$GITHUB_STEP_SUMMARY"
+
   # Formatting and the static offline audit: neither needs a build, and both are short, so they
   # share a runner (a public repository has five macOS runners at a time).
   #
@@ -380,7 +422,8 @@ jobs:
   # and runs the rest with `CI=true`, so a test that skips or fails fails the job.
   shells:
     name: Shell matrix ${{ matrix.shell }} ${{ matrix.part }} (macOS)
-    needs: build
+    needs: [build, changes]
+    if: ${{ needs.changes.outputs.shells == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 60
     strategy:
@@ -430,7 +473,7 @@ jobs:
   # ran every test (script/ci_check_coverage).
   result:
     name: CI result
-    needs: [checks, clippy, build, sandboxed, integration, plain, shells]
+    needs: [changes, checks, clippy, build, sandboxed, integration, plain, shells]
     if: ${{ always() }}
     # Python only, no build and no test: a hosted macOS runner would queue behind the test jobs of
     # every other run for nothing (measured: 16 minutes in run 37023024672).
@@ -446,9 +489,16 @@ jobs:
           python3 - << 'PY'
           import json, os, sys
           needs = json.loads(os.environ["NEEDS"])
-          bad = {name: job["result"] for name, job in needs.items() if job["result"] != "success"}
+          # The shell matrix is skipped, and only then, when `changes` decided it is not needed.
+          matrix_needed = needs["changes"]["outputs"].get("shells") == "true"
+          bad = {}
+          for name, job in needs.items():
+              expected = "skipped" if name == "shells" and not matrix_needed else "success"
+              if job["result"] != expected:
+                  bad[name] = job["result"]
           for name, job in sorted(needs.items()):
               print(f"{name}: {job['result']}")
+          print(f"shell matrix needed: {matrix_needed}")
           if bad:
               sys.exit("jobs that did not succeed: " + ", ".join(f"{n} ({r})" for n, r in sorted(bad.items())))
           PY
@@ -469,6 +519,8 @@ jobs:
           ./script/ci_check_coverage --list tests-list/tests-list.json --reports junit \
             --plain-only 'command_executor::(network_sandbox|offline_environment)|shell_integration_tests::(bash|pwsh)_only::' \
             --must-run-ignored test_idle_session \
+            --shell-matrix ${{ needs.changes.outputs.shells == 'true' && 'ran' || 'skipped' }} \
+            --matrix-must-run-ignored \
               shell_integration_tests::bash_only::test_custom_ps1_expansion_bash \
               shell_integration_tests::bash_only::test_bash_honor_ps1_expands_dynamic_prompt_once \
               shell_integration_tests::bash_only::test_warp_honors_user_title_bash \

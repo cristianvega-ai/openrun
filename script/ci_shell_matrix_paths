@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Says whether a change needs the shell matrix (bash 3.2, bash 5, fish, PowerShell 7) in CI.
+
+  script/ci_shell_matrix_paths BASE HEAD     prints `true` or `false`, then the paths that matched
+
+The matrix runs the whole integration suite under four shells outside the network sandbox and costs
+about 48 job-minutes, more than the rest of the workflow, so a push runs it only when it touches
+code the shells reach, and a nightly run on `main` and a manual dispatch run it always. The list
+below is what the matrix tests exercise:
+
+  - the bootstrap scripts of each shell (they are the shell side of every session);
+  - `app/src/terminal` (sessions, the shell-specific input and command handling, the command
+    executor and the completion generators), `app/src/context_chips`, `app/src/completer`,
+    `app/src/persistence` (the shell of a saved session), `app/src/shell_indicator.rs`;
+  - `crates/warp_terminal` (shell detection and the per-shell commands), `crates/warp_completer`,
+    `crates/command` (how commands are started), `crates/integration` and the integration driver
+    (`crates/warpui_core/src/integration`, `app/src/integration_testing`): the tests themselves;
+  - this script, the matrix runner and its exclusions, nextest's configuration, the workflow and its
+    actions.
+
+BASE that is empty, all zeros or unknown to the repository (a new branch, a forced push) means
+`true`. Edit the list here and nowhere else.
+"""
+
+import subprocess
+import sys
+
+PREFIXES = (
+    "app/assets/bundled/bootstrap/",
+    "app/src/terminal/",
+    "app/src/context_chips/",
+    "app/src/completer/",
+    "app/src/persistence/",
+    "app/src/integration_testing/",
+    "app/src/shell_indicator.rs",
+    "crates/warp_terminal/",
+    "crates/warp_completer/",
+    "crates/command/",
+    "crates/integration/",
+    "crates/warpui_core/src/integration/",
+    "script/ci_shell_matrix",
+    "script/ci_nextest",
+    "script/ci_check_coverage",
+    ".config/nextest.toml",
+    ".github/workflows/ci.yml",
+    ".github/actions/",
+)
+
+
+def main():
+    if len(sys.argv) != 3:
+        sys.exit(__doc__)
+    base, head = sys.argv[1], sys.argv[2]
+    known = base.strip("0") != "" and subprocess.run(
+        ["git", "cat-file", "-e", base + "^{commit}"], capture_output=True
+    ).returncode == 0
+    if not known:
+        print("true")
+        print(f"(no usable base commit {base!r}: run the matrix)")
+        return
+    changed = subprocess.run(
+        ["git", "diff", "--name-only", base, head],
+        capture_output=True, text=True, check=True,
+    ).stdout.split("\n")
+    matched = [path for path in changed if path and path.startswith(PREFIXES)]
+    print("true" if matched else "false")
+    for path in matched:
+        print(path)
+
+
+if __name__ == "__main__":
+    main()
