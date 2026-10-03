@@ -4349,6 +4349,8 @@ OpenRun now builds and runs on macOS only (PLAT-4, under PLAT-RM). Windows, Linu
 
 **Persisted state:** nothing a macOS user could have stored fails to read. `NativeKeyCode`, `PhysicalKey` and `KeyCode` had `Serialize` and `Deserialize` derives that nothing used (the whole workspace builds without them, with default and with all features), so no stored value can name `Windows` or `Xkb`. The settings, shell launch data and path compatibility tests above pass.
 
+**Test fix found by the CI of this change:** `shell_integration_tests::test_typeahead` failed once in the fish matrix of the push run (37123809637, "The output should be \"foo\", but got \"\"" after 10 s; the dispatched run of the same commit passed). It is not caused by the removal: a stress run of the test with fish on a hosted runner (`stress.yml`, 60 iterations, `--retries 0`, run 37126188808) failed 3 times, and the test file is unchanged by this work. The test typed "foo" 30 ms after the preexec hook of fish; fish reports the command to Warp before it switches the terminal from its own line editing mode (no echo) to the mode external commands get, so text typed in that gap is never echoed. `hold.sh` now creates `hold.started` as its first action and the step waits for it before typing. No retry, no ignore.
+
 **Offline impact:** none. The macOS sandbox, the offline environment table and the generator allow-list are unchanged; the git completion test now describes what it checks (the environment table alone, with the sandbox off).
 
 **User-visible impact:** a toast link reads "Show in Finder"; the settings pages show the same rows as before.

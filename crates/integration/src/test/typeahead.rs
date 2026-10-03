@@ -21,12 +21,18 @@ use super::{Builder, new_builder};
 /// its release file, so a test decides when the command ends instead of racing a `sleep`.
 const HOLD_COMMAND: &str = "./hold.sh";
 const HOLD_RELEASE_FILE: &str = "hold.release";
+/// The file the script creates as soon as it runs. By then the shell has handed the terminal over
+/// to the command: fish reports the command to Warp (the preexec hook) before it switches the
+/// terminal from its own line editing mode, which does not echo, to the one external commands
+/// get, so text typed in that gap is never echoed.
+const HOLD_STARTED_FILE: &str = "hold.started";
 
 /// Writes [`HOLD_COMMAND`] into the test directory.
 fn write_hold_script(utils: &mut TestSetupUtils) {
     let dir = utils.test_dir();
     let script = format!(
-        "#!/bin/sh\nwhile [ ! -e '{}' ]; do sleep 0.05; done\n",
+        "#!/bin/sh\n: > '{}'\nwhile [ ! -e '{}' ]; do sleep 0.05; done\n",
+        dir.join(HOLD_STARTED_FILE).display(),
         dir.join(HOLD_RELEASE_FILE).display()
     );
     OpenOptions::new()
@@ -49,6 +55,14 @@ fn start_hold_command() -> TestStep {
         .with_typed_characters(&[HOLD_COMMAND])
         .with_keystrokes(&["enter"])
         .add_assertion(assert_long_running_block_executing_for_single_terminal_in_tab(true, 0))
+        .add_named_assertion("the command is running", |_app, _window_id| {
+            let home = std::env::var("HOME")
+                .expect("HOME is set for the duration of the integration test");
+            async_assert!(
+                std::path::Path::new(&home).join(HOLD_STARTED_FILE).exists(),
+                "expected the hold script to have started"
+            )
+        })
 }
 
 pub fn test_typeahead() -> Builder {
