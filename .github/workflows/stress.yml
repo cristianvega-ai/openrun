@@ -41,8 +41,8 @@ env:
   NEXTEST_PROFILE: ci
 
 jobs:
-  # The job id is the one `ci.yml` uses for the unit test job: rust-cache keys on it, so this run
-  # restores the dependency build of the last push to `main`.
+  # Restores the build of the last push to `main` (the Build tests job of ci.yml saves it), so only
+  # what changed since then is compiled.
   test:
     name: Stress
     runs-on: macos-latest
@@ -50,24 +50,9 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Install the Rust toolchain from rust-toolchain.toml
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-macos
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          save-if: "false"
-
-      - name: Make sure the Metal toolchain is installed
-        run: |
-          if ! xcrun -sdk macosx metal --version; then
-            xcodebuild -downloadComponent MetalToolchain
-            xcrun -sdk macosx metal --version
-          fi
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
-        with:
-          tool: nextest
+      - uses: ./.github/actions/build-cache
 
       - uses: ./.github/actions/macos-test-tools
 
